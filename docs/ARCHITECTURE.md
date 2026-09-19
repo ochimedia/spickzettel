@@ -959,7 +959,10 @@ the tray has no window of its own to ask in. A retry loop at exit, an
 alternate destination to ask for, or a message box naming the copy were
 each considered and not done - a save that has failed at two places
 three times is a disk problem, not one more attempt away from working,
-and the on-screen warning while the app ran was the time to say so.
+and the on-screen warning while the app ran was the time to say so. A
+test pins the outcome down (both destinations unwritable, exit still
+exits, nothing forced anywhere), so that it stays a decision rather
+than drifting into an accident.
 
 ### GPU textures are per canvas
 

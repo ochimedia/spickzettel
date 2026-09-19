@@ -743,6 +743,36 @@ TEST_F(TrayControllerPersistenceTest, ExitWritesARecoveryCopyWhenTheLibraryCanno
     std::filesystem::remove_all(recovery);
 }
 
+// The accepted outcome, pinned down so that it stays a decision: when the
+// library cannot be written and the recovery copy beside it cannot be
+// written either, an exit is still an exit, and what was in memory goes
+// with the process. See TrayController::FlushForShutdown.
+TEST_F(TrayControllerPersistenceTest, ExitStillExitsWhenNeitherTheLibraryNorARecoveryCopyCanBeWritten) {
+    // A file where the library's parent directory would be: nothing under
+    // it can be created - not the library, not a recovery copy beside it.
+    std::filesystem::create_directories(dir_);
+    std::ofstream(dir_ / "blocker") << "not a directory";
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_ / "blocker" / "library";
+    host.overlayWindow.captureReturnsHandle = 7;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
+    ASSERT_TRUE(controller.GetSession().HasUnsavedChanges());
+
+    host.TriggerTrayCommand(platform::TrayCommand::Exit);
+    EXPECT_TRUE(host.quitCalled) << "an exit is an exit";
+    EXPECT_TRUE(controller.GetSession().HasUnsavedChanges()) << "nothing landed anywhere";
+    EXPECT_TRUE(std::filesystem::is_regular_file(dir_ / "blocker")) << "and nothing was forced";
+    size_t entries = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(dir_)) {
+        (void)entry;
+        ++entries;
+    }
+    EXPECT_EQ(entries, 1u) << "no recovery copy appeared anywhere else";
+}
+
 TEST_F(TrayControllerPersistenceTest, TheOSEndingTheSessionFlushesTheLibrary) {
     ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
