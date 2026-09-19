@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <fstream>
 
+#include <string>
+
 #include <gtest/gtest.h>
 
 namespace sz::core::persistence {
@@ -135,9 +137,14 @@ TEST_F(ImageCodecTest, QoiEncodeReplacesTheDestinationWholeOrNotAtAll) {
     ASSERT_TRUE(EncodeQoiToFile(path, pixels.data(), 3, 2));
     const uintmax_t before = std::filesystem::file_size(path);
 
-    // A write that cannot even start - a directory where the temp file
-    // wants to be - reports failure and leaves the previous file intact.
-    std::filesystem::create_directories(dir_ / "layer.qoi.tmp");
+    // A write that cannot even start - a directory at every temporary name
+    // the writer would try (see WriteFileAtomically) - reports failure and
+    // leaves the previous file intact.
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        std::filesystem::path tmp = path;
+        tmp += attempt == 0 ? std::string(".tmp") : ".tmp" + std::to_string(attempt);
+        std::filesystem::create_directories(tmp);
+    }
     std::vector<uint8_t> other = pixels;
     other[0] ^= 0xFF;
     EXPECT_FALSE(EncodeQoiToFile(path, other.data(), 3, 2));
@@ -147,7 +154,11 @@ TEST_F(ImageCodecTest, QoiEncodeReplacesTheDestinationWholeOrNotAtAll) {
     EXPECT_EQ(kept->pixelsRGBA, pixels) << "the previous picture must survive a failed write";
 
     // ...and a write that works leaves nothing beside the result.
-    std::filesystem::remove_all(dir_ / "layer.qoi.tmp");
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        std::filesystem::path tmp = path;
+        tmp += attempt == 0 ? std::string(".tmp") : ".tmp" + std::to_string(attempt);
+        std::filesystem::remove_all(tmp);
+    }
     EXPECT_TRUE(EncodeQoiToFile(path, other.data(), 3, 2));
     EXPECT_FALSE(std::filesystem::exists(dir_ / "layer.qoi.tmp"));
     EXPECT_EQ(DecodeImageFromFile(path)->pixelsRGBA, other);

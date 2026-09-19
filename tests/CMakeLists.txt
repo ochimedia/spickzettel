@@ -6,6 +6,7 @@ add_executable(sz_core_tests
     app/tray_app_test.cpp
     core/build_info_test.cpp
     core/app_config_test.cpp
+    core/atomic_file_test.cpp
     core/canvas_manager_test.cpp
     core/canvas_state_test.cpp
     core/display_choice_test.cpp

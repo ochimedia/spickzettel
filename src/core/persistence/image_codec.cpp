@@ -1,5 +1,7 @@
 #include "core/persistence/image_codec.h"
 
+#include "core/util/atomic_file.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -155,30 +157,13 @@ bool EncodeQoiToFile(const std::filesystem::path& path, const uint8_t* pixelsRGB
     }
 
     // Written beside the destination and renamed onto it, the same
-    // discipline every record gets (see LibraryStore's WriteFileAtomically):
-    // a painted layer is re-encoded over its own previous file every time
-    // it is saved, and truncating that file in place left a window in which
-    // a crash - or a full disk - replaced the only copy on disk of a drawing
+    // discipline every record gets (see core/util/atomic_file.h): a painted
+    // layer is re-encoded over its own previous file every time it is
+    // saved, and truncating that file in place left a window in which a
+    // crash - or a full disk - replaced the only copy on disk of a drawing
     // with the first half of it.
-    std::filesystem::path tmpPath = path;
-    tmpPath += ".tmp";
-    bool ok = false;
-    {
-        std::ofstream out(tmpPath, std::ios::binary | std::ios::trunc);
-        if (out) {
-            out.write(static_cast<const char*>(encoded), encodedSize);
-            out.flush();
-            ok = out.good();
-        }
-    }
+    const bool ok = WriteFileAtomically(path, encoded, static_cast<size_t>(encodedSize));
     free(encoded);
-    if (ok) {
-        std::filesystem::rename(tmpPath, path, ec);
-        ok = !ec;
-    }
-    if (!ok) {
-        std::filesystem::remove(tmpPath, ec);
-    }
     return ok;
 }
 

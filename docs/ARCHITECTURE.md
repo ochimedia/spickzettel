@@ -619,10 +619,22 @@ per-snippet revision counter bumped by every mutation path, so that only
 changed snippets are hashed; it has not been needed at the library sizes
 measured, and every stroke mutation would have to remember to bump it.
 
-Every file goes through write-to-temp-then-rename, pictures included: a
-painted layer is re-encoded over its own previous file on every save,
-and truncating in place left a window in which the only copy on disk of
-a drawing was the first half of it.
+Every file goes through write-to-temp-then-rename, pictures and the
+settings file included, and through one writer (`WriteFileAtomically`
+in `core/util`): a painted layer is re-encoded over its own previous
+file on every save, and truncating in place left a window in which the
+only copy on disk of a drawing was the first half of it. The temporary
+is created exclusively, under a name nothing was at. A file already at
+`<file>.tmp` is never opened: a plain file with no other name is a
+temporary of ours that a crash left, and is removed; anything else - a
+hard link to a file elsewhere, a symlink, a directory - is passed over
+for `<file>.tmp1` and so on. The first version opened `<file>.tmp` with
+truncation and trusted whatever was there, and a hard link at that name
+to a file outside the library had the library's bytes written into it;
+a hard link to the committed file itself would have truncated it before
+the rename, which is the opposite of what the rename is for. Hard links
+are not links in the reparse sense, so the path check for junctions
+(`IsOurs`) does not see them; exclusive creation is the only answer.
 
 **What is and is not promised.** Atomicity per file, not durability and
 not a transaction across files. The rename means no reader - this

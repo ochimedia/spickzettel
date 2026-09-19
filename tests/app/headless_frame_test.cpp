@@ -2269,9 +2269,12 @@ TEST_F(HeadlessSaveTest, AFailedSaveIsRetriedOnItsOwnClockNotEveryFrame) {
     std::filesystem::create_directories(root_ / "library.json");
     AttachStore();
 
-    // Past the quiet period: exactly one attempt, which failed.
+    // Past the quiet period: exactly one attempt, which failed - and left
+    // no temporary behind to show for it (see WriteFileAtomically), so the
+    // session's own account of it is the evidence.
     StepFrames(130);
-    ASSERT_TRUE(std::filesystem::is_regular_file(root_ / "library.json.tmp")) << "no attempt was made";
+    ASSERT_TRUE(controller_->GetSession().LastSaveFailed()) << "no attempt was made";
+    ASSERT_FALSE(std::filesystem::exists(root_ / "library.json.tmp")) << "nothing half-written left beside it";
     ASSERT_TRUE(std::filesystem::is_directory(root_ / "library.json"));
 
     // The obstruction goes away. Retried every frame, the next frame would

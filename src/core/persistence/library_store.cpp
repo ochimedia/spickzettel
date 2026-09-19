@@ -19,6 +19,7 @@
 
 #include "core/util/slug.h"
 #include "core/util/timestamp_name.h"
+#include "core/util/atomic_file.h"
 #include "core/util/uid.h"
 
 namespace sz::core::persistence {
@@ -506,31 +507,9 @@ bool FromJson(const json& j, Folder& out) {
     return true;
 }
 
-// Writes `content` to `path` via a temp-file-then-rename, so a reader
-// (including this same process, if it crashes mid-write and restarts)
-// never observes a partially-written file - rename() is atomic on the
-// same filesystem on both Windows and Linux. Used for every file this
-// store writes.
-bool WriteFileAtomically(const std::filesystem::path& path, const std::string& content) {
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
-
-    std::filesystem::path tmpPath = path;
-    tmpPath += ".tmp";
-    {
-        std::ofstream out(tmpPath, std::ios::binary | std::ios::trunc);
-        if (!out) {
-            return false;
-        }
-        out << content;
-        out.flush();
-        if (!out.good()) {
-            return false;
-        }
-    }
-    std::filesystem::rename(tmpPath, path, ec);
-    return !ec;
-}
+// Every file this store writes goes through WriteFileAtomically (see
+// core/util/atomic_file.h): a fresh temporary beside the destination,
+// renamed over it once whole, so a reader never sees half a record.
 
 // ===== The tree =====
 //

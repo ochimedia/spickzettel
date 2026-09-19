@@ -13,6 +13,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/util/atomic_file.h"
+
 namespace sz::core {
 
 // Ordered, not the default: this file is meant to be opened and read, and
@@ -715,39 +717,28 @@ bool WriteConfigFile(const std::filesystem::path& path, const AppConfig& config)
     if (path.empty()) {
         return false;
     }
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
-
     // Written to a temp file and renamed over the real one, the same way the
-    // library's records are: truncating the real file leaves a window in
-    // which every setting the user has is a half-written file, which
-    // ParseConfig quite correctly reads as defaults.
-    std::filesystem::path tempPath = path;
-    tempPath += ".tmp";
-    bool wrote = false;
-    {
-        // Text mode, not binary like the library's writer: this file is
-        // hand-editable and gets the platform's line endings.
-        std::ofstream out(tempPath, std::ios::trunc);
-        if (out) {
-            out << SerializeConfig(config);
-            out.flush();
-            wrote = out.good();
+    // library's records are (see core/util/atomic_file.h): truncating the
+    // real file leaves a window in which every setting the user has is a
+    // half-written file, which ParseConfig quite correctly reads as
+    // defaults. Nothing half-written is left beside the real file on any
+    // path out of there either: a stray config.json.tmp is the kind of thing
+    // a user opens by mistake and then wonders why their edits do nothing.
+    std::string text = SerializeConfig(config);
+#if defined(_WIN32)
+    // The platform's line endings, as text mode used to give: this file is
+    // hand-editable, and Notepad is what it is opened in.
+    std::string crlf;
+    crlf.reserve(text.size() + text.size() / 32);
+    for (const char c : text) {
+        if (c == '\n') {
+            crlf += '\r';
         }
+        crlf += c;
     }
-    // Nothing half-written is left lying around beside the real file on any
-    // path out of here: a stray config.json.tmp is the kind of thing a user
-    // opens by mistake and then wonders why their edits do nothing.
-    if (!wrote) {
-        std::filesystem::remove(tempPath, ec);
-        return false;
-    }
-    std::filesystem::rename(tempPath, path, ec);
-    if (ec) {
-        std::filesystem::remove(tempPath, ec);
-        return false;
-    }
-    return true;
+    text = std::move(crlf);
+#endif
+    return WriteFileAtomically(path, text);
 }
 
 }  // namespace sz::core

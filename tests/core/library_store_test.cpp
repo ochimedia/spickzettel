@@ -45,6 +45,25 @@ protected:
     }
 };
 
+// The one obstruction that fails a write without failing everything around
+// it: a directory at every temporary name the writer would try (see
+// WriteFileAtomically, which passes over a name something is at). A
+// directory at the first name alone is stepped around.
+void ObstructEveryTemporaryName(const std::filesystem::path& destination) {
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        std::filesystem::path tmp = destination;
+        tmp += attempt == 0 ? std::string(".tmp") : ".tmp" + std::to_string(attempt);
+        std::filesystem::create_directories(tmp);
+    }
+}
+void ClearTemporaryObstructions(const std::filesystem::path& destination) {
+    for (int attempt = 0; attempt < 8; ++attempt) {
+        std::filesystem::path tmp = destination;
+        tmp += attempt == 0 ? std::string(".tmp") : ".tmp" + std::to_string(attempt);
+        std::filesystem::remove_all(tmp);
+    }
+}
+
 CanvasManagerSnapshot MakeSampleSnapshot() {
     CanvasManagerSnapshot snapshot;
 
@@ -1707,13 +1726,11 @@ TEST_F(LibraryStoreTest, AnOrderFileThatCouldNotBeWrittenFailsTheSave) {
     ASSERT_TRUE(store.Save(snapshot));
     const std::filesystem::path canvasDir = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002";
 
-    // A directory where the temp file wants to be is the one obstruction
-    // that fails the write without failing everything around it.
-    std::filesystem::create_directories(canvasDir / "order.json.tmp");
+    ObstructEveryTemporaryName(canvasDir / "order.json");
     std::swap(snapshot.canvases[0].items[0], snapshot.canvases[0].items[1]);
     EXPECT_FALSE(store.Save(snapshot)) << "the z-order on disk is not the z-order in memory";
 
-    std::filesystem::remove_all(canvasDir / "order.json.tmp");
+    ClearTemporaryObstructions(canvasDir / "order.json");
     ASSERT_TRUE(store.Save(snapshot)) << "retried, not remembered as written";
     LibraryStore reopened(dir_);
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
@@ -1854,7 +1871,7 @@ TEST_F(LibraryStoreTest, ARecordThatCouldNotBeWrittenKeepsThePicturesTheOldOneNa
     // so cannot be written.
     ASSERT_TRUE(store.SaveLayerImage(4, 0, pixels.data(), 1, 1).has_value());
     snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004_p0.qoi";
-    std::filesystem::create_directories(ShotItemDir() / "item.json.tmp");
+    ObstructEveryTemporaryName(ShotItemDir() / "item.json");
     EXPECT_FALSE(store.Save(snapshot));
 
     // The record on disk is still the old one, and what it names must still
@@ -1867,7 +1884,7 @@ TEST_F(LibraryStoreTest, ARecordThatCouldNotBeWrittenKeepsThePicturesTheOldOneNa
     EXPECT_EQ(loaded->canvases[0].items[1].ImageLayer()->imageFile, "000004.qoi");
     EXPECT_TRUE(reopened.LoadImage(4, "000004.qoi").has_value());
 
-    std::filesystem::remove_all(ShotItemDir() / "item.json.tmp");
+    ClearTemporaryObstructions(ShotItemDir() / "item.json");
     ASSERT_TRUE(store.Save(snapshot));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000004.qoi"))
         << "collected once the record naming its replacement is on disk";

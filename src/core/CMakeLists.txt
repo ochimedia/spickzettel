@@ -24,6 +24,7 @@ add_library(sz_core STATIC
     session/session_edits.cpp
     session/session_paint.cpp
     session/settings.cpp
+    util/atomic_file.cpp
     util/slug.cpp
     util/timestamp_name.cpp
     util/uid.cpp
