@@ -493,6 +493,17 @@ as a float) into the field's default and holds the fields with a range
 inside it, rather than letting one infinite coordinate poison every
 bounding box it meets. Repaired, never refused: the rest of the record
 is still the user's, and the next save writes the repaired value back.
+The settings file has the same shape of budget: read past 1 MB it is
+read as one that said nothing (`ReadConfigFile`), and the one setting
+that took any positive number, the stroke width, has a ceiling it is
+held to. Two budgets were considered and not added. There is no
+aggregate limit on decoded pixels because the GPU textures are per
+canvas: only the current canvas's pictures are resident, so the working
+set is bounded by one canvas rather than the library, and a library of
+a thousand screenshots costs disk, not memory. There is no separate
+limit on the number of strokes, points or layers in a record because
+the record's byte budget bounds all three at once, and a second limit
+would have to be kept in step with the first for no extra safety.
 
 A snippet's pictures live in its own directory, so moving a snippet is
 moving one directory with no window where the record has moved and the

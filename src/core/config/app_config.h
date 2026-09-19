@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -325,6 +327,25 @@ AppConfig DefaultConfig();
 // hand-edited or truncated file should be treated as absent, not crash the
 // app on startup. Running out of memory can, as it can anywhere.
 AppConfig ParseConfig(std::string_view text);
+
+// The most a settings file is read past. A config.json is a few kilobytes;
+// one of megabytes is not a settings file, whatever it is, and is read as
+// one that said nothing rather than allocated for - the same budget-before-
+// allocation rule the library's records and pictures have (see
+// persistence::kMaxRecordBytes).
+constexpr size_t kMaxConfigFileBytes = size_t{1} << 20;
+
+// Reads and parses the settings file at `path`: nullopt when there is no
+// file there (or it cannot be opened), which is the first-run case the
+// caller answers by writing the defaults; otherwise ParseConfig of its
+// text, with a file past kMaxConfigFileBytes reading as one that said
+// nothing.
+std::optional<AppConfig> ReadConfigFile(const std::filesystem::path& path);
+
+// The widest stroke a settings file can ask for, in pixels: past this a
+// stroke is a fill, and the tessellator's work per point grows with the
+// width. Held to, not rejected - a hand-typed 1000 means "very wide".
+constexpr float kMaxStrokeWidthPx = 256.0f;
 
 // Renders a config back to JSON text, suitable for writing to disk on first
 // run or after an in-app settings change. Writes every setting, including

@@ -229,12 +229,14 @@ void ReadFloat(const json& j, const char* key, float& out, float min, float max)
 
 // For the settings where any positive value is workable and only zero or
 // negative is nonsense - rejected rather than clamped, so a typo falls back
-// to the default instead of to an arbitrary bound.
-void ReadPositiveFloat(const json& j, const char* key, float& out) {
+// to the default instead of to an arbitrary bound. Positive has a ceiling
+// all the same, held to rather than rejected: "workable" stops being true
+// somewhere, and a value past it still says which way the user leaned.
+void ReadPositiveFloat(const json& j, const char* key, float& out, float max) {
     const auto it = j.find(key);
     if (it != j.end() && it->is_number()) {
         if (const float value = it->get<float>(); value > 0.0f && std::isfinite(value)) {
-            out = value;
+            out = std::min(value, max);
         }
     }
 }
@@ -448,7 +450,7 @@ AppConfig ParseConfig(std::string_view text) {
 
     const json& drawing = Group(doc, "drawing");
     ReadColor(drawing, "strokeColor", config.strokeColorRGBA);
-    ReadPositiveFloat(drawing, "strokeWidth", config.strokeWidth);
+    ReadPositiveFloat(drawing, "strokeWidth", config.strokeWidth, kMaxStrokeWidthPx);
     if (const auto it = drawing.find("renderMode"); it != drawing.end() && it->is_string()) {
         if (const auto mode = ParseStrokeRenderMode(it->get<std::string>())) {
             config.strokeRenderMode = *mode;
@@ -688,6 +690,25 @@ std::string SerializeConfig(const AppConfig& config) {
     doc["profiles"] = std::move(profiles);
 
     return doc.dump(2) + "\n";
+}
+
+std::optional<AppConfig> ReadConfigFile(const std::filesystem::path& path) {
+    std::error_code ec;
+    const auto size = std::filesystem::file_size(path, ec);
+    if (ec) {
+        return std::nullopt;  // no file: a first run
+    }
+    if (size > kMaxConfigFileBytes) {
+        return ParseConfig("");  // not a settings file; read as one that said nothing
+    }
+    std::ifstream in(path, std::ios::binary);
+    if (!in) {
+        return std::nullopt;
+    }
+    std::string text(static_cast<size_t>(size), '\0');
+    in.read(text.data(), static_cast<std::streamsize>(text.size()));
+    text.resize(static_cast<size_t>(in.gcount()));
+    return ParseConfig(text);
 }
 
 bool WriteConfigFile(const std::filesystem::path& path, const AppConfig& config) {

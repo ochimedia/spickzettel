@@ -197,6 +197,11 @@ TEST(AppConfigTest, AGroupOfTheWrongTypeReadsAsAbsent) {
     EXPECT_EQ(ParseConfig(R"({"appearance": "wide"})"), DefaultConfig());
 }
 
+TEST(AppConfigTest, AStrokeWidthPastTheCeilingIsHeldToIt) {
+    EXPECT_FLOAT_EQ(ParseConfig(One("drawing", "strokeWidth", "1000000")).strokeWidth, kMaxStrokeWidthPx);
+    EXPECT_FLOAT_EQ(ParseConfig(One("drawing", "strokeWidth", "12")).strokeWidth, 12.0f) << "inside it, as typed";
+}
+
 TEST(AppConfigTest, ANumberTooLargeForAFloatReadsAsTheDefault) {
     EXPECT_FLOAT_EQ(ParseConfig(One("drawing", "strokeWidth", "1e100")).strokeWidth, DefaultConfig().strokeWidth);
 }
@@ -590,6 +595,32 @@ protected:
 
     std::filesystem::path dir_;
 };
+
+TEST_F(WriteConfigFileTest, ReadConfigFileReadsBackWhatWasWritten) {
+    AppConfig config = DefaultConfig();
+    config.strokeWidth = 9.0f;
+    ASSERT_TRUE(WriteConfigFile(dir_ / "config.json", config));
+    const std::optional<AppConfig> read = ReadConfigFile(dir_ / "config.json");
+    ASSERT_TRUE(read.has_value());
+    EXPECT_FLOAT_EQ(read->strokeWidth, 9.0f);
+}
+
+TEST_F(WriteConfigFileTest, ReadConfigFileIsNulloptWithoutAFile) {
+    EXPECT_FALSE(ReadConfigFile(dir_ / "config.json").has_value()) << "a first run, not a broken file";
+}
+
+// A settings file is a few kilobytes. Whatever a file of megabytes at that
+// path is, it is read as one that said nothing rather than allocated for.
+TEST_F(WriteConfigFileTest, AFileTooBigToBeASettingsFileReadsAsDefaults) {
+    std::filesystem::create_directories(dir_);
+    {
+        std::ofstream out(dir_ / "config.json", std::ios::binary);
+        out << R"({"drawing": {"strokeWidth": 9}, "padding": ")" << std::string(kMaxConfigFileBytes, 'x') << R"("})";
+    }
+    const std::optional<AppConfig> read = ReadConfigFile(dir_ / "config.json");
+    ASSERT_TRUE(read.has_value()) << "there is a file";
+    EXPECT_FLOAT_EQ(read->strokeWidth, DefaultConfig().strokeWidth) << "and it said nothing";
+}
 
 TEST_F(WriteConfigFileTest, WritesTextThatParsesBackToTheSameConfig) {
     AppConfig config = DefaultConfig();

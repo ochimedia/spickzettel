@@ -1,8 +1,6 @@
 #include <windows.h>
 
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 
 #include <backends/imgui_impl_win32.h>
 
@@ -16,10 +14,8 @@ namespace {
 // Reads the config file if present; otherwise writes out the defaults so
 // the user has something to edit, and returns them.
 sz::core::AppConfig LoadOrCreateConfig(const std::filesystem::path& path) {
-    if (std::ifstream in(path); in) {
-        std::ostringstream buffer;
-        buffer << in.rdbuf();
-        return sz::core::ParseConfig(buffer.str());
+    if (const std::optional<sz::core::AppConfig> config = sz::core::ReadConfigFile(path)) {
+        return *config;
     }
 
     const sz::core::AppConfig config = sz::core::DefaultConfig();
