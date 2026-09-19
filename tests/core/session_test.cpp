@@ -620,7 +620,7 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
 
     const ItemId copyId = session.Manager().DuplicateItem(id);
     ASSERT_NE(copyId, 0u);
-    EXPECT_TRUE(session.CloneShotImageForCopy(id, copyId)) << "the pixels are in the session";
+    EXPECT_TRUE(session.ClonePicturesForCopy(id, copyId)) << "the pixels are in the session";
     EXPECT_NE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->textureHandle, 0u) << "on screen at once";
 
     EXPECT_FALSE(session.Flush()) << "staging is still blocked";
@@ -645,6 +645,82 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
     std::filesystem::remove_all(dir);
 }
 
+// The ordinary paste across canvases: the source's painted pixels were let
+// go of when its canvas stopped being current, so the copy has to be given
+// them from the source's file - or it comes out blank, for good.
+TEST(SessionTest, APasteAcrossCanvasesKeepsThePaintedLayer) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_painted_paste";
+    std::filesystem::remove_all(dir);
+    persistence::LibraryStore store(dir);
+    test::FakeOverlayWindow window;
+    window.createTextureFromPixelsReturnsHandle = 9;
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+
+    const std::vector<uint8_t> paint = {1, 2, 3, 255, 4, 5, 6, 255};
+    const ItemId id = session.Manager().CreateItem(false, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Painted");
+    {
+        Layer painted;
+        painted.kind = LayerKind::Painted;
+        painted.painted = std::make_shared<PaintedImage>(PaintedImage::FromPixels(2, 1, paint));
+        painted.paintedDirty = true;
+        session.Manager().FindItemAnywhere(id)->layers.push_back(painted);
+    }
+    ASSERT_TRUE(session.Flush());
+    const std::string paintedFile = session.Manager().FindItemAnywhere(id)->layers[1].imageFile;
+    ASSERT_FALSE(paintedFile.empty());
+
+    // Away to another canvas: the pixels are on disk, so they are let go of.
+    const CanvasId other = session.Manager().AddCanvas("Other");
+    session.Manager().SwitchToCanvas(other);
+    session.SyncTexturesToCurrentCanvas();
+    ASSERT_FALSE(session.Manager().FindItemAnywhere(id)->layers[1].HasPaintedPixels()) << "released, as it should be";
+
+    // Paste here, the way PasteFromClipboard does it.
+    const ItemId copyId = session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/true);
+    ASSERT_NE(copyId, 0u);
+    EXPECT_TRUE(session.ClonePicturesForCopy(id, copyId));
+    Item* copy = session.Manager().FindItemAnywhere(copyId);
+    ASSERT_EQ(copy->layers.size(), 2u);
+    EXPECT_TRUE(copy->layers[1].HasPaintedPixels()) << "pixels of its own";
+    EXPECT_EQ(copy->layers[1].painted->PixelsRGBA(), paint);
+    session.SyncTexturesToCurrentCanvas();
+    EXPECT_NE(copy->layers[1].textureHandle, 0u) << "and on screen";
+    ASSERT_TRUE(session.Flush());
+
+    persistence::LibraryStore reopened(dir);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    size_t paintedLayers = 0;
+    for (const Canvas& canvas : loaded->canvases) {
+        for (const Item& item : canvas.items) {
+            ASSERT_EQ(item.layers.size(), 2u);
+            ASSERT_FALSE(item.layers[1].imageFile.empty()) << "every copy names its painted layer's file";
+            const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(item.id, item.layers[1].imageFile);
+            ASSERT_TRUE(saved.has_value());
+            EXPECT_EQ(saved->pixelsRGBA, paint);
+            ++paintedLayers;
+        }
+    }
+    EXPECT_EQ(paintedLayers, 2u);
+
+    // A source whose painted file is gone gives its copy nothing there, and
+    // says so.
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+        if (entry.path().filename() == paintedFile && entry.path().string().find("painted") != std::string::npos) {
+            std::filesystem::remove(entry.path());
+        }
+    }
+    const ItemId another = session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/true);
+    ASSERT_NE(another, 0u);
+    EXPECT_FALSE(session.ClonePicturesForCopy(id, another));
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+
 // A source whose picture is gone from the disk gives its copy nothing,
 // and says so, rather than quietly producing a copy that looks captured.
 TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
@@ -659,7 +735,7 @@ TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
 
     const ItemId copyId = session.Manager().DuplicateItem(id);
     ASSERT_NE(copyId, 0u);
-    EXPECT_FALSE(session.CloneShotImageForCopy(id, copyId));
+    EXPECT_FALSE(session.ClonePicturesForCopy(id, copyId));
     EXPECT_TRUE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->imageFile.empty());
 
     session.SetLibraryStore(nullptr);

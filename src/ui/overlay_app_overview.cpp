@@ -1003,7 +1003,7 @@ void OverlayApp::SendPickedItemTo(CanvasId target) {
         const std::string targetName = targetCanvas ? targetCanvas->name : strings::kDeleteConfirmCanvasWord;
         bool pictureLost = false;
         if (const ItemId newId = Manager().MoveOrCopyItemToCanvas(item, target, isCopy); isCopy && newId != 0) {
-            pictureLost = !session_.CloneShotImageForCopy(item, newId);
+            pictureLost = !session_.ClonePicturesForCopy(item, newId);
         }
         if (!isCopy) {
             // A move takes the item off this canvas, so its history here

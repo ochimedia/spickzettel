@@ -531,57 +531,85 @@ void Session::CaptureShotItem(Item& item) {
     }
 }
 
-bool Session::CloneShotImageForCopy(ItemId sourceId, ItemId copyId) {
+bool Session::ClonePicturesForCopy(ItemId sourceId, ItemId copyId) {
     if (!Store()) {
         return true;
     }
     const Item* source = Manager().FindItemAnywhere(sourceId);
-    const Layer* sourcePicture = source ? source->ImageLayer() : nullptr;
-    if (!sourcePicture) {
-        return true;  // a Drawing item: nothing to copy
+    Item* copy = Manager().FindItemAnywhere(copyId);
+    if (!source || !copy) {
+        return true;
     }
+    bool whole = true;
+
+    // ----- The picture layer -----
     // The session's own copy of the pixels first: a capture whose write has
     // not landed has no file yet and its pixels are here, and a copy taken
     // of it in that window used to come out with no picture at all, for
     // good - the file it would later have been read from was never named.
+    const Layer* sourcePicture = source->ImageLayer();
+    Layer* copyPicture = copy->ImageLayer();
     std::optional<persistence::DecodedImage> decoded;
-    if (const auto pending = pendingPictures_.find(sourceId); pending != pendingPictures_.end()) {
-        decoded = persistence::DecodedImage{pending->second.width, pending->second.height,
-                                            pending->second.pixelsRGBA};
-    } else if (!sourcePicture->imageFile.empty()) {
-        decoded = Store()->LoadImage(sourceId, sourcePicture->imageFile);
-        if (!decoded.has_value()) {
-            return false;  // names a picture that cannot be read: the copy gets none
+    if (sourcePicture) {
+        if (const auto pending = pendingPictures_.find(sourceId); pending != pendingPictures_.end()) {
+            decoded = persistence::DecodedImage{pending->second.width, pending->second.height,
+                                                pending->second.pixelsRGBA};
+        } else if (!sourcePicture->imageFile.empty()) {
+            decoded = Store()->LoadImage(sourceId, sourcePicture->imageFile);
+            if (!decoded.has_value()) {
+                whole = false;  // names a picture that cannot be read: the copy gets none
+            }
         }
     }
-    if (!decoded.has_value()) {
-        return true;  // a Shot item that never captured anything real
+    if (decoded.has_value() && copyPicture) {
+        // Re-saved under `copyId`'s own filename - a fresh file on disk, not
+        // a second reference to the source's - same single-owner reasoning
+        // as CanvasManager clearing these on copy in the first place. A
+        // write that fails is kept for the next save, as a capture's is.
+        if (window_) {
+            copyPicture->textureHandle =
+                window_->CreateTextureFromPixels(decoded->pixelsRGBA.data(), decoded->width, decoded->height);
+        }
+        if (const std::optional<std::string> filename =
+                Store()->SaveImage(copyId, decoded->pixelsRGBA.data(), decoded->width, decoded->height)) {
+            copyPicture->imageFile = *filename;
+            pendingPictures_.erase(copyId);
+        } else {
+            pendingPictures_[copyId] =
+                PendingPicture{std::move(decoded->pixelsRGBA), decoded->width, decoded->height};
+        }
     }
-    Item* copy = Manager().FindItemAnywhere(copyId);
-    Layer* copyPicture = copy ? copy->ImageLayer() : nullptr;
-    if (!copyPicture) {
-        return true;
-    }
-    // Re-saved under `copyId`'s own filename - a fresh file on disk, not a
-    // second reference to the source's - same single-owner reasoning as
-    // CanvasManager clearing these on copy in the first place. A write
-    // that fails is kept for the next save, as a capture's is.
-    if (window_) {
-        copyPicture->textureHandle =
-            window_->CreateTextureFromPixels(decoded->pixelsRGBA.data(), decoded->width, decoded->height);
-    }
-    if (const std::optional<std::string> filename = Store()->SaveImage(
-            copyId, decoded->pixelsRGBA.data(), decoded->width, decoded->height)) {
-        copyPicture->imageFile = *filename;
-        pendingPictures_.erase(copyId);
-    } else {
-        pendingPictures_[copyId] = PendingPicture{std::move(decoded->pixelsRGBA), decoded->width, decoded->height};
+
+    // ----- Every painted layer -----
+    // One whose pixels are resident was deep-copied by CanvasManager
+    // (DetachLayersForCopy) and starts dirty, so the next save writes it.
+    // One whose pixels were let go of when its canvas stopped being current
+    // - the ordinary state of a layer copied from another canvas - arrived
+    // with nothing: no pixels to copy, and its filename cleared, since the
+    // file is the source's. Read back from the source's file here, into
+    // pixels of the copy's own, dirty: the copy's only copy until written.
+    // The first version restored the picture layer alone, and a painted
+    // layer pasted across canvases came out blank, for good.
+    for (size_t index = 0; index < source->layers.size() && index < copy->layers.size(); ++index) {
+        const Layer& from = source->layers[index];
+        Layer& to = copy->layers[index];
+        if (to.kind != LayerKind::Painted || to.HasPaintedPixels() || from.imageFile.empty()) {
+            continue;
+        }
+        const std::optional<persistence::DecodedImage> pixels = Store()->LoadImage(sourceId, from.imageFile);
+        if (!pixels.has_value()) {
+            whole = false;
+            continue;
+        }
+        to.painted = std::make_shared<PaintedImage>(
+            PaintedImage::FromPixels(pixels->width, pixels->height, pixels->pixelsRGBA));
+        to.paintedDirty = true;
     }
     // No MarkChanged() call needed - same reasoning as CaptureShotItem's
     // own: this runs synchronously right after the copy itself
     // (CanvasManager::DuplicateItem/MoveOrCopyItemToCanvas), which already
     // bumped the generation counter moments earlier in the same call stack.
-    return true;
+    return whole;
 }
 
 }  // namespace sz::core

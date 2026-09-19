@@ -330,7 +330,7 @@ void OverlayApp::RenderItemActions(Item& item) {
     // other item.
     if (PillIconButton("##copy_item", icons::kCopy, false)) {
         if (const ItemId newId = Manager().DuplicateItem(itemId); newId != 0) {
-            if (!session_.CloneShotImageForCopy(itemId, newId)) {
+            if (!session_.ClonePicturesForCopy(itemId, newId)) {
                 ShowActionToast(strings::kToastCopiedWithoutPicture);
             }
             OffsetCopiedItem(newId);

@@ -243,7 +243,7 @@ public:
     // doesn't exist, or the target is the current canvas. Returns the
     // copy's new id for a copy (0 on a no-op) and always 0 for a move,
     // since the caller already knows `id`. A copy's picture file is the
-    // caller's to give it (see Session::CloneShotImageForCopy); this class
+    // caller's to give it (see Session::ClonePicturesForCopy); this class
     // has no file access.
     ItemId MoveOrCopyItemToCanvas(ItemId id, CanvasId targetCanvasId, bool copy);
     // The general form of that one and of DuplicateItem below, and the

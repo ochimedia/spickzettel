@@ -259,14 +259,19 @@ public:
     // writes it to disk at once rather than waiting for the autosave (see
     // LibraryStore::SaveImage).
     void CaptureShotItem(Item& item);
-    // Gives the copy `copyId` a picture file and texture of its own, read
-    // from `sourceId`'s - a copy must never share either with its source.
-    // The source's pixels come from this session when its own capture is
-    // still waiting to be written (see PendingPicture), and from disk
-    // otherwise; a copy whose write fails waits the same way. False when
-    // the source names a picture that could not be read, so the copy has
-    // none: a UI says so rather than showing a copy that looks captured.
-    bool CloneShotImageForCopy(ItemId sourceId, ItemId copyId);
+    // Gives the copy `copyId` pixels of its own for every layer of
+    // `sourceId`'s that has any - a copy must never share a file or a
+    // texture with its source. The picture layer's come from this session
+    // when the source's capture is still waiting to be written (see
+    // PendingPicture) and from disk otherwise, and are written under the
+    // copy's own name at once (a write that fails waits the same way). A
+    // painted layer's come from the deep copy CanvasManager made when
+    // they were resident, and from the source's file when they had been
+    // let go of - the state of every layer on a canvas that is not
+    // current, which is what a paste across canvases copies from. False
+    // when a layer names a picture that could not be read, so the copy
+    // lacks it: a UI says so rather than showing a copy that looks whole.
+    bool ClonePicturesForCopy(ItemId sourceId, ItemId copyId);
 
 private:
     // A library, as the session holds one: the records, where they are

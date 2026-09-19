@@ -15,7 +15,7 @@ namespace {
 // resources. A texture handle has single-owner lifetime (see layer.h) and
 // must not be duplicated. imageFile names a file in the source's own
 // directory, so it is cleared and the caller gives the copy a file of its
-// own (see Session::CloneShotImageForCopy); this class has no file access.
+// own (see Session::ClonePicturesForCopy); this class has no file access.
 //
 // Painted pixels are deep-copied, not shared: this is a live item being
 // duplicated, and painting on one copy must not show up on the other. The

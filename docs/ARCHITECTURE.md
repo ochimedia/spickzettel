@@ -965,6 +965,21 @@ switch can happen mid-frame (Alt+wheel is handled from the frame), and
 one frame drawn between the switch and the load renders every shot as
 the placeholder gradient - the gradient flash the gate removed.
 
+**A copy owns its pixels.** The clipboard holds ids, not pixels, and a
+copy made from them (paste, duplicate, copy to another canvas) must
+share neither a file nor a texture with its source. `CanvasManager`
+clears the copied layers' filenames and deep-copies whatever painted
+pixels are resident; `Session::ClonePicturesForCopy` then gives the
+copy the rest, layer by layer: the picture layer from the session's own
+pending pixels or the source's file, written under the copy's name at
+once, and every painted layer whose pixels were let go of - the state
+of every layer on a canvas that is not current, which is what a paste
+across canvases copies from - read back from the source's file into
+pixels of the copy's own, dirty, for the next save to write. The first
+version restored the picture layer alone, so painting copied to another
+canvas came out blank, for good; the UI says so when a layer's source
+cannot be read, rather than showing a copy that looks whole.
+
 ### Undo is per canvas
 
 History is a `deque` per canvas, capped at 50 entries *and* 128 MB of

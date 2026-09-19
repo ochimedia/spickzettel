@@ -318,8 +318,8 @@ void OverlayApp::PasteFromClipboard() {
             }
         } else {
             // A copy must never share its source's picture file or its
-            // texture - see Session::CloneShotImageForCopy.
-            pictureLost = !session_.CloneShotImageForCopy(id, placed) || pictureLost;
+            // texture - see Session::ClonePicturesForCopy.
+            pictureLost = !session_.ClonePicturesForCopy(id, placed) || pictureLost;
         }
         fromThisCanvas = fromThisCanvas || *from == here;
         pasted.push_back(placed);
