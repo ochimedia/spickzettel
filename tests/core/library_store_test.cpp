@@ -1026,6 +1026,36 @@ TEST_F(LibraryStoreTest, RemoveDeletesASnippetForGoodAndTheNextSaveAgrees) {
     EXPECT_EQ(loaded->canvases[0].items.size(), 1u);
 }
 
+#if defined(_WIN32)
+TEST_F(LibraryStoreTest, ARemoveThatCouldNotFinishIsRetriedByTheNextSaveNotSetAside) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    ASSERT_TRUE(store.Save(snapshot));
+    snapshot.canvases[0].items.pop_back();
+
+    {
+        std::ifstream held(ShotItemDir() / "000004.qoi");  // no delete sharing
+        ASSERT_TRUE(held.is_open());
+        EXPECT_FALSE(store.Remove(4)) << "not gone, so not done";
+        EXPECT_TRUE(store.HasPendingRemoval(4));
+        EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
+
+        // A save meanwhile neither sets the remains aside nor forgets them.
+        ASSERT_TRUE(store.Save(snapshot));
+        EXPECT_TRUE(store.HasPendingRemoval(4));
+        EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
+        EXPECT_TRUE(std::filesystem::exists(ShotItemDir()));
+    }
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_FALSE(store.HasPendingRemoval(4));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir())) << "finished once the file was let go of";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
+}
+#endif
+
 TEST_F(LibraryStoreTest, RemoveOfAFolderTakesEverythingInIt) {
     LibraryStore store(dir_);
     ASSERT_TRUE(store.Save(MakeSampleSnapshot()));

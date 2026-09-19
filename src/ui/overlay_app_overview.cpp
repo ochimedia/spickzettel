@@ -2486,8 +2486,18 @@ void OverlayApp::RenderConfirmDeletePopover() {
         // Session::Delete and DeletePermanently - and its history only with
         // the thing itself, for good.
         if (forGood) {
-            if (session_.DeletePermanently(target.id)) {
-                ShowActionToast(strings::kToastDeletedForGood);
+            switch (session_.DeletePermanently(target.id)) {
+                case Session::Removal::Removed:
+                    ShowActionToast(strings::kToastDeletedForGood);
+                    break;
+                case Session::Removal::FilesRemain:
+                    // Gone from the library; its files are still on disk
+                    // because something else holds one open, and the
+                    // store keeps trying (see LibraryStore::Remove).
+                    ShowActionToast(strings::kToastDeletedForGoodFilesRemain);
+                    break;
+                case Session::Removal::NotFound:
+                    break;
             }
         } else if (session_.Delete(target.id)) {
             ShowActionToast(strings::kToastDeleted);

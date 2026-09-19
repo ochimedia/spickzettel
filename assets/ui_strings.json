@@ -100,6 +100,7 @@
   "toast.deleted": "Deleted",
   "toast.restored": "Restored",
   "toast.deletedForGood": "Deleted permanently",
+  "toast.deletedForGoodFilesRemain": "Deleted permanently - one of its files is still in use and goes with the next save",
   "toast.clearedDrawing": "Cleared drawing",
   "toast.undidPrefix": "Undid ",
   "toast.redidPrefix": "Redid ",

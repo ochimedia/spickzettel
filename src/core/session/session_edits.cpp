@@ -440,7 +440,7 @@ bool Session::DiscardIfUntouched(ItemId itemId) {
     // Erased rather than marked - there is nothing in it to find again - and
     // its own entries go with it: its making, and any stroke taken back off
     // it. The rest of the canvas's history stays.
-    return DeletePermanently(itemId);
+    return DeletePermanently(itemId) != Removal::NotFound;
 }
 
 bool Session::ClearDrawing(ItemId itemId) {

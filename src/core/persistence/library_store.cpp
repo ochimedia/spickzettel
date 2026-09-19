@@ -829,15 +829,21 @@ bool LibraryStore::WithinRoot(const std::filesystem::path& path) const {
     return !relative.empty() && relative != "." && *relative.begin() != "..";
 }
 
-void LibraryStore::RemoveOwnDirectory(const std::filesystem::path& path) const {
+bool LibraryStore::RemoveOwnDirectory(const std::filesystem::path& path) const {
     // Nothing in the index is a link or below one - Load never indexes a
     // linked directory - so meeting one here means the tree was rearranged
     // under a running instance, and the directory is physically somewhere
     // this store has never read. Left alone.
     if (CrossesLink(rootDir_, path)) {
-        return;
+        return false;
     }
     RemoveTree(path);
+    // Whether it is gone is the answer, not whether remove_all complained:
+    // a recursive delete that met one file it could not remove - held open
+    // without delete sharing by another process, on Windows - has removed
+    // everything else and left the directory standing around that file.
+    std::error_code ec;
+    return !std::filesystem::exists(std::filesystem::symlink_status(path, ec));
 }
 
 void LibraryStore::ForgetUnder(const std::filesystem::path& dir) const {
@@ -863,9 +869,17 @@ bool LibraryStore::Remove(uint64_t uid) const {
     if (dir.empty() || !WithinRoot(dir)) {
         return false;
     }
-    ForgetUnder(dir);
-    RemoveOwnDirectory(dir);
     ++writeGeneration_;
+    if (!RemoveOwnDirectory(dir)) {
+        // Still there, whole or in part. Kept indexed and marked, so that
+        // the next save takes another run at removing it rather than
+        // taking it for something gone missing and setting it aside - and
+        // so that the caller can say the files are still there.
+        pendingRemovals_.insert(uid);
+        return false;
+    }
+    pendingRemovals_.erase(uid);
+    ForgetUnder(dir);
     return true;
 }
 
@@ -1472,6 +1486,39 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
     // entries with it. Over a copy of the ids, since every move edits the
     // index it came from.
     {
+        // First, another run at whatever a permanent delete could not remove
+        // (see Remove). What still cannot go stays indexed and marked, and
+        // nothing under it is retired below: it was deleted, not lost.
+        std::vector<std::filesystem::path> stillPending;
+        for (auto pending = pendingRemovals_.begin(); pending != pendingRemovals_.end();) {
+            std::filesystem::path dir;
+            for (const auto* index : {&folderDirs_, &canvasDirs_, &itemDirs_}) {
+                if (const auto it = index->find(*pending); it != index->end()) {
+                    dir = it->second;
+                }
+            }
+            if (dir.empty()) {
+                pending = pendingRemovals_.erase(pending);  // nothing indexed to remove any more
+                continue;
+            }
+            if (RemoveOwnDirectory(dir)) {
+                ForgetUnder(dir);
+                pending = pendingRemovals_.erase(pending);
+                continue;
+            }
+            stillPending.push_back(dir);
+            ++pending;
+        }
+        const auto underPendingRemoval = [&stillPending](const std::filesystem::path& path) {
+            for (const std::filesystem::path& dir : stillPending) {
+                const std::filesystem::path relative = path.lexically_relative(dir);
+                if (!relative.empty() && *relative.begin() != "..") {
+                    return true;
+                }
+            }
+            return false;
+        };
+
         const std::filesystem::path retiredRoot = rootDir_ / kRetiredDir;
         const auto retire = [&](const std::map<uint64_t, std::filesystem::path>& index,
                                 const std::unordered_set<uint64_t>& live) {
@@ -1491,7 +1538,7 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                 // index was made under the root, so one that isn't is a
                 // bug, and a bug here leaves the directory alone.
                 const std::filesystem::path path = it->second;
-                if (!WithinRoot(path) || CrossesLink(rootDir_, path)) {
+                if (!WithinRoot(path) || CrossesLink(rootDir_, path) || underPendingRemoval(path)) {
                     continue;
                 }
                 const std::filesystem::path destination = retiredRoot / path.lexically_relative(foldersRoot);

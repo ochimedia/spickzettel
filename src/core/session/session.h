@@ -68,8 +68,13 @@ public:
     bool Restore(uint64_t id);
     // Erases `id` for good: out of the model, its textures released, its
     // history forgotten, and its directory deleted at once (see
-    // LibraryStore::Remove). False if there is no such thing.
-    bool DeletePermanently(uint64_t id);
+    // LibraryStore::Remove). NotFound, doing nothing, if there is no such
+    // thing. FilesRemain when the model has let go of it but its directory
+    // could not be wholly removed - a picture in it held open by another
+    // program, say - so that a UI can say so rather than report a delete
+    // that left files behind; the store retries at every save.
+    enum class Removal { NotFound, Removed, FilesRemain };
+    Removal DeletePermanently(uint64_t id);
     // ===== Keeping the disk and the GPU in step =====
 
     // The debounced autosave - see kAutosaveQuietSeconds for the policy.

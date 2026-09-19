@@ -513,6 +513,16 @@ runs, and the pass finds nothing. It is the net under a snapshot that
 lacks something nobody deleted, the kind of disagreement that once
 emptied a library.
 
+A permanent delete that cannot finish - Windows refuses to delete a
+file another program holds open without delete sharing, and a picture
+viewer looking at a capture is exactly that - reports so rather than
+success: the store keeps the directory indexed and marked, every save
+takes another run at removing it and sets nothing under it aside
+meanwhile, and the session tells the UI the files remain so the toast
+can say it. The first version forgot the directory before deleting it
+and returned true whatever happened, which left the remains to be
+retired as something lost, or reloaded as a snippet.
+
 A snippet's directory is swept for pictures its layers no longer name
 only after the record that stopped naming them is on disk. Until then
 the old record is what a restart reloads, and the pictures it names have

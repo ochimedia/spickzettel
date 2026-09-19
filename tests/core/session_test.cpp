@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -88,7 +89,7 @@ TEST(SessionTest, DeletingOrRestoringWhatIsNotThereDoesNothing) {
     Session session;
     EXPECT_FALSE(session.Delete(424242));
     EXPECT_FALSE(session.Restore(424242));
-    EXPECT_FALSE(session.DeletePermanently(424242));
+    EXPECT_EQ(session.DeletePermanently(424242), Session::Removal::NotFound);
     EXPECT_FALSE(session.Restore(session.Manager().CurrentCanvasId())) << "nothing deleted to restore";
 }
 
@@ -411,7 +412,7 @@ TEST(SessionTest, DeletingASnippetPermanentlyLeavesItsCanvasHistoryAlone) {
     DrawStrokeInto(session, kept);
     const ItemId gone = session.Manager().CreateItem(false, Rect{200, 0, 100, 100}, "Gone");
     ASSERT_TRUE(session.Delete(gone));
-    ASSERT_TRUE(session.DeletePermanently(gone));
+    ASSERT_EQ(session.DeletePermanently(gone), Session::Removal::Removed);
     EXPECT_EQ(ItemById(session.Manager(), gone), nullptr);
     EXPECT_TRUE(session.CanUndo());
 }
@@ -470,6 +471,44 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     session.SetLibraryStore(nullptr);
     std::filesystem::remove_all(dir);
 }
+
+#if defined(_WIN32)
+// Windows refuses to delete a file another handle holds open without
+// delete sharing - which is what a picture viewer looking at a capture
+// does. A permanent delete that meets one must not report a clean delete.
+TEST(SessionTest, APermanentDeleteThatLeavesFilesBehindSaysSoAndFinishesLater) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_files_remain";
+    std::filesystem::remove_all(dir);
+    persistence::LibraryStore store(dir);
+    Session session;
+    session.SetLibraryStore(&store);
+    const ItemId gone = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
+    session.Flush();
+
+    std::filesystem::path record;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+        if (entry.path().filename() == "item.json") {
+            record = entry.path();
+        }
+    }
+    ASSERT_FALSE(record.empty());
+    {
+        std::ifstream held(record);  // held open, no delete sharing
+        ASSERT_TRUE(held.is_open());
+        EXPECT_EQ(session.DeletePermanently(gone), Session::Removal::FilesRemain);
+        EXPECT_EQ(ItemById(session.Manager(), gone), nullptr) << "gone from the library all the same";
+        EXPECT_TRUE(std::filesystem::exists(record));
+    }
+    // Let go, the next save finishes the delete - and sets nothing aside.
+    session.Flush();
+    EXPECT_FALSE(std::filesystem::exists(record.parent_path()));
+    EXPECT_FALSE(std::filesystem::exists(dir / "retired"));
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+#endif
 
 }  // namespace
 }  // namespace sz::core

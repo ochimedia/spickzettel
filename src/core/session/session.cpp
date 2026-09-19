@@ -237,7 +237,7 @@ bool Session::Restore(uint64_t id) {
     return true;
 }
 
-bool Session::DeletePermanently(uint64_t id) {
+Session::Removal Session::DeletePermanently(uint64_t id) {
     CanvasManager& manager = Manager();
     // What goes with it: the textures of every snippet under it, and the
     // history of every canvas - or, for a lone snippet, its own entries on
@@ -267,16 +267,20 @@ bool Session::DeletePermanently(uint64_t id) {
         }
     }
     if (!found || !manager.Erase(id)) {
-        return false;
+        return Removal::NotFound;
     }
     // Off the disk now, rather than left for the next save - which would
     // take a directory the model no longer holds for something gone missing,
-    // and set it aside (see LibraryStore::Save).
-    if (Store()) {
-        Store()->Remove(id);
+    // and set it aside (see LibraryStore::Save). A false from the store is
+    // one of two things: nothing was ever saved for it, which is fine, or
+    // something in its directory could not be removed, which the store
+    // keeps a note of and the caller is told about.
+    Removal removal = Removal::Removed;
+    if (Store() && !Store()->Remove(id) && Store()->HasPendingRemoval(id)) {
+        removal = Removal::FilesRemain;
     }
     SyncTexturesToCurrentCanvas();
-    return true;
+    return removal;
 }
 
 // ================= Capturing the screen =================

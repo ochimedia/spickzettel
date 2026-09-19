@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "core/canvas/canvas_manager.h"
 #include "core/persistence/image_codec.h"
@@ -130,10 +131,20 @@ public:
     // with everything inside it, for good and now - what "Delete
     // permanently" is on disk, once the model no longer holds the thing.
     // Now rather than at the next save, which would take a directory the
-    // model has lost for something gone missing, and set it aside. False if
-    // this store knows no directory for it: a thing never saved has none,
-    // and a capture of one still in staging is collected by the next save.
+    // model has lost for something gone missing, and set it aside.
+    //
+    // True only once the directory is gone. False if this store knows no
+    // directory for it - a thing never saved has none, and a capture of one
+    // still in staging is collected by the next save - or if something in
+    // it could not be removed: a picture held open by another program, on
+    // Windows. That directory stays indexed and marked, every save from
+    // then on takes another run at removing it, and nothing under it is
+    // set aside meanwhile (see Save). The caller can tell the two falses
+    // apart with HasPendingRemoval.
     bool Remove(uint64_t uid) const;
+    // Whether a Remove of `uid` is still owed: it was asked for and the
+    // directory is still there, whole or in part.
+    bool HasPendingRemoval(uint64_t uid) const { return pendingRemovals_.count(uid) > 0; }
 
     // Loads the on-disk library, or returns nullopt only if `rootDir` has
     // none at all - no library.json *and* no folders/ tree - which is a
@@ -268,7 +279,8 @@ private:
     // if neither it nor anything on the way down from the root is a link
     // or junction, so that nothing outside the library is ever emptied
     // through something pointing at it. See the .cpp on links.
-    void RemoveOwnDirectory(const std::filesystem::path& path) const;
+    // True once `path` is gone.
+    bool RemoveOwnDirectory(const std::filesystem::path& path) const;
 
     // The tree walk behind Load: every folder, canvas and snippet under
     // `foldersRoot`, into `out`, indexing each directory and noting each
@@ -305,6 +317,9 @@ private:
     mutable std::map<uint64_t, std::filesystem::path> canvasDirs_;
     mutable std::map<uint64_t, std::filesystem::path> itemDirs_;
     mutable bool treeIndexed_ = false;
+    // What Remove was asked to delete and could not, wholly - see Remove.
+    // Each save tries again.
+    mutable std::unordered_set<uint64_t> pendingRemovals_;
     // See WriteGeneration.
     mutable uint64_t writeGeneration_ = 0;
 
