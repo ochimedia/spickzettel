@@ -817,6 +817,16 @@ dirty. Waiting for the debounced save was not good enough: switching
 canvas bumps the generation, which pushes the save *further away* at the
 exact moment the pixels are thrown out.
 
+**One writer per library.** Two copies of the app would each save the
+library from a stale picture of it, through the same temp-file names.
+The tray claims a per-user named mutex before it does anything else,
+and a second copy exits with the app's one message box instead of
+loading the library. Per user is per `%APPDATA%`, which is per library;
+the kernel drops the mutex with the process, so a copy that crashed
+holds nothing. A hotkey collision is not a lock: with a hand-edited
+config the two copies could have different hotkeys and never notice
+each other.
+
 **When the disk says no.** A save that fails is said on screen for as
 long as it stays failed: a line along the bottom naming the library,
 drawn from `Session::LastSaveFailed`, in edit and view-only mode alike,

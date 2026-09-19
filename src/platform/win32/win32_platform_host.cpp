@@ -60,6 +60,10 @@ Win32PlatformHost::~Win32PlatformHost() {
         DestroyWindow(hwnd_);
         hwnd_ = nullptr;
     }
+    if (instanceMutex_) {
+        CloseHandle(instanceMutex_);
+        instanceMutex_ = nullptr;
+    }
 }
 
 bool Win32PlatformHost::Initialize(const std::string& appName) {
@@ -84,6 +88,28 @@ bool Win32PlatformHost::Initialize(const std::string& appName) {
     }
 
     overlayWindow_.Initialize(instance);
+    return true;
+}
+
+bool Win32PlatformHost::AcquireSingleInstance() {
+    if (instanceMutex_) {
+        return true;
+    }
+    // A named mutex in the per-session namespace: one per logged-in user,
+    // which is also one per %APPDATA% and so one per library. Created
+    // owned; ERROR_ALREADY_EXISTS means another process made it first and
+    // is still alive - the kernel drops it with its last handle, so a copy
+    // that crashed holds nothing.
+    const std::wstring name = L"Local\\" + std::wstring(appName_.begin(), appName_.end()) + L".Instance";
+    HANDLE mutex = CreateMutexW(nullptr, TRUE, name.c_str());
+    if (!mutex) {
+        return true;  // could not even ask: not a reason to refuse to start
+    }
+    if (GetLastError() == ERROR_ALREADY_EXISTS) {
+        CloseHandle(mutex);
+        return false;
+    }
+    instanceMutex_ = mutex;
     return true;
 }
 

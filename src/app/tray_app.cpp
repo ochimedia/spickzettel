@@ -35,6 +35,13 @@ bool TrayController::Initialize() {
     liveEditModeInput_ = settings_.Live().InputOptions();
     host_.GetOverlayWindow().SetEditModeInput(liveEditModeInput_);
 
+    // Before anything else - before the tray icon, which would show two
+    // icons for a moment, and long before the library is loaded, which is
+    // what this protects: two copies of the app would each write the
+    // library from a picture of it the other keeps changing.
+    if (!host_.AcquireSingleInstance()) {
+        return false;
+    }
     if (!host_.ShowTrayIcon()) {
         return false;
     }

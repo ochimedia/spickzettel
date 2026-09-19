@@ -20,6 +20,13 @@ public:
 
     virtual bool Initialize(const std::string& appName) = 0;
 
+    // Claims this user's one running copy of the app, for the life of the
+    // process; false if another copy holds it. Two instances would write
+    // one library from two stale pictures of it, through the same
+    // temp-file names - so the second never gets as far as loading it.
+    // See TrayController::Initialize.
+    virtual bool AcquireSingleInstance() = 0;
+
     virtual bool ShowTrayIcon() = 0;
     virtual void RemoveTrayIcon() = 0;
     virtual void SetTrayCommandCallback(TrayCommandCallback callback) = 0;

@@ -79,6 +79,15 @@ TEST(TrayControllerTest, InitializeFailsIfTrayIconFails) {
     EXPECT_FALSE(controller.Initialize());
 }
 
+TEST(TrayControllerTest, InitializeFailsWhenAnotherCopyIsRunning) {
+    test::FakePlatformHost host;
+    host.singleInstanceAvailable = false;
+    TrayController controller(host, DefaultConfig());
+    EXPECT_FALSE(controller.Initialize());
+    EXPECT_FALSE(host.trayIconShown) << "not even a second tray icon for a moment";
+    EXPECT_TRUE(host.registeredCombos.empty());
+}
+
 TEST(TrayControllerTest, InitializeFailsIfHotkeyRegistrationFails) {
     test::FakePlatformHost host;
     host.registerHotkeySucceeds = false;

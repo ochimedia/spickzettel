@@ -8,6 +8,7 @@
 
 #include "app/tray_app.h"
 #include "core/config/app_config.h"
+#include "generated/ui_strings.h"
 #include "platform/i_platform_host.h"
 
 namespace {
@@ -44,6 +45,10 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
 
     sz::app::TrayController trayController(*host, config);
     if (!trayController.Initialize()) {
+        // The one message box in the app: there is no tray icon yet to
+        // hang a notice on, and a tray app that starts and silently isn't
+        // there is indistinguishable from one that never started.
+        MessageBoxA(nullptr, sz::strings::kStartupFailed, "Spickzettel", MB_OK | MB_ICONWARNING);
         return 1;
     }
 

@@ -20,6 +20,7 @@ public:
     ~Win32PlatformHost() override;
 
     bool Initialize(const std::string& appName) override;
+    bool AcquireSingleInstance() override;
     bool ShowTrayIcon() override;
     void RemoveTrayIcon() override;
     void SetTrayCommandCallback(TrayCommandCallback callback) override;
@@ -41,6 +42,9 @@ private:
 
     std::string appName_;
     HWND hwnd_ = nullptr;
+    // See AcquireSingleInstance: held, never released, until the process
+    // ends - Windows abandons it for us.
+    HANDLE instanceMutex_ = nullptr;
     bool trayIconVisible_ = false;
     TrayCommandCallback trayCallback_;
     std::unordered_map<int, HotkeyCallback> hotkeyCallbacks_;

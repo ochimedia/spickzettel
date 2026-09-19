@@ -174,6 +174,11 @@ class FakePlatformHost final : public platform::IPlatformHost {
 public:
     bool Initialize(const std::string& /*appName*/) override { return true; }
 
+    // On by default; a test turns it off to stand for another copy of the
+    // app already running.
+    bool AcquireSingleInstance() override { return singleInstanceAvailable; }
+    bool singleInstanceAvailable = true;
+
     bool ShowTrayIcon() override {
         trayIconShown = showTrayIconSucceeds;
         return showTrayIconSucceeds;
