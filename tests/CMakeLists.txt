@@ -62,7 +62,11 @@ endif()
 # and whatever displays the machine has. Its own binary so the portable
 # suite stays buildable on Linux.
 if(WIN32)
-    add_executable(sz_win32_tests platform/win32_input_grab_test.cpp platform/win32_displays_test.cpp)
+    add_executable(sz_win32_tests
+        platform/win32_displays_test.cpp
+        platform/win32_input_grab_test.cpp
+        platform/win32_platform_host_test.cpp
+    )
     target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 GTest::gtest_main)
     target_compile_features(sz_win32_tests PRIVATE cxx_std_20)
     spickzettel_set_warnings(sz_win32_tests)

@@ -75,14 +75,20 @@ bool Win32PlatformHost::Initialize(const std::string& appName) {
     windowClass.lpfnWndProc = &Win32PlatformHost::WndProcThunk;
     windowClass.hInstance = instance;
     windowClass.lpszClassName = kWindowClassName;
-    // Cosmetic only - this window is HWND_MESSAGE (never visible), but the
-    // icon it registers here is also what ShowTrayIcon() below reuses for
-    // the actual tray icon.
+    // Cosmetic only - this window is never shown, but the icon it
+    // registers here is also what ShowTrayIcon() below reuses for the
+    // actual tray icon.
     windowClass.hIcon = LoadIconA(instance, MAKEINTRESOURCEA(IDI_APP_ICON));
     RegisterClassExA(&windowClass);
 
-    hwnd_ = CreateWindowExA(0, kWindowClassName, appName_.c_str(), 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
-                             instance, this);
+    // A hidden top-level window - not a message-only one (HWND_MESSAGE).
+    // WM_QUERYENDSESSION and WM_ENDSESSION are broadcast to every top-level
+    // window, and message-only windows are left off that list: the first
+    // version of the session-end handling below sat on an HWND_MESSAGE
+    // window, where no logoff could ever have reached it. Never shown, and
+    // a tool window besides, so that nothing lists it either.
+    hwnd_ = CreateWindowExA(WS_EX_TOOLWINDOW, kWindowClassName, appName_.c_str(), WS_OVERLAPPED, 0, 0, 0, 0,
+                            nullptr, nullptr, instance, this);
     if (!hwnd_) {
         return false;
     }

@@ -10,10 +10,12 @@
 
 namespace sz::platform::win32 {
 
-// Win32 implementation of IPlatformHost: owns a hidden message-only window
-// that receives tray-icon callback messages and global hotkey messages, the
-// tray icon itself, and the single-threaded event loop that keeps idle CPU
-// usage near zero (see RunEventLoop).
+// Win32 implementation of IPlatformHost: owns a hidden top-level window
+// that receives tray-icon callback messages, global hotkey messages and
+// the OS's session-end broadcast (top-level rather than message-only for
+// that last one - see Initialize), the tray icon itself, and the
+// single-threaded event loop that keeps idle CPU usage near zero (see
+// RunEventLoop).
 class Win32PlatformHost final : public IPlatformHost {
 public:
     Win32PlatformHost() = default;

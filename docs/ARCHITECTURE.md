@@ -822,7 +822,7 @@ had been on screen for a minute was gone at the next start. A flush at
 one of those points, or after a silent capture taken while hidden, that
 does not land arranges its own retry: the autosave's clock runs on
 frames and there are none while hidden, so the tray asks the platform
-host for a background timer (a `WM_TIMER` on the message window) and
+host for a background timer (a `WM_TIMER` on the host window) and
 tries again every ten seconds until the save lands or the overlay is up
 again and frames take over. Before that, a silent capture with notices
 off created its canvas and snippet and returned to hidden without a
@@ -868,7 +868,13 @@ value at the next start.
 
 Exit and the OS ending the session (`WM_QUERYENDSESSION`, answered TRUE
 after the flush, and `WM_ENDSESSION` again for good measure) are the two
-flushes with no retry after them. Both settle the hand's work, try the
+flushes with no retry after them. Those two messages are a broadcast to
+every *top-level* window, and Windows leaves message-only
+(`HWND_MESSAGE`) windows off that list - which the host window was when
+the handling was first written, so no logoff could have reached it. It
+is now an ordinary hidden top-level window, and the test finds it with
+`FindWindow`, which likewise sees only top-level windows, and sends it
+the query. Both settle the hand's work, try the
 save twice - the first attempt may be what clears the way - and, if the
 library still cannot be written, write a **recovery copy** beside it:
 `library-recovery-<timestamp>/`, a fresh tree holding every record and
@@ -1389,7 +1395,8 @@ the debounce.
 Single process, single executable: a hidden `HWND` with no render loop
 costs essentially nothing, so a tray-stub-plus-spawned-overlay split
 would add IPC and a second failure surface for no benefit. At launch only
-the hidden message window that receives tray and hotkey messages exists;
+the hidden host window that receives tray, hotkey and session-end
+messages exists;
 the first hotkey creates the overlay window and the D3D11 device, once
 per session; every toggle after that is `ShowWindow`, with no swapchain
 teardown, so fast repeated toggling has no re-creation latency. While
