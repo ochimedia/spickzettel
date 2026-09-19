@@ -1,6 +1,7 @@
 #include "core/persistence/library_store.h"
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <fstream>
 #include <functional>
@@ -50,11 +51,38 @@ uint64_t ReadId(const json& j, const char* key) {
     return 0;  // anything else is no id, and 0 is "no id" everywhere
 }
 
+// ===== Numbers a record may carry =====
+//
+// JSON has no infinity and no NaN, but it has 1e100, which becomes
+// infinity the moment it is read as a float - and one infinite coordinate
+// poisons every bounding box, tessellation and hit test it meets. Every
+// float a record holds comes through here: a value that is not finite
+// reads as the field's default, and the fields with a meaningful range are
+// held inside it. Clamped or defaulted, never refused: the rest of the
+// record is still the user's, and a save writes the repaired value back.
+float FiniteOr(const json& j, const char* key, float fallback) {
+    const auto it = j.find(key);
+    if (it == j.end() || !it->is_number()) {
+        return fallback;
+    }
+    const float value = it->get<float>();
+    return std::isfinite(value) ? value : fallback;
+}
+
+float ClampedOr(const json& j, const char* key, float fallback, float min, float max) {
+    return std::clamp(FiniteOr(j, key, fallback), min, max);
+}
+
+// A stroke's width or an item's native size: positive, and no wider than a
+// screen is likely to be. Past that a value is a typo or an overflow, not
+// a wish.
+constexpr float kMaxSensibleExtent = 65536.0f;
+
 json ToJson(const StrokePoint& p) { return json{{"x", p.x}, {"y", p.y}}; }
 
 void FromJson(const json& j, StrokePoint& out) {
-    out.x = j.value("x", 0.0f);
-    out.y = j.value("y", 0.0f);
+    out.x = FiniteOr(j, "x", 0.0f);
+    out.y = FiniteOr(j, "y", 0.0f);
 }
 
 json ToJson(const Stroke& s) {
@@ -67,7 +95,10 @@ json ToJson(const Stroke& s) {
 
 void FromJson(const json& j, Stroke& out) {
     out.colorRGBA = j.value("colorRGBA", 0xFF0000FFu);
-    out.width = j.value("width", 3.0f);
+    out.width = FiniteOr(j, "width", 3.0f);
+    if (out.width <= 0.0f || out.width > kMaxSensibleExtent) {
+        out.width = 3.0f;
+    }
     out.points.clear();
     if (const auto it = j.find("points"); it != j.end() && it->is_array()) {
         out.points.reserve(it->size());
@@ -82,10 +113,10 @@ void FromJson(const json& j, Stroke& out) {
 json ToJson(const Rect& r) { return json{{"x", r.x}, {"y", r.y}, {"w", r.w}, {"h", r.h}}; }
 
 void FromJson(const json& j, Rect& out) {
-    out.x = j.value("x", 0.0f);
-    out.y = j.value("y", 0.0f);
-    out.w = j.value("w", 0.0f);
-    out.h = j.value("h", 0.0f);
+    out.x = FiniteOr(j, "x", 0.0f);
+    out.y = FiniteOr(j, "y", 0.0f);
+    out.w = FiniteOr(j, "w", 0.0f);
+    out.h = FiniteOr(j, "h", 0.0f);
 }
 
 // A bare filename and nothing else: no separators, no ".", no "..", no
@@ -138,11 +169,11 @@ bool FromJson(const json& j, Layer& out) {
         return false;
     }
     out.kind = j.value("kind", std::string("image")) == "painted" ? LayerKind::Painted : LayerKind::Image;
-    out.opacity = j.value("opacity", 0.0f);
-    out.resolutionScale = std::max(j.value("resolutionScale", 1.0f), 0.05f);
+    out.opacity = ClampedOr(j, "opacity", 0.0f, 0.0f, 1.0f);
+    out.resolutionScale = ClampedOr(j, "resolutionScale", 1.0f, 0.05f, 16.0f);
     out.tintColorRGBA = j.value("tintColorRGBA", uint32_t{0xFFFFFFFF});
     out.showsPlaceholder = j.value("showsPlaceholder", false);
-    out.placeholderHue = j.value("placeholderHue", 0.0f);
+    out.placeholderHue = ClampedOr(j, "placeholderHue", 0.0f, 0.0f, 360.0f);
     out.imageFile = j.value("imageFile", std::string());
     if (!IsPlainFilename(out.imageFile)) {
         out.imageFile.clear();  // a layer with no picture, rather than one somewhere else
@@ -160,10 +191,10 @@ bool FromJson(const json& j, Layer& out) {
 Layer LayerFromPreLayersItemJson(const json& j, bool hasBackground) {
     Layer layer;
     layer.kind = LayerKind::Image;
-    layer.opacity = j.value("backgroundOpacity", hasBackground ? 1.0f : 0.0f);
+    layer.opacity = ClampedOr(j, "backgroundOpacity", hasBackground ? 1.0f : 0.0f, 0.0f, 1.0f);
     layer.tintColorRGBA = j.value("backgroundColorRGBA", uint32_t{0xFFFFFFFF});
     layer.showsPlaceholder = hasBackground;
-    layer.placeholderHue = j.value("seedHue", 0.0f);
+    layer.placeholderHue = ClampedOr(j, "seedHue", 0.0f, 0.0f, 360.0f);
     layer.imageFile = j.value("shotImageFile", std::string());
     if (!IsPlainFilename(layer.imageFile)) {
         layer.imageFile.clear();
@@ -341,9 +372,9 @@ bool FromJson(const json& j, Item& out) {
     if (const auto it = j.find("rect"); it != j.end()) {
         FromJson(*it, out.rect);
     }
-    out.nativeW = j.value("nativeW", 0.0f);
-    out.nativeH = j.value("nativeH", 0.0f);
-    out.foregroundOpacity = j.value("foregroundOpacity", 1.0f);
+    out.nativeW = ClampedOr(j, "nativeW", 0.0f, 0.0f, kMaxSensibleExtent);
+    out.nativeH = ClampedOr(j, "nativeH", 0.0f, 0.0f, kMaxSensibleExtent);
+    out.foregroundOpacity = ClampedOr(j, "foregroundOpacity", 1.0f, 0.0f, 1.0f);
     out.isFullscreen = j.value("isFullscreen", false);
     out.isFullscreenStretch = j.value("isFullscreenStretch", false);
     out.minimized = j.value("minimized", false);
@@ -375,7 +406,7 @@ bool FromJson(const json& j, Item& out) {
     // Clamped, not rejected, and the fallback is the same default a fresh
     // Item carries - a library written before these two fields existed
     // reads back as a note styled exactly the way it was drawn then.
-    out.noteTextSizePx = std::clamp(j.value("noteTextSizePx", 17.0f), kNoteTextSizeMin, kNoteTextSizeMax);
+    out.noteTextSizePx = ClampedOr(j, "noteTextSizePx", 17.0f, kNoteTextSizeMin, kNoteTextSizeMax);
     // anchorRect defaults to a zero Rect (via FromJson(Rect)'s own
     // per-field 0.0f defaults) and anchorDisplayWidth/Height default to 0
     // - together, "not yet anchored" (see Item::anchorRect's own doc
@@ -385,8 +416,8 @@ bool FromJson(const json& j, Item& out) {
     if (const auto it = j.find("anchorRect"); it != j.end()) {
         FromJson(*it, out.anchorRect);
     }
-    out.anchorDisplayWidth = j.value("anchorDisplayWidth", 0.0f);
-    out.anchorDisplayHeight = j.value("anchorDisplayHeight", 0.0f);
+    out.anchorDisplayWidth = ClampedOr(j, "anchorDisplayWidth", 0.0f, 0.0f, kMaxSensibleExtent);
+    out.anchorDisplayHeight = ClampedOr(j, "anchorDisplayHeight", 0.0f, 0.0f, kMaxSensibleExtent);
     out.createdAt = j.value("createdAt", int64_t{0});
     out.deletedAt = j.value("deletedAt", int64_t{0});
     out.strokes.clear();
@@ -544,7 +575,18 @@ bool ReadRecord(const json& j, T& out) {
     }
 }
 
+// The most a record may be before it is read at all. A snippet's record
+// is a JSON object per stroke point, and a heavily drawn-on snippet runs to
+// a few megabytes; 64 MB is two million points on one snippet, far past
+// anything a hand draws, and a file bigger than that in a record's place is
+// not a record. Refused unread rather than parsed into memory to find out.
+constexpr uintmax_t kMaxRecordBytes = uintmax_t{64} << 20;
+
 std::optional<std::string> ReadFileText(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (std::filesystem::file_size(path, ec) > kMaxRecordBytes || ec) {
+        return std::nullopt;
+    }
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         return std::nullopt;

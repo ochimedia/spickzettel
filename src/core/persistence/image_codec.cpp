@@ -43,13 +43,37 @@ void WriteCallback(void* context, void* data, int size) {
 
 // The whole file as bytes, or empty on any failure - shared by both
 // decoders, which each want the file in memory before handing it to a
-// memory-to-memory codec.
+// memory-to-memory codec. The size is asked first and refused past the
+// budget, so a stray multi-gigabyte file in a snippet's directory is not
+// read into memory to find out what it is.
 std::vector<uint8_t> ReadFileBytes(const std::filesystem::path& path) {
+    std::error_code ec;
+    const uintmax_t size = std::filesystem::file_size(path, ec);
+    if (ec || size == 0 || size > kMaxImageFileBytes) {
+        return {};
+    }
     std::ifstream in(path, std::ios::binary);
     if (!in) {
         return {};
     }
-    return std::vector<uint8_t>((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    std::vector<uint8_t> bytes(static_cast<size_t>(size));
+    in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+    if (static_cast<uintmax_t>(in.gcount()) != size) {
+        return {};
+    }
+    return bytes;
+}
+
+// Whether a picture of this size is one this app will decode - see
+// kMaxImageExtent. Checked against the header, before the decoder is
+// given a chance to allocate for it.
+bool WithinPixelBudget(uint64_t width, uint64_t height) {
+    return width >= 1 && height >= 1 && width <= static_cast<uint64_t>(kMaxImageExtent) &&
+           height <= static_cast<uint64_t>(kMaxImageExtent) && width * height <= kMaxImagePixels;
+}
+
+uint32_t ReadBigEndian32(const uint8_t* bytes) {
+    return (uint32_t{bytes[0]} << 24) | (uint32_t{bytes[1]} << 16) | (uint32_t{bytes[2]} << 8) | uint32_t{bytes[3]};
 }
 
 }  // namespace
@@ -164,6 +188,13 @@ std::optional<DecodedImage> DecodeQoiFromFile(const std::filesystem::path& path)
         return std::nullopt;
     }
 
+    // The header first: "qoif", then width and height as big-endian 32-bit
+    // integers. qoi_decode allocates width*height*4 on the strength of
+    // those two numbers before it has looked at a single pixel.
+    if (fileBytes.size() < QOI_HEADER_SIZE || std::memcmp(fileBytes.data(), "qoif", 4) != 0 ||
+        !WithinPixelBudget(ReadBigEndian32(fileBytes.data() + 4), ReadBigEndian32(fileBytes.data() + 8))) {
+        return std::nullopt;
+    }
     qoi_desc desc{};
     void* decoded = qoi_decode(fileBytes.data(), static_cast<int>(fileBytes.size()), &desc, /*channels=*/4);
     if (!decoded) {
@@ -231,6 +262,13 @@ std::optional<DecodedImage> DecodePngFromFile(const std::filesystem::path& path)
     int width = 0;
     int height = 0;
     int sourceChannels = 0;
+    // The header first, for the same reason as QOI's: the dimensions are
+    // what the decoder allocates from.
+    if (!stbi_info_from_memory(fileBytes.data(), static_cast<int>(fileBytes.size()), &width, &height,
+                               &sourceChannels) ||
+        !WithinPixelBudget(static_cast<uint64_t>(std::max(width, 0)), static_cast<uint64_t>(std::max(height, 0)))) {
+        return std::nullopt;
+    }
     uint8_t* decoded = stbi_load_from_memory(fileBytes.data(), static_cast<int>(fileBytes.size()), &width, &height,
                                               &sourceChannels, /*desiredChannels=*/4);
     if (!decoded) {

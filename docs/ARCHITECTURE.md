@@ -473,6 +473,19 @@ few pre-release record shapes (numeric ids, an item's single layer
 written as five fields, order files listing directory names); they are
 cheap and the tree invites old files.
 
+The tree also invites files that are not ours, so what is read has a
+budget checked before anything is allocated for it: a record is refused
+unread past 64 MB (two million stroke points on one snippet), a picture
+past 256 MB of file, 16384 pixels on a side or 64 million pixels, with
+the picture's header checked before the decoder is handed the bytes - a
+QOI header claiming 100000x100000 asked for a 40 GB allocation before
+that. Every float a record carries is read through one function that
+turns a value too large for a float (`1e100` is valid JSON and infinite
+as a float) into the field's default and holds the fields with a range
+inside it, rather than letting one infinite coordinate poison every
+bounding box it meets. Repaired, never refused: the rest of the record
+is still the user's, and the next save writes the repaired value back.
+
 A snippet's pictures live in its own directory, so moving a snippet is
 moving one directory with no window where the record has moved and the
 picture has not. `Layer::imageFile` names a *file*, not a path, and

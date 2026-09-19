@@ -424,6 +424,39 @@ TEST_F(LibraryStoreTest, LoadDefaultsNoteTextStyleToTheOldFixedLookWhenLibraryPr
 // Out-of-band sizes are pulled into range rather than rejected outright -
 // a hand-edited or corrupted 0 would otherwise render an invisible
 // caption with no way to tell it from an empty one.
+// 1e100 is valid JSON and infinite as a float, and one infinite coordinate
+// poisons every bounding box it meets. Read as the field's default, with
+// the rest of the record kept.
+TEST_F(LibraryStoreTest, LoadReadsANumberTooLargeForAFloatAsTheDefault) {
+    WriteLibraryTree(dir_, R"({
+        "currentFolderId": 1, "currentCanvasId": 2,
+        "folders": [{"id": 1, "name": "F"}],
+        "canvases": [{"id": 2, "folderId": 1, "name": "C", "items": [{
+            "id": 3, "name": "Huge",
+            "rect": {"x": 1e100, "y": 20, "w": 300, "h": -1e300},
+            "nativeW": 1e6, "nativeH": 1e40, "foregroundOpacity": 7,
+            "strokes": [{"width": 1e100, "points": [{"x": 1e100, "y": 5}, {"x": 10, "y": 6}]}],
+            "layers": [{"opacity": 5, "resolutionScale": 100}]
+        }]}]
+    })");
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases[0].items.size(), 1u) << "the record is kept";
+    const Item& item = loaded->canvases[0].items[0];
+    EXPECT_FLOAT_EQ(item.rect.x, 0.0f);
+    EXPECT_FLOAT_EQ(item.rect.y, 20.0f) << "the finite fields are untouched";
+    EXPECT_FLOAT_EQ(item.rect.h, 0.0f);
+    EXPECT_FLOAT_EQ(item.nativeW, 65536.0f) << "finite and absurd: held to the top of the sensible range";
+    EXPECT_FLOAT_EQ(item.nativeH, 0.0f) << "infinite: the default, not the top of the range";
+    EXPECT_FLOAT_EQ(item.foregroundOpacity, 1.0f);
+    ASSERT_EQ(item.strokes.size(), 1u);
+    EXPECT_FLOAT_EQ(item.strokes[0].width, 3.0f);
+    EXPECT_FLOAT_EQ(item.strokes[0].points[0].x, 0.0f);
+    EXPECT_FLOAT_EQ(item.strokes[0].points[0].y, 5.0f);
+    EXPECT_FLOAT_EQ(item.layers[0].opacity, 1.0f);
+    EXPECT_FLOAT_EQ(item.layers[0].resolutionScale, 16.0f);
+}
+
 TEST_F(LibraryStoreTest, LoadClampsAnOutOfRangeNoteTextSize) {
     std::filesystem::create_directories(dir_);
     WriteLibraryTree(dir_, R"({

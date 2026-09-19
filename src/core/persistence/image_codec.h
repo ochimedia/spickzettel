@@ -54,10 +54,23 @@ bool EncodeQoiToFile(const std::filesystem::path& path, const uint8_t* pixelsRGB
 // open, and an export path is the obvious use for it.
 bool EncodePngToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height);
 
+// What a picture may be before this reads it, checked before anything is
+// allocated for it: the file's size before it is read, the dimensions in
+// its header before it is decoded. A library is a directory tree anyone
+// can drop files into, and a header claiming 100000x100000 pixels asked
+// for a 40 GB allocation before these existed. 16384 on a side and 64
+// million pixels (an 8K display is 33 million) is well past any capture
+// this app takes; 256 MB of file is past any picture those dimensions
+// encode to.
+constexpr int kMaxImageExtent = 16384;
+constexpr uint64_t kMaxImagePixels = uint64_t{64} << 20;
+constexpr uint64_t kMaxImageFileBytes = uint64_t{256} << 20;
+
 // Reads and decodes a previously written image back into raw RGBA8 pixels
 // - used to reload a persisted Shot item's image into a GPU texture (see
 // IOverlayWindow::CreateTextureFromPixels). Returns nullopt if the file
-// doesn't exist or isn't decodable - never throws.
+// doesn't exist, isn't decodable, or is outside the budgets above - never
+// throws.
 //
 // QOI and PNG both, told apart by the bytes at the front of the file
 // rather than by the extension: a filename is a weaker claim about content

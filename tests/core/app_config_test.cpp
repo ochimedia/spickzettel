@@ -197,6 +197,10 @@ TEST(AppConfigTest, AGroupOfTheWrongTypeReadsAsAbsent) {
     EXPECT_EQ(ParseConfig(R"({"appearance": "wide"})"), DefaultConfig());
 }
 
+TEST(AppConfigTest, ANumberTooLargeForAFloatReadsAsTheDefault) {
+    EXPECT_FLOAT_EQ(ParseConfig(One("drawing", "strokeWidth", "1e100")).strokeWidth, DefaultConfig().strokeWidth);
+}
+
 TEST(AppConfigTest, AnUnboundHotkeySurvivesARoundTrip) {
     AppConfig config = DefaultConfig();
     config.hotkeyViewMode = platform::KeyCombo{};

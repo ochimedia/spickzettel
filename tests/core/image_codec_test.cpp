@@ -176,6 +176,37 @@ TEST_F(ImageCodecTest, EncodeRejectsInvalidDimensions) {
     EXPECT_FALSE(EncodePngToFile(dir_ / "bad.png", nullptr, 3, 2));
 }
 
+// A header is a claim, and the decoder allocates on the strength of it.
+// One claiming more than any capture could be is refused before that.
+TEST_F(ImageCodecTest, DecodeRefusesAHeaderClaimingMoreThanTheBudget) {
+    const std::filesystem::path path = dir_ / "huge.qoi";
+    {
+        std::ofstream out(path, std::ios::binary);
+        const uint8_t header[] = {'q', 'o', 'i', 'f', 0x00, 0x01, 0x86, 0xA0,  // 100000 wide
+                                  0x00, 0x01, 0x86, 0xA0,                       // 100000 high
+                                  4,    0};
+        out.write(reinterpret_cast<const char*>(header), sizeof(header));
+        const std::vector<uint8_t> padding(64, 0);
+        out.write(reinterpret_cast<const char*>(padding.data()), static_cast<std::streamsize>(padding.size()));
+    }
+    EXPECT_FALSE(DecodeImageFromFile(path).has_value());
+    EXPECT_FALSE(DecodeQoiFromFile(path).has_value());
+
+    // ...and a PNG making the same claim.
+    const std::filesystem::path png = dir_ / "huge.png";
+    {
+        std::ofstream out(png, std::ios::binary);
+        const uint8_t bytes[] = {0x89, 'P',  'N',  'G',  0x0D, 0x0A, 0x1A, 0x0A,  // signature
+                                 0x00, 0x00, 0x00, 0x0D, 'I',  'H',  'D',  'R',   // IHDR, 13 bytes
+                                 0x00, 0x01, 0x86, 0xA0, 0x00, 0x01, 0x86, 0xA0,  // 100000 x 100000
+                                 8,    6,    0,    0,    0,                        // 8-bit RGBA
+                                 0x00, 0x00, 0x00, 0x00};                          // crc, unchecked
+        out.write(reinterpret_cast<const char*>(bytes), sizeof(bytes));
+    }
+    EXPECT_FALSE(DecodeImageFromFile(png).has_value());
+    EXPECT_FALSE(DecodePngFromFile(png).has_value());
+}
+
 TEST_F(ImageCodecTest, DecodeReturnsNulloptForMissingFile) {
     EXPECT_FALSE(DecodePngFromFile(dir_ / "does_not_exist.png").has_value());
 }

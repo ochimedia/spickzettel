@@ -218,7 +218,12 @@ void ReadString(const json& j, const char* key, std::string& out) {
 void ReadFloat(const json& j, const char* key, float& out, float min, float max) {
     const auto it = j.find(key);
     if (it != j.end() && it->is_number()) {
-        out = std::clamp(it->get<float>(), min, max);
+        // 1e100 is valid JSON and infinite as a float; clamping would pull
+        // it to the far end of the range, which is a value the user did
+        // not choose either. Not a number this setting can hold: default.
+        if (const float value = it->get<float>(); std::isfinite(value)) {
+            out = std::clamp(value, min, max);
+        }
     }
 }
 
@@ -228,7 +233,7 @@ void ReadFloat(const json& j, const char* key, float& out, float min, float max)
 void ReadPositiveFloat(const json& j, const char* key, float& out) {
     const auto it = j.find(key);
     if (it != j.end() && it->is_number()) {
-        if (const float value = it->get<float>(); value > 0.0f) {
+        if (const float value = it->get<float>(); value > 0.0f && std::isfinite(value)) {
             out = value;
         }
     }

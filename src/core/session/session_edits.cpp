@@ -102,6 +102,9 @@ size_t Session::UndoEntryBytes(const UndoEntry& entry) {
     if (entry.paintedBefore) {
         bytes += entry.paintedBefore->PixelsRGBA().size();
     }
+    // The text a NoteTextChanged entry holds - small for a note typed by
+    // hand, but a note is whatever a record says it is.
+    bytes += entry.previousNoteText.size();
     // An ItemDeleted entry holds an id; the snippet itself stays in the
     // library, marked (see UndoEntry::deletedItemId).
     return bytes;
