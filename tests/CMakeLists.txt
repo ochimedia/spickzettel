@@ -2,6 +2,10 @@
 # Runs on Windows and, through the linux-tests preset, on Linux.
 add_executable(sz_core_tests
     core/build_info_test.cpp
+    core/canvas_state_test.cpp
+    core/draw_tool_test.cpp
+    core/stroke_clip_test.cpp
+    core/stroke_smoothing_test.cpp
     platform/pen_glyph_test.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

@@ -155,3 +155,61 @@ opaque `uint64_t` so no platform header ever names an ImGui type.
 `pen_glyph.h` is the one small piece of drawing that lives here: the pen
 pointer's outline, which both the software pointer (drawn by the UI) and
 the Win32 cursor bitmap are built from, so the two pens are the same pen.
+
+## Drawing model
+
+`Stroke` is a polyline with a colour and a width; `CanvasState` holds a
+list of finished strokes plus at most one in progress. Both are dumb on
+purpose: they record what they are given, so a shape tool can hand them
+exact corners and a test exact points.
+
+### From a hand to a mark: input, fitting, tessellation
+
+Three stages, and it is worth knowing which owns what, because the same
+visible defect can come from any of them.
+
+**Input hygiene, in `DrawTool`.** A mouse reports far faster than a hand
+moves, so consecutive samples of a slow line land a fraction of a pixel
+apart, and the direction between two points that close is quantisation
+noise. `DrawTool` discards a sample that has not travelled 2px from the
+last control point *kept* (so a slow hand still draws), low-passes what
+survives, and snaps a real line's end to the release point so it does not
+fall short of the mark. A press and release without travel stays a single
+point: that is the dot.
+
+**Curve fitting, in `stroke_smoothing.h`.** The surviving control points
+are the curve's frame, not the curve. `AppendFittedSpan` fits a
+*centripetal* Catmull-Rom through them and samples it adaptively: a
+straight span costs one segment however long, curvature costs points.
+Centripetal rather than uniform because it cannot loop or cusp when the
+spacing between control points is uneven, which it always is. This is an
+input stage, not a rendering one: the fitted polyline is what is stored,
+so the eraser cuts what you see, and the shape tools, whose corners must
+stay corners, simply never call it.
+
+**Tessellation** is the next section's subject.
+
+### Erasing is clipping, not deleting
+
+`ClipStrokeOutsideCircle` and `ClipStrokeOutsideRect` compute what is
+left of a stroke after removing everything inside a region, segment by
+segment: the line/circle quadratic or a Liang-Barsky clip finds where each
+segment crosses the boundary, points inside are dropped, and the
+survivors are regrouped into however many fragments the stroke split
+into. Both shapes share one walk (`ClipStrokeOutsideRegion`) and differ
+only in an inside test and a crossing finder, so they cannot disagree
+about what erasing means.
+
+Why not rasterise instead: a bitmap erase gives up resolution
+independence and turns undo into pixel diffs, for a problem that a
+bounded piece of segment geometry solves while keeping every stroke a
+plain, inspectable polyline. (Painted layers, below, are the case where
+pixels are the right answer and are treated as such.)
+
+One edge case earned its own test: a crossing that lands within 1e-6 of
+an existing vertex is deliberately not reported, to avoid a zero-length
+fragment, and when a sample point sits exactly on the boundary that
+leaves the walk's inside/outside state disagreeing with the pointwise
+test. The walk compares the two after each segment and splits there;
+without that it silently bridged the erased middle into one fragment,
+which looks exactly like not having erased anything.

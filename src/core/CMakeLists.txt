@@ -4,6 +4,10 @@
 # tests do.
 add_library(sz_core STATIC
     build_info/build_info.cpp
+    drawing/canvas_state.cpp
+    drawing/draw_tool.cpp
+    drawing/stroke_clip.cpp
+    drawing/stroke_smoothing.cpp
 )
 
 target_include_directories(sz_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
