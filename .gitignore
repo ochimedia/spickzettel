@@ -1,0 +1,21 @@
+# Build output and IDE state
+build/
+out/
+.cache/
+.vs/
+.vscode/
+*.user
+CMakeUserPresets.json
+compile_commands.json
+
+# Stray compiler output
+*.obj
+*.o
+*.exe
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# Dear ImGui writes its window-layout state next to the working directory
+imgui.ini

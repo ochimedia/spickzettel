@@ -1,0 +1,61 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "windows-msvc-debug",
+      "displayName": "Windows (MSVC + Ninja, Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SPICKZETTEL_BUILD_TESTS": "ON",
+        "SPICKZETTEL_UI_TESTS": "ON"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "windows-msvc-release",
+      "displayName": "Windows (MSVC + Ninja, Release)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SPICKZETTEL_BUILD_TESTS": "ON"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "windows-msvc-demo",
+      "displayName": "Windows (MSVC + Ninja, Release, demo watermark)",
+      "inherits": "windows-msvc-release",
+      "binaryDir": "${sourceDir}/build/windows-demo",
+      "cacheVariables": {
+        "SPICKZETTEL_DEMO_MODE": "ON",
+        "SPICKZETTEL_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "linux-tests",
+      "displayName": "Linux (portable core and its tests only)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/linux-tests",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SPICKZETTEL_BUILD_TESTS": "ON"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug" },
+    { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release" },
+    { "name": "windows-msvc-demo", "configurePreset": "windows-msvc-demo" },
+    { "name": "linux-tests", "configurePreset": "linux-tests" }
+  ],
+  "testPresets": [
+    { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug", "output": { "outputOnFailure": true } },
+    { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release", "output": { "outputOnFailure": true } },
+    { "name": "linux-tests", "configurePreset": "linux-tests", "output": { "outputOnFailure": true } }
+  ]
+}
