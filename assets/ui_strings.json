@@ -146,6 +146,9 @@
   "demo.title": "Spickzettel",
   "demo.subtitle": "Demo Version",
 
+  "_status": "The warning along the bottom while the disk cannot be written to - see OverlayApp::RenderPersistenceWarning. %s is a path.",
+  "status.saveFailed": "Could not save the library to %s - your changes are kept in memory and saving is retried",
+  "status.configWriteFailed": "Could not write the settings to %s",
   "_tray": "The system tray icon's own menu.",
   "tray.toggleOverlay": "Show/Hide overlay",
   "tray.exit": "Exit",

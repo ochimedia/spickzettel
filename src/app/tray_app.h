@@ -147,6 +147,20 @@ private:
     // timer, since the autosave's own retry clock runs on frames and there
     // are none while hidden - see OnBackgroundTimer.
     void FlushOrRetryLater();
+    // The flush for the moment the app has to go - Exit from the tray, or
+    // the OS ending the session - after which there is no retry. What
+    // cannot be written to the library is written to a recovery copy
+    // beside it (see Session::WriteRecoveryCopy and RecoveryCopyPath), so
+    // that the changes exist somewhere rather than nowhere.
+    void FlushForShutdown();
+    // Wired to IPlatformHost::SetSessionEndCallback in Initialize().
+    void OnSessionEnding();
+    // Where a recovery copy goes: a sibling of the library, named after it
+    // and the moment. Nullopt without a library on disk.
+    std::optional<std::filesystem::path> RecoveryCopyPath() const;
+    // The one way the settings file is written, so that a write that
+    // fails is reported to the overlay once, and cleared when one lands.
+    void PersistConfig();
     // The background timer's tick: another attempt at whatever is owed to
     // the disk, and the timer is stopped once nothing is - or once the
     // overlay is up again and frames take over.

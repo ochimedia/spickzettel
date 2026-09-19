@@ -52,6 +52,11 @@ public:
     // See TrayController::OnBackgroundTimer.
     virtual void SetBackgroundTimer(int intervalMs, std::function<void()> callback) = 0;
 
+    // Called on the app thread when the OS is ending the user's session -
+    // logging off, shutting down - before the process is taken down. The
+    // last chance to write what is unsaved; see TrayController::OnSessionEnding.
+    virtual void SetSessionEndCallback(std::function<void()> callback) = 0;
+
     // Runs the OS event loop until Quit() is called; returns the exit code.
     virtual int RunEventLoop() = 0;
     virtual void Quit(int exitCode = 0) = 0;

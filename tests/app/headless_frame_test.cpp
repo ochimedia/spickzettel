@@ -2253,6 +2253,23 @@ TEST_F(HeadlessSaveTest, AFailedSaveIsRetriedOnItsOwnClockNotEveryFrame) {
     EXPECT_TRUE(std::filesystem::is_regular_file(root_ / "library.json")) << "never retried";
 }
 
+// A save that fails is said on screen for as long as it stays failed -
+// what is drawn looks saved whether or not it is.
+TEST_F(HeadlessSaveTest, AFailedSaveIsSaidOnScreenUntilItLands) {
+    PlaceADrawing();
+    std::filesystem::create_directories(root_ / "library.json");
+    AttachStore();
+    EXPECT_TRUE(App().PersistenceWarning().empty()) << "nothing has failed yet";
+
+    StepFrames(130);  // past the quiet period: one attempt, which failed
+    const std::string warning = App().PersistenceWarning();
+    EXPECT_NE(warning.find(root_.string()), std::string::npos) << warning;
+
+    std::filesystem::remove_all(root_ / "library.json");
+    StepFrames(160);  // past the retry's own clock
+    EXPECT_TRUE(App().PersistenceWarning().empty()) << "gone with the save that landed";
+}
+
 // The record went through and the picture didn't: the save must not be
 // acknowledged on the strength of the half that worked, or the picture
 // waits for some unrelated edit to trigger the next save - and a hide or

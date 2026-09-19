@@ -271,6 +271,10 @@ void Win32PlatformHost::Quit(int exitCode) {
     running_ = false;
 }
 
+void Win32PlatformHost::SetSessionEndCallback(std::function<void()> callback) {
+    sessionEndCallback_ = std::move(callback);
+}
+
 void Win32PlatformHost::SetBackgroundTimer(int intervalMs, std::function<void()> callback) {
     if (intervalMs <= 0 || !callback) {
         if (hwnd_) {
@@ -351,6 +355,21 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
         case WM_TIMER:
             if (wParam == kBackgroundTimerId && backgroundTimerCallback_) {
                 backgroundTimerCallback_();
+            }
+            return 0;
+        // Logoff or shutdown. The work is done on the query, which is where
+        // Windows waits for an answer - by WM_ENDSESSION the decision is
+        // made and the time left is not guaranteed. Done again there
+        // anyway, cheaply, in case something changed in between. TRUE
+        // means "fine by me": there is no case for holding a shutdown up.
+        case WM_QUERYENDSESSION:
+            if (sessionEndCallback_) {
+                sessionEndCallback_();
+            }
+            return TRUE;
+        case WM_ENDSESSION:
+            if (wParam && sessionEndCallback_) {
+                sessionEndCallback_();
             }
             return 0;
         default:

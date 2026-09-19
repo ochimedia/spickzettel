@@ -1165,6 +1165,7 @@ void OverlayApp::OnFrame(float deltaSeconds) {
         // says so - it costs a frame that was being drawn anyway, and
         // click-through means it cannot get in the way of anything.
         RenderActionToast();
+        RenderPersistenceWarning();
         // A notice exists only to carry that message, so it is over when
         // the message is - faded, or never set at all, which is the same
         // condition RenderActionToast draws nothing on. Reported once (see
@@ -1277,6 +1278,7 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     RenderOverview(displayW, displayH);
     RenderConfirmDeletePopover();
     RenderActionToast();
+    RenderPersistenceWarning();
     HandleInputOptionsHudKeys();
     ApplyPointerShape();
     DrawSoftwareCursor();

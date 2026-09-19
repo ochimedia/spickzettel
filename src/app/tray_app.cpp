@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "core/config/display_choice.h"
+#include "core/util/timestamp_name.h"
 
 namespace sz::app {
 
@@ -56,8 +57,8 @@ bool TrayController::Initialize() {
                 }
             }
         }
-        if (unboundAny && !host_.GetConfigFilePath().empty()) {
-            WriteConfigFile(host_.GetConfigFilePath(), settings_.Stored());
+        if (unboundAny) {
+            PersistConfig();
         }
     }
 
@@ -89,6 +90,7 @@ bool TrayController::Initialize() {
 
     session_.AttachWindow(&host_.GetOverlayWindow());
     overlayApp_.AttachTo(host_.GetOverlayWindow());
+    host_.SetSessionEndCallback([this] { OnSessionEnding(); });
     host_.GetOverlayWindow().SetDisplaysChangedCallback([this] { OnDisplaysChanged(); });
     settings_.SetChangedCallback([this] { OnSettingsChanged(); });
     overlayApp_.SetHotkeyChangeCallback([this](HotkeySlot slot, platform::KeyCombo combo) {
@@ -382,6 +384,38 @@ void TrayController::FlushOrRetryLater() {
     host_.SetBackgroundTimer(kHiddenSaveRetryMs, [this] { OnBackgroundTimer(); });
 }
 
+void TrayController::FlushForShutdown() {
+    overlayApp_.SettleForPersistence();
+    // Twice: the first attempt may have been what cleared the way - a
+    // pending removal finished, a picture's directory made - and a second
+    // is cheap against what the alternative costs.
+    if (session_.Flush() || session_.Flush()) {
+        return;
+    }
+    if (const std::optional<std::filesystem::path> recovery = RecoveryCopyPath()) {
+        session_.WriteRecoveryCopy(*recovery);
+    }
+}
+
+void TrayController::OnSessionEnding() { FlushForShutdown(); }
+
+std::optional<std::filesystem::path> TrayController::RecoveryCopyPath() const {
+    const std::filesystem::path library = host_.GetDataDirectoryPath();
+    if (library.empty()) {
+        return std::nullopt;
+    }
+    // "library-recovery-2026-09-19-22-36-14", beside "library": the same
+    // place, which is where someone looking for their work will look, and
+    // spelled so that it sorts after the library and reads as what it is.
+    std::string stamp = TimestampName();
+    for (char& c : stamp) {
+        if (c == ' ' || c == ':') {
+            c = '-';
+        }
+    }
+    return library.parent_path() / (library.filename().string() + "-recovery-" + stamp);
+}
+
 void TrayController::OnBackgroundTimer() {
     // Up again: frames are running and the autosave's own clock, with its
     // backoff, is the one to use.
@@ -515,7 +549,19 @@ void TrayController::OnSettingsChanged() {
     if (window.IsVisible()) {
         MoveOverlayTo(OverlayDisplay());
     }
-    WriteConfigFile(host_.GetConfigFilePath(), settings_.Stored());
+    PersistConfig();
+}
+
+void TrayController::PersistConfig() {
+    const std::filesystem::path path = host_.GetConfigFilePath();
+    if (path.empty()) {
+        return;  // nowhere to persist to - see FakePlatformHost
+    }
+    // Said on screen while it stays true: a setting that appears applied
+    // and is back to its old value at the next start is the kind of thing
+    // nobody connects to a full disk a week later.
+    const bool written = WriteConfigFile(path, settings_.Stored());
+    overlayApp_.SetConfigWriteFailed(written ? std::nullopt : std::optional<std::string>(path.string()));
 }
 
 bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
@@ -600,7 +646,7 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     host_.UnregisterGlobalHotkey(*hotkeyId);
     *hotkeyId = newId;
     *configField = combo;
-    WriteConfigFile(host_.GetConfigFilePath(), settings_.Stored());
+    PersistConfig();
     return true;
 }
 
@@ -612,8 +658,7 @@ void TrayController::OnTrayCommand(platform::TrayCommand command) {
             ToggleMode(/*viewOnly=*/false);
             break;
         case platform::TrayCommand::Exit:
-            overlayApp_.SettleForPersistence();
-            session_.Flush();
+            FlushForShutdown();
             host_.Quit(0);
             break;
     }

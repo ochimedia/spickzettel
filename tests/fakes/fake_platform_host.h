@@ -234,6 +234,15 @@ public:
     int backgroundTimerIntervalMs = 0;
     std::function<void()> backgroundTimerCallback;
 
+    void SetSessionEndCallback(std::function<void()> callback) override { sessionEndCallback = std::move(callback); }
+    // What the OS does on logoff or shutdown.
+    void TriggerSessionEnd() {
+        if (sessionEndCallback) {
+            sessionEndCallback();
+        }
+    }
+    std::function<void()> sessionEndCallback;
+
     int RunEventLoop() override { return exitCode; }
 
     void Quit(int code) override {
@@ -255,6 +264,9 @@ public:
         overlayWindow.frameCallback = nullptr;
         overlayWindow.mouseCallback = nullptr;
         overlayWindow.displaysChangedCallback = nullptr;
+        backgroundTimerCallback = nullptr;
+        backgroundTimerIntervalMs = 0;
+        sessionEndCallback = nullptr;
     }
 
     // Test-only helpers to simulate what a real backend would deliver.

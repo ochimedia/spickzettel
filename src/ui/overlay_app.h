@@ -230,6 +230,19 @@ public:
     // of the pair above, and how a test asks whether something was said at
     // all rather than looking at pixels.
     const std::string& ActionToastText() const { return actionToastText_; }
+
+    // ===== When the disk says no =====
+    //
+    // What is on screen looks saved whether or not it is, so a save that
+    // failed is said out loud, and kept on screen for as long as it stays
+    // failed: a line along the bottom naming the library (see
+    // RenderPersistenceWarning), rather than a toast that fades while the
+    // problem does not. The same line carries a settings file that could
+    // not be written, which the tray reports here.
+    void SetConfigWriteFailed(std::optional<std::string> path) { configWriteFailedPath_ = std::move(path); }
+    // The warning as it would be drawn this frame, or empty when there is
+    // nothing wrong - for a test, and for anything else that has to know.
+    std::string PersistenceWarning() const;
     // What the overlay is currently set to do, for anything that needs to
     // ask rather than watch: the tool a stroke would use, whether a create
     // action is armed and waiting for a click, and whether the Overview is
@@ -809,6 +822,8 @@ private:
     // item/stroke deletion (DeleteItemWithToast) stays instant + undoable.
     void RenderConfirmDeletePopover();
     void RenderActionToast();
+    // See SetConfigWriteFailed.
+    void RenderPersistenceWarning();
     // The Canvases tab's other body, in place of the folders and the grid:
     // everything deleted, newest first, each with a preview, what it is and
     // what is in it, where it was and when it went, and Restore and Delete
@@ -1642,6 +1657,9 @@ private:
     // nothing to draw (see RenderActionToast).
     std::string actionToastText_;
     double actionToastExpireAtSeconds_ = 0.0;
+    // The settings file the tray last failed to write, while it stays
+    // unwritten - see SetConfigWriteFailed.
+    std::optional<std::string> configWriteFailedPath_;
     // The pacing last handed to the window - see OnFrame, which decides it
     // each frame and passes it on only when it changes.
     std::optional<platform::FramePacing> appliedFramePacing_;

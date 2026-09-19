@@ -673,6 +673,92 @@ TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromThe
     EXPECT_EQ(items, 1u);
 }
 
+// ===== When the library cannot be written =====
+
+// Exit is the one flush with no retry after it. What cannot go into the
+// library goes into a copy beside it, rather than nowhere.
+TEST_F(TrayControllerPersistenceTest, ExitWritesARecoveryCopyWhenTheLibraryCannotBeSaved) {
+    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_;
+    host.overlayWindow.captureReturnsHandle = 7;
+    host.overlayWindow.captureReturnsWidth = 1;
+    host.overlayWindow.captureReturnsHeight = 1;
+    host.overlayWindow.captureReturnsPixelsRGBA = {9, 9, 9, 255};
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
+    ASSERT_TRUE(controller.GetSession().HasUnsavedChanges());
+    // The library stops being writable before the exit.
+    std::filesystem::remove(dir_ / "library.json");
+    std::filesystem::create_directories(dir_ / "library.json");
+
+    host.TriggerTrayCommand(platform::TrayCommand::Exit);
+    EXPECT_TRUE(host.quitCalled) << "an exit is an exit";
+
+    std::filesystem::path recovery;
+    const std::string prefix = dir_.filename().string() + "-recovery-";
+    for (const auto& entry : std::filesystem::directory_iterator(dir_.parent_path())) {
+        if (entry.path().filename().string().rfind(prefix, 0) == 0) {
+            recovery = entry.path();
+        }
+    }
+    ASSERT_FALSE(recovery.empty()) << "no recovery copy beside the library";
+    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(recovery).Load();
+    ASSERT_TRUE(loaded.has_value());
+    size_t items = 0;
+    for (const Canvas& canvas : loaded->canvases) {
+        for (const Item& item : canvas.items) {
+            ++items;
+            EXPECT_FALSE(item.ImageLayer()->imageFile.empty()) << "the record names its picture";
+        }
+    }
+    EXPECT_EQ(items, 1u);
+    std::filesystem::remove_all(recovery);
+}
+
+TEST_F(TrayControllerPersistenceTest, TheOSEndingTheSessionFlushesTheLibrary) {
+    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_;
+    host.overlayWindow.captureReturnsHandle = 7;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
+    ASSERT_TRUE(controller.GetSession().HasUnsavedChanges());
+
+    host.TriggerSessionEnd();  // logoff, with no frame between the capture and it
+    EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
+    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(dir_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    size_t items = 0;
+    for (const Canvas& canvas : loaded->canvases) {
+        items += canvas.items.size();
+    }
+    EXPECT_EQ(items, 1u);
+}
+
+TEST_F(TrayControllerPersistenceTest, ASettingsFileThatCannotBeWrittenIsSaidOnScreenUntilItIs) {
+    std::filesystem::create_directories(dir_ / "config.json");  // a directory where the file goes
+    test::FakePlatformHost host;
+    host.configFilePath = dir_ / "config.json";
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    EXPECT_TRUE(controller.Overlay().PersistenceWarning().empty()) << "nothing written yet, nothing failed";
+
+    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Z'}));
+    EXPECT_NE(controller.Overlay().PersistenceWarning().find("config.json"), std::string::npos)
+        << "applied in memory, and said to be unsaved";
+
+    std::filesystem::remove_all(dir_ / "config.json");
+    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Y'}));
+    EXPECT_TRUE(controller.Overlay().PersistenceWarning().empty()) << "cleared by the write that landed";
+    EXPECT_TRUE(std::filesystem::is_regular_file(dir_ / "config.json"));
+}
+
 // The actual rescale math (position/size/fullscreen/clamping behavior) is
 // covered exhaustively in canvas_manager_test.cpp against CanvasManager
 // directly. This just guards the wiring decision that Initialize() itself

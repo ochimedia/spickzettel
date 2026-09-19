@@ -30,6 +30,7 @@ public:
     std::filesystem::path GetConfigFilePath() const override;
     std::filesystem::path GetDataDirectoryPath() const override;
     void SetBackgroundTimer(int intervalMs, std::function<void()> callback) override;
+    void SetSessionEndCallback(std::function<void()> callback) override;
     int RunEventLoop() override;
     void Quit(int exitCode) override;
 
@@ -44,6 +45,7 @@ private:
     TrayCommandCallback trayCallback_;
     std::unordered_map<int, HotkeyCallback> hotkeyCallbacks_;
     std::function<void()> backgroundTimerCallback_;
+    std::function<void()> sessionEndCallback_;
     int nextHotkeyId_ = 1;
     Win32OverlayWindow overlayWindow_;
     bool running_ = false;

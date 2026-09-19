@@ -790,9 +790,28 @@ dirty. Waiting for the debounced save was not good enough: switching
 canvas bumps the generation, which pushes the save *further away* at the
 exact moment the pixels are thrown out.
 
-Windows session shutdown (`WM_QUERYENDSESSION`) is not hooked, so a
-change inside the debounce window at that moment could be lost; the
-tray's Exit is the only quit path that flushes.
+**When the disk says no.** A save that fails is said on screen for as
+long as it stays failed: a line along the bottom naming the library,
+drawn from `Session::LastSaveFailed`, in edit and view-only mode alike,
+rather than a toast that fades while the problem does not. A settings
+file that could not be written is reported on the same line by the
+tray, which is the only writer of it. Before this, both results were
+discarded: a full disk lost every outstanding edit on an ordinary exit
+without a word, and a setting that appeared applied was back to its old
+value at the next start.
+
+Exit and the OS ending the session (`WM_QUERYENDSESSION`, answered TRUE
+after the flush, and `WM_ENDSESSION` again for good measure) are the two
+flushes with no retry after them. Both settle the hand's work, try the
+save twice - the first attempt may be what clears the way - and, if the
+library still cannot be written, write a **recovery copy** beside it:
+`library-recovery-<timestamp>/`, a fresh tree holding every record and
+every picture still in memory (a capture whose write never landed, a
+painted layer's pixels). Pictures already on disk in the real library
+are not copied; they are safe where they are. Exit still exits: holding
+the app open against the user's explicit request was judged worse than
+a copy they have to go and find, and the tray has no window of its own
+to ask in.
 
 ### GPU textures are per canvas
 

@@ -103,6 +103,46 @@ bool Session::SavePendingPictures(LibraryInstance& instance) {
     return wroteEverything;
 }
 
+bool Session::WriteRecoveryCopy(const std::filesystem::path& dir) {
+    persistence::LibraryStore copy(dir);
+    CanvasManagerSnapshot snapshot = library_.manager.ExportSnapshot();
+    bool wroteEverything = true;
+    for (Canvas& canvas : snapshot.canvases) {
+        for (Item& item : canvas.items) {
+            // A capture still waiting to be written, named in the copy's
+            // record by whatever the copy calls it.
+            if (const auto pending = pendingPictures_.find(item.id); pending != pendingPictures_.end()) {
+                if (Layer* picture = item.ImageLayer()) {
+                    const std::optional<std::string> filename = copy.SaveImage(
+                        item.id, pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
+                    if (filename) {
+                        picture->imageFile = *filename;
+                    } else {
+                        wroteEverything = false;
+                    }
+                }
+            }
+            // Painted pixels held in memory, dirty or not: the copy has no
+            // other source for them.
+            for (size_t index = 0; index < item.layers.size(); ++index) {
+                Layer& layer = item.layers[index];
+                if (!layer.HasPaintedPixels()) {
+                    continue;
+                }
+                const std::optional<std::string> filename =
+                    copy.SaveLayerImage(item.id, index, layer.painted->PixelsRGBA().data(), layer.painted->Width(),
+                                        layer.painted->Height());
+                if (filename) {
+                    layer.imageFile = *filename;
+                } else {
+                    wroteEverything = false;
+                }
+            }
+        }
+    }
+    return copy.Save(snapshot) && wroteEverything;
+}
+
 bool Session::HasUnsavedChanges() const {
     return library_.manager.Generation() != library_.lastSavedGeneration || !pendingPictures_.empty();
 }

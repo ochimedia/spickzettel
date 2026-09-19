@@ -96,6 +96,14 @@ public:
     // Whether the most recent save attempt failed and is waiting to be
     // retried - for a UI to say so. Cleared by the save that lands.
     bool LastSaveFailed() const { return library_.saveRetryBackoffSeconds > 0.0f; }
+    // Writes what is in memory to a fresh library at `dir`: every record,
+    // and every picture still held in memory - a capture whose write has
+    // not landed, a painted layer's pixels. Pictures already on disk in the
+    // real library are not copied; they are safe where they are. For the
+    // moment the app has to go - exit, the OS ending the session - and the
+    // library it was working in cannot be written: the alternative is
+    // losing the changes silently. True if the copy is whole.
+    bool WriteRecoveryCopy(const std::filesystem::path& dir);
 
     // Brings GPU shot textures in line with whichever canvas is current:
     // loads the ones it needs, frees every other canvas's (see

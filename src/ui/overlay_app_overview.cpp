@@ -2524,6 +2524,44 @@ void OverlayApp::RenderActionToast() {
                        actionToastText_.c_str());
 }
 
+std::string OverlayApp::PersistenceWarning() const {
+    std::string warning;
+    char line[1024];
+    if (session_.LastSaveFailed() && session_.Store() != nullptr) {
+        std::snprintf(line, sizeof(line), strings::kStatusSaveFailed, session_.Store()->RootDir().string().c_str());
+        warning = line;
+    }
+    if (configWriteFailedPath_.has_value()) {
+        std::snprintf(line, sizeof(line), strings::kStatusConfigWriteFailed, configWriteFailedPath_->c_str());
+        if (!warning.empty()) {
+            warning += "\n";
+        }
+        warning += line;
+    }
+    return warning;
+}
+
+void OverlayApp::RenderPersistenceWarning() {
+    const std::string warning = PersistenceWarning();
+    if (warning.empty()) {
+        return;
+    }
+    // Along the bottom, out from under the canvas bar's own reveal zone and
+    // away from the toast at the top, in the toast's own colours but with a
+    // warning tint behind the text: this one does not go away by itself.
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+    const ImVec2 textSize = ImGui::CalcTextSize(warning.c_str());
+    constexpr float kPaddingX = 16.0f;
+    constexpr float kPaddingY = 9.0f;
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    const ImVec2 boxSize(textSize.x + kPaddingX * 2.0f, textSize.y + kPaddingY * 2.0f);
+    const ImVec2 boxMin((display.x - boxSize.x) * 0.5f, display.y - boxSize.y - 64.0f);
+    const ImVec2 boxMax(boxMin.x + boxSize.x, boxMin.y + boxSize.y);
+    drawList->AddRectFilled(boxMin, boxMax, IM_COL32(92, 40, 20, 235), 8.0f);
+    drawList->AddText(ImVec2(boxMin.x + kPaddingX, boxMin.y + kPaddingY), IM_COL32(255, 232, 210, 255),
+                       warning.c_str());
+}
+
 void OverlayApp::OpenOverview() {
     pickerItemId_.reset();
     overviewOpen_ = true;
