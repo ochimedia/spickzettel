@@ -775,13 +775,23 @@ B's, on a canvas you were not looking at.
 Six kinds of entry, and every one is either its own inverse or a mirror
 with the direction as the only difference, so undo and redo are one walk
 in opposite directions through one dispatch. A `StrokeBaked` entry
-carries the stroke so redo can push it back; an `Erased` entry carries
-the whole originals a gesture touched and the fragments that replaced
-them, built by a snapshot/diff at the gesture's ends rather than by
-accumulating per-call results, since a stroke clipped once mid-gesture
-can be clipped again by a later call in the same drag; the painted half
-of the same gesture rides in the same entry, so one drag is one undo
-whichever kinds of ink it touched. `ItemDeleted` and `ItemCreated` carry
+carries the stroke so redo can push it back, and undo takes off that
+stroke, found from the back, rather than whatever is last. An `Erased`
+entry is a list of *replacements*: for each original a gesture clipped,
+its index in the list as it was, the original itself, and the fragments
+now standing in its place. Undo rebuilds the before-list from the
+after-list and redo the reverse, both by position. The session follows
+the list through the gesture - the manager's erase reports what became
+of each stroke, index for index, and the session keeps a parallel
+"which original does this stand for" vector - so a fragment clipped
+again by a later call in the same drag still traces back to the stroke
+that was there before the drag. The first version diffed a snapshot
+against the result by value, removed fragments by value and appended
+the originals at the end: that changed the draw order, left the next
+undo of a stroke popping a different stroke than it was for, could not
+tell two equal strokes apart, and was quadratic in the drawing's size.
+The painted half of the same gesture rides in the same entry, so one
+drag is one undo whichever kinds of ink it touched. `ItemDeleted` and `ItemCreated` carry
 an id and toggle the mark. `NoteTextChanged` and the painted entries swap
 their contents with the item's, so the popped entry is already what the
 opposite stack needs. Undo is best-effort about staleness: an entry

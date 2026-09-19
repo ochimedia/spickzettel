@@ -698,54 +698,63 @@ ItemId CanvasManager::DuplicateItem(ItemId id) {
     return PlaceItemOnCanvas(id, currentCanvasId_, /*copy=*/true);
 }
 
-void CanvasManager::EraseAt(ItemId id, float screenX, float screenY, float radiusScreenPx) {
+namespace {
+// The shared body of EraseAt and EraseRectAt: replaces each stroke `clip`
+// touches with the fragments it returns, in place, and reports what became
+// of each - see EraseAt's own doc comment for the contract.
+template <typename Clip>
+std::vector<size_t> ClipStrokesInPlace(Item& item, const Clip& clip) {
+    std::vector<size_t> outcome;
+    outcome.reserve(item.strokes.size());
+    std::vector<Stroke> kept;
+    kept.reserve(item.strokes.size());
+    for (Stroke& stroke : item.strokes) {
+        std::optional<std::vector<Stroke>> clipped = clip(stroke);
+        if (!clipped.has_value()) {
+            outcome.push_back(CanvasManager::kStrokeUntouched);
+            kept.push_back(std::move(stroke));
+            continue;
+        }
+        outcome.push_back(clipped->size());
+        for (Stroke& fragment : *clipped) {
+            kept.push_back(std::move(fragment));
+        }
+    }
+    item.strokes = std::move(kept);
+    return outcome;
+}
+}  // namespace
+
+std::vector<size_t> CanvasManager::EraseAt(ItemId id, float screenX, float screenY, float radiusScreenPx) {
     // Marked changed whether or not anything came away: simpler than
     // threading a \"did this actually change anything\" result out just to
     // decide whether to mark, and a spurious bump costs nothing (see
     // Generation()'s own doc comment: it only resets the autosave's
     // debounce timer).
     MarkChanged();
-    if (Item* item = FindInCurrent(id)) {
-        const NativePoint native = ScreenToNative(*item, screenX, screenY);
-        const float nativeRadius = radiusScreenPx * native.scale;
-        std::vector<Stroke> kept;
-        kept.reserve(item->strokes.size());
-        for (Stroke& stroke : item->strokes) {
-            std::optional<std::vector<Stroke>> clipped =
-                ClipStrokeOutsideCircle(stroke, StrokePoint{native.x, native.y}, nativeRadius);
-            if (!clipped.has_value()) {
-                kept.push_back(std::move(stroke));
-                continue;
-            }
-            for (Stroke& fragment : *clipped) {
-                kept.push_back(std::move(fragment));
-            }
-        }
-        item->strokes = std::move(kept);
+    Item* item = FindInCurrent(id);
+    if (!item) {
+        return {};
     }
+    const NativePoint native = ScreenToNative(*item, screenX, screenY);
+    const float nativeRadius = radiusScreenPx * native.scale;
+    return ClipStrokesInPlace(*item, [&](const Stroke& stroke) {
+        return ClipStrokeOutsideCircle(stroke, StrokePoint{native.x, native.y}, nativeRadius);
+    });
 }
 
-void CanvasManager::EraseRectAt(ItemId id, float minX, float minY, float maxX, float maxY) {
+std::vector<size_t> CanvasManager::EraseRectAt(ItemId id, float minX, float minY, float maxX, float maxY) {
     // See EraseAt on why this is unconditional.
     MarkChanged();
-    if (Item* item = FindInCurrent(id)) {
-        const NativePoint nativeMin = ScreenToNative(*item, minX, minY);
-        const NativePoint nativeMax = ScreenToNative(*item, maxX, maxY);
-        std::vector<Stroke> kept;
-        kept.reserve(item->strokes.size());
-        for (Stroke& stroke : item->strokes) {
-            std::optional<std::vector<Stroke>> clipped =
-                ClipStrokeOutsideRect(stroke, nativeMin.x, nativeMin.y, nativeMax.x, nativeMax.y);
-            if (!clipped.has_value()) {
-                kept.push_back(std::move(stroke));
-                continue;
-            }
-            for (Stroke& fragment : *clipped) {
-                kept.push_back(std::move(fragment));
-            }
-        }
-        item->strokes = std::move(kept);
+    Item* item = FindInCurrent(id);
+    if (!item) {
+        return {};
     }
+    const NativePoint nativeMin = ScreenToNative(*item, minX, minY);
+    const NativePoint nativeMax = ScreenToNative(*item, maxX, maxY);
+    return ClipStrokesInPlace(*item, [&](const Stroke& stroke) {
+        return ClipStrokeOutsideRect(stroke, nativeMin.x, nativeMin.y, nativeMax.x, nativeMax.y);
+    });
 }
 
 Stroke CanvasManager::BakeStrokeToNative(const Item& item, const Stroke& screenSpaceStroke) {

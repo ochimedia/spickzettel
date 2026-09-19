@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <ctime>
 #include <iterator>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -32,22 +33,69 @@ size_t StrokesBytes(const std::vector<Stroke>& strokes) {
     return bytes;
 }
 
-// Removes one stroke equal to each of `strokes` from `item` - by value (see
-// Stroke::operator==), since a fragment has no stable id of its own. The
-// undo side of an Erased entry removes the fragments the gesture added;
-// the redo side removes the originals undo put back.
-void EraseStrokesByValue(Item& item, const std::vector<Stroke>& strokes) {
-    for (const Stroke& stroke : strokes) {
-        const auto it = std::find(item.strokes.begin(), item.strokes.end(), stroke);
-        if (it != item.strokes.end()) {
-            item.strokes.erase(it);
-        }
-    }
-}
 }  // namespace
 
+// The two directions of an Erased entry's vector half, each a rebuild of
+// one list from the other by position - see UndoEntry::Kind::Erased. Both
+// refuse, changing nothing, when the list is not the length the entry says
+// it should be: that means something other than this history has changed
+// the strokes since, and rebuilding from a list that is not the one the
+// entry describes could only scramble it.
+//
+// Undo: the item holds the after-list. Every original the entry names goes
+// back where it was, in place of the fragments that stood for it; every
+// other stroke is carried over in order.
+bool Session::RestoreStrokesBeforeErase(Item& item, const UndoEntry& entry) {
+    size_t expectedAfter = entry.strokeCountBefore - entry.replacements.size();
+    for (const auto& replacement : entry.replacements) {
+        expectedAfter += replacement.fragments.size();
+    }
+    if (item.strokes.size() != expectedAfter) {
+        return false;
+    }
+    std::vector<Stroke> before;
+    before.reserve(entry.strokeCountBefore);
+    auto replacement = entry.replacements.begin();
+    size_t after = 0;
+    for (size_t index = 0; index < entry.strokeCountBefore; ++index) {
+        if (replacement != entry.replacements.end() && replacement->index == index) {
+            before.push_back(replacement->original);
+            after += replacement->fragments.size();
+            ++replacement;
+        } else {
+            before.push_back(std::move(item.strokes[after++]));
+        }
+    }
+    item.strokes = std::move(before);
+    return true;
+}
+
+// Redo: the item holds the before-list. Every original the entry names is
+// replaced, in place, by the fragments the gesture left of it.
+bool Session::ReapplyErase(Item& item, const UndoEntry& entry) {
+    if (item.strokes.size() != entry.strokeCountBefore) {
+        return false;
+    }
+    std::vector<Stroke> after;
+    after.reserve(item.strokes.size());
+    auto replacement = entry.replacements.begin();
+    for (size_t index = 0; index < item.strokes.size(); ++index) {
+        if (replacement != entry.replacements.end() && replacement->index == index) {
+            after.insert(after.end(), replacement->fragments.begin(), replacement->fragments.end());
+            ++replacement;
+        } else {
+            after.push_back(std::move(item.strokes[index]));
+        }
+    }
+    item.strokes = std::move(after);
+    return true;
+}
+
 size_t Session::UndoEntryBytes(const UndoEntry& entry) {
-    size_t bytes = StrokesBytes(entry.strokes) + StrokesBytes(entry.addedFragments);
+    size_t bytes = StrokesBytes(entry.strokes);
+    for (const UndoEntry::StrokeReplacement& replacement : entry.replacements) {
+        bytes += replacement.original.points.size() * sizeof(StrokePoint) + StrokesBytes(replacement.fragments);
+    }
     for (const PaintedTile& tile : entry.paintedTiles) {
         bytes += tile.pixelsRGBA.size();
     }
@@ -171,10 +219,18 @@ std::optional<Session::UndoWhat> Session::ApplyUndoEntry(UndoEntry& entry, bool 
                 return std::nullopt;
             }
             if (undo) {
-                if (item->strokes.empty()) {
+                // The stroke this entry is for - which is the last one
+                // whenever history alone has touched the list, and is
+                // looked for from the back so that it still is the last
+                // of two equal strokes. Nothing to do if it is gone.
+                if (entry.strokes.empty()) {
                     return std::nullopt;
                 }
-                item->strokes.pop_back();
+                const auto it = std::find(item->strokes.rbegin(), item->strokes.rend(), entry.strokes.front());
+                if (it == item->strokes.rend()) {
+                    return std::nullopt;
+                }
+                item->strokes.erase(std::next(it).base());
             } else {
                 // entry.strokes[0] is the exact value the undo popped - see
                 // UndoEntry::Kind::StrokeBaked's own doc comment for why
@@ -192,17 +248,16 @@ std::optional<Session::UndoWhat> Session::ApplyUndoEntry(UndoEntry& entry, bool 
             if (!item) {
                 return std::nullopt;
             }
-            // The vector half: undo removes the fragments the gesture added
-            // and puts the originals back; redo is the exact mirror, same
-            // two arrays with their roles swapped. Remove before add either
-            // way, so a stroke that was shortened rather than fully erased
-            // doesn't end up duplicated.
-            const std::vector<Stroke>& remove = undo ? entry.addedFragments : entry.strokes;
-            const std::vector<Stroke>& add = undo ? entry.strokes : entry.addedFragments;
-            EraseStrokesByValue(*item, remove);
-            item->strokes.insert(item->strokes.end(), add.begin(), add.end());
-            // The painted half, if any - its own inverse.
-            SwapPaintedUndoState(entry);
+            // The vector half, rebuilt by position in either direction -
+            // see RestoreStrokesBeforeErase/ReapplyErase - and the painted
+            // half, which is its own inverse. Either half having something
+            // to do is enough for the entry to count.
+            const bool strokesChanged =
+                !entry.replacements.empty() && (undo ? RestoreStrokesBeforeErase(*item, entry) : ReapplyErase(*item, entry));
+            const bool paintChanged = SwapPaintedUndoState(entry);
+            if (!strokesChanged && !paintChanged) {
+                return std::nullopt;
+            }
             what = UndoWhat::Erase;
             break;
         }
@@ -407,7 +462,11 @@ bool Session::ClearDrawing(ItemId itemId) {
     UndoEntry entry;
     entry.kind = UndoEntry::Kind::Erased;
     entry.itemId = itemId;
-    entry.strokes = std::move(item->strokes);
+    entry.strokeCountBefore = item->strokes.size();
+    entry.replacements.reserve(item->strokes.size());
+    for (size_t index = 0; index < item->strokes.size(); ++index) {
+        entry.replacements.push_back({index, std::move(item->strokes[index]), {}});
+    }
     entry.layerIndex = painted.layerIndex;
     entry.paintedBefore = std::move(painted.wholeImage);
     PushUndo(std::move(entry));
@@ -452,9 +511,41 @@ void Session::EndTextEdit(std::optional<std::string> text) {
 
 void Session::SnapshotStrokesForErase(ItemId itemId) {
     eraseGestureStartSnapshot_.clear();
+    eraseOrigins_.clear();
+    eraseReplaced_.clear();
     if (const Item* item = Manager().FindItemAnywhere(itemId)) {
         eraseGestureStartSnapshot_ = item->strokes;
+        eraseOrigins_.resize(item->strokes.size());
+        std::iota(eraseOrigins_.begin(), eraseOrigins_.end(), size_t{0});
+        eraseReplaced_.assign(item->strokes.size(), false);
     }
+}
+
+void Session::NoteEraseOutcome(const std::vector<size_t>& outcome) {
+    if (outcome.size() != eraseOrigins_.size()) {
+        // Not the list being followed - the item went away mid-gesture, or
+        // something other than the eraser changed its strokes. Nothing
+        // followed from here on means nothing goes on the history for the
+        // vector half, which is the safe failure.
+        eraseOrigins_.clear();
+        eraseReplaced_.assign(eraseReplaced_.size(), false);
+        return;
+    }
+    std::vector<size_t> origins;
+    origins.reserve(eraseOrigins_.size());
+    for (size_t index = 0; index < outcome.size(); ++index) {
+        const size_t origin = eraseOrigins_[index];
+        if (outcome[index] == CanvasManager::kStrokeUntouched) {
+            origins.push_back(origin);
+            continue;
+        }
+        // Clipped: whatever fragments it became stand for the original it
+        // stood for - which is how a fragment clipped again later in the
+        // drag still traces back to the stroke that came before the drag.
+        eraseReplaced_[origin] = true;
+        origins.insert(origins.end(), outcome[index], origin);
+    }
+    eraseOrigins_ = std::move(origins);
 }
 
 void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx) {
@@ -465,7 +556,7 @@ void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widt
     // own effect.
     SnapshotStrokesForErase(itemId);
     eraseItemId_ = itemId;
-    Manager().EraseAt(itemId, screenX, screenY, widthScreenPx * 0.5f);
+    NoteEraseOutcome(Manager().EraseAt(itemId, screenX, screenY, widthScreenPx * 0.5f));
     // ...and the same gesture takes pixels off any painted layer it passes
     // over - the brush gesture the pen uses, with the erase blend. The
     // eraser deliberately ignores the drawing mode: an item can hold both
@@ -481,7 +572,7 @@ void Session::ExtendErase(float screenX, float screenY, float widthScreenPx) {
     if (!eraseItemId_.has_value()) {
         return;
     }
-    Manager().EraseAt(*eraseItemId_, screenX, screenY, widthScreenPx * 0.5f);
+    NoteEraseOutcome(Manager().EraseAt(*eraseItemId_, screenX, screenY, widthScreenPx * 0.5f));
     ExtendPaintStroke(screenX, screenY);
 }
 
@@ -501,7 +592,7 @@ void Session::EraseRect(ItemId itemId, float minX, float minY, float maxX, float
     // press that started the rectangle and the release that ends it, so the
     // snapshot taken here is the one the press would have taken.
     SnapshotStrokesForErase(itemId);
-    Manager().EraseRectAt(itemId, minX, minY, maxX, maxY);
+    NoteEraseOutcome(Manager().EraseRectAt(itemId, minX, minY, maxX, maxY));
     // ...and the same rectangle out of any painted layer, for the same
     // reason the circular eraser does it: an eraser acts on whatever is
     // under it, whichever mode the marks were made in. One entry for both.
@@ -518,35 +609,41 @@ void Session::PushEraseGestureUndoEntry(ItemId itemId, PaintedUndo painted) {
     if (!item) {
         return;
     }
-    // Present in the snapshot but not (byte-identically) in the final
-    // strokes - a whole original this gesture touched, kept here so undo
-    // can restore it exactly.
-    std::vector<Stroke> removedOriginals;
-    for (const Stroke& original : eraseGestureStartSnapshot_) {
-        const bool stillPresent = std::find(item->strokes.begin(), item->strokes.end(), original) != item->strokes.end();
-        if (!stillPresent) {
-            removedOriginals.push_back(original);
+    // Every original some call in the gesture clipped, with the fragments
+    // now standing for it - which are exactly the current strokes whose
+    // origin it is, in order (see NoteEraseOutcome). Only while the list
+    // is still the one being followed; a mismatch means the vector half
+    // is unknown and is left off rather than guessed at.
+    std::vector<UndoEntry::StrokeReplacement> replacements;
+    if (eraseOrigins_.size() == item->strokes.size()) {
+        // One pass over both: origins never decrease along the list, since
+        // erasing keeps the order and each original's fragments stand
+        // together where it stood.
+        size_t current = 0;
+        for (size_t origin = 0; origin < eraseReplaced_.size(); ++origin) {
+            while (current < eraseOrigins_.size() && eraseOrigins_[current] < origin) {
+                ++current;
+            }
+            if (!eraseReplaced_[origin]) {
+                continue;
+            }
+            UndoEntry::StrokeReplacement replacement;
+            replacement.index = origin;
+            replacement.original = eraseGestureStartSnapshot_[origin];
+            for (; current < eraseOrigins_.size() && eraseOrigins_[current] == origin; ++current) {
+                replacement.fragments.push_back(item->strokes[current]);
+            }
+            replacements.push_back(std::move(replacement));
         }
     }
-    // Present in the final strokes but not in the snapshot - a fragment
-    // this gesture added, kept here so undo knows exactly what to remove
-    // again.
-    std::vector<Stroke> addedFragments;
-    for (const Stroke& current : item->strokes) {
-        const bool wasOriginal = std::find(eraseGestureStartSnapshot_.begin(), eraseGestureStartSnapshot_.end(),
-                                            current) != eraseGestureStartSnapshot_.end();
-        if (!wasOriginal) {
-            addedFragments.push_back(current);
-        }
-    }
-    if (removedOriginals.empty() && painted.Empty()) {
+    if (replacements.empty() && painted.Empty()) {
         return;  // the gesture touched nothing of either kind
     }
     UndoEntry entry;
     entry.kind = UndoEntry::Kind::Erased;
     entry.itemId = itemId;
-    entry.strokes = std::move(removedOriginals);
-    entry.addedFragments = std::move(addedFragments);
+    entry.strokeCountBefore = eraseGestureStartSnapshot_.size();
+    entry.replacements = std::move(replacements);
     // The painted half, if the gesture had one. Its own item is by
     // construction this one - the eraser only acts on the snippet being
     // drawn on.

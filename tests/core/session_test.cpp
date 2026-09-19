@@ -38,6 +38,28 @@ void DrawStrokeInto(Session& session, ItemId item) {
     session.CommitLiveStroke(item);
 }
 
+// A horizontal stroke at height `y` across `item`, for the tests about
+// which stroke is which: an item made at {0,0,100,100} has native space
+// equal to screen space, so the y comes back out unchanged.
+void DrawLineInto(Session& session, ItemId item, float y) {
+    Canvas* canvas = session.Manager().CurrentOrNull();
+    ASSERT_NE(canvas, nullptr);
+    canvas->liveLayer.BeginStroke(StrokePoint{10.0f, y}, 0xFF0000FFu, 3.0f);
+    canvas->liveLayer.ExtendStroke(StrokePoint{90.0f, y});
+    canvas->liveLayer.EndStroke();
+    session.CommitLiveStroke(item);
+}
+
+// The height of every stroke, in list order - the draw order, which is what
+// the history has to keep.
+std::vector<float> StrokeHeights(const CanvasManager& manager, ItemId id) {
+    std::vector<float> heights;
+    for (const Stroke& stroke : ItemById(manager, id)->strokes) {
+        heights.push_back(stroke.points.front().y);
+    }
+    return heights;
+}
+
 TEST(SessionTest, StartsWithNothingDeleted) {
     Session session;
     EXPECT_TRUE(session.Manager().DeletedThings().empty());
@@ -145,6 +167,84 @@ TEST(SessionTest, ClearingADrawingIsOneStep) {
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::Erase);
     EXPECT_EQ(ItemById(session.Manager(), item)->strokes.size(), 2u);
+}
+
+// ===== Erase history keeps the draw order =====
+
+TEST(SessionTest, UndoingAnEraseRestoresTheStrokeWhereItWas) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawLineInto(session, item, 30.0f);
+    DrawLineInto(session, item, 100.0f);
+    session.EraseRect(item, 0.0f, 20.0f, 100.0f, 40.0f);  // the first stroke, wholly
+    ASSERT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{100.0f}));
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f}))
+        << "back where it was, not at the end";
+
+    // The next undo is of the second stroke, and takes off the second
+    // stroke - not whichever one happens to be last.
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f}));
+
+    ASSERT_TRUE(session.Redo().has_value());
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{100.0f}));
+    EXPECT_FALSE(session.CanRedo());
+}
+
+TEST(SessionTest, FragmentsOfAnErasedStrokeStandWhereItStood) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawLineInto(session, item, 30.0f);
+    DrawLineInto(session, item, 100.0f);
+    session.EraseRect(item, 40.0f, 0.0f, 60.0f, 50.0f);  // the middle out of the first stroke
+    ASSERT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 30.0f, 100.0f}))
+        << "two fragments, in the erased stroke's place";
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f}));
+    EXPECT_EQ(ItemById(session.Manager(), item)->strokes[0].points.size(), 2u) << "the whole original";
+
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 30.0f, 100.0f}));
+}
+
+TEST(SessionTest, AStrokeClippedTwiceInOneDragComesBackWhole) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawLineInto(session, item, 30.0f);
+    DrawLineInto(session, item, 100.0f);
+    // One drag, two bites out of the first stroke - the second bite clips a
+    // fragment the first one left.
+    session.BeginErase(item, 30.0f, 30.0f, 10.0f);
+    session.ExtendErase(70.0f, 30.0f, 10.0f);
+    session.EndErase();
+    ASSERT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 30.0f, 30.0f, 100.0f}));
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f}));
+    EXPECT_EQ(ItemById(session.Manager(), item)->strokes[0].points.size(), 2u) << "as before the drag";
+    EXPECT_TRUE(session.CanRedo()) << "one entry for the drag";
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 30.0f, 30.0f, 100.0f}));
+}
+
+TEST(SessionTest, EqualStrokesAreToldApartByPosition) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawLineInto(session, item, 30.0f);
+    DrawLineInto(session, item, 100.0f);
+    DrawLineInto(session, item, 30.0f);  // equal to the first, by value
+    session.EraseRect(item, 0.0f, 20.0f, 100.0f, 40.0f);  // both equal strokes, wholly
+    ASSERT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{100.0f}));
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f, 30.0f}))
+        << "each equal stroke back in its own place";
+    ASSERT_TRUE(session.Undo().has_value()) << "the third stroke";
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f}));
 }
 
 // Nothing leaves the library when a canvas is deleted, so nothing of its

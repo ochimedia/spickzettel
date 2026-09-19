@@ -267,11 +267,15 @@ public:
     // CanvasState::EraseNear's own doc comment, which this shares the same
     // clipping behavior with.
     //
-    // No return value: a clip can shorten or split a stroke as easily as
-    // remove it, and undoing a whole eraser drag needs the *net* change
-    // across the gesture, which the session gets by snapshotting the
-    // strokes before the drag starts.
-    void EraseAt(ItemId id, float screenX, float screenY, float radiusScreenPx);
+    // Returns what became of each stroke, index for index against the list
+    // as it was when the call began: kStrokeUntouched, or the number of
+    // fragments (0 for wholly erased) that now stand in its place, in its
+    // place - the list keeps its order, with each clipped stroke replaced
+    // by its fragments where it was. That is what lets the session compose
+    // a whole eraser drag into one exact undo entry (see
+    // Session::NoteEraseOutcome). Empty if the item was not found.
+    std::vector<size_t> EraseAt(ItemId id, float screenX, float screenY, float radiusScreenPx);
+    static constexpr size_t kStrokeUntouched = static_cast<size_t>(-1);
 
     // The rectangular-eraser equivalent of EraseAt - the same "clip, don't
     // delete whole strokes" contract (see ClipStrokeOutsideRect), against
@@ -281,7 +285,7 @@ public:
     // independently via ScreenToNative (unlike EraseAt's single averaged
     // radius scale, an axis-aligned rect's corners transform exactly
     // under its per-axis scale, with no approximation needed).
-    void EraseRectAt(ItemId id, float minX, float minY, float maxX, float maxY);
+    std::vector<size_t> EraseRectAt(ItemId id, float minX, float minY, float maxX, float maxY);
 
     // Finds an item by id across *every* canvas, unlike the item operations
     // above. Returns nullptr if `id` doesn't exist anywhere.

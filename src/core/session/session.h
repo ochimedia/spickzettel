@@ -299,17 +299,20 @@ private:
             // took two undos to take back one drag, because the strokes and
             // the pixels went on the stack separately, read as a bug.
             //
-            // The vector half is itemId + strokes + addedFragments (see
-            // CanvasManager::EraseAt/ClipStrokeOutsideCircle - a stroke
-            // only partly within the eraser is shortened/split rather than
-            // removed outright). `strokes` holds whichever whole original
-            // strokes were touched, exactly as they were before the
-            // gesture; `addedFragments` holds whatever replaced them
-            // (shortened/split pieces, or nothing if a stroke was wholly
-            // erased). Undo removes every stroke matching one of
-            // addedFragments (by value - see Stroke::operator==), then
-            // re-adds every stroke in `strokes`; redo is the exact mirror,
-            // same two arrays. Both empty when the gesture clipped nothing.
+            // The vector half is itemId + strokeCountBefore + replacements
+            // (see CanvasManager::EraseAt - a stroke only partly within the
+            // eraser is shortened/split rather than removed outright, and
+            // the fragments stand where it stood). Each replacement names
+            // one original by its index in the list as it was before the
+            // gesture, carries that original exactly, and carries the
+            // fragments that stand in its place afterwards. Undo rebuilds
+            // the before-list from the after-list, redo the reverse, both
+            // by position and neither by value: an undo that matched
+            // strokes by value put the restored originals at the end,
+            // which changed the draw order and left the next undo of a
+            // stroke taking off a different stroke than the one it was
+            // for, and could not tell two equal strokes apart. Empty when
+            // the gesture clipped nothing.
             //
             // The painted half is layerIndex + paintedTiles (the tiles the
             // brush touched, as they were before - see PaintedImage::
@@ -344,12 +347,20 @@ private:
             // round: undo marks it deleted, redo restores it.
             ItemCreated,
         };
+        // One original an erase gesture touched: where it was, what it
+        // was, and what stands in its place - see Kind::Erased.
+        struct StrokeReplacement {
+            size_t index = 0;
+            Stroke original;
+            std::vector<Stroke> fragments;
+        };
         Kind kind = Kind::StrokeBaked;
         ItemId itemId = 0;
         CanvasId canvasId = 0;
-        std::vector<Stroke> strokes;         // StrokeBaked: the one stroke, strokes[0]; Erased: originals removed
-        std::vector<Stroke> addedFragments;  // Erased only
-        ItemId deletedItemId = 0;            // ItemDeleted only
+        std::vector<Stroke> strokes;                  // StrokeBaked: the one stroke, strokes[0]
+        std::vector<StrokeReplacement> replacements;  // Erased only, ascending by index
+        size_t strokeCountBefore = 0;                 // Erased only: the list's length before the gesture
+        ItemId deletedItemId = 0;                     // ItemDeleted only
         std::string previousNoteText;        // NoteTextChanged only
         size_t layerIndex = 0;                        // Erased / PaintedTilesChanged: which of the item's layers
         std::vector<PaintedTile> paintedTiles;        // Erased (a brush erase) / PaintedTilesChanged
@@ -382,6 +393,11 @@ private:
     // Applies `entry` one way or the other and says what it was - nullopt
     // when the item or canvas it names is already gone.
     std::optional<UndoWhat> ApplyUndoEntry(UndoEntry& entry, bool undo);
+    // The vector half of an Erased entry, one function per direction - see
+    // UndoEntry::Kind::Erased. False, changing nothing, when the item's
+    // strokes are not the list the entry describes.
+    static bool RestoreStrokesBeforeErase(Item& item, const UndoEntry& entry);
+    static bool ReapplyErase(Item& item, const UndoEntry& entry);
     // The painted half of an entry, applied in either direction: puts back
     // the tiles (or the whole image) the entry holds and keeps what they
     // replaced, so the entry is its own inverse afterwards.
@@ -391,10 +407,17 @@ private:
     // left there that could ever want these. A canvas merely deleted keeps
     // its history for when it is restored.
     void DropHistoryOfCanvas(CanvasId canvasId);
+    // Starts following `itemId`'s strokes through an erase gesture: keeps
+    // the list as it is now, and notes that every stroke is still its own
+    // original - see eraseGestureStartSnapshot_.
     void SnapshotStrokesForErase(ItemId itemId);
-    // Diffs `itemId`'s current strokes against eraseGestureStartSnapshot_
-    // and pushes one Erased entry for the gesture, carrying whatever
-    // strokes changed *and* the painted pixels the same gesture took away.
+    // Folds one erase call's outcome (see CanvasManager::EraseAt) into what
+    // is being followed: each stroke the call clipped is marked replaced,
+    // and its fragments are noted as standing for the same original it did.
+    void NoteEraseOutcome(const std::vector<size_t>& outcome);
+    // Pushes one Erased entry for the whole gesture, built from what was
+    // followed: every original marked replaced, with the fragments now
+    // standing for it, *and* the painted pixels the same gesture took away.
     // No-op if neither half changed anything.
     void PushEraseGestureUndoEntry(ItemId itemId, PaintedUndo painted);
 
@@ -458,13 +481,18 @@ private:
     // What Undo has taken back, most recent last - same keying and caps.
     std::unordered_map<CanvasId, std::deque<UndoEntry>> redoStacks_;
     // A copy of the erased item's whole stroke list, taken as an eraser
-    // gesture begins - compared against that same item's strokes when it
-    // ends, to build one entry for the *whole* gesture rather than one per
-    // erase call. A before/after diff rather than accumulating each call's
-    // effect because a stroke clipped once mid-gesture can be clipped
-    // *again* by a later call in the same drag, and only its true
-    // pre-gesture shape should come back on undo.
+    // gesture begins, and beside it where every stroke currently in the
+    // list came from: eraseOrigins_ is parallel to the item's strokes and
+    // holds, for each, the index in the snapshot of the original it is or
+    // stands for; eraseReplaced_ is parallel to the snapshot and marks the
+    // originals some call has clipped. Together they say, at the gesture's
+    // end, exactly which fragments stand for which original - however many
+    // times a fragment was clipped again by a later call in the same drag -
+    // which is what one entry for the *whole* gesture needs, and what a
+    // before/after diff by value could not say (see UndoEntry::Kind::Erased).
     std::vector<Stroke> eraseGestureStartSnapshot_;
+    std::vector<size_t> eraseOrigins_;
+    std::vector<bool> eraseReplaced_;
     // The item the circular eraser gesture in progress is erasing, if any.
     std::optional<ItemId> eraseItemId_;
     // The text edit in progress, and the note as it was when it began.
