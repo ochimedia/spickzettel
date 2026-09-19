@@ -577,7 +577,11 @@ back a snippet deleted for good. The session counts an owed removal as
 an unsaved change: the flush that recorded it counts, but the autosave
 keeps asking - on a clock of its own, every ten seconds, the cadence the
 hidden retry timer has - and the hidden retry timer keeps running, until
-the directory is gone. The clock matters: the save that recorded the
+the directory is gone. The owed path follows every rename and
+retirement of a parent, the way the index does, so a folder renamed
+before the retry does not leave the pass looking at the old spelling,
+finding nothing, and calling the removal done with the directory
+sitting under the new name. The clock matters: the save that recorded the
 removal counted, so neither the failure backoff nor the quiet period
 held the next one back, and the retry ran on every frame, hashing the
 library each time, for as long as another program held the file. The

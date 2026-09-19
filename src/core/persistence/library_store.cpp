@@ -1455,10 +1455,15 @@ bool LibraryStore::Save(const LibraryView& view) const {
             ec.clear();
             std::filesystem::rename(old, wanted, ec);
             if (!ec) {
-                // Everything indexed inside it moved with it.
+                // Everything indexed inside it moved with it - and every
+                // removal still owed inside it, which is not indexed but
+                // is a path all the same. Left at its old spelling, the
+                // next pass found nothing there and took the removal for
+                // done, with the directory sitting under the new name.
                 for (std::map<uint64_t, std::filesystem::path>* nested : inside) {
                     Rehome(*nested, old, wanted);
                 }
+                Rehome(pendingRemovals_, old, wanted);
                 it->second = wanted;
                 return Placed{wanted, true};
             }
@@ -1612,6 +1617,8 @@ bool LibraryStore::Save(const LibraryView& view) const {
         // Not part of the index, so nothing under it is retired below: it
         // was deleted, not lost.
         for (auto pending = pendingRemovals_.begin(); pending != pendingRemovals_.end();) {
+            // The path is kept current through every rename and retirement
+            // of a parent (see Rehome), so "gone" here means gone, not moved.
             const std::filesystem::path& dir = pending->second;
             if (RemoveOwnDirectory(dir)) {
                 ForgetUnder(dir);
@@ -1664,8 +1671,12 @@ bool LibraryStore::Save(const LibraryView& view) const {
                     moved = !moveEc;
                 }
                 // A move that failed leaves the directory where it is, and
-                // indexed, for the next save to take another run at.
+                // indexed, for the next save to take another run at. One
+                // that went takes the removals still owed inside it along:
+                // retired/ is never read, but a directory deleted for good
+                // is finished there too rather than left as a remainder.
                 if (moved) {
+                    Rehome(pendingRemovals_, path, destination);
                     ForgetUnder(path);
                 }
             }

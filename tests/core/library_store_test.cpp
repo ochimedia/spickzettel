@@ -1108,6 +1108,37 @@ TEST_F(LibraryStoreTest, ARemoveThatCouldNotFinishIsRetriedByTheNextSaveNotSetAs
     EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
 }
 
+// The owed directory's parent may be renamed before the retry - the folder
+// given a new name, the canvas too - and the removal has to follow it
+// rather than look at the old spelling, find nothing, and call it done.
+TEST_F(LibraryStoreTest, ARemovalStillOwedFollowsItsParentsRename) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    ASSERT_TRUE(store.Save(snapshot));
+    snapshot.canvases[0].items.pop_back();
+    {
+        std::ifstream held(ShotItemDir() / "000004.qoi");
+        ASSERT_TRUE(held.is_open());
+        EXPECT_FALSE(store.Remove(4));
+        ASSERT_TRUE(store.HasPendingRemoval(4));
+    }
+    // Let go - and the folder and the canvas renamed before the next save.
+    snapshot.folders[0].name = "Renamed Folder";
+    snapshot.canvases[0].name = "Renamed Canvas";
+    ASSERT_TRUE(store.Save(snapshot));
+    const std::filesystem::path movedTo =
+        dir_ / "folders" / "renamed-folder-000001" / "renamed-canvas-000002" / "shot-1-000004";
+    EXPECT_FALSE(std::filesystem::exists(movedTo)) << "left under the new name as a remainder";
+    EXPECT_FALSE(store.HasPendingRemoval(4)) << "owed until it is gone, then not";
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir_)) {
+        EXPECT_NE(entry.path().filename(), ".removed") << entry.path();
+    }
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
+}
+
 // The app may well be restarted while the file is still held - and the
 // snippet the user deleted for good must not be back when it is.
 TEST_F(LibraryStoreTest, ARemovalStillOwedSurvivesARestart) {
