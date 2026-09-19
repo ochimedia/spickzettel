@@ -71,7 +71,8 @@ namespace sz::core::persistence {
 //   - a directory with no folder.json/canvas.json in it is not ours, and is
 //     left alone rather than deleted or complained about
 //   - a symlink or junction is not ours either, whatever is behind it: not
-//     read, not written to, not retired, not deleted (see the .cpp)
+//     read, not written to, not retired, not deleted - wherever it sits,
+//     folders/ or images/ or retired/ themselves included (see IsOurs)
 //   - an order file naming something that is gone simply skips it; anything
 //     present that it doesn't name goes to the end
 //   - a directory whose readable half was renamed by hand keeps its place,
@@ -280,16 +281,25 @@ private:
     // this store deletes is checked against it first - a tripwire, since
     // every path it could delete was built under the root to begin with.
     bool WithinRoot(const std::filesystem::path& path) const;
+    // Whether `path` is a place this store may write into, move or delete:
+    // under the root, and with no link or junction anywhere on the way
+    // down from the root to it. The one check every write, move and
+    // delete goes through - the top-level directories included (folders/,
+    // images/, retired/), which a user can replace with a junction as
+    // easily as any other. The library root itself is not checked: a root
+    // that is a junction is how a library is moved to another drive, and
+    // is supported. A path that does not exist yet passes if its existing
+    // ancestors do, which is what a directory about to be created needs.
+    // See the .cpp on links.
+    bool IsOurs(const std::filesystem::path& path) const;
     // Drops every index entry that points under `dir` - what a removed or
     // retired directory takes with it.
     void ForgetUnder(const std::filesystem::path& dir) const;
     // Where the folder directories are: folders/ under the root.
     std::filesystem::path FoldersRoot() const;
     // The one way this store deletes a directory: recursively, and only
-    // if neither it nor anything on the way down from the root is a link
-    // or junction, so that nothing outside the library is ever emptied
-    // through something pointing at it. See the .cpp on links.
-    // True once `path` is gone.
+    // if it IsOurs, so that nothing outside the library is ever emptied
+    // through something pointing at it. True once `path` is gone.
     bool RemoveOwnDirectory(const std::filesystem::path& path) const;
 
     // The tree walk behind Load: every folder, canvas and snippet under

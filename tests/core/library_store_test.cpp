@@ -1587,6 +1587,58 @@ TEST_F(LibraryStoreTest, RetiringOntoAJunctionReplacesTheLinkNotWhatItPointsTo) 
     EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt"));
     std::filesystem::remove_all(outside);
 }
+
+// The top-level directories are directories like any other, and a junction
+// at one of them is the cheapest way to point a whole tree's worth of
+// writes somewhere else.
+TEST_F(LibraryStoreTest, NothingIsWrittenOrReadThroughAJunctionAtFolders) {
+    const std::filesystem::path outside =
+        MakeJunctionTo(dir_ / "folders", dir_.parent_path() / (dir_.filename().string() + "_outside"));
+    LibraryStore store(dir_);
+    EXPECT_FALSE(store.Save(MakeSampleSnapshot())) << "nowhere of the library's to write the tree";
+    EXPECT_FALSE(std::filesystem::exists(outside / "order.json"));
+    EXPECT_FALSE(std::filesystem::exists(outside / "folder-1-000001"));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "library.json")) << "no pointer file over a tree that was not written";
+
+    // Not read either: a folder behind the link is not the library's.
+    std::filesystem::create_directories(outside / "folder-1-000001");
+    std::ofstream(outside / "folder-1-000001" / "folder.json") << R"({"id": 1, "name": "Behind the link"})";
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_TRUE(loaded->folders.empty());
+    std::filesystem::remove_all(outside);
+}
+
+TEST_F(LibraryStoreTest, APictureIsNotWrittenThroughAJunctionAtStaging) {
+    const std::filesystem::path outside =
+        MakeJunctionTo(dir_ / "images", dir_.parent_path() / (dir_.filename().string() + "_outside"));
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(8, 8);
+    EXPECT_FALSE(store.SaveImage(4, pixels.data(), 8, 8).has_value()) << "refused, so the session keeps the pixels";
+    EXPECT_FALSE(std::filesystem::exists(outside / "000004.qoi"));
+    EXPECT_FALSE(std::filesystem::exists(outside / "000004.thumb.qoi"));
+    std::filesystem::remove_all(outside);
+}
+
+TEST_F(LibraryStoreTest, NothingIsSetAsideThroughAJunctionAtRetired) {
+    LibraryStore store(dir_);
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    ASSERT_TRUE(store.Save(snapshot));
+    const std::vector<uint8_t> pixels = Checkerboard(8, 8);
+    ASSERT_TRUE(store.SaveImage(99, pixels.data(), 8, 8).has_value());  // nothing names it: an orphan in staging
+    const std::filesystem::path outside =
+        MakeJunctionTo(dir_ / "retired", dir_.parent_path() / (dir_.filename().string() + "_outside"));
+
+    snapshot.canvases.clear();
+    snapshot.currentCanvasId = 0;
+    ASSERT_TRUE(store.Save(snapshot)) << "setting aside is best-effort; the records landed";
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" / "canvas.json"))
+        << "left where it is rather than moved out of the library";
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "images" / "00002r.qoi")) << "the orphan stays in staging, readably";
+    EXPECT_FALSE(std::filesystem::exists(outside / "folder-1-000001"));
+    EXPECT_FALSE(std::filesystem::exists(outside / "images"));
+    std::filesystem::remove_all(outside);
+}
 #endif
 
 // ===== A save that could not write everything says so =====

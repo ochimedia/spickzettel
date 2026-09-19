@@ -613,13 +613,18 @@ std::optional<json> ReadJsonFile(const std::filesystem::path& path) {
 // A symlink or junction inside the library names something that may be
 // anywhere on the disk. What is behind one is therefore never the store's:
 // not read as a record, not written to, not swept, not retired, not
-// deleted. Load skips linked directories (see SortedSubdirectories), so
-// nothing behind a link ever enters the index, and every step that removes
-// or moves something checks the whole path from the root down for a link
-// (see CrossesLink) in case one appeared under a running instance. A link
-// left where a save wants to put a directory is a name collision the save
-// treats like any other: the record goes where its slug says and the link
-// is left alone.
+// deleted. Load skips linked directories and does not look inside one
+// (see SortedSubdirectories), so nothing behind a link ever enters the
+// index; and every path this store creates, writes, moves or deletes goes
+// through one check, LibraryStore::IsOurs, which walks the whole path from
+// the root down for a link (see CrossesLink). That includes the top-level
+// directories - folders/, images/, retired/ - which the first version of
+// this took on trust and a junction at any of which had a save writing a
+// whole tree outside the library. A link standing where a save wants to
+// put a directory makes that record unplaceable: the save reports failure
+// and leaves the link alone. The one thing not checked is the library
+// root itself: a root that is a junction is how a library is moved to
+// another drive, and is supported.
 
 // Whether `path` itself is a symlink or junction - a junction being what
 // "mklink /J" makes, the reparse point Windows lets a user create without
@@ -683,6 +688,9 @@ bool RemoveTree(const std::filesystem::path& path) {
 // Real directories only: a linked one is not part of the tree, see above.
 std::vector<std::filesystem::path> SortedSubdirectories(const std::filesystem::path& dir) {
     std::vector<std::filesystem::path> out;
+    if (IsLink(dir)) {
+        return out;  // nothing behind a link is read - folders/ itself included
+    }
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
         std::error_code isDirEc;
@@ -871,12 +879,16 @@ bool LibraryStore::WithinRoot(const std::filesystem::path& path) const {
     return !relative.empty() && relative != "." && *relative.begin() != "..";
 }
 
+bool LibraryStore::IsOurs(const std::filesystem::path& path) const {
+    return WithinRoot(path) && !CrossesLink(rootDir_, path);
+}
+
 bool LibraryStore::RemoveOwnDirectory(const std::filesystem::path& path) const {
     // Nothing in the index is a link or below one - Load never indexes a
     // linked directory - so meeting one here means the tree was rearranged
     // under a running instance, and the directory is physically somewhere
     // this store has never read. Left alone.
-    if (CrossesLink(rootDir_, path)) {
+    if (!IsOurs(path)) {
         return false;
     }
     RemoveTree(path);
@@ -1265,6 +1277,13 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
 bool LibraryStore::Save(const LibraryView& view) const {
     std::error_code ec;
     const std::filesystem::path foldersRoot = FoldersRoot();
+    if (!IsOurs(foldersRoot)) {
+        // folders/ is a junction: there is nowhere of the library's to
+        // write the tree. Nothing is written, not library.json either -
+        // a pointer file over a tree this store will not write is worth
+        // nothing - and the save fails until the link is gone.
+        return false;
+    }
     std::filesystem::create_directories(foldersRoot, ec);
 
     // What the library holds, by id - what the retirement pass below is
@@ -1358,17 +1377,18 @@ bool LibraryStore::Save(const LibraryView& view) const {
     // written into it has to be written whatever a hash says.
     //
     // `usable` is false when a link sits where the directory would have to
-    // be created: what is behind a link is not the store's to write into
-    // (see IsLink), so the record - and everything under it - is skipped,
-    // the save reports failure, and the next one tries again.
+    // be created, or on the way there: what is behind a link is not the
+    // store's to write into (see IsOurs), so the record - and everything
+    // under it - is skipped, the save reports failure, and the next one
+    // tries again.
     struct Placed {
         std::filesystem::path dir;
         bool kept;
         bool usable = true;
     };
-    const auto placeDirectory = [&ec](std::map<uint64_t, std::filesystem::path>& index, uint64_t id,
-                                       const std::filesystem::path& wanted,
-                                       std::initializer_list<std::map<uint64_t, std::filesystem::path>*> inside) {
+    const auto placeDirectory = [this, &ec](std::map<uint64_t, std::filesystem::path>& index, uint64_t id,
+                                            const std::filesystem::path& wanted,
+                                            std::initializer_list<std::map<uint64_t, std::filesystem::path>*> inside) {
         const auto it = index.find(id);
         if (it != index.end() && it->second == wanted) {
             // Already exactly where it belongs, which is the overwhelmingly
@@ -1380,6 +1400,12 @@ bool LibraryStore::Save(const LibraryView& view) const {
         }
         if (it != index.end()) {
             const std::filesystem::path old = it->second;
+            if (!IsOurs(wanted)) {
+                // A link is in the way of where its name says. It stays
+                // where it is, indexed and real, with a stale label - the
+                // same as a rename that failed.
+                return Placed{old, true};
+            }
             std::filesystem::create_directories(wanted.parent_path(), ec);
             ec.clear();
             std::filesystem::rename(old, wanted, ec);
@@ -1400,8 +1426,8 @@ bool LibraryStore::Save(const LibraryView& view) const {
             // memory. Rebuilt from that, below.
         }
         ec.clear();
-        if (IsLink(wanted)) {
-            return Placed{wanted, false, /*usable=*/false};  // not indexed: never ours
+        if (!IsOurs(wanted)) {
+            return Placed{wanted, false, /*usable=*/false};  // a link there, or on the way: never ours
         }
         std::filesystem::create_directories(wanted, ec);
         index[id] = wanted;
@@ -1481,7 +1507,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 // process never manages to write the new one - collecting
                 // them on the strength of a record that failed to land would
                 // leave the old record pointing at nothing.
-                if (!placedItem.kept || !recordWritten || CrossesLink(rootDir_, itemDir)) {
+                if (!placedItem.kept || !recordWritten || !IsOurs(itemDir)) {
                     continue;  // a fresh directory holds nothing to collect
                 }
                 std::unordered_set<std::string> named;
@@ -1585,10 +1611,16 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 // index was made under the root, so one that isn't is a
                 // bug, and a bug here leaves the directory alone.
                 const std::filesystem::path path = it->second;
-                if (!WithinRoot(path) || CrossesLink(rootDir_, path) || underPendingRemoval(path)) {
+                if (!IsOurs(path) || underPendingRemoval(path)) {
                     continue;
                 }
+                // ...and where it would go: retired/ can be a junction as
+                // easily as anything else, and a directory moved through
+                // one has left the library.
                 const std::filesystem::path destination = retiredRoot / path.lexically_relative(foldersRoot);
+                if (!IsOurs(destination)) {
+                    continue;
+                }
                 std::error_code moveEc;
                 std::filesystem::create_directories(destination.parent_path(), moveEc);
                 bool moved = false;
@@ -1656,7 +1688,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
     // deleting it at the next start would undo that promise. A move that
     // fails stays, readably - see FindImage.
     const std::filesystem::path stagingDir = rootDir_ / kStagingDir;
-    if (std::filesystem::exists(stagingDir, ec)) {
+    if (std::filesystem::exists(stagingDir, ec) && IsOurs(stagingDir)) {
         for (const auto& entry : std::filesystem::directory_iterator(stagingDir, ec)) {
             std::error_code isFileEc;
             if (!entry.is_regular_file(isFileEc)) {
@@ -1670,6 +1702,9 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 continue;
             }
             const std::filesystem::path setAside = rootDir_ / kRetiredDir / kStagingDir;
+            if (!IsOurs(setAside)) {
+                continue;  // stays in staging, readably, rather than leaving the library
+            }
             std::filesystem::create_directories(setAside, ec);
             std::filesystem::rename(entry.path(), setAside / name, ec);
         }
@@ -1699,6 +1734,9 @@ std::optional<std::string> LibraryStore::SaveLayerImage(uint64_t itemId, size_t 
 std::optional<std::string> LibraryStore::WritePicture(uint64_t itemId, const std::string& filename,
                                                        const uint8_t* pixelsRGBA, int width, int height) const {
     const std::filesystem::path home = ImageHome(itemId);
+    if (!IsOurs(home)) {
+        return std::nullopt;  // staging, or the snippet's directory, is behind a link: not written
+    }
     ++writeGeneration_;
     if (!EncodeQoiToFile(home / filename, pixelsRGBA, width, height)) {
         return std::nullopt;
@@ -1728,6 +1766,9 @@ bool LibraryStore::SaveThumbnail(uint64_t itemId, const std::string& imageFilena
     // Beside the image it belongs to, wherever that currently is - which for
     // a picture still in staging is staging, so the two travel together.
     const std::filesystem::path beside = FindImage(itemId, imageFilename).parent_path();
+    if (!IsOurs(beside)) {
+        return false;
+    }
     ++writeGeneration_;
     return EncodeQoiToFile(beside / ThumbnailFilename(imageFilename), small.pixelsRGBA.data(), small.width,
                             small.height);

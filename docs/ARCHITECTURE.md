@@ -503,18 +503,27 @@ moved, and two snippets can legitimately hold files of the same name.
 
 **Links are not part of the tree.** A symlink or junction inside the
 library names something that may be anywhere on the disk, so what is
-behind one is never the store's: `Load` skips linked directories, so
-nothing behind one enters the index and nothing behind one is written,
-swept, retired or deleted. Every step that removes or moves a directory
-also checks the whole path from the root down for a link, in case one
-appeared under a running instance, and a junction standing where a save
-would have to create a directory makes that record unplaceable: the save
-reports failure and leaves the link alone rather than writing through
-it. The checks are by path, not by handle. The threat is a user's own
-junction (a snippet directory pointed at a folder of notes, say) meeting
-an ordinary sweep, not a process racing the store's own file operations;
-the latter would need handle-based operations with reparse checks and is
-out of scope.
+behind one is never the store's: `Load` skips linked directories and
+does not look inside one, so nothing behind one enters the index, and
+every path the store creates, writes, moves or deletes goes through one
+check (`IsOurs`) that walks the whole path from the root down for a
+link. That covers the top-level directories too: a junction at
+`folders/` fails every save outright, one at `images/` refuses the
+capture's write (the session keeps the pixels and the save keeps
+failing, visibly), and one at `retired/` leaves what would have been
+retired where it is. The first version checked only the directory a
+record would be created in and took the roots on trust, and a junction
+at either root had a save writing a whole tree outside the library. A
+junction standing where a save would have to create a directory makes
+that record unplaceable: the save reports failure and leaves the link
+alone rather than writing through it. The library root itself is not
+checked: a root that is a junction is how a library is moved to another
+drive, and is supported. The checks are by path, not by handle. The
+threat is a user's own junction (a snippet directory pointed at a folder
+of notes, say) meeting an ordinary sweep, not a process racing the
+store's own file operations; the latter would need handle-based
+operations with reparse checks and is out of scope for a single-user
+tray app writing its own `%APPDATA%`.
 
 ### A save is a plan
 
