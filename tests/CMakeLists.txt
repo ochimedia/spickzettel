@@ -1,6 +1,8 @@
 # The portable suite: everything that needs neither a window nor an OS.
 # Runs on Windows and, through the linux-tests preset, on Linux.
 add_executable(sz_core_tests
+    app/headless_frame_test.cpp
+    app/tray_app_test.cpp
     core/build_info_test.cpp
     core/app_config_test.cpp
     core/canvas_manager_test.cpp
@@ -26,7 +28,9 @@ add_executable(sz_core_tests
     ui/shortcut_targets_test.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(sz_core_tests PRIVATE sz_ui GTest::gtest_main)
+# sz_app, not only sz_core: the headless frame tests and the tray controller
+# tests drive the whole app.
+target_link_libraries(sz_core_tests PRIVATE sz_app GTest::gtest_main)
 target_compile_features(sz_core_tests PRIVATE cxx_std_20)
 spickzettel_set_warnings(sz_core_tests)
 

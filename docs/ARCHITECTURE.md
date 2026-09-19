@@ -1141,3 +1141,76 @@ the platform hides the whole overlay before grabbing pixels.
 - `InvisibleButton`'s return value, not `IsItemClicked()`, means
   "clicked": the latter fires on press, and breaks click-to-select next
   to a drag source.
+
+## The tray controller: hidden, edit and view-only
+
+`app::TrayController` owns the settings, the session and the overlay,
+loads the library, and is the only place that knows what a hotkey does.
+Two hotkeys drive three states:
+
+```
+hidden --edit hotkey--> edit        edit --edit hotkey--> hidden
+hidden --view hotkey--> view        view --view hotkey--> hidden
+edit   --view hotkey--> view        view --edit hotkey--> edit
+```
+
+Each hotkey toggles its own mode off and switches straight to its mode
+otherwise, including directly between edit and view with no hide and
+reshow. The controller is deliberately stateless about which state it is
+in: "hidden vs visible" is the window's `IsVisible()`, "edit vs view" is
+the overlay's `IsViewOnly()`, both ground truth something else maintains,
+so no `mode_` member can go stale.
+
+**Pinned snippets.** Whenever the current canvas has a pinned snippet,
+"hidden" is the pinned view instead: view-only with every other snippet
+left out, click-through, never focused, put up the way a notice is. It
+stands in for hidden throughout, and there is deliberately no hotkey that
+hides it - unpinning is how pinned snippets go.
+
+**Notices.** A fourth state the hotkeys never ask for: view-only with the
+canvas left out, so the only thing on screen is a message. It exists for
+the silent capture hotkey, which acts while the overlay is hidden and
+still has to say what it did. Three things about it were found by
+watching it fail on the real thing: showing a window activates it
+(`SW_SHOW` takes focus by itself, hence `ShowWithoutActivating`); a
+window given `WS_EX_LAYERED` before its first show draws nothing, so the
+order is show first, click-through second; and ImGui's clock is not the
+app's clock, so the first frame after an hour in the tray carries an
+hour's delta and puts every expiry set while hidden in the past - the
+renderer caps the delta at 0.1 s.
+
+**View-only draws only now and then.** Its picture does not change by
+itself, and with pinned snippets it can sit over a game for hours, where
+drawing at the refresh rate cost 2% of a core. The overlay tells the
+window which frame pacing it wants; idle, the Win32 loop draws a frame
+every 250 ms plus one after any dispatched message, and sleeps in
+`MsgWaitForMultipleObjectsEx` in between. Measured: 31 ms of CPU per 10 s
+in the pinned view, against 203 ms before.
+
+**Profiles are resolved once, on the way up**, before `Show`, which is
+what makes the application underneath the answer rather than this
+window. A restart the overlay does to itself (for a setting only read on
+the way in) keeps the answer it already had: asked again in the middle
+of hiding itself, the overlay may have taken the foreground on the way
+out, the profile stops matching, and a toggle that went into it reads as
+if it had switched itself back.
+
+**Which display** is decided when the overlay comes up from hidden and
+kept while it is up, so switching modes or a capture hotkey happens where
+the overlay already is. It moves while up only when the displays change
+or a different monitor is picked in Settings, and a move retakes the
+frozen screen, which was a picture of the display just left.
+
+**Hotkeys are the one setting that cannot just be written**: a
+registration can fail, so the editor asks and the controller commits only
+if the OS accepts. A set combination that cannot be registered is fatal
+for the three that bring the overlay up; the silent capture's is an
+extra, and a machine where another app owns it still gets an app that
+runs. A first run - nothing on disk at all - shows the overlay in edit
+mode with a welcome note, since an app that installs a tray icon and then
+waits for a chord it never mentioned is indistinguishable from one that
+did not start.
+
+`Flush` is called before hiding and before exiting, the two places
+content stops being editable and no frame will come soon enough to catch
+the debounce.
