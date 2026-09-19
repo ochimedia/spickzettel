@@ -1075,6 +1075,7 @@ TEST_F(LibraryStoreTest, ARemoveThatCouldNotFinishIsRetriedByTheNextSaveNotSetAs
         EXPECT_FALSE(store.Remove(4)) << "not gone, so not done";
         EXPECT_TRUE(store.HasPendingRemoval(4));
         EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
+        EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / ".removed")) << "the intent is on disk";
 
         // A save meanwhile neither sets the remains aside nor forgets them.
         ASSERT_TRUE(store.Save(snapshot));
@@ -1085,6 +1086,38 @@ TEST_F(LibraryStoreTest, ARemoveThatCouldNotFinishIsRetriedByTheNextSaveNotSetAs
     ASSERT_TRUE(store.Save(snapshot));
     EXPECT_FALSE(store.HasPendingRemoval(4));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir())) << "finished once the file was let go of";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
+}
+
+// The app may well be restarted while the file is still held - and the
+// snippet the user deleted for good must not be back when it is.
+TEST_F(LibraryStoreTest, ARemovalStillOwedSurvivesARestart) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    ASSERT_TRUE(store.Save(snapshot));
+
+    std::ifstream held(ShotItemDir() / "000004.qoi");  // no delete sharing
+    ASSERT_TRUE(held.is_open());
+    EXPECT_FALSE(store.Remove(4));
+    ASSERT_TRUE(std::filesystem::exists(ShotItemDir() / ".removed"));
+
+    LibraryStore reopened(dir_);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    EXPECT_EQ(loaded->canvases[0].items.size(), 1u) << "deleted for good is not brought back by a restart";
+    EXPECT_TRUE(reopened.HasPendingRemoval(4)) << "and still owed";
+    ASSERT_TRUE(reopened.Save(*loaded));
+    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi")) << "still held";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired")) << "owed, not lost";
+
+    held.close();
+    ASSERT_TRUE(reopened.Save(*loaded));
+    EXPECT_FALSE(reopened.HasPendingRemoval(4));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir()));
     EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
 }
 #endif

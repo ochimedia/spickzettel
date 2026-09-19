@@ -48,6 +48,10 @@ namespace sz::core::persistence {
 //   retired/images/                    - pictures found in staging that no
 //                                       snippet named, set aside for the
 //                                       same reason; see Save's last pass
+//   .../<any directory>/.removed        - the directory was deleted for good
+//                                       and could not be wholly removed
+//                                       yet; nothing in it is read, and
+//                                       every save tries again. See Remove.
 //
 // Every id inside a record is spelled the way the directory names spell
 // it - six base36 characters, see util/uid.h - so a record and the
@@ -141,14 +145,21 @@ public:
     // directory for it - a thing never saved has none, and a capture of one
     // still in staging is collected by the next save - or if something in
     // it could not be removed: a picture held open by another program, on
-    // Windows. That directory stays indexed and marked, every save from
-    // then on takes another run at removing it, and nothing under it is
-    // set aside meanwhile (see Save). The caller can tell the two falses
-    // apart with HasPendingRemoval.
+    // Windows. That directory is then marked on disk as removed (a
+    // `.removed` file in it), dropped from the index, and remembered as
+    // owed: every save from then on takes another run at removing it, and
+    // a Load that finds the mark reads nothing from the directory and owes
+    // the removal too, so a restart cannot bring back what was deleted for
+    // good. The caller can tell the two falses apart with
+    // HasPendingRemoval.
     bool Remove(uint64_t uid) const;
     // Whether a Remove of `uid` is still owed: it was asked for and the
     // directory is still there, whole or in part.
     bool HasPendingRemoval(uint64_t uid) const { return pendingRemovals_.count(uid) > 0; }
+    // Whether any removal is still owed - what keeps a session's "unsaved
+    // changes" true until the disk agrees with the library about what is
+    // gone, so that the retry is asked for rather than waited on.
+    bool HasPendingRemovals() const { return !pendingRemovals_.empty(); }
 
     // Loads the on-disk library, or returns nullopt only if `rootDir` has
     // none at all - no library.json *and* no folders/ tree - which is a
@@ -301,6 +312,13 @@ private:
     // if it IsOurs, so that nothing outside the library is ever emptied
     // through something pointing at it. True once `path` is gone.
     bool RemoveOwnDirectory(const std::filesystem::path& path) const;
+    // Puts the removed mark into `dir` - a directory RemoveOwnDirectory
+    // could not finish with - so that the intent outlives the process.
+    // True once the mark is there.
+    bool MarkRemoved(const std::filesystem::path& dir) const;
+    // Whether `dir` carries the removed mark; if so it is remembered as
+    // owed (by the uid its name ends in) and nothing in it is to be read.
+    bool NotePendingRemoval(const std::filesystem::path& dir) const;
 
     // The tree walk behind Load: every folder, canvas and snippet under
     // `foldersRoot`, into `out`, indexing each directory and noting each
@@ -337,9 +355,11 @@ private:
     mutable std::map<uint64_t, std::filesystem::path> canvasDirs_;
     mutable std::map<uint64_t, std::filesystem::path> itemDirs_;
     mutable bool treeIndexed_ = false;
-    // What Remove was asked to delete and could not, wholly - see Remove.
-    // Each save tries again.
-    mutable std::unordered_set<uint64_t> pendingRemovals_;
+    // What Remove was asked to delete and could not, wholly, and where it
+    // is - see Remove. Each save tries again. Not in the index, so that
+    // nothing under it is placed, retired or read meanwhile: it was
+    // deleted, not lost.
+    mutable std::map<uint64_t, std::filesystem::path> pendingRemovals_;
     // See WriteGeneration.
     mutable uint64_t writeGeneration_ = 0;
 

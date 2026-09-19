@@ -555,6 +555,15 @@ constexpr const char* kStagingDir = "images";
 // it back: it is there for a person to recover something from, where a
 // delete would have left nothing to recover.
 constexpr const char* kRetiredDir = "retired";
+// The mark Remove leaves in a directory it could not wholly remove - a
+// picture in it held open by another program, on Windows. A directory
+// carrying it was deleted for good and is nothing but a removal still
+// owed: Load reads nothing from it, and every save tries again. Without
+// it, a restart while the file was still held reloaded the record as a
+// snippet the user had deleted for good.
+constexpr const char* kRemovedMarker = ".removed";
+constexpr const char* kRemovedMarkerText =
+    "Deleted for good. Spickzettel removes this directory once everything in it can be removed.\n";
 
 // ===== Reading a record without letting it throw =====
 //
@@ -925,15 +934,45 @@ bool LibraryStore::Remove(uint64_t uid) const {
     }
     ++writeGeneration_;
     if (!RemoveOwnDirectory(dir)) {
-        // Still there, whole or in part. Kept indexed and marked, so that
-        // the next save takes another run at removing it rather than
-        // taking it for something gone missing and setting it aside - and
-        // so that the caller can say the files are still there.
-        pendingRemovals_.insert(uid);
+        // Still there, whole or in part. Marked on disk and remembered as
+        // owed, so that every save takes another run at it and a restart
+        // knows not to read it; out of the index, so that nothing under
+        // it is taken for something gone missing and set aside. The
+        // caller is told the files are still there.
+        pendingRemovals_[uid] = dir;
+        MarkRemoved(dir);
+        ForgetUnder(dir);
         return false;
     }
     pendingRemovals_.erase(uid);
     ForgetUnder(dir);
+    return true;
+}
+
+bool LibraryStore::MarkRemoved(const std::filesystem::path& dir) const {
+    std::error_code ec;
+    if (!IsOurs(dir) || !std::filesystem::is_directory(dir, ec)) {
+        return false;
+    }
+    const std::filesystem::path marker = dir / kRemovedMarker;
+    if (std::filesystem::exists(marker, ec)) {
+        return true;
+    }
+    return WriteFileAtomically(marker, kRemovedMarkerText);
+}
+
+bool LibraryStore::NotePendingRemoval(const std::filesystem::path& dir) const {
+    std::error_code ec;
+    if (!std::filesystem::exists(dir / kRemovedMarker, ec)) {
+        return false;
+    }
+    // Owed under the uid its name ends in - what Remove keyed it by, since
+    // the record inside may already be gone. A name without one is left
+    // alone: not read, since the mark says so, and not removed, since
+    // nothing says whose it was.
+    if (const std::optional<uint64_t> uid = UidFromDirectoryName(dir.filename().string())) {
+        pendingRemovals_[*uid] = dir;
+    }
     return true;
 }
 
@@ -992,6 +1031,9 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
 
     std::vector<std::pair<std::string, Folder>> foundFolders;
     for (const std::filesystem::path& folderDir : SortedSubdirectories(foldersRoot)) {
+        if (NotePendingRemoval(folderDir)) {
+            continue;  // deleted for good; a removal still owed, not a folder
+        }
         const std::optional<json> folderDoc = ReadJsonFile(folderDir / kFolderFile);
         if (!folderDoc) {
             continue;  // not a folder of ours; left alone rather than guessed at
@@ -1039,6 +1081,9 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
         const std::filesystem::path folderDir = foldersRoot / folderDirName;
         std::vector<std::pair<std::string, Canvas>> foundCanvases;
         for (const std::filesystem::path& canvasDir : SortedSubdirectories(folderDir)) {
+            if (NotePendingRemoval(canvasDir)) {
+                continue;
+            }
             const std::optional<json> canvasDoc = ReadJsonFile(canvasDir / kCanvasFile);
             if (!canvasDoc) {
                 continue;
@@ -1064,6 +1109,9 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             // ...and the same, one level down, for the snippets inside it.
             std::vector<std::pair<std::string, Item>> foundItems;
             for (const std::filesystem::path& itemDir : SortedSubdirectories(canvasDir)) {
+                if (NotePendingRemoval(itemDir)) {
+                    continue;
+                }
                 const std::optional<json> itemDoc = ReadJsonFile(itemDir / kItemFile);
                 if (!itemDoc) {
                     continue;
@@ -1174,6 +1222,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     folderDirs_.clear();
     canvasDirs_.clear();
     itemDirs_.clear();
+    pendingRemovals_.clear();  // refilled from the marks the walk finds
     writtenItemHashes_.clear();
     writtenFileText_.clear();
     treeIndexed_ = true;
@@ -1228,12 +1277,18 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
     canvasDirs_.clear();
     itemDirs_.clear();
     for (const std::filesystem::path& folderDir : SortedSubdirectories(foldersRoot)) {
+        if (NotePendingRemoval(folderDir)) {
+            continue;
+        }
         if (const std::optional<json> doc = ReadJsonFile(folderDir / kFolderFile)) {
             if (const uint64_t id = ReadId(*doc, "id"); id != 0) {
                 folderDirs_.emplace(id, folderDir);
             }
         }
         for (const std::filesystem::path& canvasDir : SortedSubdirectories(folderDir)) {
+            if (NotePendingRemoval(canvasDir)) {
+                continue;
+            }
             if (const std::optional<json> doc = ReadJsonFile(canvasDir / kCanvasFile)) {
                 if (const uint64_t id = ReadId(*doc, "id"); id != 0) {
                     canvasDirs_.emplace(id, canvasDir);
@@ -1244,6 +1299,9 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
             // of its directory, and finding where it currently is is what
             // makes that a move rather than a copy plus an orphan.
             for (const std::filesystem::path& itemDir : SortedSubdirectories(canvasDir)) {
+                if (NotePendingRemoval(itemDir)) {
+                    continue;
+                }
                 if (const std::optional<json> doc = ReadJsonFile(itemDir / kItemFile)) {
                     if (const uint64_t id = ReadId(*doc, "id"); id != 0) {
                         itemDirs_.emplace(id, itemDir);
@@ -1560,37 +1618,23 @@ bool LibraryStore::Save(const LibraryView& view) const {
     // index it came from.
     {
         // First, another run at whatever a permanent delete could not remove
-        // (see Remove). What still cannot go stays indexed and marked, and
-        // nothing under it is retired below: it was deleted, not lost.
-        std::vector<std::filesystem::path> stillPending;
+        // (see Remove). What still cannot go stays marked, on disk, so that
+        // the intent survives this process; a mark that cannot be written
+        // either fails the save, since nothing on disk then records it.
+        // Not part of the index, so nothing under it is retired below: it
+        // was deleted, not lost.
         for (auto pending = pendingRemovals_.begin(); pending != pendingRemovals_.end();) {
-            std::filesystem::path dir;
-            for (const auto* index : {&folderDirs_, &canvasDirs_, &itemDirs_}) {
-                if (const auto it = index->find(*pending); it != index->end()) {
-                    dir = it->second;
-                }
-            }
-            if (dir.empty()) {
-                pending = pendingRemovals_.erase(pending);  // nothing indexed to remove any more
-                continue;
-            }
+            const std::filesystem::path& dir = pending->second;
             if (RemoveOwnDirectory(dir)) {
                 ForgetUnder(dir);
                 pending = pendingRemovals_.erase(pending);
                 continue;
             }
-            stillPending.push_back(dir);
+            if (!MarkRemoved(dir)) {
+                wroteEverything = false;
+            }
             ++pending;
         }
-        const auto underPendingRemoval = [&stillPending](const std::filesystem::path& path) {
-            for (const std::filesystem::path& dir : stillPending) {
-                const std::filesystem::path relative = path.lexically_relative(dir);
-                if (!relative.empty() && *relative.begin() != "..") {
-                    return true;
-                }
-            }
-            return false;
-        };
 
         const std::filesystem::path retiredRoot = rootDir_ / kRetiredDir;
         const auto retire = [&](const std::map<uint64_t, std::filesystem::path>& index,
@@ -1611,7 +1655,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 // index was made under the root, so one that isn't is a
                 // bug, and a bug here leaves the directory alone.
                 const std::filesystem::path path = it->second;
-                if (!IsOurs(path) || underPendingRemoval(path)) {
+                if (!IsOurs(path)) {
                     continue;
                 }
                 // ...and where it would go: retired/ can be a junction as

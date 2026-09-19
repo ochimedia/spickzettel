@@ -89,9 +89,13 @@ public:
     // tries again.
     bool Flush();
     // Whether anything is owed to the disk: a change since the last save
-    // that landed, or a capture whose picture could not be written yet
-    // (see CaptureShotItem). What the autosave and Flush act on, and what
-    // a UI can show.
+    // that landed, a capture whose picture could not be written yet (see
+    // CaptureShotItem), or a permanent delete whose directory could not
+    // be wholly removed yet (see DeletePermanently). What the autosave and
+    // Flush act on, and what a UI can show. The last of the three keeps
+    // this true across a Flush that returned true: the intent is on disk
+    // and the save counted, but the autosave's clock keeps asking until
+    // the directory is gone, rather than waiting for an unrelated edit.
     bool HasUnsavedChanges() const;
     // Whether the most recent save attempt failed and is waiting to be
     // retried - for a UI to say so. Cleared by the save that lands.

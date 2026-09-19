@@ -144,7 +144,8 @@ bool Session::WriteRecoveryCopy(const std::filesystem::path& dir) {
 }
 
 bool Session::HasUnsavedChanges() const {
-    return library_.manager.Generation() != library_.lastSavedGeneration || !pendingPictures_.empty();
+    return library_.manager.Generation() != library_.lastSavedGeneration || !pendingPictures_.empty() ||
+           (library_.store && library_.store->HasPendingRemovals());
 }
 
 void Session::SyncTexturesToCurrentCanvas() {

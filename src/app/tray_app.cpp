@@ -384,7 +384,9 @@ constexpr int kHiddenSaveRetryMs = 10000;
 }  // namespace
 
 void TrayController::FlushOrRetryLater() {
-    if (session_.Flush()) {
+    // Landed and nothing owed - a removal still pending counts as owed,
+    // though the flush that recorded it counted - or scheduled again.
+    if (session_.Flush() && !session_.HasUnsavedChanges()) {
         host_.SetBackgroundTimer(0, nullptr);
         return;
     }
@@ -426,7 +428,10 @@ std::optional<std::filesystem::path> TrayController::RecoveryCopyPath() const {
 void TrayController::OnBackgroundTimer() {
     // Up again: frames are running and the autosave's own clock, with its
     // backoff, is the one to use.
-    if (host_.GetOverlayWindow().IsVisible() || !session_.HasUnsavedChanges() || session_.Flush()) {
+    if (!host_.GetOverlayWindow().IsVisible() && session_.HasUnsavedChanges()) {
+        session_.Flush();
+    }
+    if (host_.GetOverlayWindow().IsVisible() || !session_.HasUnsavedChanges()) {
         host_.SetBackgroundTimer(0, nullptr);
     }
 }

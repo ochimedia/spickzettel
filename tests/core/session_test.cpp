@@ -559,9 +559,19 @@ TEST(SessionTest, APermanentDeleteThatLeavesFilesBehindSaysSoAndFinishesLater) {
         EXPECT_EQ(session.DeletePermanently(gone), Session::Removal::FilesRemain);
         EXPECT_EQ(ItemById(session.Manager(), gone), nullptr) << "gone from the library all the same";
         EXPECT_TRUE(std::filesystem::exists(record));
+
+        // A save meanwhile counts - the records and the intent are on disk -
+        // but the removal stays owed, so the autosave keeps asking.
+        EXPECT_TRUE(session.Flush());
+        EXPECT_TRUE(session.HasUnsavedChanges()) << "a removal is still owed";
+        EXPECT_TRUE(std::filesystem::exists(record));
     }
-    // Let go, the next save finishes the delete - and sets nothing aside.
-    session.Flush();
+    // Let go, the autosave's own clock finishes the delete with no edit
+    // to prompt it - and sets nothing aside. The first tick is the one
+    // that notices the generation moved; the quiet time counts from there.
+    session.Tick(0.0f);
+    session.Tick(3.0f);
+    EXPECT_FALSE(session.HasUnsavedChanges());
     EXPECT_FALSE(std::filesystem::exists(record.parent_path()));
     EXPECT_FALSE(std::filesystem::exists(dir / "retired"));
 

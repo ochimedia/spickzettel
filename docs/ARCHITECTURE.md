@@ -548,12 +548,22 @@ emptied a library.
 A permanent delete that cannot finish - Windows refuses to delete a
 file another program holds open without delete sharing, and a picture
 viewer looking at a capture is exactly that - reports so rather than
-success: the store keeps the directory indexed and marked, every save
-takes another run at removing it and sets nothing under it aside
-meanwhile, and the session tells the UI the files remain so the toast
-can say it. The first version forgot the directory before deleting it
-and returned true whatever happened, which left the remains to be
-retired as something lost, or reloaded as a snippet.
+success, and the intent outlives the process: the store writes a
+`.removed` mark into the directory, drops it from the index so that
+nothing under it is placed or set aside meanwhile, and remembers the
+removal as owed. Every save takes another run at it, and a save whose
+mark could not be written fails, since nothing on disk then records the
+delete. `Load` reads nothing from a marked directory and owes its
+removal too, so a restart while the file is still held does not bring
+back a snippet deleted for good. The session counts an owed removal as
+an unsaved change: the flush that recorded it counts, but the autosave's
+clock keeps asking, and the hidden retry timer keeps running, until the
+directory is gone. The first version forgot the directory before
+deleting it and returned true whatever happened, which left the remains
+to be retired as something lost, or reloaded as a snippet; the second
+kept the removal pending but let the next save count as clean, so
+nothing retried until an unrelated edit, and a restart reloaded the
+record.
 
 A snippet's directory is swept for pictures its layers no longer name
 only after the record that stopped naming them is on disk. Until then
