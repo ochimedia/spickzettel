@@ -827,7 +827,14 @@ CaptureResult Win32OverlayWindow::CaptureRegionAsTexture(const Rect& rect) {
                 // CAPTUREBLT includes layered windows (other apps' own
                 // translucent UI) in the capture, matching what's visually
                 // on screen rather than just the opaque desktop.
-                if (BitBlt(memDC, 0, 0, width, height, screenDC, source.x, source.y, SRCCOPY | CAPTUREBLT)) {
+                const BOOL blitted =
+                    BitBlt(memDC, 0, 0, width, height, screenDC, source.x, source.y, SRCCOPY | CAPTUREBLT);
+                // Deselected *before* it is read: GetDIBits documents that
+                // the bitmap must not be selected into a DC when it is
+                // called. It happened to work while selected, on the
+                // drivers tried, which is not the same as being allowed.
+                SelectObject(memDC, oldObj);
+                if (blitted) {
                     BITMAPINFOHEADER bi{};
                     bi.biSize = sizeof(bi);
                     bi.biWidth = width;
@@ -837,10 +844,11 @@ CaptureResult Win32OverlayWindow::CaptureRegionAsTexture(const Rect& rect) {
                     bi.biCompression = BI_RGB;
                     BITMAPINFO bmi{};
                     bmi.bmiHeader = bi;
+                    // Every row, or nothing: a short read is a picture
+                    // with garbage along its bottom, not a capture.
                     captured = GetDIBits(memDC, bitmap, 0, static_cast<UINT>(height), pixelsBGRA.data(), &bmi,
-                                          DIB_RGB_COLORS) != 0;
+                                          DIB_RGB_COLORS) == height;
                 }
-                SelectObject(memDC, oldObj);
                 DeleteObject(bitmap);
             }
             DeleteDC(memDC);
@@ -859,8 +867,13 @@ CaptureResult Win32OverlayWindow::CaptureRegionAsTexture(const Rect& rect) {
     // GDI's 32bpp DIBs are byte-order BGRA; D3D11's DXGI_FORMAT_R8G8B8A8_UNORM
     // (what CreateTextureFromRGBA uses, matching imgui_impl_dx11.cpp's own
     // texture format) wants RGBA - swap the B/R bytes of each pixel in place.
+    // The fourth byte of a 32bpp DIB is not an alpha channel: GDI leaves it
+    // undefined (zero for most of the screen, whatever a layered window
+    // wrote for the rest), and a screenshot is opaque by definition, so it
+    // is set rather than trusted.
     for (size_t i = 0; i + 3 < pixelsBGRA.size(); i += 4) {
         std::swap(pixelsBGRA[i], pixelsBGRA[i + 2]);
+        pixelsBGRA[i + 3] = 255;
     }
 
     ID3D11ShaderResourceView* srv = renderer_->CreateTextureFromRGBA(pixelsBGRA.data(), width, height);
