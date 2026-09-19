@@ -532,6 +532,77 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
     std::filesystem::remove_all(dir);
 }
 
+// A copy taken of a capture whose write has not landed has the session's
+// pixels to copy from, not a file - and must not come out pictureless.
+TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_copy_of_pending";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    std::ofstream(dir / "images") << "a file where the staging directory wants to be";
+    persistence::LibraryStore store(dir);
+    test::FakeOverlayWindow window;
+    window.captureReturnsHandle = 7;
+    window.captureReturnsWidth = 2;
+    window.captureReturnsHeight = 1;
+    window.captureReturnsPixelsRGBA = {10, 20, 30, 255, 40, 50, 60, 255};
+    window.createTextureFromPixelsReturnsHandle = 9;
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+
+    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
+    ASSERT_TRUE(session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile.empty()) << "not on disk";
+
+    const ItemId copyId = session.Manager().DuplicateItem(id);
+    ASSERT_NE(copyId, 0u);
+    EXPECT_TRUE(session.CloneShotImageForCopy(id, copyId)) << "the pixels are in the session";
+    EXPECT_NE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->textureHandle, 0u) << "on screen at once";
+
+    EXPECT_FALSE(session.Flush()) << "staging is still blocked";
+    EXPECT_TRUE(session.Flush()) << "both snippets have directories of their own now";
+    persistence::LibraryStore reopened(dir);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    size_t pictures = 0;
+    for (const Canvas& canvas : loaded->canvases) {
+        for (const Item& item : canvas.items) {
+            ASSERT_FALSE(item.ImageLayer()->imageFile.empty()) << "every copy names a picture";
+            const std::optional<persistence::DecodedImage> saved =
+                reopened.LoadImage(item.id, item.ImageLayer()->imageFile);
+            ASSERT_TRUE(saved.has_value());
+            EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
+            ++pictures;
+        }
+    }
+    EXPECT_EQ(pictures, 2u);
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+
+// A source whose picture is gone from the disk gives its copy nothing,
+// and says so, rather than quietly producing a copy that looks captured.
+TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_copy_unreadable";
+    std::filesystem::remove_all(dir);
+    persistence::LibraryStore store(dir);
+    Session session;
+    session.SetLibraryStore(&store);
+    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile = "gone.qoi";
+
+    const ItemId copyId = session.Manager().DuplicateItem(id);
+    ASSERT_NE(copyId, 0u);
+    EXPECT_FALSE(session.CloneShotImageForCopy(id, copyId));
+    EXPECT_TRUE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->imageFile.empty());
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+
 #if defined(_WIN32)
 // Windows refuses to delete a file another handle holds open without
 // delete sharing - which is what a picture viewer looking at a capture

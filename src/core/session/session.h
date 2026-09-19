@@ -258,7 +258,12 @@ public:
     void CaptureShotItem(Item& item);
     // Gives the copy `copyId` a picture file and texture of its own, read
     // from `sourceId`'s - a copy must never share either with its source.
-    void CloneShotImageForCopy(ItemId sourceId, ItemId copyId);
+    // The source's pixels come from this session when its own capture is
+    // still waiting to be written (see PendingPicture), and from disk
+    // otherwise; a copy whose write fails waits the same way. False when
+    // the source names a picture that could not be read, so the copy has
+    // none: a UI says so rather than showing a copy that looks captured.
+    bool CloneShotImageForCopy(ItemId sourceId, ItemId copyId);
 
 private:
     // A library, as the session holds one: the records, where they are

@@ -499,23 +499,36 @@ void Session::CaptureShotItem(Item& item) {
     }
 }
 
-void Session::CloneShotImageForCopy(ItemId sourceId, ItemId copyId) {
+bool Session::CloneShotImageForCopy(ItemId sourceId, ItemId copyId) {
     if (!Store()) {
-        return;
+        return true;
     }
     const Item* source = Manager().FindItemAnywhere(sourceId);
     const Layer* sourcePicture = source ? source->ImageLayer() : nullptr;
-    if (!sourcePicture || sourcePicture->imageFile.empty()) {
-        return;  // a Drawing item, or a Shot item that never captured anything real
+    if (!sourcePicture) {
+        return true;  // a Drawing item: nothing to copy
     }
-    const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(sourceId, sourcePicture->imageFile);
+    // The session's own copy of the pixels first: a capture whose write has
+    // not landed has no file yet and its pixels are here, and a copy taken
+    // of it in that window used to come out with no picture at all, for
+    // good - the file it would later have been read from was never named.
+    std::optional<persistence::DecodedImage> decoded;
+    if (const auto pending = pendingPictures_.find(sourceId); pending != pendingPictures_.end()) {
+        decoded = persistence::DecodedImage{pending->second.width, pending->second.height,
+                                            pending->second.pixelsRGBA};
+    } else if (!sourcePicture->imageFile.empty()) {
+        decoded = Store()->LoadImage(sourceId, sourcePicture->imageFile);
+        if (!decoded.has_value()) {
+            return false;  // names a picture that cannot be read: the copy gets none
+        }
+    }
     if (!decoded.has_value()) {
-        return;
+        return true;  // a Shot item that never captured anything real
     }
     Item* copy = Manager().FindItemAnywhere(copyId);
     Layer* copyPicture = copy ? copy->ImageLayer() : nullptr;
     if (!copyPicture) {
-        return;
+        return true;
     }
     // Re-saved under `copyId`'s own filename - a fresh file on disk, not a
     // second reference to the source's - same single-owner reasoning as
@@ -536,6 +549,7 @@ void Session::CloneShotImageForCopy(ItemId sourceId, ItemId copyId) {
     // own: this runs synchronously right after the copy itself
     // (CanvasManager::DuplicateItem/MoveOrCopyItemToCanvas), which already
     // bumped the generation counter moments earlier in the same call stack.
+    return true;
 }
 
 }  // namespace sz::core

@@ -97,6 +97,7 @@
   "_toasts": "The brief messages that appear after something happened.",
   "toast.capturedScreenshot": "Captured screenshot",
   "toast.copied": "Copied",
+  "toast.copiedWithoutPicture": "Copied without its picture - the original's could not be read",
   "toast.deleted": "Deleted",
   "toast.restored": "Restored",
   "toast.deletedForGood": "Deleted permanently",

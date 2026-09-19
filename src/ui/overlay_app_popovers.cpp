@@ -330,7 +330,9 @@ void OverlayApp::RenderItemActions(Item& item) {
     // other item.
     if (PillIconButton("##copy_item", icons::kCopy, false)) {
         if (const ItemId newId = Manager().DuplicateItem(itemId); newId != 0) {
-            session_.CloneShotImageForCopy(itemId, newId);
+            if (!session_.CloneShotImageForCopy(itemId, newId)) {
+                ShowActionToast(strings::kToastCopiedWithoutPicture);
+            }
             OffsetCopiedItem(newId);
             // The copy sits on *this* canvas, so its painted layer - pixels
             // in memory, no texture yet - needs one now, not on the next

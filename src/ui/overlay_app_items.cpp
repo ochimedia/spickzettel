@@ -299,6 +299,7 @@ void OverlayApp::PasteFromClipboard() {
     const bool cut = clipboardIsCut_;
     std::vector<ItemId> pasted;
     bool fromThisCanvas = false;
+    bool pictureLost = false;  // a copy whose source's picture could not be read
     for (const ItemId id : clipboard_) {
         const std::optional<CanvasId> from = Manager().CanvasHoldingItem(id);
         if (!from.has_value() || Manager().IsItemDeleted(id)) {
@@ -318,7 +319,7 @@ void OverlayApp::PasteFromClipboard() {
         } else {
             // A copy must never share its source's picture file or its
             // texture - see Session::CloneShotImageForCopy.
-            session_.CloneShotImageForCopy(id, placed);
+            pictureLost = !session_.CloneShotImageForCopy(id, placed) || pictureLost;
         }
         fromThisCanvas = fromThisCanvas || *from == here;
         pasted.push_back(placed);
@@ -343,7 +344,7 @@ void OverlayApp::PasteFromClipboard() {
         clipboard_.clear();
         clipboardIsCut_ = false;
     }
-    ShowActionToast(strings::kToastPasted);
+    ShowActionToast(pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastPasted);
 }
 
 void OverlayApp::AddTouchedToSelection(const Rect& box) {

@@ -1001,8 +1001,9 @@ void OverlayApp::SendPickedItemTo(CanvasId target) {
     if (target != source) {
         const Canvas* targetCanvas = Manager().FindCanvas(target);
         const std::string targetName = targetCanvas ? targetCanvas->name : strings::kDeleteConfirmCanvasWord;
+        bool pictureLost = false;
         if (const ItemId newId = Manager().MoveOrCopyItemToCanvas(item, target, isCopy); isCopy && newId != 0) {
-            session_.CloneShotImageForCopy(item, newId);
+            pictureLost = !session_.CloneShotImageForCopy(item, newId);
         }
         if (!isCopy) {
             // A move takes the item off this canvas, so its history here
@@ -1011,7 +1012,9 @@ void OverlayApp::SendPickedItemTo(CanvasId target) {
             // its history) exactly where it was.
             session_.ForgetHistoryOfItem(source, item);
         }
-        ShowActionToast(std::string(isCopy ? strings::kToastCopiedToPrefix : strings::kToastMovedToPrefix) + targetName);
+        ShowActionToast(pictureLost ? std::string(strings::kToastCopiedWithoutPicture)
+                                    : std::string(isCopy ? strings::kToastCopiedToPrefix : strings::kToastMovedToPrefix) +
+                                          targetName);
         // The item (or its fresh copy) now lives on a canvas that isn't
         // current, so whatever texture it holds is no longer doing anything
         // - hand it straight back rather than leaving it resident until the
