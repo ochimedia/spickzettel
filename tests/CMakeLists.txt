@@ -5,6 +5,8 @@ add_executable(sz_core_tests
     core/canvas_state_test.cpp
     core/draw_tool_test.cpp
     core/stroke_clip_test.cpp
+    core/stroke_mesh_test.cpp
+    core/stroke_mesh_cache_test.cpp
     core/stroke_smoothing_test.cpp
     platform/pen_glyph_test.cpp
 )

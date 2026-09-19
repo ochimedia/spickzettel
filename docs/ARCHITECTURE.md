@@ -213,3 +213,41 @@ leaves the walk's inside/outside state disagreeing with the pointwise
 test. The walk compares the two after each segment and splits there;
 without that it silently bridged the erased middle into one fragment,
 which looks exactly like not having erased anything.
+
+### Tessellation, and its cache
+
+`BuildStrokeMesh` turns a centerline into the shape a round pen leaves:
+a miter join while the turn is shallow, a round join past a limit of 2
+half-widths (about 120 degrees), round caps, a disc for a dot, and a
+seam join instead of caps for a closed path (the rectangle tool's). It
+exists because ImGui's `AddPolyline` offsets each point along the
+average of its adjacent normals and rescales by 1/cos² of half the turn,
+clamped only at 100x the half width, so a near-reversal throws a spike
+most of a hundred widths out of a wide pen; it also has only flat caps
+and no round join.
+
+The mesh is one connected strip whose neighbouring quads share vertices,
+so no triangle is drawn over another. That is what a *translucent*
+stroke needs: every overlap is a place the colour lands twice, which at
+less than full opacity is a visibly darker patch. `StrokeMeshTest`
+measures this as area, since a screenshot cannot tell a double-covered
+pixel from a slightly darker one. A one-pixel anti-aliasing fringe is
+carried in screen space so it stays a pixel wide whatever an item is
+scaled to.
+
+`StrokeMeshCache` keeps each stroke's mesh between frames, keyed by item
+and stroke index. Two things make it work. The mesh is built around the
+origin and translated as it is written into the draw list, so dragging
+an item - the case where a dropped frame shows most - changes nothing
+the cache holds; only the scale reaches the tessellator. And each entry
+remembers the `CanvasManager` generation it was last checked at: while
+that has not moved nothing anywhere has changed, so a canvas at rest
+costs one integer compare per stroke. When it has moved the stroke is
+fingerprinted (64-bit FNV over its bytes) and compared, which catches
+the case a stroke count cannot: the eraser rewriting the middle of a
+list without changing its length. A fingerprint rather than a kept copy
+because there are two caches - the canvas's and the Overview previews' -
+and two copies of every stroke on screen is a lot to hold to compare
+against. `EndFrame` drops whatever was not drawn that frame, so
+switching canvas or deleting an item releases the memory without either
+having to know the cache exists.

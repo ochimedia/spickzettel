@@ -6,6 +6,8 @@ add_library(sz_core STATIC
     build_info/build_info.cpp
     drawing/canvas_state.cpp
     drawing/draw_tool.cpp
+    drawing/stroke_mesh.cpp
+    drawing/stroke_mesh_cache.cpp
     drawing/stroke_clip.cpp
     drawing/stroke_smoothing.cpp
 )
