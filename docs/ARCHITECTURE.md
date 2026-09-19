@@ -1214,3 +1214,265 @@ did not start.
 `Flush` is called before hiding and before exiting, the two places
 content stops being editable and no frame will come soon enough to catch
 the debounce.
+
+## The Windows backend
+
+### Process and window lifecycle
+
+Single process, single executable: a hidden `HWND` with no render loop
+costs essentially nothing, so a tray-stub-plus-spawned-overlay split
+would add IPC and a second failure surface for no benefit. At launch only
+the hidden message window that receives tray and hotkey messages exists;
+the first hotkey creates the overlay window and the D3D11 device, once
+per session; every toggle after that is `ShowWindow`, with no swapchain
+teardown, so fast repeated toggling has no re-creation latency. While
+hidden the event loop blocks in `GetMessage` and nothing is rendered,
+which is what delivers near-zero idle CPU. `Destroy` happens once, on
+exit.
+
+### Translucency
+
+The overlay window is *not* `WS_EX_LAYERED`. It is an ordinary topmost
+tool window made transparent through `DwmEnableBlurBehindWindow` with an
+effectively infinite blur region (ImGui's own `EnableAlphaCompositing`
+helper), which makes the DWM composite the window using its rendered
+per-pixel alpha: the render target is cleared to alpha 0 each frame, so
+untouched regions are see-through and strokes are opaque.
+
+Two layered-window approaches were rejected because layered windows tie
+hit-testing to pixel transparency, which is fatal for an overlay whose
+premise is that the whole screen is clickable while shown. Colour-keying
+(`LWA_COLORKEY`) composites correctly but `DefWindowProc` answers
+`WM_NCHITTEST` with `HTTRANSPARENT` over keyed pixels, so clicks on
+"empty" parts fell through, and answering `HTCLIENT` explicitly did not
+fix it. Constant alpha (`LWA_ALPHA`) does not consult the backbuffer's
+alpha at all, so the whole window went uniformly opaque.
+
+### Click-through for view-only
+
+Answering `WM_NCHITTEST` with `HTTRANSPARENT` does nothing on real
+hardware against a window in another process. What works is toggling
+`WS_EX_TRANSPARENT` on the whole window, paired with `WS_EX_LAYERED`,
+which is required alongside it to take effect reliably. `WS_EX_LAYERED`'s
+bit is borrowed only for what it does to hit-testing; neither
+`SetLayeredWindowAttributes` nor `UpdateLayeredWindow` is ever called,
+since those are how the rejected techniques fed a window's alpha and
+would fight blur-behind. Toggling passthrough also hands keyboard focus
+back to what had it, since click-through alone only stops mouse routing
+and the overlay would otherwise keep eating the game's keys.
+
+`Hide` restores focus only if this window still holds it: once view-only
+has handed focus off, the user may have clicked into other windows
+through the click-through overlay, and forcing a stale memory over what
+`GetForegroundWindow` already points at can only make things worse.
+Alt+F4 and `WM_CLOSE` are swallowed: `DefWindowProc` would destroy the
+window and nothing resets the handle, so `EnsureCreated` would report
+success against a dead window forever.
+
+### Not stealing focus in edit mode
+
+Some games detect losing focus and pause or throttle. `WS_EX_NOACTIVATE`
+baked into the creation style stops showing or clicking the window from
+activating it, while mouse routing works as usual. It defaults on, and
+has a real measured cost: keeping the game foreground is exactly what
+most games use to gate raw mouse input for camera-look, so a drag draws
+on the overlay *and* spins the camera. The input options below exist to
+claw that back, which is why they default on together.
+
+Foreground is not focus, and `WS_EX_NOACTIVATE` blocks the half that
+matters: a text field opened under it looked ready and every keystroke
+went elsewhere with the system beep, two renames in eight. So a field
+*borrows* focus by clearing the bit for the duration - or, better, needs
+no focus at all while the keyboard is grabbed (below).
+
+### Taking input back from the game: the input grab
+
+`WH_MOUSE_LL` and `WH_KEYBOARD_LL` are the only user-mode mechanism that
+can discard an input event before another process sees it. What that
+reaches was measured rather than assumed, and the answer is not the
+intuitive one: a foreground application registered for raw input stops
+receiving legacy messages, `GetAsyncKeyState`, cursor movement and the
+whole raw *keyboard* stream, but keeps receiving the raw *mouse* stream.
+Raw mouse input branches off ahead of the hooks and is delivered only to
+the foreground window, so the sole way to stop it is to take the
+foreground - the one thing this mode exists to avoid.
+
+Consequences that shape `Win32InputGrab`:
+
+- **The grab feeds the overlay.** Movement, buttons and wheel are read
+  from the raw stream (one stream, so a click can never land at the
+  position of the previous report) and re-posted as ordinary messages.
+  Button state is tracked in the grab because Windows no longer knows it.
+- **The pointer is driven by raw device counts, not screen positions.**
+  Differencing integer cursor positions discards any movement too small
+  to cross a pixel with no remainder kept: measured, 22% of events came
+  out as zero and 5% of motion vanished, and slow steady movement moved
+  the pointer not at all. Raw counts are exact; the sub-pixel part is
+  accumulated in a float.
+- **The pointer obeys the desktop's own ballistics**, read from the
+  registry: the speed slider and, when "enhance pointer precision" is
+  on, the acceleration curve. The slider means two different things and
+  both were measured: with the curve off Windows applies the documented
+  multiplier table, with it on a linear `slider/10`. Applying the table
+  in curve mode ran the pointer at 2.25x where the OS runs 1.5x, which
+  lifted slow-speed gain past a pixel per count and made single reports
+  step two pixels. One constant ties the curve's units to ours,
+  calibrated by measurement: identical input travels 51px with the grab
+  and 51px without at low speed; at brisk speed the grab is about 25%
+  short, left alone rather than fitted to a coarse measurement.
+  Fractional pointer drawing was tried twice to hide the two-pixel steps
+  and retired once the real cause was fixed.
+- **The overlay draws its own pointer** because a game holding the mouse
+  for mouse-look typically sets the cursor back to screen centre every
+  frame, and `SetCursorPos` is not an input event: 120 such calls
+  produced zero hook invocations. Sharing one cursor with such a game is
+  unwinnable. The grab accumulates its own virtual cursor and submits it
+  to ImGui between the backend's frame setup and `ImGui::NewFrame`.
+  Hiding the OS cursor takes `io.MouseDrawCursor`, not just
+  `WM_SETCURSOR`: the backend also installs a cursor from its own
+  `NewFrame` whenever ImGui's wanted shape changes, and under a grab the
+  cursor stops moving over the window so `WM_SETCURSOR` barely arrives.
+  Drawing and driving the pointer are separate options: with the drawn
+  pointer off the grab writes its position to the real cursor
+  *absolutely*, which does not go through the ballistics curve (a
+  relative `SendInput` did, and was the reason the pair looked
+  inseparable).
+- **The handover runs both ways from one place.** The real cursor is
+  parked where the grab began and the drawn one is far away by the end;
+  starting to drive seeds from the real cursor and stopping puts the real
+  cursor where the drawn one was, both in `Refresh`, or switching raw
+  input on mid-session leaves the pointer jumping back to where edit mode
+  opened.
+- **The hooks live on their own thread, and this is not a nicety.** A
+  low-level hook runs on the thread that installed it and the input stack
+  blocks every mouse event system-wide until that thread services it.
+  Installed on the render thread, which sits in `Present` most of a
+  frame, that throttled the whole machine's mouse to the frame rate:
+  300 injected reports took 10 ms ungrabbed and 5,318 ms grabbed, and a
+  drag laid down 2 stroke points ungrabbed and 282 grabbed. On a thread
+  that does nothing but pump, 18 ms and 4 points, the ungrabbed baseline.
+- **Movement is never posted.** Windows coalesces `WM_MOUSEMOVE` to about
+  one per frame; re-posting every swallowed report made a 1000 Hz mouse a
+  message flood. The render thread emits one Move per frame while a
+  button is held, if the pointer moved, which is the OS's own behaviour
+  by construction.
+- **Modifiers are fed to ImGui by hand**, from `GetAsyncKeyState` OR'd
+  with the grab's own record, since the backend learns them from key
+  messages and key messages need focus. A keyboard chord has one frame
+  to work in and a stale modifier event cannot be corrected after the
+  fact (ImGui refuses a second change to a key in one frame), so for the
+  duration of one key message the grabbed modifiers are made visible to
+  `GetKeyState` with `SetKeyboardState`, which is safe to lie in
+  precisely because no real key message reaches that thread.
+- **Hotkeys are dispatched by the grab.** A swallowing keyboard hook
+  suppresses `RegisterHotKey` too (the hook ate 18 events, `WM_HOTKEY`
+  never fired), so without this the grab would disable the hotkey that
+  turns it off. The grab matches every registered combo itself and posts
+  an identical `WM_HOTKEY` back.
+- **A key-up is swallowed only if its key-down was.** The hotkey that
+  turns edit mode on is pressed before any hook exists; its key-ups then
+  arrived under the hook and were swallowed, so Windows never learned
+  Ctrl and Alt came up and ImGui saw Alt held for the rest of the session
+  - and the game underneath got the same stuck state. The grab records
+  which downs it took, seeds its modifier record from `GetAsyncKeyState`
+  when it starts mid-chord, and injects still-held modifiers back to the
+  OS when it ends mid-chord (only modifiers: handing back every swallowed
+  key would type its letters into whatever has focus).
+- **Typing needs the keyboard, not focus.** ImGui implements text editing
+  from key events; what it cannot do is turn a virtual key into a
+  character, which is the layout's job and arrives as `WM_CHAR` only for
+  a focused window. The grab closes that gap with `ToUnicodeEx` against
+  its own keyboard state (the thread's reports nothing held, so every
+  letter would come out unshifted), the overlay window is registered
+  wide so a posted `WM_CHAR` carries a UTF-16 unit, and
+  `TranslateMessage` is skipped for the key-downs the grab posts or every
+  letter arrives twice. IME composition genuinely needs a focused window
+  and still borrows one.
+- **Counter raw mouse input** injects the exact negation of every
+  physical movement, against the raw device deltas read through an
+  `RIDEV_INPUTSINK` registration: negating hook-derived screen
+  coordinates removed ~27% of the motion, negating device deltas ~98%.
+  Corrections are stamped in `dwExtraInfo` so the hook recognises and
+  swallows them (they still reach the game), since passing them through
+  corrupted the next movement's delta and jittered the pointer. It
+  measures far better than it feels: the correction reaches the camera a
+  frame after the movement, so the view shakes, and anything with
+  anti-cheat discards injected input outright. Kept, labelled
+  experimental, on by default because its common failure is doing
+  nothing. Four things were tried against the shake and are gone:
+  injecting per report instead of per frame (cut the window as intended,
+  changed nothing in a real game); a dedicated high-priority sink thread
+  (measured 15 ms median lateness from the render loop, tried in a game,
+  worse, reverted); an integral term aiming at the accumulated total (a
+  feedback loop with dead time and no damping; oscillated wildly - do not
+  reintroduce it); and `BlockInput`, which settles the question: elevated
+  it stops the game's camera dead and blinds the overlay at the same
+  moment, both channels, so the raw stream can be taken from a game but
+  never selectively. What remains is take focus, counter-inject, or a
+  kernel mouse-class filter driver, which is exactly the shape anti-cheat
+  is built to notice and has not been undertaken.
+
+The option dependencies are enforced, not documented: keystroke holding,
+raw input and countering need the game to keep focus (with focus taken
+the ordinary way the game has already stopped receiving input, and the
+hooks would install a system-wide chokepoint for nothing), countering
+needs raw input, and the software pointer is independent of all of them.
+An option whose precondition fails keeps its stored value and has no
+effect, and every reader asks availability, not storage - the stored
+value of an option that cannot take effect is not evidence of anything.
+The HUD shows such a row as `--` rather than `ON`. The HUD itself is off
+by default because its number keys can only reach a focus-less overlay
+through the keyboard hook, so an always-on HUD ate digits even with
+keystroke forwarding on.
+
+### Freezing the screen instead of out-arguing the game
+
+`freezeScreen` sidesteps all of the above: on entering edit mode the
+whole display is captured and drawn beneath everything else. The game
+keeps running and turning its camera; it stops being what you look at.
+This is what ZoomIt does, minus the part where ZoomIt takes the
+foreground. Captured fresh on every entry and released on hide. The
+known failure is a game in exclusive fullscreen, where a GDI capture can
+come back blank; ZoomIt keeps a Windows.Graphics.Capture path for the
+same reason, which is the fallback to reach for if it turns up.
+
+### Screen capture
+
+`CaptureRegionAsTexture` hides the overlay, `DwmFlush`es so the next
+composition pass has happened, `BitBlt`s with `CAPTUREBLT` so other
+applications' layered windows are included, converts GDI's BGRA to RGBA
+once, and shows the overlay again - a real, brief flicker, expected for
+this technique. The rectangle goes through `ClientToScreen`, so a capture
+comes from the overlay's display rather than from wherever its
+coordinates land on the primary. Textures are `D3D11_USAGE_DEFAULT`
+rather than immutable so a painted layer can be updated in place.
+
+### Displays
+
+`EnumDisplayMonitors` gives rectangles, the primary flag and (with
+`GetDpiForMonitor`) the scale; `QueryDisplayConfig` gives the EDID name,
+refresh rate and the device path, joined by GDI device name. The device
+path is the id because it survives a restart, while `\\.\DISPLAY2` is
+renumbered by Windows. The window is created and moved to its display's
+rectangle, and `WM_DPICHANGED`'s suggested size is declined: the window
+is exactly its display's size in physical pixels. The UI does not scale
+with a display's scale factor, and there is no way to show the overlay on
+several displays at once; that would be a window per display.
+
+### What is a Windows limitation, not a bug
+
+Win+E, Alt-Tab and other shell shortcuts reach their targets outside
+normal focus routing, and once they open a window focus follows it. Only
+a global low-level keyboard hook swallowing the Windows key could
+prevent that, which is far more invasive than an overlay should be by
+default. Exclusive-fullscreen games sidestep all of this by not sharing
+the desktop, which an always-on-top overlay deliberately does.
+
+### Cursors
+
+Windows has no stock pen, so the window builds one from `pen_glyph.h`: a
+24x24 top-down 32-bit DIB section, an empty mask (alpha is the mask), and
+`CreateIconIndirect` with a hotspot at the nib, sampling the glyph 4x4
+per pixel. Built once; a failure falls back to the crosshair. The push
+of a wanted shape is guarded on owning the cursor (`WindowFromPoint`),
+not on being foreground, which in edit mode the overlay never is.

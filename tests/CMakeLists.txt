@@ -36,3 +36,14 @@ spickzettel_set_warnings(sz_core_tests)
 
 include(GoogleTest)
 gtest_discover_tests(sz_core_tests)
+
+# The Win32 backend against the real OS: the input grab's registrations,
+# and whatever displays the machine has. Its own binary so the portable
+# suite stays buildable on Linux.
+if(WIN32)
+    add_executable(sz_win32_tests platform/win32_input_grab_test.cpp platform/win32_displays_test.cpp)
+    target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 GTest::gtest_main)
+    target_compile_features(sz_win32_tests PRIVATE cxx_std_20)
+    spickzettel_set_warnings(sz_win32_tests)
+    gtest_discover_tests(sz_win32_tests)
+endif()

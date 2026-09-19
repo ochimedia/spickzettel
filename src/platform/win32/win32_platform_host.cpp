@@ -1,0 +1,345 @@
+#include "platform/win32/win32_platform_host.h"
+
+#include <shellapi.h>
+
+#include <cstdlib>
+#include <cstring>
+
+#include "platform/win32/resources/resource.h"
+#include "platform/win32/win32_displays.h"
+#include "platform/win32/win32_input_grab.h"
+// The tray menu's two items are words the user reads, so they live in the
+// same catalogue as every other one - see cmake/UiStrings.cmake. A header
+// of constants, so this costs the platform layer no dependency on core.
+#include "generated/ui_strings.h"
+
+namespace sz::platform::win32 {
+
+namespace strings = sz::strings;
+
+namespace {
+constexpr const char* kWindowClassName = "SpickzettelHostWindowClass";
+constexpr UINT kTrayIconMessage = WM_APP + 1;
+constexpr UINT kTrayIconId = 1;
+
+// Whether this message must not go through TranslateMessage.
+//
+// While the keyboard grab is delivering typing, it posts a synthetic
+// WM_KEYDOWN to the overlay *and* synthesises the matching WM_CHAR itself,
+// from the modifier state that only it has (see
+// Win32InputGrab::PostCharactersToOverlay). TranslateMessage would then make
+// a second WM_CHAR out of that same posted key-down - measured: every letter
+// arriving twice - and it would make it from this thread's keyboard state,
+// which never saw the swallowed Shift or AltGr. So the duplicate is the wrong
+// character as well as a surplus one, and the grab's version is the one to
+// keep.
+//
+// Only key-downs, and only while the grab is delivering: with it off, these
+// are real messages for a focused window and TranslateMessage is the only
+// thing producing characters at all.
+bool SkipCharacterTranslation(const MSG& msg) {
+    if (msg.message != WM_KEYDOWN && msg.message != WM_SYSKEYDOWN) {
+        return false;
+    }
+    return Win32InputGrab::Instance().DeliversTypingToOverlay();
+}
+constexpr UINT kMenuIdToggle = 1;
+constexpr UINT kMenuIdExit = 2;
+}  // namespace
+
+Win32PlatformHost::~Win32PlatformHost() {
+    for (const auto& [id, callback] : hotkeyCallbacks_) {
+        UnregisterHotKey(hwnd_, id);
+    }
+    RemoveTrayIcon();
+    overlayWindow_.Destroy();
+    if (hwnd_) {
+        DestroyWindow(hwnd_);
+        hwnd_ = nullptr;
+    }
+}
+
+bool Win32PlatformHost::Initialize(const std::string& appName) {
+    appName_ = appName;
+    HINSTANCE instance = GetModuleHandleA(nullptr);
+
+    WNDCLASSEXA windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.lpfnWndProc = &Win32PlatformHost::WndProcThunk;
+    windowClass.hInstance = instance;
+    windowClass.lpszClassName = kWindowClassName;
+    // Cosmetic only - this window is HWND_MESSAGE (never visible), but the
+    // icon it registers here is also what ShowTrayIcon() below reuses for
+    // the actual tray icon.
+    windowClass.hIcon = LoadIconA(instance, MAKEINTRESOURCEA(IDI_APP_ICON));
+    RegisterClassExA(&windowClass);
+
+    hwnd_ = CreateWindowExA(0, kWindowClassName, appName_.c_str(), 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                             instance, this);
+    if (!hwnd_) {
+        return false;
+    }
+
+    overlayWindow_.Initialize(instance);
+    return true;
+}
+
+bool Win32PlatformHost::ShowTrayIcon() {
+    if (trayIconVisible_) {
+        return true;
+    }
+
+    NOTIFYICONDATAA nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = hwnd_;
+    nid.uID = kTrayIconId;
+    nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    nid.uCallbackMessage = kTrayIconMessage;
+    // The real app icon (see resource.h/app_icon.rc), not IDI_APPLICATION's
+    // generic placeholder - GetModuleHandleA(nullptr) rather than a stored
+    // instance handle since this method has no other reason to keep one
+    // around.
+    nid.hIcon = LoadIconA(GetModuleHandleA(nullptr), MAKEINTRESOURCEA(IDI_APP_ICON));
+    strncpy_s(nid.szTip, appName_.c_str(), _TRUNCATE);
+
+    if (!Shell_NotifyIconA(NIM_ADD, &nid)) {
+        return false;
+    }
+    trayIconVisible_ = true;
+    return true;
+}
+
+void Win32PlatformHost::RemoveTrayIcon() {
+    if (!trayIconVisible_) {
+        return;
+    }
+    NOTIFYICONDATAA nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = hwnd_;
+    nid.uID = kTrayIconId;
+    Shell_NotifyIconA(NIM_DELETE, &nid);
+    trayIconVisible_ = false;
+}
+
+void Win32PlatformHost::SetTrayCommandCallback(TrayCommandCallback callback) {
+    trayCallback_ = std::move(callback);
+}
+
+int Win32PlatformHost::RegisterGlobalHotkey(const KeyCombo& combo, HotkeyCallback callback) {
+    if (!hwnd_ || !combo.IsValid()) {
+        return 0;
+    }
+
+    UINT modifiers = MOD_NOREPEAT;
+    if (combo.ctrl) {
+        modifiers |= MOD_CONTROL;
+    }
+    if (combo.alt) {
+        modifiers |= MOD_ALT;
+    }
+    if (combo.shift) {
+        modifiers |= MOD_SHIFT;
+    }
+
+    // VK_F1..VK_F24 are consecutive in winuser.h, same as KeyCombo's own
+    // F1..F24 encoding (see KeyCombo::kFunctionKeyBase) - letters/digits
+    // instead pass straight through, since their ASCII value already is
+    // the matching VK code.
+    const UINT vkCode = combo.IsFunctionKey() ? static_cast<UINT>(VK_F1 + combo.FunctionKeyNumber() - 1)
+                                               : static_cast<UINT>(combo.key);
+
+    const int id = nextHotkeyId_++;
+    if (!RegisterHotKey(hwnd_, id, modifiers, vkCode)) {
+        return 0;
+    }
+
+    hotkeyCallbacks_[id] = std::move(callback);
+    // Also handed to the input grab: while that is swallowing the keyboard,
+    // Windows stops delivering WM_HOTKEY at all (measured - a low-level
+    // hook that discards the event suppresses the hotkey with it), so the
+    // grab matches the combo itself and posts the identical message back to
+    // this same window, where the handler below can't tell the difference.
+    // Done for every hotkey unconditionally: it costs nothing while no grab
+    // is running, and leaves no registration state to synchronise when one
+    // starts.
+    Win32InputGrab::Instance().AddHotkey(id, combo, hwnd_);
+    return id;
+}
+
+void Win32PlatformHost::UnregisterGlobalHotkey(int hotkeyId) {
+    if (hotkeyId == 0) {
+        return;
+    }
+    UnregisterHotKey(hwnd_, hotkeyId);
+    hotkeyCallbacks_.erase(hotkeyId);
+    Win32InputGrab::Instance().RemoveHotkey(hotkeyId);
+}
+
+IOverlayWindow& Win32PlatformHost::GetOverlayWindow() { return overlayWindow_; }
+
+std::vector<DisplayInfo> Win32PlatformHost::ListDisplays() const { return EnumerateDisplays(); }
+
+namespace {
+// Shared by GetConfigFilePath/GetDataDirectoryPath below.
+std::filesystem::path AppDataBase() {
+    std::filesystem::path base;
+    // GetEnvironmentVariableW rather than std::getenv: the wide form is
+    // what %APPDATA% actually is, so a user whose profile folder holds a
+    // character outside the system code page gets a path that works rather
+    // than one the ANSI copy mangled; it is a plain kernel32 export, so it
+    // exists on every toolchain; and MSVC deprecates getenv.
+    //
+    // Called twice on purpose: with (nullptr, 0) it answers with the size
+    // it needs, terminator included, and 0 only when the variable is not
+    // set at all.
+    std::wstring appData;
+    if (const DWORD needed = GetEnvironmentVariableW(L"APPDATA", nullptr, 0); needed > 0) {
+        appData.resize(needed);
+        // ...and this time it answers with how much it wrote, terminator
+        // excluded, which is where the string really ends.
+        appData.resize(GetEnvironmentVariableW(L"APPDATA", appData.data(), needed));
+    }
+    if (appData.empty()) {
+        base = std::filesystem::current_path();
+    } else {
+        base = appData;
+    }
+    // Capitalised because %APPDATA% is somewhere people actually browse,
+    // and the name is a proper noun there. Safe to change after the fact:
+    // Windows paths are case-insensitive, so an install that already has a
+    // lowercase "spickzettel" folder keeps using that exact folder (with
+    // its existing on-disk casing) rather than getting a second, empty
+    // one - verified, not assumed. Only fresh installs are spelled this
+    // way on disk.
+    return base / "Spickzettel";
+}
+}  // namespace
+
+std::filesystem::path Win32PlatformHost::GetConfigFilePath() const { return AppDataBase() / "config.json"; }
+
+std::filesystem::path Win32PlatformHost::GetDataDirectoryPath() const { return AppDataBase() / "library"; }
+
+int Win32PlatformHost::RunEventLoop() {
+    running_ = true;
+    MSG msg;
+    while (running_) {
+        if (overlayWindow_.IsVisible()) {
+            bool dispatched = false;
+            while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+                if (msg.message == WM_QUIT) {
+                    running_ = false;
+                    break;
+                }
+                if (!SkipCharacterTranslation(msg)) {
+                    TranslateMessage(&msg);
+                }
+                DispatchMessage(&msg);
+                dispatched = true;
+            }
+            if (running_) {
+                // Every refresh while the overlay wants that, and otherwise a
+                // frame when one is due or a message may have changed what is
+                // shown - sleeping in between, until whichever comes first.
+                // See IOverlayWindow::SetFramePacing.
+                if (overlayWindow_.WantsFrame(dispatched)) {
+                    overlayWindow_.RenderFrame();
+                } else {
+                    MsgWaitForMultipleObjectsEx(0, nullptr, overlayWindow_.MillisecondsUntilIdleFrame(), QS_ALLINPUT,
+                                                MWMO_INPUTAVAILABLE);
+                }
+            }
+        } else {
+            const BOOL result = GetMessage(&msg, nullptr, 0, 0);
+            if (result <= 0) {
+                running_ = false;
+                break;
+            }
+            if (!SkipCharacterTranslation(msg)) {
+                TranslateMessage(&msg);
+            }
+            DispatchMessage(&msg);
+        }
+    }
+    return exitCode_;
+}
+
+void Win32PlatformHost::Quit(int exitCode) {
+    exitCode_ = exitCode;
+    running_ = false;
+}
+
+void Win32PlatformHost::ShowTrayContextMenu() {
+    POINT cursor{};
+    GetCursorPos(&cursor);
+
+    HMENU menu = CreatePopupMenu();
+    AppendMenuA(menu, MF_STRING, kMenuIdToggle, strings::kTrayToggleOverlay);
+    AppendMenuA(menu, MF_STRING, kMenuIdExit, strings::kTrayExit);
+
+    // Required so the popup menu dismisses correctly when it loses focus.
+    SetForegroundWindow(hwnd_);
+    TrackPopupMenu(menu, TPM_RIGHTBUTTON, cursor.x, cursor.y, 0, hwnd_, nullptr);
+    PostMessage(hwnd_, WM_NULL, 0, 0);
+
+    DestroyMenu(menu);
+}
+
+LRESULT CALLBACK Win32PlatformHost::WndProcThunk(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    Win32PlatformHost* self = nullptr;
+    if (msg == WM_NCCREATE) {
+        auto* createStruct = reinterpret_cast<CREATESTRUCTA*>(lParam);
+        self = static_cast<Win32PlatformHost*>(createStruct->lpCreateParams);
+        SetWindowLongPtrA(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
+    } else {
+        self = reinterpret_cast<Win32PlatformHost*>(GetWindowLongPtrA(hwnd, GWLP_USERDATA));
+    }
+    if (self) {
+        return self->HandleMessage(hwnd, msg, wParam, lParam);
+    }
+    return DefWindowProcA(hwnd, msg, wParam, lParam);
+}
+
+LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch (msg) {
+        case kTrayIconMessage:
+            // Left is the icon's primary action, which for this app is the
+            // same thing the show hotkey and the menu's own first item do:
+            // bring the overlay up, or put it away if it is already there.
+            // Without it the only way in from the tray was through a menu
+            // to press the one item on it that matters.
+            if (LOWORD(lParam) == WM_LBUTTONUP) {
+                if (trayCallback_) {
+                    trayCallback_(TrayCommand::ToggleOverlay);
+                }
+            } else if (LOWORD(lParam) == WM_RBUTTONUP) {
+                ShowTrayContextMenu();
+            }
+            return 0;
+        case WM_HOTKEY: {
+            auto it = hotkeyCallbacks_.find(static_cast<int>(wParam));
+            if (it != hotkeyCallbacks_.end() && it->second) {
+                it->second();
+            }
+            return 0;
+        }
+        case WM_COMMAND: {
+            const int id = LOWORD(wParam);
+            if (id == kMenuIdToggle && trayCallback_) {
+                trayCallback_(TrayCommand::ToggleOverlay);
+            } else if (id == kMenuIdExit && trayCallback_) {
+                trayCallback_(TrayCommand::Exit);
+            }
+            return 0;
+        }
+        default:
+            return DefWindowProcA(hwnd, msg, wParam, lParam);
+    }
+}
+
+}  // namespace sz::platform::win32
+
+namespace sz::platform {
+
+std::unique_ptr<IPlatformHost> CreatePlatformHost() { return std::make_unique<win32::Win32PlatformHost>(); }
+
+}  // namespace sz::platform
