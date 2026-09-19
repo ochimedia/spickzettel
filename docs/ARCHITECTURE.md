@@ -588,8 +588,15 @@ Three things about the file are deliberate:
   profile is those two objects again, sparse.
 - **Absent means inherit, `null` means explicitly unset.** "Said
   nothing" and "said none" have different spellings, which a shortcut
-  that ships bound and is unbound on purpose depends on. Every setting
-  is written, defaults included, so the file documents what can be set.
+  that ships bound and is unbound on purpose depends on. The summon
+  hotkeys use the same spelling: a hotkey given another's combination
+  leaves that other unbound, and an unbound hotkey read back as "said
+  nothing" took its default again on the next start - which could now be
+  the combination the other had taken, and one combination registered
+  twice refuses to start the app. The tray also unbinds a later
+  duplicate of an earlier hotkey at startup, for a file edited by hand.
+  Every setting is written, defaults included, so the file documents
+  what can be set.
 - **`ordered_json`, and floats rounded to six decimals**, because the
   file is meant to be opened and read: alphabetical keys interleave
   settings by spelling, and `0.22f` promoted to double writes as

@@ -1,5 +1,6 @@
 #include "app/tray_app.h"
 
+#include <iterator>
 #include <optional>
 #include <utility>
 
@@ -35,6 +36,29 @@ bool TrayController::Initialize() {
 
     if (!host_.ShowTrayIcon()) {
         return false;
+    }
+
+    // Two of the app's own hotkeys on one combination would register once
+    // and fail once, and a failure below refuses to start - so a later
+    // duplicate of an earlier combination is unbound first, and the file is
+    // corrected so it stays that way. What ChangeHotkey does for an edit
+    // made in the app, done here for a file edited by hand.
+    {
+        AppConfig& stored = settings_.Mutable();
+        platform::KeyCombo* slots[] = {&stored.hotkeyEditMode, &stored.hotkeyViewMode, &stored.hotkeyQuickCapture,
+                                       &stored.hotkeySilentCapture};
+        bool unboundAny = false;
+        for (size_t later = 1; later < std::size(slots); ++later) {
+            for (size_t earlier = 0; earlier < later; ++earlier) {
+                if (slots[later]->IsValid() && *slots[later] == *slots[earlier]) {
+                    *slots[later] = platform::KeyCombo{};
+                    unboundAny = true;
+                }
+            }
+        }
+        if (unboundAny && !host_.GetConfigFilePath().empty()) {
+            WriteConfigFile(host_.GetConfigFilePath(), settings_.Stored());
+        }
     }
 
     // A set combination that cannot be registered - another application

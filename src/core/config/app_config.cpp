@@ -101,6 +101,9 @@ std::optional<platform::KeyCombo> ParseHotkey(std::string_view text) {
 }
 
 std::string FormatHotkey(const platform::KeyCombo& combo) {
+    if (!combo.IsValid()) {
+        return std::string();  // unbound: nothing to spell (the file says null - see HotkeyJson)
+    }
     std::string result;
     if (combo.ctrl) {
         result += "Ctrl+";
@@ -253,9 +256,29 @@ void ReadColor(const json& j, const char* key, uint32_t& out) {
     }
 }
 
+// A global hotkey in the file: a combination, or null for one deliberately
+// unbound - the same spelling the tool shortcuts use (see ReadShortcuts),
+// and for the same reason: an unbound hotkey has to survive a round trip.
+// One that took another's combination leaves that other unbound (see
+// TrayController::ChangeHotkey), and reading the unbound one back as "said
+// nothing" gave it its default again on the next start - where the default
+// could now be the very combination the other hotkey had taken, and two
+// registrations of one combination refuse to start the app.
+json HotkeyJson(const platform::KeyCombo& combo) {
+    if (!combo.IsValid()) {
+        return nullptr;
+    }
+    return FormatHotkey(combo);
+}
+
 void ReadHotkey(const json& j, const char* key, platform::KeyCombo& out) {
     const auto it = j.find(key);
-    if (it != j.end() && it->is_string()) {
+    if (it == j.end()) {
+        return;  // said nothing: keep the default
+    }
+    if (it->is_null()) {
+        out = platform::KeyCombo{};
+    } else if (it->is_string()) {
         if (const auto combo = ParseHotkey(it->get<std::string>())) {
             out = *combo;
         }
@@ -539,10 +562,10 @@ std::string SerializeConfig(const AppConfig& config) {
     doc["version"] = kConfigVersion;
 
     doc["hotkeys"] = {
-        {"editMode", FormatHotkey(config.hotkeyEditMode)},
-        {"viewMode", FormatHotkey(config.hotkeyViewMode)},
-        {"quickCapture", FormatHotkey(config.hotkeyQuickCapture)},
-        {"silentCapture", FormatHotkey(config.hotkeySilentCapture)},
+        {"editMode", HotkeyJson(config.hotkeyEditMode)},
+        {"viewMode", HotkeyJson(config.hotkeyViewMode)},
+        {"quickCapture", HotkeyJson(config.hotkeyQuickCapture)},
+        {"silentCapture", HotkeyJson(config.hotkeySilentCapture)},
     };
 
     doc["drawing"] = {

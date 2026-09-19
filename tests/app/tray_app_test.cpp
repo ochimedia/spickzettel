@@ -154,6 +154,64 @@ TEST(TrayControllerTest, ChangeHotkeyPersistsTheNewComboToDisk) {
     std::filesystem::remove(path);
 }
 
+int CountRegistrations(const test::FakePlatformHost& host, const platform::KeyCombo& combo) {
+    int count = 0;
+    for (const auto& [id, registeredCombo] : host.registeredCombos) {
+        (void)id;
+        count += registeredCombo == combo ? 1 : 0;
+    }
+    return count;
+}
+
+TEST(TrayControllerTest, AHotkeyLeftUnboundByAnotherStaysUnboundAcrossARestart) {
+    const std::filesystem::path path =
+        std::filesystem::temp_directory_path() / "spickzettel_tray_app_unbound_hotkey_test_config.txt";
+    std::filesystem::remove(path);
+
+    test::FakePlatformHost host;
+    host.configFilePath = path;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+
+    // Edit mode takes view mode's combination; view mode is left unbound,
+    // and the file has to say so rather than say nothing.
+    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::EditMode, config.hotkeyViewMode));
+    EXPECT_EQ(CountRegistrations(host, config.hotkeyViewMode), 1);
+    const AppConfig written = ParseConfig([&] {
+        std::ifstream in(path);
+        std::ostringstream buffer;
+        buffer << in.rdbuf();
+        return buffer.str();
+    }());
+    EXPECT_EQ(written.hotkeyEditMode, config.hotkeyViewMode);
+    EXPECT_FALSE(written.hotkeyViewMode.IsValid()) << "the default would collide with what edit mode took";
+
+    // A restart from that file registers the combination exactly once, for
+    // the hotkey that took it.
+    test::FakePlatformHost restarted;
+    restarted.configFilePath = path;
+    TrayController again(restarted, written);
+    ASSERT_TRUE(again.Initialize());
+    EXPECT_EQ(CountRegistrations(restarted, config.hotkeyViewMode), 1);
+    restarted.TriggerHotkey(FindHotkeyId(restarted, config.hotkeyViewMode));
+    EXPECT_TRUE(restarted.overlayWindow.IsVisible()) << "it is the edit hotkey now";
+
+    std::filesystem::remove(path);
+}
+
+TEST(TrayControllerTest, InitializeUnbindsALaterDuplicateOfAnEarlierHotkey) {
+    test::FakePlatformHost host;
+    AppConfig config = DefaultConfig();
+    config.hotkeyQuickCapture = config.hotkeyEditMode;  // as a hand-edited file might say
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize()) << "one combination twice is not a reason to refuse to start";
+
+    EXPECT_EQ(CountRegistrations(host, config.hotkeyEditMode), 1);
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    EXPECT_TRUE(host.overlayWindow.IsVisible()) << "the earlier hotkey keeps the combination";
+}
+
 TEST(TrayControllerTest, ChangeHotkeyLeavesTheOldHotkeyLiveWhenRegistrationFails) {
     test::FakePlatformHost host;
     const AppConfig config = DefaultConfig();

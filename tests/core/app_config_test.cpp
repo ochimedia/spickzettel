@@ -197,6 +197,23 @@ TEST(AppConfigTest, AGroupOfTheWrongTypeReadsAsAbsent) {
     EXPECT_EQ(ParseConfig(R"({"appearance": "wide"})"), DefaultConfig());
 }
 
+TEST(AppConfigTest, AnUnboundHotkeySurvivesARoundTrip) {
+    AppConfig config = DefaultConfig();
+    config.hotkeyViewMode = platform::KeyCombo{};
+    const std::string text = SerializeConfig(config);
+    EXPECT_NE(text.find("\"viewMode\": null"), std::string::npos) << text;
+
+    const AppConfig parsed = ParseConfig(text);
+    EXPECT_FALSE(parsed.hotkeyViewMode.IsValid()) << "read back as unbound, not as the default";
+    EXPECT_EQ(parsed, config);
+}
+
+TEST(AppConfigTest, ANullHotkeyReadsAsUnboundAndAMissingOneAsTheDefault) {
+    EXPECT_FALSE(ParseConfig(One("hotkeys", "quickCapture", "null")).hotkeyQuickCapture.IsValid());
+    EXPECT_EQ(ParseConfig(One("hotkeys", "viewMode", "null")).hotkeyQuickCapture,
+              DefaultConfig().hotkeyQuickCapture);
+}
+
 TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     AppConfig config = DefaultConfig();
     config.hotkeyEditMode = platform::KeyCombo{true, false, true, 'D'};
