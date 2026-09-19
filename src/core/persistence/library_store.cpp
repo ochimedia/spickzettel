@@ -626,10 +626,14 @@ std::optional<json> ReadJsonFile(const std::filesystem::path& path) {
 // (see SortedSubdirectories), so nothing behind a link ever enters the
 // index; and every path this store creates, writes, moves or deletes goes
 // through one check, LibraryStore::IsOurs, which walks the whole path from
-// the root down for a link (see CrossesLink). That includes the top-level
-// directories - folders/, images/, retired/ - which the first version of
-// this took on trust and a junction at any of which had a save writing a
-// whole tree outside the library. A link standing where a save wants to
+// the root down for a link (see CrossesLink) - at the moment of the
+// operation, whether the path was just made or has been indexed since the
+// load. That includes the top-level directories - folders/, images/,
+// retired/ - which the first version of this took on trust and a junction
+// at any of which had a save writing a whole tree outside the library; and
+// it includes an indexed directory replaced by a junction between two
+// saves, which the second version wrote its record through, since it had
+// been real when indexed. A link standing where a save wants to
 // put a directory makes that record unplaceable: the save reports failure
 // and leaves the link alone. The one thing not checked is the library
 // root itself: a root that is a junction is how a library is moved to
@@ -1407,7 +1411,11 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 return true;
             }
         }
-        if (!WriteFileAtomically(path, text)) {
+        // At the write, not only at placement: the directory was real when
+        // it was indexed, and a junction put in its place since is a link
+        // all the same. Checked only when there is something to write, so
+        // that a no-op save costs no trip to the filesystem for it.
+        if (!IsOurs(path) || !WriteFileAtomically(path, text)) {
             // Not recorded, so the next save tries again rather than
             // believing a file it never managed to write.
             writtenFileText_.erase(key);
@@ -1545,7 +1553,8 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 if (placedItem.kept && known != writtenItemHashes_.end() && known->second == hash) {
                     continue;
                 }
-                const bool recordWritten = WriteFileAtomically(itemDir / kItemFile, ToJson(item).dump(2));
+                const bool recordWritten =
+                    IsOurs(itemDir / kItemFile) && WriteFileAtomically(itemDir / kItemFile, ToJson(item).dump(2));
                 if (recordWritten) {
                     writtenItemHashes_[item.id] = hash;
                 } else {
@@ -1740,7 +1749,8 @@ bool LibraryStore::Save(const LibraryView& view) const {
             }
             const std::string name = entry.path().filename().string();
             if (const auto owner = pictureOwner.find(name); owner != pictureOwner.end()) {
-                if (const auto home = itemDirs_.find(owner->second); home != itemDirs_.end()) {
+                if (const auto home = itemDirs_.find(owner->second);
+                    home != itemDirs_.end() && IsOurs(home->second)) {
                     std::filesystem::rename(entry.path(), home->second / name, ec);
                 }
                 continue;

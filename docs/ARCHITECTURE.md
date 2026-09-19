@@ -518,7 +518,14 @@ behind one is never the store's: `Load` skips linked directories and
 does not look inside one, so nothing behind one enters the index, and
 every path the store creates, writes, moves or deletes goes through one
 check (`IsOurs`) that walks the whole path from the root down for a
-link. That covers the top-level directories too: a junction at
+link - at the moment of the write, move or delete, whether the path was
+made just now or indexed at load. An indexed directory is trusted only
+as far as answering "unchanged?" from the hash: the moment there is
+something to write into it, it is checked like any other, so a junction
+put in its place between two saves fails that record's write rather
+than being written through. The check costs a filesystem call per path
+component, and only what is written pays it; a no-op save pays nothing.
+That covers the top-level directories too: a junction at
 `folders/` fails every save outright, one at `images/` refuses the
 capture's write (the session keeps the pixels and the save keeps
 failing, visibly), and one at `retired/` leaves what would have been

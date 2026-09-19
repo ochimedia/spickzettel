@@ -1672,6 +1672,31 @@ TEST_F(LibraryStoreTest, NothingIsSetAsideThroughAJunctionAtRetired) {
     EXPECT_FALSE(std::filesystem::exists(outside / "images"));
     std::filesystem::remove_all(outside);
 }
+
+// A directory that was real when the store indexed it and is a junction by
+// the time there is something to write into it. Not a race: the tree was
+// rearranged between two saves, and the second must notice at the write.
+TEST_F(LibraryStoreTest, AJunctionPutInPlaceOfAnIndexedDirectoryIsNotWrittenThrough) {
+    LibraryStore store(dir_);
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    ASSERT_TRUE(store.Save(snapshot));
+    std::filesystem::remove_all(ShotItemDir());
+    const std::filesystem::path outside =
+        MakeJunctionTo(ShotItemDir(), dir_.parent_path() / (dir_.filename().string() + "_outside"));
+
+    snapshot.canvases[0].items[1].noteText = "would land outside";
+    EXPECT_FALSE(store.Save(snapshot)) << "the record has nowhere of the library's to go";
+    nlohmann::json record = nlohmann::json::parse(std::ifstream(outside / "item.json"));
+    EXPECT_EQ(record["id"], 77) << "the record behind the link is untouched";
+    EXPECT_FALSE(record.contains("noteText"));
+    EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt"));
+
+    // And a picture for that snippet is not written there either.
+    const std::vector<uint8_t> pixels = Checkerboard(8, 8);
+    EXPECT_FALSE(store.SaveImage(4, pixels.data(), 8, 8).has_value());
+    EXPECT_FALSE(std::filesystem::exists(outside / "000004.qoi"));
+    std::filesystem::remove_all(outside);
+}
 #endif
 
 // ===== A save that could not write everything says so =====
