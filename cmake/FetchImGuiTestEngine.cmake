@@ -12,7 +12,7 @@ include(FetchContent)
 FetchContent_Declare(
     imgui_test_engine
     GIT_REPOSITORY https://github.com/ocornut/imgui_test_engine.git
-    GIT_TAG v1.92.1
+    GIT_TAG b6638c5d088febaa050a2745d7b838e637fa7381 # v1.92.1
 )
 FetchContent_MakeAvailable(imgui_test_engine)
 

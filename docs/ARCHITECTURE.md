@@ -135,6 +135,14 @@ closed-source one:
 googletest and imgui_test_engine only build or test the app and are not
 in a release binary, so they are not in the notices.
 
+Every dependency is fetched at a commit hash, with the tag it
+corresponds to in a comment beside it. A tag is a mutable reference -
+its owner can move it - so a build pinned to one is reproducible only
+for as long as nobody does; a hash is a build's exact input. Bumping a
+dependency is therefore: pick the tag, resolve it (`git ls-remote
+<repo> refs/tags/<tag>^{}`, or the un-peeled line for a lightweight
+tag), write the hash and the tag's name side by side.
+
 ## The platform interface
 
 `IPlatformHost` owns what exists for the whole process: the tray icon,
