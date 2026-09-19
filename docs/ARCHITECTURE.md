@@ -1563,10 +1563,23 @@ Consequences that shape `Win32InputGrab`:
   has no message queue until it first asks for one, `PostThreadMessage`
   to a thread without one fails, and the first reconcile request is
   posted the moment the start returns - so the thread signals an event
-  once its queue exists and the start waits for that. A stop whose
-  two-second wait times out keeps the handle rather than forgetting a
-  live thread: the next start finds it (or finds it finished, and closes
-  it) instead of starting a second thread over the same hooks and sink.
+  once its queue exists and the start waits for that. The thread is in
+  one of three states the app thread can tell apart - starting (the
+  event still open), running, stopping (a quit posted and not yet seen
+  to land) - and a reconcile request is posted only to a running one:
+  a post to a thread still on its way up is lost, and a thread on its
+  way out would run it behind its quit, or not at all. A start whose
+  wait times out keeps the event for the thread to set when it gets
+  there; a stop whose two-second wait times out keeps the handle rather
+  than forgetting a live thread, so that the next start finds it (waits
+  for it once more, or finds it finished and closes it) instead of
+  starting a second thread over the same hooks and sink; a stop whose
+  quit could not be posted because the queue is not up yet waits for
+  the queue and posts again. The first version ignored the wait's
+  result and closed the event whatever it said, and a start after a
+  timed-out stop posted to a thread that was about to quit. These paths
+  are established from the source: the class offers no fault injection,
+  and the rapid start/stop test exercises ordinary timing.
 - **Movement is never posted.** Windows coalesces `WM_MOUSEMOVE` to about
   one per frame; re-posting every swallowed report made a 1000 Hz mouse a
   message flood. The render thread emits one Move per frame while a

@@ -231,8 +231,17 @@ private:
     // pointer, a stroke made of visible steps, and "everything feels slower
     // with this on" all were. This thread does nothing but pump, so hooks
     // are serviced immediately.
-    void StartHookThread();
+    // Starts the hook thread if there is none, and says whether there is
+    // now one whose message queue exists - the only kind a post reaches.
+    // False when the thread could not be started, died on the way up, is
+    // still on the way up, or is on its way out after a Stop that gave up
+    // waiting: the caller posts nothing, and the next transition asks
+    // again. See the .cpp for the states.
+    bool StartHookThread();
     void StopHookThread();
+    // Lets go of the thread's handle, the ready event and the id, once the
+    // thread has been seen to exit - the one place these are closed.
+    void CloseHookThreadHandles();
     static DWORD WINAPI HookThreadMain(void* self);
     // Runs on the hook thread: installs/removes hooks to match the state
     // below. Posted to rather than called directly, since only that thread
@@ -385,13 +394,19 @@ private:
     HHOOK mouseHook_ = nullptr;
     HHOOK keyboardHook_ = nullptr;
     // The thread itself is owned by the app thread, from CreateThread to
-    // the CloseHandle after it has been seen to exit - see StartHookThread
-    // and StopHookThread. hookThreadReady_ lives only for the handshake
-    // between the two: set by the thread once its message queue exists,
-    // waited on by Start before it lets anyone post to the id.
+    // the CloseHandle after it has been seen to exit - see StartHookThread,
+    // StopHookThread and CloseHookThreadHandles. Three states, told apart
+    // by these: no thread (hookThread_ null); starting (hookThreadReady_
+    // still open - the event the thread sets once its message queue
+    // exists, which Start waits on before it lets anyone post to the id,
+    // and keeps if that wait times out, for the thread to set when it
+    // gets there); running (the event closed); stopping
+    // (hookThreadQuitting_: a Stop posted WM_QUIT and gave up waiting, so
+    // whatever is posted now lands behind the quit and is lost).
     HANDLE hookThread_ = nullptr;
     DWORD hookThreadId_ = 0;
     HANDLE hookThreadReady_ = nullptr;
+    bool hookThreadQuitting_ = false;
 
     // The overlay's own pointer, in screen coordinates - see
     // VirtualCursorActive. Seeded from the real cursor when a grab starts

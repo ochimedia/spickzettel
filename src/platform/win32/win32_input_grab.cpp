@@ -335,62 +335,112 @@ void Win32InputGrab::Refresh() {
 
     const bool wantHooks = (WantPointerGrab() && overlay_ != nullptr) || keyboardGrabbed;
     if (wantHooks) {
-        StartHookThread();
         // The thread owns the hooks and the raw-input sink alike, so it has
-        // to be the one to create or destroy them; this only asks.
-        PostThreadMessageA(hookThreadId_, kReconcileHooksMessage, 0, 0);
+        // to be the one to create or destroy them; this only asks - and
+        // only of a thread whose queue exists. A post to one still on its
+        // way up, or on its way out, is lost; a thread on its way up
+        // reconciles once by itself when it gets there, and for the rest
+        // the next transition asks again.
+        if (StartHookThread()) {
+            PostThreadMessageA(hookThreadId_, kReconcileHooksMessage, 0, 0);
+        }
     } else {
         StopHookThread();
     }
 }
 
-void Win32InputGrab::StartHookThread() {
+bool Win32InputGrab::StartHookThread() {
     if (hookThread_) {
-        // A thread a previous Stop asked to quit and gave up waiting for
-        // (see StopHookThread) may have finished since. If it has, its
-        // handle is closed here and a fresh thread started; if it is still
-        // running, it is the thread and gets the next message.
-        if (WaitForSingleObject(hookThread_, 0) != WAIT_OBJECT_0) {
-            return;
+        // There is a thread. Finished since it was last looked at - a Stop
+        // that gave up waiting, or a start that died late - and it is
+        // closed here and a fresh one started. Still there and on its way
+        // out (see StopHookThread), waited for once more: a post would
+        // land behind its quit, and a second thread over the same hooks
+        // is not an option. Still there and on its way up, ready only if
+        // its queue has appeared meanwhile.
+        const DWORD wait = WaitForSingleObject(hookThread_, hookThreadQuitting_ ? 2000 : 0);
+        if (wait != WAIT_OBJECT_0) {
+            if (hookThreadQuitting_) {
+                return false;
+            }
+            if (hookThreadReady_) {
+                if (WaitForSingleObject(hookThreadReady_, 0) != WAIT_OBJECT_0) {
+                    return false;
+                }
+                CloseHandle(hookThreadReady_);
+                hookThreadReady_ = nullptr;
+            }
+            return true;
         }
-        CloseHandle(hookThread_);
-        hookThread_ = nullptr;
-        hookThreadId_ = 0;
+        CloseHookThreadHandles();
     }
     // A thread has no message queue until it first asks for one, and
     // PostThreadMessage to a thread without a queue fails - so the first
     // reconcile request, posted the moment this returns, could land on
     // nothing. The thread signals once its queue exists, and this waits for
     // that (or for the thread to die trying) before handing the id out.
+    // Without the event there is no handshake, so no thread either.
     hookThreadReady_ = CreateEventA(nullptr, TRUE, FALSE, nullptr);
+    if (!hookThreadReady_) {
+        return false;
+    }
     hookThread_ = CreateThread(nullptr, 0, &Win32InputGrab::HookThreadMain, this, 0, &hookThreadId_);
     if (!hookThread_) {
-        hookThreadId_ = 0;
-    } else if (hookThreadReady_) {
-        const HANDLE readyOrDead[] = {hookThreadReady_, hookThread_};
-        WaitForMultipleObjects(2, readyOrDead, FALSE, 5000);
+        CloseHookThreadHandles();
+        return false;
     }
-    if (hookThreadReady_) {
-        CloseHandle(hookThreadReady_);
+    const HANDLE readyOrDead[] = {hookThreadReady_, hookThread_};
+    const DWORD result = WaitForMultipleObjects(2, readyOrDead, FALSE, 5000);
+    if (result == WAIT_OBJECT_0) {
+        CloseHandle(hookThreadReady_);  // running: the handshake is over
         hookThreadReady_ = nullptr;
+        return true;
     }
+    if (result == WAIT_OBJECT_0 + 1) {
+        CloseHookThreadHandles();  // died before its queue existed
+        return false;
+    }
+    // Timed out: still starting, on a machine that is very busy. The event
+    // stays open for the thread to set when it gets there, and the next
+    // Start looks at it; nothing is posted until then.
+    return false;
 }
 
 void Win32InputGrab::StopHookThread() {
     if (!hookThread_) {
         return;
     }
-    PostThreadMessageA(hookThreadId_, WM_QUIT, 0, 0);
+    if (!PostThreadMessageA(hookThreadId_, WM_QUIT, 0, 0) && hookThreadReady_) {
+        // No queue to post to yet: the thread is still on its way up. A
+        // quit that is not delivered leaves a thread that never stops, so
+        // this waits for the queue (or the thread's death) and asks again.
+        const HANDLE readyOrDead[] = {hookThreadReady_, hookThread_};
+        WaitForMultipleObjects(2, readyOrDead, FALSE, 5000);
+        PostThreadMessageA(hookThreadId_, WM_QUIT, 0, 0);
+    }
     if (WaitForSingleObject(hookThread_, 2000) != WAIT_OBJECT_0) {
         // Still running - a hook callback stuck behind something, say. The
         // handle and id are kept, so that it stays this object's thread:
         // the next Start finds it rather than starting a second thread over
-        // the same hooks and raw-input sink, and the next Stop asks again.
+        // the same hooks and raw-input sink, and knows from the flag that
+        // it is not one to post to; the next Stop asks again.
+        hookThreadQuitting_ = true;
         return;
     }
-    CloseHandle(hookThread_);
-    hookThread_ = nullptr;
+    CloseHookThreadHandles();
+}
+
+void Win32InputGrab::CloseHookThreadHandles() {
+    if (hookThread_) {
+        CloseHandle(hookThread_);
+        hookThread_ = nullptr;
+    }
+    if (hookThreadReady_) {
+        CloseHandle(hookThreadReady_);
+        hookThreadReady_ = nullptr;
+    }
     hookThreadId_ = 0;
+    hookThreadQuitting_ = false;
 }
 
 DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
