@@ -1476,3 +1476,79 @@ Windows has no stock pen, so the window builds one from `pen_glyph.h`: a
 per pixel. Built once; a failure falls back to the crosshair. The push
 of a wanted shape is guarded on owning the cursor (`WindowFromPoint`),
 not on being foreground, which in edit mode the overlay never is.
+
+## Testing
+
+Automated UI testing of a transparent, always-on-top Windows window is
+impractical, so the strategy focuses on what can be verified without a
+live compositor, in four tiers:
+
+- **Core tests** (`tests/core/`, portable) cover the drawing model, the
+  canvas model, persistence against a real temporary directory, the
+  config, the session and the settings. They are where a test of new
+  behaviour belongs before any UI reaches it.
+- **Headless app tests** (`tests/app/`) run the whole app - a real
+  `OverlayApp` driven through a real ImGui frame - over the in-memory fake
+  platform, with nothing drawn anywhere. ImGui needs a context and a font
+  atlas, not a window or a GPU, so every path the app has is reachable
+  from an ordinary test. Input arrives the same two ways it does in the
+  real app: ImGui's own event queue, which widgets see, and the platform
+  mouse callback, which the raw drawing pipeline runs on.
+- **UI tests** (`tests/ui/`, debug preset only) add Dear ImGui's test
+  engine, which drives widgets by name - "click the thing labelled
+  Settings" - and fails when a widget is present but unreachable, the
+  shape of every z-order bug this UI has had. Text is never an identifier
+  (see "Every word in one file"), so rewording a label breaks no test.
+- **Win32 tests** (`tests/platform/`) run the input grab against the
+  real registration API and list whatever displays the machine has. The
+  rest of the backend needs manual verification: tray icon, hotkeys,
+  focus returned on hide, idle CPU in Task Manager, a real capture that
+  survives resize and disappears from GPU memory when its item is
+  deleted.
+
+`linux-tests` builds the portable core and its tests with GCC or Clang.
+Worth running now and then even when working on Windows: MSVC is the
+more forgiving reader, and core can drift for weeks into a shape only it
+accepts. Two examples that happened: a braced default argument for a
+nested aggregate (a hard error on GCC), and constructor initialisers out
+of declaration order (`-Wreorder`, which MSVC leaves off even at `/W4`).
+Configuring a scratch MSVC build with `/permissive- /W4 /w45038` catches
+most of this class without a Linux machine.
+
+## Dead ends, for the record
+
+Things that were built, used and removed. Each is described where it
+matters above; this is the index, so nobody spends an afternoon proving
+one twice.
+
+- **A right-click ring menu with favourite tool slots**, and the flat
+  tool strip that mirrored it. Seven tools on three slots meant the slot
+  wanted was usually not there. Replaced by six tools, a selection bar
+  and drawing mode.
+- **Per-item ImGui windows for chrome** (titlebar bands, handle margins,
+  `InvisibleButton`s). Two hit-testers on two clocks; replaced by one
+  resolver of the app's own over `NoInputs` layers.
+- **A dedicated text-note item kind.** Could not combine with a drawing
+  or a screenshot; replaced by a caption any item can carry.
+- **A trash folder, then a trash library.** Replaced by a deletion mark
+  in place and a Recently deleted list.
+- **Profiles based on other profiles.** A third level nobody could see;
+  replaced by exactly two levels.
+- **One library file.** 42 MB rewritten every two seconds at fifty
+  canvases; replaced by a directory tree that is its own index, and then
+  by a save bounded by what changed.
+- **PNG for captures.** Six to twenty times slower than QOI on this
+  app's own screenshots; PNG is still decoded.
+- **Loading every canvas's textures at startup.** 1.6 GB of VRAM behind a
+  game for fifty 4K captures; replaced by per-canvas residency.
+- **A global undo stack.** Undid strokes on canvases not on screen;
+  replaced by a stack per canvas.
+- **`SetCursorPos` to drive the real cursor under a grab**, fractional
+  pointer drawing, an integral term for counter-injection, a dedicated
+  sink thread, `BlockInput`, and a null-device-handle fallback for
+  recognising injected input. All in the input grab section.
+- **A Linux dev harness** (GLFW/OpenGL, an ordinary window showing the
+  same UI) and a **MinGW cross-compile preset**. Useful once for
+  iterating without a Windows machine; not carried into this repository.
+  Core stays portable and the `linux-tests` preset keeps that honest;
+  what the cross build taught is under "Cross-compiling".
