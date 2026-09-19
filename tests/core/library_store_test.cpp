@@ -1599,7 +1599,7 @@ TEST_F(LibraryStoreTest, LoadImageReturnsNulloptForEmptyFilename) {
     EXPECT_FALSE(store.LoadImage(7, "").has_value());
 }
 
-TEST_F(LibraryStoreTest, SaveDeletesOrphanedImagesNoLongerReferencedByAnyItem) {
+TEST_F(LibraryStoreTest, SaveSetsAsideAStagedPictureNothingNames) {
     LibraryStore store(dir_);
     const std::vector<uint8_t> pixels = {1, 2, 3, 255};
     ASSERT_TRUE(store.SaveImage(7, pixels.data(), 1, 1).has_value());   // will stay referenced
@@ -1611,10 +1611,11 @@ TEST_F(LibraryStoreTest, SaveDeletesOrphanedImagesNoLongerReferencedByAnyItem) {
     ASSERT_TRUE(store.Save(snapshot));
 
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000007.qoi"));
-    // Nothing names image 8, so it is collected out of staging rather than
-    // carried into a snippet that never claimed it.
+    // Nothing names image 8, so it leaves staging - but for retired/, not
+    // for nowhere: it may be the capture a crash left without a record.
     EXPECT_FALSE(std::filesystem::exists(dir_ / "images" / "000008.qoi"));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000008.qoi"));
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "retired" / "images" / "000008.qoi"));
 }
 
 // ===== Sidecar thumbnails =====

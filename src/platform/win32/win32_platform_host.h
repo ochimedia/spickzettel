@@ -29,6 +29,7 @@ public:
     std::vector<DisplayInfo> ListDisplays() const override;
     std::filesystem::path GetConfigFilePath() const override;
     std::filesystem::path GetDataDirectoryPath() const override;
+    void SetBackgroundTimer(int intervalMs, std::function<void()> callback) override;
     int RunEventLoop() override;
     void Quit(int exitCode) override;
 
@@ -42,6 +43,7 @@ private:
     bool trayIconVisible_ = false;
     TrayCommandCallback trayCallback_;
     std::unordered_map<int, HotkeyCallback> hotkeyCallbacks_;
+    std::function<void()> backgroundTimerCallback_;
     int nextHotkeyId_ = 1;
     Win32OverlayWindow overlayWindow_;
     bool running_ = false;

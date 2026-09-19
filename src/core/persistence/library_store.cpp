@@ -1599,10 +1599,15 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
     //
     // Whatever a snippet in the library names is moved in with it - every
     // one has a directory by now, a deleted one included, since a delete
-    // leaves it where it is - and whatever nothing names is collected: the
-    // capture of a snippet deleted for good before it was ever saved, or the
-    // remains of a crash between writing a picture and saving the record
-    // that names it. A move that fails stays, readably - see FindImage.
+    // leaves it where it is. Whatever nothing names is set aside into
+    // retired/images/ rather than deleted: it is the capture of a snippet
+    // deleted for good before it was ever saved, which nobody wants back -
+    // or the remains of a crash between writing a picture and saving the
+    // record that names it, which is exactly the screenshot that cannot be
+    // taken again, and the two cannot be told apart from here. A picture
+    // is written the moment it is taken so that it survives such a crash;
+    // deleting it at the next start would undo that promise. A move that
+    // fails stays, readably - see FindImage.
     const std::filesystem::path stagingDir = rootDir_ / kStagingDir;
     if (std::filesystem::exists(stagingDir, ec)) {
         for (const auto& entry : std::filesystem::directory_iterator(stagingDir, ec)) {
@@ -1617,7 +1622,9 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                 }
                 continue;
             }
-            std::filesystem::remove(entry.path(), ec);
+            const std::filesystem::path setAside = rootDir_ / kRetiredDir / kStagingDir;
+            std::filesystem::create_directories(setAside, ec);
+            std::filesystem::rename(entry.path(), setAside / name, ec);
         }
     }
 

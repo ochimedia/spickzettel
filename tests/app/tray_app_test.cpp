@@ -594,6 +594,85 @@ TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImag
     EXPECT_EQ(saved->pixelsRGBA, host.overlayWindow.captureReturnsPixelsRGBA);
 }
 
+// A silent capture while the overlay is hidden, with notices off, shows
+// nothing - so no frame runs the autosave. The record naming the picture
+// has to be written all the same, or a crash before the next show loses
+// the capture and the next save sets its picture aside as an orphan.
+TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAFrame) {
+    // A library on disk already, so this is not a first run - which would
+    // show the overlay with its welcome note rather than start hidden.
+    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_;
+    host.overlayWindow.captureReturnsHandle = 7;
+    host.overlayWindow.captureReturnsWidth = 2;
+    host.overlayWindow.captureReturnsHeight = 1;
+    host.overlayWindow.captureReturnsPixelsRGBA = {1, 2, 3, 255, 4, 5, 6, 255};
+    AppConfig config = DefaultConfig();
+    config.showToastsWhileHidden = false;
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
+    EXPECT_FALSE(host.overlayWindow.IsVisible());
+    EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
+    EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "nothing left to retry";
+
+    persistence::LibraryStore reopened(dir_);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const Item* shot = nullptr;
+    for (const Canvas& canvas : loaded->canvases) {
+        for (const Item& item : canvas.items) {
+            shot = &item;
+        }
+    }
+    ASSERT_NE(shot, nullptr);
+    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty());
+    const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(shot->id, shot->ImageLayer()->imageFile);
+    ASSERT_TRUE(saved.has_value());
+    EXPECT_EQ(saved->pixelsRGBA, host.overlayWindow.captureReturnsPixelsRGBA);
+}
+
+TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromTheBackgroundTimer) {
+    // A library on disk, so the app starts hidden - and then a directory
+    // where library.json wants to be: the save fails late, at the rename,
+    // and keeps failing until it is gone. The tree beside it still loads.
+    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    std::filesystem::remove(dir_ / "library.json");
+    std::filesystem::create_directories(dir_ / "library.json");
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_;
+    host.overlayWindow.captureReturnsHandle = 7;
+    host.overlayWindow.captureReturnsWidth = 1;
+    host.overlayWindow.captureReturnsHeight = 1;
+    host.overlayWindow.captureReturnsPixelsRGBA = {9, 9, 9, 255};
+    AppConfig config = DefaultConfig();
+    config.showToastsWhileHidden = false;
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
+    EXPECT_TRUE(controller.GetSession().HasUnsavedChanges());
+    ASSERT_GT(host.backgroundTimerIntervalMs, 0) << "no frame will come; something else has to";
+
+    host.FireBackgroundTimer();
+    EXPECT_TRUE(controller.GetSession().HasUnsavedChanges()) << "still in the way";
+    EXPECT_GT(host.backgroundTimerIntervalMs, 0) << "so still scheduled";
+
+    std::filesystem::remove(dir_ / "library.json");
+    host.FireBackgroundTimer();
+    EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
+    EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "done, and stopped";
+    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(dir_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    size_t items = 0;
+    for (const Canvas& canvas : loaded->canvases) {
+        items += canvas.items.size();
+    }
+    EXPECT_EQ(items, 1u);
+}
+
 // The actual rescale math (position/size/fullscreen/clamping behavior) is
 // covered exhaustively in canvas_manager_test.cpp against CanvasManager
 // directly. This just guards the wiring decision that Initialize() itself

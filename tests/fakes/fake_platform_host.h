@@ -220,6 +220,20 @@ public:
     std::filesystem::path GetDataDirectoryPath() const override { return dataDirectoryPath; }
     std::filesystem::path dataDirectoryPath;
 
+    // Recorded rather than run: a test fires it with FireBackgroundTimer,
+    // standing for the interval having passed. 0 means none is set.
+    void SetBackgroundTimer(int intervalMs, std::function<void()> callback) override {
+        backgroundTimerIntervalMs = intervalMs > 0 && callback ? intervalMs : 0;
+        backgroundTimerCallback = backgroundTimerIntervalMs > 0 ? std::move(callback) : nullptr;
+    }
+    void FireBackgroundTimer() {
+        if (backgroundTimerCallback) {
+            backgroundTimerCallback();
+        }
+    }
+    int backgroundTimerIntervalMs = 0;
+    std::function<void()> backgroundTimerCallback;
+
     int RunEventLoop() override { return exitCode; }
 
     void Quit(int code) override {

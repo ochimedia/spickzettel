@@ -440,6 +440,8 @@ library/
                            snippet that names it
   retired/<folder>/...  - what a save found the library no longer
                            holding, set aside whole rather than deleted
+  retired/images/       - staged pictures no snippet named, set aside
+                           for the same reason
 ```
 
 Every directory is `<slug of its current name>-<uid>`. The readable half
@@ -573,7 +575,13 @@ Overview never decodes a fullscreen capture to draw a 200px tile.
 
 A capture's pixels are written synchronously at capture time, not with
 the debounced record write: a screenshot lost to a crash can never be
-recaptured, where a few seconds of strokes can be redrawn.
+recaptured, where a few seconds of strokes can be redrawn. For the same
+reason a picture found in staging that no record names is set aside
+into `retired/images/` rather than deleted: from the store's side it is
+either the capture of a snippet deleted for good before it was saved,
+which nobody wants, or the capture a crash left without its record,
+which is exactly what writing it early was for, and the two cannot be
+told apart. `retired/` is the user's to empty.
 
 ## Configuration
 
@@ -754,7 +762,16 @@ first settles what the hand is in the middle of
 ends, and a note being typed is committed to its item. A note lives in
 the editor's buffer until it is committed, and a flush that ran before
 the commit wrote the note as it was when the editor opened; typing that
-had been on screen for a minute was gone at the next start. A failed write (disk full, a file held open) is retried
+had been on screen for a minute was gone at the next start. A flush at
+one of those points, or after a silent capture taken while hidden, that
+does not land arranges its own retry: the autosave's clock runs on
+frames and there are none while hidden, so the tray asks the platform
+host for a background timer (a `WM_TIMER` on the message window) and
+tries again every ten seconds until the save lands or the overlay is up
+again and frames take over. Before that, a silent capture with notices
+off created its canvas and snippet and returned to hidden without a
+save; the picture was on disk and the record naming it was not, for as
+long as the overlay stayed hidden. A failed write (disk full, a file held open) is retried
 on a clock of its own, doubling up to 30 s; falling through to the quiet
 check, which a failed save does nothing to reset, retried on every frame
 and turned a full disk into a synchronous rewrite per frame. A save is

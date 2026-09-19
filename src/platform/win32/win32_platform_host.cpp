@@ -45,6 +45,9 @@ bool SkipCharacterTranslation(const MSG& msg) {
 }
 constexpr UINT kMenuIdToggle = 1;
 constexpr UINT kMenuIdExit = 2;
+// See SetBackgroundTimer: a WM_TIMER on the message window, which is
+// pumped whether or not the overlay is up.
+constexpr UINT_PTR kBackgroundTimerId = 1;
 }  // namespace
 
 Win32PlatformHost::~Win32PlatformHost() {
@@ -268,6 +271,20 @@ void Win32PlatformHost::Quit(int exitCode) {
     running_ = false;
 }
 
+void Win32PlatformHost::SetBackgroundTimer(int intervalMs, std::function<void()> callback) {
+    if (intervalMs <= 0 || !callback) {
+        if (hwnd_) {
+            KillTimer(hwnd_, kBackgroundTimerId);
+        }
+        backgroundTimerCallback_ = nullptr;
+        return;
+    }
+    backgroundTimerCallback_ = std::move(callback);
+    if (hwnd_) {
+        SetTimer(hwnd_, kBackgroundTimerId, static_cast<UINT>(intervalMs), nullptr);
+    }
+}
+
 void Win32PlatformHost::ShowTrayContextMenu() {
     POINT cursor{};
     GetCursorPos(&cursor);
@@ -331,6 +348,11 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
             }
             return 0;
         }
+        case WM_TIMER:
+            if (wParam == kBackgroundTimerId && backgroundTimerCallback_) {
+                backgroundTimerCallback_();
+            }
+            return 0;
         default:
             return DefWindowProcA(hwnd, msg, wParam, lParam);
     }

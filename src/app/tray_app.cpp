@@ -216,6 +216,13 @@ void TrayController::OnSilentCaptureHotkey() {
         // saying so costs nothing at all.
         return;
     }
+    // Hidden, and staying hidden unless a notice goes up for two seconds:
+    // the picture is on disk (see Session::CaptureShotItem) but the record
+    // that names it is not, and no frame is coming to run the autosave.
+    // Written now, so a crash before the overlay is next shown does not
+    // lose the capture - or, worse, leave the picture as an orphan the
+    // next save sets aside.
+    FlushOrRetryLater();
     if (!settings_.Stored().showToastsWhileHidden) {
         // Nothing will ever draw it, so drop it rather than leave it
         // queued for whenever the overlay next comes up - see
@@ -265,7 +272,7 @@ void TrayController::HideNoticeIfDone() {
     // The capture that caused this notice is a library change, and frames
     // stop the moment the window goes - so the same explicit flush every
     // other way out of the overlay does (see ToggleMode).
-    session_.Flush();
+    FlushOrRetryLater();
     // Called from inside OverlayApp::OnFrame, which is inside the frame
     // callback: safe, because the renderer ends the ImGui frame after that
     // callback returns whether or not the window is still visible.
@@ -348,7 +355,7 @@ void TrayController::PutAway() {
     // debounce window might otherwise never arrive. Settled first, so the
     // flush has what was being typed or drawn - see SettleForPersistence.
     overlayApp_.SettleForPersistence();
-    session_.Flush();
+    FlushOrRetryLater();
     session_.ReleaseFrozenScreen();
     if (overlayApp_.IsViewOnly() && session_.Manager().CurrentCanvasHasPinnedItems()) {
         // Already click-through and unfocused: only what is drawn changes.
@@ -357,6 +364,30 @@ void TrayController::PutAway() {
     }
     host_.GetOverlayWindow().Hide();
     ShowPinnedView();
+}
+
+namespace {
+// How long between attempts at a save that failed while the overlay is
+// hidden. Generous: a disk that is full or a file that is held open does
+// not clear itself in a hurry, and each attempt is a synchronous write on
+// the app thread.
+constexpr int kHiddenSaveRetryMs = 10000;
+}  // namespace
+
+void TrayController::FlushOrRetryLater() {
+    if (session_.Flush()) {
+        host_.SetBackgroundTimer(0, nullptr);
+        return;
+    }
+    host_.SetBackgroundTimer(kHiddenSaveRetryMs, [this] { OnBackgroundTimer(); });
+}
+
+void TrayController::OnBackgroundTimer() {
+    // Up again: frames are running and the autosave's own clock, with its
+    // backoff, is the one to use.
+    if (host_.GetOverlayWindow().IsVisible() || !session_.HasUnsavedChanges() || session_.Flush()) {
+        host_.SetBackgroundTimer(0, nullptr);
+    }
 }
 
 bool TrayController::ShowPinnedView() {

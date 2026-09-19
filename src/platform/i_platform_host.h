@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,6 +43,14 @@ public:
     // Per-user root of the persisted library, a sibling of the config file
     // (%APPDATA%\Spickzettel\library\ on Windows). Need not exist yet.
     virtual std::filesystem::path GetDataDirectoryPath() const = 0;
+
+    // Calls `callback` on the app thread every `intervalMs`, until called
+    // again with 0. The one clock the app has while the overlay is hidden:
+    // frames stop with the window, and the debounced autosave runs on
+    // frames, so a save that failed on the way to hidden - or a capture
+    // taken there - would otherwise wait for the next show to be retried.
+    // See TrayController::OnBackgroundTimer.
+    virtual void SetBackgroundTimer(int intervalMs, std::function<void()> callback) = 0;
 
     // Runs the OS event loop until Quit() is called; returns the exit code.
     virtual int RunEventLoop() = 0;

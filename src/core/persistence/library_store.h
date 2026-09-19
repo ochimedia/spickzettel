@@ -45,6 +45,9 @@ namespace sz::core::persistence {
 //                                       longer holding, set aside whole at
 //                                       the path it had under folders/
 //                                       rather than deleted; see Save
+//   retired/images/                    - pictures found in staging that no
+//                                       snippet named, set aside for the
+//                                       same reason; see Save's last pass
 //
 // Every id inside a record is spelled the way the directory names spell
 // it - six base36 characters, see util/uid.h - so a record and the

@@ -141,6 +141,16 @@ private:
     // snippets (in place from view-only, which it already is), to hidden
     // otherwise.
     void PutAway();
+    // The flush for a moment after which no frame follows: the overlay
+    // going away, or a capture taken while it is away. What it cannot
+    // write now it arranges to try again from the host's background
+    // timer, since the autosave's own retry clock runs on frames and there
+    // are none while hidden - see OnBackgroundTimer.
+    void FlushOrRetryLater();
+    // The background timer's tick: another attempt at whatever is owed to
+    // the disk, and the timer is stopped once nothing is - or once the
+    // overlay is up again and frames take over.
+    void OnBackgroundTimer();
     // Puts the pinned view up - view-only, click-through, never focused,
     // drawing the current canvas's pinned snippets - if the overlay is
     // hidden and there are any. False if it did not. The same way up as a
