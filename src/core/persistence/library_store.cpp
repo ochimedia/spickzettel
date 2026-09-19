@@ -566,15 +566,85 @@ std::optional<json> ReadJsonFile(const std::filesystem::path& path) {
     return doc;
 }
 
+// ===== Links are not part of the tree =====
+//
+// A symlink or junction inside the library names something that may be
+// anywhere on the disk. What is behind one is therefore never the store's:
+// not read as a record, not written to, not swept, not retired, not
+// deleted. Load skips linked directories (see SortedSubdirectories), so
+// nothing behind a link ever enters the index, and every step that removes
+// or moves something checks the whole path from the root down for a link
+// (see CrossesLink) in case one appeared under a running instance. A link
+// left where a save wants to put a directory is a name collision the save
+// treats like any other: the record goes where its slug says and the link
+// is left alone.
+
+// Whether `path` itself is a symlink or junction - a junction being what
+// "mklink /J" makes, the reparse point Windows lets a user create without
+// privileges, and one that looks like a directory to everything that does
+// not ask.
+bool IsLink(const std::filesystem::path& path) {
+    std::error_code ec;
+    const std::filesystem::file_status status = std::filesystem::symlink_status(path, ec);
+    if (std::filesystem::is_symlink(status)) {
+        return true;
+    }
+#if defined(_MSC_VER)
+    // file_type::junction is MSVC's own extension; other standard libraries
+    // have no junctions to report.
+    return status.type() == std::filesystem::file_type::junction;
+#else
+    return false;
+#endif
+}
+
+// Whether any component of `path` from `root` down - `root` itself
+// excluded, `path` itself included - is a link. Checked before anything
+// under `path` is deleted or moved: a plain directory below a linked
+// ancestor is physically somewhere else, whatever it is called here.
+bool CrossesLink(const std::filesystem::path& root, const std::filesystem::path& path) {
+    const std::filesystem::path relative = path.lexically_relative(root);
+    if (relative.empty() || *relative.begin() == "..") {
+        return true;  // not under the root at all - treated as not ours either
+    }
+    std::filesystem::path walked = root;
+    for (const std::filesystem::path& component : relative) {
+        if (component == ".") {
+            continue;
+        }
+        walked /= component;
+        if (IsLink(walked)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Deletes `path` with everything in it - or, for a link, the link alone,
+// whatever it points at. remove_all on a directory symlink already stops at
+// the link; a junction is reported as its own kind and has to be asked
+// about first, since a remove_all that walked into one would be emptying a
+// directory outside the library.
+bool RemoveTree(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (IsLink(path)) {
+        std::filesystem::remove(path, ec);
+        return !ec;
+    }
+    std::filesystem::remove_all(path, ec);
+    return !ec;
+}
+
 // Sorted, so that what a directory holds is walked in the same order twice
 // running. Enumeration order is not specified by the filesystem, and an
 // unlisted member's position (see ApplyOrder) would otherwise wander.
+// Real directories only: a linked one is not part of the tree, see above.
 std::vector<std::filesystem::path> SortedSubdirectories(const std::filesystem::path& dir) {
     std::vector<std::filesystem::path> out;
     std::error_code ec;
     for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
         std::error_code isDirEc;
-        if (entry.is_directory(isDirEc)) {
+        if (entry.is_directory(isDirEc) && !IsLink(entry.path())) {
             out.push_back(entry.path());
         }
     }
@@ -704,12 +774,17 @@ bool MergeDirectoryInto(const std::filesystem::path& source, const std::filesyst
     for (const auto& entry : std::filesystem::directory_iterator(source, ec)) {
         const std::filesystem::path to = target / entry.path().filename();
         std::error_code kindEc;
-        if (entry.is_directory(kindEc) && std::filesystem::is_directory(to, kindEc)) {
+        // A link on either side is a leaf: one in the source is moved as a
+        // link, and one in the target is replaced as a link. Recursing into
+        // either would be moving files into, or out of, wherever it points.
+        const bool bothRealDirectories = entry.is_directory(kindEc) && !IsLink(entry.path()) &&
+                                         std::filesystem::is_directory(to, kindEc) && !IsLink(to);
+        if (bothRealDirectories) {
             complete = MergeDirectoryInto(entry.path(), to) && complete;
             continue;
         }
-        if (std::filesystem::exists(to, kindEc)) {
-            std::filesystem::remove_all(to, kindEc);
+        if (std::filesystem::exists(std::filesystem::symlink_status(to, kindEc))) {
+            RemoveTree(to);
         }
         std::filesystem::rename(entry.path(), to, kindEc);
         complete = complete && !kindEc;
@@ -755,25 +830,14 @@ bool LibraryStore::WithinRoot(const std::filesystem::path& path) const {
 }
 
 void LibraryStore::RemoveOwnDirectory(const std::filesystem::path& path) const {
-    std::error_code ec;
-    // A link is deleted as a link, whatever it points at. remove_all on a
-    // directory symlink already stops at the link; a junction - what
-    // "mklink /J" makes, and the reparse point Windows lets a user create
-    // without privileges - is reported as its own kind and has to be asked
-    // about separately, since a remove_all that walked into one would be
-    // emptying a directory outside the library.
-    const std::filesystem::file_status status = std::filesystem::symlink_status(path, ec);
-    bool isLink = std::filesystem::is_symlink(status);
-#if defined(_MSC_VER)
-    // file_type::junction is MSVC's own extension; other standard libraries
-    // have no junctions to report.
-    isLink = isLink || status.type() == std::filesystem::file_type::junction;
-#endif
-    if (isLink) {
-        std::filesystem::remove(path, ec);
+    // Nothing in the index is a link or below one - Load never indexes a
+    // linked directory - so meeting one here means the tree was rearranged
+    // under a running instance, and the directory is physically somewhere
+    // this store has never read. Left alone.
+    if (CrossesLink(rootDir_, path)) {
         return;
     }
-    std::filesystem::remove_all(path, ec);
+    RemoveTree(path);
 }
 
 void LibraryStore::ForgetUnder(const std::filesystem::path& dir) const {
@@ -1231,9 +1295,15 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
     // the old place if the move lost - and `kept` is whether what was in it
     // is still there. A fresh empty directory is not kept, and everything
     // written into it has to be written whatever a hash says.
+    //
+    // `usable` is false when a link sits where the directory would have to
+    // be created: what is behind a link is not the store's to write into
+    // (see IsLink), so the record - and everything under it - is skipped,
+    // the save reports failure, and the next one tries again.
     struct Placed {
         std::filesystem::path dir;
         bool kept;
+        bool usable = true;
     };
     const auto placeDirectory = [&ec](std::map<uint64_t, std::filesystem::path>& index, uint64_t id,
                                        const std::filesystem::path& wanted,
@@ -1269,6 +1339,9 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
             // memory. Rebuilt from that, below.
         }
         ec.clear();
+        if (IsLink(wanted)) {
+            return Placed{wanted, false, /*usable=*/false};  // not indexed: never ours
+        }
         std::filesystem::create_directories(wanted, ec);
         index[id] = wanted;
         return Placed{wanted, false};
@@ -1284,6 +1357,10 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                            {&canvasDirs_, &itemDirs_});
         const std::filesystem::path& folderDir = placedFolder.dir;
         folderOrder.push_back(FormatUid(folder.id));
+        if (!placedFolder.usable) {
+            wroteEverything = false;
+            continue;
+        }
         wroteEverything &= writeIfChanged("folder:" + std::to_string(folder.id), folderDir / kFolderFile,
                                            ToJson(folder).dump(2), !placedFolder.kept);
 
@@ -1296,6 +1373,10 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                 canvasDirs_, canvas.id, folderDir / MakeSlug(canvas.name, canvas.id), {&itemDirs_});
             const std::filesystem::path& canvasDir = placedCanvas.dir;
             canvasOrder.push_back(FormatUid(canvas.id));
+            if (!placedCanvas.usable) {
+                wroteEverything = false;
+                continue;
+            }
             wroteEverything &= writeIfChanged("canvas:" + std::to_string(canvas.id), canvasDir / kCanvasFile,
                                                ToJson(canvas).dump(2), !placedCanvas.kept);
 
@@ -1305,6 +1386,10 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                     placeDirectory(itemDirs_, item.id, canvasDir / MakeSlug(item.name, item.id), {});
                 const std::filesystem::path& itemDir = placedItem.dir;
                 itemOrder.push_back(FormatUid(item.id));
+                if (!placedItem.usable) {
+                    wroteEverything = false;
+                    continue;
+                }
 
                 // The one place where skipping the work is worth real time,
                 // and the only one that answers "changed?" without
@@ -1335,7 +1420,7 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                 // process never manages to write the new one - collecting
                 // them on the strength of a record that failed to land would
                 // leave the old record pointing at nothing.
-                if (!placedItem.kept || !recordWritten) {
+                if (!placedItem.kept || !recordWritten || CrossesLink(rootDir_, itemDir)) {
                     continue;  // a fresh directory holds nothing to collect
                 }
                 std::unordered_set<std::string> named;
@@ -1406,7 +1491,7 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                 // index was made under the root, so one that isn't is a
                 // bug, and a bug here leaves the directory alone.
                 const std::filesystem::path path = it->second;
-                if (!WithinRoot(path)) {
+                if (!WithinRoot(path) || CrossesLink(rootDir_, path)) {
                     continue;
                 }
                 const std::filesystem::path destination = retiredRoot / path.lexically_relative(foldersRoot);

@@ -478,6 +478,21 @@ picture has not. `Layer::imageFile` names a *file*, not a path, and
 library-wide filename-to-directory map fell behind whenever a directory
 moved, and two snippets can legitimately hold files of the same name.
 
+**Links are not part of the tree.** A symlink or junction inside the
+library names something that may be anywhere on the disk, so what is
+behind one is never the store's: `Load` skips linked directories, so
+nothing behind one enters the index and nothing behind one is written,
+swept, retired or deleted. Every step that removes or moves a directory
+also checks the whole path from the root down for a link, in case one
+appeared under a running instance, and a junction standing where a save
+would have to create a directory makes that record unplaceable: the save
+reports failure and leaves the link alone rather than writing through
+it. The checks are by path, not by handle. The threat is a user's own
+junction (a snippet directory pointed at a folder of notes, say) meeting
+an ordinary sweep, not a process racing the store's own file operations;
+the latter would need handle-based operations with reparse checks and is
+out of scope.
+
 ### A save is a plan
 
 First everything the library holds is *placed* - its directory found

@@ -1429,33 +1429,99 @@ TEST_F(LibraryStoreTest, AnImageFileThatNamesAPathIsDroppedOnLoad) {
 }
 
 #if defined(_WIN32)
+// ===== Links are not part of the tree =====
+//
 // A junction is what "mklink /J" makes, needs no privilege, and looks like a
-// directory to everything that does not ask. One dropped into the tree by
-// hand, pointing somewhere else, must be retired as a link - a remove_all
-// that walked into it would be emptying a directory outside the library.
-TEST_F(LibraryStoreTest, RetiringAJunctionRemovesTheLinkNotWhatItPointsTo) {
-    ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
-    const std::filesystem::path outside = dir_.parent_path() / (dir_.filename().string() + "_outside");
+// directory to everything that does not ask. What is behind one is somewhere
+// else on the disk and is never the library's: not read, not written, not
+// swept, not retired, not deleted.
+
+// A directory outside the library, with a snippet's worth of files in it,
+// and a junction at `link` pointing at it. The caller removes `outside`.
+std::filesystem::path MakeJunctionTo(const std::filesystem::path& link, const std::filesystem::path& outside) {
     std::filesystem::remove_all(outside);
     std::filesystem::create_directories(outside);
     std::ofstream(outside / "item.json") << R"({"id": 77, "name": "Linked", "layers": []})";
     std::ofstream(outside / "precious.txt") << "not the library's to delete";
-    const std::filesystem::path link = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" / "linked-000025";
+    std::filesystem::create_directories(link.parent_path());
     const std::string command = "mklink /J \"" + link.string() + "\" \"" + outside.string() + "\" >nul";
-    ASSERT_EQ(std::system(command.c_str()), 0) << "could not create the junction";
-    ASSERT_TRUE(std::filesystem::exists(link / "precious.txt"));
+    EXPECT_EQ(std::system(command.c_str()), 0) << "could not create the junction";
+    EXPECT_TRUE(std::filesystem::exists(link / "precious.txt"));
+    return outside;
+}
 
-    // Load reads the linked record as a snippet of this canvas...
+TEST_F(LibraryStoreTest, AJunctionInTheTreeIsNeitherReadNorWrittenNorRetired) {
+    ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
+    const std::filesystem::path link = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" / "linked-000025";
+    const std::filesystem::path outside =
+        MakeJunctionTo(link, dir_.parent_path() / (dir_.filename().string() + "_outside"));
+
+    // Not read: the record behind the link is not a snippet of this canvas.
     LibraryStore store(dir_);
     const std::optional<CanvasManagerSnapshot> loaded = store.Load();
     ASSERT_TRUE(loaded.has_value());
-    ASSERT_EQ(loaded->canvases[0].items.size(), 3u);
-    // ...and a save without it retires it.
-    ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+    ASSERT_EQ(loaded->canvases[0].items.size(), 2u) << "what is behind a link is not the library's";
 
-    EXPECT_FALSE(std::filesystem::exists(link)) << "the link itself is retired";
-    EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt")) << "what it pointed at is not";
+    // Not retired, though the snapshot lacks it - and not swept either,
+    // though the snapshot has changed.
+    CanvasManagerSnapshot snapshot = *loaded;
+    snapshot.canvases[0].items[1].name = "Edited";
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_TRUE(std::filesystem::exists(link)) << "left exactly where it was";
+    EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt"));
     EXPECT_TRUE(std::filesystem::exists(outside / "item.json"));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired" / "folder-1-000001" / "canvas-1-000002" / "linked-000025"));
+    std::filesystem::remove_all(outside);
+}
+
+TEST_F(LibraryStoreTest, ASaveDoesNotWriteThroughAJunctionSittingWhereItsDirectoryWouldBe) {
+    LibraryStore store(dir_);
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    ASSERT_TRUE(store.Save(snapshot));
+    // A junction with exactly the name the snippet's directory would get.
+    const std::filesystem::path link = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" / "linked-000025";
+    const std::filesystem::path outside =
+        MakeJunctionTo(link, dir_.parent_path() / (dir_.filename().string() + "_outside"));
+
+    Item linked;
+    linked.id = 77;  // "000025" in base36: the directory the junction is standing in for
+    linked.name = "Linked";
+    linked.noteText = "would land outside";
+    snapshot.canvases[0].items.push_back(linked);
+    EXPECT_FALSE(store.Save(snapshot)) << "the record has nowhere of the library's to go";
+
+    nlohmann::json record = nlohmann::json::parse(std::ifstream(outside / "item.json"));
+    EXPECT_EQ(record["id"], 77) << "the record behind the link is untouched";
+    EXPECT_FALSE(record.contains("noteText")) << "nothing was written through the link";
+    EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt"));
+
+    // The rest of the library is saved as usual, and a restart sees it.
+    LibraryStore reopened(dir_);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].items.size(), 2u);
+    std::filesystem::remove_all(outside);
+}
+
+TEST_F(LibraryStoreTest, RetiringOntoAJunctionReplacesTheLinkNotWhatItPointsTo) {
+    LibraryStore store(dir_);
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    ASSERT_TRUE(store.Save(snapshot));
+    // The canvas's place in retired/ is already taken, and inside it a
+    // junction sits where the snippet's directory would merge to.
+    const std::filesystem::path link = RetiredCanvasDir() / "shot-1-000004";
+    const std::filesystem::path outside =
+        MakeJunctionTo(link, dir_.parent_path() / (dir_.filename().string() + "_outside"));
+
+    snapshot.canvases.clear();
+    snapshot.currentCanvasId = 0;
+    ASSERT_TRUE(store.Save(snapshot));
+
+    EXPECT_TRUE(std::filesystem::exists(RetiredCanvasDir() / "shot-1-000004" / "item.json")) << "set aside";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001" / "canvas-1-000002"));
+    nlohmann::json record = nlohmann::json::parse(std::ifstream(outside / "item.json"));
+    EXPECT_EQ(record["id"], 77) << "nothing was moved into where the link pointed";
+    EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt"));
     std::filesystem::remove_all(outside);
 }
 #endif

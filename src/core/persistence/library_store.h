@@ -66,6 +66,8 @@ namespace sz::core::persistence {
 //
 //   - a directory with no folder.json/canvas.json in it is not ours, and is
 //     left alone rather than deleted or complained about
+//   - a symlink or junction is not ours either, whatever is behind it: not
+//     read, not written to, not retired, not deleted (see the .cpp)
 //   - an order file naming something that is gone simply skips it; anything
 //     present that it doesn't name goes to the end
 //   - a directory whose readable half was renamed by hand keeps its place,
@@ -262,9 +264,10 @@ private:
     void ForgetUnder(const std::filesystem::path& dir) const;
     // Where the folder directories are: folders/ under the root.
     std::filesystem::path FoldersRoot() const;
-    // The one way this store deletes a directory: recursively for a real
-    // one, as a link for a link or junction, so that nothing outside the
-    // library is ever emptied through something pointing at it.
+    // The one way this store deletes a directory: recursively, and only
+    // if neither it nor anything on the way down from the root is a link
+    // or junction, so that nothing outside the library is ever emptied
+    // through something pointing at it. See the .cpp on links.
     void RemoveOwnDirectory(const std::filesystem::path& path) const;
 
     // The tree walk behind Load: every folder, canvas and snippet under
