@@ -663,3 +663,129 @@ the only display with that name, which is the same monitor on another
 port; else the primary. Two monitors sharing a name are not guessed
 between. A chosen display that is not attached is not forgotten; the
 primary stands in until it returns.
+
+## Session and settings
+
+The layers above the platform are three libraries, and the build keeps
+them apart: `sz_core` holds the model, the persistence, the settings and
+the session and does not link Dear ImGui; `sz_ui` is the overlay as it is
+drawn, a view of the session; `sz_app` is the tray controller that owns
+settings, session and overlay and moves the window between hidden, edit
+and view-only.
+
+**`Settings`** is the one copy of every setting. `Stored()` is what
+`config.json` holds; `Live()` is the profileable group resolved against
+the profile that matched what the overlay came up over. The UI reads
+plain fields through `Stored()`, edits them in place through `Mutable()`
+and `Commit()`s once an edit is finished; profileable fields go through
+setters that say whether the defaults or a profile is meant. A commit
+re-resolves and calls the controller back, which applies what changed to
+the window and writes the file. The live values are derived, never
+assigned, so there is no path by which what runs and what is stored can
+disagree.
+
+**`Session`** is what is being worked on, independent of how it is
+shown: the library and deleting and restoring in it; the debounced
+autosave and the texture sync that keeps the GPU in step with the current
+canvas; screen capture (the frozen screen, a snippet's capture, the
+picture a copy gets); and the per-canvas undo history with every edit
+that goes on it, offered as commands (`DeleteItem`, `ClearDrawing`,
+`CommitLiveStroke`, text edits) and as gestures in screen space (paint,
+erase, shapes). The session needs two things of the platform, textures
+and captures, and takes them from the window it is attached to, which may
+be absent: the session tests drive all of this with no window, no store
+and no ImGui.
+
+What stays in the UI is what a UI decides: which tool is in hand and its
+colour and width, where a gesture starts and what it is over, panel and
+popover state, toasts, and GPU caches that exist only for drawing.
+
+### Autosave
+
+`Session::Tick` runs every frame and compares the model's generation
+counter against what was true last frame and what was last saved. A
+write fires once the generation has been unchanged for 2 s, coalescing a
+burst of edits into one write, or after 15 s regardless, so a long
+uninterrupted session is still persisted. `Flush` is called at the two
+places content stops being editable: before hiding the overlay and
+before exiting. A failed write (disk full, a file held open) is retried
+on a clock of its own, doubling up to 30 s; falling through to the quiet
+check, which a failed save does nothing to reset, retried on every frame
+and turned a full disk into a synchronous rewrite per frame. A save is
+acknowledged only when *all* of it landed, painted pixels included, so a
+layer whose write failed is retried rather than waiting for an unrelated
+edit.
+
+Painted pixels are written before the texture sync discards anything
+non-current, and the release path refuses to drop a layer that is still
+dirty. Waiting for the debounced save was not good enough: switching
+canvas bumps the generation, which pushes the save *further away* at the
+exact moment the pixels are thrown out.
+
+Windows session shutdown (`WM_QUERYENDSESSION`) is not hooked, so a
+change inside the debounce window at that moment could be lost; the
+tray's Exit is the only quit path that flushes.
+
+### GPU textures are per canvas
+
+`SyncTexturesToCurrentCanvas` uploads a texture for every layer on the
+current canvas that has a file or pixels but no texture, and releases
+every other canvas's. Only the current canvas is ever drawn from a real
+texture, so everything else is pure cost - a library of fifty 4K
+captures would otherwise pin ~1.6 GB of VRAM behind a game and pay for
+it as a stall on the first hotkey. The gated form runs immediately
+before anything draws item content, not merely once a frame: a canvas
+switch can happen mid-frame (Alt+wheel is handled from the frame), and
+one frame drawn between the switch and the load renders every shot as
+the placeholder gradient - the gradient flash the gate removed.
+
+### Undo is per canvas
+
+History is a `deque` per canvas, capped at 50 entries *and* 128 MB of
+what they hold (a Clear drawing holds a whole fullscreen layer, 8 MB;
+fifty of them was 400 MB on one stack). A canvas is this app's document,
+and undo scoped to a document is what every editor does. One global
+stack reached across canvases and failed invisibly: draw on A, switch to
+B, draw, come back to A, press Ctrl+Z, and the stroke that vanished was
+B's, on a canvas you were not looking at.
+
+Six kinds of entry, and every one is either its own inverse or a mirror
+with the direction as the only difference, so undo and redo are one walk
+in opposite directions through one dispatch. A `StrokeBaked` entry
+carries the stroke so redo can push it back; an `Erased` entry carries
+the whole originals a gesture touched and the fragments that replaced
+them, built by a snapshot/diff at the gesture's ends rather than by
+accumulating per-call results, since a stroke clipped once mid-gesture
+can be clipped again by a later call in the same drag; the painted half
+of the same gesture rides in the same entry, so one drag is one undo
+whichever kinds of ink it touched. `ItemDeleted` and `ItemCreated` carry
+an id and toggle the mark. `NoteTextChanged` and the painted entries swap
+their contents with the item's, so the popped entry is already what the
+opposite stack needs. Undo is best-effort about staleness: an entry
+naming something gone does nothing and is dropped rather than moved to
+the other stack.
+
+Deliberately narrow: moves, resizes, reorders and renames are not
+tracked, and deleting a canvas or folder gets a confirmation and Recently
+deleted instead of an undo entry.
+
+### Making a snippet is on the history, and an untouched one goes
+
+Snippets are made through `Session::CreateItem`, so a screenshot taken
+by mistake can be undone into Recently deleted and redone out of it. A
+drawing a press made is watched until the hand moves on, and
+`DiscardIfUntouched` erases it for good if nothing was put into it: no
+strokes, no paint, no text, no picture. A screenshot is content even when
+its capture failed.
+
+### Freezing the screen
+
+`FreezeScreen` captures the whole display through the same call a
+snippet's capture uses, which hides the overlay for the duration, so the
+picture is the application underneath and none of our content. While a
+screen is frozen a region capture is cropped out of it rather than taken
+live; without that the user drags a region over a still picture and gets
+back whatever the game showed a moment later, which for a moving camera
+is a different scene. The pixels are kept alongside the texture for
+exactly this. Released on hide: it is a fullscreen texture with no reason
+to exist while nothing is shown.

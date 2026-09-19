@@ -12,6 +12,8 @@ add_executable(sz_core_tests
     core/library_store_test.cpp
     core/painted_image_test.cpp
     core/profile_test.cpp
+    core/session_test.cpp
+    core/settings_test.cpp
     core/shortcut_action_test.cpp
     core/slug_test.cpp
     core/stroke_clip_test.cpp

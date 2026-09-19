@@ -1,0 +1,375 @@
+#include "core/session/session.h"
+
+#include <algorithm>
+#include <filesystem>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+#include "core/persistence/library_store.h"
+#include "fakes/fake_platform_host.h"
+
+namespace sz::core {
+namespace {
+
+// The session with nothing attached - no window, no stores - is still a
+// whole model of what the app is working on: that is what lets a UI, or a
+// test, drive it without either.
+
+const Item* ItemById(const CanvasManager& manager, ItemId id) {
+    for (const Canvas& canvas : manager.Canvases()) {
+        for (const Item& item : canvas.items) {
+            if (item.id == id) {
+                return &item;
+            }
+        }
+    }
+    return nullptr;
+}
+
+// Draws a two-point stroke across `item` on the live layer and commits it,
+// the way the pen does.
+void DrawStrokeInto(Session& session, ItemId item) {
+    Canvas* canvas = session.Manager().CurrentOrNull();
+    ASSERT_NE(canvas, nullptr);
+    canvas->liveLayer.BeginStroke(StrokePoint{10.0f, 10.0f}, 0xFF0000FFu, 3.0f);
+    canvas->liveLayer.ExtendStroke(StrokePoint{60.0f, 60.0f});
+    canvas->liveLayer.EndStroke();
+    session.CommitLiveStroke(item);
+}
+
+TEST(SessionTest, StartsWithNothingDeleted) {
+    Session session;
+    EXPECT_TRUE(session.Manager().DeletedThings().empty());
+    EXPECT_TRUE(session.Manager().HasCurrentCanvas());
+    EXPECT_FALSE(session.CanUndo());
+}
+
+TEST(SessionTest, ADeletedCanvasStaysWhereItIsAndComesBack) {
+    Session session;
+    const CanvasId canvas = session.Manager().CurrentCanvasId();
+    const FolderId folder = session.Manager().CurrentFolderId();
+
+    ASSERT_TRUE(session.Delete(canvas));
+    const Canvas* deleted = session.Manager().FindCanvas(canvas);
+    ASSERT_NE(deleted, nullptr) << "marked, not moved anywhere";
+    EXPECT_NE(deleted->deletedAt, 0);
+    EXPECT_EQ(deleted->folderId, folder);
+    EXPECT_FALSE(session.Manager().HasCurrentCanvas()) << "the only canvas in its folder, and hidden now";
+    EXPECT_EQ(session.Manager().CurrentFolderId(), folder) << "still browsing where it was";
+
+    ASSERT_TRUE(session.Restore(canvas));
+    EXPECT_EQ(session.Manager().FindCanvas(canvas)->deletedAt, 0);
+}
+
+TEST(SessionTest, DeletingOrRestoringWhatIsNotThereDoesNothing) {
+    Session session;
+    EXPECT_FALSE(session.Delete(424242));
+    EXPECT_FALSE(session.Restore(424242));
+    EXPECT_FALSE(session.DeletePermanently(424242));
+    EXPECT_FALSE(session.Restore(session.Manager().CurrentCanvasId())) << "nothing deleted to restore";
+}
+
+TEST(SessionTest, AStrokeIsUndoneAndRedone) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawStrokeInto(session, item);
+    ASSERT_EQ(ItemById(session.Manager(), item)->strokes.size(), 1u);
+    ASSERT_TRUE(session.CanUndo());
+
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(undone->undone);
+    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+    EXPECT_FALSE(session.CanUndo());
+    ASSERT_TRUE(session.CanRedo());
+
+    const std::optional<Session::UndoStep> redone = session.Redo();
+    ASSERT_TRUE(redone.has_value());
+    EXPECT_FALSE(redone->undone);
+    EXPECT_EQ(ItemById(session.Manager(), item)->strokes.size(), 1u);
+}
+
+TEST(SessionTest, ADeletedSnippetIsRestoredOnUndo) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    ASSERT_TRUE(session.DeleteItem(item));
+    ASSERT_NE(ItemById(session.Manager(), item), nullptr) << "marked where it is";
+    EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+    EXPECT_FALSE(session.DeleteItem(item)) << "a delete of something deleted is for good, and not this call";
+
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Delete);
+    EXPECT_FALSE(session.Manager().IsItemDeleted(item));
+
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+}
+
+TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Note");
+    session.BeginTextEdit(item);
+    session.EndTextEdit(std::string("first"));
+    EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "first");
+
+    // Undone with the note open: nothing happens, and - as for any entry
+    // that no longer applies - it is dropped rather than kept for later.
+    session.BeginTextEdit(item);
+    EXPECT_FALSE(session.Undo().has_value()) << "the edit in progress would overwrite it anyway";
+    session.EndTextEdit(std::nullopt);  // abandoned: nothing filed
+    EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "first");
+    EXPECT_FALSE(session.CanUndo());
+
+    // Undone with the note closed, it goes back.
+    session.BeginTextEdit(item);
+    session.EndTextEdit(std::string("second"));
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::TextEdit);
+    EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "first");
+}
+
+TEST(SessionTest, ClearingADrawingIsOneStep) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawStrokeInto(session, item);
+    DrawStrokeInto(session, item);
+    ASSERT_TRUE(session.ClearDrawing(item));
+    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+    EXPECT_FALSE(session.ClearDrawing(item)) << "nothing left to clear";
+
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Erase);
+    EXPECT_EQ(ItemById(session.Manager(), item)->strokes.size(), 2u);
+}
+
+// Nothing leaves the library when a canvas is deleted, so nothing of its
+// history does either: restored, it can be undone into as before.
+TEST(SessionTest, ACanvasDeletedAndRestoredKeepsItsHistory) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawStrokeInto(session, item);
+    ASSERT_TRUE(session.CanUndo());
+
+    const CanvasId second = session.Manager().AddCanvas("Second");
+    session.Manager().SwitchToCanvas(second);
+    ASSERT_TRUE(session.Delete(first));
+    ASSERT_TRUE(session.Restore(first));
+    session.Manager().SwitchToCanvas(first);
+    ASSERT_EQ(session.Manager().CurrentCanvasId(), first);
+    EXPECT_TRUE(session.CanUndo());
+}
+
+TEST(SessionTest, AnItemMovedAwayTakesNoHistoryWithIt) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawStrokeInto(session, item);
+    session.ForgetHistoryOfItem(first, item);
+    EXPECT_FALSE(session.CanUndo());
+}
+
+TEST(SessionTest, RestoringASnippetRestoresWhatHoldsIt) {
+    Session session;
+    const FolderId folder = session.Manager().CurrentFolderId();
+    const CanvasId canvas = session.Manager().CurrentCanvasId();
+    const ItemId kept = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
+    const ItemId back = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Back");
+    ASSERT_TRUE(session.Delete(kept));
+    ASSERT_TRUE(session.Delete(folder));
+    EXPECT_TRUE(session.Manager().IsItemDeleted(back)) << "inside a deleted folder";
+
+    ASSERT_TRUE(session.Restore(back));
+    EXPECT_FALSE(session.Manager().IsItemDeleted(back));
+    EXPECT_EQ(session.Manager().FindCanvas(canvas)->deletedAt, 0);
+    EXPECT_EQ(session.Manager().FindFolder(folder)->deletedAt, 0) << "the folder came back with it";
+    EXPECT_TRUE(session.Manager().IsItemDeleted(kept)) << "deleted on its own before, and still";
+}
+
+TEST(SessionTest, CapturingWithoutAWindowLeavesAPlaceholder) {
+    Session session;
+    const ItemId id = session.Manager().CreateItem(/*hasBackground=*/true, Rect{0, 0, 100, 100}, "Shot");
+    Item* item = session.Manager().FindItemAnywhere(id);
+    ASSERT_NE(item, nullptr);
+    session.CaptureShotItem(*item);
+    ASSERT_NE(item->ImageLayer(), nullptr);
+    EXPECT_EQ(item->ImageLayer()->textureHandle, 0u);
+    EXPECT_TRUE(item->ImageLayer()->imageFile.empty());
+    EXPECT_EQ(session.FrozenScreenTexture(), 0u);
+}
+
+// Drags a shape from (10, 10) to (x, y), the way the mouse does.
+void DragShape(Session& session, ItemId item, Session::Shape shape, float x, float y) {
+    session.BeginShape(item, shape, 10.0f, 10.0f, 0xFF0000FFu, 3.0f, /*paintPixels=*/false);
+    session.UpdateShape((10.0f + x) * 0.5f, (10.0f + y) * 0.5f);
+    session.UpdateShape(x, y);
+    session.EndShape(x, y);
+}
+
+TEST(SessionTest, AShapeIsBakedAsOneStrokeAndUndoneInOneStep) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DragShape(session, item, Session::Shape::Rectangle, 80.0f, 60.0f);
+
+    const Item* baked = ItemById(session.Manager(), item);
+    ASSERT_EQ(baked->strokes.size(), 1u);
+    EXPECT_EQ(baked->strokes[0].points.size(), 5u) << "an outline closed back on its corner";
+    const CanvasState& live = session.Manager().CurrentOrNull()->liveLayer;
+    EXPECT_TRUE(live.Strokes().empty());
+    EXPECT_FALSE(live.ActiveStroke().has_value());
+    EXPECT_FALSE(session.IsDrawingShape());
+
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+}
+
+TEST(SessionTest, AShapeCanChangeWhileItIsDragged) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    session.BeginShape(item, Session::Shape::Rectangle, 10.0f, 10.0f, 0xFF0000FFu, 3.0f, false);
+    session.UpdateShape(80.0f, 60.0f);
+    session.SetShape(Session::Shape::Line);
+    const CanvasState& live = session.Manager().CurrentOrNull()->liveLayer;
+    ASSERT_TRUE(live.ActiveStroke().has_value());
+    EXPECT_EQ(live.ActiveStroke()->points.size(), 2u) << "the preview follows at once";
+
+    session.EndShape(80.0f, 60.0f);
+    const Item* baked = ItemById(session.Manager(), item);
+    ASSERT_EQ(baked->strokes.size(), 1u);
+    EXPECT_EQ(baked->strokes[0].points.size(), 2u);
+}
+
+TEST(SessionTest, AShapeTooShortToBeMeantLeavesNothing) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DragShape(session, item, Session::Shape::Line, 15.0f, 15.0f);
+    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+    EXPECT_FALSE(session.Manager().CurrentOrNull()->liveLayer.ActiveStroke().has_value());
+    EXPECT_FALSE(session.CanUndo());
+}
+
+TEST(SessionTest, MakingASnippetIsUndoneIntoDeletedAndRedoneOutOfIt) {
+    Session session;
+    const ItemId item = session.CreateItem(/*hasBackground=*/true, Rect{0, 0, 100, 100}, "Shot");
+    ASSERT_NE(ItemById(session.Manager(), item), nullptr);
+    ASSERT_TRUE(session.CanUndo());
+
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Create);
+    ASSERT_NE(ItemById(session.Manager(), item), nullptr) << "where a capture taken by mistake can still be found";
+    EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_FALSE(session.Manager().IsItemDeleted(item));
+}
+
+TEST(SessionTest, AnUntouchedSnippetIsDiscardedWithoutATrace) {
+    Session session;
+    const ItemId kept = session.CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
+    DrawStrokeInto(session, kept);
+    const ItemId empty = session.CreateItem(false, Rect{200, 0, 100, 100}, "Empty");
+
+    EXPECT_TRUE(session.DiscardIfUntouched(empty));
+    EXPECT_EQ(ItemById(session.Manager(), empty), nullptr) << "erased, not marked deleted";
+    // Its own making is off the history; the rest of the canvas's is not.
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
+}
+
+TEST(SessionTest, ASnippetWithAnythingInItIsNotDiscarded) {
+    Session session;
+    const ItemId drawn = session.CreateItem(false, Rect{0, 0, 100, 100}, "Drawn");
+    DrawStrokeInto(session, drawn);
+    const ItemId noted = session.CreateItem(false, Rect{200, 0, 100, 100}, "Noted");
+    session.BeginTextEdit(noted);
+    session.EndTextEdit(std::string("text"));
+    const ItemId shot = session.CreateItem(true, Rect{400, 0, 100, 100}, "Shot");
+
+    EXPECT_FALSE(session.DiscardIfUntouched(drawn));
+    EXPECT_FALSE(session.DiscardIfUntouched(noted));
+    EXPECT_FALSE(session.DiscardIfUntouched(shot)) << "a capture is content, even one that failed";
+    EXPECT_FALSE(session.DiscardIfUntouched(424242));
+    EXPECT_NE(ItemById(session.Manager(), drawn), nullptr);
+    EXPECT_NE(ItemById(session.Manager(), noted), nullptr);
+    EXPECT_NE(ItemById(session.Manager(), shot), nullptr);
+}
+
+// Deleting a snippet for good takes its own entries with it, and nothing
+// else of its canvas's history.
+TEST(SessionTest, DeletingASnippetPermanentlyLeavesItsCanvasHistoryAlone) {
+    Session session;
+    const ItemId kept = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
+    DrawStrokeInto(session, kept);
+    const ItemId gone = session.Manager().CreateItem(false, Rect{200, 0, 100, 100}, "Gone");
+    ASSERT_TRUE(session.Delete(gone));
+    ASSERT_TRUE(session.DeletePermanently(gone));
+    EXPECT_EQ(ItemById(session.Manager(), gone), nullptr);
+    EXPECT_TRUE(session.CanUndo());
+}
+
+// With the screen frozen, a shot is cut out of the frozen picture rather
+// than captured again - the live screen has moved on, and the user framed
+// what they were looking at. The cut is a plain sub-rectangle, saved to
+// the library like any other capture's pixels.
+TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_frozen_cut";
+    std::filesystem::remove_all(dir);
+    persistence::LibraryStore store(dir);
+    test::FakeOverlayWindow window;
+    window.captureReturnsHandle = 7;
+    window.createTextureFromPixelsReturnsHandle = 8;
+    // A 4x3 screen with every pixel its own value, so the cut can be told
+    // from the whole and from any other cut.
+    window.captureReturnsWidth = 4;
+    window.captureReturnsHeight = 3;
+    for (uint8_t i = 0; i < 12; ++i) {
+        window.captureReturnsPixelsRGBA.insert(window.captureReturnsPixelsRGBA.end(), {i, i, i, 255});
+    }
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+    session.FreezeScreen(platform::DisplayInfo{"d", "D", 0, 0, 4, 3, true, 60, 100});
+    ASSERT_EQ(window.captureCallCount, 1);
+    ASSERT_EQ(session.FrozenScreenTexture(), 7u);
+
+    // The middle two columns of the bottom two rows.
+    const ItemId id = session.Manager().CreateItem(true, Rect{1.0f, 1.0f, 2.0f, 2.0f}, "Shot");
+    Item* shot = session.Manager().FindItemAnywhere(id);
+    ASSERT_NE(shot, nullptr);
+    session.CaptureShotItem(*shot);
+
+    EXPECT_EQ(window.captureCallCount, 1) << "cut from the frozen screen, not captured again";
+    ASSERT_NE(shot->ImageLayer(), nullptr);
+    EXPECT_EQ(shot->ImageLayer()->textureHandle, 8u) << "the cut's own upload";
+    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty());
+    const std::optional<persistence::DecodedImage> saved = store.LoadImage(id, shot->ImageLayer()->imageFile);
+    ASSERT_TRUE(saved.has_value());
+    EXPECT_EQ(saved->width, 2);
+    EXPECT_EQ(saved->height, 2);
+    const std::vector<uint8_t> expected{5, 5, 5, 255, 6, 6, 6, 255, 9, 9, 9, 255, 10, 10, 10, 255};
+    EXPECT_EQ(saved->pixelsRGBA, expected);
+
+    // Without the upload the cut is dropped and the screen is captured
+    // live, as it is with nothing frozen at all.
+    window.createTextureFromPixelsReturnsHandle = 0;
+    const ItemId again = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Again");
+    session.CaptureShotItem(*session.Manager().FindItemAnywhere(again));
+    EXPECT_EQ(window.captureCallCount, 2);
+    EXPECT_FLOAT_EQ(window.lastCaptureRect.w, 1.0f);
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+
+}  // namespace
+}  // namespace sz::core
