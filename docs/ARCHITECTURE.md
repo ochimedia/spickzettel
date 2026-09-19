@@ -851,3 +851,293 @@ all take an id of their own. Two traps: `##` hides the id but hashes the
 whole string, only `###` restarts the hash; and a widget that pushes its
 own label as an id scope (`ColorEdit3/4`) needs an id-only label with the
 caption written beside it by hand.
+
+## The overlay UI
+
+`ui::OverlayApp` is the overlay as it is drawn, with Dear ImGui: a view
+of the session. Its definition is split across `overlay_app_*.cpp` by
+section of the UI (items, input, paint, popovers, docks, overview,
+deleted, undo) with `overlay_app.cpp` holding the per-frame entry points
+and construction; it is still one class. Helpers used by more than one
+file live in `overlay_app_internal.h` under `overlay_detail`; anything
+used by one file stays a file-local helper.
+
+Panels - popovers, the canvas bar, the dock, the note editor, the
+Overview - are ordinary ImGui windows and widgets. Items and the
+selection's furniture are painted into full-screen `NoInputs` layers and
+hit-tested by the app itself. Keyboard input reaches the UI through
+ImGui's own input state, which the platform backends feed; a UI not
+built on ImGui would need a key callback on `IOverlayWindow` in its
+place.
+
+### Making a snippet
+
+Making a snippet is the thing done most often, so it is a press on empty
+canvas rather than a tool: the left button makes a screenshot, the right
+a drawing; dragged past a threshold it is the dragged rectangle, and a
+double-click - or a press held still for half a second, since a finger
+or a pen cannot double-click reliably - makes it fullscreen. A plain
+click makes nothing, with either button: a fullscreen snippet is too much
+to make by accident. "Empty canvas" means nothing under the pointer and
+nothing open that a click outside of is meant to close, or every
+dismissal would leave a drawing behind.
+
+Two things make it cheap to hit by accident. A drawing a press made is
+watched until the hand moves on, and discarded for good if nothing was
+put into it. And making one is on the history: undo marks the snippet
+deleted, where a screenshot taken by mistake can still be found.
+
+### Tools, and what a modifier does
+
+Six tools, exactly one in hand at a time, so the one lit on the bar is
+always what a press will do. Select is the hand at rest. Draw, Erase and
+Text are in hand only while a snippet is in *drawing mode* and act on
+that snippet alone; for them a shape is a modifier held as the press
+starts (Shift for a line, Ctrl for a rectangle, Ctrl with the eraser for
+a rectangle eraser), read once on the press so letting go mid-drag
+changes nothing. Drawing and Screenshot place a new snippet with the
+next press, anywhere, then hand over: a drawing to Draw, a screenshot to
+the tool that was in hand before.
+
+There were seven tools once - Pen, Rectangle, Line, Eraser, RectEraser,
+Text and Move - with three favourite slots of them on a right-click ring
+menu, so the tool wanted was usually not on a slot and the slots were
+rebound all the time. The ring and the flat tool strip that mirrored it
+went: with the selection bar carrying every action on a snippet and the
+canvas bar reaching the Overview, they added a gesture to learn and
+nothing to reach.
+
+### Drawing is a mode, entered on one snippet
+
+At rest a snippet is an object that a click selects and a drag moves.
+Double-clicking it, or holding a press still on it, enters drawing mode:
+a stronger outline, the bar shows Pen, Eraser, Text and the colour, the
+pen is in hand, a press on it draws, a right-drag on it erases whatever
+tool is in hand, and a click anywhere else, a right click on the snippet
+or Escape leaves. The Pen and Eraser buttons pressed again cycle their
+tool through its shapes, so a hand with no keyboard can draw a line with
+a plain drag. Holding Alt picks the snippet up instead of drawing on it.
+
+The mode exists so a plain press on a snippet can mean one thing: with
+drawing the default, every click on a snippet made a mark, and with a
+Select tool the hand had to be switched to move anything and switched
+back to draw.
+
+### Nothing over the canvas is hit-tested by ImGui
+
+This is the one rule the selection rests on. An item's chrome was once an
+ImGui window full of `InvisibleButton`s (before that, one window per
+handle), and every bug in the family - "the pointer flickers", "I can
+grab the handles of the window behind", "my stroke didn't start" - was
+the same bug: two hit-testers on two clocks. ImGui resolves the hovered
+window inside `NewFrame` against each window's rect as it stood at the
+end of the *previous* frame, with no idea that item B's body should
+occlude item A's chrome. At the pixels where one item's chrome lay under
+a fronter item's body the two disagreed for one frame, and everything
+that consumed ImGui's answer inherited it. Each was fixed with another
+correction until the chrome was a model fighting its framework.
+
+So there is one resolver, `ResolvePointerTarget`: a walk over the current
+canvas, pure in position and model, returning the frontmost thing that
+would take a press there (a bar button, a handle, an item's body, or
+nothing) and the frontmost item whose content holds the point. Furniture
+first, in the order it is painted, then items front to back. Drawing and
+resolving share one definition of the geometry, so what is drawn and
+what is hit cannot differ. Panels that are always above every item stay
+ImGui's.
+
+### One gesture engine on the raw pipeline
+
+Every way a snippet is selected, moved or resized is one gesture on the
+left button, in `HandleItemGesture`, fed by the platform mouse callback
+rather than by frame-time polling. Starting a gesture is gated on
+`!io.WantCaptureMouse`, so a click on a panel is the panel's; a gesture
+in flight is consumed regardless, so straying over a panel mid-drag
+cannot hand the event to it. The engine is a start snapshot plus the
+*full* delta from there, recomputed on every move - not an incremental
+delta, which drifts under event coalescing, and not ImGui's drag delta,
+which loses the grab offset against a screen edge.
+
+A press is a click until the pointer has travelled 4px. A resize started
+on one of several selected snippets scales all of them about the fixed
+corner; the smallest is the floor for the group. Shift-drag on open
+canvas draws a box that adds every snippet it touches to the selection.
+One button at a time: the first to press owns the pointer until it lets
+go. Windows' press-and-hold on a touch screen injects a right press into
+a held finger's left press, and the app does not depend on the OS being
+asked not to.
+
+The selection bar floats over the selection's bounding box, or below it
+when there is no room, or inside its top edge for a fullscreen snippet.
+Its buttons fire on release over the same button, ImGui's own rule. The
+Properties popover opens through a request flag rather than
+`ImGui::OpenPopup` from the release: the raw callback runs during the
+message pump, before that frame's `NewFrame`, where `OpenPopup` has no
+current window and dereferences an empty id stack.
+
+Which buttons either bar carries is a setting, and anything the file gets
+wrong is made sense of rather than obeyed: a name from the other bar is
+dropped, a duplicate kept once, and a button the file never mentioned is
+appended shown, since a new button arriving invisible is a feature that
+silently isn't there.
+
+### Item text
+
+A caption is a plain string on any item, not a separate note kind - a
+dedicated text-only kind could not combine with a drawing or a
+screenshot, and once text stopped being exclusive the flag that gated it
+had nothing left to do. Colour and size are per item, since a caption
+over a dark screenshot and one over a pale drawing want different
+answers. Size is in screen pixels at the item's current size, not scaled
+with the item like strokes: a caption that shrinks to illegibility is
+worse than one that wraps sooner. Text is never erased by either eraser.
+
+Editing is a second, genuinely interactive window over the content rect,
+not a flag on the items layer, which is unconditionally `NoInputs`.
+Escape ends editing without discarding what was typed: ImGui reverts its
+own buffer on Escape in the same call that reports deactivation, so the
+commit reads a snapshot taken before the widget ran. "Stop editing" and
+"undo my typing" are different actions, and the second is Ctrl+Z.
+
+### The canvas bar and the wheel
+
+The canvas bar along the bottom edge shows the canvases of the folder
+being worked in, with the current one outlined and buttons for a new
+canvas and the Overview. It hides below the edge and slides out when the
+pointer reaches it, for a moment when the canvas changes, and for a
+moment when the overlay comes up; it stays in while a gesture is in
+flight, so a stroke run into the bottom of the screen cannot pull a bar
+out from under the pointer.
+
+The wheel sets the size of Draw or Erase; with Alt it steps through the
+canvases of the folder the *current canvas* lives in (not the browsed
+folder), without wrapping, and ends any gesture in flight first by
+feeding the release the handler is waiting for. Both honour how far the
+wheel actually turned, keeping a remainder across frames, so a fast spin
+is not truncated to one step and a precision touchpad's fractions are
+not rounded to nothing. A transient size preview at the cursor is the
+feedback; a permanent brush cursor is what made an earlier design feel
+busy over a game.
+
+### The Overview
+
+A translucent backdrop and a centred panel, drawn last so ordinary
+insertion order puts them above everything. Tabs: Canvases (a folder
+sidebar and a tile grid with live thumbnails, drag to reorder, drag a
+tile onto a folder to move it), Settings, About. What either pane asks
+for is collected and applied after both have been drawn, since the
+handlers read a `const&` into the live canvas vector that a mutation
+would reallocate. "New canvas" and "New folder" switch to what they made
+and leave the panel up; closing it the instant a button is pressed was
+disorienting, and stopping at "it exists" left half the job to a click
+on a tile that had just appeared. The move/copy picker deliberately does
+not follow the item to its destination.
+
+Thumbnails draw strokes by default (nearly free at tile size) and
+bitmaps only when asked, because a bitmap means decoding a file for a
+canvas whose pixels are deliberately not in memory. A 256px sidecar
+thumbnail beside every picture makes the ordinary case a sub-millisecond
+decode; the full decode is a budgeted fallback that writes the sidecar
+on its way out, so an old library acquires them one visit at a time. A
+layer waiting its turn draws nothing rather than the placeholder
+gradient, which would read as thumbnails being wrong and then correcting
+themselves.
+
+Settings is a list of sections down the left, not one long scroll.
+Appearance, Drawing and Debug are about *you* and always global; Input
+and Hotkeys are about *whatever is underneath* and are what a profile may
+override, which makes the section boundary the rule. Hotkeys holds the
+three global summon keys above its profile picker and the rebindable tool
+keys below it, since a control that governs what is below it must have
+nothing above it that it does not govern. Most rows bind ImGui widgets
+straight to the settings' fields and commit on a finished edit; colour
+swatches commit on deactivation rather than on every frame of a drag,
+which wrote the file sixty times a second.
+
+Hotkeys are the one setting that cannot just be written: an OS
+registration can fail, so the editor asks the controller and commits only
+if it accepts. A combo one of the app's own other hotkeys has is taken
+from it rather than refused. While a row waits for a key, a press of one
+of the app's own combos never reaches the capture loop as a key - Windows
+hands it to its hotkey - so the hotkey handlers ask first, and while a
+row is armed the hotkey firing *is* the press.
+
+### Recently deleted
+
+A switch on the Canvases row swaps the folders and the grid for a list of
+everything with a stamp of its own, newest first, with a preview, what it
+held and when it went, and Restore and Delete permanently. Nothing in
+the list is opened or browsed: restoring is how a thing is seen again,
+which keeps a deleted folder one row rather than a tree to look into. A
+first version showed deleted things in place, outlined in red, in a mode
+that let them be looked at but not changed - which needed a read-only
+check at every edit and a banner for a deleted canvas, for a question
+("what did I delete half an hour ago?") that is about time, not place.
+
+### Cursors and the demo mark
+
+Every cursor is ImGui's except the crosshair and the pen, which ImGui's
+set does not have and every OS does, so those go through
+`IOverlayWindow::SetCursorShape`. `WantedPointerShape` is the one place
+that says what the pointer means; both the OS cursor and the drawn
+software pointer read it, so they cannot disagree. It is re-asserted
+every frame because the backend's own cursor push lands one frame late.
+
+The demo watermark is drawn wherever the overlay is visible, above every
+snippet and below only the Overview: a mark a snippet can be parked on
+top of is not one. It wanders every ten seconds across a 3x3 grid, never
+landing where it was, so it cannot be hidden permanently under a snippet
+that is never moved again. It needs no special handling for capture:
+the platform hides the whole overlay before grabbing pixels.
+
+### ImGui gotchas worth knowing before touching this code
+
+- `##` hides an id from the display; only `###` detaches it from the
+  label. The id of `"Play##1"` is a hash of the whole string.
+- Two visible widgets with one id is an ImGui error, detected only while
+  they are hovered, so it never shows in a screenshot of an idle panel.
+- `CalcTextSize` measures the line box, not the ink; centring a glyph on
+  it sits the glyph low. `FindGlyph` gives the ink's own corners.
+- `DC.CurrLineSize.y` is the row height something joining a row after
+  `SameLine` should centre on; `GetFrameHeight()` is only right if a
+  framed widget started the row.
+- `IsMouseHoveringRect(..., clip=true)` intersects with the *current*
+  window's clip rect, which between windows is whatever the stack left.
+- An ordinary window sets `WantCaptureMouse` just from being hovered,
+  and a press ImGui owns keeps it true for the whole drag. Every layer
+  the app paints into is `NoInputs`; ImGui's hit-test does not stop at
+  an excluded window but at the next ordinary one behind it.
+- `NoBringToFrontOnFocus` also changes where a *new* window is first
+  inserted (the back). The app re-asserts its layers to the front every
+  frame, in the order it draws them.
+- Chrome that has to sit at a stated height gets a screen layer of its
+  own; the background and foreground draw lists are fixed at the very
+  bottom and the very top, and a border drawn at the bottom was invisible
+  under a fullscreen snippet, exactly where the cue mattered most.
+- A live stroke has to be drawn inside the item's own draw block, after
+  its fill; a layer below is painted over by the fill.
+- An `AlwaysAutoResize` window's real width is not knowable from its
+  content's logical bounds; ask `FindWindowByName`.
+- Overlapping widgets resolve first-submitted-wins: `ItemHoverable` sets
+  the hovered id once per frame and every later widget over the same
+  point returns false.
+- `AddRect`'s order is `(min, max, col, rounding, thickness, flags)`; a
+  flag in the thickness slot compiles and draws garbage.
+- `WindowRounding` feeds a window's *minimum height*; a pill value of
+  999 is safe only for frame and grab rounding.
+- A popup's id is scoped to the window current at `OpenPopup`/
+  `BeginPopup`; both must run inside the same `Begin`/`End` block or the
+  popup silently never opens.
+- `BringWindowToDisplayFront` wins by running *last*; a window that
+  re-asserts itself must do so before any popover it opens renders, and
+  a widget's own internal popup (`ColorEdit3`'s picker) has no `Begin` to
+  hook, so `KeepChildPopupsInFront` walks the open-popup stack for it.
+- A popup's default placement is anchored to the mouse and can overlap
+  its opener, stealing clicks; pin it with `SetNextWindowPos`.
+- `TextWrapped` wraps to a width that is not settled on a new auto-resize
+  popup's first frame; use an explicit wrap position.
+- A hand-rolled wrapping grid needs a trailing `Dummy` after the loop or
+  ImGui asserts about extending the parent's bounds.
+- `InvisibleButton`'s return value, not `IsItemClicked()`, means
+  "clicked": the latter fires on press, and breaks click-to-select next
+  to a drag source.

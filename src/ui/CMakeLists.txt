@@ -6,6 +6,15 @@
 # The only library above the platform interface that links Dear ImGui.
 add_library(sz_ui STATIC
     icon_draw.cpp
+    overlay_app.cpp
+    overlay_app_deleted.cpp
+    overlay_app_docks.cpp
+    overlay_app_input.cpp
+    overlay_app_items.cpp
+    overlay_app_overview.cpp
+    overlay_app_paint.cpp
+    overlay_app_popovers.cpp
+    overlay_app_undo.cpp
 )
 
 target_include_directories(sz_ui PUBLIC ${CMAKE_SOURCE_DIR}/src)

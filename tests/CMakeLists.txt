@@ -23,6 +23,7 @@ add_executable(sz_core_tests
     core/uid_test.cpp
     platform/pen_glyph_test.cpp
     ui/icon_draw_test.cpp
+    ui/shortcut_targets_test.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(sz_core_tests PRIVATE sz_ui GTest::gtest_main)

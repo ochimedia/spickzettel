@@ -1,0 +1,486 @@
+// The popovers and overlays that sit over the canvas: the properties
+// popover a snippet's More button opens, the colour chooser the drawing
+// bar's colour button opens, and the two drag previews - the frame a
+// region capture is dragging out, and the rectangle the rectangle eraser
+// is about to take away. All of them are ordinary ImGui windows, submitted
+// from OnFrame after the items so they sit above every snippet.
+#include "ui/overlay_app.h"
+#include "ui/overlay_app_internal.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "ui/icons_generated.h"
+
+#include <imgui.h>
+#include <imgui_internal.h>
+
+namespace sz::ui {
+
+using namespace overlay_detail;
+
+namespace {
+// A round color swatch button - the .swatch equivalent (a plain colored
+// circle, ringed in white while selected, in the panel border color while
+// merely hovered). Returns true the frame it's clicked.
+bool ColorSwatchButton(ImU32 fillColor, bool selected) {
+    constexpr float kDiameter = 22.0f;
+    ImGui::InvisibleButton("##swatch", ImVec2(kDiameter + 6.0f, kDiameter + 6.0f));
+    const bool pressed = ImGui::IsItemClicked();
+    const ImVec2 pMin = ImGui::GetItemRectMin();
+    const ImVec2 pMax = ImGui::GetItemRectMax();
+    const ImVec2 center((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    dl->AddCircleFilled(center, kDiameter * 0.5f, fillColor);
+    // Same reasoning as PillColorButton's rim: black, and any dark custom
+    // color, needs an edge of its own to read as a swatch on a dark panel.
+    dl->AddCircle(center, kDiameter * 0.5f, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0, 1.0f);
+    if (selected) {
+        dl->AddCircle(center, kDiameter * 0.5f + 2.0f, ImGui::ColorConvertFloat4ToU32(theme::kWhite), 0, 1.5f);
+    } else if (ImGui::IsItemHovered()) {
+        dl->AddCircle(center, kDiameter * 0.5f + 2.0f, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0,
+                       1.5f);
+    }
+    return pressed;
+}
+
+// The preset pen colours as a row of round swatches, the one whose rgb is
+// `currentRGBA`'s ringed. `continuesRow` puts the first swatch on the
+// same line as whatever came before it. Returns the picked preset's
+// colour, opaque, or nullopt.
+std::optional<uint32_t> PresetSwatchRow(uint32_t currentRGBA, bool skipNearWhite, bool continuesRow) {
+    std::optional<uint32_t> picked;
+    bool first = true;
+    for (size_t i = 0; i < std::size(kPresetPenColors); ++i) {
+        const PresetColor& c = kPresetPenColors[i];
+        if (skipNearWhite && IsNearWhitePreset(c)) {
+            continue;
+        }
+        if (!first || continuesRow) {
+            ImGui::SameLine(0.0f, 2.0f);
+        }
+        first = false;
+        const bool selected = ((currentRGBA >> 24) & 0xFF) == c.r && ((currentRGBA >> 16) & 0xFF) == c.g &&
+                              ((currentRGBA >> 8) & 0xFF) == c.b;
+        ImGui::PushID(static_cast<int>(i));
+        if (ColorSwatchButton(IM_COL32(c.r, c.g, c.b, 255), selected)) {
+            picked = ColorFromPreset(c);
+        }
+        ImGui::PopID();
+    }
+    return picked;
+}
+}  // namespace
+
+// ================= Canvases =================
+
+CanvasId OverlayApp::CreateCanvasInCurrentFolder() {
+    const CanvasId id = Manager().AddCanvas(TimestampName());
+    // It lands at the end of the folder, which in a long folder is off the
+    // bottom of the Overview's grid - see overviewScrollToCanvasId_.
+    overviewScrollToCanvasId_ = id;
+    return id;
+}
+
+void OverlayApp::CreateAndSwitchToNewCanvas() {
+    Manager().SwitchToCanvas(CreateCanvasInCurrentFolder());
+}
+
+// ================= The properties popover =================
+
+void OverlayApp::RenderItemPropertiesPopover() {
+    // Consume the deferred-open request first - see
+    // itemPropertiesPopoverRequested_'s own doc comment.
+    if (itemPropertiesPopoverRequested_) {
+        itemPropertiesPopoverRequested_ = false;
+        ImGui::OpenPopup("##item_properties_popover");
+    }
+
+    // Anchored just below the "More" button that opened it (see
+    // itemPropertiesPopoverAnchor_'s own doc comment) rather than ImGui's
+    // default near-mouse placement. Pivot (1, 0): the anchor point is the
+    // popover's own top-right corner, not top-left - keeps it from
+    // running off the right edge of the screen when that button sits
+    // near it (which it usually does - every cluster is right-aligned to
+    // its own item, and an item can sit anywhere up to the screen edge).
+    ImGui::SetNextWindowPos(itemPropertiesPopoverAnchor_, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    if (!ImGui::BeginPopup("##item_properties_popover")) {
+        // Not open (never triggered this frame, or the user closed it -
+        // click-outside, Escape) - drop the sticky reference used by
+        // RenderItems' highlight resolution along with it. A
+        // harmless no-op on every ordinary frame where it was already
+        // unset.
+        itemPropertiesPopoverItemId_.reset();
+        return;
+    }
+    KeepPopoverInFront();
+    if (!itemPropertiesPopoverItemId_.has_value()) {
+        ImGui::EndPopup();
+        return;
+    }
+    Canvas* canvasPtr = Manager().CurrentOrNull();
+    if (!canvasPtr) {
+        // The canvas this popover's item lived on was deleted out from
+        // under it - same outcome as the item itself going away, below.
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
+    Canvas& canvas = *canvasPtr;
+    const auto it = std::find_if(canvas.items.begin(), canvas.items.end(),
+                                  [&](const Item& i) { return i.id == *itemPropertiesPopoverItemId_; });
+    // Gone, or deleted while the popover was open.
+    if (it == canvas.items.end() || Manager().IsDeleted(canvas, *it)) {
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
+    RenderItemOpacity(*it);
+    // Every item has a picture layer (see Item::ImageLayer) - the guard is
+    // for the hypothetical one that does not, which shows its foreground
+    // opacity and nothing else.
+    if (Layer* picture = it->ImageLayer()) {
+        RenderItemBackgroundColour(*picture);
+        RenderItemTextStyle(*it);
+        RenderItemActions(*it);
+        // After the background-colour ColorEdit3 swatch, not before - see
+        // KeepChildPopupsInFront.
+        KeepChildPopupsInFront();
+    }
+    ImGui::EndPopup();
+}
+
+void OverlayApp::RenderItemOpacity(Item& item) {
+    // Foreground (strokes) and background (captured image / color fill)
+    // opacity are independent - see Item::foregroundOpacity/
+    // Layer::opacity's own doc comments. Background can go all the way
+    // to 0 (invisible) unlike foreground, which bottoms out at 10% - a
+    // fully invisible drawing surface still has strokes to see, but there
+    // being nothing left to *tell* whether it's an item at all is only a
+    // real state for the background.
+    int foregroundPct = static_cast<int>(std::round(item.foregroundOpacity * 100.0f));
+    ImGui::SetNextItemWidth(160.0f);
+    // An id of its own, not shared with the background slider below: both
+    // are visible at once on any snippet with a picture in it, and ###
+    // hashes only the id, so one spelling for the two of them made them one
+    // widget as far as ImGui is concerned - which is an ID conflict it
+    // warns about, and a drag it can attribute to the wrong slider.
+    if (ImGui::SliderInt(Labeled(strings::kPopoverForeground, "opacityfg"), &foregroundPct, 10, 100, strings::kFormatPercent)) {
+        item.foregroundOpacity = static_cast<float>(foregroundPct) / 100.0f;
+        Manager().MarkChanged();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverForegroundTip);
+    }
+
+    Layer* picture = item.ImageLayer();
+    if (!picture) {
+        return;
+    }
+    int backgroundPct = static_cast<int>(std::round(picture->opacity * 100.0f));
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::SliderInt(Labeled(strings::kPopoverBackground, "opacitybg"), &backgroundPct, 0, 100, strings::kFormatPercent)) {
+        picture->opacity = static_cast<float>(backgroundPct) / 100.0f;
+        Manager().MarkChanged();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", picture->textureHandle != 0 ? strings::kPopoverBackgroundShotTip
+                                                            : strings::kPopoverBackgroundFillTip);
+    }
+}
+
+void OverlayApp::RenderItemBackgroundColour(Layer& picture) {
+    // White is a deliberate, meaningful default (see Layer::tintColorRGBA's
+    // own doc comment - it's a no-op multiply tint on a real capture), so
+    // it gets its own dedicated swatch rather than relying on
+    // kPresetPenColors' own near-white entry, which is close but not
+    // literal white and so wouldn't actually be a no-op.
+    ImGui::PushID("##bg_color_section");
+    ImGui::TextUnformatted(strings::kPopoverBackgroundColor);
+    constexpr uint32_t kWhiteBackground = 0xFFFFFFFFu;
+    if (ColorSwatchButton(IM_COL32(255, 255, 255, 255), picture.tintColorRGBA == kWhiteBackground)) {
+        picture.tintColorRGBA = kWhiteBackground;
+        Manager().MarkChanged();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverBackgroundWhiteTip);
+    }
+    // The dedicated white swatch above already covers the near-white
+    // preset - see IsNearWhitePreset.
+    if (const std::optional<uint32_t> picked =
+            PresetSwatchRow(picture.tintColorRGBA, /*skipNearWhite=*/true, /*continuesRow=*/true)) {
+        picture.tintColorRGBA = *picked;
+        Manager().MarkChanged();
+    }
+    ImGui::SameLine(0.0f, 2.0f);
+    float rgb[3];
+    ColorRGBAToFloats(picture.tintColorRGBA, rgb);
+    if (ImGui::ColorEdit3(Labeled(strings::kPopoverCustom, "bgcolor"), rgb, ImGuiColorEditFlags_NoInputs)) {
+        picture.tintColorRGBA = FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF));
+        Manager().MarkChanged();
+    }
+    ImGui::PopID();
+}
+
+void OverlayApp::RenderItemTextStyle(Item& item) {
+    // Per item rather than app-wide (see Item::noteTextColorRGBA/
+    // noteTextSizePx for why). Shown whether or not this item currently
+    // has any text: the alternative - appearing only once something's been
+    // typed - makes the popover's own height jump around depending on
+    // which item opened it, and rules out setting up a caption's look
+    // before writing it.
+    ImGui::Spacing();
+    ImGui::PushID("##note_text_section");
+    ImGui::TextUnformatted(strings::kPopoverText);
+    if (item.noteText.empty()) {
+        ImGui::SameLine();
+        ImGui::TextColored(theme::kGraphite200, "%s", strings::kPopoverTextNoneYet);
+    }
+    ImGui::SetNextItemWidth(160.0f);
+    if (ImGui::SliderFloat(Labeled(strings::kPopoverTextSize, "notetextsize"), &item.noteTextSizePx, kNoteTextSizeMin, kNoteTextSizeMax,
+                            strings::kFormatPixels)) {
+        Manager().MarkChanged();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverTextSizeTip);
+    }
+    // Alpha is preserved rather than forced opaque: unlike the background
+    // colour, Item::noteTextColorRGBA's own alpha byte is live (text has no
+    // separate opacity field), so picking a new hue shouldn't silently undo
+    // a faded caption.
+    if (const std::optional<uint32_t> picked =
+            PresetSwatchRow(item.noteTextColorRGBA, /*skipNearWhite=*/false, /*continuesRow=*/false)) {
+        item.noteTextColorRGBA = (*picked & 0xFFFFFF00u) | (item.noteTextColorRGBA & 0xFFu);
+        Manager().MarkChanged();
+    }
+    ImGui::SameLine(0.0f, 2.0f);
+    // ColorEdit4, not the ColorEdit3 the background colour uses - see the
+    // alpha note just above.
+    float rgba[4];
+    ColorRGBAToFloats(item.noteTextColorRGBA, rgba);
+    rgba[3] = static_cast<float>(item.noteTextColorRGBA & 0xFFu) / 255.0f;
+    if (ImGui::ColorEdit4(Labeled(strings::kPopoverCustom, "notetextcolor"), rgba,
+                           ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar |
+                               ImGuiColorEditFlags_AlphaPreview)) {
+        item.noteTextColorRGBA =
+            FloatsToColorRGBA(rgba, static_cast<uint8_t>(std::clamp(rgba[3], 0.0f, 1.0f) * 255.0f + 0.5f));
+        Manager().MarkChanged();
+    }
+    ImGui::PopID();
+}
+
+void OverlayApp::RenderItemActions(Item& item) {
+    // Fullscreen toggle, copy, z-order, and move-to-another-canvas all
+    // live here - opened from the selection bar's "More" button (see
+    // ActivateBarButton); Delete is a direct one-click button on that
+    // same bar (its Close), and the Delete key, as the one item action
+    // reached for often enough to skip this popover entirely.
+    //
+    // Everything read off the item is read here, before any button: Copy
+    // adds to the canvas's items, which can move `item`.
+    const ItemId itemId = item.id;
+    const bool isFullscreen = item.isFullscreen;
+    // "Nothing to clear" has to count painted pixels too, or the button is
+    // greyed out over a snippet that visibly has ink on it.
+    const Layer* paintedLayer = Session::FindPaintedLayer(item);
+    const bool nothingToClear = item.strokes.empty() && (!paintedLayer || !paintedLayer->HasPaintedPixels());
+
+    ImGui::Spacing();
+    if (PillIconButton("##fullscreen", isFullscreen ? icons::kRestore : icons::kMaximize, false)) {
+        Manager().ToggleFullscreen(itemId, ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y,
+                                         ImGui::GetIO().KeyShift);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", isFullscreen ? strings::kPopoverRestoreSize : strings::kPopoverMakeFullscreen);
+    }
+    ImGui::SameLine();
+    // Resets to the item's permanent original size (Item::nativeW/H - a
+    // captured screenshot's actual pixel dimensions, or a drawing's
+    // creation size), re-centered on its current position - see
+    // CanvasManager::ResetItemToNativeSize's own doc comment.
+    if (PillIconButton("##reset_size", icons::kTarget, false)) {
+        Manager().ResetItemToNativeSize(itemId);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverResetToOriginalSize);
+    }
+    ImGui::SameLine();
+    // Removes every stroke drawn on this item - a screenshot's own
+    // captured pixels (if it's a Shot item) are untouched, only ink drawn
+    // on top of it. Disabled when there's nothing to clear, same
+    // reasoning as the z-order buttons below being disabled at a stack
+    // boundary.
+    ImGui::BeginDisabled(nothingToClear);
+    if (PillIconButton("##clear_drawing", icons::kEraser, false)) {
+        ClearItemDrawing(itemId);
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverClearDrawing);
+    }
+    ImGui::SameLine();
+    // Duplicates onto this same canvas (CanvasManager::DuplicateItem,
+    // unlike Move's cross-canvas MoveOrCopyItemToCanvas, which no-ops for
+    // a same-canvas target) - the user can move the new copy elsewhere
+    // afterward with its own Move button if they want to, same as any
+    // other item.
+    if (PillIconButton("##copy_item", icons::kCopy, false)) {
+        if (const ItemId newId = Manager().DuplicateItem(itemId); newId != 0) {
+            session_.CloneShotImageForCopy(itemId, newId);
+            OffsetCopiedItem(newId);
+            // The copy sits on *this* canvas, so its painted layer - pixels
+            // in memory, no texture yet - needs one now, not on the next
+            // canvas switch, which is the only other time the sync runs.
+            // Without this the copy of a painted snippet came up blank and
+            // stayed blank until the user happened to switch away and
+            // back. Same call the cross-canvas copy makes (see
+            // SendPickedItemTo), for the same reason.
+            session_.SyncTexturesToCurrentCanvas();
+            ShowActionToast(strings::kToastCopied);
+        }
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverCopyToThisCanvas);
+    }
+    ImGui::SameLine();
+    // Disabled when there is nothing in that direction *overlapping* this
+    // snippet, rather than at the ends of the stack: a step that passes a
+    // snippet somewhere else on the canvas changes nothing anybody can
+    // see, and a button that looks available and does nothing visible is
+    // the bug this rule came from - see CanvasManager::MoveItemLayer.
+    ImGui::BeginDisabled(!Manager().CanMoveItemLayer(itemId, -1));
+    if (PillIconButton("##backward", icons::kLayerDown, false)) {
+        Manager().MoveItemLayer(itemId, -1);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverSendBackward);
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!Manager().CanMoveItemLayer(itemId, 1));
+    if (PillIconButton("##forward", icons::kLayerUp, false)) {
+        Manager().MoveItemLayer(itemId, 1);
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverBringForward);
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    // Cross-canvas move (unlike Copy above, which duplicates onto this
+    // same canvas) - see OpenPicker, which opens the Overview in picker
+    // mode so the user can choose a destination.
+    ImGui::BeginDisabled(Manager().Canvases().size() <= 1);
+    if (PillIconButton("##move_item", icons::kMove, false)) {
+        OpenPicker(itemId, /*isCopy=*/false);
+        // This popup is still "open" as far as ImGui is concerned until
+        // something explicitly closes it - clicking a button inside it
+        // doesn't count, only clicking outside its bounds or Escape
+        // normally does. The Overview drawn on top of it (see OnFrame's
+        // own call order) doesn't count as "outside" either, since it's
+        // an ordinary window, not this popup's own backdrop - so without
+        // this, the popup stayed open underneath, and the user needed one
+        // extra click just to dismiss it before they could interact with
+        // anything else. Must be called while this popup is still
+        // current, i.e. before EndPopup - same rule as every other
+        // CloseCurrentPopup call in this file.
+        ImGui::CloseCurrentPopup();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverMoveToAnotherCanvas);
+    }
+    ImGui::EndDisabled();
+}
+
+// ================= The colour chooser =================
+
+void OverlayApp::OpenColorChooser(ImVec2 from) {
+    // Only asked for here: the bar's colour button fires from the raw
+    // mouse callback between frames, where there is no window for
+    // ImGui::OpenPopup to belong to.
+    colorChooserRequested_ = true;
+    colorChooserAnchor_ = from;
+}
+
+void OverlayApp::RenderColorChooser(float displayW, float displayH) {
+    constexpr const char* kPopupId = "##color_chooser";
+    if (colorChooserRequested_) {
+        colorChooserRequested_ = false;
+        ImGui::OpenPopup(kPopupId);
+    }
+    // Beside the point it was asked from, on whichever side has room, so
+    // a bar near an edge of the screen does not have its chooser placed
+    // off it.
+    constexpr float kGap = 20.0f;
+    const bool above = colorChooserAnchor_.y > displayH * 0.5f;
+    const bool toTheLeft = colorChooserAnchor_.x > displayW * 0.5f;
+    ImGui::SetNextWindowPos(ImVec2(colorChooserAnchor_.x + (toTheLeft ? -kGap : kGap),
+                                   colorChooserAnchor_.y + (above ? -kGap : kGap)),
+                            ImGuiCond_Appearing, ImVec2(toTheLeft ? 1.0f : 0.0f, above ? 1.0f : 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+    const bool open = ImGui::BeginPopup(kPopupId);
+    ImGui::PopStyleVar();
+    if (!open) {
+        if (colorChooserOpen_) {
+            // Closed since the last frame. What it was left on is the
+            // colour from now on, and the next time the app starts.
+            colorChooserOpen_ = false;
+            if (settings_.Stored().strokeColorRGBA != drawColorRGBA_) {
+                settings_.Mutable().strokeColorRGBA = drawColorRGBA_;
+                settings_.Commit();
+            }
+        }
+        return;
+    }
+    colorChooserOpen_ = true;
+    // Items re-assert themselves to the front every frame; a popup has to
+    // as well, or the first snippet it overlaps covers it.
+    KeepPopoverInFront();
+    float rgb[3];
+    ColorRGBAToFloats(drawColorRGBA_, rgb);
+    ImGui::SetNextItemWidth(220.0f);
+    if (ImGui::ColorPicker3("##picker", rgb,
+                            ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs |
+                                ImGuiColorEditFlags_NoLabel)) {
+        SetDrawColor(FloatsToColorRGBA(rgb, 0xFF));
+    }
+    ImGui::EndPopup();
+}
+
+// ================= Drag previews =================
+
+void OverlayApp::RenderRegionCaptureOverlay() {
+    if (!creation_.has_value() || !creation_->dragTo.has_value()) {
+        return;
+    }
+    const CreationGesture& gesture = *creation_;
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+    const ImVec2 pMin(std::min(gesture.downX, gesture.dragTo->x), std::min(gesture.downY, gesture.dragTo->y));
+    const ImVec2 pMax(std::max(gesture.downX, gesture.dragTo->x), std::max(gesture.downY, gesture.dragTo->y));
+    drawList->AddRectFilled(pMin, pMax, theme::AccentU32(40));
+    drawList->AddRect(pMin, pMax, theme::AccentU32(255), 0.0f, 2.0f, ImDrawFlags_None);
+    char dims[32];
+    std::snprintf(dims, sizeof(dims), strings::kFormatSizeWidthByHeight, pMax.x - pMin.x, pMax.y - pMin.y);
+    drawList->AddText(ImVec2(pMin.x, pMin.y - 18.0f), IM_COL32(255, 255, 255, 255), dims);
+}
+
+void OverlayApp::RenderRectEraserOverlay() {
+    if (!rectErase_.has_value()) {
+        return;
+    }
+    // Same visual language as RenderRegionCaptureOverlay, in a cool tone
+    // instead of that one's warm orange - erasing is a destructive
+    // preview, not a placement one, and the two shouldn't read as the
+    // same affordance at a glance.
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+    const RectErase& r = *rectErase_;
+    const ImVec2 pMin(std::min(r.x0, r.x1), std::min(r.y0, r.y1));
+    const ImVec2 pMax(std::max(r.x0, r.x1), std::max(r.y0, r.y1));
+    drawList->AddRectFilled(pMin, pMax, IM_COL32(120, 170, 255, 40));
+    drawList->AddRect(pMin, pMax, IM_COL32(120, 170, 255, 255), 0.0f, 2.0f, ImDrawFlags_None);
+}
+
+}  // namespace sz::ui

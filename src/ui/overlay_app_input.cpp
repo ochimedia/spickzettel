@@ -1,0 +1,1382 @@
+#include "ui/overlay_app.h"
+#include "ui/overlay_app_internal.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <iterator>
+#include <limits>
+#include <string>
+#include <vector>
+
+#include "core/canvas/item_geometry.h"
+
+#include <imgui.h>
+
+namespace sz::ui {
+
+using namespace overlay_detail;
+
+// ================= Tool / creation-arming state =================
+
+namespace {
+
+// px, click-vs-drag gesture threshold for the region-capture drag.
+constexpr float kCreationDragThreshold = 6.0f;
+
+std::string ItemNameForKind(ItemCreationKind kind, const Canvas& canvas, bool fullscreen) {
+    const bool wantsBackground = kind == ItemCreationKind::Screenshot;
+    const char* base = wantsBackground ? (fullscreen ? strings::kItemNameScreenshotPrefix : strings::kItemNameRegionPrefix) : strings::kItemNameDrawingPrefix;
+    std::vector<std::string> existingNames;
+    for (const Item& item : canvas.items) {
+        if (item.hasBackground == wantsBackground) {
+            existingNames.push_back(item.name);
+        }
+    }
+    return base + std::to_string(NextAvailableNumber(base, existingNames));
+}
+
+// px the pointer has to travel from a press on a snippet before the press
+// is a drag rather than a click: a click selects and moves nothing, so
+// nothing about the snippet is written until then.
+constexpr float kSelectionDragThreshold = 4.0f;
+
+// The box around a gesture's snapshotted rects - the selection as it
+// stood at the press. Retaken when a fullscreen snippet among them is
+// restored, which changes the very rect the box was drawn around.
+Rect BoundsOfStartRects(const std::vector<ItemGesture::StartRect>& rects) {
+    if (rects.empty()) {
+        return Rect{};
+    }
+    float x0 = rects.front().rect.x;
+    float y0 = rects.front().rect.y;
+    float x1 = x0 + rects.front().rect.w;
+    float y1 = y0 + rects.front().rect.h;
+    for (const ItemGesture::StartRect& start : rects) {
+        x0 = std::min(x0, start.rect.x);
+        y0 = std::min(y0, start.rect.y);
+        x1 = std::max(x1, start.rect.x + start.rect.w);
+        y1 = std::max(y1, start.rect.y + start.rect.h);
+    }
+    return Rect{x0, y0, x1 - x0, y1 - y0};
+}
+
+// Whether a resize holds the snippet's shape unless Shift says otherwise.
+// A screenshot is a picture and a drawing's strokes scale with it, so
+// stretching either is almost never meant; a text box is a box whose
+// shape is the point of resizing it, since its text does not scale. Shift
+// flips whichever the default is.
+bool KeepsAspectRatio(const Item& item) { return item.noteText.empty(); }
+
+// Which edge(s) of `rect` a point at (x, y) is nearest to, for the
+// Alt+right-drag "resize from nearest edge" way in (see
+// OverlayApp::HandleItemGesture) - divides the rect into a 3x3 grid: the
+// outer thirds on
+// either axis pick that edge (both axes at once for a corner); dead
+// center (neither axis in an outer third) falls back to whichever single
+// edge is nearest by plain distance, so a press anywhere in the rect
+// always resolves to *something* rather than resizing nothing.
+void NearestResizeEdges(const Rect& rect, float x, float y, bool& left, bool& right, bool& top, bool& bottom) {
+    const float px = x - rect.x;
+    const float py = y - rect.y;
+    left = px < rect.w / 3.0f;
+    right = px > rect.w * 2.0f / 3.0f;
+    top = py < rect.h / 3.0f;
+    bottom = py > rect.h * 2.0f / 3.0f;
+    if (!left && !right && !top && !bottom) {
+        const float distLeft = px, distRight = rect.w - px, distTop = py, distBottom = rect.h - py;
+        const float minDist = std::min({distLeft, distRight, distTop, distBottom});
+        left = minDist == distLeft;
+        right = !left && minDist == distRight;
+        top = !left && !right && minDist == distTop;
+        bottom = !left && !right && !top;
+    }
+}
+
+}  // namespace
+
+void OverlayApp::SetTool(Tool tool) {
+    if (CreationKindFor(tool).has_value()) {
+        // Remembered for a screenshot to hand back once it is placed - only
+        // coming from a tool that isn't one of the two, so that going from
+        // Drawing to Screenshot doesn't make Drawing the one to return to.
+        if (!CreationKindFor(activeTool_).has_value()) {
+            toolBeforeCreation_ = activeTool_;
+        }
+    }
+    if (tool != activeTool_) {
+        // A shape the bar cycled the pen or the eraser to is that tool's
+        // for as long as it stays in hand - see penShape_.
+        penShape_ = DrawShape::Freehand;
+        eraserShape_ = DrawShape::Freehand;
+    }
+    activeTool_ = tool;
+}
+
+void OverlayApp::PutDownCreationTool() {
+    if (CreationKindFor(activeTool_).has_value()) {
+        SetTool(toolBeforeCreation_);
+    }
+}
+
+void OverlayApp::SetDrawColor(uint32_t colorRGBA) {
+    drawColorRGBA_ = colorRGBA;
+    drawTool_.SetColor(colorRGBA);
+}
+
+void OverlayApp::RunCreateAction(CreateAction action) {
+    switch (action) {
+        case CreateAction::NewCanvas:
+            // Nothing to place, so it happens now rather than arming.
+            CreateAndSwitchToNewCanvas();
+            break;
+    }
+}
+
+void OverlayApp::RunShortcutAction(ShortcutAction action) {
+    const overlay_detail::ShortcutTarget& target = overlay_detail::TargetForShortcut(action);
+    if (target.tool.has_value()) {
+        // The key of the tool already in hand puts it down again - back to
+        // Select, the hand at rest (see the Tool enum), which for a marking
+        // tool means leaving drawing mode.
+        PickTool(activeTool_ == *target.tool ? Tool::Select : *target.tool);
+        return;
+    }
+    if (target.create.has_value()) {
+        RunCreateAction(*target.create);
+        return;
+    }
+    if (target.clipboard.has_value()) {
+        RunClipboardAction(*target.clipboard);
+    }
+}
+
+void OverlayApp::RunClipboardAction(ClipboardAction action) {
+    switch (action) {
+        case ClipboardAction::Copy:
+            CopySelectionToClipboard(/*cut=*/false);
+            return;
+        case ClipboardAction::Cut:
+            CopySelectionToClipboard(/*cut=*/true);
+            return;
+        case ClipboardAction::Paste:
+            PasteFromClipboard();
+            return;
+    }
+}
+
+void OverlayApp::HandleToolShortcuts() {
+    const ImGuiIO& io = ImGui::GetIO();
+    // Not while a name is being typed, and not while the Overview is up -
+    // where the Shortcuts tab itself is, and where a stray "P" would
+    // otherwise change the tool underneath the panel while the user is in
+    // the middle of binding one.
+    if (io.WantTextInput || overviewOpen_) {
+        return;
+    }
+    for (const ShortcutAction action : kAllShortcutActions) {
+        const platform::KeyCombo& combo = settings_.Live().shortcuts[ShortcutActionIndex(action)];
+        if (combo.key == 0) {
+            continue;  // unbound
+        }
+        const ImGuiKey key = overlay_detail::ImGuiKeyForCombo(combo);
+        if (key == ImGuiKey_None || !ImGui::IsKeyPressed(key, /*repeat=*/false)) {
+            continue;
+        }
+        // Exactly the modifiers the binding names, so a bare "P" doesn't
+        // also fire on Ctrl+P - which is somebody else's chord, even if
+        // nothing here claims it yet.
+        if (io.KeyCtrl != combo.ctrl || io.KeyAlt != combo.alt || io.KeyShift != combo.shift) {
+            continue;
+        }
+        RunShortcutAction(action);
+        return;  // one per frame, even if two rows somehow share a key
+    }
+}
+
+void OverlayApp::SetToolShortcut(ShortcutAction action, platform::KeyCombo combo) {
+    if (combo.key != 0) {
+        // Whatever else held this key loses it. The alternative - refusing
+        // the change - leaves the user to go and find the other holder
+        // themselves, and two rows claiming one key is a state where only
+        // the first of them could ever fire (see HandleToolShortcuts).
+        //
+        // Judged against what the *edited* target resolves to, not against
+        // what is running: a collision inside a profile is a collision when
+        // that profile is active, and a key the defaults use elsewhere is
+        // not this profile's problem to solve.
+        const ProfileableSettings edited = EditedSettings();
+        for (const ShortcutAction other : kAllShortcutActions) {
+            if (other != action && edited.shortcuts[ShortcutActionIndex(other)] == combo) {
+                SetEditedShortcut(other, platform::KeyCombo{});
+            }
+        }
+    }
+    SetEditedShortcut(action, combo);
+}
+
+void OverlayApp::BeginEditingNote(ItemId id) {
+    Item* item = Manager().FindItemAnywhere(id);
+    if (!item) {
+        return;
+    }
+    if (editingNoteItemId_.has_value() && *editingNoteItemId_ != id) {
+        // Still the live buffer here (nothing's pressed Escape on it this
+        // frame), so it holds whatever was actually typed - safe to commit
+        // as-is, same as EndEditingNote's own doc comment describes.
+        EndEditingNote(noteEditBuffer_);
+    }
+    editingNoteItemId_ = id;
+    std::snprintf(noteEditBuffer_, sizeof(noteEditBuffer_), "%s", item->noteText.c_str());
+    session_.BeginTextEdit(id);
+    noteEditJustFocused_ = true;
+    if (window_) {
+        window_->RequestTextInput();
+    }
+}
+
+void OverlayApp::EndEditingNote(const std::string& text) {
+    if (!editingNoteItemId_.has_value()) {
+        return;
+    }
+    // One undo entry for the whole edit, and none for an edit that changed
+    // nothing - see Session::EndTextEdit.
+    session_.EndTextEdit(text);
+    editingNoteItemId_.reset();
+    if (window_) {
+        window_->ReleaseTextInput();
+    }
+}
+
+void OverlayApp::ClearCreationGesture() { creation_.reset(); }
+
+// ================= Drawing mode =================
+
+void OverlayApp::EnterDrawingMode(ItemId id, std::optional<Tool> tool) {
+    if (Manager().FindItemAnywhere(id) == nullptr) {
+        return;
+    }
+    if (drawingItem_.has_value() && *drawingItem_ != id) {
+        ExitDrawingMode();
+    }
+    // The snippet being drawn on is the selection - alone, and in front
+    // while raising is on, as any selected snippet is.
+    SelectOnly(id);
+    if (Cfg().raiseSelectedSnippet) {
+        Manager().BringItemToFront(id);
+    }
+    drawingItem_ = id;
+    // The pen, unless a tool was asked for by name (a key): the
+    // mode is entered to draw, and the eraser is a right-drag away in it.
+    SetTool(tool.value_or(Tool::Draw));
+}
+
+void OverlayApp::ExitDrawingMode() {
+    if (!drawingItem_.has_value()) {
+        return;
+    }
+    // Nothing of a stroke survives the mode: a press elsewhere is what
+    // leaves it, and no stroke is in flight then.
+    if (Canvas* canvas = Manager().CurrentOrNull()) {
+        canvas->liveLayer.Clear();
+    }
+    strokeGesture_ = StrokeGesture::None;
+    rectErase_.reset();
+    if (rightErase_.has_value() && rightErase_->erasing) {
+        session_.EndErase();
+    }
+    rightErase_.reset();
+    drawingItem_.reset();
+    SetTool(Tool::Select);
+}
+
+void OverlayApp::PickTool(Tool tool) {
+    switch (tool) {
+        case Tool::Select:
+            ExitDrawingMode();
+            SetTool(Tool::Select);
+            return;
+        case Tool::Draw:
+        case Tool::Erase:
+        case Tool::Text:
+            if (drawingItem_.has_value()) {
+                SetTool(tool);
+                return;
+            }
+            // Not drawing yet: the tool is picked *for* the snippet selected
+            // last, and means nothing without one.
+            if (const std::optional<ItemId> target = PrimarySelection()) {
+                EnterDrawingMode(*target, tool);
+            }
+            return;
+        case Tool::NewDrawing:
+        case Tool::NewScreenshot:
+            ExitDrawingMode();
+            SetTool(tool);
+            return;
+    }
+}
+
+bool OverlayApp::PressPicksUp() const { return !drawingItem_.has_value() || ImGui::GetIO().KeyAlt; }
+
+bool OverlayApp::NoteDoubleClick(const platform::MouseEvent& event) {
+    const ImGuiIO& io = ImGui::GetIO();
+    const double now = ImGui::GetTime();
+    // A modified press is never half of a double-click: Shift+click twice
+    // on one snippet adds it and takes it out again, and nothing else.
+    if (io.KeyShift || io.KeyCtrl || io.KeyAlt) {
+        lastPress_.reset();
+        return false;
+    }
+    bool isDouble = false;
+    if (lastPress_.has_value() && lastPress_->button == event.button &&
+        now - lastPress_->atSeconds <= kDoubleClickSeconds) {
+        const float dx = event.position.x - lastPress_->x;
+        const float dy = event.position.y - lastPress_->y;
+        isDouble = std::sqrt(dx * dx + dy * dy) <= kDoubleClickPx;
+    }
+    if (isDouble) {
+        lastPress_.reset();  // the pair is spent: a third press starts over
+    } else {
+        lastPress_ = LastPress{event.button, now, event.position.x, event.position.y};
+    }
+    return isDouble;
+}
+void OverlayApp::HoldPress(const platform::MouseEvent& event, std::optional<ItemId> item,
+                           std::optional<ItemCreationKind> creates) {
+    if (pressIsDouble_) {
+        // Spent already: the second press of a double-click does on release
+        // what the hold would do, and must not do it twice.
+        heldPress_.reset();
+        return;
+    }
+    heldPress_ = HeldPress{event.button, event.position.x, event.position.y, ImGui::GetTime(), item, creates};
+}
+void OverlayApp::MatureHeldPress() {
+    if (!heldPress_.has_value() || ImGui::GetTime() - heldPress_->atSeconds < kHoldSeconds) {
+        return;
+    }
+    const HeldPress held = *heldPress_;
+    heldPress_.reset();
+    if (held.item.has_value()) {
+        if (itemGesture_.has_value() && itemGesture_->button == held.button) {
+            if (itemGesture_->moved) {
+                return;  // became a drag after all - a move, not a hold
+            }
+            // The move the press started never moved, so nothing of it was
+            // written; without it the release finds nothing to end.
+            itemGesture_.reset();
+        }
+        EnterDrawingMode(*held.item);
+        return;
+    }
+    if (held.creates.has_value()) {
+        if (creation_.has_value() && creation_->button == held.button) {
+            if (creation_->dragTo.has_value()) {
+                return;  // became a drag after all - a frame, not a hold
+            }
+            // Dropped from under the release, which then finds nothing to
+            // place and places nothing.
+            creation_.reset();
+        }
+        const ImGuiIO& io = ImGui::GetIO();
+        const ItemId made = CreateFullscreenItem(*held.creates, io.DisplaySize.x, io.DisplaySize.y);
+        // As a double-click's fullscreen drawing is: watched until something
+        // goes into it - see untouchedDrawing_.
+        if (*held.creates != ItemCreationKind::Screenshot && made != 0) {
+            untouchedDrawing_ = made;
+        }
+    }
+}
+
+// Somewhere to put a new item, always. The library is allowed to hold no
+// canvases at all now (see CanvasManager's own class comment), and the
+// answer to "screenshot, please" in that state is a canvas with the
+// screenshot on it - not a dead button. That makes the empty state
+// self-healing: the first thing created gets out of it on its own, and
+// only an explicit "New canvas" is needed if what you want *is* an empty
+// canvas.
+Canvas& OverlayApp::EnsureCanvasForNewItem() {
+    if (Canvas* existing = Manager().CurrentOrNull()) {
+        return *existing;
+    }
+    CreateAndSwitchToNewCanvas();
+    // AddCanvas (via CreateAndSwitchToNewCanvas) always produces one, and
+    // makes it current - there is no failure path.
+    return *Manager().CurrentOrNull();
+}
+
+namespace {
+// Deliberately short. This is the first thing anyone sees, and its job is
+// only to get them to the point where the app can explain itself - the
+// right mouse button, the three hotkeys, and where the full guide lives.
+// Wrapped by hand at a width the note's own rect fits, since Item::noteText
+// is drawn as-is (DrawItemContent wraps too, but on its own boundaries -
+// keeping the shortcut lines intact reads better than letting them break
+// wherever the item's width happens to fall).
+constexpr const char* kWelcomeNoteText =
+    strings::kWelcomeBody;
+}  // namespace
+
+void OverlayApp::PlaceWelcomeNote(float displayW, float displayH) {
+    // Sized to the text rather than to the screen, then clamped, so it
+    // stays readable on a small display without becoming a banner on a
+    // large one.
+    // Fitted to the text above at 18px - 13 lines plus padding, and a hair
+    // wider than its longest line - rather than to some round number, so
+    // the panel doesn't sit there mostly empty. The min() is only a guard
+    // for a display too small to hold it.
+    const float w = std::min(480.0f, displayW * 0.8f);
+    const float h = std::min(272.0f, displayH * 0.7f);
+    const Rect rect{(displayW - w) * 0.5f, (displayH - h) * 0.5f, w, h};
+
+    Canvas& canvas = EnsureCanvasForNewItem();
+    const ItemId id = Manager().CreateItem(/*hasBackground=*/false, rect, strings::kWelcomeName);
+    if (id == 0) {
+        return;
+    }
+    Item& item = canvas.items.back();
+    // The same backing a Text Note gets - see kNoteBackgroundColorRGBA.
+    if (Layer* picture = item.ImageLayer()) {
+        picture->tintColorRGBA = kNoteBackgroundColorRGBA;
+        picture->opacity = kNoteBackgroundOpacity;
+    }
+    item.noteText = kWelcomeNoteText;
+    item.noteTextSizePx = 18.0f;
+    Manager().MarkChanged();
+}
+
+ItemId OverlayApp::CreateFullscreenItem(ItemCreationKind kind, float displayW, float displayH) {
+    Canvas& canvas = EnsureCanvasForNewItem();
+    const std::string name = ItemNameForKind(kind, canvas, /*fullscreen=*/true);
+    // Through the session, so that making it is on the history - see
+    // Session::CreateItem.
+    const ItemId id =
+        session_.CreateItem(kind == ItemCreationKind::Screenshot, Rect{0.0f, 0.0f, displayW, displayH}, name);
+    if (id == 0) {
+        return 0;
+    }
+    Item* item = &canvas.items.back();
+    item->isFullscreen = true;
+    ApplyCreationDefaults(kind, id, *item);
+    return id;
+}
+
+ItemId OverlayApp::FinishRegionCapture() {
+    const CreationGesture gesture = *creation_;
+    const ItemCreationKind kind = gesture.kind;
+    const ImVec2 to = gesture.dragTo.value_or(ImVec2(gesture.downX, gesture.downY));
+    const Rect rect{
+        std::min(gesture.downX, to.x),
+        std::min(gesture.downY, to.y),
+        std::abs(gesture.downX - to.x),
+        std::abs(gesture.downY - to.y),
+    };
+    ClearCreationGesture();
+    if (rect.w < kRegionMinSize || rect.h < kRegionMinSize) {
+        return 0;
+    }
+    Canvas& canvas = EnsureCanvasForNewItem();
+    const std::string name = ItemNameForKind(kind, canvas, /*fullscreen=*/false);
+    const ItemId id = session_.CreateItem(kind == ItemCreationKind::Screenshot, rect, name);
+    if (id == 0) {
+        return 0;
+    }
+    ApplyCreationDefaults(kind, id, canvas.items.back());
+    return id;
+}
+
+void OverlayApp::ApplyCreationDefaults(ItemCreationKind kind, ItemId id, Item& item) {
+    switch (kind) {
+        case ItemCreationKind::Screenshot:
+            session_.CaptureShotItem(item);
+            // Selected as made, so its bar is there to act on it at once -
+            // as a drawing is, by entering drawing mode.
+            SelectOnly(id);
+            break;
+        case ItemCreationKind::Drawing:
+            // A drawing is made to be drawn in: straight into drawing mode,
+            // with the pen.
+            EnterDrawingMode(id, Tool::Draw);
+            break;
+    }
+}
+
+void OverlayApp::OffsetCopiedItem(ItemId itemId) {
+    Item* item = Manager().FindItemAnywhere(itemId);
+    if (!item) {
+        return;
+    }
+    constexpr float kCopyOffsetPx = 24.0f;
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    item->rect = ClampRectToViewport(
+        Rect{item->rect.x + kCopyOffsetPx, item->rect.y + kCopyOffsetPx, item->rect.w, item->rect.h}, displaySize.x,
+        displaySize.y);
+    Manager().CommitItemLayout(itemId);
+}
+
+
+
+// ================= Raw mouse input: pen/eraser + creation placement =================
+
+// ================= The selection's gestures: select, move, resize, and the bar's buttons =================
+
+// Every way a snippet is selected, moved or resized comes through here, as
+// one gesture with three ways in - what ResolvePointerTarget says is under
+// the press:
+//  - a snippet's body, on the left button, while the selection is live
+//    (Select in hand, or Alt held with any tool): the press selects it -
+//    alone, or added to or taken out of the selection with Shift - and a
+//    drag from there moves the whole selection. A click that never becomes
+//    a drag moves nothing;
+//  - one of a selected snippet's handles: a drag resizes that one snippet
+//    by that handle, keeping its shape or not (see KeepsAspectRatio; Shift
+//    flips it);
+//  - a snippet's body on the right button: a resize of that snippet from
+//    whichever edge or corner is nearest the press (NearestResizeEdges),
+//    decided once at the press - the one way to resize without aiming for
+//    a handle, with any tool in hand. A right press that never becomes a
+//    drag is a right click, which has selected the snippet and no more.
+// Whichever started it, the gesture is a start snapshot (every moved
+// snippet's rect and the pointer's position at the press) plus the *full*
+// delta from there, recomputed fresh on every Move - not an incremental
+// delta accumulated per event, which drifts under event coalescing, and
+// not ImGui's own GetMouseDragDelta, since this is the raw platform
+// pipeline (see OnMouse) and no widget backs any of it.
+//
+// A press that selects a snippet brings it to the front while
+// AppConfig::raiseSelectedSnippet is on (the default), the way a window
+// manager raises a window you take hold of; off, the stacking order is the
+// Properties popover's alone to change, as in a drawing program.
+//
+// The selection bar's buttons ride the same pipeline: a press on one is
+// held until release, and fires only if the release lands on the same
+// button - the rule ImGui's own Button follows.
+//
+// Returns true if this event was consumed (the caller returns without its
+// own normal handling); false lets it fall through to whatever it would
+// otherwise do - a stroke or a creation gesture for the left button, a
+// drawing for the right.
+bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
+    if (event.button != platform::MouseButton::Left && event.button != platform::MouseButton::Right) {
+        return false;
+    }
+    if (itemGesture_.has_value() && itemGesture_->button != event.button) {
+        // The other button's business - a drag it started is left alone
+        // rather than hijacked, and it gets nothing of ours.
+        return false;
+    }
+    if (boxSelect_.has_value()) {
+        return HandleBoxSelection(event);
+    }
+    if (pressedBarButton_.has_value()) {
+        if (event.button != platform::MouseButton::Left) {
+            return false;
+        }
+        if (event.kind == platform::MouseEventKind::Up) {
+            const ChromeButton pressed = *pressedBarButton_;
+            pressedBarButton_.reset();
+            const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
+            if (target.kind == PointerTarget::Kind::Button && target.button == pressed) {
+                ActivateBarButton(pressed);
+            }
+        }
+        return true;  // held: nothing else starts under a pressed button
+    }
+    if (itemGesture_.has_value()) {
+        // Continuing (or ending) the gesture - always consumed regardless
+        // of Alt's current state (releasing Alt mid-drag shouldn't abandon
+        // it half-finished).
+        if (event.kind == platform::MouseEventKind::Up) {
+            const ItemGesture ended = *itemGesture_;
+            itemGesture_.reset();
+            if (ended.button == platform::MouseButton::Right && !ended.moved) {
+                // A right press on a snippet that never dragged is a right
+                // click - a drag resizes instead. On the snippet being
+                // drawn on it leaves drawing mode; on any other it has
+                // selected the snippet, and that is all.
+                if (drawingItem_ == ended.item) {
+                    ExitDrawingMode();
+                }
+            }
+            return true;
+        }
+        if (event.kind != platform::MouseEventKind::Move) {
+            return true;
+        }
+        const float dx = event.position.x - itemGesture_->startMouseX;
+        const float dy = event.position.y - itemGesture_->startMouseY;
+        if (!itemGesture_->moved) {
+            if (std::sqrt(dx * dx + dy * dy) < kSelectionDragThreshold) {
+                return true;  // still a click, as far as anyone can tell
+            }
+            itemGesture_->moved = true;
+            KeepPlacedDrawings();
+            // A fullscreen snippet is taken out of fullscreen the moment
+            // it is dragged, as a window manager un-maximizes a window you
+            // take hold of - but only now that it *is* a drag, so a click
+            // that merely selects it leaves it be. The snapshot is retaken
+            // from the restored rect; the few pixels the pointer has
+            // travelled by then are not worth a jump.
+            for (ItemGesture::StartRect& start : itemGesture_->startRects) {
+                Item* item = Manager().FindItemAnywhere(start.item);
+                if (item != nullptr && item->isFullscreen) {
+                    Manager().ToggleFullscreen(start.item, ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+                    item = Manager().FindItemAnywhere(start.item);
+                    if (item != nullptr) {
+                        start.rect = item->rect;
+                    }
+                }
+            }
+            if (itemGesture_->group) {
+                // The box was drawn around the rects the press found, and
+                // one of them has just been restored out of fullscreen.
+                itemGesture_->startBounds = BoundsOfStartRects(itemGesture_->startRects);
+            }
+        }
+        if (itemGesture_->resize && itemGesture_->group) {
+            ResizeSelectionAsAGroup(dx, dy);
+            return true;
+        }
+        const ImVec2 display = ImGui::GetIO().DisplaySize;
+        for (const ItemGesture::StartRect& start : itemGesture_->startRects) {
+            Item* item = Manager().FindItemAnywhere(start.item);
+            if (item == nullptr) {
+                continue;  // deleted mid-drag - nothing left to move/resize
+            }
+            Rect newRect = start.rect;
+            if (itemGesture_->resize) {
+                // Recomputed from the modifier on every event, so Shift
+                // pressed or let go mid-drag takes effect at once.
+                const bool lockAspect = KeepsAspectRatio(*item) != ImGui::GetIO().KeyShift;
+                ApplyResizeHandleDelta(newRect, itemGesture_->left, itemGesture_->right, itemGesture_->top,
+                                       itemGesture_->bottom, dx, dy, lockAspect);
+            } else {
+                newRect.x += dx;
+                newRect.y += dy;
+            }
+            item->rect = ClampRectToViewport(newRect, display.x, display.y);
+            Manager().MarkChanged();
+            // Re-anchors to this deliberate move/resize - see
+            // CanvasManager::CommitItemLayout's own doc comment on why that
+            // matters: without it, the next display-size change would
+            // silently revert this.
+            Manager().CommitItemLayout(item->id);
+        }
+        return true;
+    }
+    if (event.kind != platform::MouseEventKind::Down || ImGui::GetIO().WantCaptureMouse) {
+        // Only a press starts one, and not a press that a panel of ImGui's
+        // own is under: a popover, the canvas bar, the Overview all
+        // sit above every item, and a click landing on one of them is
+        // theirs alone.
+        return false;
+    }
+    const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
+    ItemGesture gesture;
+    gesture.button = event.button;
+    gesture.startMouseX = event.position.x;
+    gesture.startMouseY = event.position.y;
+    if (event.button == platform::MouseButton::Right) {
+        if (target.kind != PointerTarget::Kind::Body) {
+            return false;
+        }
+        if (drawingItem_ == target.item && !ImGui::GetIO().KeyAlt) {
+            // On the snippet being drawn on the right button is the eraser
+            // (see OnMouse), unless Alt picks the snippet up.
+            return false;
+        }
+        Item* item = Manager().FindItemAnywhere(target.item);
+        if (item == nullptr) {
+            return false;
+        }
+        if (!IsSelected(target.item)) {
+            SelectOnly(target.item);
+        }
+        if (Cfg().raiseSelectedSnippet) {
+            // Reorders canvas.items, so `item` is found again afterwards
+            // rather than read through the pointer from before.
+            Manager().BringItemToFront(target.item);
+            item = Manager().FindItemAnywhere(target.item);
+            if (item == nullptr) {
+                return false;
+            }
+        }
+        // A resize from the nearest edge or corner - decided from the rect
+        // as it is now, which for a fullscreen snippet is the screen; the
+        // snapshot is retaken from the restored rect once it is a drag
+        // (see the in-flight handling above), and a click that never
+        // drags leaves a fullscreen snippet fullscreen.
+        gesture.item = target.item;
+        gesture.resize = true;
+        NearestResizeEdges(item->rect, event.position.x, event.position.y, gesture.left, gesture.right, gesture.top,
+                           gesture.bottom);
+        SnapshotResizeTargets(gesture, target.item);
+        itemGesture_ = gesture;
+        return true;
+    }
+    switch (target.kind) {
+        case PointerTarget::Kind::Button:
+            pressedBarButton_ = target.button;
+            return true;
+        case PointerTarget::Kind::Handle: {
+            const Item* item = Manager().FindItemAnywhere(target.item);
+            if (item == nullptr) {
+                return false;
+            }
+            gesture.item = target.item;
+            gesture.resize = true;
+            gesture.handle = target.handle;
+            ResizeHandleEdges(target.handle, gesture.left, gesture.right, gesture.top, gesture.bottom);
+            SnapshotResizeTargets(gesture, target.item);
+            gesture.moved = true;  // a handle is only ever pressed to drag it
+            itemGesture_ = gesture;
+            KeepPlacedDrawings();
+            return true;
+        }
+        case PointerTarget::Kind::Body: {
+            if (!SelectionLive() || !PressPicksUp()) {
+                return false;  // a creation tool's press, or a stroke in drawing mode
+            }
+            if (pressIsDouble_ && !ImGui::GetIO().KeyShift) {
+                // The second press of a double-click on a snippet: drawing
+                // mode on it, rather than a move. The first press already
+                // selected it.
+                EnterDrawingMode(target.item);
+                return true;
+            }
+            if (ImGui::GetIO().KeyShift) {
+                // Added to or taken out of the selection, and that is all
+                // the press does - a Shift-press is never a drag.
+                ToggleSelected(target.item);
+                if (IsSelected(target.item) && Cfg().raiseSelectedSnippet) {
+                    Manager().BringItemToFront(target.item);
+                }
+                return true;
+            }
+            if (!IsSelected(target.item)) {
+                SelectOnly(target.item);
+            }
+            if (Cfg().raiseSelectedSnippet) {
+                Manager().BringItemToFront(target.item);
+            }
+            gesture.item = target.item;
+            for (const ItemId id : selection_) {
+                if (const Item* item = Manager().FindItemAnywhere(id)) {
+                    gesture.startRects.push_back({id, item->rect});
+                }
+            }
+            itemGesture_ = gesture;
+            // Held still instead of dragged, the press enters drawing mode
+            // as a double-click would - see MatureHeldPress.
+            HoldPress(event, target.item, std::nullopt);
+            return true;
+        }
+        case PointerTarget::Kind::None:
+            // Empty canvas: the press clears the selection - and is then
+            // the creation gesture's, which is why this falls through
+            // rather than consuming it (see HandleCreationGesture: a drag
+            // frames a snippet, a double-click makes one fullscreen, a
+            // click makes nothing). Not in drawing mode, where the press
+            // is for leaving it (see OnMouse).
+            if (SelectionLive() && !drawingItem_.has_value()) {
+                if (ImGui::GetIO().KeyShift) {
+                    // With Shift, the press is the start of a box to
+                    // select by instead - consumed, so no snippet is
+                    // framed under it, and the selection is left alone
+                    // until the box says what it caught.
+                    boxSelect_ = BoxSelection{event.position.x, event.position.y, event.position.x, event.position.y,
+                                                /*moved=*/false};
+                    return true;
+                }
+                ClearSelection();
+            }
+            return false;
+    }
+    return false;
+}
+
+// The box drawn over the canvas with Shift held, from the press on open
+// canvas that started it (see HandleItemGesture) to the release that
+// applies it: every snippet the box touches, by any overlap at all, joins
+// the selection.
+//
+// Joins rather than replaces, because Shift is already the key that adds
+// one snippet to the selection and takes one out - a box drawn with it
+// held is the same thing said about several at once. A press that never
+// travels is an ordinary Shift-click on open canvas: it caught nothing,
+// and the selection stands.
+bool OverlayApp::HandleBoxSelection(const platform::MouseEvent& event) {
+    if (event.button != platform::MouseButton::Left) {
+        return false;  // the other button's business, as every gesture here
+    }
+    if (event.kind == platform::MouseEventKind::Move) {
+        boxSelect_->toX = event.position.x;
+        boxSelect_->toY = event.position.y;
+        if (!boxSelect_->moved) {
+            const float dx = boxSelect_->toX - boxSelect_->fromX;
+            const float dy = boxSelect_->toY - boxSelect_->fromY;
+            boxSelect_->moved = std::sqrt(dx * dx + dy * dy) >= kSelectionDragThreshold;
+        }
+        return true;
+    }
+    if (event.kind == platform::MouseEventKind::Up) {
+        const BoxSelection box = *boxSelect_;
+        boxSelect_.reset();
+        if (box.moved) {
+            AddTouchedToSelection(box.Bounds());
+        }
+    }
+    return true;
+}
+
+void OverlayApp::SnapshotResizeTargets(ItemGesture& gesture, ItemId itemId) {
+    const Item* grabbed = Manager().FindItemAnywhere(itemId);
+    if (grabbed == nullptr) {
+        return;
+    }
+    if (!IsSelected(itemId) || selection_.size() < 2) {
+        gesture.startRects.push_back({itemId, grabbed->rect});
+        return;
+    }
+    // One of several selected: the drag takes all of them. The snippet
+    // the handle belongs to is in the selection by construction, so it is
+    // in here too, and nothing decides separately which snippet was
+    // grabbed.
+    for (const ItemId id : selection_) {
+        if (const Item* item = Manager().FindItemAnywhere(id)) {
+            gesture.startRects.push_back({id, item->rect});
+        }
+    }
+    gesture.group = gesture.startRects.size() > 1;
+    if (gesture.group) {
+        gesture.startBounds = BoundsOfStartRects(gesture.startRects);
+    }
+}
+
+// Every selected snippet scaled by one factor about the point the drag
+// leaves fixed - the opposite corner, or the middle of the axis an edge
+// handle does not drive, which is how one snippet's own edge handle grows
+// too.
+//
+// Scaled, never stretched, whatever Shift says: a group is snippets of
+// several shapes, and stretching the box around them would reshape every
+// one of them at once - a screenshot squashed, a drawing's strokes pulled
+// out of round. Shift frees a single snippet's resize because there the
+// one shape being changed is the one under the hand.
+//
+// The smallest snippet decides how far down the group can go: one of them
+// reaching the floor stops all of them, rather than that one flattening
+// against it while the rest carry on shrinking and the group quietly
+// reshapes itself.
+void OverlayApp::ResizeSelectionAsAGroup(float dx, float dy) {
+    if (!itemGesture_.has_value()) {
+        return;
+    }
+    const ItemGesture& gesture = *itemGesture_;
+    const Rect box = gesture.startBounds;
+    if (box.w <= 0.0f || box.h <= 0.0f) {
+        return;
+    }
+    Rect dragged = box;
+    ApplyResizeHandleDelta(dragged, gesture.left, gesture.right, gesture.top, gesture.bottom, dx, dy,
+                            /*lockAspect=*/true);
+    float scale = dragged.w / box.w;
+    float floorScale = 0.0f;
+    for (const ItemGesture::StartRect& start : gesture.startRects) {
+        if (start.rect.w <= 0.0f || start.rect.h <= 0.0f) {
+            continue;
+        }
+        const MinItemSize smallest = MinimumSizeForAspectRatio(start.rect.w / start.rect.h);
+        floorScale = std::max({floorScale, smallest.w / start.rect.w, smallest.h / start.rect.h});
+    }
+    scale = std::max(scale, floorScale);
+
+    const float anchorX = gesture.left ? box.x + box.w : (gesture.right ? box.x : box.x + box.w * 0.5f);
+    const float anchorY = gesture.top ? box.y + box.h : (gesture.bottom ? box.y : box.y + box.h * 0.5f);
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    for (const ItemGesture::StartRect& start : gesture.startRects) {
+        Item* item = Manager().FindItemAnywhere(start.item);
+        if (item == nullptr) {
+            continue;  // deleted mid-drag
+        }
+        const Rect scaled{anchorX + (start.rect.x - anchorX) * scale, anchorY + (start.rect.y - anchorY) * scale,
+                           start.rect.w * scale, start.rect.h * scale};
+        // Clamped one snippet at a time, exactly as a move of the whole
+        // selection is: at the very edges of the screen that can put one
+        // of them out of step with the rest, and the alternative is a
+        // snippet scaled off the screen with nothing left to grab.
+        item->rect = ClampRectToViewport(scaled, display.x, display.y);
+        Manager().MarkChanged();
+        Manager().CommitItemLayout(item->id);
+    }
+}
+
+// ================= Making a snippet: a press on empty canvas =================
+
+bool OverlayApp::PressMakesASnippet(const platform::MouseEvent& event) const {
+    if (event.button != platform::MouseButton::Left && event.button != platform::MouseButton::Right) {
+        return false;
+    }
+    // Not a press on a panel, and not one that is really a click outside
+    // something open - the Overview, a popover, a note being
+    // typed into - which that click is for closing. Making a snippet as
+    // well would turn every dismissal into a new drawing.
+    if (ImGui::GetIO().WantCaptureMouse || overviewOpen_ || editingNoteItemId_.has_value() || noteOpenAtPress_ ||
+        ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
+        return false;
+    }
+    const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
+    return target.kind == PointerTarget::Kind::None && !target.body.has_value();
+}
+
+bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
+    if (creation_.has_value()) {
+        if (event.button != creation_->button) {
+            return false;  // the other button's business
+        }
+        switch (event.kind) {
+            case platform::MouseEventKind::Down:
+                break;
+            case platform::MouseEventKind::Move:
+                if (!creation_->dragTo.has_value()) {
+                    const float dx = event.position.x - creation_->downX;
+                    const float dy = event.position.y - creation_->downY;
+                    if (std::sqrt(dx * dx + dy * dy) <= kCreationDragThreshold) {
+                        break;  // still a click, as far as anyone can tell
+                    }
+                }
+                creation_->dragTo = ImVec2(event.position.x, event.position.y);
+                break;
+            case platform::MouseEventKind::Up: {
+                const CreationGesture gesture = *creation_;
+                ItemId made = 0;
+                if (gesture.dragTo.has_value()) {
+                    made = FinishRegionCapture();
+                } else if (gesture.isDouble || !gesture.fromEmptyCanvas) {
+                    // Fullscreen: the second press of a double-click on
+                    // empty canvas, or any click with a creation tool in
+                    // hand, which was picked on purpose.
+                    const ImGuiIO& io = ImGui::GetIO();
+                    made = CreateFullscreenItem(gesture.kind, io.DisplaySize.x, io.DisplaySize.y);
+                    ClearCreationGesture();
+                } else {
+                    // A plain click on empty canvas makes nothing - a
+                    // fullscreen snippet is too much to make by accident -
+                    // with either button.
+                    ClearCreationGesture();
+                    return true;
+                }
+                // A drawing a press on empty canvas made is watched until
+                // something goes into it - see untouchedDrawing_. One made
+                // with a creation tool was asked for, and is not.
+                if (gesture.fromEmptyCanvas && gesture.kind != ItemCreationKind::Screenshot && made != 0) {
+                    untouchedDrawing_ = made;
+                }
+                // A creation tool places once. A drawing has already handed
+                // over to Draw (see ApplyCreationDefaults); a screenshot hands
+                // back the tool that was in hand before it. Nothing placed -
+                // a drag too small to keep - leaves the tool in hand to try
+                // again.
+                if (!gesture.fromEmptyCanvas && made != 0 && activeTool_ == Tool::NewScreenshot) {
+                    PutDownCreationTool();
+                }
+                break;
+            }
+        }
+        return true;
+    }
+    if (event.kind != platform::MouseEventKind::Down) {
+        return false;
+    }
+    CreationGesture gesture;
+    gesture.button = event.button;
+    gesture.downX = event.position.x;
+    gesture.downY = event.position.y;
+    const std::optional<ItemCreationKind> toolKind =
+        event.button == platform::MouseButton::Left ? CreationKindFor(activeTool_) : std::nullopt;
+    if (toolKind.has_value()) {
+        // A creation tool in hand: the left button places it wherever it
+        // lands, on a snippet or not. The right still resizes a snippet,
+        // and makes a drawing on empty canvas, as with any tool.
+        gesture.kind = *toolKind;
+    } else {
+        if (!PressMakesASnippet(event)) {
+            return false;
+        }
+        // The left button makes a screenshot, the right a drawing. Either
+        // is the hand moving on from a snippet it was drawing on.
+        ExitDrawingMode();
+        gesture.kind = event.button == platform::MouseButton::Right ? ItemCreationKind::Drawing
+                                                                    : ItemCreationKind::Screenshot;
+        gesture.fromEmptyCanvas = true;
+        gesture.isDouble = pressIsDouble_;
+        // Held still instead of dragged, the press makes the snippet
+        // fullscreen as a double-click would - see MatureHeldPress.
+        HoldPress(event, std::nullopt, gesture.kind);
+    }
+    creation_ = gesture;
+    return true;
+}
+
+void OverlayApp::KeepPlacedDrawings() {
+    if (!untouchedDrawing_.has_value() || !itemGesture_.has_value()) {
+        return;
+    }
+    for (const ItemGesture::StartRect& start : itemGesture_->startRects) {
+        if (start.item == *untouchedDrawing_) {
+            untouchedDrawing_.reset();
+            return;
+        }
+    }
+}
+
+void OverlayApp::SettleUntouchedDrawing() {
+    if (!untouchedDrawing_.has_value()) {
+        return;
+    }
+    const ItemId id = *untouchedDrawing_;
+    untouchedDrawing_.reset();
+    // A note still being typed into is committed first, so what counts is
+    // whatever was typed - the press that settles it would end the edit a
+    // frame later anyway.
+    if (editingNoteItemId_ == id) {
+        EndEditingNote(noteEditBuffer_);
+    }
+    // Does nothing to a snippet something went into, or one that is gone.
+    session_.DiscardIfUntouched(id);
+}
+
+void OverlayApp::OnMouse(const platform::MouseEvent& event) {
+    if (viewOnly_) {
+        // Real OS-level click-through (see IOverlayWindow::SetInputPassthrough)
+        // means this shouldn't even fire on Windows, but the Linux dev
+        // harness has no such mechanism - guard here too so view-only mode
+        // is genuinely read-only on every backend, not just the real one.
+        return;
+    }
+    // One button at a time: the first to press owns the pointer until it
+    // lets go, and the other is ignored until it lets go too - see
+    // pressedButton_. Middle-button events, which nothing below reads, are
+    // not part of this, so a wheel click cannot lock a button out.
+    if (event.button == platform::MouseButton::Left || event.button == platform::MouseButton::Right) {
+        if (ignoredButton_ == event.button) {
+            if (event.kind == platform::MouseEventKind::Up) {
+                ignoredButton_.reset();
+            }
+            return;
+        }
+        if (event.kind == platform::MouseEventKind::Down) {
+            if (pressedButton_.has_value() && *pressedButton_ != event.button) {
+                ignoredButton_ = event.button;
+                return;
+            }
+            pressedButton_ = event.button;
+        } else if (event.kind == platform::MouseEventKind::Up && pressedButton_ == event.button) {
+            pressedButton_.reset();
+        }
+    }
+    // A press while a note is open is for closing it, whatever happens to
+    // the note on the way (see PressMakesASnippet) - asked before settling
+    // the untouched snippet below, which can close that note itself. And
+    // whether this press is the second of a double-click, for the handlers
+    // below that care.
+    if (event.kind == platform::MouseEventKind::Down) {
+        noteOpenAtPress_ = editingNoteItemId_.has_value();
+        pressIsDouble_ = NoteDoubleClick(event);
+    }
+    // A press held still is remembered until it moves or lets go - see
+    // heldPress_. Another button's press ends it too: a hold is one finger
+    // on one spot.
+    if (heldPress_.has_value()) {
+        if (event.kind != platform::MouseEventKind::Move) {
+            heldPress_.reset();
+        } else {
+            const float dx = event.position.x - heldPress_->x;
+            const float dy = event.position.y - heldPress_->y;
+            if (std::sqrt(dx * dx + dy * dy) > kDoubleClickPx) {
+                heldPress_.reset();
+            }
+        }
+    }
+    // A press anywhere but on the drawing a stray click made is the hand
+    // moving on from it - see untouchedDrawing_. Not a press on a panel,
+    // which is as likely to be picking a colour to draw in it with.
+    if (event.kind == platform::MouseEventKind::Down && untouchedDrawing_.has_value() &&
+        !ImGui::GetIO().WantCaptureMouse && !overviewOpen_) {
+        // A press on the selection bar is not moving on either: the bar is
+        // the selection's, and the drawing may be in it - its Pin, its
+        // drawing buttons, and its Close, which settles it itself.
+        const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
+        const bool onIt = (target.kind != PointerTarget::Kind::None && target.item == *untouchedDrawing_) ||
+                          target.body == untouchedDrawing_ || target.kind == PointerTarget::Kind::Button;
+        if (!onIt) {
+            SettleUntouchedDrawing();
+        }
+    }
+    if (event.button == platform::MouseButton::Right) {
+        // A right press on a snippet resizes it from its nearest edge, or
+        // is a right click if it never drags - checked first. Starting
+        // one is gated on !WantCaptureMouse like every selection gesture
+        // (over a panel the press is the panel's); one in flight is
+        // consumed regardless.
+        if (HandleItemGesture(event)) {
+            return;
+        }
+        // In drawing mode the right button on the snippet being drawn on
+        // is the eraser, for quick corrections without changing the tool:
+        // a drag erases along its path, and a press that never drags is a
+        // right click, which leaves the mode. The erase starts only once
+        // it is a drag, so a click takes nothing away.
+        if (rightErase_.has_value()) {
+            if (event.kind == platform::MouseEventKind::Move) {
+                if (!rightErase_->erasing) {
+                    const float dx = event.position.x - rightErase_->x;
+                    const float dy = event.position.y - rightErase_->y;
+                    if (std::sqrt(dx * dx + dy * dy) < kSelectionDragThreshold || !drawingItem_.has_value()) {
+                        return;
+                    }
+                    rightErase_->erasing = true;
+                    session_.BeginErase(*drawingItem_, rightErase_->x, rightErase_->y, eraserWidth_);
+                }
+                session_.ExtendErase(event.position.x, event.position.y, eraserWidth_);
+            } else if (event.kind == platform::MouseEventKind::Up) {
+                const bool erased = rightErase_->erasing;
+                rightErase_.reset();
+                if (erased) {
+                    session_.EndErase();
+                } else {
+                    ExitDrawingMode();
+                }
+            }
+            return;
+        }
+        if (event.kind == platform::MouseEventKind::Down && drawingItem_.has_value() && !ImGui::GetIO().KeyAlt &&
+            !ImGui::GetIO().WantCaptureMouse) {
+            const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
+            if (target.kind == PointerTarget::Kind::Body && target.item == *drawingItem_) {
+                rightErase_ = RightErase{event.position.x, event.position.y, false};
+                return;
+            }
+        }
+        // A press on empty canvas frames a drawing, or makes one fullscreen
+        // on a double-click or a hold, and does nothing on a plain click -
+        // see HandleCreationGesture. Nothing else is the right button's.
+        HandleCreationGesture(event);
+        return;
+    }
+    if (event.button != platform::MouseButton::Left) {
+        return;
+    }
+    // The selection's gestures - a press on a snippet, on a selected
+    // snippet's handle, or on the selection bar - all one gesture engine:
+    // see HandleItemGesture. Before the WantCaptureMouse gate below only in
+    // the sense that a gesture already in flight is consumed regardless;
+    // starting one is gated on it too.
+    if (HandleItemGesture(event)) {
+        return;
+    }
+    // A creation already in flight takes its moves and its release wherever
+    // they land, over a panel included - only the press that starts one is
+    // held to the gates below. So does a stroke.
+    if (creation_.has_value() && HandleCreationGesture(event)) {
+        return;
+    }
+    if (event.kind != platform::MouseEventKind::Down) {
+        // A stroke in flight takes its moves and its release wherever they
+        // land - see HandleStrokeEvent, which started it on the press.
+        if (strokeGesture_ != StrokeGesture::None) {
+            HandleStrokeEvent(event);
+        }
+        return;
+    }
+    if (ImGui::GetIO().WantCaptureMouse) {
+        return;  // a real ImGui widget (a popover, the canvas bar) owns this click
+    }
+
+    if (drawingItem_.has_value() && !ImGui::GetIO().KeyAlt) {
+        // Drawing mode: a press on the snippet being drawn on draws with
+        // the tool in hand; a press anywhere else - empty canvas, another
+        // snippet - leaves the mode, and does nothing more, since that is
+        // what the press was for. (A press on the snippet's handles or its
+        // bar was HandleItemGesture's, above; with Alt held the press picks
+        // the snippet up instead, there too.)
+        const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
+        if (target.kind == PointerTarget::Kind::Body && target.item == *drawingItem_) {
+            HandleStrokeEvent(event);
+        } else {
+            ExitDrawingMode();
+            // Held still, though, the press is what a double-click here
+            // would have been: drawing mode on the other snippet, or a
+            // fullscreen screenshot of empty canvas - see MatureHeldPress.
+            // A double-click gets there by leaving on its first press and
+            // arriving on its second; a hold has only the one.
+            if (target.kind == PointerTarget::Kind::Body) {
+                HoldPress(event, target.item, std::nullopt);
+            } else if (PressMakesASnippet(event)) {
+                HoldPress(event, std::nullopt, ItemCreationKind::Screenshot);
+            }
+        }
+        return;
+    }
+
+    // A press on empty canvas frames a screenshot, or makes one fullscreen
+    // on a double-click, and a press anywhere places with a creation tool -
+    // see HandleCreationGesture. A press on a snippet was
+    // HandleItemGesture's already; nothing else is left for it to be.
+    HandleCreationGesture(event);
+}
+
+DrawShape OverlayApp::ShapeForPress() const {
+    const ImGuiIO& io = ImGui::GetIO();
+    if (activeTool_ == Tool::Erase) {
+        // Ctrl for a rectangle; Shift means nothing to the eraser.
+        return ErasesRectangle(io.KeyCtrl) ? DrawShape::Rectangle : eraserShape_;
+    }
+    return io.KeyCtrl || io.KeyShift ? DrawShapeFor(io.KeyCtrl, io.KeyShift) : penShape_;
+}
+
+void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
+    // The stroke goes into the snippet in drawing mode, which is on the
+    // current canvas (see PruneSelection) - but the live layer below is
+    // reached through a check rather than assumed, so "there's no canvas"
+    // stays a checked condition everywhere.
+    if (!drawingItem_.has_value()) {
+        return;
+    }
+    Canvas* canvas = Manager().CurrentOrNull();
+    if (!canvas) {
+        return;
+    }
+
+    if (activeTool_ == Tool::Text) {
+        // Not stroke-based at all (see Tool::Text's own doc comment) - a
+        // press opens the snippet's noteText for editing instead of
+        // starting a drag, the same way clicking a real text field just
+        // focuses it.
+        if (event.kind == platform::MouseEventKind::Down) {
+            BeginEditingNote(*drawingItem_);
+        }
+        return;
+    }
+
+    const ItemId armed = *drawingItem_;
+    const ImGuiIO& io = ImGui::GetIO();
+
+    // What a Draw or Erase press makes is decided as it starts, from the
+    // modifiers held then - Ctrl for a rectangle with either tool, Shift for
+    // a line with Draw (see DrawShapeFor) - and holds for the whole gesture,
+    // so letting go of a key halfway through a drag changes nothing it has
+    // done. The one thing that can change mid-drag is which of the two
+    // shapes a shape is.
+    // With no modifier held, the shape is whatever the drawing bar has cycled
+    // the tool to (see ShapeForPress), so a plain drag can be a line or a
+    // rectangle for a hand with no keyboard.
+    if (event.kind == platform::MouseEventKind::Down) {
+        if (activeTool_ == Tool::Erase) {
+            strokeGesture_ = ShapeForPress() == DrawShape::Rectangle ? StrokeGesture::EraseRect : StrokeGesture::Erase;
+        } else {
+            strokeShape_ = ShapeForPress();
+            strokeGesture_ = strokeShape_ != DrawShape::Freehand ? StrokeGesture::Shape
+                             // The mode is read here rather than inside the
+                             // gesture so that flipping the setting mid-
+                             // stroke can't move the rest of that stroke
+                             // somewhere else.
+                             : Cfg().paintPixelsInsteadOfStrokes ? StrokeGesture::Paint
+                                                                 : StrokeGesture::Freehand;
+        }
+    }
+    const auto sessionShape = [](DrawShape shape) {
+        return shape == DrawShape::Rectangle ? Session::Shape::Rectangle : Session::Shape::Line;
+    };
+
+    switch (strokeGesture_) {
+        case StrokeGesture::Erase:
+            // One gesture in the session: the strokes it clips and the
+            // pixels it takes off any painted layer, snapshotted as it
+            // starts and filed as a single undo entry as it ends - see
+            // Session::BeginErase.
+            if (event.kind == platform::MouseEventKind::Down) {
+                session_.BeginErase(armed, event.position.x, event.position.y, eraserWidth_);
+            } else if (event.kind == platform::MouseEventKind::Move) {
+                session_.ExtendErase(event.position.x, event.position.y, eraserWidth_);
+            } else {
+                session_.EndErase();
+            }
+            break;
+        case StrokeGesture::EraseRect:
+            // Dragged out from a fixed corner with nothing erased while it
+            // is - the rect is only a preview (RenderRectEraserOverlay) -
+            // then erased once, on release, as one undoable step (see
+            // Session::EraseRect). A drag too short to be meant erases
+            // nothing.
+            if (event.kind == platform::MouseEventKind::Down) {
+                rectErase_ = RectErase{event.position.x, event.position.y, event.position.x, event.position.y};
+            } else if (event.kind == platform::MouseEventKind::Move) {
+                if (rectErase_.has_value()) {
+                    rectErase_->x1 = event.position.x;
+                    rectErase_->y1 = event.position.y;
+                }
+            } else if (rectErase_.has_value()) {
+                const RectErase rect = *rectErase_;
+                rectErase_.reset();
+                const float dx = event.position.x - rect.x0;
+                const float dy = event.position.y - rect.y0;
+                if (std::sqrt(dx * dx + dy * dy) >= kRegionMinSize) {
+                    session_.EraseRect(armed, std::min(rect.x0, event.position.x), std::min(rect.y0, event.position.y),
+                                       std::max(rect.x0, event.position.x), std::max(rect.y0, event.position.y));
+                }
+            }
+            break;
+        case StrokeGesture::Shape:
+            // The whole of a shape is the session's: its preview, how short
+            // a drag is a stray click, and whether it ends as a stroke or as
+            // painted pixels - see Session::BeginShape. Pressing the other
+            // modifier mid-drag turns a line into a rectangle or back;
+            // letting go of both leaves it as it was.
+            if (event.kind == platform::MouseEventKind::Down) {
+                session_.BeginShape(armed, sessionShape(strokeShape_), event.position.x, event.position.y,
+                                    drawColorRGBA_, drawWidth_, Cfg().paintPixelsInsteadOfStrokes);
+            } else if (event.kind == platform::MouseEventKind::Move) {
+                if (io.KeyCtrl || io.KeyShift) {
+                    strokeShape_ = DrawShapeFor(io.KeyCtrl, io.KeyShift);
+                    session_.SetShape(sessionShape(strokeShape_));
+                }
+                session_.UpdateShape(event.position.x, event.position.y);
+            } else {
+                session_.EndShape(event.position.x, event.position.y);
+            }
+            break;
+        case StrokeGesture::Paint:
+            // Freehand, in pixels: the brush writes straight into the armed
+            // item's own painted layer, with no stroke stored anywhere.
+            if (event.kind == platform::MouseEventKind::Down) {
+                session_.BeginPaint(armed, event.position.x, event.position.y, drawColorRGBA_, drawWidth_);
+            } else if (event.kind == platform::MouseEventKind::Move) {
+                session_.ExtendPaint(event.position.x, event.position.y);
+            } else {
+                session_.EndPaint();
+            }
+            break;
+        case StrokeGesture::Freehand:
+            // Freehand, in vector: accumulated into the live layer (screen
+            // space) while the stroke is in progress, then transformed into
+            // native space and moved into the armed item (see
+            // Session::CommitLiveStroke).
+            if (event.kind == platform::MouseEventKind::Down) {
+                canvas->liveLayer.Clear();  // nothing of an earlier stroke is part of this one
+            }
+            drawTool_.OnMouseEvent(event, canvas->liveLayer);
+            if (event.kind == platform::MouseEventKind::Up) {
+                session_.CommitLiveStroke(armed);
+            }
+            break;
+        case StrokeGesture::None:
+            break;
+    }
+    if (event.kind == platform::MouseEventKind::Up) {
+        strokeGesture_ = StrokeGesture::None;
+    }
+}
+
+}  // namespace sz::ui
