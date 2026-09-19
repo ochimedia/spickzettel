@@ -2,13 +2,17 @@
 # Runs on Windows and, through the linux-tests preset, on Linux.
 add_executable(sz_core_tests
     core/build_info_test.cpp
+    core/app_config_test.cpp
     core/canvas_manager_test.cpp
     core/canvas_state_test.cpp
+    core/display_choice_test.cpp
     core/draw_tool_test.cpp
     core/image_codec_test.cpp
     core/item_geometry_test.cpp
     core/library_store_test.cpp
     core/painted_image_test.cpp
+    core/profile_test.cpp
+    core/shortcut_action_test.cpp
     core/slug_test.cpp
     core/stroke_clip_test.cpp
     core/stroke_mesh_test.cpp

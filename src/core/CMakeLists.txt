@@ -6,6 +6,11 @@ add_library(sz_core STATIC
     build_info/build_info.cpp
     canvas/canvas_manager.cpp
     canvas/item_geometry.cpp
+    config/app_config.cpp
+    config/bar_layout.cpp
+    config/display_choice.cpp
+    config/profile.cpp
+    config/shortcut_action.cpp
     drawing/canvas_state.cpp
     drawing/draw_tool.cpp
     drawing/painted_image.cpp

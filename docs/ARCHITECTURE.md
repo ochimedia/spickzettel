@@ -541,3 +541,125 @@ Overview never decodes a fullscreen capture to draw a 200px tile.
 A capture's pixels are written synchronously at capture time, not with
 the debounced record write: a screenshot lost to a crash can never be
 recaptured, where a few seconds of strokes can be redrawn.
+
+## Configuration
+
+`AppConfig` is every user-editable setting, read from and written to
+`config.json` by `ParseConfig`/`SerializeConfig`. Parsing is pure core
+logic; only *where* the file lives is platform-specific.
+
+The file is JSON rather than flat `key=value` lines because of
+profiles: a profile matches on a list of executable names and window
+titles, which are arbitrary strings holding `=`, `#`, commas and
+non-ASCII, and any flat encoding of "a list of arbitrary strings" grows
+a bespoke escaping scheme with its own bugs. nlohmann/json was already
+in the binary for the library.
+
+Three things about the file are deliberate:
+
+- **Groups, not a flat namespace** (`hotkeys`, `drawing`, `appearance`,
+  `bars`, `overview`, `display`, `input`, `shortcuts`, `diagnostics`).
+  `AppConfig`'s fields stay flat and the mapping lives in the
+  serializer. The grouping is not cosmetic: `input` and `shortcuts` are
+  exactly the settings a per-application profile may override, so a
+  profile is those two objects again, sparse.
+- **Absent means inherit, `null` means explicitly unset.** "Said
+  nothing" and "said none" have different spellings, which a shortcut
+  that ships bound and is unbound on purpose depends on. Every setting
+  is written, defaults included, so the file documents what can be set.
+- **`ordered_json`, and floats rounded to six decimals**, because the
+  file is meant to be opened and read: alphabetical keys interleave
+  settings by spelling, and `0.22f` promoted to double writes as
+  `0.2199999988079071`.
+
+Malformed input is never an error: a value of the wrong type, out of
+range, or a file that is not JSON at all leaves every setting at its
+default, the same contract the library has. A hand-edited config is
+treated as absent, not as a reason to crash on startup. The file is
+written through temp-then-rename, since truncating it in place leaves a
+window in which every setting is a half-written file.
+
+`KeyCombo` represents a hotkey as modifiers plus one logical key rather
+than an OS virtual-key code, and no modifier is required: a bare
+function key is a legitimate hotkey, and refusing plain letters is a
+possible later restriction rather than a rule today.
+
+### Tool shortcuts
+
+Every drawing tool, creation tool and clipboard action can carry a key,
+pressed while the overlay is up in edit mode. Four ship bound (`S`
+screenshot, `D` drawing, `E` eraser, `P` pen) plus the clipboard's usual
+`Ctrl+C/X/V`; the rest start unset, because a shortcut that fires a tool
+you did not want is worse than no shortcut. These are not OS hotkeys and
+are stored apart from the summon hotkeys: the UI reads them off its own
+frame, they only do anything while the overlay takes input, and nothing
+about them can fail the way registering a global hotkey can, which is
+also why a bare letter is allowed here and questionable there.
+
+`ShortcutAction` is the flat list the config layer persists, by name.
+Config sits below the app and cannot see `Tool` or `ClipboardAction`;
+the table that ties an action to what it runs lives in the UI, and a
+test there stands in for the exhaustiveness check a switch would give.
+
+### Per-application profiles
+
+A profile is a name, match rules and sparse overrides. Two levels, always
+the same two: exactly one profile matches at a time, first in list
+order, so "which profile am I in" has one answer; and everything it does
+not state comes from the defaults, so "where did this value come from"
+has two possible answers and no chain to trace.
+
+There was a third level once: a profile could be `basedOn` another, so
+one input recipe could serve a dozen games. The resolver was fine and
+the idea was not. The rule that made it comprehensible - a recipe may
+not itself be based on something - existed only in conversation, so
+nothing stopped a chain four deep; a list where every entry names what
+it derives from has to be read rather than scanned; and the sharing it
+bought is speculative, since typing the same three settings into a
+second profile costs seconds, once.
+
+`ProfileOverrides` is `std::optional` throughout because "says nothing"
+must be distinct from "says false". For a shortcut that is three states:
+nullopt inherits, a default `KeyCombo` is explicitly unbound, anything
+else is a binding.
+
+**An override is what you touched, not what happens to differ.**
+Inferring overrides from values unlike the inherited ones cannot tell "I
+never touched this here" from "I set this here and it happens to match",
+and only the second should survive a later change to the defaults. So
+overrides are written directly, and the UI makes the state visible and
+reversible with a marker and a revert arrow per row.
+
+What is overridable is exactly the `input` and `shortcuts` groups: the
+settings about the machine in front of you rather than about you.
+Colours and the rest are deliberately not.
+
+**The summon hotkeys are not overridable, and the obstacle is the OS.**
+`RegisterHotKey` is exclusive and system-wide, so per-application
+hotkeys would mean the registration following the foreground: a
+foreground-change hook while the overlay is down, a rule freezing the
+swap while it is up (edit mode taking focus makes *this* the foreground
+application), somewhere to report a registration that fails per
+application, and an unavoidable race on alt-tab. The alternative -
+matching combinations in a permanently installed low-level keyboard hook
+- is an always-on system-wide hook in every keystroke's path, in an app
+whose purpose is to sit over games with anti-cheat. That is a posture
+decision rather than an implementation one, and it has been decided
+against.
+
+Matching is on lowercased executable name (several per profile, since a
+launcher and the game it starts arrive under different names), with
+case-insensitive title substrings as the fallback for a process whose
+image path cannot be read. Resolution happens once, on the way up, and
+is deliberately not re-run when the foreground changes while the overlay
+is showing: that would tear the input hooks down mid-session, and "which
+profile am I in" would stop having one answer while the panel is open.
+
+### Which display
+
+`ChooseDisplay` turns the remembered display id and name into an
+attached display, and always answers: the display with that id; else
+the only display with that name, which is the same monitor on another
+port; else the primary. Two monitors sharing a name are not guessed
+between. A chosen display that is not attached is not forgotten; the
+primary stands in until it returns.
