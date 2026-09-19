@@ -69,6 +69,7 @@ add_subdirectory(src/app)
 
 if(WIN32)
     add_subdirectory(src/platform/win32)
+    add_subdirectory(src/app_main)
 endif()
 
 if(SPICKZETTEL_BUILD_TESTS)
