@@ -251,3 +251,39 @@ and two copies of every stroke on screen is a lot to hold to compare
 against. `EndFrame` drops whatever was not drawn that frame, so
 switching canvas or deleting an item releases the memory without either
 having to know the cache exists.
+
+### Painting: the pixel brush
+
+`PaintedImage` holds a pixel-authoritative layer's pixels and the brush
+that writes them. The brush is a capsule per segment - the same figure
+the tessellator builds - with coverage taken analytically from each
+pixel's distance to the centerline, so round caps, round joins and
+anti-aliasing come out of the arithmetic, a zero-length segment is a dab
+and therefore a dot, and a line drawn in either mode is the same shape.
+Only what can be done to it afterwards differs.
+
+A stroke is a session, not a run of stamps. Compositing each segment as
+it arrives would darken every overlap, and a brush moving a pixel at a
+time overlaps almost entirely, so a translucent line would go opaque
+within a few steps. Instead a stroke accumulates coverage into a mask
+(taking the maximum) and recomposites each touched tile from the pixels
+it held *before* the stroke began. Those saved pixels are exactly what
+undo needs, so nothing is stored twice: `EndStroke` hands them back as
+the undo entry's tiles, and `RestoreTiles` puts them back and returns
+what it replaced, which is the redo state. Tiles are 64x64 (16 KB); a
+stroke across a 640x640 layer touches four of a hundred, where a
+whole-image undo entry would be 8 MB a step.
+
+The rectangular eraser is the same session with a different coverage
+function (`ExtendRect`), so it shares the mask, the tiles and the undo
+entry. Erasing takes alpha and leaves colour, so a half-erased edge
+fades instead of shifting toward black.
+
+A layer's size is capped at 4096 on a side, and the cap is applied to
+the *resolution scale*, not to the bitmap: `FitResolutionScale` lowers
+the scale uniformly until the longer side fits, and because every
+coordinate on the way in is multiplied by that same scale, a 5120-wide
+capture paints where the pen is. Clamping the bitmap's width and height
+while still mapping coordinates 1:1 cropped everything past the cap and
+stretched the rest, putting a stroke a quarter of the way across the
+item from the pen.
