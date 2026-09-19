@@ -346,9 +346,34 @@ void Win32InputGrab::Refresh() {
 
 void Win32InputGrab::StartHookThread() {
     if (hookThread_) {
-        return;
+        // A thread a previous Stop asked to quit and gave up waiting for
+        // (see StopHookThread) may have finished since. If it has, its
+        // handle is closed here and a fresh thread started; if it is still
+        // running, it is the thread and gets the next message.
+        if (WaitForSingleObject(hookThread_, 0) != WAIT_OBJECT_0) {
+            return;
+        }
+        CloseHandle(hookThread_);
+        hookThread_ = nullptr;
+        hookThreadId_ = 0;
     }
+    // A thread has no message queue until it first asks for one, and
+    // PostThreadMessage to a thread without a queue fails - so the first
+    // reconcile request, posted the moment this returns, could land on
+    // nothing. The thread signals once its queue exists, and this waits for
+    // that (or for the thread to die trying) before handing the id out.
+    hookThreadReady_ = CreateEventA(nullptr, TRUE, FALSE, nullptr);
     hookThread_ = CreateThread(nullptr, 0, &Win32InputGrab::HookThreadMain, this, 0, &hookThreadId_);
+    if (!hookThread_) {
+        hookThreadId_ = 0;
+    } else if (hookThreadReady_) {
+        const HANDLE readyOrDead[] = {hookThreadReady_, hookThread_};
+        WaitForMultipleObjects(2, readyOrDead, FALSE, 5000);
+    }
+    if (hookThreadReady_) {
+        CloseHandle(hookThreadReady_);
+        hookThreadReady_ = nullptr;
+    }
 }
 
 void Win32InputGrab::StopHookThread() {
@@ -356,7 +381,13 @@ void Win32InputGrab::StopHookThread() {
         return;
     }
     PostThreadMessageA(hookThreadId_, WM_QUIT, 0, 0);
-    WaitForSingleObject(hookThread_, 2000);
+    if (WaitForSingleObject(hookThread_, 2000) != WAIT_OBJECT_0) {
+        // Still running - a hook callback stuck behind something, say. The
+        // handle and id are kept, so that it stays this object's thread:
+        // the next Start finds it rather than starting a second thread over
+        // the same hooks and raw-input sink, and the next Stop asks again.
+        return;
+    }
     CloseHandle(hookThread_);
     hookThread_ = nullptr;
     hookThreadId_ = 0;
@@ -364,9 +395,13 @@ void Win32InputGrab::StopHookThread() {
 
 DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
     auto& grab = *static_cast<Win32InputGrab*>(self);
-    // Ensure the thread has a message queue before anyone posts to it.
+    // The message queue exists from this call on - and StartHookThread is
+    // waiting to hear so before it lets anyone post here.
     MSG msg;
     PeekMessageA(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    if (grab.hookThreadReady_) {
+        SetEvent(grab.hookThreadReady_);
+    }
     grab.ReconcileHooks();
 
     while (GetMessageA(&msg, nullptr, 0, 0) > 0) {

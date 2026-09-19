@@ -91,5 +91,39 @@ TEST(Win32InputGrabTest, RawMouseInputIsRegisteredAgainAfterHideAndShow) {
     DestroyWindow(overlay);
 }
 
+// A start followed at once by a stop, many times over: the stop's quit
+// message must reach a queue that exists, and every thread started must be
+// gone by the time the grab says it is inactive - or a hook survives on a
+// thread nothing owns.
+TEST(Win32InputGrabTest, RapidStartAndStopLeavesNoHookBehind) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = false;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+
+    for (int i = 0; i < 20; ++i) {
+        grab.SetActive(true);
+        grab.SetActive(false);
+    }
+    EXPECT_TRUE(Eventually([] { return !QueryRawMouse().present; }, std::chrono::milliseconds(1500)))
+        << "a sink registered by a thread that outlived its stop";
+
+    // ...and a start after all that still works.
+    grab.SetActive(true);
+    EXPECT_TRUE(Eventually([] { return QueryRawMouse().targetIsAWindow; }, std::chrono::milliseconds(1500)));
+    grab.SetActive(false);
+    grab.Shutdown();
+    DestroyWindow(overlay);
+}
+
 }  // namespace
 }  // namespace sz::platform::win32

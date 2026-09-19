@@ -384,8 +384,14 @@ private:
     // Owned by the hook thread; never touched from anywhere else.
     HHOOK mouseHook_ = nullptr;
     HHOOK keyboardHook_ = nullptr;
+    // The thread itself is owned by the app thread, from CreateThread to
+    // the CloseHandle after it has been seen to exit - see StartHookThread
+    // and StopHookThread. hookThreadReady_ lives only for the handshake
+    // between the two: set by the thread once its message queue exists,
+    // waited on by Start before it lets anyone post to the id.
     HANDLE hookThread_ = nullptr;
     DWORD hookThreadId_ = 0;
+    HANDLE hookThreadReady_ = nullptr;
 
     // The overlay's own pointer, in screen coordinates - see
     // VirtualCursorActive. Seeded from the real cursor when a grab starts

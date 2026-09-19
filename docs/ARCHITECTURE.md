@@ -1401,6 +1401,15 @@ Consequences that shape `Win32InputGrab`:
   300 injected reports took 10 ms ungrabbed and 5,318 ms grabbed, and a
   drag laid down 2 stroke points ungrabbed and 282 grabbed. On a thread
   that does nothing but pump, 18 ms and 4 points, the ungrabbed baseline.
+  The app thread owns the thread from `CreateThread` to the `CloseHandle`
+  after it has been seen to exit. Starting it is a handshake: a thread
+  has no message queue until it first asks for one, `PostThreadMessage`
+  to a thread without one fails, and the first reconcile request is
+  posted the moment the start returns - so the thread signals an event
+  once its queue exists and the start waits for that. A stop whose
+  two-second wait times out keeps the handle rather than forgetting a
+  live thread: the next start finds it (or finds it finished, and closes
+  it) instead of starting a second thread over the same hooks and sink.
 - **Movement is never posted.** Windows coalesces `WM_MOUSEMOVE` to about
   one per frame; re-posting every swallowed report made a 1000 Hz mouse a
   message flood. The render thread emits one Move per frame while a
@@ -1490,9 +1499,13 @@ same reason, which is the fallback to reach for if it turns up.
 
 `CaptureRegionAsTexture` hides the overlay, `DwmFlush`es so the next
 composition pass has happened, `BitBlt`s with `CAPTUREBLT` so other
-applications' layered windows are included, converts GDI's BGRA to RGBA
-once, and shows the overlay again - a real, brief flicker, expected for
-this technique. The rectangle goes through `ClientToScreen`, so a capture
+applications' layered windows are included, deselects the bitmap and
+reads it with `GetDIBits` (which documents that the bitmap must not be
+selected into a DC while it is read, and whose row count is checked
+rather than taken as nonzero), converts GDI's BGRA to RGBA once and sets
+every alpha byte to opaque - the fourth byte of a 32bpp DIB is not an
+alpha channel, GDI leaves it undefined - and shows the overlay again: a
+real, brief flicker, expected for this technique. The rectangle goes through `ClientToScreen`, so a capture
 comes from the overlay's display rather than from wherever its
 coordinates land on the primary. Textures are `D3D11_USAGE_DEFAULT`
 rather than immutable so a painted layer can be updated in place.
