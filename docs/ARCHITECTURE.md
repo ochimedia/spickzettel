@@ -579,6 +579,27 @@ painted layer is re-encoded over its own previous file on every save,
 and truncating in place left a window in which the only copy on disk of
 a drawing was the first half of it.
 
+**What is and is not promised.** Atomicity per file, not durability and
+not a transaction across files. The rename means no reader - this
+process after a crash included - sees half a record or half a picture.
+It does not mean the bytes are on the platter: the stream is flushed to
+the OS and not `fsync`ed, so a power loss inside the OS's write-back
+window can lose the last save, and even a synced rename on NTFS is not
+a durability guarantee for the file's contents. Nor is there a
+transaction spanning a record and the pictures it names: a crash between
+the two leaves a picture with no record (kept in staging, then in
+`retired/images/`) or a record naming a picture that was never written
+(the layer draws as its placeholder). Both are the same shape of
+inconsistency a hand edit leaves and are reconciled the same way. What
+"captured" means, precisely: the pixels are encoded to disk before the
+capture returns; the *record* naming them is written by the save that
+follows - at once when the overlay is hidden, within the debounce
+otherwise - and the session holds the pixels until both have landed.
+Journaling and per-file `fsync` were considered and not done: the
+library is a working surface autosaved every few seconds, not a
+document with a save button, and a few seconds of ink is the most a
+power loss can take.
+
 ### Images: QOI, decoded by magic bytes
 
 Pixels are written as QOI. Measured on this app's own screenshots

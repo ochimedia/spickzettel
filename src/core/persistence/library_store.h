@@ -162,8 +162,11 @@ public:
     // library absent over its pointer file would start the app fresh, and
     // a fresh library saved over a tree is how a tree gets retired.
     //
-    // Never throws, whatever is in the files - the same "bad input means
-    // defaults" rule AppConfig::ParseConfig keeps. A field of the wrong
+    // Nothing in the *content* of the files can make this throw - the same
+    // "bad input means defaults" rule AppConfig::ParseConfig keeps; every
+    // filesystem call takes an error_code. Running out of memory can, as
+    // it can anywhere, which is what the size budgets on what is read are
+    // for (see the .cpp). A field of the wrong
     // type in library.json reads as its default; a folder, canvas or
     // snippet record that cannot be read is skipped, and skipped is all
     // it is (see the class comment on what Save may retire). Everything

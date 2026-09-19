@@ -32,7 +32,9 @@ DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent);
 
 // Encodes `pixelsRGBA` as a QOI image and writes it to `path`, creating
 // parent directories as needed. Returns false on any failure (bad input,
-// encode error, can't write the file) - never throws. This is what a Shot
+// encode error, can't write the file) rather than throwing; filesystem
+// calls take an error_code, and streams report through their state. An
+// allocation failure is the one thing that can still throw. This is what a Shot
 // item's captured screenshot is written with, synchronously at capture
 // time (see Session::CaptureShotItem) rather than as part of the
 // debounced library autosave - losing a few seconds of drawing to a crash

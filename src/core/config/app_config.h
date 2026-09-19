@@ -319,10 +319,11 @@ AppConfig DefaultConfig();
 
 // Parses config.json text. Every setting is optional: one that is missing,
 // of the wrong type, or out of range keeps its default, and a file that
-// isn't valid JSON at all reads as one that said nothing. Never throws -
-// the same contract persistence::LibraryStore::Load has, and for the same
-// reason: a hand-edited or truncated file should be treated as absent, not
-// crash the app on startup.
+// isn't valid JSON at all reads as one that said nothing. Nothing in the
+// *content* of the text can make this throw - the same contract
+// persistence::LibraryStore::Load has, and for the same reason: a
+// hand-edited or truncated file should be treated as absent, not crash the
+// app on startup. Running out of memory can, as it can anywhere.
 AppConfig ParseConfig(std::string_view text);
 
 // Renders a config back to JSON text, suitable for writing to disk on first
