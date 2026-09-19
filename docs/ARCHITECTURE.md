@@ -96,3 +96,24 @@ closed-source one:
 
 googletest and imgui_test_engine only build or test the app and are not
 in a release binary, so they are not in the notices.
+
+## The platform interface
+
+`IPlatformHost` owns what exists for the whole process: the tray icon,
+global hotkey registration, the event loop, the list of displays and the
+per-user paths. `IOverlayWindow` is the one fullscreen window: lazily
+created, then shown and hidden without tearing down its GPU resources,
+so toggling it by hotkey costs nothing after the first time. Both are
+kept deliberately small and grow one method at a time as a feature needs
+one, rather than being redesigned per feature.
+
+Everything crossing the boundary is plain data in `platform_types.h`: a
+`KeyCombo` is modifiers plus one logical key (letters and digits share
+their virtual-key value on every platform; function keys get their own
+encoding), a `CaptureResult` carries the GPU texture *and* the CPU pixels
+so persisting a capture needs no second OS call, and a texture is an
+opaque `uint64_t` so no platform header ever names an ImGui type.
+
+`pen_glyph.h` is the one small piece of drawing that lives here: the pen
+pointer's outline, which both the software pointer (drawn by the UI) and
+the Win32 cursor bitmap are built from, so the two pens are the same pen.

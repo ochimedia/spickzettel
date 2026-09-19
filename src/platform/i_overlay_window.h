@@ -1,0 +1,147 @@
+#pragma once
+
+#include <cstdint>
+#include <functional>
+
+#include "platform/platform_types.h"
+
+namespace sz::platform {
+
+// A fullscreen overlay window covering one display. Created lazily and
+// then hidden and shown without tearing down GPU resources, so that
+// toggling it by hotkey many times a session costs nothing after the first.
+class IOverlayWindow {
+public:
+    virtual ~IOverlayWindow() = default;
+
+    // ===== Lifetime and placement =====
+
+    // Creates the window and its rendering resources on first call,
+    // covering `display`; a cheap no-op afterwards, which ignores
+    // `display`. Returns true if the window is ready to show.
+    virtual bool EnsureCreated(const DisplayInfo& display) = 0;
+
+    // Moves the window to cover `display` instead, together with everything
+    // the backend does in desktop coordinates on its behalf (where a capture
+    // is taken from, where a grabbed pointer may go). Safe while visible or
+    // hidden; a no-op before EnsureCreated or when already there.
+    virtual void MoveToDisplay(const DisplayInfo& display) = 0;
+
+    // Invoked when the displays change under the window - one attached or
+    // removed, a resolution changed - so that whoever chooses the display
+    // can choose again. The window never moves itself.
+    virtual void SetDisplaysChangedCallback(std::function<void()> callback) = 0;
+
+    // Releases everything (window, device, swapchain). Called once, on exit.
+    virtual void Destroy() = 0;
+
+    // ===== Showing =====
+
+    // Shows the window and gives it focus, unless SetEditModeNoActivate(true)
+    // is in effect.
+    virtual void Show() = 0;
+    // Shows it without ever taking focus, whatever that setting says. On
+    // Windows showing a window is what activates it, so this has to be a
+    // distinct operation. For a window only there to be looked at - see
+    // app::TrayController::ShowNotice.
+    virtual void ShowWithoutActivating() = 0;
+    // Hides the window and restores focus to whatever previously had it, if
+    // this window still holds it.
+    virtual void Hide() = 0;
+    virtual bool IsVisible() const = 0;
+
+    // Whether frames are wanted at the display's refresh rate or only now
+    // and then - see FramePacing. Idle lets the backend draw a few times a
+    // second plus once per event that could have changed the picture,
+    // instead of redrawing an unchanging view-only overlay at 120 Hz over a
+    // game for hours. Told from the frame callback whenever it changes.
+    virtual void SetFramePacing(FramePacing pacing) = 0;
+
+    // ===== Focus and input =====
+
+    // Whether showing the window, or clicking it in edit mode, ever gives it
+    // OS input focus. Enabled, it never does: mouse routing works as usual
+    // while keyboard focus stays with the application underneath, which
+    // therefore sees no focus-loss event. Safe to call at any time; takes
+    // effect immediately. See RequestTextInput for the one thing that still
+    // needs the keyboard regardless.
+    virtual void SetEditModeNoActivate(bool enabled) = 0;
+
+    // A text field is open and needs keystrokes even though the window may
+    // be holding no focus: the backend either grabs the keyboard for the
+    // duration or borrows real focus, whichever it can. Release gives back
+    // whichever was taken. Both are no-ops when the window holds focus the
+    // ordinary way.
+    virtual void RequestTextInput() = 0;
+    virtual void ReleaseTextInput() = 0;
+
+    // OS-level click-through: while enabled every mouse event over this
+    // window goes to whatever is beneath it, and keyboard focus is handed
+    // back to what had it before the overlay was shown. For view-only mode.
+    // Independent of Show/Hide; takes effect immediately.
+    virtual void SetInputPassthrough(bool enabled) = 0;
+
+    // How much physical input the overlay takes away from the foreground
+    // application while it is up in edit mode - see EditModeInputOptions.
+    // Safe to call at any time; applies only while genuinely visible in
+    // edit mode, never while hidden or in click-through view-only mode.
+    virtual void SetEditModeInput(const EditModeInputOptions& options) = 0;
+
+    // The input options HUD is up: its rows are toggled by number keys, and
+    // an overlay deliberately holding no keyboard focus can only be handed
+    // those by the backend's keyboard grab, so that grab has to stay
+    // available even with dontForwardKeystrokes off. 0 when the HUD closes.
+    virtual void SetInputOptionsHudDigits(int digitCount) = 0;
+
+    // Which application the overlay is up over - see ForegroundApp. Asked
+    // at the moment the overlay is shown, when the answer means something.
+    virtual ForegroundApp UnderlyingApplication() const = 0;
+
+    // Overrides the cursor over this window for the shapes ImGui does not
+    // have - see CursorShape. Called once per frame with whatever is wanted,
+    // so a shape ImGui quietly overwrote from its own NewFrame is
+    // reinstated; must be idempotent and cheap on an unchanged shape.
+    virtual void SetCursorShape(CursorShape shape) = 0;
+
+    // Debug scaffolding for the input options HUD. Backends without an
+    // input grab return a default-constructed value.
+    virtual InputGrabDiagnostics GetInputGrabDiagnostics() const = 0;
+
+    // ===== Callbacks =====
+
+    // Invoked once per rendered frame while visible; the UI issues its draw
+    // calls from within it.
+    virtual void SetFrameCallback(FrameCallback callback) = 0;
+    // Invoked for mouse button and move events received while visible.
+    virtual void SetMouseCallback(MouseCallback callback) = 0;
+
+    // ===== Textures and capture =====
+
+    // Captures `rect` (in this window's own coordinates) as it appears with
+    // this window's own content excluded, and uploads it as a GPU texture.
+    // The handle is an ImTextureID kept as a bare uint64_t so this header
+    // stays free of ImGui; the caller casts. textureHandle is 0 and
+    // pixelsRGBA empty if the backend cannot capture or the OS refused;
+    // callers then fall back to a placeholder.
+    virtual CaptureResult CaptureRegionAsTexture(const Rect& rect) = 0;
+
+    // Uploads RGBA8 pixels (the layout CaptureResult uses) as a new
+    // texture - for reloading a persisted picture. Returns 0 if the backend
+    // has no device to create one with.
+    virtual uint64_t CreateTextureFromPixels(const uint8_t* pixelsRGBA, int width, int height) = 0;
+
+    // Replaces a rectangle of an existing texture's pixels in place.
+    // `pixelsRGBA` is the *whole* image the texture was created from, with
+    // `sourceWidth` its width; x/y/w/h select the changed part. Returns false
+    // for an unknown handle, a rectangle outside the texture, or a backend
+    // that cannot do this. Painting needs it: a brush moves several times a
+    // frame and touches a few hundred pixels, where re-uploading a
+    // fullscreen layer would be 8 MB a move.
+    virtual bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* pixelsRGBA, int sourceWidth,
+                                      int x, int y, int w, int h) = 0;
+
+    // Releases a texture from either call above. No-op for 0.
+    virtual void ReleaseTexture(uint64_t textureHandle) = 0;
+};
+
+}  // namespace sz::platform

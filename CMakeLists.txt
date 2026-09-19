@@ -44,3 +44,9 @@ if(SPICKZETTEL_BUILD_TESTS)
     include(FetchGoogleTest)
     enable_testing()
 endif()
+
+add_subdirectory(src/platform)
+
+if(SPICKZETTEL_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
