@@ -299,6 +299,16 @@ public:
     // Overview that can be told apart at a glance. The user's own call.
     void QuickCapture(float displayW, float displayH);
 
+    // Brings everything the hand is in the middle of into the model, so
+    // that a save taken right after it has all of it: the gesture under a
+    // held button ends where the pointer is (a stroke is committed, a drag
+    // lands), and a note being typed is committed to its item. What every
+    // canvas switch settles first (see SwitchToCanvasSettled), done for the
+    // saves that happen with no frame to follow - hiding, restarting,
+    // exiting, the OS ending the session. A flush that ran without this
+    // wrote the note as it was when the editor opened, and typing that had
+    // been visible for a minute was gone at the next start.
+    void SettleForPersistence();
 
     // Asks for the first-run welcome note to be placed on the current
     // canvas. Called by TrayController when there was no library on disk to

@@ -952,6 +952,18 @@ void OverlayApp::QuickCapture(float displayW, float displayH) {
     ShowActionToast(strings::kToastCapturedScreenshot);
 }
 
+void OverlayApp::SettleForPersistence() {
+    // Same guard as QuickCapture's: finishing a gesture asks ImGui whether
+    // the button is down, which needs a context, and there is nothing in
+    // flight without one.
+    if (ImGui::GetCurrentContext() != nullptr) {
+        FinishLeftButtonGesture();
+    }
+    if (editingNoteItemId_.has_value()) {
+        EndEditingNote(noteEditBuffer_);
+    }
+}
+
 // ================= Frame =================
 
 // Brackets one frame's use of the two stroke-mesh caches. A struct rather

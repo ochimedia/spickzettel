@@ -746,9 +746,15 @@ popover state, toasts, and GPU caches that exist only for drawing.
 counter against what was true last frame and what was last saved. A
 write fires once the generation has been unchanged for 2 s, coalescing a
 burst of edits into one write, or after 15 s regardless, so a long
-uninterrupted session is still persisted. `Flush` is called at the two
-places content stops being editable: before hiding the overlay and
-before exiting. A failed write (disk full, a file held open) is retried
+uninterrupted session is still persisted. `Flush` is called where
+content stops being editable with no frame to follow - hiding the
+overlay, restarting it for a setting, exiting - and every one of those
+first settles what the hand is in the middle of
+(`OverlayApp::SettleForPersistence`): the gesture under a held button
+ends, and a note being typed is committed to its item. A note lives in
+the editor's buffer until it is committed, and a flush that ran before
+the commit wrote the note as it was when the editor opened; typing that
+had been on screen for a minute was gone at the next start. A failed write (disk full, a file held open) is retried
 on a clock of its own, doubling up to 30 s; falling through to the quiet
 check, which a failed save does nothing to reset, retried on every frame
 and turned a full disk into a synchronous rewrite per frame. A save is

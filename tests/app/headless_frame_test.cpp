@@ -2121,6 +2121,44 @@ TEST_F(HeadlessAppTest, ANoteNothingWasTypedIntoGoesWhenTheHandMovesOn) {
     EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty()) << "erased, not kept deleted";
 }
 
+// Hiding and exiting both flush, and a note being typed lives in the
+// editor's buffer until it is committed - so both have to commit it first,
+// or the flush writes the note as it was when the editor opened.
+TEST_F(HeadlessAppTest, HidingByHotkeyCommitsTheNoteBeingTyped) {
+    StartWith(WithTextOnT());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 620.0f, 440.0f);
+    PressKey(ImGuiKey_T);
+    RawClick(400.0f, 400.0f);
+    ASSERT_TRUE(App().EditingNote().has_value());
+    ImGui::GetIO().AddInputCharacter('a');
+    ImGui::GetIO().AddInputCharacter('b');
+    StepFrames(2);
+    ASSERT_TRUE(Canvases().CurrentOrNull()->items[0].noteText.empty()) << "typed, not yet committed";
+
+    ShowEditMode();  // the edit hotkey again: put away, with the editor still open
+    EXPECT_FALSE(host_.overlayWindow.IsVisible());
+    EXPECT_FALSE(App().EditingNote().has_value());
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].noteText, "ab");
+}
+
+TEST_F(HeadlessAppTest, ExitingFromTheTrayCommitsTheNoteBeingTyped) {
+    StartWith(WithTextOnT());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 620.0f, 440.0f);
+    PressKey(ImGuiKey_T);
+    RawClick(400.0f, 400.0f);
+    ASSERT_TRUE(App().EditingNote().has_value());
+    ImGui::GetIO().AddInputCharacter('x');
+    StepFrames(2);
+
+    host_.TriggerTrayCommand(platform::TrayCommand::Exit);
+    EXPECT_TRUE(host_.quitCalled);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].noteText, "x");
+}
+
 // A text box is a box whose shape is the point of resizing it, so its
 // resize is free where a drawing's or a screenshot's keeps the shape.
 TEST_F(HeadlessAppTest, ATextBoxResizesFreely) {

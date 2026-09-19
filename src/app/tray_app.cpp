@@ -345,7 +345,9 @@ void TrayController::PutAway() {
     // OnFrame (and so the debounced autosave check inside it) only runs
     // while visible - and in the pinned view nothing is edited - so going
     // away is a safe point that needs its own explicit flush: the next
-    // debounce window might otherwise never arrive.
+    // debounce window might otherwise never arrive. Settled first, so the
+    // flush has what was being typed or drawn - see SettleForPersistence.
+    overlayApp_.SettleForPersistence();
     session_.Flush();
     session_.ReleaseFrozenScreen();
     if (overlayApp_.IsViewOnly() && session_.Manager().CurrentCanvasHasPinnedItems()) {
@@ -451,6 +453,7 @@ void TrayController::RestartOverlay() {
     // Same teardown a deliberate hide does - the frozen image belongs to
     // the session being ended, and hiding is the safe point autosave needs.
     const bool viewOnly = overlayApp_.IsViewOnly();
+    overlayApp_.SettleForPersistence();
     session_.Flush();
     session_.ReleaseFrozenScreen();
     window.Hide();
@@ -578,6 +581,7 @@ void TrayController::OnTrayCommand(platform::TrayCommand command) {
             ToggleMode(/*viewOnly=*/false);
             break;
         case platform::TrayCommand::Exit:
+            overlayApp_.SettleForPersistence();
             session_.Flush();
             host_.Quit(0);
             break;
