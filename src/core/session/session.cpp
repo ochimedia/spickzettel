@@ -78,6 +78,35 @@ bool Session::SavePaintedLayers(LibraryInstance& instance) {
     return wroteEverything;
 }
 
+bool Session::SavePendingPictures(LibraryInstance& instance) {
+    if (!instance.store) {
+        return true;
+    }
+    bool wroteEverything = true;
+    for (auto it = pendingPictures_.begin(); it != pendingPictures_.end();) {
+        Item* item = instance.manager.FindItemAnywhere(it->first);
+        Layer* picture = item ? item->ImageLayer() : nullptr;
+        if (!picture) {
+            it = pendingPictures_.erase(it);  // erased for good since; nothing to keep it for
+            continue;
+        }
+        const PendingPicture& pending = it->second;
+        if (const std::optional<std::string> filename =
+                instance.store->SaveImage(it->first, pending.pixelsRGBA.data(), pending.width, pending.height)) {
+            picture->imageFile = *filename;
+            it = pendingPictures_.erase(it);
+        } else {
+            wroteEverything = false;
+            ++it;
+        }
+    }
+    return wroteEverything;
+}
+
+bool Session::HasUnsavedChanges() const {
+    return library_.manager.Generation() != library_.lastSavedGeneration || !pendingPictures_.empty();
+}
+
 void Session::SyncTexturesToCurrentCanvas() {
     if (!Store() || !window_) {
         return;
@@ -155,7 +184,7 @@ void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {
         instance.secondsSinceLastChange += deltaSeconds;
     }
 
-    if (generation == instance.lastSavedGeneration) {
+    if (!HasUnsavedChanges()) {
         instance.secondsSinceFirstUnsavedChange = 0.0f;
         return;  // nothing pending
     }
@@ -184,14 +213,16 @@ bool Session::SaveLibraryNow(LibraryInstance& instance) {
     }
     // Pixels first, then the metadata that points at them. Both have to
     // land for the save to count: the generation is acknowledged only when
-    // everything it covers is on disk, and a painted layer's pixels are
-    // covered by it as much as the record that names them. The metadata
-    // is written even when a picture wasn't - what did land is worth
-    // have, and the whole thing is retried until all of it has.
+    // everything it covers is on disk, and a painted layer's pixels - or a
+    // capture's still waiting to be written - are covered by it as much as
+    // the record that names them. The metadata is written even when a
+    // picture wasn't - what did land is worth having, and the whole thing
+    // is retried until all of it has.
     const uint64_t generation = instance.manager.Generation();
     const bool pixelsSaved = SavePaintedLayers(instance);
+    const bool picturesSaved = SavePendingPictures(instance);
     const bool metadataSaved = instance.store->Save(instance.manager.ExportSnapshot());
-    const bool saved = pixelsSaved && metadataSaved;
+    const bool saved = pixelsSaved && picturesSaved && metadataSaved;
     if (saved) {
         instance.lastSavedGeneration = generation;
         instance.saveRetryBackoffSeconds = 0.0f;
@@ -207,14 +238,14 @@ bool Session::SaveLibraryNow(LibraryInstance& instance) {
     return saved;
 }
 
-void Session::FlushIfDirty(LibraryInstance& instance) {
-    if (!instance.store || instance.manager.Generation() == instance.lastSavedGeneration) {
-        return;
+bool Session::FlushIfDirty(LibraryInstance& instance) {
+    if (!instance.store || !HasUnsavedChanges()) {
+        return true;
     }
-    SaveLibraryNow(instance);
+    return SaveLibraryNow(instance);
 }
 
-void Session::Flush() { FlushIfDirty(library_); }
+bool Session::Flush() { return FlushIfDirty(library_); }
 
 // ================= Deleting and restoring =================
 
@@ -397,7 +428,7 @@ void Session::CaptureShotItem(Item& item) {
     // capture whenever nothing is frozen, which is also what happens if the
     // freeze itself failed.
     std::optional<platform::CaptureResult> cropped = CropFrozenScreen(item.rect);
-    const platform::CaptureResult result =
+    platform::CaptureResult result =
         cropped.has_value() ? std::move(*cropped)
                              : window_->CaptureRegionAsTexture(
                                    platform::Rect{item.rect.x, item.rect.y, item.rect.w, item.rect.h});
@@ -410,10 +441,19 @@ void Session::CaptureShotItem(Item& item) {
     // CanvasManager::CreateItem a moment earlier in the same synchronous
     // call stack, which already bumped the generation counter - nothing can
     // observe this item's state in between.
+    //
+    // A write that fails keeps the pixels rather than the texture alone:
+    // what is on screen looks captured, and letting the only copy go would
+    // make that a lie the next restart tells. They are tried again with
+    // every save until they land, and no save counts until they have - see
+    // SavePendingPictures.
     if (!result.pixelsRGBA.empty() && Store()) {
         if (const std::optional<std::string> filename =
                 Store()->SaveImage(item.id, result.pixelsRGBA.data(), result.width, result.height)) {
             picture->imageFile = *filename;
+            pendingPictures_.erase(item.id);
+        } else {
+            pendingPictures_[item.id] = PendingPicture{std::move(result.pixelsRGBA), result.width, result.height};
         }
     }
 }
@@ -438,14 +478,18 @@ void Session::CloneShotImageForCopy(ItemId sourceId, ItemId copyId) {
     }
     // Re-saved under `copyId`'s own filename - a fresh file on disk, not a
     // second reference to the source's - same single-owner reasoning as
-    // CanvasManager clearing these on copy in the first place.
-    if (const std::optional<std::string> filename = Store()->SaveImage(
-            copyId, decoded->pixelsRGBA.data(), decoded->width, decoded->height)) {
-        copyPicture->imageFile = *filename;
-    }
+    // CanvasManager clearing these on copy in the first place. A write
+    // that fails is kept for the next save, as a capture's is.
     if (window_) {
         copyPicture->textureHandle =
             window_->CreateTextureFromPixels(decoded->pixelsRGBA.data(), decoded->width, decoded->height);
+    }
+    if (const std::optional<std::string> filename = Store()->SaveImage(
+            copyId, decoded->pixelsRGBA.data(), decoded->width, decoded->height)) {
+        copyPicture->imageFile = *filename;
+        pendingPictures_.erase(copyId);
+    } else {
+        pendingPictures_[copyId] = PendingPicture{std::move(decoded->pixelsRGBA), decoded->width, decoded->height};
     }
     // No MarkChanged() call needed - same reasoning as CaptureShotItem's
     // own: this runs synchronously right after the copy itself

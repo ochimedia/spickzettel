@@ -82,8 +82,20 @@ public:
     void Tick(float deltaSeconds);
     // Writes the library right now if anything's changed since its last
     // save, bypassing the debounce - for a safe point where no frame will
-    // come soon enough to catch it (hiding the overlay, exiting).
-    void Flush();
+    // come soon enough to catch it (hiding the overlay, exiting). True
+    // when everything is on disk afterwards - nothing was pending, or the
+    // save landed whole. False means something is not, and stays owed:
+    // the caller decides what to tell the user, the next Tick or Flush
+    // tries again.
+    bool Flush();
+    // Whether anything is owed to the disk: a change since the last save
+    // that landed, or a capture whose picture could not be written yet
+    // (see CaptureShotItem). What the autosave and Flush act on, and what
+    // a UI can show.
+    bool HasUnsavedChanges() const;
+    // Whether the most recent save attempt failed and is waiting to be
+    // retried - for a UI to say so. Cleared by the save that lands.
+    bool LastSaveFailed() const { return library_.saveRetryBackoffSeconds > 0.0f; }
 
     // Brings GPU shot textures in line with whichever canvas is current:
     // loads the ones it needs, frees every other canvas's (see
@@ -266,13 +278,27 @@ private:
     // if any layer's pixels could not be written; that layer stays dirty,
     // and the save this is part of is not acknowledged.
     bool SavePaintedLayers(LibraryInstance& instance);
+    // A capture's pixels whose write failed at capture time, kept so the
+    // write can be tried again - see CaptureShotItem. A screenshot is the
+    // one thing in the library that cannot be remade, so its pixels are
+    // not let go of until they are on disk.
+    struct PendingPicture {
+        std::vector<uint8_t> pixelsRGBA;
+        int width = 0;
+        int height = 0;
+    };
+    // Tries again to write every pending picture, recording the filename
+    // on its item's picture layer as it lands. Called with SavePaintedLayers
+    // before the records are written, and part of the same all-or-nothing
+    // answer. A picture whose item has since gone for good is dropped.
+    bool SavePendingPictures(LibraryInstance& instance);
     void UpdateAutosave(LibraryInstance& instance, float deltaSeconds);
     // The actual write. True means everything the current generation covers
     // is on disk: every painted layer's pixels and every record. False means
     // it is not, nothing is acknowledged, and a retry is scheduled on its
     // own backoff.
     bool SaveLibraryNow(LibraryInstance& instance);
-    void FlushIfDirty(LibraryInstance& instance);
+    bool FlushIfDirty(LibraryInstance& instance);
     std::optional<platform::CaptureResult> CropFrozenScreen(const Rect& rect) const;
 
     // ----- Undo -----
@@ -467,6 +493,8 @@ private:
     // is kept for a second one (an archive, say) should the app ever look
     // at two.
     LibraryInstance library_;
+    // See PendingPicture.
+    std::unordered_map<ItemId, PendingPicture> pendingPictures_;
     // Which canvas's shot textures are currently resident on the GPU, or
     // nullopt before the first sync has run. Compared against the current
     // canvas by EnsureTexturesForCurrentCanvas; a mismatch is what triggers

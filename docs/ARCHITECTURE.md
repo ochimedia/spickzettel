@@ -754,7 +754,12 @@ check, which a failed save does nothing to reset, retried on every frame
 and turned a full disk into a synchronous rewrite per frame. A save is
 acknowledged only when *all* of it landed, painted pixels included, so a
 layer whose write failed is retried rather than waiting for an unrelated
-edit.
+edit. A capture whose picture could not be written at capture time keeps
+its pixels in the session and is written by the next save that can, and
+no save counts until it has. A screenshot is the one thing in the
+library that cannot be remade; the first version let the pixels go with
+the capture result, so a picture that failed to write stayed on screen,
+looking captured, and was gone at the next restart.
 
 Painted pixels are written before the texture sync discards anything
 non-current, and the release path refuses to drop a layer that is still

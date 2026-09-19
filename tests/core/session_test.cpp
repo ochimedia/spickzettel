@@ -472,6 +472,66 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     std::filesystem::remove_all(dir);
 }
 
+// A screenshot is the one thing in the library that cannot be remade, so
+// a capture whose picture could not be written at capture time keeps its
+// pixels and is written by the next save that can - and no save counts as
+// landed until it has.
+TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_pending_capture";
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    std::ofstream(dir / "images") << "a file where the staging directory wants to be";
+    persistence::LibraryStore store(dir);
+    test::FakeOverlayWindow window;
+    window.captureReturnsHandle = 7;
+    window.captureReturnsWidth = 2;
+    window.captureReturnsHeight = 1;
+    window.captureReturnsPixelsRGBA = {10, 20, 30, 255, 40, 50, 60, 255};
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+
+    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
+    const Item* shot = session.Manager().FindItemAnywhere(id);
+    EXPECT_EQ(shot->ImageLayer()->textureHandle, 7u) << "on screen as captured";
+    EXPECT_TRUE(shot->ImageLayer()->imageFile.empty()) << "but not on disk";
+    EXPECT_TRUE(session.HasUnsavedChanges());
+
+    // The records land; the picture does not, so the save does not count.
+    EXPECT_FALSE(session.Flush());
+    EXPECT_TRUE(session.HasUnsavedChanges());
+    EXPECT_TRUE(session.LastSaveFailed());
+
+    // Now the snippet has a directory of its own to be written into.
+    EXPECT_TRUE(session.Flush());
+    EXPECT_FALSE(session.HasUnsavedChanges());
+    EXPECT_FALSE(session.LastSaveFailed());
+    shot = session.Manager().FindItemAnywhere(id);
+    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty());
+
+    persistence::LibraryStore reopened(dir);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const Item* reloaded = nullptr;
+    for (const Canvas& canvas : loaded->canvases) {
+        for (const Item& item : canvas.items) {
+            if (item.id == id) {
+                reloaded = &item;
+            }
+        }
+    }
+    ASSERT_NE(reloaded, nullptr);
+    EXPECT_EQ(reloaded->ImageLayer()->imageFile, shot->ImageLayer()->imageFile);
+    const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(id, reloaded->ImageLayer()->imageFile);
+    ASSERT_TRUE(saved.has_value());
+    EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+
 #if defined(_WIN32)
 // Windows refuses to delete a file another handle holds open without
 // delete sharing - which is what a picture viewer looking at a capture
