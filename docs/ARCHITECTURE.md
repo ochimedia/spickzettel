@@ -789,3 +789,65 @@ back whatever the game showed a moment later, which for a moving camera
 is a different scene. The pixels are kept alongside the texture for
 exactly this. Released on hide: it is a fullscreen texture with no reason
 to exist while nothing is shown.
+
+## Visual theme
+
+The look is a graphite and accent-orange scale, translucent panel
+backgrounds with a thin border in place of real backdrop blur (ImGui has
+no blur, and a multi-pass blur target does not compose with a single
+full-viewport swapchain), pill-shaped containers, the accent for every
+active state with dark ink on top of it, a bundled UI font, and real
+vector icons on every button.
+
+### Icons: vector shapes, not an icon font
+
+The conventional ImGui way to get icons is an icon font merged into the
+atlas and drawn as text. This app instead compiles `assets/icons/*.svg`
+with `scripts/gen_icons.py` into `src/ui/icons_generated.h`, a table of
+drawing commands (move, line, cubic, circular arc, circle, rounded rect
+in a fixed 24x24 space) that `DrawIcon` replays against an `ImDrawList`
+every frame, scaled to whatever size the icon is drawn at. Nothing is
+baked at one size; ImGui tessellates the curves fresh like any other
+shape. The script needs `svgpathtools` and is a dev-machine tool, not a
+build dependency: the generated header is committed, so building needs no
+Python.
+
+**A point may not appear twice in a row in a path.** ImGui's stroker
+offsets each point along the average of its two adjacent normals and
+divides by that average's squared length, the standard mitre. A
+zero-length segment has no direction, so its normal is zero, averaging
+halves the vector, and the mitre reads a half-length vector as a very
+sharp corner and doubles the stroke: a lump twice the line's width,
+sticking out where the path does not turn. Icons produce such points
+honestly - `DrawIcon` emits the subpath's start and `PathArcTo` emits the
+arc's start at the same place - so `DropRepeatedPathPoints` runs over
+every subpath before it is stroked. `icon_draw_test` asserts on the
+triangles ImGui actually produces: no vertex may land outside its icon's
+own outline by more than the stroke plus a mitre's worth, which is how
+seven affected icons were found.
+
+Icon choices are hand-picked per button rather than a one-to-one Lucide
+mapping; the set is styled after Lucide and Feather, drawn from this
+project's own path data, and both licences cover the designs.
+
+### Every word in one file
+
+All user-facing text lives in `assets/ui_strings.json` and reaches the
+code as `sz::strings::k...` constants. `cmake/UiStrings.cmake` compiles it
+into `generated/ui_strings.h` at configure time, parsed by CMake's own
+`string(JSON)` so that editing what the app says needs no Python and no
+remembered step. Keys are dotted paths that become PascalCase
+identifiers; a key starting with `_` is a note to the reader, JSON having
+no comments; two keys that would mangle to one identifier are a
+configure-time error. Values become raw string literals, so nothing has
+to be escaped. A handful of strings carry `%s` placeholders and the file
+says so; that is the one edit that can crash rather than read oddly.
+
+The other half, and the reason it was worth doing: **text is not an
+identifier.** A widget's ImGui id must not be its label, or rewording a
+checkbox silently renames it and breaks every test that reaches for it.
+`Labeled(text, id)` returns `"text###id"`, and the row-building helpers
+all take an id of their own. Two traps: `##` hides the id but hashes the
+whole string, only `###` restarts the hash; and a widget that pushes its
+own label as an id scope (`ColorEdit3/4`) needs an id-only label with the
+caption written beside it by hand.

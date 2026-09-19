@@ -50,8 +50,21 @@ endif()
 include(BuildInfo)
 spickzettel_configure_build_info()
 
+# Every word the app shows, compiled in from one editable file - see
+# cmake/UiStrings.cmake. A configure dependency like the About text: editing
+# what the app says is editing a source file.
+include(UiStrings)
+spickzettel_generate_ui_strings(
+    "${CMAKE_SOURCE_DIR}/assets/ui_strings.json"
+    "${CMAKE_BINARY_DIR}/generated/ui_strings.h"
+    sz::strings
+)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/assets/ui_strings.json")
+
 add_subdirectory(src/platform)
 add_subdirectory(src/core)
+add_subdirectory(src/ui)
 
 if(SPICKZETTEL_BUILD_TESTS)
     add_subdirectory(tests)
