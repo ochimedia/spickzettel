@@ -37,6 +37,14 @@ endfunction()
 
 # Third-party code, all fetched and pinned - see docs/ARCHITECTURE.md.
 include(FetchImGui)
+if(SPICKZETTEL_UI_TESTS)
+    include(FetchImGuiTestEngine)
+    # ImGui itself has to know, or it compiles none of the hooks the engine
+    # listens on; PUBLIC so everything that includes imgui.h agrees, since
+    # the hook macros are in the header.
+    target_compile_definitions(imgui_core PUBLIC IMGUI_ENABLE_TEST_ENGINE)
+    target_link_libraries(imgui_core PUBLIC imgui_test_engine)
+endif()
 include(FetchJson)
 include(FetchStb)
 include(FetchQoi)

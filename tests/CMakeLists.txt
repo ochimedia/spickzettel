@@ -37,6 +37,22 @@ spickzettel_set_warnings(sz_core_tests)
 include(GoogleTest)
 gtest_discover_tests(sz_core_tests)
 
+# The UI tests drive real widgets by name and so need the test engine - see
+# cmake/FetchImGuiTestEngine.cmake for why that is opt-in. A separate binary
+# so the ordinary suite stays buildable and runnable without any of it.
+if(SPICKZETTEL_UI_TESTS)
+    add_executable(sz_ui_tests
+        ui/canvas_bar_ui_test.cpp
+        ui/overview_ui_test.cpp
+        ui/settings_ui_test.cpp
+    )
+    target_include_directories(sz_ui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(sz_ui_tests PRIVATE sz_app imgui_test_engine GTest::gtest_main)
+    target_compile_features(sz_ui_tests PRIVATE cxx_std_20)
+    spickzettel_set_warnings(sz_ui_tests)
+    gtest_discover_tests(sz_ui_tests)
+endif()
+
 # The Win32 backend against the real OS: the input grab's registrations,
 # and whatever displays the machine has. Its own binary so the portable
 # suite stays buildable on Linux.
