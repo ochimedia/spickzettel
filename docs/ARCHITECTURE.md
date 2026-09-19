@@ -880,7 +880,11 @@ long as it stays failed: a line along the bottom naming the library,
 drawn from `Session::LastSaveFailed`, in edit and view-only mode alike,
 rather than a toast that fades while the problem does not. A settings
 file that could not be written is reported on the same line by the
-tray, which is the only writer of it. Before this, both results were
+tray, which is the only writer of it, and remembered as owed: the
+background timer tries it again every ten seconds, whether or not the
+overlay is up, and the shutdown flush tries it once more before the app
+goes. A settings edit is rare, and a failed write used to stay
+unwritten until the next one. Before this, both results were
 discarded: a full disk lost every outstanding edit on an ordinary exit
 without a word, and a setting that appeared applied was back to its old
 value at the next start.

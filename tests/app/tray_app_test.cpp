@@ -503,6 +503,13 @@ protected:
     }
     void TearDown() override { std::filesystem::remove_all(dir_); }
 
+    static std::string ReadFile(const std::filesystem::path& path) {
+        std::ifstream in(path);
+        std::ostringstream buffer;
+        buffer << in.rdbuf();
+        return buffer.str();
+    }
+
     std::filesystem::path dir_;
 };
 
@@ -770,11 +777,34 @@ TEST_F(TrayControllerPersistenceTest, ASettingsFileThatCannotBeWrittenIsSaidOnSc
     ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Z'}));
     EXPECT_NE(controller.Overlay().PersistenceWarning().find("config.json"), std::string::npos)
         << "applied in memory, and said to be unsaved";
+    ASSERT_GT(host.backgroundTimerIntervalMs, 0) << "owed, so tried again without waiting for another edit";
+
+    host.FireBackgroundTimer();
+    EXPECT_FALSE(controller.Overlay().PersistenceWarning().empty()) << "still in the way";
+    EXPECT_GT(host.backgroundTimerIntervalMs, 0);
 
     std::filesystem::remove_all(dir_ / "config.json");
-    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Y'}));
+    host.FireBackgroundTimer();
     EXPECT_TRUE(controller.Overlay().PersistenceWarning().empty()) << "cleared by the write that landed";
+    EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "nothing owed any more";
     EXPECT_TRUE(std::filesystem::is_regular_file(dir_ / "config.json"));
+    EXPECT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).hotkeyViewMode, (platform::KeyCombo{true, false, true, 'Z'}));
+}
+
+TEST_F(TrayControllerPersistenceTest, ExitWritesASettingsFileStillOwed) {
+    std::filesystem::create_directories(dir_ / "config.json");
+    test::FakePlatformHost host;
+    host.configFilePath = dir_ / "config.json";
+    TrayController controller(host, DefaultConfig());
+    ASSERT_TRUE(controller.Initialize());
+    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Z'}));
+    ASSERT_FALSE(controller.Overlay().PersistenceWarning().empty());
+
+    std::filesystem::remove_all(dir_ / "config.json");  // writable again, and no timer has fired since
+    host.TriggerTrayCommand(platform::TrayCommand::Exit);
+    EXPECT_TRUE(host.quitCalled);
+    EXPECT_TRUE(std::filesystem::is_regular_file(dir_ / "config.json")) << "the last chance was taken";
+    EXPECT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).hotkeyViewMode, (platform::KeyCombo{true, false, true, 'Z'}));
 }
 
 // The actual rescale math (position/size/fullscreen/clamping behavior) is

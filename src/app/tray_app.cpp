@@ -385,8 +385,9 @@ constexpr int kHiddenSaveRetryMs = 10000;
 
 void TrayController::FlushOrRetryLater() {
     // Landed and nothing owed - a removal still pending counts as owed,
-    // though the flush that recorded it counted - or scheduled again.
-    if (session_.Flush() && !session_.HasUnsavedChanges()) {
+    // though the flush that recorded it counted; so does a settings file
+    // that could not be written - or scheduled again.
+    if (session_.Flush() && !session_.HasUnsavedChanges() && !configWriteOwed_) {
         host_.SetBackgroundTimer(0, nullptr);
         return;
     }
@@ -395,6 +396,9 @@ void TrayController::FlushOrRetryLater() {
 
 bool TrayController::FlushForShutdown() {
     overlayApp_.SettleForPersistence();
+    if (configWriteOwed_) {
+        PersistConfig();  // owed since a settings edit; the last chance for it too
+    }
     // Twice: the first attempt may have been what cleared the way - a
     // pending removal finished, a picture's directory made - and a second
     // is cheap against what the alternative costs.
@@ -435,12 +439,16 @@ std::optional<std::filesystem::path> TrayController::RecoveryCopyPath() const {
 }
 
 void TrayController::OnBackgroundTimer() {
-    // Up again: frames are running and the autosave's own clock, with its
-    // backoff, is the one to use.
-    if (!host_.GetOverlayWindow().IsVisible() && session_.HasUnsavedChanges()) {
+    if (configWriteOwed_) {
+        PersistConfig();
+    }
+    // The library only while hidden: up again, frames are running and the
+    // autosave's own clock, with its backoff, is the one to use.
+    const bool visible = host_.GetOverlayWindow().IsVisible();
+    if (!visible && session_.HasUnsavedChanges()) {
         session_.Flush();
     }
-    if (host_.GetOverlayWindow().IsVisible() || !session_.HasUnsavedChanges()) {
+    if (!configWriteOwed_ && (visible || !session_.HasUnsavedChanges())) {
         host_.SetBackgroundTimer(0, nullptr);
     }
 }
@@ -580,9 +588,15 @@ void TrayController::PersistConfig() {
     }
     // Said on screen while it stays true: a setting that appears applied
     // and is back to its old value at the next start is the kind of thing
-    // nobody connects to a full disk a week later.
+    // nobody connects to a full disk a week later. And tried again from
+    // the timer, whether or not the overlay is up: a settings edit is
+    // rare, and one that failed used to stay unwritten until the next.
     const bool written = WriteConfigFile(path, settings_.Stored());
     overlayApp_.SetConfigWriteFailed(written ? std::nullopt : std::optional<std::string>(path.string()));
+    configWriteOwed_ = !written;
+    if (configWriteOwed_) {
+        host_.SetBackgroundTimer(kHiddenSaveRetryMs, [this] { OnBackgroundTimer(); });
+    }
 }
 
 bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {

@@ -162,11 +162,15 @@ private:
     // and the moment. Nullopt without a library on disk.
     std::optional<std::filesystem::path> RecoveryCopyPath() const;
     // The one way the settings file is written, so that a write that
-    // fails is reported to the overlay once, and cleared when one lands.
+    // fails is reported to the overlay once, and cleared when one lands -
+    // and remembered as owed (configWriteOwed_), so that it is tried again
+    // from the background timer and before the app goes, rather than only
+    // when the next settings edit happens to write the file.
     void PersistConfig();
     // The background timer's tick: another attempt at whatever is owed to
-    // the disk, and the timer is stopped once nothing is - or once the
-    // overlay is up again and frames take over.
+    // the disk - the library while the overlay is hidden (frames retry it
+    // while it is up), the settings file either way - and the timer is
+    // stopped once nothing is.
     void OnBackgroundTimer();
     // Puts the pinned view up - view-only, click-through, never focused,
     // drawing the current canvas's pinned snippets - if the overlay is
@@ -245,6 +249,9 @@ private:
     // profile overrides it.
     bool liveEditModeNoActivate_ = false;
     platform::EditModeInputOptions liveEditModeInput_;
+    // Whether the settings as held differ from the file because a write
+    // failed - see PersistConfig. Retried from the background timer.
+    bool configWriteOwed_ = false;
     // Constructed up front (from host.GetDataDirectoryPath(), possibly
     // empty) but only ever used - Load()'d from, attached to overlayApp_ -
     // when that path is non-empty; see Initialize().
