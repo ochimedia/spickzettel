@@ -796,11 +796,11 @@ json OrderFileJson(const char* key, const std::vector<std::string>& names) {
 // What library.json holds: the things with no other home. One function for
 // both directions, so that what Load compares against is exactly what Save
 // writes.
-json LibraryJson(const CanvasManagerSnapshot& snapshot) {
+json LibraryJson(FolderId currentFolderId, CanvasId currentCanvasId) {
     json doc;
     doc["version"] = kLibraryFormatVersion;
-    doc["currentFolderId"] = IdJson(snapshot.currentFolderId);
-    doc["currentCanvasId"] = IdJson(snapshot.currentCanvasId);
+    doc["currentFolderId"] = IdJson(currentFolderId);
+    doc["currentCanvasId"] = IdJson(currentCanvasId);
     return doc;
 }
 
@@ -1204,8 +1204,8 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
 
     // And library.json itself, after the repairs above: one that named
     // nothing is not noted, and is rewritten naming something.
-    if (LibraryJson(snapshot) == doc) {
-        writtenFileText_["library"] = LibraryJson(snapshot).dump(2);
+    if (LibraryJson(snapshot.currentFolderId, snapshot.currentCanvasId) == doc) {
+        writtenFileText_["library"] = LibraryJson(snapshot.currentFolderId, snapshot.currentCanvasId).dump(2);
     }
 
     return snapshot;
@@ -1262,7 +1262,7 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
 // is skipped by Load and never enters the index, so it cannot be retired
 // here; unreadable must not become deleted. Deletion is a statement about
 // something this store once read, and nothing else.
-bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
+bool LibraryStore::Save(const LibraryView& view) const {
     std::error_code ec;
     const std::filesystem::path foldersRoot = FoldersRoot();
     std::filesystem::create_directories(foldersRoot, ec);
@@ -1275,11 +1275,15 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
     // ...and by picture: which snippet each live picture (and its thumbnail)
     // belongs to, for the staging pass.
     std::unordered_map<std::string, uint64_t> pictureOwner;
-    for (const Folder& folder : snapshot.folders) {
+    // ...and by folder, once, so that placing a folder's canvases below is
+    // a walk of its own canvases rather than of every canvas per folder.
+    std::unordered_map<uint64_t, std::vector<const Canvas*>> canvasesByFolder;
+    for (const Folder& folder : view.folders) {
         liveFolderIds.insert(folder.id);
     }
-    for (const Canvas& canvas : snapshot.canvases) {
+    for (const Canvas& canvas : view.canvases) {
         liveCanvasIds.insert(canvas.id);
+        canvasesByFolder[canvas.folderId].push_back(&canvas);
         for (const Item& item : canvas.items) {
             liveItemIds.insert(item.id);
             for (const Layer& layer : item.layers) {
@@ -1339,8 +1343,9 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
     // Every write this save is obliged to make lands in here. Best-effort
     // work - moving a picture, retiring a directory - does not, since none
     // of it loses anything if it waits for the next save; see the header.
-    bool wroteEverything =
-        writeIfChanged("library", rootDir_ / "library.json", LibraryJson(snapshot).dump(2), /*force=*/false);
+    bool wroteEverything = writeIfChanged("library", rootDir_ / "library.json",
+                                          LibraryJson(view.currentFolderId, view.currentCanvasId).dump(2),
+                                          /*force=*/false);
 
     // The directory name is regenerated from the *current* name every time,
     // which is what keeps it worth reading. Identity is the trailing uid, so
@@ -1406,8 +1411,9 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
     // ===== 1. Place and write everything the library holds =====
 
     std::vector<std::string> folderOrder;
-    folderOrder.reserve(snapshot.folders.size());
-    for (const Folder& folder : snapshot.folders) {
+    folderOrder.reserve(view.folders.size());
+    const std::vector<const Canvas*> noCanvases;
+    for (const Folder& folder : view.folders) {
         const Placed placedFolder =
             placeDirectory(folderDirs_, folder.id, foldersRoot / MakeSlug(folder.name, folder.id),
                            {&canvasDirs_, &itemDirs_});
@@ -1421,10 +1427,9 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                                            ToJson(folder).dump(2), !placedFolder.kept);
 
         std::vector<std::string> canvasOrder;
-        for (const Canvas& canvas : snapshot.canvases) {
-            if (canvas.folderId != folder.id) {
-                continue;
-            }
+        const auto inFolder = canvasesByFolder.find(folder.id);
+        for (const Canvas* canvasPtr : inFolder != canvasesByFolder.end() ? inFolder->second : noCanvases) {
+            const Canvas& canvas = *canvasPtr;
             const Placed placedCanvas = placeDirectory(
                 canvasDirs_, canvas.id, folderDir / MakeSlug(canvas.name, canvas.id), {&itemDirs_});
             const std::filesystem::path& canvasDir = placedCanvas.dir;

@@ -25,6 +25,18 @@ struct CanvasManagerSnapshot {
     CanvasId currentCanvasId = 0;
 };
 
+// The same four things, borrowed rather than copied - what a save reads.
+// A snapshot copies every stroke point in the library, and a save runs
+// every two seconds of quiet; the copy was the largest single cost of a
+// save that otherwise writes only what changed. Valid only while the
+// manager it came from is not mutated - see CanvasManager::View.
+struct LibraryView {
+    const std::vector<Folder>& folders;
+    const std::vector<Canvas>& canvases;
+    FolderId currentFolderId = 0;
+    CanvasId currentCanvasId = 0;
+};
+
 // One thing that is deleted and can be restored - see
 // CanvasManager::DeletedThings.
 struct DeletedThing {
@@ -317,6 +329,9 @@ public:
     // core::persistence::LibraryStore - see CanvasManagerSnapshot's own
     // doc comment.
     CanvasManagerSnapshot ExportSnapshot() const;
+    // The library as it is, for reading - see LibraryView. What a save
+    // takes; a snapshot is for a caller that needs its own copy to alter.
+    LibraryView View() const { return LibraryView{folders_, canvases_, currentFolderId_, currentCanvasId_}; }
     // Wholesale-replaces this manager's state with `snapshot` - once, right
     // after startup. Moves the current canvas off a deleted one (see
     // SettleOffDeleted), but leaves Generation() untouched: loading isn't a

@@ -546,7 +546,7 @@ land deleted the only image the surviving record pointed at. The sweep
 also takes only pictures (`.qoi`, `.png`); anything else someone put
 beside a record is not the store's to delete.
 
-### A save costs what changed
+### A save writes what changed
 
 The store keeps what it last wrote - a content hash per snippet, the
 exact text for the small records - and where everything lives, so a save
@@ -559,6 +559,20 @@ costs only what the load had to repair. The hash and the serialiser are
 kept adjacent in the source and a test asserts every field moves the
 hash, because a field added to one and not the other is an edit that is
 silently never saved.
+
+To be precise about what is and is not bounded: the *writes* are
+bounded by what changed; the *pass* that finds out what changed is not.
+A save reads the library through a `LibraryView` - borrowed references
+to the manager's own vectors - rather than a snapshot, since the
+snapshot copied every stroke point in the library on every save and was
+the largest single cost of one that then wrote nothing. What remains is
+the fingerprint: `HashItem` walks every point of every snippet, about a
+thousandth of the cost of serialising it, and linear in the library's
+size. Canvases are grouped by folder once rather than scanned per
+folder. If the fingerprint ever shows in a profile, the next step is a
+per-snippet revision counter bumped by every mutation path, so that only
+changed snippets are hashed; it has not been needed at the library sizes
+measured, and every stroke mutation would have to remember to bump it.
 
 Every file goes through write-to-temp-then-rename, pictures included: a
 painted layer is re-encoded over its own previous file on every save,
@@ -1659,7 +1673,7 @@ one twice.
   replaced by exactly two levels.
 - **One library file.** 42 MB rewritten every two seconds at fifty
   canvases; replaced by a directory tree that is its own index, and then
-  by a save bounded by what changed.
+  by a save whose writes are bounded by what changed.
 - **PNG for captures.** Six to twenty times slower than QOI on this
   app's own screenshots; PNG is still decoded.
 - **Loading every canvas's textures at startup.** 1.6 GB of VRAM behind a

@@ -261,7 +261,7 @@ bool Session::SaveLibraryNow(LibraryInstance& instance) {
     const uint64_t generation = instance.manager.Generation();
     const bool pixelsSaved = SavePaintedLayers(instance);
     const bool picturesSaved = SavePendingPictures(instance);
-    const bool metadataSaved = instance.store->Save(instance.manager.ExportSnapshot());
+    const bool metadataSaved = instance.store->Save(instance.manager.View());
     const bool saved = pixelsSaved && picturesSaved && metadataSaved;
     if (saved) {
         instance.lastSavedGeneration = generation;

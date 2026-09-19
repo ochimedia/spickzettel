@@ -170,7 +170,7 @@ public:
     // dangling is repaired rather than refused - see the .cpp.
     std::optional<CanvasManagerSnapshot> Load() const;
 
-    // Writes `snapshot` to the tree - every record whose content changed
+    // Writes the library to the tree - every record whose content changed
     // since this store last wrote it, each via a temp-file-then-rename so a
     // reader never observes a half-written file (see WriteFileAtomically) -
     // then sets aside, into retired/, the directories of whatever the
@@ -186,7 +186,11 @@ public:
     // outside the result: a picture not yet moved is still readable where
     // it is, a directory not yet retired costs disk space, and the next save
     // takes another run at both.
-    bool Save(const CanvasManagerSnapshot& snapshot) const;
+    bool Save(const LibraryView& view) const;
+    bool Save(const CanvasManagerSnapshot& snapshot) const {
+        return Save(LibraryView{snapshot.folders, snapshot.canvases, snapshot.currentFolderId,
+                                snapshot.currentCanvasId});
+    }
 
     // Encodes `pixelsRGBA` (width*height*4 bytes RGBA8, row-major,
     // top-left origin) as "<itemId>.qoi" in the snippet's own directory -
