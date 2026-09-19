@@ -2,6 +2,7 @@
 # Runs on Windows and, through the linux-tests preset, on Linux.
 add_executable(sz_core_tests
     app/headless_frame_test.cpp
+    app/perf_bench_test.cpp
     app/tray_app_test.cpp
     core/build_info_test.cpp
     core/app_config_test.cpp
@@ -33,6 +34,10 @@ target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(sz_core_tests PRIVATE sz_app GTest::gtest_main)
 target_compile_features(sz_core_tests PRIVATE cxx_std_20)
 spickzettel_set_warnings(sz_core_tests)
+
+# The benchmark reads its scenario from the environment; MSVC deprecates
+# getenv for a shared-state reason that does not apply to a test.
+set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 
 include(GoogleTest)
 gtest_discover_tests(sz_core_tests)

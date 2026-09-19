@@ -82,4 +82,7 @@ endif()
 
 if(SPICKZETTEL_BUILD_TESTS)
     add_subdirectory(tests)
+    # Developer tools that are never shipped. Tied to the tests option: they
+    # exist for the same reason the tests do.
+    add_subdirectory(tools/perf_library)
 endif()
