@@ -2159,6 +2159,37 @@ TEST_F(HeadlessAppTest, ExitingFromTheTrayCommitsTheNoteBeingTyped) {
     EXPECT_EQ(Canvases().CurrentOrNull()->items[0].noteText, "x");
 }
 
+// A note is whatever its record says it is. Opening a long one for
+// editing must not cut it to the size of some buffer.
+TEST_F(HeadlessAppTest, EditingALongNoteKeepsAllOfIt) {
+    StartWith(WithTextOnT());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 620.0f, 440.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const std::string longNote(20000, 'a');
+    controller_->GetSession().Manager().CurrentOrNull()->items[0].noteText = longNote;
+
+    PressKey(ImGuiKey_T);
+    RawClick(400.0f, 400.0f);
+    ASSERT_TRUE(App().EditingNote().has_value());
+    ImGui::GetIO().AddInputCharacter('b');
+    StepFrames(2);
+    RawClick(1100.0f, 100.0f);  // closes the note
+    ASSERT_FALSE(App().EditingNote().has_value());
+
+    const std::string& text = Canvases().CurrentOrNull()->items[0].noteText;
+    EXPECT_EQ(text.size(), longNote.size() + 1) << "nothing cut off, one character typed";
+    size_t as = 0;
+    size_t bs = 0;
+    for (const char c : text) {
+        as += c == 'a' ? 1 : 0;
+        bs += c == 'b' ? 1 : 0;
+    }
+    EXPECT_EQ(as, longNote.size()) << "every character of the long note survived";
+    EXPECT_EQ(bs, 1u) << "wherever the caret was";
+}
+
 // A text box is a box whose shape is the point of resizing it, so its
 // resize is free where a drawing's or a screenshot's keeps the shape.
 TEST_F(HeadlessAppTest, ATextBoxResizesFreely) {

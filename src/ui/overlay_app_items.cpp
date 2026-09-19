@@ -1084,6 +1084,20 @@ void OverlayApp::ResizeHandleEdges(ResizeHandle handle, bool& left, bool& right,
 // one short line comfortably. Being an input-capturing window, it makes
 // io.WantCaptureMouse true over the item while editing, which is what
 // keeps a stroke from starting under the caret.
+namespace {
+// ImGuiInputTextFlags_CallbackResize's contract, against a std::string:
+// the widget reports the length it needs, the string is resized to hold
+// it, and the widget is pointed at the (possibly moved) storage.
+int ResizeStringForInputText(ImGuiInputTextCallbackData* data) {
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+        auto* text = static_cast<std::string*>(data->UserData);
+        text->resize(static_cast<size_t>(data->BufTextLen));
+        data->Buf = text->data();
+    }
+    return 0;
+}
+}  // namespace
+
 void OverlayApp::RenderNoteEditor(Item& item, ImVec2 pMin, ImVec2 pMax) {
     constexpr ImGuiWindowFlags kNoteWindowFlags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
@@ -1139,7 +1153,12 @@ void OverlayApp::RenderNoteEditor(Item& item, ImVec2 pMin, ImVec2 pMax) {
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
     const std::string preCallBuffer(noteEditBuffer_);
     const ImVec2 avail = ImGui::GetContentRegionAvail();
-    ImGui::InputTextMultiline("##notetext", noteEditBuffer_, sizeof(noteEditBuffer_), avail);
+    // The widget edits the string's own storage and asks for more through
+    // the resize callback - what ImGui's misc/cpp/imgui_stdlib does, done
+    // here so the std::string is the buffer rather than a fixed array that
+    // would cut a long note off at its end.
+    ImGui::InputTextMultiline("##notetext", noteEditBuffer_.data(), noteEditBuffer_.capacity() + 1, avail,
+                              ImGuiInputTextFlags_CallbackResize, &ResizeStringForInputText, &noteEditBuffer_);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     if (ImGui::IsItemDeactivated()) {

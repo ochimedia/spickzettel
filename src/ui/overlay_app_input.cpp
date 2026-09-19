@@ -227,7 +227,7 @@ void OverlayApp::BeginEditingNote(ItemId id) {
         EndEditingNote(noteEditBuffer_);
     }
     editingNoteItemId_ = id;
-    std::snprintf(noteEditBuffer_, sizeof(noteEditBuffer_), "%s", item->noteText.c_str());
+    noteEditBuffer_ = item->noteText;
     session_.BeginTextEdit(id);
     noteEditJustFocused_ = true;
     if (window_) {

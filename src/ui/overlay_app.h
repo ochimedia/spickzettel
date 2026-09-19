@@ -1643,13 +1643,14 @@ private:
 
     // Live text editing of a Note item's body - the same shape as the
     // rename state just above (at most one item being edited at a time,
-    // a fixed edit buffer, a just-focused flag consumed once), see
-    // BeginEditingNote/EndEditingNote and RenderNoteEditor's
-    // editor window. 8192 chars is generous for a quick note; there's no
-    // hard need for more given the use case (see the user's own framing:
-    // annotations/labels, not documents).
+    // an edit buffer, a just-focused flag consumed once), see
+    // BeginEditingNote/EndEditingNote and RenderNoteEditor's editor
+    // window. The buffer is a string the widget grows as it types (see
+    // RenderNoteEditor), not a fixed array: a note is whatever its record
+    // says it is, and a fixed 8 KB buffer silently truncated a longer one
+    // the moment it was opened for editing.
     std::optional<ItemId> editingNoteItemId_ = std::nullopt;
-    char noteEditBuffer_[8192] = {};
+    std::string noteEditBuffer_;
     bool noteEditJustFocused_ = false;
 
     // Small transient "Moved to X" / "Copied to X" banner after a

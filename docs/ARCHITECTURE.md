@@ -1127,7 +1127,11 @@ with the item like strokes: a caption that shrinks to illegibility is
 worse than one that wraps sooner. Text is never erased by either eraser.
 
 Editing is a second, genuinely interactive window over the content rect,
-not a flag on the items layer, which is unconditionally `NoInputs`.
+not a flag on the items layer, which is unconditionally `NoInputs`. The
+editor's buffer is a `std::string` the widget grows through ImGui's
+resize callback, not a fixed array: a note is whatever its record says
+it is, and the 8 KB array it once was silently cut a longer note off the
+moment it was opened for editing.
 Escape ends editing without discarding what was typed: ImGui reverts its
 own buffer on Escape in the same call that reports deactivation, so the
 commit reads a snapshot taken before the widget ran. "Stop editing" and
