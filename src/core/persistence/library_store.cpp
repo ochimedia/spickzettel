@@ -107,6 +107,17 @@ bool IsPlainFilename(const std::string& name) {
     return true;
 }
 
+// Whether `name` is one this store could have written a picture under: a
+// capture or painted layer (.qoi, or .png from before QOI) or a thumbnail
+// beside one. What the per-snippet collection below is limited to.
+bool IsPictureFilename(const std::string& name) {
+    const auto endsWith = [&name](std::string_view suffix) {
+        return name.size() >= suffix.size() &&
+               std::string_view(name).substr(name.size() - suffix.size()) == suffix;
+    };
+    return endsWith(".qoi") || endsWith(".png");
+}
+
 json ToJson(const Layer& layer) {
     // textureHandle is deliberately absent: a GPU handle from a previous
     // run is never valid to reuse, and imageFile is what it is re-derived
@@ -1304,19 +1315,27 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                 if (placedItem.kept && known != writtenItemHashes_.end() && known->second == hash) {
                     continue;
                 }
-                if (WriteFileAtomically(itemDir / kItemFile, ToJson(item).dump(2))) {
+                const bool recordWritten = WriteFileAtomically(itemDir / kItemFile, ToJson(item).dump(2));
+                if (recordWritten) {
                     writtenItemHashes_[item.id] = hash;
                 } else {
                     writtenItemHashes_.erase(item.id);
                     wroteEverything = false;
                 }
 
-                // Anything in the directory its layers no longer name - a
-                // painted layer that moved in the stack is written under a
-                // new name, and this is what collects the old one. Only on
-                // a changed record, because that is the only time a file
+                // Any picture in the directory its layers no longer name -
+                // a painted layer that moved in the stack is written under
+                // a new name, and this is what collects the old one. Only
+                // on a changed record, because that is the only time a file
                 // can have stopped being named; a no-op save lists nothing.
-                if (!placedItem.kept) {
+                //
+                // Only once the record that stopped naming it is on disk.
+                // Until then the record on disk is the old one, and the
+                // pictures it names are what the library reloads to if this
+                // process never manages to write the new one - collecting
+                // them on the strength of a record that failed to land would
+                // leave the old record pointing at nothing.
+                if (!placedItem.kept || !recordWritten) {
                     continue;  // a fresh directory holds nothing to collect
                 }
                 std::unordered_set<std::string> named;
@@ -1332,7 +1351,11 @@ bool LibraryStore::Save(const CanvasManagerSnapshot& snapshot) const {
                         continue;
                     }
                     const std::string name = entry.path().filename().string();
-                    if (name == kItemFile || named.count(name) > 0) {
+                    // Only what this store writes: its own pictures and
+                    // their thumbnails. Anything else beside the record - a
+                    // note someone dropped in by hand, say - is not the
+                    // store's to collect, whatever it is called.
+                    if (name == kItemFile || named.count(name) > 0 || !IsPictureFilename(name)) {
                         continue;
                     }
                     std::filesystem::remove(entry.path(), ec);

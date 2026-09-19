@@ -498,6 +498,14 @@ runs, and the pass finds nothing. It is the net under a snapshot that
 lacks something nobody deleted, the kind of disagreement that once
 emptied a library.
 
+A snippet's directory is swept for pictures its layers no longer name
+only after the record that stopped naming them is on disk. Until then
+the old record is what a restart reloads, and the pictures it names have
+to still be there for it: a sweep that ran on a record that failed to
+land deleted the only image the surviving record pointed at. The sweep
+also takes only pictures (`.qoi`, `.png`); anything else someone put
+beside a record is not the store's to delete.
+
 ### A save costs what changed
 
 The store keeps what it last wrote - a content hash per snippet, the

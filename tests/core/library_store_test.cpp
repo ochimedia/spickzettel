@@ -1601,6 +1601,57 @@ TEST_F(LibraryStoreTest, SaveKeepsALiveImagesThumbnailAndCollectsADeadOnes) {
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000008.qoi"));
 }
 
+TEST_F(LibraryStoreTest, ARecordThatCouldNotBeWrittenKeepsThePicturesTheOldOneNames) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = {1, 2, 3, 255};
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 1, 1).has_value());
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    ASSERT_TRUE(store.Save(snapshot));
+    ASSERT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
+
+    // The layer comes to name a different picture, and the record saying
+    // so cannot be written.
+    ASSERT_TRUE(store.SaveLayerImage(4, 0, pixels.data(), 1, 1).has_value());
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004_p0.qoi";
+    std::filesystem::create_directories(ShotItemDir() / "item.json.tmp");
+    EXPECT_FALSE(store.Save(snapshot));
+
+    // The record on disk is still the old one, and what it names must still
+    // be there for it: a restart reloads exactly that.
+    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"))
+        << "collected on the strength of a record that never landed";
+    LibraryStore reopened(dir_);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].items[1].ImageLayer()->imageFile, "000004.qoi");
+    EXPECT_TRUE(reopened.LoadImage(4, "000004.qoi").has_value());
+
+    std::filesystem::remove_all(ShotItemDir() / "item.json.tmp");
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000004.qoi"))
+        << "collected once the record naming its replacement is on disk";
+    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004_p0.qoi"));
+}
+
+TEST_F(LibraryStoreTest, SaveCollectsOnlyPicturesOutOfASnippetsDirectory) {
+    LibraryStore store(dir_);
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    ASSERT_TRUE(store.Save(snapshot));
+    std::ofstream(ShotItemDir() / "notes.txt") << "not the store's";
+    std::ofstream(ShotItemDir() / "stray.qoi") << "a picture nothing names";
+
+    snapshot.canvases[0].items[1].name = "Renamed in place";
+    snapshot.canvases[0].items[1].id = 4;  // the slug changes, the directory moves, the record is rewritten
+    ASSERT_TRUE(store.Save(snapshot));
+
+    const std::filesystem::path movedDir =
+        dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" / "renamed-in-place-000004";
+    ASSERT_TRUE(std::filesystem::exists(movedDir / "item.json"));
+    EXPECT_TRUE(std::filesystem::exists(movedDir / "notes.txt")) << "only pictures are the store's to collect";
+    EXPECT_FALSE(std::filesystem::exists(movedDir / "stray.qoi")) << "a picture nothing names is";
+}
+
 // ===== Saving only what changed =====
 //
 // A save costs what changed, not the whole library. These tests are about
