@@ -1,0 +1,27 @@
+// Generated at configure time from src/core/build_info/build_config.h.in
+// by CMake - do not edit.
+//
+// Everything here is a compile-time constant on purpose: these are values
+// that must be *baked* into a particular build rather than read from
+// config.json - a demo watermark someone can switch off in a settings file
+// is not a watermark. constexpr rather than #define so both sides of every
+// `if (build::kDemoMode)` are compiled and type-checked in every
+// configuration; the optimiser folds the condition away regardless.
+//
+// Only stable values belong here, since this header is included wherever
+// the flags are read. The git description and the About text change
+// constantly and are behind functions in build_info.h instead.
+#pragma once
+
+#include <string_view>
+
+namespace sz::core::build {
+
+// From the VERSION file at the repo root, which also feeds project(VERSION).
+inline constexpr std::string_view kVersion{"@SPICKZETTEL_VERSION@"};
+
+// SPICKZETTEL_DEMO_MODE: draw a permanent, faint "Demo Version" mark over
+// the overlay in both modes. See ui::OverlayApp::DrawDemoWatermark.
+inline constexpr bool kDemoMode = @SPICKZETTEL_DEMO_MODE_CXX@;
+
+}  // namespace sz::core::build

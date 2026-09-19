@@ -1,10 +1,11 @@
 # The portable suite: everything that needs neither a window nor an OS.
 # Runs on Windows and, through the linux-tests preset, on Linux.
 add_executable(sz_core_tests
+    core/build_info_test.cpp
     platform/pen_glyph_test.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(sz_core_tests PRIVATE sz_platform_iface GTest::gtest_main)
+target_link_libraries(sz_core_tests PRIVATE sz_core GTest::gtest_main)
 target_compile_features(sz_core_tests PRIVATE cxx_std_20)
 spickzettel_set_warnings(sz_core_tests)
 

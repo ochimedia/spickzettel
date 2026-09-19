@@ -53,6 +53,44 @@ a tag or commit, so a checkout builds with nothing installed beyond a
 compiler, CMake and Ninja. Header-only libraries are marked `SYSTEM` so
 their warnings do not count against the project's own warning level.
 
+### Build-time configuration: version, flags, embedded text
+
+Three things are decided when a binary is *built* rather than when it
+runs, and all three land in `build/<preset>/generated/` through
+`cmake/BuildInfo.cmake`:
+
+| Header | Holds | Regenerated | Included by |
+| --- | --- | --- | --- |
+| `build_config.h` | `kVersion`, `kDemoMode` | configure | `build_info.h`, so widely |
+| `git_stamp.h` | `kGitDescribe` | **every build** | `build_info.cpp` only |
+| `about_text.h`, `notices_text.h` | `ABOUT.md`, `THIRD-PARTY-NOTICES.md` | configure | `build_info.cpp` only |
+
+The third column is the design: the git stamp changes with every commit
+and the embedded texts are by far the largest, so both sit behind
+functions in a header that declares but does not contain them. In
+`build_config.h` they would rebuild everything that merely wanted the
+version number.
+
+Feature flags are `constexpr bool`, not `#ifdef`. Both branches of an
+`if (build::kDemoMode)` are compiled and type-checked in every
+configuration, where an `#ifdef`-ed branch nobody builds for months has
+quietly stopped compiling; the optimiser removes the dead side either
+way. Demo mode is deliberately not a setting: a watermark that can be
+switched off in `config.json` is not a watermark.
+
+The version lives in `VERSION` at the repo root, read by CMake and fed to
+both `project()` and the header, so a release script can bump it without
+parsing CMake. (A file named `VERSION` can shadow `#include <version>` on
+a case-insensitive filesystem. It is safe here only because the repo root
+is never an include directory; do not add it to one.)
+
+The git stamp is regenerated per build from an always-run target and
+written through `copy_if_different`, so it costs one `git` call per
+build and recompiles one file only when the commit changed. A configure
+time `execute_process` would bake whatever commit the build directory
+was created on, which this project - configured once, built for days -
+would show for weeks.
+
 ### Cross-compiling: what is known
 
 An earlier incarnation of this project cross-compiled the Windows build

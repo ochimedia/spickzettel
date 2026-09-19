@@ -1,0 +1,18 @@
+# sz_core: the model, the persistence, the settings and the session. No OS
+# headers and no Dear ImGui, on purpose - a build that cannot reach imgui.h
+# is what keeps this layer usable by a different UI, or by none, as the
+# tests do.
+add_library(sz_core STATIC
+    build_info/build_info.cpp
+)
+
+target_include_directories(sz_core PUBLIC ${CMAKE_SOURCE_DIR}/src)
+# PUBLIC: build_info.h includes "generated/build_config.h", and the
+# include root for generated headers is CMAKE_BINARY_DIR.
+target_include_directories(sz_core PUBLIC ${CMAKE_BINARY_DIR})
+# The git stamp is regenerated before anything here compiles - see
+# cmake/GitStamp.cmake.
+add_dependencies(sz_core sz_git_stamp)
+target_compile_features(sz_core PUBLIC cxx_std_20)
+target_link_libraries(sz_core PUBLIC sz_platform_iface)
+spickzettel_set_warnings(sz_core)

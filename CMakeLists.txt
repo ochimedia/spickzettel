@@ -45,7 +45,13 @@ if(SPICKZETTEL_BUILD_TESTS)
     enable_testing()
 endif()
 
+# generated/build_config.h, about_text.h, notices_text.h and the per-build
+# git_stamp.h - see cmake/BuildInfo.cmake. After the options it reads.
+include(BuildInfo)
+spickzettel_configure_build_info()
+
 add_subdirectory(src/platform)
+add_subdirectory(src/core)
 
 if(SPICKZETTEL_BUILD_TESTS)
     add_subdirectory(tests)
