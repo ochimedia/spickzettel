@@ -393,17 +393,26 @@ void TrayController::FlushOrRetryLater() {
     host_.SetBackgroundTimer(kHiddenSaveRetryMs, [this] { OnBackgroundTimer(); });
 }
 
-void TrayController::FlushForShutdown() {
+bool TrayController::FlushForShutdown() {
     overlayApp_.SettleForPersistence();
     // Twice: the first attempt may have been what cleared the way - a
     // pending removal finished, a picture's directory made - and a second
     // is cheap against what the alternative costs.
     if (session_.Flush() || session_.Flush()) {
-        return;
+        return true;
     }
-    if (const std::optional<std::filesystem::path> recovery = RecoveryCopyPath()) {
-        session_.WriteRecoveryCopy(*recovery);
-    }
+    const std::optional<std::filesystem::path> recovery = RecoveryCopyPath();
+    const bool recovered = recovery.has_value() && session_.WriteRecoveryCopy(*recovery);
+    // ACCEPTED OUTCOME: when the library cannot be written twice over and
+    // the recovery copy beside it cannot be written either - a full
+    // volume, an unwritable parent - what is in memory is lost when the
+    // caller goes on to quit. That is a decision, not an oversight: the
+    // exit was asked for, the OS's session end cannot be held up, the
+    // tray has no window of its own to ask in, and holding a process open
+    // against an explicit exit was judged worse than losing what three
+    // attempts at two destinations could not write. The result is
+    // returned so a caller can say so where it has somewhere to say it.
+    return recovered;
 }
 
 void TrayController::OnSessionEnding() { FlushForShutdown(); }

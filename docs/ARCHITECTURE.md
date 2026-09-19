@@ -906,10 +906,17 @@ memory, so its records named screenshot files that were still in the
 real library and the copy opened with placeholders where they should
 have been. A copy that could not be made whole (a picture the real
 library no longer has) is reported as such, in the return and in the
-note. Exit still exits: holding
-the app open against the user's explicit request was judged worse than
-a copy they have to go and find, and the tray has no window of its own
-to ask in.
+note. Exit still exits, and this is an **accepted outcome**: when the
+library cannot be written twice over and the recovery copy beside it
+cannot be written either - a full volume, an unwritable parent - what
+is in memory is lost when the process goes. Holding the app open
+against the user's explicit request was judged worse than a copy they
+have to go and find; the OS's session end cannot be held up at all; and
+the tray has no window of its own to ask in. A retry loop at exit, an
+alternate destination to ask for, or a message box naming the copy were
+each considered and not done - a save that has failed at two places
+three times is a disk problem, not one more attempt away from working,
+and the on-screen warning while the app ran was the time to say so.
 
 ### GPU textures are per canvas
 

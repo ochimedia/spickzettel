@@ -151,8 +151,11 @@ private:
     // the OS ending the session - after which there is no retry. What
     // cannot be written to the library is written to a recovery copy
     // beside it (see Session::WriteRecoveryCopy and RecoveryCopyPath), so
-    // that the changes exist somewhere rather than nowhere.
-    void FlushForShutdown();
+    // that the changes exist somewhere rather than nowhere. True when one
+    // of the two landed whole. False - the library and the copy both
+    // unwritable - is an accepted outcome, and the caller exits anyway;
+    // see the .cpp.
+    bool FlushForShutdown();
     // Wired to IPlatformHost::SetSessionEndCallback in Initialize().
     void OnSessionEnding();
     // Where a recovery copy goes: a sibling of the library, named after it
