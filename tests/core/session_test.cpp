@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -530,6 +532,67 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
 
     session.SetLibraryStore(nullptr);
     std::filesystem::remove_all(dir);
+}
+
+// A recovery copy is a library that opens on its own: every picture a
+// record in it names is in it, whether the session still held the pixels
+// or had to read them back from the real library - and one that could not
+// be made whole says so.
+TEST(SessionTest, ARecoveryCopyHoldsEveryPictureItsRecordsName) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "spickzettel_session_test_recovery";
+    const std::filesystem::path whole = dir.parent_path() / "spickzettel_session_test_recovery_whole";
+    const std::filesystem::path partial = dir.parent_path() / "spickzettel_session_test_recovery_partial";
+    for (const auto& path : {dir, whole, partial}) {
+        std::filesystem::remove_all(path);
+    }
+    persistence::LibraryStore store(dir);
+    test::FakeOverlayWindow window;
+    window.captureReturnsHandle = 7;
+    window.captureReturnsWidth = 2;
+    window.captureReturnsHeight = 1;
+    window.captureReturnsPixelsRGBA = {10, 20, 30, 255, 40, 50, 60, 255};
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
+    ASSERT_TRUE(session.Flush());
+    const std::string onDisk = session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile;
+    ASSERT_FALSE(onDisk.empty()) << "on disk in the real library, not in memory";
+
+    EXPECT_TRUE(session.WriteRecoveryCopy(whole));
+    persistence::LibraryStore recovered(whole);
+    const std::optional<CanvasManagerSnapshot> loaded = recovered.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const Item* copy = nullptr;
+    for (const Canvas& canvas : loaded->canvases) {
+        for (const Item& item : canvas.items) {
+            copy = &item;
+        }
+    }
+    ASSERT_NE(copy, nullptr);
+    const std::optional<persistence::DecodedImage> picture = recovered.LoadImage(copy->id, copy->ImageLayer()->imageFile);
+    ASSERT_TRUE(picture.has_value()) << "names a picture the copy does not hold";
+    EXPECT_EQ(picture->pixelsRGBA, window.captureReturnsPixelsRGBA);
+    EXPECT_TRUE(std::filesystem::is_regular_file(whole / "recovery.txt"));
+
+    // The real library's picture gone: the copy cannot be whole, and says so.
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+        if (entry.path().filename() == onDisk) {
+            std::filesystem::remove(entry.path());
+        }
+    }
+    EXPECT_FALSE(session.WriteRecoveryCopy(partial));
+    {
+        std::ifstream note(partial / "recovery.txt");
+        const std::string text((std::istreambuf_iterator<char>(note)), std::istreambuf_iterator<char>());
+        EXPECT_NE(text.find("Incomplete"), std::string::npos) << text;
+    }
+
+    session.SetLibraryStore(nullptr);
+    for (const auto& path : {dir, whole, partial}) {
+        std::filesystem::remove_all(path);
+    }
 }
 
 // A copy taken of a capture whose write has not landed has the session's

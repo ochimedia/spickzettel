@@ -897,9 +897,16 @@ the query. Both settle the hand's work, try the
 save twice - the first attempt may be what clears the way - and, if the
 library still cannot be written, write a **recovery copy** beside it:
 `library-recovery-<timestamp>/`, a fresh tree holding every record and
-every picture still in memory (a capture whose write never landed, a
-painted layer's pixels). Pictures already on disk in the real library
-are not copied; they are safe where they are. Exit still exits: holding
+every picture those records name - from the session where it holds the
+pixels (a capture whose write never landed, a painted layer), and
+re-encoded from the real library otherwise - with a `recovery.txt`
+beside the tree saying where it came from and whether it is whole. The
+copy has to open on its own: the first version copied only what was in
+memory, so its records named screenshot files that were still in the
+real library and the copy opened with placeholders where they should
+have been. A copy that could not be made whole (a picture the real
+library no longer has) is reported as such, in the return and in the
+note. Exit still exits: holding
 the app open against the user's explicit request was judged worse than
 a copy they have to go and find, and the tray has no window of its own
 to ask in.

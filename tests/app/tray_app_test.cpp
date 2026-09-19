@@ -714,16 +714,25 @@ TEST_F(TrayControllerPersistenceTest, ExitWritesARecoveryCopyWhenTheLibraryCanno
         }
     }
     ASSERT_FALSE(recovery.empty()) << "no recovery copy beside the library";
-    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(recovery).Load();
+    persistence::LibraryStore recovered(recovery);
+    const std::optional<CanvasManagerSnapshot> loaded = recovered.Load();
     ASSERT_TRUE(loaded.has_value());
     size_t items = 0;
     for (const Canvas& canvas : loaded->canvases) {
         for (const Item& item : canvas.items) {
             ++items;
-            EXPECT_FALSE(item.ImageLayer()->imageFile.empty()) << "the record names its picture";
+            ASSERT_FALSE(item.ImageLayer()->imageFile.empty()) << "the record names its picture";
+            // The picture was on disk in the real library, not in memory;
+            // the copy has to hold it all the same, or it does not open on
+            // its own.
+            const std::optional<persistence::DecodedImage> picture =
+                recovered.LoadImage(item.id, item.ImageLayer()->imageFile);
+            ASSERT_TRUE(picture.has_value()) << "the copy names a picture it does not hold";
+            EXPECT_EQ(picture->pixelsRGBA, host.overlayWindow.captureReturnsPixelsRGBA);
         }
     }
     EXPECT_EQ(items, 1u);
+    EXPECT_TRUE(std::filesystem::is_regular_file(recovery / "recovery.txt")) << "says what it is";
     std::filesystem::remove_all(recovery);
 }
 

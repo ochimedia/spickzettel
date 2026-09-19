@@ -4,9 +4,12 @@
 #include <cmath>
 #include <cstring>
 #include <ctime>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
+
+#include "core/util/timestamp_name.h"
 
 namespace sz::core {
 
@@ -106,41 +109,70 @@ bool Session::SavePendingPictures(LibraryInstance& instance) {
 bool Session::WriteRecoveryCopy(const std::filesystem::path& dir) {
     persistence::LibraryStore copy(dir);
     CanvasManagerSnapshot snapshot = library_.manager.ExportSnapshot();
-    bool wroteEverything = true;
+    size_t picturesMissing = 0;
     for (Canvas& canvas : snapshot.canvases) {
         for (Item& item : canvas.items) {
-            // A capture still waiting to be written, named in the copy's
-            // record by whatever the copy calls it.
-            if (const auto pending = pendingPictures_.find(item.id); pending != pendingPictures_.end()) {
-                if (Layer* picture = item.ImageLayer()) {
-                    const std::optional<std::string> filename = copy.SaveImage(
-                        item.id, pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
-                    if (filename) {
-                        picture->imageFile = *filename;
-                    } else {
-                        wroteEverything = false;
-                    }
-                }
-            }
-            // Painted pixels held in memory, dirty or not: the copy has no
-            // other source for them.
+            const Layer* picture = item.ImageLayer();
             for (size_t index = 0; index < item.layers.size(); ++index) {
                 Layer& layer = item.layers[index];
-                if (!layer.HasPaintedPixels()) {
+                // Into the copy under whatever the copy calls it; the
+                // record is rewritten to name that.
+                const auto write = [&](const uint8_t* pixelsRGBA, int width, int height) {
+                    const std::optional<std::string> filename =
+                        &layer == picture ? copy.SaveImage(item.id, pixelsRGBA, width, height)
+                                          : copy.SaveLayerImage(item.id, index, pixelsRGBA, width, height);
+                    if (filename) {
+                        layer.imageFile = *filename;
+                    } else {
+                        ++picturesMissing;
+                    }
+                };
+                // Where the pixels are, in order: this session (a capture
+                // whose write never landed; a painted layer, dirty or not),
+                // else the real library, re-encoded from there. The first
+                // version copied only what was in memory and left every
+                // record naming a file that was not in the copy, so the copy
+                // opened with its screenshots as placeholders and nothing to
+                // say why.
+                if (&layer == picture) {
+                    if (const auto pending = pendingPictures_.find(item.id); pending != pendingPictures_.end()) {
+                        write(pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
+                        continue;
+                    }
+                }
+                if (layer.HasPaintedPixels()) {
+                    write(layer.painted->PixelsRGBA().data(), layer.painted->Width(), layer.painted->Height());
                     continue;
                 }
-                const std::optional<std::string> filename =
-                    copy.SaveLayerImage(item.id, index, layer.painted->PixelsRGBA().data(), layer.painted->Width(),
-                                        layer.painted->Height());
-                if (filename) {
-                    layer.imageFile = *filename;
+                if (layer.imageFile.empty()) {
+                    continue;  // nothing named, nothing owed
+                }
+                const std::optional<persistence::DecodedImage> onDisk =
+                    Store() ? Store()->LoadImage(item.id, layer.imageFile) : std::nullopt;
+                if (onDisk) {
+                    write(onDisk->pixelsRGBA.data(), onDisk->width, onDisk->height);
                 } else {
-                    wroteEverything = false;
+                    ++picturesMissing;  // the record keeps the name, which says what was there
                 }
             }
         }
     }
-    return copy.Save(snapshot) && wroteEverything;
+    const bool recordsWritten = copy.Save(snapshot);
+    // A note beside the tree for the person who finds it: what it is, where
+    // it came from, and whether every picture came with it.
+    {
+        std::ofstream note(dir / "recovery.txt", std::ios::binary | std::ios::trunc);
+        note << "Spickzettel recovery copy, written " << TimestampName() << "\n";
+        note << "Source library: " << (Store() ? Store()->RootDir().string() : std::string("(none)")) << "\n";
+        if (picturesMissing == 0 && recordsWritten) {
+            note << "Complete: every record and every picture it names is in this directory.\n";
+        } else {
+            note << "Incomplete: " << picturesMissing << " picture(s) could not be copied"
+                 << (recordsWritten ? "" : ", and not every record could be written") << ".\n";
+        }
+        note << "To use it, close the app and put this directory where the source library was.\n";
+    }
+    return recordsWritten && picturesMissing == 0;
 }
 
 bool Session::HasUnsavedChanges() const {
