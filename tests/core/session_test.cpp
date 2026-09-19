@@ -775,12 +775,18 @@ TEST(SessionTest, APermanentDeleteThatLeavesFilesBehindSaysSoAndFinishesLater) {
         EXPECT_TRUE(session.Flush());
         EXPECT_TRUE(session.HasUnsavedChanges()) << "a removal is still owed";
         EXPECT_TRUE(std::filesystem::exists(record));
+
+        // ...on a clock of its own, not every frame: two seconds of frames
+        // while the file is still held are not two seconds of saves.
+        const uint64_t writesBefore = store.WriteGeneration();
+        for (int frame = 0; frame < 120; ++frame) {
+            session.Tick(1.0f / 60.0f);
+        }
+        EXPECT_EQ(store.WriteGeneration(), writesBefore) << "retried on every frame";
     }
-    // Let go, the autosave's own clock finishes the delete with no edit
-    // to prompt it - and sets nothing aside. The first tick is the one
-    // that notices the generation moved; the quiet time counts from there.
-    session.Tick(0.0f);
-    session.Tick(3.0f);
+    // Let go, the removal's own clock finishes the delete with no edit to
+    // prompt it - and sets nothing aside.
+    session.Tick(10.0f);
     EXPECT_FALSE(session.HasUnsavedChanges());
     EXPECT_FALSE(std::filesystem::exists(record.parent_path()));
     EXPECT_FALSE(std::filesystem::exists(dir / "retired"));

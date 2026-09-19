@@ -29,6 +29,13 @@ constexpr float kAutosaveMaxIntervalSeconds = 15.0f;
 // disk turned an ordinary autosave into a synchronous rewrite of every file
 // on every frame, for as long as the disk stayed full.
 constexpr float kAutosaveRetryMaxSeconds = 30.0f;
+// A permanent delete whose directory could not be wholly removed is tried
+// again this often while the overlay is up - the same cadence the hidden
+// retry timer has. The save that recorded the removal as owed counted, so
+// neither the failure backoff nor the quiet period holds the next one
+// back; without a clock of its own, the retry ran on every frame for as
+// long as another program held the file, hashing the library each time.
+constexpr float kRemovalRetrySeconds = 10.0f;
 }  // namespace
 
 // ================= Persistence =================
@@ -273,6 +280,20 @@ void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {
         }
     }
 
+    // Nothing owed but a removal - the records are saved and no picture
+    // is waiting - is on its own clock (see kRemovalRetrySeconds), unless a
+    // failed save's retry is what brought us here, which goes ahead.
+    const bool onlyARemovalOwed =
+        generation == instance.lastSavedGeneration && pendingPictures_.empty() && instance.saveRetryBackoffSeconds <= 0.0f;
+    if (onlyARemovalOwed) {
+        instance.removalRetryCountdownSeconds -= deltaSeconds;
+        if (instance.removalRetryCountdownSeconds > 0.0f) {
+            return;
+        }
+        SaveLibraryNow(instance);  // sets the clock again if still owed
+        return;
+    }
+
     const bool quietLongEnough = instance.secondsSinceLastChange >= kAutosaveQuietSeconds;
     const bool waitedTooLong = instance.secondsSinceFirstUnsavedChange >= kAutosaveMaxIntervalSeconds;
     if (quietLongEnough || waitedTooLong) {
@@ -299,6 +320,9 @@ bool Session::SaveLibraryNow(LibraryInstance& instance) {
     if (saved) {
         instance.lastSavedGeneration = generation;
         instance.saveRetryBackoffSeconds = 0.0f;
+        if (instance.store->HasPendingRemovals()) {
+            instance.removalRetryCountdownSeconds = kRemovalRetrySeconds;
+        }
     } else {
         // Disk full, permissions, a file held open by something else: try
         // again later, and later each time - see kAutosaveRetryMaxSeconds.

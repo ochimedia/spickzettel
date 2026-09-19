@@ -574,9 +574,14 @@ mark could not be written fails, since nothing on disk then records the
 delete. `Load` reads nothing from a marked directory and owes its
 removal too, so a restart while the file is still held does not bring
 back a snippet deleted for good. The session counts an owed removal as
-an unsaved change: the flush that recorded it counts, but the autosave's
-clock keeps asking, and the hidden retry timer keeps running, until the
-directory is gone. The first version forgot the directory before
+an unsaved change: the flush that recorded it counts, but the autosave
+keeps asking - on a clock of its own, every ten seconds, the cadence the
+hidden retry timer has - and the hidden retry timer keeps running, until
+the directory is gone. The clock matters: the save that recorded the
+removal counted, so neither the failure backoff nor the quiet period
+held the next one back, and the retry ran on every frame, hashing the
+library each time, for as long as another program held the file. The
+first version forgot the directory before
 deleting it and returned true whatever happened, which left the remains
 to be retired as something lost, or reloaded as a snippet; the second
 kept the removal pending but let the next save count as clean, so

@@ -295,6 +295,10 @@ private:
         // - which is why they cannot double as a retry delay.
         float saveRetryCountdownSeconds = 0.0f;
         float saveRetryBackoffSeconds = 0.0f;
+        // A removal still owed after a save that counted (see
+        // LibraryStore::HasPendingRemovals) is tried again on this clock,
+        // not every frame - see UpdateAutosave.
+        float removalRetryCountdownSeconds = 0.0f;
     };
 
     // Writes every painted layer's pixels out as QOI and records the
