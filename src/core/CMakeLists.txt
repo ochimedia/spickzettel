@@ -4,6 +4,8 @@
 # tests do.
 add_library(sz_core STATIC
     build_info/build_info.cpp
+    canvas/canvas_manager.cpp
+    canvas/item_geometry.cpp
     drawing/canvas_state.cpp
     drawing/draw_tool.cpp
     drawing/painted_image.cpp
@@ -11,6 +13,9 @@ add_library(sz_core STATIC
     drawing/stroke_mesh_cache.cpp
     drawing/stroke_clip.cpp
     drawing/stroke_smoothing.cpp
+    util/slug.cpp
+    util/timestamp_name.cpp
+    util/uid.cpp
 )
 
 target_include_directories(sz_core PUBLIC ${CMAKE_SOURCE_DIR}/src)

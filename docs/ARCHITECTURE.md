@@ -287,3 +287,126 @@ capture paints where the pen is. Clamping the bitmap's width and height
 while still mapping coordinates 1:1 cropped everything past the cap and
 stretched the rest, putting a stroke a quarter of the way across the
 item from the pen.
+
+## Canvases, items and folders
+
+`Item` is a snippet: freehand strokes over a stack of layers, at a
+`rect` on screen. `Canvas` is an independent collection of items whose
+order is paint order; `Folder` is a flat, non-nesting group of canvases
+- one per game, or per set of levels. `CanvasManager` owns all three,
+plus which folder is browsed and which canvas is current.
+
+Two pieces of "current" are deliberately decoupled: the current canvas
+is what is on screen and drawn on; the browsed folder is what the
+Overview shows and where a new canvas lands. Browsing a folder never
+switches away from the canvas being edited. Code that wants one of them
+has to say which: "where am I working" is the current canvas's folder,
+"what am I looking at" is the browsed folder.
+
+There is no "always at least one canvas" invariant. An empty folder is a
+legal state the moment one is created, so refusing to let the library
+reach the same state would be an inconsistency dressed up as a
+safeguard. Everything treats "nothing at all" as ordinary: the only
+accessor for the current canvas is `CurrentOrNull()`, every item
+operation no-ops without one, `AddCanvas` mints a folder if none is
+left, and the library saves and loads empty.
+
+### Layers
+
+An item's picture is a list of `Layer`s composited bottom-first, with
+strokes and the caption always on top. Every item has an Image layer
+(its screenshot, or a transparent fill for a drawing), and gets a
+Painted layer on top the first time something is painted on it. The rule
+that keeps the kinds honest: a layer is either vector-authoritative (its
+pixels are a rebuildable cache) or pixel-authoritative (its pixels are
+the document, persisted and undone as pixels), never both. Strokes are
+the first kind; both layer kinds are the second.
+
+A texture handle has single-owner lifetime even though `Item` is a
+freely copyable struct, so a copy detaches its layers: the handle is
+reset and reloaded from the file, painted pixels are deep-copied, and
+the clone starts *dirty* because it has no file yet and its pixels are
+the only copy.
+
+### Strokes live in the item's native space
+
+Strokes are stored in a fixed coordinate space set at creation
+(`nativeW/nativeH`), not in screen space, so a stroke drawn at one size
+still looks right after the item is resized. `ScreenToNative` is the one
+transform for everything that lands a gesture on an item - the pen, the
+erasers, the brush - so they cannot disagree about where the pen is.
+
+### Resolution-relative item sizing
+
+`rect` is always in absolute pixels for every runtime consumer, but it
+is a *derived* value: recomputed every frame from a per-item anchor (the
+last deliberate placement and the display size it was made against) by
+`SyncItemsToDisplaySize`. Position scales per axis so an item near a
+corner stays near it; size scales by one uniform factor so its shape is
+never distorted, at the cost of not filling an ultrawide. Rescaling in
+place instead is unstable - the uniform factor is asymmetric between
+shrinking and growing, so shrinking a display and widening it back
+ratchets items smaller every cycle - which is why the anchor is fixed
+and every deliberate move or resize re-anchors through
+`CommitItemLayout`.
+
+A fullscreen item bypasses the anchor entirely and is recomputed from
+the viewport each call, stretched or fitted to its own aspect ratio as
+it was entered (`isFullscreenStretch` remembers which, since `rect`
+alone cannot tell). Exiting fullscreen recomputes the restore rect from
+the untouched anchor against the *current* viewport, so a display change
+while fullscreen lands it in the right place.
+
+### The floor is a shape
+
+Items cannot shrink below 90x70. Applied as two independent per-axis
+clamps that floor reshapes anything that is not 9:7: a 16:9 item reaches
+the height floor at 124x70 and then goes on narrowing to 90. Reaching
+one floor has to stop the whole resize, so `MinimumSizeForAspectRatio`
+turns the two numbers into one floor on the item's own ratio, and the
+derived axis is deliberately not re-clamped. The same floor applies in
+the display sync and in fullscreen restore, and a free (Shift) resize,
+which is meant to reshape, keeps the plain per-axis pair.
+
+### Z-order steps past what actually overlaps
+
+Bring forward and send backward move an item past the nearest item that
+*overlaps* it, not the immediate neighbour in the list. A canvas holds
+snippets all over the screen, and a step over one that shares no pixels
+with this one changes the order without changing anything anybody can
+see, which reads as a button that does nothing.
+
+### Deletion is a mark
+
+A deleted folder, canvas or snippet stays exactly where it is, with
+`deletedAt` stamped, and is hidden by every walk over the library. A
+thing counts as deleted when it or anything holding it is marked, so
+deleting a canvas stamps only the canvas, restoring it brings back
+exactly what went with it, and a snippet deleted earlier keeps its own
+mark. Restoring a snippet inside a deleted canvas restores the canvas
+too. "Delete permanently" is the erasure the `Delete*` methods perform.
+
+Two designs preceded this. A reserved Trash folder inside the library
+grouped three structurally different things under one "dig through the
+bin" model that fit none of them. A trash that was a second library of
+the same shape needed a delete to transfer records, directories and
+textures into it with scaffolding containers on the far side, ids
+reserved across both, a tab that switched which library the whole
+overlay viewed, and a staging rule for a capture deleted before its
+first save. A stamp in the record replaces all of it without moving
+anything.
+
+### Ids and names
+
+Ids are random six-character base36 uids, checked against everything
+the library holds. Random rather than counted because every counted
+library starts at 1, so two libraries built independently collide on
+nearly every id, and moving a directory between them - which the on-disk
+tree is meant to allow - would be a guaranteed conflict. Lowercase only,
+since the ids become directory names on case-insensitive filesystems.
+
+A folder or canvas nobody has named is called for the moment it was
+made, "2026-09-07 22:36:14": a counted "Folder 2, Folder 5" says nothing
+about which is which a week later. Items keep numbered names
+("Screenshot 3"), which is all an item name is asked to carry. Names are
+not identity; the slug a directory is named by carries the id.
