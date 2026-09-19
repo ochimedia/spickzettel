@@ -13,6 +13,8 @@ add_library(sz_core STATIC
     drawing/stroke_mesh_cache.cpp
     drawing/stroke_clip.cpp
     drawing/stroke_smoothing.cpp
+    persistence/image_codec.cpp
+    persistence/library_store.cpp
     util/slug.cpp
     util/timestamp_name.cpp
     util/uid.cpp
@@ -26,5 +28,5 @@ target_include_directories(sz_core PUBLIC ${CMAKE_BINARY_DIR})
 # cmake/GitStamp.cmake.
 add_dependencies(sz_core sz_git_stamp)
 target_compile_features(sz_core PUBLIC cxx_std_20)
-target_link_libraries(sz_core PUBLIC sz_platform_iface)
+target_link_libraries(sz_core PUBLIC sz_platform_iface stb qoi nlohmann_json::nlohmann_json)
 spickzettel_set_warnings(sz_core)

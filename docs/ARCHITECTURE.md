@@ -410,3 +410,134 @@ made, "2026-09-07 22:36:14": a counted "Folder 2, Folder 5" says nothing
 about which is which a week later. Items keep numbered names
 ("Screenshot 3"), which is all an item name is asked to carry. Names are
 not identity; the slug a directory is named by carries the id.
+
+## Persistence: the on-disk library
+
+Everything the overlay shows survives a restart, written to
+`%APPDATA%\Spickzettel\library\`. There is no save action anywhere in
+the UI; the session decides when to write (see "Session"). Loading
+happens once, at startup.
+
+### Layout
+
+```
+library/
+  library.json          - currentFolderId and currentCanvasId. Nothing
+                           else: the tree is the rest.
+  folders/order.json    - the folders' uids, in order
+  folders/<folder>/
+    folder.json         - that folder's id and name
+    order.json          - its canvases' uids, in order
+    <canvas>/
+      canvas.json       - that canvas's id and name
+      order.json        - its snippets' uids, back to front
+      <snippet>/
+        item.json       - rect, strokes, layers, anchor, note text...
+        <uid>.qoi       - its captured pixels, if it has any
+        <uid>.thumb.qoi - a 256px copy for the Overview's thumbnails
+  images/               - staging: where a capture waits between being
+                           taken and the next save moving it into the
+                           snippet that names it
+  retired/<folder>/...  - what a save found the library no longer
+                           holding, set aside whole rather than deleted
+```
+
+Every directory is `<slug of its current name>-<uid>`. The readable half
+is regenerated on every save so it stays true after a rename; the
+trailing uid is the identity, so a rename is cosmetic and a failed one
+costs a stale label. Every id inside a record is spelled the same
+six-character way, so a record and its directory can be matched by eye.
+
+A tree rather than one file because one file is rewritten whole on every
+save: 50 canvases of ordinary drawing is a 42 MB document taking half a
+second to serialise, on the render thread, every couple of seconds of
+quiet.
+
+**The tree is the index.** Nothing records which canvas is in which
+folder; the directory it sits in says so, and where a record disagrees
+with where it physically is, the filesystem wins. Rearranging the
+library in a file manager while the app is closed is a supported way to
+use it, so `Load` reconciles rather than validates: a directory without
+a record is not ours and is left alone; an order file naming something
+gone skips it, and anything present it does not name goes to the end
+(the front, for snippets, since their order is z-order); a directory
+whose readable half was renamed by hand keeps its place by its uid; two
+directories claiming one id - what copying one produces - is not
+corruption, the second gets a fresh id; a current-canvas pointer naming
+nothing falls back to a canvas that exists. The same reconciliation is
+what makes a half-finished save survivable: a crash mid-write leaves the
+same kind of inconsistency a hand edit does. The reader also tolerates a
+few pre-release record shapes (numeric ids, an item's single layer
+written as five fields, order files listing directory names); they are
+cheap and the tree invites old files.
+
+A snippet's pictures live in its own directory, so moving a snippet is
+moving one directory with no window where the record has moved and the
+picture has not. `Layer::imageFile` names a *file*, not a path, and
+`FindImage` turns it into a path through the owning snippet. A
+library-wide filename-to-directory map fell behind whenever a directory
+moved, and two snippets can legitimately hold files of the same name.
+
+### A save is a plan
+
+First everything the library holds is *placed* - its directory found
+where the index says, or moved to where its current name says, or
+created - and its record written; then whatever the index knows about
+that the library no longer holds is retired; then pictures waiting in
+staging are moved in with their snippets. Placing everything before
+retiring anything is what makes a move a move: a save that swept each
+canvas for strays as it went deleted a snippet dragged to a *later*
+canvas, picture and all, before reaching the canvas it went to. Retiring
+only what the index knows is what makes an unfamiliar directory safe:
+unreadable must never become deleted.
+
+Retiring sets aside into `retired/` rather than deleting. With a delete
+a mark and a permanent delete an eager `Remove`, the index and the
+snapshot agree about everything that went on purpose by the time a save
+runs, and the pass finds nothing. It is the net under a snapshot that
+lacks something nobody deleted, the kind of disagreement that once
+emptied a library.
+
+### A save costs what changed
+
+The store keeps what it last wrote - a content hash per snippet, the
+exact text for the small records - and where everything lives, so a save
+neither re-reads the tree nor re-serialises what it would write back
+unchanged. A twelve-canvas library measured 858 ms per autosave when
+every file was rewritten, for one stroke on one snippet; bounded by what
+moved it is 1.8 ms when nothing did and 7.5 ms for that stroke. `Load`
+establishes the same record as it reads, so the first save of a session
+costs only what the load had to repair. The hash and the serialiser are
+kept adjacent in the source and a test asserts every field moves the
+hash, because a field added to one and not the other is an edit that is
+silently never saved.
+
+Every file goes through write-to-temp-then-rename, pictures included: a
+painted layer is re-encoded over its own previous file on every save,
+and truncating in place left a window in which the only copy on disk of
+a drawing was the first half of it.
+
+### Images: QOI, decoded by magic bytes
+
+Pixels are written as QOI. Measured on this app's own screenshots
+against stb's PNG:
+
+| | 1920x1080 capture | ~500x400 capture |
+|---|---|---|
+| PNG decode | 43 ms | 8.8 ms |
+| QOI decode | 7 ms | 1.2 ms |
+| PNG encode | 296 ms | 49 ms |
+| QOI encode | 13 ms | 2.4 ms |
+
+Decoding is what a canvas switch pays; encoding is what every screenshot
+pays, synchronously, while the user waits. Both are lossless, and the
+files come out ~30% smaller because stb's encoder is a weak one. Raw
+pixels were measured too and are a trap: reading 8 MB off disk costs
+more than reading 1.6 MB and decoding it. `DecodeImageFromFile`
+dispatches on the file's leading bytes, not its extension, so a `.png`
+still loads. A 256px thumbnail is written beside every picture so the
+Overview never decodes a fullscreen capture to draw a 200px tile.
+
+A capture's pixels are written synchronously at capture time, not with
+the debounced record write: a screenshot lost to a crash can never be
+recaptured, where a few seconds of strokes can be redrawn.

@@ -5,7 +5,9 @@ add_executable(sz_core_tests
     core/canvas_manager_test.cpp
     core/canvas_state_test.cpp
     core/draw_tool_test.cpp
+    core/image_codec_test.cpp
     core/item_geometry_test.cpp
+    core/library_store_test.cpp
     core/painted_image_test.cpp
     core/slug_test.cpp
     core/stroke_clip_test.cpp
