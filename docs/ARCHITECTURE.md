@@ -71,3 +71,28 @@ keeping for whoever adds it back:
   "no DLLs to bring along" reason, and Defender's heuristics key on that
   shape. Copying the three MinGW runtime DLLs next to the executable
   avoids it; an MSVC build needs no such step.
+
+### Licences: what ships, and where the notices are
+
+`LICENSE` covers Spickzettel itself, which is proprietary.
+`THIRD-PARTY-NOTICES.md` covers everything that ends up inside the
+binary, and is compiled into it and shown on the About tab, because MIT,
+ISC and the OFL all require the notice to reach whoever received the
+software; a text file next to the executable is one copy away from not
+doing that.
+
+What is in a release binary, and why each is allowed in a paid,
+closed-source one:
+
+- **Dear ImGui**, **nlohmann/json**, **QOI**: MIT. Reproduce the notice.
+- **stb_image / stb_image_write**: dual MIT or public domain; the notices
+  file takes the MIT branch and says so.
+- **Manrope**: SIL OFL 1.1, which permits bundling and selling a font
+  *with* software provided the licence travels with it, and forbids only
+  selling the font by itself.
+- **Icon designs**: ISC (Lucide) and MIT (Feather). The SVGs here are
+  drawn from this project's own path data, but both licences cover the
+  designs.
+
+googletest and imgui_test_engine only build or test the app and are not
+in a release binary, so they are not in the notices.

@@ -34,3 +34,13 @@ function(spickzettel_set_warnings TARGET)
         target_compile_options(${TARGET} PRIVATE -Wall -Wextra)
     endif()
 endfunction()
+
+# Third-party code, all fetched and pinned - see docs/ARCHITECTURE.md.
+include(FetchImGui)
+include(FetchJson)
+include(FetchStb)
+include(FetchQoi)
+if(SPICKZETTEL_BUILD_TESTS)
+    include(FetchGoogleTest)
+    enable_testing()
+endif()
