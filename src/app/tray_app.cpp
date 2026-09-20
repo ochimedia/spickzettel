@@ -518,6 +518,17 @@ void TrayController::MoveOverlayTo(const platform::DisplayInfo& display) {
 // would tear the input hooks down and put them back mid-session, and
 // "which profile am I in" would stop being a question with one answer for
 // as long as the panel is open.
+bool TrayController::MustTakeFocusFrom(const platform::ForegroundApp& app) const {
+    // Only a *positive* reading. Unknown is the answer for a process that
+    // refuses the question, and the two things that refuse it want
+    // opposite treatment: an elevated tool would want focus taken, a game
+    // behind an anti-cheat driver must never have it taken. Leaving
+    // Unknown alone keeps the game right and costs the tool nothing it
+    // had, since without this it had nothing anyway.
+    return settings_.Live().takeFocusOverElevated &&
+           app.integrity == platform::ForegroundIntegrity::Above;
+}
+
 void TrayController::ApplyProfileForCurrentApplication(bool keepPrevious) {
     platform::IOverlayWindow& window = host_.GetOverlayWindow();
     // Asked before Show, which is what makes it the *underlying*
@@ -533,7 +544,7 @@ void TrayController::ApplyProfileForCurrentApplication(bool keepPrevious) {
     // Both have a real runtime effect beyond what OverlayApp renders, and
     // both are set before the window is shown: no-activate decides how it
     // is shown at all, and the input options decide what gets hooked.
-    liveEditModeNoActivate_ = settings_.Live().dontStealFocus;
+    liveEditModeNoActivate_ = settings_.Live().dontStealFocus && !MustTakeFocusFrom(*sessionApp_);
     liveEditModeInput_ = settings_.Live().InputOptions();
     window.SetEditModeNoActivate(liveEditModeNoActivate_);
     window.SetEditModeInput(liveEditModeInput_);

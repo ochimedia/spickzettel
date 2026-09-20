@@ -197,6 +197,14 @@ private:
     // convention host_.GetDataDirectoryPath() already has for
     // libraryStore_ (see Initialize()).
     void OnSettingsChanged();
+    // Whether this showing has to take focus whatever the settings say
+    // about leaving it alone, because Windows would otherwise deliver us
+    // none of that application's input - see ForegroundIntegrity and
+    // ProfileableSettings::takeFocusOverElevated. Only the live
+    // no-activate value is affected; what is stored stays as the user set
+    // it, so the Settings row keeps showing their answer rather than
+    // silently rewriting itself for one application.
+    bool MustTakeFocusFrom(const platform::ForegroundApp& app) const;
     // Hides the overlay and immediately shows it again in the same mode,
     // for settings that are only read on the way in - see
     // OverlayApp::SetRestartOverlayCallback. No-op while hidden.

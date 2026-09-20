@@ -1014,6 +1014,100 @@ TEST(TrayControllerProfileTest, NothingUnderneathMeansTheDefaultsRun) {
     EXPECT_TRUE(host.overlayWindow.editModeInput.counterRawMouseInput);
 }
 
+// ===== Taking focus from an elevated application =====
+
+namespace {
+platform::ForegroundApp AppAt(const char* executable, platform::ForegroundIntegrity integrity) {
+    platform::ForegroundApp app;
+    app.executable = executable;
+    app.title = "A Window";
+    app.integrity = integrity;
+    return app;
+}
+
+bool ShowEditModeOver(test::FakePlatformHost& host, const AppConfig& config,
+                       const platform::ForegroundApp& app) {
+    host.overlayWindow.underlyingApp = app;
+    TrayController controller(host, config);
+    EXPECT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    EXPECT_TRUE(host.overlayWindow.visible);
+    return host.overlayWindow.editModeNoActivate;
+}
+}  // namespace
+
+// Windows gives a lower-integrity process none of an elevated
+// application's input, so leaving it focused costs the overlay not only
+// the grab but every shortcut it has. Focus is taken instead.
+TEST(TrayControllerProfileTest, AnElevatedApplicationHasFocusTakenFromIt) {
+    test::FakePlatformHost host;
+    EXPECT_FALSE(ShowEditModeOver(host, DefaultConfig(),
+                                   AppAt("taskmgr.exe", platform::ForegroundIntegrity::Above)));
+}
+
+// The other two answers change nothing, and Unknown is the one that
+// matters: a game behind an anti-cheat driver refuses the integrity query
+// exactly as an elevated tool would, and taking focus from it is the one
+// thing this whole mode exists to prevent. So only a positive reading acts.
+TEST(TrayControllerProfileTest, AnApplicationThatIsNotAboveUsKeepsItsFocus) {
+    test::FakePlatformHost host;
+    EXPECT_TRUE(ShowEditModeOver(host, DefaultConfig(),
+                                  AppAt("notepad.exe", platform::ForegroundIntegrity::NotAbove)));
+}
+
+TEST(TrayControllerProfileTest, AnApplicationThatRefusesTheQuestionKeepsItsFocus) {
+    test::FakePlatformHost host;
+    EXPECT_TRUE(ShowEditModeOver(host, DefaultConfig(),
+                                  AppAt("game.exe", platform::ForegroundIntegrity::Unknown)));
+}
+
+// Off globally, an elevated application is treated like any other: the
+// overlay stays hands-off and is simply deaf, which is a choice a person
+// is allowed to make.
+TEST(TrayControllerProfileTest, TheSettingTurnedOffLeavesAnElevatedApplicationAlone) {
+    test::FakePlatformHost host;
+    AppConfig config = DefaultConfig();
+    config.takeFocusOverElevated = false;
+    EXPECT_TRUE(ShowEditModeOver(host, config, AppAt("taskmgr.exe", platform::ForegroundIntegrity::Above)));
+}
+
+// And off for one application only, which is the case the setting is
+// profileable for: an elevated game, where a deaf overlay still shows
+// pinned snippets and still captures.
+TEST(TrayControllerProfileTest, AProfileMayKeepHandsOffOneElevatedApplication) {
+    test::FakePlatformHost host;
+    AppConfig config = DefaultConfig();
+    Profile profile;
+    profile.name = "Game";
+    profile.match.executables.push_back("game.exe");
+    profile.overrides.takeFocusOverElevated = false;
+    config.profiles.push_back(profile);
+
+    EXPECT_TRUE(ShowEditModeOver(host, config, AppAt("game.exe", platform::ForegroundIntegrity::Above)));
+
+    test::FakePlatformHost other;
+    EXPECT_FALSE(ShowEditModeOver(other, config,
+                                   AppAt("taskmgr.exe", platform::ForegroundIntegrity::Above)))
+        << "the profile speaks for its own application only";
+}
+
+// What is stored stays as the user set it: the Settings row goes on
+// showing their answer rather than silently rewriting itself because of
+// what happened to be in front of the overlay once.
+TEST(TrayControllerProfileTest, TakingFocusDoesNotRewriteTheStoredSetting) {
+    test::FakePlatformHost host;
+    host.overlayWindow.underlyingApp = AppAt("taskmgr.exe", platform::ForegroundIntegrity::Above);
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+
+    EXPECT_FALSE(host.overlayWindow.editModeNoActivate) << "focus taken for this showing";
+    EXPECT_TRUE(controller.GetSettings().Stored().editModeNoActivate) << "but not written down";
+    EXPECT_TRUE(controller.GetSettings().Live().dontStealFocus);
+}
+
 // ===== Pinned snippets =====
 
 namespace {
