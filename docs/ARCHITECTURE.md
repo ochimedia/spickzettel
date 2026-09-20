@@ -376,6 +376,29 @@ derived axis is deliberately not re-clamped. The same floor applies in
 the display sync and in fullscreen restore, and a free (Shift) resize,
 which is meant to reshape, keeps the plain per-axis pair.
 
+### An aspect-locked corner follows the diagonal
+
+One scale drives both axes while the shape is kept, and a corner takes it
+by projecting the corner the pointer asks for onto the item's own
+diagonal. The obvious rule - whichever axis moved proportionally further
+drives, the other is derived - is discontinuous wherever the two axes
+disagree about which way they are going. At the crossover one answer says
+a tenth bigger and the other a tenth smaller, so moving the pointer
+*across* the diagonal rather than along it made the size jump: measured on
+a 400x300 snippet, 440x330 to 360x270 from a ten-thousandth of a pixel of
+movement, and up to the snippet's whole width in the worst case. Along the
+diagonal, where both axes agree, the two rules are identical, which is why
+it only ever happened in two of the four directions.
+
+The projection has no crossover to jump at and costs one thing worth
+knowing: a corner dragged straight sideways grows by less than the pointer
+moved (`w^2 / (w^2 + h^2)` of it), because the corner tracks the pointer's
+foot on the diagonal rather than the pointer itself. `std::max` of the two
+per-axis scales is the other continuous rule - it tracks the pointer
+exactly on whichever axis wants the item bigger, at the price of growing
+the item when a corner is dragged inward on one axis and outward on the
+other.
+
 ### Z-order steps past what actually overlaps
 
 Bring forward and send backward move an item past the nearest item that

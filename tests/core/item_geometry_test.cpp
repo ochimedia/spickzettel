@@ -64,6 +64,47 @@ TEST(ItemGeometryTest, FreeResizeStillBottomsOutAtThePlainPerAxisFloor) {
     EXPECT_FLOAT_EQ(shrunk.h, kItemMinHeight);
 }
 
+// The size has to follow the pointer without jumping. A corner drag whose
+// two axes disagree about which way they are going used to flip between
+// "the width drives" and "the height drives" the moment one overtook the
+// other, and the two answers are nothing like each other: a 400x300
+// snippet went from 440x330 to 360x270 on a ten-thousandth of a pixel.
+// Swept across that crossover in both of the directions that cross the
+// diagonal, the step per pixel of pointer movement has to stay small.
+TEST(ItemGeometryTest, AnAspectLockedCornerDragNeverJumps) {
+    const Rect start{100.0f, 100.0f, 400.0f, 300.0f};
+    // One axis held still while the other is swept past it, so the sweep
+    // crosses the line where the two changed places rather than running
+    // along it. Both signs: the crossing is at dy = -30 for a 40px pull
+    // to the right, and at dy = +30 for one to the left.
+    for (const float dx : {40.0f, -40.0f}) {
+        float previous = -1.0f;
+        for (int step = -320; step <= 320; ++step) {
+            const float dy = static_cast<float>(step) * 0.25f;
+            Rect rect = start;
+            ApplyResizeHandleDelta(rect, /*movesLeft=*/false, /*movesRight=*/true, /*movesTop=*/false,
+                                    /*movesBottom=*/true, dx, dy, /*lockAspect=*/true);
+            EXPECT_NEAR(rect.w / rect.h, start.w / start.h, 0.01f) << "the shape is kept throughout";
+            if (previous >= 0.0f) {
+                EXPECT_LT(std::fabs(rect.w - previous), 1.0f)
+                    << "a quarter-pixel of pointer movement, at dx " << dx << " dy " << dy;
+            }
+            previous = rect.w;
+        }
+    }
+}
+
+// Along the diagonal the projection has to agree with the obvious answer:
+// dragging the corner out by a tenth of the snippet makes it a tenth
+// bigger, which is what the old rule did on this path too.
+TEST(ItemGeometryTest, AnAspectLockedCornerFollowsTheDiagonalExactly) {
+    Rect rect{100.0f, 100.0f, 400.0f, 300.0f};
+    ApplyResizeHandleDelta(rect, /*movesLeft=*/false, /*movesRight=*/true, /*movesTop=*/false,
+                            /*movesBottom=*/true, /*dx=*/40.0f, /*dy=*/30.0f, /*lockAspect=*/true);
+    EXPECT_NEAR(rect.w, 440.0f, 0.01f);
+    EXPECT_NEAR(rect.h, 330.0f, 0.01f);
+}
+
 // An edge handle drives one axis and derives the other; it must land on
 // the same shape-preserving floor as a corner does.
 TEST(ItemGeometryTest, AspectLockedEdgeDragKeepsTheRatioToTheFloor) {

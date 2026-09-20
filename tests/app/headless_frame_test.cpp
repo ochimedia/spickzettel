@@ -647,7 +647,11 @@ TEST_F(HeadlessAppTest, ARightDragOnTheSnippetBeingDrawnOnErasesAndARightClickLe
     Drag(680.0f, 330.0f, 780.0f, 330.0f, 10, platform::MouseButton::Right);
     ImGui::GetIO().AddKeyEvent(ImGuiMod_Alt, false);
     StepFrame();
-    EXPECT_NEAR(Canvases().CurrentOrNull()->items[0].rect.w, before.w + 100.0f, 1.0f);
+    // Grew, rather than by exactly the 100px of drag: the press landed in
+    // a corner, and an aspect-locked corner follows the pointer projected
+    // onto the snippet's own diagonal (see ItemGeometryTest). Sideways
+    // motion therefore counts for less than all of itself.
+    EXPECT_GT(Canvases().CurrentOrNull()->items[0].rect.w, before.w + 1.0f);
     EXPECT_TRUE(App().DrawingItem().has_value());
 
     RightClick(500.0f, 425.0f);
@@ -1710,8 +1714,13 @@ TEST_F(OverlappingItemsTest, ARightDragResizesFromTheNearestEdgeAndARightClickRe
     Drag(x, y, x + 40.0f, y, 10, platform::MouseButton::Right);
 
     const Rect after = BackItem().rect;
-    EXPECT_NEAR(after.w, items.back.w + 40.0f, 1.0f);
-    EXPECT_FLOAT_EQ(after.x, items.back.x);
+    // The press was in the top *and* right thirds, so this is a corner:
+    // the width follows the drag projected onto the snippet's diagonal,
+    // which is less than the 40px moved - the amount is ItemGeometryTest's
+    // to pin down, what matters here is which edges moved.
+    EXPECT_GT(after.w, items.back.w + 1.0f) << "the right edge followed the drag";
+    EXPECT_FLOAT_EQ(after.x, items.back.x) << "and the left edge stayed put";
+    EXPECT_NEAR(after.h / after.w, items.back.h / items.back.w, 0.01f) << "keeping its shape";
     EXPECT_EQ(App().Selection().size(), 1u) << "resizing it selects it";
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u);
 

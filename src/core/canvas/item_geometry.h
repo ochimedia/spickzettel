@@ -127,16 +127,17 @@ NativePoint ScreenToNative(const Item& item, float screenX, float screenY);
 // the full delta since the gesture began, applied to a copy of the rect as
 // it was then, so this is stateless per call.
 //
-// With `lockAspect` the item keeps its shape: the two per-axis floors
-// become one floor on the item's own ratio (MinimumSizeForAspectRatio),
-// and the axis not under the cursor is derived from the one that is. An
-// edge handle derives the other axis and grows or shrinks it centred,
-// since there is no opposite edge on that axis to anchor to; a corner
-// handle takes whichever axis moved *proportionally* further this call as
-// the driver. Without it, each axis is floored on its own and the item
-// may reshape freely. There is deliberately no second clamp on the
-// derived axis: the floor is ratio-consistent, and a re-clamp is exactly
-// what would break the ratio.
+// With `lockAspect` the item keeps its shape: one scale drives both axes,
+// and the two per-axis floors become one floor on the item's own ratio
+// (MinimumSizeForAspectRatio), applied to that scale rather than per axis
+// - a second clamp on a derived axis is exactly what would break the
+// ratio. An edge handle takes the scale from the single axis it drives
+// and grows or shrinks the other centred, since there is no opposite edge
+// on that axis to anchor to; a corner handle projects the corner the
+// pointer asks for onto the item's own diagonal, which is continuous in
+// the pointer where choosing a driving axis is not (see the
+// implementation). Without `lockAspect`, each axis is floored on its own
+// and the item may reshape freely.
 void ApplyResizeHandleDelta(Rect& rect, bool movesLeft, bool movesRight, bool movesTop, bool movesBottom, float dx,
                              float dy, bool lockAspect);
 

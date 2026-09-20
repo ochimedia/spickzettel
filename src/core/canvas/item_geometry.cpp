@@ -1,7 +1,6 @@
 #include "core/canvas/item_geometry.h"
 
 #include <algorithm>
-#include <cmath>
 
 namespace sz::core {
 
@@ -97,32 +96,73 @@ void ApplyResizeHandleDelta(Rect& rect, bool movesLeft, bool movesRight, bool mo
     const MinItemSize floorSize =
         ratioLocked ? MinimumSizeForAspectRatio(ratio) : MinItemSize{kItemMinWidth, kItemMinHeight};
 
-    float newW = rect.w;
+    // The size the pointer is asking for, before any floor and before the
+    // ratio has a say: the edge or corner under the hand moved by the
+    // whole drag, the opposite one left where it was.
+    float wantW = rect.w;
     if (movesRight) {
-        newW = std::max(floorSize.w, rect.w + dx);
+        wantW = rect.w + dx;
     } else if (movesLeft) {
-        newW = std::max(floorSize.w, rect.w - dx);
+        wantW = rect.w - dx;
     }
-    float newH = rect.h;
+    float wantH = rect.h;
     if (movesBottom) {
-        newH = std::max(floorSize.h, rect.h + dy);
+        wantH = rect.h + dy;
     } else if (movesTop) {
-        newH = std::max(floorSize.h, rect.h - dy);
+        wantH = rect.h - dy;
     }
 
+    float newW = rect.w;
+    float newH = rect.h;
     if (ratioLocked) {
+        // One scale for both axes, which is what keeping the shape means.
+        //
+        // A corner takes it by projecting the corner the pointer asks for
+        // onto the item's own diagonal - the scale that fits that corner
+        // best, and the reason this is a projection rather than a choice
+        // between the two axes. Choosing (whichever axis moved
+        // proportionally further drives, the other is derived) is
+        // discontinuous wherever the axes disagree about which way they
+        // are going: at the crossover one answer says a tenth bigger and
+        // the other a tenth smaller, so moving the pointer *across* the
+        // diagonal rather than along it made the size jump by up to its
+        // own width - measured, from a hundredth of a pixel of movement.
+        // A projection has no crossover to jump at, agrees with the old
+        // rule exactly for a drag along the diagonal, and for one across
+        // it lets the two axes cancel smoothly.
+        //
+        // An edge handle has one axis to take it from, since there is no
+        // opposite edge on the other to anchor to.
+        float scale = 1.0f;
         if (horizontal && vertical) {
-            const float wChange = std::fabs(newW - rect.w) / rect.w;
-            const float hChange = std::fabs(newH - rect.h) / rect.h;
-            if (wChange >= hChange) {
-                newH = newW / ratio;
-            } else {
-                newW = newH * ratio;
-            }
+            scale = (wantW * rect.w + wantH * rect.h) / (rect.w * rect.w + rect.h * rect.h);
         } else if (horizontal) {
-            newH = newW / ratio;
+            scale = wantW / rect.w;
         } else if (vertical) {
-            newW = newH * ratio;
+            scale = wantH / rect.h;
+        }
+        // One floor, on the scale, rather than one per axis: floorSize is
+        // already the item's own shape (MinimumSizeForAspectRatio), so at
+        // the floor the size *is* that floor, exactly, and a per-axis
+        // clamp is precisely what would break the ratio. It also catches
+        // a scale driven negative by a pointer dragged past the anchor.
+        const float floorScale = std::max(floorSize.w / rect.w, floorSize.h / rect.h);
+        if (scale <= floorScale) {
+            newW = floorSize.w;
+            newH = floorSize.h;
+        } else {
+            newW = rect.w * scale;
+            newH = rect.h * scale;
+        }
+    } else {
+        // Free to reshape: each axis floored on its own, and an axis this
+        // handle does not drive is left alone entirely - including one
+        // already under the floor, which is not this drag's to correct.
+        if (horizontal) {
+            newW = std::max(floorSize.w, wantW);
+        }
+        if (vertical) {
+            newH = std::max(floorSize.h, wantH);
         }
     }
 
