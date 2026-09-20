@@ -314,10 +314,11 @@ void ReadShortcuts(const json& j, ShortcutBindings& out) {
 }
 
 // The `input` group's key names, in one place: the base config writes all
-// six, a profile writes whichever it overrides, and both have to agree on
-// what they are called.
+// of them, a profile writes whichever it overrides, and both have to agree
+// on what they are called.
 struct InputKeys {
     static constexpr const char* kDontStealFocus = "dontStealFocus";
+    static constexpr const char* kTakeFocusOverElevated = "takeFocusOverElevated";
     static constexpr const char* kSoftwarePointer = "softwarePointer";
     static constexpr const char* kRawMouseInput = "rawMouseInput";
     static constexpr const char* kDontForwardKeystrokes = "dontForwardKeystrokes";
@@ -419,6 +420,7 @@ json WriteShortcuts(const ShortcutBindings& bindings) {
 ProfileableSettings ProfileableFrom(const AppConfig& config) {
     ProfileableSettings settings;
     settings.dontStealFocus = config.editModeNoActivate;
+    settings.takeFocusOverElevated = config.takeFocusOverElevated;
     settings.SetInputOptions(config.editModeInput);
     settings.freezeScreen = config.freezeScreenInEditMode;
     settings.shortcuts = config.toolShortcuts;
@@ -427,6 +429,7 @@ ProfileableSettings ProfileableFrom(const AppConfig& config) {
 
 void ApplyProfileable(const ProfileableSettings& settings, AppConfig& config) {
     config.editModeNoActivate = settings.dontStealFocus;
+    config.takeFocusOverElevated = settings.takeFocusOverElevated;
     config.editModeInput = settings.InputOptions();
     config.freezeScreenInEditMode = settings.freezeScreen;
     config.toolShortcuts = settings.shortcuts;
@@ -502,6 +505,7 @@ AppConfig ParseConfig(std::string_view text) {
 
     const json& input = Group(doc, "input");
     ReadBool(input, InputKeys::kDontStealFocus, config.editModeNoActivate);
+    ReadBool(input, InputKeys::kTakeFocusOverElevated, config.takeFocusOverElevated);
     ReadBool(input, InputKeys::kSoftwarePointer, config.editModeInput.useSoftwarePointer);
     ReadBool(input, InputKeys::kRawMouseInput, config.editModeInput.useRawMouseInput);
     ReadBool(input, InputKeys::kDontForwardKeystrokes, config.editModeInput.dontForwardKeystrokes);
@@ -537,6 +541,8 @@ AppConfig ParseConfig(std::string_view text) {
 
             const json& profileInput = Group(entry, "input");
             ReadOptionalBool(profileInput, InputKeys::kDontStealFocus, profile.overrides.dontStealFocus);
+            ReadOptionalBool(profileInput, InputKeys::kTakeFocusOverElevated,
+                              profile.overrides.takeFocusOverElevated);
             ReadOptionalBool(profileInput, InputKeys::kSoftwarePointer, profile.overrides.softwarePointer);
             ReadOptionalBool(profileInput, InputKeys::kRawMouseInput, profile.overrides.rawMouseInput);
             ReadOptionalBool(profileInput, InputKeys::kDontForwardKeystrokes,
@@ -629,6 +635,7 @@ std::string SerializeConfig(const AppConfig& config) {
     // rather than about you.
     doc["input"] = json{
         {InputKeys::kDontStealFocus, config.editModeNoActivate},
+        {InputKeys::kTakeFocusOverElevated, config.takeFocusOverElevated},
         {InputKeys::kSoftwarePointer, config.editModeInput.useSoftwarePointer},
         {InputKeys::kRawMouseInput, config.editModeInput.useRawMouseInput},
         {InputKeys::kDontForwardKeystrokes, config.editModeInput.dontForwardKeystrokes},
@@ -661,6 +668,7 @@ std::string SerializeConfig(const AppConfig& config) {
 
         json input = json::object();
         WriteOptionalBool(input, InputKeys::kDontStealFocus, profile.overrides.dontStealFocus);
+        WriteOptionalBool(input, InputKeys::kTakeFocusOverElevated, profile.overrides.takeFocusOverElevated);
         WriteOptionalBool(input, InputKeys::kSoftwarePointer, profile.overrides.softwarePointer);
         WriteOptionalBool(input, InputKeys::kRawMouseInput, profile.overrides.rawMouseInput);
         WriteOptionalBool(input, InputKeys::kDontForwardKeystrokes, profile.overrides.dontForwardKeystrokes);

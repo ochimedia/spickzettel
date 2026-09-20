@@ -196,6 +196,7 @@ TEST(ProfileTest, AnOverrideOfEveryKindSurvivesTheFile) {
     AppConfig config = DefaultConfig();
     Profile profile = GameProfile("Game", "game.exe");
     profile.overrides.dontStealFocus = false;
+    profile.overrides.takeFocusOverElevated = false;
     profile.overrides.softwarePointer = false;
     profile.overrides.rawMouseInput = false;
     profile.overrides.dontForwardKeystrokes = false;

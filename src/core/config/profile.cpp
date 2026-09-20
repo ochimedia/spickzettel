@@ -67,8 +67,8 @@ bool ProfileMatch::Matches(const platform::ForegroundApp& app) const {
 }
 
 bool ProfileOverrides::Empty() const {
-    if (dontStealFocus || softwarePointer || rawMouseInput || dontForwardKeystrokes ||
-        counterRawMouseInput || freezeScreen) {
+    if (dontStealFocus || takeFocusOverElevated || softwarePointer || rawMouseInput ||
+        dontForwardKeystrokes || counterRawMouseInput || freezeScreen) {
         return false;
     }
     return std::none_of(shortcuts.begin(), shortcuts.end(),

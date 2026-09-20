@@ -62,6 +62,20 @@ TEST(AppConfigTest, ParsesEditModeNoActivate) {
     EXPECT_TRUE(ParseConfig(One("input", "dontStealFocus", "1")).editModeNoActivate);
 }
 
+// On by default, because over an elevated application every other input
+// setting is a no-op: Windows gives a lower-integrity process none of that
+// application's input, so an overlay that keeps its hands off gets nothing
+// at all. Off is the deliberate choice to accept that.
+TEST(AppConfigTest, TakeFocusOverElevatedDefaultsToOn) {
+    EXPECT_TRUE(DefaultConfig().takeFocusOverElevated);
+}
+
+TEST(AppConfigTest, ParsesTakeFocusOverElevated) {
+    EXPECT_TRUE(ParseConfig(One("input", "takeFocusOverElevated", "true")).takeFocusOverElevated);
+    EXPECT_FALSE(ParseConfig(One("input", "takeFocusOverElevated", "false")).takeFocusOverElevated);
+    EXPECT_TRUE(ParseConfig(One("input", "takeFocusOverElevated", R"("no")")).takeFocusOverElevated);
+}
+
 TEST(AppConfigTest, EveryEditModeInputOptionDefaultsToOn) {
     const platform::EditModeInputOptions options = DefaultConfig().editModeInput;
     EXPECT_TRUE(options.useSoftwarePointer);

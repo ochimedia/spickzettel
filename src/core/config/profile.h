@@ -54,6 +54,7 @@ struct ProfileMatch {
 // an absent key and a null one.
 struct ProfileOverrides {
     std::optional<bool> dontStealFocus;
+    std::optional<bool> takeFocusOverElevated;
     std::optional<bool> softwarePointer;
     std::optional<bool> rawMouseInput;
     std::optional<bool> dontForwardKeystrokes;
@@ -75,10 +76,19 @@ struct ProfileOverrides {
 // resolving a profile against them. Flat rather than mirroring AppConfig's
 // nesting so that a UI row can name its field once, as a pair of pointers
 // to member - `&ProfileableSettings::freezeScreen` alongside
-// `&ProfileOverrides::freezeScreen` - instead of six near-identical blocks
-// of plumbing.
+// `&ProfileOverrides::freezeScreen` - instead of a near-identical block of
+// plumbing per setting.
 struct ProfileableSettings {
     bool dontStealFocus = true;
+    // Qualifies the one above, and only ever in the direction of taking
+    // focus: over an application at a higher integrity level nothing else
+    // in this struct can work, because Windows delivers that application's
+    // input to no lower-integrity process. Per-application because the one
+    // good reason to turn it off is per-application - an elevated game,
+    // where a dead overlay still shows pinned snippets and still captures,
+    // and where taking focus is the one thing that must not happen. See
+    // docs/ARCHITECTURE.md.
+    bool takeFocusOverElevated = true;
     bool softwarePointer = true;
     bool rawMouseInput = true;
     bool dontForwardKeystrokes = true;
@@ -106,10 +116,11 @@ struct ProfileableField {
 
 // Every one of them, in no particular order - for the code that has to
 // treat them uniformly (applying a profile, counting what it overrides).
-// The Settings panel does *not* walk this: its rows are six different
+// The Settings panel does *not* walk this: its rows are as many different
 // explanations, not a list.
 inline constexpr ProfileableField kProfileableFields[] = {
     {&ProfileableSettings::dontStealFocus, &ProfileOverrides::dontStealFocus},
+    {&ProfileableSettings::takeFocusOverElevated, &ProfileOverrides::takeFocusOverElevated},
     {&ProfileableSettings::softwarePointer, &ProfileOverrides::softwarePointer},
     {&ProfileableSettings::rawMouseInput, &ProfileOverrides::rawMouseInput},
     {&ProfileableSettings::dontForwardKeystrokes, &ProfileOverrides::dontForwardKeystrokes},
