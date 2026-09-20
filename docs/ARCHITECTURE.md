@@ -1551,7 +1551,13 @@ Foreground is not focus, and `WS_EX_NOACTIVATE` blocks the half that
 matters: a text field opened under it looked ready and every keystroke
 went elsewhere with the system beep, two renames in eight. So a field
 *borrows* focus by clearing the bit for the duration - or, better, needs
-no focus at all while the keyboard is grabbed (below).
+no focus at all while the keyboard is grabbed (below). Either way what
+was borrowed is handed back when the field closes, and a field can close
+two ways: ImGui deactivates it, or the Overview around it is closed from
+outside the frame by a mode switch, in which case the field is never
+rendered again and its own release never runs. `CloseOverview` releases
+for it; `ReleaseTextInput` is idempotent, so both routes running is
+harmless.
 
 ### Taking input back from the game: the input grab
 

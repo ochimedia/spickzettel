@@ -90,8 +90,8 @@ public:
         cursorShape = shape;
     }
 
-    void RequestTextInput() override {}
-    void ReleaseTextInput() override {}
+    void RequestTextInput() override { ++requestTextInputCallCount; }
+    void ReleaseTextInput() override { ++releaseTextInputCallCount; }
 
     void SetFrameCallback(platform::FrameCallback callback) override { frameCallback = std::move(callback); }
     void SetFramePacing(platform::FramePacing pacing) override { framePacing = pacing; }
@@ -135,6 +135,10 @@ public:
     platform::EditModeInputOptions editModeInput;
     int setEditModeInputCallCount = 0;
     int setCursorShapeCallCount = 0;
+    // A text field borrows the keyboard from the game for as long as it is
+    // open; the two have to balance, or the game is left without it.
+    int requestTextInputCallCount = 0;
+    int releaseTextInputCallCount = 0;
     platform::CursorShape cursorShape = platform::CursorShape::Default;
     // Off, the window is never made: what the OS answers when it will not
     // give the overlay a window, and every show and capture has to cope.

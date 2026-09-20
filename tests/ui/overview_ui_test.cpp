@@ -68,6 +68,33 @@ size_t CanvasesInFolder(const CanvasManager& canvases, FolderId folderId) {
     return count;
 }
 
+// A rename field borrows the keyboard from the game and gives it back when
+// ImGui deactivates the field. Switching to view mode closes the Overview
+// from outside the frame, so the field is never rendered again and that
+// deactivation never comes - the keyboard was left borrowed for the rest
+// of the session. See OverlayApp::CloseOverview.
+TEST_F(UiTest, SwitchingModeWhileRenamingGivesTheKeyboardBack) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    const int requestsBefore = host_.overlayWindow.requestTextInputCallCount;
+    const int releasesBefore = host_.overlayWindow.releaseTextInputCallCount;
+
+    RunUi("rename then switch mode", [this, requestsBefore](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemDoubleClick("**/##folderrow");
+        ctx->Yield();
+        IM_CHECK_EQ(host_.overlayWindow.requestTextInputCallCount, requestsBefore + 1);
+        ShowViewMode();
+        ctx->Yield();
+        IM_CHECK(!App().IsOverviewOpen());
+    });
+
+    EXPECT_FALSE(App().IsOverviewOpen());
+    EXPECT_EQ(host_.overlayWindow.requestTextInputCallCount, requestsBefore + 1);
+    EXPECT_EQ(host_.overlayWindow.releaseTextInputCallCount, releasesBefore + 1) << "the keyboard stayed borrowed";
+}
+
 // Deleting the canvas you are working on stays in the folder it lived in
 // rather than handing you whichever canvas is first in the whole library -
 // in practice a folder you had not been in all session. When that was its

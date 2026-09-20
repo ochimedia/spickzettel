@@ -2584,8 +2584,18 @@ void OverlayApp::OpenPicker(ItemId itemId, bool isCopy) {
 void OverlayApp::CloseOverview() {
     overviewOpen_ = false;
     pickerItemId_.reset();
+    // A rename field gives the keyboard back when ImGui deactivates it (see
+    // the InputText sites in RenderOverview). A mode switch closes the
+    // Overview between frames, so the field is never rendered again and
+    // that frame never comes - without this the keyboard stays borrowed
+    // from the game for the rest of the session. ReleaseTextInput is
+    // idempotent, so the ordinary route running as well costs nothing.
+    const bool wasRenaming = renamingFolderId_.has_value() || renamingCanvasId_.has_value();
     renamingFolderId_.reset();
     renamingCanvasId_.reset();
+    if (wasRenaming && window_) {
+        window_->ReleaseTextInput();
+    }
     // RenderOverview's own Escape-to-close check (above in this file) runs
     // before RenderOverviewSettingsPanel/RenderHotkeyEditor ever get a
     // chance to see that same keypress, so a hotkey row armed for capture
