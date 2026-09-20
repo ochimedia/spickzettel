@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -107,13 +108,18 @@ DecodedImage DownscaleToFit(const uint8_t* pixelsRGBA, int width, int height, in
     // into noise.
     constexpr int kMaxSamplesPerAxis = 4;
 
+    // The products are taken in 64 bits: an output index times a source
+    // extent passes 2^31 well before either is unusual on its own.
+    const auto sourceStart = [](int index, int sourceExtent, int outExtent) {
+        return static_cast<int>(static_cast<int64_t>(index) * sourceExtent / outExtent);
+    };
     for (int y = 0; y < out.height; ++y) {
-        const int srcY0 = y * height / out.height;
-        const int srcY1 = std::max(srcY0 + 1, (y + 1) * height / out.height);
+        const int srcY0 = sourceStart(y, height, out.height);
+        const int srcY1 = std::max(srcY0 + 1, sourceStart(y + 1, height, out.height));
         const int stepY = std::max(1, (srcY1 - srcY0 + kMaxSamplesPerAxis - 1) / kMaxSamplesPerAxis);
         for (int x = 0; x < out.width; ++x) {
-            const int srcX0 = x * width / out.width;
-            const int srcX1 = std::max(srcX0 + 1, (x + 1) * width / out.width);
+            const int srcX0 = sourceStart(x, width, out.width);
+            const int srcX1 = std::max(srcX0 + 1, sourceStart(x + 1, width, out.width));
             const int stepX = std::max(1, (srcX1 - srcX0 + kMaxSamplesPerAxis - 1) / kMaxSamplesPerAxis);
             uint32_t sums[4] = {0, 0, 0, 0};
             uint32_t count = 0;

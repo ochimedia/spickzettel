@@ -279,6 +279,22 @@ TEST(DownscaleToFitTest, AveragesRatherThanPickingOnePixel) {
     }
 }
 
+// An output index times the source width passes 2^31 at x = 32768 for a
+// source this narrow (256 KB of pixels). Taken in 32 bits, the last output
+// pixel would read from before the buffer; it should average the last two
+// source pixels like any other.
+TEST(DownscaleToFitTest, AWideImageIsSampledWithoutTheProductOverflowing) {
+    DecodedImage source = SolidImage(65536, 1, 0);
+    source.pixelsRGBA[source.pixelsRGBA.size() - 8] = 100;
+    source.pixelsRGBA[source.pixelsRGBA.size() - 4] = 200;
+
+    const DecodedImage out = DownscaleToFit(source, 32769);
+
+    ASSERT_EQ(out.width, 32769);
+    ASSERT_EQ(out.height, 1);
+    EXPECT_EQ(out.pixelsRGBA[out.pixelsRGBA.size() - 4], 150);
+}
+
 TEST(DownscaleToFitTest, EmptyInputComesBackEmptyRatherThanCrashing) {
     const DecodedImage out = DownscaleToFit(nullptr, 0, 0, 256);
     EXPECT_EQ(out.width, 0);
