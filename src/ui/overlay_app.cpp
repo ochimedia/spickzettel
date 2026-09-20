@@ -1562,6 +1562,33 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
                        diag.correctionLagMsLast, diag.correctionLagMsMax, diag.correctionsInjected);
     }
 
+    // What is in front and where it sits relative to us - the line that
+    // answers "why is nothing in this panel moving". Above us, Windows
+    // delivers that application's input to no lower-integrity process at
+    // all, so every number here stays where it is however the rows are
+    // set, and no shortcut of the overlay's arrives either. See
+    // platform::ForegroundIntegrity.
+    char foreground[224];
+    foreground[0] = '\0';
+    {
+        const platform::ForegroundApp& app = settings_.UnderlyingApplication();
+        const char* what = !app.executable.empty() ? app.executable.c_str()
+                           : !app.title.empty()    ? app.title.c_str()
+                                                   : "(nothing identifiable)";
+        switch (app.integrity) {
+            case platform::ForegroundIntegrity::Above:
+                std::snprintf(foreground, sizeof(foreground),
+                               "over %s  -  above us, none of its input reaches here", what);
+                break;
+            case platform::ForegroundIntegrity::NotAbove:
+                std::snprintf(foreground, sizeof(foreground), "over %s  -  not above us", what);
+                break;
+            case platform::ForegroundIntegrity::Unknown:
+                std::snprintf(foreground, sizeof(foreground), "over %s  -  integrity unreadable", what);
+                break;
+        }
+    }
+
     // Number prefix, label, then the ON/OFF column clear of the longest label.
     const float statusX = kOriginX + kPad + 26.0f + widest + 16.0f;
     // Wide enough for the header line too - it carries the pointer
@@ -1569,12 +1596,14 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
     const float panelW = std::max({statusX + 34.0f + kPad - kOriginX,
                                     ImGui::CalcTextSize(fps).x + kPad * 2.0f,
                                     ImGui::CalcTextSize(counter).x + kPad * 2.0f,
+                                    ImGui::CalcTextSize(foreground).x + kPad * 2.0f,
                                     ImGui::CalcTextSize(lastKey).x + kPad * 2.0f});
     // One extra line for the frame rate: "the overlay feels slower with the
     // grab on" is a measurement, not an impression, and this is where it can
     // be read without leaving the situation that caused it. Then one for the
     // counter readout and one for the last key, on the frames there are any.
-    const int extraLines = 1 + (counter[0] != '\0' ? 1 : 0) + (lastKey[0] != '\0' ? 1 : 0);
+    const int extraLines = 1 + (counter[0] != '\0' ? 1 : 0) + (foreground[0] != '\0' ? 1 : 0) +
+                          (lastKey[0] != '\0' ? 1 : 0);
     const float panelH = kPad * 2.0f + kLineHeight * static_cast<float>(rowCount + extraLines);
 
     drawList->AddRectFilled(ImVec2(kOriginX, kOriginY), ImVec2(kOriginX + panelW, kOriginY + panelH),
@@ -1613,6 +1642,14 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
     if (counter[0] != '\0') {
         drawList->AddText(ImVec2(kOriginX + kPad, kOriginY + kPad + kLineHeight * footerLine),
                            IM_COL32(150, 158, 172, 255), counter);
+        footerLine += 1.0f;
+    }
+    if (foreground[0] != '\0') {
+        // Brighter when it is the answer: above us, nothing else in this
+        // panel can be trusted to mean anything.
+        const bool above = settings_.UnderlyingApplication().integrity == platform::ForegroundIntegrity::Above;
+        drawList->AddText(ImVec2(kOriginX + kPad, kOriginY + kPad + kLineHeight * footerLine),
+                           above ? IM_COL32(232, 100, 100, 255) : IM_COL32(150, 158, 172, 255), foreground);
         footerLine += 1.0f;
     }
     if (lastKey[0] != '\0') {

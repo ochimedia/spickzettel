@@ -993,6 +993,42 @@ TEST_F(HeadlessAppTest, CreatingAnItemWithNoCanvasMakesOne) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
+// The HUD names what is in front and where it sits relative to us, which
+// is the line that answers "nothing in this panel is moving". It has to
+// cope with there being nothing to name: over a hidden or just-started
+// desktop the foreground is unknown on both counts.
+TEST_F(HeadlessAppTest, TheHudDrawsWithNothingIdentifiableInFront) {
+    AppConfig config = DefaultConfig();
+    config.showInputOptionsHud = true;
+    host_.overlayWindow.underlyingApp = platform::ForegroundApp{};
+    StartWith(std::move(config));
+
+    ShowEditMode();
+    StepFrames(3);
+
+    EXPECT_FALSE(AppSession().Manager().Canvases().empty());
+    EXPECT_EQ(AppSettings().UnderlyingApplication().integrity, platform::ForegroundIntegrity::Unknown);
+}
+
+// An elevated application is named too, and is the case the line exists
+// for: every number beside it is a readout of input that never arrived.
+TEST_F(HeadlessAppTest, TheHudDrawsOverAnApplicationAboveUs) {
+    AppConfig config = DefaultConfig();
+    config.showInputOptionsHud = true;
+    platform::ForegroundApp elevated;
+    elevated.executable = "taskmgr.exe";
+    elevated.title = "Task Manager";
+    elevated.integrity = platform::ForegroundIntegrity::Above;
+    host_.overlayWindow.underlyingApp = elevated;
+    StartWith(std::move(config));
+
+    ShowEditMode();
+    StepFrames(3);
+
+    EXPECT_EQ(AppSettings().UnderlyingApplication().integrity, platform::ForegroundIntegrity::Above);
+    EXPECT_FALSE(host_.overlayWindow.editModeNoActivate) << "and focus was taken from it";
+}
+
 // The HUD's number keys write into the profile that is running, and the two
 // rows that need edit mode re-entered then restart the overlay. A restart
 // that re-asked what was underneath - in the middle of hiding itself, when
