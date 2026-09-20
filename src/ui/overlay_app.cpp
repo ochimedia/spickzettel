@@ -270,14 +270,17 @@ const GalleryTool kGalleryTools[6] = {
     {Tool::NewDrawing, &icons::kNote, strings::kToolNewDrawing, strings::kToolNewDrawingTip},
 };
 
-const CreateActionInfo kCreateActions[1] = {
+const CreateActionInfo kCreateActions[2] = {
     {CreateAction::NewCanvas, &icons::kPlus, strings::kCreateNewCanvas, strings::kCreateNewCanvas},
+    {CreateAction::NewCanvasWithSelection, &icons::kPlus, strings::kCreateNewCanvasWithSelection,
+     strings::kCreateNewCanvasWithSelection},
 };
 
-const ClipboardActionInfo kClipboardActions[3] = {
+const ClipboardActionInfo kClipboardActions[4] = {
     {ClipboardAction::Copy, &icons::kCopy, strings::kClipboardCopy},
     {ClipboardAction::Cut, &icons::kScissors, strings::kClipboardCut},
     {ClipboardAction::Paste, &icons::kClipboard, strings::kClipboardPaste},
+    {ClipboardAction::Duplicate, &icons::kCopy, strings::kClipboardDuplicate},
 };
 
 const ShortcutTarget kShortcutTargets[kShortcutActionCount] = {
@@ -288,9 +291,11 @@ const ShortcutTarget kShortcutTargets[kShortcutActionCount] = {
     {ShortcutAction::NewScreenshot, Tool::NewScreenshot, std::nullopt, std::nullopt},
     {ShortcutAction::NewDrawing, Tool::NewDrawing, std::nullopt, std::nullopt},
     {ShortcutAction::NewCanvas, std::nullopt, CreateAction::NewCanvas, std::nullopt},
+    {ShortcutAction::NewCanvasWithSelection, std::nullopt, CreateAction::NewCanvasWithSelection, std::nullopt},
     {ShortcutAction::Copy, std::nullopt, std::nullopt, ClipboardAction::Copy},
     {ShortcutAction::Cut, std::nullopt, std::nullopt, ClipboardAction::Cut},
     {ShortcutAction::Paste, std::nullopt, std::nullopt, ClipboardAction::Paste},
+    {ShortcutAction::Duplicate, std::nullopt, std::nullopt, ClipboardAction::Duplicate},
 };
 
 const ShortcutTarget& TargetForShortcut(ShortcutAction action) {

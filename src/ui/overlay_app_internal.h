@@ -181,15 +181,15 @@ struct CreateActionInfo {
 // Defined once, in overlay_app.cpp - see this header's own opening note.
 // The icons they point at are per-translation-unit constants, so a table
 // defined in the header would hand each file a different set of addresses.
-// Copy, Cut and Paste, for the Shortcuts tab to list them by.
+// Copy, Cut, Paste and Duplicate, for the Shortcuts tab to list them by.
 struct ClipboardActionInfo {
     ClipboardAction action;
     const Icon* icon;
     const char* name;
 };
 extern const GalleryTool kGalleryTools[6];
-extern const CreateActionInfo kCreateActions[1];
-extern const ClipboardActionInfo kClipboardActions[3];
+extern const CreateActionInfo kCreateActions[2];
+extern const ClipboardActionInfo kClipboardActions[4];
 
 // What a ShortcutAction means in the app's own terms - exactly one of the
 // three is set. This is the single place the config layer's flat list of

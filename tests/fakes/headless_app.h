@@ -225,6 +225,19 @@ protected:
         StepFrame();
     }
 
+    // A key with Ctrl and Shift held - Ctrl+Shift+N.
+    void PressCtrlShiftKey(ImGuiKey key) {
+        ImGuiIO& io = ImGui::GetIO();
+        io.AddKeyEvent(ImGuiMod_Ctrl, true);
+        io.AddKeyEvent(ImGuiMod_Shift, true);
+        io.AddKeyEvent(key, true);
+        StepFrame();
+        io.AddKeyEvent(key, false);
+        io.AddKeyEvent(ImGuiMod_Shift, false);
+        io.AddKeyEvent(ImGuiMod_Ctrl, false);
+        StepFrame();
+    }
+
     void RightClick(float x, float y) {
         MoveTo(x, y);
         StepFrame();

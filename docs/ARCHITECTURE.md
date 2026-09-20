@@ -774,8 +774,22 @@ possible later restriction rather than a rule today.
 Every drawing tool, creation tool and clipboard action can carry a key,
 pressed while the overlay is up in edit mode. Four ship bound (`S`
 screenshot, `D` drawing, `E` eraser, `P` pen) plus the clipboard's usual
-`Ctrl+C/X/V`; the rest start unset, because a shortcut that fires a tool
-you did not want is worse than no shortcut. These are not OS hotkeys and
+`Ctrl+C/X/V`, `Ctrl+D` to duplicate the selection and `Ctrl+Shift+N` for
+a new canvas the selection comes along to; the rest start unset, because
+a shortcut that fires a tool you did not want is worse than no shortcut.
+The two chords are safe to ship where a letter would not be, since a
+chord cannot fire from ordinary typing - `Ctrl+D` sits beside the plain
+`D` that makes a drawing, and the exact-modifier match keeps them apart.
+
+Duplicate is Copy and Paste in one step and deliberately does not go
+through the clipboard: duplicating something is not a reason to lose what
+was copied earlier. `Ctrl+Shift+N` moves the selected snippets to the
+canvas it makes, which otherwise costs a new canvas, a switch back, a
+cut, a switch forward and a paste; it is a separate action from the plain
+new canvas rather than one that reads the selection, so the canvas bar's
+own "+" keeps meaning only what its icon says. With nothing selected the
+two do the same thing, because an empty selection is no reason to refuse
+the canvas. These are not OS hotkeys and
 are stored apart from the summon hotkeys: the UI reads them off its own
 frame, they only do anything while the overlay takes input, and nothing
 about them can fail the way registering a global hotkey can, which is

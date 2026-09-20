@@ -541,6 +541,9 @@ private:
     // gone since.
     void CopySelectionToClipboard(bool cut);
     void PasteFromClipboard();
+    // The two of those in one step, without going through the clipboard -
+    // see its definition.
+    void DuplicateSelection();
     // Whether this snippet is waiting for the paste that will move it,
     // which is what it is drawn faded for.
     bool IsWaitingToBeCut(ItemId id) const;
@@ -960,6 +963,8 @@ private:
     // and switch straight to it - jumping there immediately is the useful
     // default when there's no Overview grid open to decide from.
     void CreateAndSwitchToNewCanvas();
+    // That, taking the selected snippets along - see its definition.
+    void MoveSelectionToNewCanvas();
 
     // ===== Rasterized vector strokes (StrokeRenderMode::Rasterized) =====
 

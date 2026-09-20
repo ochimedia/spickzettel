@@ -25,11 +25,13 @@
 
   "_create": "Actions that happen at once rather than being a tool.",
   "create.newCanvas": "New canvas",
+  "create.newCanvasWithSelection": "New canvas with the selection",
 
-  "_clipboard": "What the clipboard does with the selected snippets - the three rows in the Shortcuts list, on Ctrl+C/X/V by default.",
+  "_clipboard": "What the clipboard does with the selected snippets - the four rows in the Shortcuts list, on Ctrl+C/X/V and Ctrl+D by default.",
   "clipboard.copy": "Copy",
   "clipboard.cut": "Cut",
   "clipboard.paste": "Paste",
+  "clipboard.duplicate": "Duplicate",
 
   "_popover": "The popover a snippet's More button opens.",
   "popover.foreground": "Foreground",
@@ -107,6 +109,7 @@
   "toast.redidPrefix": "Redid ",
   "toast.cut": "Cut",
   "toast.pasted": "Pasted",
+  "toast.duplicated": "Duplicated",
   "toast.nothingToPaste": "Nothing left to paste",
   "toast.copiedToPrefix": "Copied to ",
   "toast.movedToPrefix": "Moved to ",

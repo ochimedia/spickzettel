@@ -130,6 +130,9 @@ void OverlayApp::RunCreateAction(CreateAction action) {
             // Nothing to place, so it happens now rather than arming.
             CreateAndSwitchToNewCanvas();
             break;
+        case CreateAction::NewCanvasWithSelection:
+            MoveSelectionToNewCanvas();
+            break;
     }
 }
 
@@ -161,6 +164,9 @@ void OverlayApp::RunClipboardAction(ClipboardAction action) {
             return;
         case ClipboardAction::Paste:
             PasteFromClipboard();
+            return;
+        case ClipboardAction::Duplicate:
+            DuplicateSelection();
             return;
     }
 }

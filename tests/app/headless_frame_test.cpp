@@ -493,6 +493,104 @@ TEST_F(HeadlessAppTest, EscapeCallsOffACutBeforeItClearsTheSelection) {
     EXPECT_TRUE(App().Selection().empty()) << "the next one is the selection's";
 }
 
+// ===== Duplicate, and a canvas of their own =====
+
+// Ctrl+D is Copy and Paste in one step: a copy of what is selected, on
+// this canvas, offset off its source and selected in its place. What it
+// must not do is go through the clipboard, which is why this copies one
+// snippet first and pastes it afterwards - the duplicate in between would
+// have quietly taken its place.
+TEST_F(HeadlessAppTest, DuplicatingTheSelectionLeavesTheClipboardAlone) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);  // a wide one, onto the clipboard
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const Rect copied = Canvases().CurrentOrNull()->items[0].rect;
+    PressCtrlKey(ImGuiKey_C);
+
+    Drag(600.0f, 400.0f, 700.0f, 620.0f);  // a tall one, selected now
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    const ItemId tall = App().Selection().front();
+    const Rect tallRect = Canvases().CurrentOrNull()->items[1].rect;
+
+    PressCtrlKey(ImGuiKey_D);
+
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u) << "the selected snippet was duplicated";
+    ASSERT_EQ(App().Selection().size(), 1u);
+    const ItemId duplicate = App().Selection().front();
+    EXPECT_NE(duplicate, tall) << "the copy is what is selected, ready to be dragged off";
+    const Item& made = Canvases().CurrentOrNull()->items.back();
+    ASSERT_EQ(made.id, duplicate);
+    EXPECT_GT(made.rect.x, tallRect.x) << "offset off its source, or it would be invisible under it";
+    EXPECT_GT(made.rect.y, tallRect.y);
+    EXPECT_NEAR(made.rect.w, tallRect.w, 0.01f) << "and the same snippet otherwise";
+
+    PressCtrlKey(ImGuiKey_V);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 4u);
+    EXPECT_NEAR(Canvases().CurrentOrNull()->items.back().rect.w, copied.w, 0.01f)
+        << "the paste is of the wide one, so Ctrl+D never touched the clipboard";
+}
+
+TEST_F(HeadlessAppTest, DuplicatingWithNothingSelectedMakesNothing) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    RawClick(900.0f, 650.0f);  // empty canvas: clears the selection
+    ASSERT_TRUE(App().Selection().empty());
+
+    PressCtrlKey(ImGuiKey_D);
+
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+}
+
+// Ctrl+Shift+N: a new canvas that the selected snippets come along to,
+// which is what "these belong somewhere of their own" otherwise costs a
+// cut, two canvas switches and a paste.
+TEST_F(HeadlessAppTest, TheSelectionCanBeTakenToANewCanvas) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);  // stays behind
+    Drag(600.0f, 400.0f, 800.0f, 560.0f);  // goes
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    const CanvasId before = Canvases().CurrentOrNull()->id;
+    const FolderId folder = Canvases().CurrentOrNull()->folderId;
+    const ItemId staying = Canvases().CurrentOrNull()->items[0].id;
+    const ItemId going = App().Selection().front();
+    ASSERT_NE(going, staying);
+
+    PressCtrlShiftKey(ImGuiKey_N);
+
+    ASSERT_EQ(Canvases().Canvases().size(), 2u);
+    const Canvas& made = Canvases().Canvases().back();
+    EXPECT_NE(made.id, before);
+    EXPECT_EQ(made.folderId, folder) << "in the folder the work was in";
+    EXPECT_EQ(Canvases().CurrentOrNull()->id, made.id) << "and it is the canvas you are now on";
+    ASSERT_EQ(made.items.size(), 1u);
+    EXPECT_EQ(made.items[0].id, going) << "the snippet itself moved, rather than a copy of it";
+    EXPECT_EQ(App().Selection(), std::vector<ItemId>{going}) << "still selected, to be arranged";
+
+    const Canvas& left = Canvases().Canvases().front();
+    ASSERT_EQ(left.id, before);
+    ASSERT_EQ(left.items.size(), 1u);
+    EXPECT_EQ(left.items[0].id, staying) << "what was not selected stayed where it was";
+}
+
+TEST_F(HeadlessAppTest, TakingNothingToANewCanvasIsJustANewCanvas) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    RawClick(900.0f, 650.0f);  // empty canvas: clears the selection
+    ASSERT_TRUE(App().Selection().empty());
+    const CanvasId before = Canvases().CurrentOrNull()->id;
+
+    PressCtrlShiftKey(ImGuiKey_N);
+
+    ASSERT_EQ(Canvases().Canvases().size(), 2u) << "an empty selection is no reason to refuse the canvas";
+    EXPECT_NE(Canvases().CurrentOrNull()->id, before);
+    EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty());
+    EXPECT_EQ(Canvases().Canvases().front().items.size(), 1u) << "and the snippet stayed behind";
+}
+
 // ===== The panels docked against the screen's edges =====
 
 // Enough frames for the moment the panels come out when the overlay comes

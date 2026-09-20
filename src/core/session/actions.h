@@ -70,9 +70,13 @@ constexpr std::optional<ItemCreationKind> CreationKindFor(Tool tool) {
     }
     return std::nullopt;
 }
-// Things that happen at once rather than being a tool: only New canvas,
-// which has nothing to place, with a shortcut of its own.
-enum class CreateAction { NewCanvas };
+// Things that happen at once rather than being a tool - nothing to place,
+// each with a shortcut of its own. NewCanvasWithSelection makes a canvas
+// and takes the selected snippets to it, which with nothing selected is
+// exactly NewCanvas; the two are separate actions rather than one that
+// reads the selection, so that the canvas bar's own "+" keeps meaning
+// only what its icon says.
+enum class CreateAction { NewCanvas, NewCanvasWithSelection };
 
 // One of the buttons on the selection bar - the small pill that floats
 // over the selected snippets (see OverlayApp::PaintSelectionBar). Five of
@@ -94,7 +98,12 @@ enum class ChromeButton { Close, Maximize, Minimize, More, Pin, Pen, Eraser, Tex
 // looked at. The clipboard holds ids rather than snippets, so a Cut takes
 // nothing away until the Paste that moves it - see
 // OverlayApp::PasteFromClipboard.
-enum class ClipboardAction { Copy, Cut, Paste };
+//
+// Duplicate is the copy and the paste in one step, and is here because
+// that is where a hand goes looking for it. It deliberately leaves the
+// clipboard itself untouched: duplicating something is not a reason to
+// lose what was copied ten minutes ago.
+enum class ClipboardAction { Copy, Cut, Paste, Duplicate };
 
 // Identifies one of the global hotkeys - kept distinct from any index into
 // AppConfig itself, so that nothing naming one depends on how the config

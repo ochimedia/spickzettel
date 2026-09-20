@@ -347,6 +347,49 @@ void OverlayApp::PasteFromClipboard() {
     ShowActionToast(pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastPasted);
 }
 
+// A copy of every selected snippet, on this canvas, offset the way a
+// paste onto its own canvas is - Copy and Paste in one step, and what
+// Ctrl+D means everywhere else.
+//
+// Deliberately not routed through the clipboard: duplicating something is
+// not a reason to lose what was copied earlier, and the clipboard holds
+// ids rather than snippets (see PasteFromClipboard), so borrowing it here
+// would also mean deciding what a later paste of those ids should do.
+//
+// What was made is what ends up selected, so it can be dragged straight
+// off the original - the same rule a paste follows, and the reason the
+// copies are offset at all.
+void OverlayApp::DuplicateSelection() {
+    if (selection_.empty() || Manager().CurrentOrNull() == nullptr) {
+        return;
+    }
+    std::vector<ItemId> made;
+    bool pictureLost = false;  // a copy whose source's picture could not be read
+    for (const ItemId id : selection_) {
+        if (Manager().IsItemDeleted(id)) {
+            continue;  // deleted since it was selected
+        }
+        const ItemId copy = Manager().DuplicateItem(id);
+        if (copy == 0) {
+            continue;
+        }
+        // A copy must never share its source's picture file or its
+        // texture - see Session::ClonePicturesForCopy.
+        pictureLost = !session_.ClonePicturesForCopy(id, copy) || pictureLost;
+        OffsetCopiedItem(copy);
+        made.push_back(copy);
+    }
+    if (made.empty()) {
+        return;
+    }
+    // The copies are on the current canvas, so a painted layer's pixels
+    // need a texture now rather than at the next canvas switch, which is
+    // the only other time the sync runs.
+    session_.SyncTexturesToCurrentCanvas();
+    selection_ = made;
+    ShowActionToast(pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastDuplicated);
+}
+
 void OverlayApp::AddTouchedToSelection(const Rect& box) {
     const Canvas* canvas = Manager().CurrentOrNull();
     if (canvas == nullptr) {

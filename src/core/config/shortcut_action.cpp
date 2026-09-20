@@ -18,12 +18,16 @@ std::string_view ShortcutActionKey(ShortcutAction action) {
             return "newDrawing";
         case ShortcutAction::NewCanvas:
             return "newCanvas";
+        case ShortcutAction::NewCanvasWithSelection:
+            return "newCanvasWithSelection";
         case ShortcutAction::Copy:
             return "copy";
         case ShortcutAction::Cut:
             return "cut";
         case ShortcutAction::Paste:
             return "paste";
+        case ShortcutAction::Duplicate:
+            return "duplicate";
     }
     return "";
 }
@@ -54,6 +58,12 @@ ShortcutBindings DefaultShortcuts() {
     bindWithCtrl(ShortcutAction::Copy, 'C');
     bindWithCtrl(ShortcutAction::Cut, 'X');
     bindWithCtrl(ShortcutAction::Paste, 'V');
+    bindWithCtrl(ShortcutAction::Duplicate, 'D');
+    // Ctrl+Shift+N rather than Ctrl+N: the plain chord is "new" in every
+    // browser and editor there is, and this one takes the selection with
+    // it, which is the heavier of the two things to do by accident.
+    bindings[ShortcutActionIndex(ShortcutAction::NewCanvasWithSelection)] =
+        platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/'N'};
     return bindings;
 }
 

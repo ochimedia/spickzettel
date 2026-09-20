@@ -90,6 +90,51 @@ void OverlayApp::CreateAndSwitchToNewCanvas() {
     Manager().SwitchToCanvas(CreateCanvasInCurrentFolder());
 }
 
+// A new canvas that the selected snippets come along to - "these belong
+// somewhere of their own", which otherwise takes a new canvas, a switch
+// back, a cut, a switch forward and a paste.
+//
+// With nothing selected this is exactly CreateAndSwitchToNewCanvas, and
+// says so by doing nothing else: an empty selection is not a reason to
+// refuse the canvas.
+//
+// The moves happen before the switch, because MoveOrCopyItemToCanvas
+// takes snippets off the *current* canvas (see its header note), and the
+// switch happens even if every move failed - there is a new canvas either
+// way, and leaving the app on the old one would make the shortcut look
+// like it had done nothing.
+void OverlayApp::MoveSelectionToNewCanvas() {
+    const CanvasId source = Manager().CurrentCanvasId();
+    const CanvasId target = CreateCanvasInCurrentFolder();
+    std::vector<ItemId> moved;
+    for (const ItemId id : selection_) {
+        if (Manager().IsItemDeleted(id)) {
+            continue;  // deleted since it was selected
+        }
+        Manager().MoveOrCopyItemToCanvas(id, target, /*copy=*/false);
+        // A move returns 0 whether it moved the snippet or found nothing
+        // to move - the caller already knows the id - so what happened is
+        // read from where the snippet is now.
+        if (Manager().CanvasHoldingItem(id) != target) {
+            continue;
+        }
+        // Its history is filed under the canvas it has left, where an undo
+        // would now edit a snippet living somewhere else - see
+        // Session::ForgetHistoryOfItem.
+        session_.ForgetHistoryOfItem(source, id);
+        moved.push_back(id);
+    }
+    Manager().SwitchToCanvas(target);
+    // What arrived is what is selected, so it can be arranged straight
+    // away - and the canvas bar is over it rather than over nothing.
+    selection_ = moved;
+    if (!moved.empty()) {
+        const Canvas* canvas = Manager().FindCanvas(target);
+        ShowActionToast(std::string(strings::kToastMovedToPrefix) +
+                         (canvas != nullptr ? canvas->name : std::string()));
+    }
+}
+
 // ================= The properties popover =================
 
 void OverlayApp::RenderItemPropertiesPopover() {

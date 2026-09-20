@@ -18,6 +18,10 @@ platform::KeyCombo WithCtrl(char key) {
     return platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/false, /*key=*/key};
 }
 
+platform::KeyCombo WithCtrlShift(char key) {
+    return platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/key};
+}
+
 const platform::KeyCombo& BindingFor(const ShortcutBindings& bindings, ShortcutAction action) {
     return bindings[ShortcutActionIndex(action)];
 }
@@ -39,13 +43,28 @@ TEST(ShortcutActionTest, TheClipboardShipsOnTheUsualChords) {
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::Paste), WithCtrl('V'));
 }
 
+// Duplicate on the chord it has everywhere else, and the canvas that
+// takes the selection with it on the "new" chord with Shift - both chords
+// rather than letters, so neither can fire from ordinary typing. Ctrl+D
+// sits beside a plain D for a new drawing, which the exact-modifier match
+// in HandleToolShortcuts keeps apart.
+TEST(ShortcutActionTest, DuplicateAndTheCanvasThatTakesTheSelectionShipBound) {
+    const ShortcutBindings bindings = DefaultShortcuts();
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Duplicate), WithCtrl('D'));
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewCanvasWithSelection), WithCtrlShift('N'));
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewDrawing), Plain('D'));
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewCanvas), platform::KeyCombo{})
+        << "the plain new canvas keeps no key of its own";
+}
+
 TEST(ShortcutActionTest, EverythingElseStartsUnbound) {
     const ShortcutBindings bindings = DefaultShortcuts();
     for (const ShortcutAction action : kAllShortcutActions) {
         const bool bound = action == ShortcutAction::NewScreenshot || action == ShortcutAction::NewDrawing ||
                            action == ShortcutAction::Erase || action == ShortcutAction::Draw ||
                            action == ShortcutAction::Copy || action == ShortcutAction::Cut ||
-                           action == ShortcutAction::Paste;
+                           action == ShortcutAction::Paste || action == ShortcutAction::Duplicate ||
+                           action == ShortcutAction::NewCanvasWithSelection;
         EXPECT_EQ(BindingFor(bindings, action).key != 0, bound)
             << "action " << ShortcutActionKey(action);
     }
