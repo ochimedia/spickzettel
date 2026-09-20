@@ -66,6 +66,7 @@ if(WIN32)
     add_executable(sz_win32_tests
         platform/win32_displays_test.cpp
         platform/win32_input_grab_test.cpp
+        platform/win32_integrity_test.cpp
         platform/win32_platform_host_test.cpp
     )
     target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 GTest::gtest_main)

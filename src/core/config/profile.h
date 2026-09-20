@@ -29,9 +29,12 @@ struct ProfileMatch {
     // it starts, an anti-cheat wrapper and what it wraps).
     std::vector<std::string> executables;
     // Case-insensitive substrings of the window title, for the case the
-    // executable can't be read at all - a process at a higher integrity
-    // level than ours. Coarser and easier to get wrong, so it is the
-    // fallback rather than the first thing offered.
+    // executable can't be read at all - a process owned by another
+    // account, or a game shielded by an anti-cheat driver, both of which
+    // refuse to be opened. Being elevated does not do it: an elevated
+    // Task Manager reports its executable name like anything else.
+    // Coarser and easier to get wrong, so it is the fallback rather than
+    // the first thing offered.
     std::vector<std::string> titleContains;
 
     bool Empty() const { return executables.empty() && titleContains.empty(); }

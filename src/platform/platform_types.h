@@ -143,16 +143,34 @@ struct EditModeInputOptions {
     bool operator==(const EditModeInputOptions&) const = default;
 };
 
+// Whether the foreground application runs at a higher integrity level
+// than we do - a process started as administrator, of which Task Manager
+// is the one everybody has. It matters because Windows cuts a
+// lower-integrity process out of that application's input entirely: the
+// low-level hooks stop being called and the raw-input sink stops
+// receiving reports, so the grab has nothing to drive the pointer with
+// and nothing to carry shortcuts. See docs/ARCHITECTURE.md.
+//
+// `Unknown` is a third answer and not a synonym for either: a process
+// whose token cannot be read at all is one we know nothing about, and
+// the two reasons it can happen point opposite ways. An elevated tool
+// would want focus taken; a game behind an anti-cheat driver blocks the
+// same query and is the one thing that must never have focus taken from
+// it. Only `Above` is acted on.
+enum class ForegroundIntegrity { Unknown, NotAbove, Above };
+
 // What the overlay is up over: the application holding the foreground
 // while edit mode deliberately does not, or the one that held it just
-// before the overlay took focus. Both fields are best-effort and either
-// may be empty: reading the image path fails for a process at a higher
-// integrity level than ours (a game run as administrator), so the title
-// is the coarser fallback. Used for nothing but matching a profile the
-// user created.
+// before the overlay took focus. Every field is best-effort: the title
+// may be empty, and the image path and the integrity level both need the
+// process opened, which fails for one owned by another account (every
+// service) or shielded by an anti-cheat driver. A higher integrity level
+// on its own does not stop either - measured, and an elevated Task
+// Manager reports its executable name like anything else.
 struct ForegroundApp {
     std::string executable;  // "eldenring.exe", lowercased; empty if unreadable
     std::string title;       // the window's title at the time; may be empty
+    ForegroundIntegrity integrity = ForegroundIntegrity::Unknown;
 
     bool Known() const { return !executable.empty() || !title.empty(); }
     bool operator==(const ForegroundApp&) const = default;

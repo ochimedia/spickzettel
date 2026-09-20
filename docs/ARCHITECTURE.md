@@ -1708,6 +1708,44 @@ Consequences that shape `Win32InputGrab`:
   kernel mouse-class filter driver, which is exactly the shape anti-cheat
   is built to notice and has not been undertaken.
 
+### What an elevated application does to all of this
+
+None of it reaches an application running at a higher integrity level than
+the overlay, which in practice means anything started as administrator and
+Task Manager above all. Windows cuts a lower-integrity process out of such
+an application's input completely: the low-level hooks stop being called
+and the raw-input sink stops receiving reports. Measured over Task
+Manager, with every input option on, not one number in the input debug
+overlay moved, and the overlay's own shortcuts were dead with it. The one
+thing that survives is `RegisterHotKey`, because with the keyboard hook
+never called there is nothing left to swallow `WM_HOTKEY` - so the hotkey
+that puts the overlay away still works, which is the difference between a
+limitation and a trap.
+
+Turning raw mouse input off recovers the pointer and nothing else: without
+the grab the cursor arrives as ordinary messages, but the keyboard hook is
+what carries shortcuts to a window that deliberately has no focus, and it
+is blocked just the same. Taking focus is the only thing that restores
+both, because it leaves no higher-integrity foreground window to be shut
+out of.
+
+So the overlay asks where the foreground application sits relative to it -
+`ForegroundIntegrity`, read in `UnderlyingApplication`, where the process
+handle is open anyway. The measurement that shaped it: of every process on
+one machine, seen from a medium-integrity process, 91 refused the handle
+outright and 36 granted it, of which 35 answered the integrity query and
+one refused the token. The refusals are processes owned by another
+account, not processes above us - the limited query right is granted
+across integrity levels for the same user, which is why an elevated Task
+Manager reports its executable name like anything else.
+
+That asymmetry is the whole design. A process that cannot be read is
+`Unknown`, and `Unknown` is acted on as "leave it alone" rather than as
+either answer. Treating it as above us would take focus from exactly the
+application that must never lose it: a game behind an anti-cheat driver
+refuses that query in precisely the same way an elevated tool would. Only
+a positive reading forces anything.
+
 The option dependencies are enforced, not documented: keystroke holding,
 raw input and countering need the game to keep focus (with focus taken
 the ordinary way the game has already stopped receiving input, and the

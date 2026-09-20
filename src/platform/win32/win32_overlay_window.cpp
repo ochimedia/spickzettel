@@ -20,6 +20,7 @@
 #include "platform/win32/resources/resource.h"
 #include "platform/win32/win32_dx11_renderer.h"
 #include "platform/win32/win32_input_grab.h"
+#include "platform/win32/win32_integrity.h"
 #include "platform/win32/win32_text.h"
 
 // imgui_impl_win32.h intentionally wraps its real declaration of this
@@ -137,6 +138,7 @@ private:
     BYTE saved_[kKeyStateSize] = {};
     bool active_ = false;
 };
+
 }  // namespace
 
 Win32OverlayWindow::Win32OverlayWindow() = default;
@@ -377,10 +379,13 @@ ForegroundApp Win32OverlayWindow::UnderlyingApplication() const {
     if (processId != 0) {
         // QUERY_LIMITED_INFORMATION rather than QUERY_INFORMATION: the
         // limited right is the one a normal-integrity process is granted
-        // for most other processes, and it is all QueryFullProcessImageName
-        // needs. It still fails for a process at a higher integrity level -
-        // a game started as administrator - which is why the title above is
-        // read first and unconditionally.
+        // for most other processes, and it is all of
+        // QueryFullProcessImageName, OpenProcessToken and the integrity
+        // read below that is needed. It is granted across integrity levels
+        // for the same account - an elevated Task Manager answers both
+        // questions - and refused for a process owned by another account
+        // or shielded by an anti-cheat driver, which is why the title
+        // above is read first and unconditionally.
         if (const HANDLE process =
                 OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId)) {
             wchar_t path[MAX_PATH] = {};
@@ -394,6 +399,7 @@ ForegroundApp Win32OverlayWindow::UnderlyingApplication() const {
                 std::transform(app.executable.begin(), app.executable.end(), app.executable.begin(),
                                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
             }
+            app.integrity = IntegrityComparedToOurs(process);
             CloseHandle(process);
         }
     }

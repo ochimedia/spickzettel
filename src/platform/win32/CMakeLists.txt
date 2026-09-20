@@ -35,5 +35,8 @@ target_link_libraries(sz_platform_win32
         shell32
         user32
         gdi32
+        # OpenProcessToken/GetTokenInformation, for the foreground process's
+        # integrity level (win32_integrity.h).
+        advapi32
 )
 spickzettel_set_warnings(sz_platform_win32)
