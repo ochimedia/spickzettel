@@ -1091,6 +1091,30 @@ TEST(TrayControllerProfileTest, AProfileMayKeepHandsOffOneElevatedApplication) {
         << "the profile speaks for its own application only";
 }
 
+// The decision is made once per showing rather than once per mode, and
+// that is what makes view-only into edit mode work: EnsureMode switches
+// those two in place, without coming up from hidden and without asking
+// again. Deciding this per mode would leave the overlay deaf in exactly
+// the case it is here to fix, two keypresses in.
+TEST(TrayControllerProfileTest, EnteringEditModeFromViewOnlyKeepsTheFocusItTook) {
+    test::FakePlatformHost host;
+    host.overlayWindow.underlyingApp = AppAt("taskmgr.exe", platform::ForegroundIntegrity::Above);
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyViewMode));
+    ASSERT_TRUE(host.overlayWindow.visible);
+    ASSERT_FALSE(host.overlayWindow.editModeNoActivate);
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+
+    EXPECT_TRUE(host.overlayWindow.visible);
+    EXPECT_FALSE(controller.Overlay().IsViewOnly());
+    EXPECT_FALSE(host.overlayWindow.editModeNoActivate) << "switched in place, still holding focus";
+    EXPECT_FALSE(host.overlayWindow.inputPassthrough);
+}
+
 // What is stored stays as the user set it: the Settings row goes on
 // showing their answer rather than silently rewriting itself because of
 // what happened to be in front of the overlay once.

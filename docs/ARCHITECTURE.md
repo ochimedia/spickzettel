@@ -1739,6 +1739,13 @@ account, not processes above us - the limited query right is granted
 across integrity levels for the same user, which is why an elevated Task
 Manager reports its executable name like anything else.
 
+Taking focus is decided once per showing, beside the profile, and not per
+mode. View-only wants none of that input and would rather leave the
+foreground alone - but it and edit mode switch in place, without coming
+up from hidden and without asking again, so the answer view-only settled
+on is the one edit mode inherits. Deciding it per mode would leave edit
+mode deaf two keypresses into the very case this is here to fix.
+
 That asymmetry is the whole design. A process that cannot be read is
 `Unknown`, and `Unknown` is acted on as "leave it alone" rather than as
 either answer. Treating it as above us would take focus from exactly the

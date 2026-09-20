@@ -197,13 +197,21 @@ private:
     // convention host_.GetDataDirectoryPath() already has for
     // libraryStore_ (see Initialize()).
     void OnSettingsChanged();
-    // Whether this showing has to take focus whatever the settings say
+    // Whether this showing - the whole showing, not one mode of it - has
+    // to take focus whatever the settings say
     // about leaving it alone, because Windows would otherwise deliver us
     // none of that application's input - see ForegroundIntegrity and
     // ProfileableSettings::takeFocusOverElevated. Only the live
     // no-activate value is affected; what is stored stays as the user set
     // it, so the Settings row keeps showing their answer rather than
     // silently rewriting itself for one application.
+    //
+    // Asked once, on the way up, and deliberately not per mode. View-only
+    // needs none of that input and would rather leave the foreground
+    // alone, but EnsureMode switches it and edit mode in place without
+    // coming up from hidden - so a decision made for view-only is the one
+    // edit mode inherits, and scoping this to edit mode would leave the
+    // overlay deaf in exactly the case it exists to fix.
     bool MustTakeFocusFrom(const platform::ForegroundApp& app) const;
     // Hides the overlay and immediately shows it again in the same mode,
     // for settings that are only read on the way in - see
