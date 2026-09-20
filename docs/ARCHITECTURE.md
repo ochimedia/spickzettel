@@ -1800,7 +1800,10 @@ live compositor, in four tiers:
   shape of every z-order bug this UI has had. Text is never an identifier
   (see "Every word in one file"), so rewording a label breaks no test.
 - **Win32 tests** (`tests/platform/`) run the input grab against the
-  real registration API and list whatever displays the machine has. The
+  real registration API and list whatever displays the machine has. CTest
+  runs them one at a time, with a timeout: the hooks and the raw-input
+  registration are process-wide state two copies would fight over, and a
+  hook thread that never stops should fail the suite, not hang it. The
   rest of the backend needs manual verification: tray icon, hotkeys,
   focus returned on hide, idle CPU in Task Manager, a real capture that
   survives resize and disappears from GPU memory when its item is

@@ -18,9 +18,32 @@
 #include <gtest/gtest.h>
 
 #include <windows.h>
+#include <tlhelp32.h>
 
 namespace sz::platform::win32 {
 namespace {
+
+// How many threads this process has - the hook thread is one of them
+// while the grab is active, and none of them once it is not.
+DWORD ProcessThreadCount() {
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) {
+        ADD_FAILURE() << "cannot enumerate the process's threads";
+        return 0;
+    }
+    THREADENTRY32 entry{};
+    entry.dwSize = sizeof(entry);
+    DWORD count = 0;
+    if (Thread32First(snapshot, &entry)) {
+        do {
+            if (entry.th32OwnerProcessID == GetCurrentProcessId()) {
+                ++count;
+            }
+        } while (Thread32Next(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return count;
+}
 
 struct RawMouseRegistration {
     bool present = false;          // this process has registered for raw mouse input at all
@@ -110,12 +133,17 @@ TEST(Win32InputGrabTest, RapidStartAndStopLeavesNoHookBehind) {
     grab.SetOptions(options);
     grab.SetGameKeepsFocus(true);
 
+    const DWORD threadsBefore = ProcessThreadCount();
     for (int i = 0; i < 20; ++i) {
         grab.SetActive(true);
         grab.SetActive(false);
     }
     EXPECT_TRUE(Eventually([] { return !QueryRawMouse().present; }, std::chrono::milliseconds(1500)))
         << "a sink registered by a thread that outlived its stop";
+    EXPECT_TRUE(Eventually([threadsBefore] { return ProcessThreadCount() == threadsBefore; },
+                           std::chrono::milliseconds(1500)))
+        << "a stop left its hook thread running: " << ProcessThreadCount() << " threads, " << threadsBefore
+        << " before";
 
     // ...and a start after all that still works.
     grab.SetActive(true);

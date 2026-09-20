@@ -71,5 +71,9 @@ if(WIN32)
     target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 GTest::gtest_main)
     target_compile_features(sz_win32_tests PRIVATE cxx_std_20)
     spickzettel_set_warnings(sz_win32_tests)
-    gtest_discover_tests(sz_win32_tests)
+    # One at a time: these install desktop-wide hooks and register raw
+    # input for the whole process, which two copies would fight over. The
+    # timeout is there because a hook thread that never stops would
+    # otherwise hang the suite rather than fail it.
+    gtest_discover_tests(sz_win32_tests PROPERTIES RUN_SERIAL TRUE TIMEOUT 30)
 endif()
