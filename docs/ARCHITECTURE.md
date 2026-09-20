@@ -1711,16 +1711,24 @@ Consequences that shape `Win32InputGrab`:
 ### What an elevated application does to all of this
 
 None of it reaches an application running at a higher integrity level than
-the overlay, which in practice means anything started as administrator and
-Task Manager above all. Windows cuts a lower-integrity process out of such
-an application's input completely: the low-level hooks stop being called
-and the raw-input sink stops receiving reports. Measured over Task
-Manager, with every input option on, not one number in the input debug
-overlay moved, and the overlay's own shortcuts were dead with it. The one
-thing that survives is `RegisterHotKey`, because with the keyboard hook
-never called there is nothing left to swallow `WM_HOTKEY` - so the hotkey
-that puts the overlay away still works, which is the difference between a
-limitation and a trap.
+the overlay, which in practice means anything started as administrator.
+Windows cuts a lower-integrity process out of such an application's input
+completely: the low-level hooks stop being called and the raw-input sink
+stops receiving reports. Measured over Task Manager on an account with
+admin rights, with every input option on, not one number in the input
+debug overlay moved, and the overlay's own shortcuts were dead with it.
+
+The one thing that survives is `RegisterHotKey`, because with the keyboard
+hook never called there is nothing left to swallow `WM_HOTKEY` - so the
+hotkey that puts the overlay away still works, which is the difference
+between a limitation and a trap.
+
+Task Manager is the everyday example and also a reminder of why this is a
+comparison rather than a test: it asks Windows for the highest level it
+can have, so it comes up elevated for an administrator and ordinary for
+everyone else. On the second kind of account it is level with the overlay,
+nothing is blocked, and there is correctly nothing to do. The same holds
+when the overlay itself was started as administrator.
 
 Turning raw mouse input off recovers the pointer and nothing else: without
 the grab the cursor arrives as ordinary messages, but the keyboard hook is

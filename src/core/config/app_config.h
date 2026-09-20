@@ -145,14 +145,15 @@ struct AppConfig {
     bool editModeNoActivate = true;
     // true (default): `editModeNoActivate` is overruled, for one showing,
     // when the application in front is at a higher integrity level than
-    // this process - something started as administrator, Task Manager
-    // above all. Windows hands such an application's input to no
-    // lower-integrity process at all, so leaving it focused costs not just
-    // the grab but every shortcut the overlay has; taking focus is the
-    // only thing that restores either. Only a *positive* reading acts: a
-    // process that refuses the question is left alone, because a game
-    // behind an anti-cheat driver refuses it the same way and is the one
-    // thing that must keep focus. See docs/ARCHITECTURE.md.
+    // this process - something started as administrator, which on an
+    // account with admin rights includes Task Manager. Windows hands such
+    // an application's input to no lower-integrity process at all, so
+    // leaving it focused costs not just the grab but every shortcut the
+    // overlay has; taking focus is the only thing that restores either.
+    // Only a *positive* reading acts: a process that refuses the question
+    // is left alone, because a game behind an anti-cheat driver refuses it
+    // the same way and is the one thing that must keep focus. See
+    // docs/ARCHITECTURE.md.
     bool takeFocusOverElevated = true;
     // What edit mode does with physical input while `editModeNoActivate` is
     // leaving the game focused - see platform::EditModeInputOptions, which

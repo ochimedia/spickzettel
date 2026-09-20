@@ -144,12 +144,18 @@ struct EditModeInputOptions {
 };
 
 // Whether the foreground application runs at a higher integrity level
-// than we do - a process started as administrator, of which Task Manager
-// is the one everybody has. It matters because Windows cuts a
-// lower-integrity process out of that application's input entirely: the
-// low-level hooks stop being called and the raw-input sink stops
-// receiving reports, so the grab has nothing to drive the pointer with
-// and nothing to carry shortcuts. See docs/ARCHITECTURE.md.
+// than we do - something started as administrator, of which Task Manager
+// is the everyday example on an account with admin rights. On an account
+// without them it comes up at the ordinary level, since it asks for the
+// highest one it can have rather than for administrator outright, and is
+// then no higher than us. Which is why this is a comparison against our
+// own level and never a test for elevation in the abstract.
+//
+// It matters because Windows cuts a lower-integrity process out of that
+// application's input entirely: the low-level hooks stop being called and
+// the raw-input sink stops receiving reports, so the grab has nothing to
+// drive the pointer with and nothing to carry shortcuts. See
+// docs/ARCHITECTURE.md.
 //
 // `Unknown` is a third answer and not a synonym for either: a process
 // whose token cannot be read at all is one we know nothing about, and
