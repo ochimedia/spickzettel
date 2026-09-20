@@ -1078,6 +1078,47 @@ TEST_F(HeadlessAppTest, ShortcutsAreIgnoredInViewOnlyMode) {
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
 }
 
+// ===== Nothing from before a showing counts as input to it =====
+
+// The keyboard grab hands the overlay every keystroke while edit mode is
+// up, the letter of the hotkey that ends edit mode included - and that one
+// arrives after the last frame. Hidden, the app draws no frame at all, so
+// ImGui's queue holds the press until the next showing. Bound to the
+// screenshot tool, "S" came back armed to capture on the first click.
+TEST_F(HeadlessAppTest, AKeyStrandedByHidingIsNotAPressOnTheWayBack) {
+    ShowEditMode();
+    StepFrame();
+    ASSERT_EQ(App().ActiveTool(), Tool::Select);
+
+    ShowEditMode();  // the same hotkey again puts the overlay away
+    ASSERT_FALSE(host_.overlayWindow.visible);
+    // No frame in between, which is the whole point: hidden, there are none.
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_S, true);
+    ImGui::GetIO().AddKeyEvent(ImGuiKey_S, false);
+
+    ShowEditMode();
+    StepFrames(2);
+    EXPECT_EQ(App().ActiveTool(), Tool::Select) << "that S belonged to the showing it ended";
+}
+
+// The same staleness the other way round: what ImGui believes is held is
+// whatever the last frame before the hiding saw. A modifier latched that
+// way would make the exact-modifier test in HandleToolShortcuts refuse an
+// ordinary key press on the way back.
+TEST_F(HeadlessAppTest, AModifierHeldWhenTheOverlayWentAwayDoesNotOutliveIt) {
+    ShowEditMode();
+    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+    StepFrame();  // the frame that records it as held
+    ASSERT_TRUE(ImGui::GetIO().KeyCtrl);
+
+    ShowEditMode();  // away, with Ctrl still down as far as ImGui knows
+    ShowEditMode();  // and back
+    StepFrame();
+
+    PressKey(ImGuiKey_S);
+    EXPECT_EQ(App().ActiveTool(), Tool::NewScreenshot) << "a bare S, not Ctrl+S";
+}
+
 // Long enough for a message to have faded: it lasts 2.2 seconds, and a
 // frame here is a sixtieth of one.
 constexpr int kFramesPastAToast = 200;

@@ -1408,6 +1408,12 @@ the platform hides the whole overlay before grabbing pixels.
 - `InvisibleButton`'s return value, not `IsItemClicked()`, means
   "clicked": the latter fires on press, and breaks click-to-select next
   to a drag source.
+- The input queue and the key state both outlive a gap in frames: an
+  event queued while nothing is rendering waits for the next `NewFrame`,
+  whenever that is, and what ImGui believes is held is whatever the last
+  frame saw. A window that stops drawing while its messages keep arriving
+  has to say so - see the hotkey letter stranded by hiding, under the
+  input grab.
 
 ## The tray controller: hidden, edit and view-only
 
@@ -1664,7 +1670,16 @@ Consequences that shape `Win32InputGrab`:
   suppresses `RegisterHotKey` too (the hook ate 18 events, `WM_HOTKEY`
   never fired), so without this the grab would disable the hotkey that
   turns it off. The grab matches every registered combo itself and posts
-  an identical `WM_HOTKEY` back.
+  an identical `WM_HOTKEY` back. The key is then handed to the overlay as
+  well - a global chord is not a reason for the focused surface to go
+  deaf - which strands the letter of the hotkey that *hides* the overlay:
+  it is posted after the last frame of that showing, no frame is drawn
+  while hidden, and ImGui's queue holds it until the overlay comes back,
+  where it reads as a fresh press. Ctrl+Alt+S for edit mode came back as
+  a bare S and put the screenshot tool in hand, intermittently - only
+  when no frame had recorded Ctrl and Alt as held, since a binding fires
+  on exactly the modifiers it names. `OverlayApp::OnOverlayShown` clears
+  ImGui's event queue and key state, so a showing starts from no input.
 - **A key-up is swallowed only if its key-down was.** The hotkey that
   turns edit mode on is pressed before any hook exists; its key-ups then
   arrived under the hook and were swallowed, so Windows never learned

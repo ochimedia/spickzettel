@@ -1366,6 +1366,38 @@ void OverlayApp::OnOverlayShown() {
     // skipping the push because "it hasn't changed" would leave the other
     // application's cursor over our canvas until the next mouse move.
     appliedPointerShape_.reset();
+    // A showing starts from no input at all: nothing that happened while
+    // the overlay was hidden is input to it.
+    //
+    // Not housekeeping - a key really does survive the gap. The keyboard
+    // grab hands every keystroke to this window for as long as edit mode is
+    // up, the hotkey that *ends* edit mode included (see
+    // Win32InputGrab::OnKeyboard, which dispatches the hotkey and passes the
+    // key on deliberately). That last one is posted after the final frame
+    // and nothing drains it: no frame is drawn while hidden, so ImGui's
+    // event queue keeps it until the next showing reads it as a fresh
+    // press. Seen with Ctrl+Alt+S bound to edit mode: the overlay came back
+    // with the screenshot tool in hand, because "S" alone is that tool's
+    // key. Only intermittently, since HandleToolShortcuts demands exactly
+    // the modifiers a binding names and ImGui knows a modifier is held only
+    // from a frame that recorded it - so the chord was harmless whenever a
+    // frame had run between the modifiers going down and the letter.
+    //
+    // The key state as well as the queue, because it goes stale the same
+    // way and in both directions: what ImGui believes is held is whatever
+    // the last frame before the hiding saw, however long ago that was, and
+    // modifiers left latched that way would make the exact-modifier test
+    // refuse a perfectly ordinary key on the way back. Nothing true is lost
+    // by clearing - a modifier still physically held is re-sent on every
+    // frame by the platform (see Win32OverlayWindow::RenderFrame).
+    //
+    // Guarded like ShowActionToast's: the overlay can be shown by a hotkey
+    // pressed before a single frame has ever been drawn.
+    if (ImGui::GetCurrentContext() != nullptr) {
+        ImGuiIO& io = ImGui::GetIO();
+        io.ClearEventsQueue();
+        io.ClearInputKeys();
+    }
 }
 
 namespace {
