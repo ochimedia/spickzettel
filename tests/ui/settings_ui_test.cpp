@@ -293,6 +293,10 @@ TEST_F(UiTest, TurningAParentOffLeavesItsDependentsSetButUnavailable) {
         // between them.
         ctx->ItemClick("**/###dontstealfocus");
         IM_CHECK((ctx->ItemInfo("**/###rawmouse").ItemFlags & ImGuiItemFlags_Disabled) != 0);
+        // The elevated exception included: with focus taken already there
+        // is no case left for it to be the exception to.
+        IM_CHECK((ctx->ItemInfo("**/###takefocusoverelevated").ItemFlags &
+                   ImGuiItemFlags_Disabled) != 0);
         IM_CHECK((ctx->ItemInfo("**/###counterrawmouse").ItemFlags &
                    ImGuiItemFlags_Disabled) != 0);
         // Not these two: they are in the same list for the eye, not in
@@ -305,6 +309,7 @@ TEST_F(UiTest, TurningAParentOffLeavesItsDependentsSetButUnavailable) {
     EXPECT_FALSE(AppSettings().Base().dontStealFocus);
     // Kept, not cleared - which is what the dash on those rows means.
     EXPECT_TRUE(AppSettings().Base().rawMouseInput);
+    EXPECT_TRUE(AppSettings().Base().takeFocusOverElevated);
 }
 
 // Which pointer is shown and whether the mouse is taken are separate

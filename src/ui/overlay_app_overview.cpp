@@ -1554,6 +1554,17 @@ void OverlayApp::RenderSettingsInput([[maybe_unused]] bool& anyChanged) {
     float focusTrunk = TrunkFrom(rowPos);
 
     ImGui::Indent(kTreeIndent);
+    // First under the focus row because it is the exception to it, and
+    // greyed out when that row is off for the same reason the others are:
+    // with focus taken already there is nothing left for it to do.
+    rowPos = ImGui::GetCursorScreenPos();
+    ProfileableCheckbox(
+        "takefocusoverelevated", strings::kInputTakeFocusOverElevatedLabel,
+        {&ProfileableSettings::takeFocusOverElevated, &ProfileOverrides::takeFocusOverElevated},
+        strings::kInputTakeFocusOverElevatedHelp,
+        !edited.dontStealFocus);
+    TreeBranch(focusTrunk, rowPos, kTreeIndent);
+
     rowPos = ImGui::GetCursorScreenPos();
     ProfileableCheckbox(
         "dontforwardkeys", strings::kHudDontForwardKeystrokes,
