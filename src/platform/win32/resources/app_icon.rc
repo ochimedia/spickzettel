@@ -1,6 +1,6 @@
 // Compiled by rc.exe, which CMake invokes for any .rc file listed as an
-// executable source. Embeds assets/app_icon/spickzettel.ico (generated from
-// the .svg by scripts/gen_app_icon.py) into the .exe as a resource, which
+// executable source. Embeds assets/app_icon/spickzettel.ico (packed from
+// the .png by scripts/gen_app_icon.py) into the .exe as a resource, which
 // Explorer and the taskbar pick up for the file itself and which the window
 // class and the tray icon load back out (see resource.h).
 #include "resource.h"
