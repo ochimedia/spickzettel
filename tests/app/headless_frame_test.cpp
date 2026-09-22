@@ -1781,8 +1781,10 @@ TEST_F(OverlappingItemsTest, AClickSelectsAndShiftClickAddsAndRemoves) {
     // On the front item, where the back item isn't.
     const float frontX = items.front.x + items.front.w - 30.0f;
     const float frontY = items.front.y + items.front.h - 30.0f;
+    ASSERT_EQ(Canvases().CurrentOrNull()->items.back().id, backId) << "selecting it raised it";
     RawClickWith(ImGuiMod_Shift, frontX, frontY);
     EXPECT_EQ(App().Selection(), (std::vector<ItemId>{backId, frontId}));
+    EXPECT_EQ(Canvases().CurrentOrNull()->items.back().id, backId) << "a Shift-click restacks nothing";
     RawClickWith(ImGuiMod_Shift, frontX, frontY);
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{backId});
 
@@ -1889,14 +1891,16 @@ TEST_F(OverlappingItemsTest, DraggingAMultiSelectionRaisesItAsABlockInItsOwnOrde
         }
         return ids;
     };
-    ASSERT_EQ(order(), (std::vector<ItemId>{backId, frontId, otherId}));
+    // Selecting the back one raised it; the Shift-click that added the
+    // other raised nothing.
+    ASSERT_EQ(order(), (std::vector<ItemId>{frontId, backId, otherId}));
 
-    // Taken hold of by the one at the back of the two.
+    // Taken hold of by the one in front of the two.
     const float x = items.back.x + 60.0f;
     const float y = items.back.y + 100.0f;
     Drag(x, y, x + 30.0f, y + 10.0f);
 
-    EXPECT_EQ(order(), (std::vector<ItemId>{otherId, backId, frontId}));
+    EXPECT_EQ(order(), (std::vector<ItemId>{otherId, frontId, backId}));
     EXPECT_FLOAT_EQ(ItemById(backId).rect.x, items.back.x + 30.0f);
     EXPECT_FLOAT_EQ(ItemById(frontId).rect.x, items.front.x + 30.0f) << "the group moved together";
 }

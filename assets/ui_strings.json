@@ -273,7 +273,7 @@
   "barButton.text": "Text",
   "barButton.colour": "Colour",
   "drawing.raiseSelected": "Bring a snippet to the front when it is selected",
-  "drawing.raiseSelectedHelp": "On: clicking a snippet, or taking hold of it to drag it, puts it in front of the others - the way a window manager raises a window you click.\n\nOff: selecting leaves the order alone, as in a drawing program; the order is changed from the Properties popover (the bar's More button).",
+  "drawing.raiseSelectedHelp": "On: clicking a snippet, or taking hold of it to drag it, puts it in front of the others - the way a window manager raises a window you click. Taking hold of one of several selected snippets brings all of them forward, in the order they already have; Shift-clicking to add to the selection changes no order.\n\nOff: selecting leaves the order alone, as in a drawing program; the order is changed from the Properties popover (the bar's More button).",
   "settings.deletedHeading": "Deleted folders and canvases",
   "settings.purgeDeleted": "Delete permanently after",
   "settings.purgeDeletedDays": "days",

@@ -556,7 +556,8 @@ void OverlayApp::OffsetCopiedItem(ItemId itemId) {
 // manager raises a window you take hold of; off, the stacking order is the
 // Properties popover's alone to change, as in a drawing program. A press
 // on a snippet of a multi-selection brings the whole selection forward,
-// keeping its own order: it is the selection that is taken hold of.
+// keeping its own order: it is the selection that is taken hold of. A
+// Shift-click that adds to or takes from the selection restacks nothing.
 //
 // The selection bar's buttons ride the same pipeline: a press on one is
 // held until release, and fires only if the release lands on the same
@@ -763,11 +764,13 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             }
             if (ImGui::GetIO().KeyShift) {
                 // Added to or taken out of the selection, and that is all
-                // the press does - a Shift-press is never a drag.
+                // the press does - a Shift-press is never a drag, and
+                // never restacks either: gathering snippets into a
+                // selection is not taking hold of any one of them, and a
+                // stack built up with care should not reshuffle as it is
+                // picked from. Taking hold of the selection afterwards
+                // raises it, as a block in the order it already has.
                 ToggleSelected(target.item);
-                if (IsSelected(target.item) && Cfg().raiseSelectedSnippet) {
-                    Manager().BringItemToFront(target.item);
-                }
                 return true;
             }
             if (!IsSelected(target.item)) {
