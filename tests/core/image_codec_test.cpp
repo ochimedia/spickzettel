@@ -83,41 +83,13 @@ TEST_F(ImageCodecTest, QoiRoundTripsRunsAndRepeatsExactly) {
     EXPECT_EQ(decoded->pixelsRGBA, pixels);
 }
 
-// The point of sniffing the magic bytes rather than the extension: both
-// formats have to work from one call, whatever the file is called.
-TEST_F(ImageCodecTest, DecodeImageReadsBothFormats) {
-    const std::vector<uint8_t> pixels = SamplePixels();
-    const std::filesystem::path pngPath = dir_ / "sample.png";
-    const std::filesystem::path qoiPath = dir_ / "sample.qoi";
-    ASSERT_TRUE(EncodePngToFile(pngPath, pixels.data(), 3, 2));
-    ASSERT_TRUE(EncodeQoiToFile(qoiPath, pixels.data(), 3, 2));
-
-    const std::optional<DecodedImage> fromPng = DecodeImageFromFile(pngPath);
-    const std::optional<DecodedImage> fromQoi = DecodeImageFromFile(qoiPath);
-    ASSERT_TRUE(fromPng.has_value());
-    ASSERT_TRUE(fromQoi.has_value());
-    EXPECT_EQ(fromPng->pixelsRGBA, pixels);
-    EXPECT_EQ(fromQoi->pixelsRGBA, pixels);
-}
-
-// ...and the content is what decides, not the name.
-TEST_F(ImageCodecTest, DecodeImageIgnoresAMisleadingExtension) {
-    const std::vector<uint8_t> pixels = SamplePixels();
-    const std::filesystem::path path = dir_ / "actually_qoi.png";
-    ASSERT_TRUE(EncodeQoiToFile(path, pixels.data(), 3, 2));
-
-    const std::optional<DecodedImage> decoded = DecodeImageFromFile(path);
-    ASSERT_TRUE(decoded.has_value());
-    EXPECT_EQ(decoded->pixelsRGBA, pixels);
-}
-
-TEST_F(ImageCodecTest, DecodeImageReturnsNulloptForUnknownContent) {
+TEST_F(ImageCodecTest, QoiDecodeReturnsNulloptForUnknownContent) {
     std::filesystem::create_directories(dir_);
     const std::filesystem::path path = dir_ / "garbage.qoi";
-    std::ofstream(path, std::ios::binary) << "neither a png nor a qoi, just some bytes";
+    std::ofstream(path, std::ios::binary) << "not a qoi, just some bytes";
 
-    EXPECT_FALSE(DecodeImageFromFile(path).has_value());
-    EXPECT_FALSE(DecodeImageFromFile(dir_ / "does_not_exist.qoi").has_value());
+    EXPECT_FALSE(DecodeQoiFromFile(path).has_value());
+    EXPECT_FALSE(DecodeQoiFromFile(dir_ / "does_not_exist.qoi").has_value());
 }
 
 TEST_F(ImageCodecTest, QoiEncodeRejectsInvalidDimensions) {
@@ -149,7 +121,7 @@ TEST_F(ImageCodecTest, QoiEncodeReplacesTheDestinationWholeOrNotAtAll) {
     other[0] ^= 0xFF;
     EXPECT_FALSE(EncodeQoiToFile(path, other.data(), 3, 2));
     EXPECT_EQ(std::filesystem::file_size(path), before);
-    const std::optional<DecodedImage> kept = DecodeImageFromFile(path);
+    const std::optional<DecodedImage> kept = DecodeQoiFromFile(path);
     ASSERT_TRUE(kept.has_value());
     EXPECT_EQ(kept->pixelsRGBA, pixels) << "the previous picture must survive a failed write";
 
@@ -161,7 +133,7 @@ TEST_F(ImageCodecTest, QoiEncodeReplacesTheDestinationWholeOrNotAtAll) {
     }
     EXPECT_TRUE(EncodeQoiToFile(path, other.data(), 3, 2));
     EXPECT_FALSE(std::filesystem::exists(dir_ / "layer.qoi.tmp"));
-    EXPECT_EQ(DecodeImageFromFile(path)->pixelsRGBA, other);
+    EXPECT_EQ(DecodeQoiFromFile(path)->pixelsRGBA, other);
 }
 
 TEST_F(ImageCodecTest, QoiEncodeCreatesParentDirectories) {
@@ -200,7 +172,6 @@ TEST_F(ImageCodecTest, DecodeRefusesAHeaderClaimingMoreThanTheBudget) {
         const std::vector<uint8_t> padding(64, 0);
         out.write(reinterpret_cast<const char*>(padding.data()), static_cast<std::streamsize>(padding.size()));
     }
-    EXPECT_FALSE(DecodeImageFromFile(path).has_value());
     EXPECT_FALSE(DecodeQoiFromFile(path).has_value());
 
     // ...and a PNG making the same claim.
@@ -214,7 +185,6 @@ TEST_F(ImageCodecTest, DecodeRefusesAHeaderClaimingMoreThanTheBudget) {
                                  0x00, 0x00, 0x00, 0x00};                          // crc, unchecked
         out.write(reinterpret_cast<const char*>(bytes), sizeof(bytes));
     }
-    EXPECT_FALSE(DecodeImageFromFile(png).has_value());
     EXPECT_FALSE(DecodePngFromFile(png).has_value());
 }
 

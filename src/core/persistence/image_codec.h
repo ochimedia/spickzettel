@@ -69,20 +69,14 @@ constexpr uint64_t kMaxImagePixels = uint64_t{64} << 20;
 constexpr uint64_t kMaxImageFileBytes = uint64_t{256} << 20;
 
 // Reads and decodes a previously written image back into raw RGBA8 pixels
-// - used to reload a persisted Shot item's image into a GPU texture (see
+// - used to reload a persisted snippet's picture into a GPU texture (see
 // IOverlayWindow::CreateTextureFromPixels). Returns nullopt if the file
-// doesn't exist, isn't decodable, or is outside the budgets above - never
+// doesn't exist, isn't QOI, or is outside the budgets above - never
 // throws.
-//
-// QOI and PNG both, told apart by the bytes at the front of the file
-// rather than by the extension: a filename is a weaker claim about content
-// than the content itself, and a snippet's directory may hold either.
-std::optional<DecodedImage> DecodeImageFromFile(const std::filesystem::path& path);
-
-// The single-format decoders behind DecodeImageFromFile. Prefer that one
-// for anything read back from the library; these are for a caller that
-// genuinely knows which format it has (and for testing each in isolation).
 std::optional<DecodedImage> DecodeQoiFromFile(const std::filesystem::path& path);
+
+// The same for a PNG, under the same budgets. The library holds none;
+// like EncodePngToFile, it is here for importing pictures from elsewhere.
 std::optional<DecodedImage> DecodePngFromFile(const std::filesystem::path& path);
 
 }  // namespace sz::core::persistence

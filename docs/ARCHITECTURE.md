@@ -748,7 +748,7 @@ only after the record that stopped naming them is on disk. Until then
 the old record is what a restart reloads, and the pictures it names have
 to still be there for it: a sweep that ran on a record that failed to
 land deleted the only image the surviving record pointed at. The sweep
-also takes only pictures (`.qoi`, `.png`); anything else someone put
+also takes only pictures (`.qoi`); anything else someone put
 beside a record is not the store's to delete.
 
 ### A save writes what changed
@@ -833,9 +833,9 @@ Decoding is what a canvas switch pays; encoding is what every screenshot
 pays, synchronously, while the user waits. Both are lossless, and the
 files come out ~30% smaller because stb's encoder is a weak one. Raw
 pixels were measured too and are a trap: reading 8 MB off disk costs
-more than reading 1.6 MB and decoding it. `DecodeImageFromFile`
-dispatches on the file's leading bytes, not its extension, so a `.png`
-still loads. A 256px thumbnail is written beside every picture so the
+more than reading 1.6 MB and decoding it. The library holds QOI only;
+stb's PNG codec stays in `image_codec.h` for importing and exporting
+pictures, which nothing does yet. A 256px thumbnail is written beside every picture so the
 Overview never decodes a fullscreen capture to draw a 200px tile.
 
 A capture's pixels are written synchronously at capture time, not with

@@ -240,11 +240,6 @@ public:
     // Synchronously is also why the format matters: this runs on the
     // render thread while the user waits, and QOI encodes the same pixels
     // in a twentieth of the time PNG took (see EncodeQoiToFile).
-    //
-    // Only the extension of *new* captures changes. A library written
-    // before this holds .png files, named as such in each layer's
-    // imageFile, and LoadImage goes on reading them - see
-    // DecodeImageFromFile.
     std::optional<std::string> SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int width, int height) const;
 
     // The same for a painted layer's pixels, as "<itemId>_p<layerIndex>.qoi":
@@ -270,8 +265,7 @@ public:
     // fullscreen capture decodes to.
     static constexpr int kThumbnailMaxExtent = 256;
 
-    // "<stem>.thumb.qoi" for an image named "<stem>.qoi" (or the legacy
-    // "<stem>.png" - the thumbnail is always QOI). Public because Save()'s
+    // "<stem>.thumb.qoi" for an image named "<stem>.qoi". Public because Save()'s
     // own GC has to recognise these, and because it is the one thing a test
     // needs to look at the file directly.
     static std::string ThumbnailFilename(const std::string& imageFilename);

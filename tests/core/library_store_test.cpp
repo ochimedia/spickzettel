@@ -115,7 +115,7 @@ CanvasManagerSnapshot MakeSampleSnapshot() {
     shot.ImageLayer()->placeholderHue = 123.5f;
     shot.ImageLayer()->opacity = 0.9f;
     shot.ImageLayer()->tintColorRGBA = 0x112233ffu;
-    shot.ImageLayer()->imageFile = "000004.png";
+    shot.ImageLayer()->imageFile = "000004.qoi";
     canvas.items.push_back(shot);
 
     snapshot.canvases.push_back(canvas);
@@ -340,7 +340,7 @@ TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsEverything) {
     EXPECT_FLOAT_EQ(shot.ImageLayer()->placeholderHue, 123.5f);
     EXPECT_FLOAT_EQ(shot.ImageLayer()->opacity, 0.9f);
     EXPECT_EQ(shot.ImageLayer()->tintColorRGBA, 0x112233ffu);
-    EXPECT_EQ(shot.ImageLayer()->imageFile, "000004.png");
+    EXPECT_EQ(shot.ImageLayer()->imageFile, "000004.qoi");
 }
 
 // An item is never layerless, however broken the record - everything
@@ -382,7 +382,7 @@ TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsSeveralLayersInOrder) {
 
     const Item& reloaded = loaded->canvases[0].items[1];
     ASSERT_EQ(reloaded.layers.size(), 2u);
-    EXPECT_EQ(reloaded.layers[0].imageFile, "000004.png");
+    EXPECT_EQ(reloaded.layers[0].imageFile, "000004.qoi");
     EXPECT_EQ(reloaded.layers[1].imageFile, "over.qoi");
     EXPECT_FLOAT_EQ(reloaded.layers[1].opacity, 0.5f);
 }
@@ -1973,10 +1973,8 @@ TEST_F(LibraryStoreTest, LoadThumbnailReturnsNulloptForALibraryThatHasNone) {
     EXPECT_TRUE(store.LoadImage(7, "000007.qoi").has_value());
 }
 
-TEST_F(LibraryStoreTest, ThumbnailsAreNamedForLegacyPngImagesToo) {
-    // A library from before the QOI switch names its images .png; the
-    // sidecar is still QOI, and still has to be found by the same rule.
-    EXPECT_EQ(LibraryStore::ThumbnailFilename("000007.png"), "000007.thumb.qoi");
+TEST_F(LibraryStoreTest, ThumbnailsAreNamedAfterTheirImage) {
+    EXPECT_EQ(LibraryStore::ThumbnailFilename("000007.qoi"), "000007.thumb.qoi");
     EXPECT_EQ(LibraryStore::ThumbnailFilename("4_p1.qoi"), "4_p1.thumb.qoi");
 }
 

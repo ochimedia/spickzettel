@@ -156,14 +156,14 @@ bool IsPlainFilename(const std::string& name) {
 }
 
 // Whether `name` is one this store could have written a picture under: a
-// capture or painted layer (.qoi, or .png from before QOI) or a thumbnail
-// beside one. What the per-snippet collection below is limited to.
+// capture or painted layer or a thumbnail beside one, all .qoi. What the
+// per-snippet collection below is limited to.
 bool IsPictureFilename(const std::string& name) {
     const auto endsWith = [&name](std::string_view suffix) {
         return name.size() >= suffix.size() &&
                std::string_view(name).substr(name.size() - suffix.size()) == suffix;
     };
-    return endsWith(".qoi") || endsWith(".png");
+    return endsWith(".qoi");
 }
 
 json ToJson(const Layer& layer) {
@@ -1946,14 +1946,14 @@ std::optional<DecodedImage> LibraryStore::LoadThumbnail(uint64_t itemId, const s
     if (imageFilename.empty()) {
         return std::nullopt;
     }
-    return DecodeImageFromFile(FindImage(itemId, ThumbnailFilename(imageFilename)));
+    return DecodeQoiFromFile(FindImage(itemId, ThumbnailFilename(imageFilename)));
 }
 
 std::optional<DecodedImage> LibraryStore::LoadImage(uint64_t itemId, const std::string& filename) const {
     if (filename.empty()) {
         return std::nullopt;
     }
-    return DecodeImageFromFile(FindImage(itemId, filename));
+    return DecodeQoiFromFile(FindImage(itemId, filename));
 }
 
 }  // namespace sz::core::persistence

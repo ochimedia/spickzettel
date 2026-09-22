@@ -11,8 +11,8 @@
 #include <iterator>
 #include <system_error>
 
-// Only PNG is needed of stb: pictures are written as QOI and read back
-// through DecodeImageFromFile, never sourced from arbitrary user files.
+// Only PNG is needed of stb. The library itself is QOI throughout; PNG is
+// kept for importing and exporting pictures, which nothing does yet.
 #define STBI_ONLY_PNG
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -199,31 +199,6 @@ std::optional<DecodedImage> DecodeQoiFromFile(const std::filesystem::path& path)
     result.pixelsRGBA.assign(pixels, pixels + (static_cast<size_t>(desc.width) * desc.height * 4));
     free(decoded);
     return result;
-}
-
-std::optional<DecodedImage> DecodeImageFromFile(const std::filesystem::path& path) {
-    // The format's own signature, not the extension - see the header. Both
-    // are fixed-length and at offset 0: "qoif" for QOI, and PNG's own
-    // 8-byte magic, of which the \x89PNG at the front is already unique
-    // enough to dispatch on.
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        return std::nullopt;
-    }
-    char magic[4] = {};
-    in.read(magic, sizeof(magic));
-    if (in.gcount() < static_cast<std::streamsize>(sizeof(magic))) {
-        return std::nullopt;  // too short to be either
-    }
-    in.close();
-
-    if (std::memcmp(magic, "qoif", 4) == 0) {
-        return DecodeQoiFromFile(path);
-    }
-    if (std::memcmp(magic, "\x89PNG", 4) == 0) {
-        return DecodePngFromFile(path);
-    }
-    return std::nullopt;
 }
 
 bool EncodePngToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height) {
