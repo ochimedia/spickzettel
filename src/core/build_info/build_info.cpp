@@ -26,8 +26,15 @@ std::string VersionLine() {
         line += describe;
         line += ")";
     }
+    const char* separator = " - ";
     if (kDemoMode) {
-        line += " - demo";
+        line += separator;
+        line += "demo";
+        separator = ", ";
+    }
+    if (kPrereleaseNotice) {
+        line += separator;
+        line += "prerelease";
     }
     return line;
 }

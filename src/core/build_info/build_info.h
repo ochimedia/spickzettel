@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-// kVersion and kDemoMode come through here so callers need one include.
+// kVersion and the build flags come through here so callers need one include.
 #include "generated/build_config.h"
 
 namespace sz::core::build {
@@ -27,7 +27,8 @@ std::string_view NoticesText();
 // What to show a person: the version, plus the git description when it
 // says something the version does not. An exact release build reads
 // "0.1.0"; a test build reads "0.1.0 (v0.1.0-12-gabc1234-dirty)". A demo
-// build is suffixed " - demo".
+// build is suffixed " - demo", a prerelease " - prerelease", and one that
+// is both " - demo, prerelease".
 std::string VersionLine();
 
 }  // namespace sz::core::build

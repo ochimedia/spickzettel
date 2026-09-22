@@ -20,6 +20,11 @@ TEST(BuildInfoTest, VersionLineNeverRepeatsTheVersionAsTheDescription) {
     EXPECT_EQ(line.find("(v" + std::string(kVersion) + ")"), std::string::npos) << line;
 }
 
+TEST(BuildInfoTest, VersionLineNamesAPrereleaseBuild) {
+    const std::string line = VersionLine();
+    EXPECT_EQ(line.find("prerelease") != std::string::npos, kPrereleaseNotice) << line;
+}
+
 TEST(BuildInfoTest, EmbeddedTextsArePresentAndLfOnly) {
     EXPECT_FALSE(AboutText().empty());
     EXPECT_FALSE(NoticesText().empty());

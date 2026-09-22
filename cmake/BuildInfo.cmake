@@ -16,6 +16,11 @@ function(spickzettel_configure_build_info)
     else()
         set(SPICKZETTEL_DEMO_MODE_CXX "false")
     endif()
+    if(SPICKZETTEL_PRERELEASE_NOTICE)
+        set(SPICKZETTEL_PRERELEASE_NOTICE_CXX "true")
+    else()
+        set(SPICKZETTEL_PRERELEASE_NOTICE_CXX "false")
+    endif()
     configure_file(
         "${CMAKE_SOURCE_DIR}/src/core/build_info/build_config.h.in"
         "${_generated_dir}/build_config.h"

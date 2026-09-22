@@ -21,6 +21,9 @@ option(SPICKZETTEL_BUILD_TESTS "Build the unit tests" ON)
 # Compile-time flag rather than a setting: a demo watermark that can be
 # switched off in config.json is not a watermark. See docs/ARCHITECTURE.md.
 option(SPICKZETTEL_DEMO_MODE "Build a demo binary with a permanent 'Demo Version' mark" OFF)
+# The same reasoning: a build handed out ahead of a release, which says so at
+# every start and wherever it states its version.
+option(SPICKZETTEL_PRERELEASE_NOTICE "Build a prerelease binary that shows a not-for-redistribution notice at every start" OFF)
 # Off by default because it defines IMGUI_ENABLE_TEST_ENGINE for ImGui
 # itself, which every consumer then has to link. On in the debug preset.
 option(SPICKZETTEL_UI_TESTS "Build the UI tests, which drive real widgets by name" OFF)
