@@ -55,6 +55,17 @@
   "popover.bringForward": "Bring forward",
   "popover.moveToAnotherCanvas": "Move to another canvas",
 
+  "_menu": "The context menu a right-click on a snippet opens. Worded shorter than the popover's tooltips above: a menu row is read at a glance, next to its own icon and its own shortcut, not hovered for an explanation.",
+  "menu.fullscreen": "Fullscreen",
+  "menu.restoreSize": "Restore size",
+  "menu.originalSize": "Original size",
+  "menu.clearDrawing": "Clear drawing",
+  "menu.duplicate": "Duplicate",
+  "menu.sendBackward": "Send backward",
+  "menu.bringForward": "Bring forward",
+  "menu.moveToCanvas": "Move to canvas...",
+  "menu.moveToNewCanvas": "Move to new canvas",
+
   "_deleted": "The Recently deleted list the Canvases tab switches to: one row per deleted folder, canvas or snippet, newest first.",
   "deleted.empty": "Nothing has been deleted.",
   "deleted.hint": "Restoring puts a thing back where it was - and whatever held it, if that was deleted too.",

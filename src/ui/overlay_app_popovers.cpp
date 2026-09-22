@@ -442,6 +442,137 @@ void OverlayApp::RenderItemActions(Item& item) {
     ImGui::EndDisabled();
 }
 
+// ================= The context menu =================
+
+void OverlayApp::OpenItemContextMenu(ItemId itemId, ImVec2 at) {
+    itemContextMenuItemId_ = itemId;
+    itemContextMenu_.RequestOpenAt(at);
+}
+
+void OverlayApp::RenderItemContextMenu() {
+    // Found again every frame rather than held by pointer across them:
+    // Duplicate grows the canvas's item vector and the two z-order rows
+    // reorder it, either of which moves every Item in it.
+    Item* item = nullptr;
+    if (itemContextMenuItemId_.has_value()) {
+        if (Canvas* canvas = Manager().CurrentOrNull()) {
+            for (Item& candidate : canvas->items) {
+                if (candidate.id == *itemContextMenuItemId_ && !Manager().IsDeleted(*canvas, candidate)) {
+                    item = &candidate;
+                    break;
+                }
+            }
+        }
+    }
+    // No snippet - deleted while the menu was up, or its canvas switched
+    // out from under it - leaves the rows empty, which is how the menu is
+    // told to close itself (see ContextMenu::Render).
+    const std::optional<int> chosen = itemContextMenu_.Render([&](std::vector<ContextMenuEntry>& rows) {
+        if (item != nullptr) {
+            BuildItemContextMenuRows(*item, rows);
+        }
+    });
+    if (chosen.has_value()) {
+        RunItemMenuAction(static_cast<ItemMenuAction>(*chosen), *itemContextMenuItemId_);
+    }
+    if (!itemContextMenu_.IsOpen()) {
+        itemContextMenuItemId_.reset();
+    }
+}
+
+void OverlayApp::BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEntry>& rows) {
+    const ItemId itemId = item.id;
+    // Same rule as the popover's Clear button: painted pixels count as
+    // something to clear, or the row is greyed out over a snippet that
+    // visibly has ink on it.
+    const Layer* painted = Session::FindPaintedLayer(item);
+    const bool nothingToClear = item.strokes.empty() && (painted == nullptr || !painted->HasPaintedPixels());
+
+    // By value rather than by reference into `rows`: a push_back that
+    // reallocates would leave a reference handed back from an earlier one
+    // dangling, and a menu is exactly the kind of list that grows a row.
+    const auto add = [&rows](ItemMenuAction action, const char* id, const Icon& icon, const char* label,
+                              bool enabled = true, std::string shortcut = {}, bool separatorAbove = false) {
+        rows.push_back(ContextMenuEntry{static_cast<int>(action), id, &icon, label, std::move(shortcut), enabled,
+                                         separatorAbove});
+    };
+
+    // Size first, then what is on the snippet, then where it lives - the
+    // order the popover's own row of buttons is in, which is the order a
+    // hand has already learned.
+    add(ItemMenuAction::ToggleFullscreen, "##menu_fullscreen",
+        item.isFullscreen ? icons::kRestore : icons::kMaximize,
+        item.isFullscreen ? strings::kMenuRestoreSize : strings::kMenuFullscreen);
+    add(ItemMenuAction::ResetSize, "##menu_reset_size", icons::kTarget, strings::kMenuOriginalSize);
+    add(ItemMenuAction::ClearDrawing, "##menu_clear_drawing", icons::kEraser, strings::kMenuClearDrawing,
+        /*enabled=*/!nothingToClear);
+
+    // Duplicate is the selection's, not this one snippet's - unlike the
+    // popover's Copy button, which was only ever reachable for the snippet
+    // the More button belonged to. A right-click has already made this
+    // snippet part of the selection (see HandleItemGesture), so the two
+    // agree whenever only it is selected, and where they differ the
+    // shortcut shown beside the row is the honest answer: Ctrl+D does the
+    // whole selection, so the row that names Ctrl+D has to as well.
+    add(ItemMenuAction::Duplicate, "##menu_duplicate", icons::kCopy, strings::kMenuDuplicate, /*enabled=*/true,
+        MenuShortcutLabel(ShortcutAction::Duplicate), /*separatorAbove=*/true);
+    // Disabled when nothing *overlapping* this snippet is in that
+    // direction, rather than at the ends of the stack - see
+    // CanvasManager::MoveItemLayer for why that is the useful rule.
+    add(ItemMenuAction::SendBackward, "##menu_send_backward", icons::kLayerDown, strings::kMenuSendBackward,
+        Manager().CanMoveItemLayer(itemId, -1));
+    add(ItemMenuAction::BringForward, "##menu_bring_forward", icons::kLayerUp, strings::kMenuBringForward,
+        Manager().CanMoveItemLayer(itemId, 1));
+
+    add(ItemMenuAction::MoveToCanvas, "##menu_move_to_canvas", icons::kMove, strings::kMenuMoveToCanvas,
+        Manager().Canvases().size() > 1, /*shortcut=*/{}, /*separatorAbove=*/true);
+    // The selection again, and for the same reason as Duplicate: this is
+    // the row for the Ctrl+Shift+N beside it.
+    add(ItemMenuAction::MoveToNewCanvas, "##menu_move_to_new_canvas", icons::kPlus, strings::kMenuMoveToNewCanvas,
+        /*enabled=*/true, MenuShortcutLabel(ShortcutAction::NewCanvasWithSelection));
+}
+
+std::string OverlayApp::MenuShortcutLabel(ShortcutAction action) const {
+    // Live(), not Stored(): what is bound right now, profile and all, is
+    // what the row has to promise.
+    const platform::KeyCombo& combo = settings_.Live().shortcuts[ShortcutActionIndex(action)];
+    return combo.key == 0 ? std::string() : FormatKeyComboLabel(combo);
+}
+
+void OverlayApp::RunItemMenuAction(ItemMenuAction action, ItemId itemId) {
+    const ImGuiIO& io = ImGui::GetIO();
+    switch (action) {
+        case ItemMenuAction::ToggleFullscreen:
+            Manager().ToggleFullscreen(itemId, io.DisplaySize.x, io.DisplaySize.y, io.KeyShift);
+            return;
+        case ItemMenuAction::ResetSize:
+            Manager().ResetItemToNativeSize(itemId);
+            return;
+        case ItemMenuAction::ClearDrawing:
+            ClearItemDrawing(itemId);
+            return;
+        case ItemMenuAction::Duplicate:
+            DuplicateSelection();
+            return;
+        case ItemMenuAction::SendBackward:
+            Manager().MoveItemLayer(itemId, -1);
+            return;
+        case ItemMenuAction::BringForward:
+            Manager().MoveItemLayer(itemId, 1);
+            return;
+        case ItemMenuAction::MoveToCanvas:
+            // Opens the Overview in picker mode to choose a destination -
+            // the menu has already closed itself by the time this runs (a
+            // chosen row closes the popup), so unlike the popover's own
+            // Move button there is nothing left here to dismiss.
+            OpenPicker(itemId, /*isCopy=*/false);
+            return;
+        case ItemMenuAction::MoveToNewCanvas:
+            MoveSelectionToNewCanvas();
+            return;
+    }
+}
+
 // ================= The colour chooser =================
 
 void OverlayApp::OpenColorChooser(ImVec2 from) {

@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "ui/context_menu.h"
 #include "ui/icon_draw.h"
 #include "core/build_info/build_info.h"
 #include "core/canvas/canvas_manager.h"
@@ -130,6 +131,24 @@ struct BoxSelection {
         const float y0 = std::min(fromY, toY);
         return Rect{x0, y0, std::max(fromX, toX) - x0, std::max(fromY, toY) - y0};
     }
+};
+
+// What a row of the snippet context menu does - the value a chosen row
+// carries back out of ContextMenu::Render (see BuildItemContextMenuRows,
+// which names each one, and RunItemMenuAction, which runs it).
+//
+// The UI's own, unlike ChromeButton next door in core/session/actions.h:
+// nothing persists these and no setting names them, so they are free to
+// be reordered, renamed and added to as the menu grows.
+enum class ItemMenuAction {
+    ToggleFullscreen,
+    ResetSize,
+    ClearDrawing,
+    Duplicate,
+    SendBackward,
+    BringForward,
+    MoveToCanvas,
+    MoveToNewCanvas,
 };
 
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
@@ -264,6 +283,10 @@ public:
     bool IsOverviewOpen() const { return overviewOpen_; }
     // Whether the colour chooser is up - see RenderColorChooser.
     bool IsColorChooserOpen() const { return colorChooserOpen_; }
+    // Whether the snippet context menu is up, and over which snippet -
+    // see RenderItemContextMenu.
+    bool IsItemContextMenuOpen() const { return itemContextMenu_.IsOpen(); }
+    std::optional<ItemId> ItemContextMenuItem() const { return itemContextMenuItemId_; }
     // How far out the canvas bar is, 0 to 1 - see EdgeReveal and
     // UpdateEdgePanels.
     float CanvasBarReveal() const { return canvasBarReveal_.amount; }
@@ -617,6 +640,26 @@ private:
     void RenderItemBackgroundColour(Layer& picture);
     void RenderItemTextStyle(Item& item);
     void RenderItemActions(Item& item);
+
+    // The context menu a right-click on a snippet opens - the popover's
+    // actions as a list of named rows with their shortcuts beside them,
+    // plus the ones that only had a key until now. Asked for from the raw
+    // mouse callback, which is why opening is a request rather than a call
+    // (see ContextMenu::RequestOpenAt).
+    void OpenItemContextMenu(ItemId itemId, ImVec2 at);
+    void RenderItemContextMenu();
+    // The rows, for the snippet the menu is open over. Rebuilt every frame
+    // it is up, so "nothing to clear" and "nothing behind it" are answered
+    // from the canvas as it is now rather than as it was when the menu
+    // opened.
+    void BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEntry>& rows);
+    void RunItemMenuAction(ItemMenuAction action, ItemId itemId);
+    // "Ctrl+D" for a bound action, empty for an unbound one - what a menu
+    // row shows on its right. FormatKeyComboLabel's "(none)" is the right
+    // answer for a key editor and the wrong one here, where an action
+    // without a shortcut should simply show nothing.
+    std::string MenuShortcutLabel(ShortcutAction action) const;
+
     void RenderRegionCaptureOverlay();
     // RectEraser's own drag-preview overlay (see rectErase_) -
     // same visual language as RenderRegionCaptureOverlay (a translucent
@@ -1490,6 +1533,12 @@ private:
     // Where to open the popover above - captured from the "More" button's
     // own screen position at click time (see ActivateBarButton).
     ImVec2 itemPropertiesPopoverAnchor_ = ImVec2(0.0f, 0.0f);
+    // The snippet context menu, and which snippet it is up for. The menu
+    // owns its own "asked for, not yet opened" state; the id is kept here
+    // because the rows are the snippet's, and it has to survive the frame
+    // between the right-click and the menu appearing.
+    ContextMenu itemContextMenu_{"##item_context_menu"};
+    std::optional<ItemId> itemContextMenuItemId_ = std::nullopt;
     // Why the popovers open through request flags (this one, and
     // itemPropertiesPopoverRequested_ below) rather than calling
     // ImGui::OpenPopup where the button fires: a selection bar button

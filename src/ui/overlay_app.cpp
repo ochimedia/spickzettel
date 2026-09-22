@@ -1266,6 +1266,11 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // popover a snippet's More button opens, and the colour chooser.
     RenderCanvasBar(displayW, displayH);
     RenderItemPropertiesPopover();
+    // And the menu a right-click on a snippet opens - beside the popover
+    // rather than inside it: the two hold the same actions and are opened
+    // different ways, and only one of them can be up at a time anyway,
+    // since opening either closes whatever popup was there.
+    RenderItemContextMenu();
     // After both things that can open it, so it opens on the frame after
     // either asked - and at the top level every frame, so the popup always
     // belongs to the same window whichever of the two it came from.

@@ -1160,7 +1160,10 @@ section of the UI (items, input, paint, popovers, docks, overview,
 deleted, undo) with `overlay_app.cpp` holding the per-frame entry points
 and construction; it is still one class. Helpers used by more than one
 file live in `overlay_app_internal.h` under `overlay_detail`; anything
-used by one file stays a file-local helper.
+used by one file stays a file-local helper. `ui::ContextMenu`
+(`context_menu.*`) is the one piece drawn beside the class rather than
+inside it: it is a widget, not a view of the session, and depends on
+nothing but Dear ImGui and the icon tables.
 
 Panels - popovers, the canvas bar, the dock, the note editor, the
 Overview - are ordinary ImGui windows and widgets. Items and the
@@ -1274,6 +1277,29 @@ Properties popover opens through a request flag rather than
 `ImGui::OpenPopup` from the release: the raw callback runs during the
 message pump, before that frame's `NewFrame`, where `OpenPopup` has no
 current window and dereferences an empty id stack.
+
+A right click on a snippet opens its context menu. Right-drag already
+resized from the nearest edge, so the two are told apart by the one thing
+the gesture engine was already tracking: whether the press travelled its
+4px. On the snippet being drawn on the right button belongs to the
+eraser, and the click that gets past it is Alt's, which leaves drawing
+mode and opens nothing.
+
+The menu itself knows nothing about the app - rows in, the chosen row's
+action out, every colour read from the current ImGui style rather than
+the palette - so the dock's canvases and the Recently deleted list can
+have their own without it growing a second personality. Each row carries
+the shortcut of the action it runs, read from the live binding, which
+makes the menu the place the keys are learned as well as pressed; a row
+whose action has no binding shows nothing rather than the key editor's
+"(none)". Two rows say the selection's name and not the snippet's -
+Duplicate and Move to new canvas - because the shortcut printed beside
+each is the selection's, and a row that names Ctrl+D has to do what
+Ctrl+D does. A row that cannot be chosen right now is greyed rather than
+dropped, so the menu is the same shape over every snippet and a hand can
+learn where a row is. While it is up ImGui claims the mouse, so the press
+that dismisses it does nothing else - which is what a context menu does
+everywhere, and is why a right-drag after a right-click resizes nothing.
 
 Which buttons either bar carries is a setting, and anything the file gets
 wrong is made sense of rather than obeyed: a name from the other bar is

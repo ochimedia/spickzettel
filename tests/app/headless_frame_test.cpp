@@ -697,9 +697,12 @@ TEST_F(HeadlessAppTest, WithSelectInHandADragAnywhereOnASnippetPicksItUp) {
 }
 
 // A right click on a snippet - one not being drawn on - selects it and
-// nothing more; on empty canvas a right click does nothing (see the tests
-// under "Making a snippet").
-TEST_F(HeadlessAppTest, ARightClickOnASnippetSelectsItAndEscapeClearsTheSelection) {
+// opens its context menu, and makes nothing and changes nothing else; on
+// empty canvas a right click does nothing (see the tests under "Making a
+// snippet"). Escape then closes the menu, and the *next* Escape clears
+// the selection: an open popover takes the first press (see
+// HandleSelectionKeys).
+TEST_F(HeadlessAppTest, ARightClickOnASnippetSelectsItAndOpensItsContextMenu) {
     ShowEditMode();
     StepFrame();
     DoubleClick(640.0f, 400.0f);  // a screenshot, fullscreen, to click on
@@ -712,9 +715,50 @@ TEST_F(HeadlessAppTest, ARightClickOnASnippetSelectsItAndEscapeClearsTheSelectio
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
     EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().IsItemContextMenuOpen());
+    EXPECT_EQ(App().ItemContextMenuItem(), App().Selection().front());
+
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(App().IsItemContextMenuOpen());
+    EXPECT_EQ(App().Selection().size(), 1u) << "the menu took that press, not the selection";
 
     PressKey(ImGuiKey_Escape);
     EXPECT_TRUE(App().Selection().empty());
+}
+
+// The menu belongs to the click that never dragged: a right-drag is a
+// resize (see ARightDragFromNearestEdgeResizes...) and must leave no menu
+// hanging open over the snippet it just resized.
+TEST_F(HeadlessAppTest, ARightDragResizesAndOpensNoContextMenu) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    PressKey(ImGuiKey_Escape);  // out of drawing mode, where right is the eraser
+    ASSERT_FALSE(App().DrawingItem().has_value());
+    const float before = Canvases().CurrentOrNull()->items[0].rect.w;
+
+    Drag(690.0f, 420.0f, 780.0f, 420.0f, 10, platform::MouseButton::Right);
+    EXPECT_GT(Canvases().CurrentOrNull()->items[0].rect.w, before + 1.0f);
+    EXPECT_FALSE(App().IsItemContextMenuOpen());
+}
+
+// The menu follows the snippet it was opened over: delete that snippet
+// while it is up and it closes itself rather than acting on nothing (see
+// ContextMenu::Render, which reads an empty row list as "close").
+TEST_F(HeadlessAppTest, TheContextMenuClosesWhenItsSnippetGoesAway) {
+    ShowEditMode();
+    StepFrame();
+    DoubleClick(640.0f, 400.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    PressKey(ImGuiKey_Escape);
+
+    RightClick(640.0f, 400.0f);
+    ASSERT_TRUE(App().IsItemContextMenuOpen());
+
+    controller_->GetSession().Manager().DeleteItem(*App().ItemContextMenuItem());
+    StepFrames(2);
+    EXPECT_FALSE(App().IsItemContextMenuOpen());
+    EXPECT_FALSE(App().ItemContextMenuItem().has_value());
 }
 
 // On the snippet being drawn on, a right-drag is the eraser, whatever tool
@@ -757,6 +801,7 @@ TEST_F(HeadlessAppTest, ARightDragOnTheSnippetBeingDrawnOnErasesAndARightClickLe
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
     EXPECT_EQ(App().Selection().size(), 1u) << "still selected";
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 2u) << "a click erases nothing";
+    EXPECT_FALSE(App().IsItemContextMenuOpen()) << "leaving the mode is all that click did";
 }
 
 // Drawing mode is entered with the pen, whatever tool was used last time.
@@ -1838,6 +1883,14 @@ TEST_F(HeadlessAppTest, ARightClickOnAFullscreenSnippetLeavesItFullscreen) {
 
     RightClick(640.0f, 400.0f);
     EXPECT_TRUE(Canvases().CurrentOrNull()->items[0].isFullscreen);
+
+    // The click opened the snippet's context menu, and while a popup is up
+    // ImGui claims the mouse (io.WantCaptureMouse) - so the next press
+    // dismisses the menu and does nothing else, exactly as a context menu
+    // behaves anywhere. Escape is the same dismissal without spending a
+    // press on it.
+    PressKey(ImGuiKey_Escape);
+    ASSERT_FALSE(App().IsItemContextMenuOpen());
 
     Drag(1200.0f, 400.0f, 1100.0f, 400.0f, 10, platform::MouseButton::Right);
     EXPECT_FALSE(Canvases().CurrentOrNull()->items[0].isFullscreen);

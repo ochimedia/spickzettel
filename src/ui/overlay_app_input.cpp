@@ -599,10 +599,16 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             if (ended.button == platform::MouseButton::Right && !ended.moved) {
                 // A right press on a snippet that never dragged is a right
                 // click - a drag resizes instead. On the snippet being
-                // drawn on it leaves drawing mode; on any other it has
-                // selected the snippet, and that is all.
+                // drawn on it leaves drawing mode, and opens nothing:
+                // there, the right button belongs to the eraser (see
+                // OnMouse), and this click only got here because Alt took
+                // the snippet out of its hands. On any other snippet the
+                // press has already selected it, and the click opens its
+                // context menu where it landed.
                 if (drawingItem_ == ended.item) {
                     ExitDrawingMode();
+                } else {
+                    OpenItemContextMenu(ended.item, ImVec2(event.position.x, event.position.y));
                 }
             }
             return true;

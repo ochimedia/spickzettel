@@ -49,6 +49,7 @@ gtest_discover_tests(sz_core_tests)
 if(SPICKZETTEL_UI_TESTS)
     add_executable(sz_ui_tests
         ui/canvas_bar_ui_test.cpp
+        ui/context_menu_ui_test.cpp
         ui/overview_ui_test.cpp
         ui/settings_ui_test.cpp
     )
