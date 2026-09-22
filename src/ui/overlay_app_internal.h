@@ -114,38 +114,6 @@ inline constexpr float kNoteTextPad = 6.0f;
 // pen/eraser/tool mouse pipeline (RectEraser's own drag threshold).
 inline constexpr float kRegionMinSize = 24.0f;
 
-// Preset colors, offered as a snippet's background tints (see
-// RenderItemPropertiesPopover), in this order.
-struct PresetColor {
-    uint8_t r, g, b;
-};
-inline constexpr PresetColor kPresetPenColors[] = {
-    {0xff, 0x6a, 0x3d}, {0xff, 0x4d, 0x6d}, {0xff, 0xd2, 0x3f},
-    {0x4d, 0xd6, 0xb8}, {0x5a, 0xa9, 0xff}, {0xf5, 0xf7, 0xf9},
-    // Black: every one of the six above is a bright ink meant for a dark or
-    // busy background, and something has to draw on a *light* one.
-    {0x00, 0x00, 0x00},
-};
-
-// A preset as the packed 0xRRGGBBAA every colour-carrying field in the app
-// uses, opaque - one function for the four shifts, rather than each
-// swatch row writing them out by hand.
-inline constexpr uint32_t ColorFromPreset(const PresetColor& c) {
-    return (static_cast<uint32_t>(c.r) << 24) | (static_cast<uint32_t>(c.g) << 16) |
-            (static_cast<uint32_t>(c.b) << 8) | 0xFFu;
-}
-
-// True for a preset close enough to pure white to be visually
-// indistinguishable from it. Only the item-background swatch row cares:
-// that row already offers literal white as its own dedicated "no tint"
-// entry (see RenderItemPropertiesPopover for why it can't just use the
-// preset - a tint multiply by 0xF5F7F9 isn't a no-op, only 0xFFFFFF is),
-// so drawing the near-white preset alongside it put two swatches on screen
-// that look identical and do subtly different things.
-inline constexpr bool IsNearWhitePreset(const PresetColor& c) {
-    return c.r >= 0xF0 && c.g >= 0xF0 && c.b >= 0xF0;
-}
-
 // The backing a text note gets by default (ApplyCreationDefaults, and the
 // first-run welcome note). Half-transparent black: note text defaults to
 // white, and white on a light backing is poor contrast wherever the overlay

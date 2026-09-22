@@ -48,32 +48,6 @@ bool ColorSwatchButton(ImU32 fillColor, bool selected) {
     return pressed;
 }
 
-// The preset pen colours as a row of round swatches, the one whose rgb is
-// `currentRGBA`'s ringed. `continuesRow` puts the first swatch on the
-// same line as whatever came before it. Returns the picked preset's
-// colour, opaque, or nullopt.
-std::optional<uint32_t> PresetSwatchRow(uint32_t currentRGBA, bool skipNearWhite, bool continuesRow) {
-    std::optional<uint32_t> picked;
-    bool first = true;
-    for (size_t i = 0; i < std::size(kPresetPenColors); ++i) {
-        const PresetColor& c = kPresetPenColors[i];
-        if (skipNearWhite && IsNearWhitePreset(c)) {
-            continue;
-        }
-        if (!first || continuesRow) {
-            ImGui::SameLine(0.0f, 2.0f);
-        }
-        first = false;
-        const bool selected = ((currentRGBA >> 24) & 0xFF) == c.r && ((currentRGBA >> 16) & 0xFF) == c.g &&
-                              ((currentRGBA >> 8) & 0xFF) == c.b;
-        ImGui::PushID(static_cast<int>(i));
-        if (ColorSwatchButton(IM_COL32(c.r, c.g, c.b, 255), selected)) {
-            picked = ColorFromPreset(c);
-        }
-        ImGui::PopID();
-    }
-    return picked;
-}
 }  // namespace
 
 // ================= Canvases =================
@@ -212,7 +186,6 @@ void OverlayApp::RenderItemPropertiesPopover() {
     if (Layer* picture = it->ImageLayer()) {
         RenderItemBackgroundColour(*picture);
         RenderItemTextStyle(*it);
-        RenderItemActions(*it);
         // After the background-colour ColorEdit3 swatch, not before - see
         // KeepChildPopupsInFront.
         KeepChildPopupsInFront();
@@ -260,11 +233,11 @@ void OverlayApp::RenderItemOpacity(Item& item) {
 }
 
 void OverlayApp::RenderItemBackgroundColour(Layer& picture) {
-    // White is a deliberate, meaningful default (see Layer::tintColorRGBA's
-    // own doc comment - it's a no-op multiply tint on a real capture), so
-    // it gets its own dedicated swatch rather than relying on
-    // kPresetPenColors' own near-white entry, which is close but not
-    // literal white and so wouldn't actually be a no-op.
+    // White, and the picker for everything else. White gets a swatch of
+    // its own because it is the one colour with a meaning here: a no-op
+    // multiply tint on a real capture (see Layer::tintColorRGBA), the way
+    // back to the picture as it was - and hitting exact white in a picker
+    // takes aim. Nothing else is preset: the picker does the whole job.
     ImGui::PushID("##bg_color_section");
     ImGui::TextUnformatted(strings::kPopoverBackgroundColor);
     constexpr uint32_t kWhiteBackground = 0xFFFFFFFFu;
@@ -275,17 +248,10 @@ void OverlayApp::RenderItemBackgroundColour(Layer& picture) {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverBackgroundWhiteTip);
     }
-    // The dedicated white swatch above already covers the near-white
-    // preset - see IsNearWhitePreset.
-    if (const std::optional<uint32_t> picked =
-            PresetSwatchRow(picture.tintColorRGBA, /*skipNearWhite=*/true, /*continuesRow=*/true)) {
-        picture.tintColorRGBA = *picked;
-        Manager().MarkChanged();
-    }
-    ImGui::SameLine(0.0f, 2.0f);
+    ImGui::SameLine(0.0f, 6.0f);
     float rgb[3];
     ColorRGBAToFloats(picture.tintColorRGBA, rgb);
-    if (ImGui::ColorEdit3(Labeled(strings::kPopoverCustom, "bgcolor"), rgb, ImGuiColorEditFlags_NoInputs)) {
+    if (ImGui::ColorEdit3("##bgcolor", rgb, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
         picture.tintColorRGBA = FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF));
         Manager().MarkChanged();
     }
@@ -314,153 +280,21 @@ void OverlayApp::RenderItemTextStyle(Item& item) {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverTextSizeTip);
     }
-    // Alpha is preserved rather than forced opaque: unlike the background
-    // colour, Item::noteTextColorRGBA's own alpha byte is live (text has no
-    // separate opacity field), so picking a new hue shouldn't silently undo
-    // a faded caption.
-    if (const std::optional<uint32_t> picked =
-            PresetSwatchRow(item.noteTextColorRGBA, /*skipNearWhite=*/false, /*continuesRow=*/false)) {
-        item.noteTextColorRGBA = (*picked & 0xFFFFFF00u) | (item.noteTextColorRGBA & 0xFFu);
-        Manager().MarkChanged();
-    }
-    ImGui::SameLine(0.0f, 2.0f);
-    // ColorEdit4, not the ColorEdit3 the background colour uses - see the
-    // alpha note just above.
+    // ColorEdit4, not the ColorEdit3 the background colour uses: unlike
+    // the background colour, Item::noteTextColorRGBA's own alpha byte is
+    // live (text has no separate opacity field), so a caption can be faded
+    // from here.
     float rgba[4];
     ColorRGBAToFloats(item.noteTextColorRGBA, rgba);
     rgba[3] = static_cast<float>(item.noteTextColorRGBA & 0xFFu) / 255.0f;
-    if (ImGui::ColorEdit4(Labeled(strings::kPopoverCustom, "notetextcolor"), rgba,
-                           ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar |
+    if (ImGui::ColorEdit4("##notetextcolor", rgba,
+                           ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar |
                                ImGuiColorEditFlags_AlphaPreview)) {
         item.noteTextColorRGBA =
             FloatsToColorRGBA(rgba, static_cast<uint8_t>(std::clamp(rgba[3], 0.0f, 1.0f) * 255.0f + 0.5f));
         Manager().MarkChanged();
     }
     ImGui::PopID();
-}
-
-void OverlayApp::RenderItemActions(Item& item) {
-    // Fullscreen toggle, copy, z-order, and move-to-another-canvas all
-    // live here - opened from the selection bar's "More" button (see
-    // ActivateBarButton); Delete is a direct one-click button on that
-    // same bar (its Close), and the Delete key, as the one item action
-    // reached for often enough to skip this popover entirely.
-    //
-    // Everything read off the item is read here, before any button: Copy
-    // adds to the canvas's items, which can move `item`.
-    const ItemId itemId = item.id;
-    const bool isFullscreen = item.isFullscreen;
-    // "Nothing to clear" has to count painted pixels too, or the button is
-    // greyed out over a snippet that visibly has ink on it.
-    const Layer* paintedLayer = Session::FindPaintedLayer(item);
-    const bool nothingToClear = item.strokes.empty() && (!paintedLayer || !paintedLayer->HasPaintedPixels());
-
-    ImGui::Spacing();
-    if (PillIconButton("##fullscreen", isFullscreen ? icons::kRestore : icons::kMaximize, false)) {
-        Manager().ToggleFullscreen(itemId, ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y,
-                                         ImGui::GetIO().KeyShift);
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", isFullscreen ? strings::kPopoverRestoreSize : strings::kPopoverMakeFullscreen);
-    }
-    ImGui::SameLine();
-    // Resets to the item's permanent original size (Item::nativeW/H - a
-    // captured screenshot's actual pixel dimensions, or a drawing's
-    // creation size), re-centered on its current position - see
-    // CanvasManager::ResetItemToNativeSize's own doc comment.
-    if (PillIconButton("##reset_size", icons::kTarget, false)) {
-        Manager().ResetItemToNativeSize(itemId);
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverResetToOriginalSize);
-    }
-    ImGui::SameLine();
-    // Removes every stroke drawn on this item - a screenshot's own
-    // captured pixels (if it's a Shot item) are untouched, only ink drawn
-    // on top of it. Disabled when there's nothing to clear, same
-    // reasoning as the z-order buttons below being disabled at a stack
-    // boundary.
-    ImGui::BeginDisabled(nothingToClear);
-    if (PillIconButton("##clear_drawing", icons::kEraser, false)) {
-        ClearItemDrawing(itemId);
-    }
-    ImGui::EndDisabled();
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverClearDrawing);
-    }
-    ImGui::SameLine();
-    // Duplicates onto this same canvas (CanvasManager::DuplicateItem,
-    // unlike Move's cross-canvas MoveOrCopyItemToCanvas, which no-ops for
-    // a same-canvas target) - the user can move the new copy elsewhere
-    // afterward with its own Move button if they want to, same as any
-    // other item.
-    if (PillIconButton("##copy_item", icons::kCopy, false)) {
-        if (const ItemId newId = Manager().DuplicateItem(itemId); newId != 0) {
-            if (!session_.ClonePicturesForCopy(itemId, newId)) {
-                ShowActionToast(strings::kToastCopiedWithoutPicture);
-            }
-            OffsetCopiedItem(newId);
-            // The copy sits on *this* canvas, so its painted layer - pixels
-            // in memory, no texture yet - needs one now, not on the next
-            // canvas switch, which is the only other time the sync runs.
-            // Without this the copy of a painted snippet came up blank and
-            // stayed blank until the user happened to switch away and
-            // back. Same call the cross-canvas copy makes (see
-            // SendPickedItemTo), for the same reason.
-            session_.SyncTexturesToCurrentCanvas();
-            ShowActionToast(strings::kToastCopied);
-        }
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverCopyToThisCanvas);
-    }
-    ImGui::SameLine();
-    // Disabled when there is nothing in that direction *overlapping* this
-    // snippet, rather than at the ends of the stack: a step that passes a
-    // snippet somewhere else on the canvas changes nothing anybody can
-    // see, and a button that looks available and does nothing visible is
-    // the bug this rule came from - see CanvasManager::MoveItemLayer.
-    ImGui::BeginDisabled(!Manager().CanMoveItemLayer(itemId, -1));
-    if (PillIconButton("##backward", icons::kLayerDown, false)) {
-        Manager().MoveItemLayer(itemId, -1);
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverSendBackward);
-    }
-    ImGui::EndDisabled();
-    ImGui::SameLine();
-    ImGui::BeginDisabled(!Manager().CanMoveItemLayer(itemId, 1));
-    if (PillIconButton("##forward", icons::kLayerUp, false)) {
-        Manager().MoveItemLayer(itemId, 1);
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverBringForward);
-    }
-    ImGui::EndDisabled();
-    ImGui::SameLine();
-    // Cross-canvas move (unlike Copy above, which duplicates onto this
-    // same canvas) - see OpenPicker, which opens the Overview in picker
-    // mode so the user can choose a destination.
-    ImGui::BeginDisabled(Manager().Canvases().size() <= 1);
-    if (PillIconButton("##move_item", icons::kMove, false)) {
-        OpenPicker(itemId, /*isCopy=*/false);
-        // This popup is still "open" as far as ImGui is concerned until
-        // something explicitly closes it - clicking a button inside it
-        // doesn't count, only clicking outside its bounds or Escape
-        // normally does. The Overview drawn on top of it (see OnFrame's
-        // own call order) doesn't count as "outside" either, since it's
-        // an ordinary window, not this popup's own backdrop - so without
-        // this, the popup stayed open underneath, and the user needed one
-        // extra click just to dismiss it before they could interact with
-        // anything else. Must be called while this popup is still
-        // current, i.e. before EndPopup - same rule as every other
-        // CloseCurrentPopup call in this file.
-        ImGui::CloseCurrentPopup();
-    }
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverMoveToAnotherCanvas);
-    }
-    ImGui::EndDisabled();
 }
 
 // ================= The context menu =================
@@ -528,13 +362,12 @@ void OverlayApp::BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEnt
     add(ItemMenuAction::ClearDrawing, "##menu_clear_drawing", icons::kEraser, strings::kMenuClearDrawing,
         /*enabled=*/!nothingToClear);
 
-    // Duplicate is the selection's, not this one snippet's - unlike the
-    // popover's Copy button, which was only ever reachable for the snippet
-    // the More button belonged to. A right-click has already made this
-    // snippet part of the selection (see HandleItemGesture), so the two
-    // agree whenever only it is selected, and where they differ the
-    // shortcut shown beside the row is the honest answer: Ctrl+D does the
-    // whole selection, so the row that names Ctrl+D has to as well.
+    // Duplicate is the selection's, not this one snippet's. A right-click
+    // has already made this snippet part of the selection (see
+    // HandleItemGesture), so the two agree whenever only it is selected,
+    // and where they differ the shortcut shown beside the row is the honest
+    // answer: Ctrl+D does the whole selection, so the row that names Ctrl+D
+    // has to as well.
     add(ItemMenuAction::Duplicate, "##menu_duplicate", icons::kCopy, strings::kMenuDuplicate, /*enabled=*/true,
         MenuShortcutLabel(ShortcutAction::Duplicate), /*separatorAbove=*/true);
     // Disabled when nothing *overlapping* this snippet is in that
@@ -584,8 +417,8 @@ void OverlayApp::RunItemMenuAction(ItemMenuAction action, ItemId itemId) {
         case ItemMenuAction::MoveToCanvas:
             // Opens the Overview in picker mode to choose a destination -
             // the menu has already closed itself by the time this runs (a
-            // chosen row closes the popup), so unlike the popover's own
-            // Move button there is nothing left here to dismiss.
+            // chosen row closes the popup), so there is nothing left here
+            // to dismiss.
             OpenPicker(itemId, /*isCopy=*/false);
             return;
         case ItemMenuAction::MoveToNewCanvas:

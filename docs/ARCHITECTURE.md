@@ -1369,6 +1369,18 @@ learn where a row is. While it is up ImGui claims the mouse, so the press
 that dismisses it does nothing else - which is what a context menu does
 everywhere, and is why a right-drag after a right-click resizes nothing.
 
+The menu is the one place a snippet's actions live. The Properties
+popover (the bar's More button) had a row of the same actions as icon
+buttons, and kept it for a while after the menu arrived; it went, and
+the popover is left with what describes a snippet rather than what is
+done to it - the two opacities, the background colour and the text's
+size and colour. Its colours are a picker each, with no preset swatches
+beside them: the picker does the whole job, and a row of presets was a
+second way to do part of it. The background keeps one swatch, white,
+because white is the one colour with a meaning there - the no-op tint
+that gives a capture back as it was - and hitting it exactly in a picker
+takes aim.
+
 Which buttons either bar carries is a setting, and anything the file gets
 wrong is made sense of rather than obeyed: a name from the other bar is
 dropped, a duplicate kept once, and a button the file never mentioned is

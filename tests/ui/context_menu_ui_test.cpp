@@ -82,6 +82,43 @@ TEST_F(ContextMenuUiTest, ARowWithNothingToDoIsThereButDisabled) {
     EXPECT_EQ(duplicateFlags & ImGuiItemFlags_Disabled, 0);
 }
 
+// The Properties popover keeps what describes a snippet and gives what is
+// done to it to this menu: none of the old row of action buttons, and a
+// picker for each colour with white the one swatch left beside the
+// background's.
+TEST_F(UiTest, ThePropertiesPopoverHasPickersAndNoActionRow) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 700.0f, 550.0f);  // a screenshot, which has a background colour
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    RawClick(500.0f, 420.0f);
+    ASSERT_EQ(App().Selection().size(), 1u);
+    const std::optional<ImVec2> more = App().SelectionBarButtonCenter(ChromeButton::More);
+    ASSERT_TRUE(more.has_value());
+    RawClick(more->x, more->y);
+
+    bool hasBackgroundPicker = false;
+    bool hasTextPicker = false;
+    bool hasWhite = false;
+    bool hasPreset = false;
+    bool hasActionRow = false;
+    RunUi("read the popover", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//$FOCUSED");
+        hasBackgroundPicker = ctx->ItemExists("##bg_color_section/##bgcolor/##ColorButton");
+        hasTextPicker = ctx->ItemExists("##note_text_section/##notetextcolor/##ColorButton");
+        hasWhite = ctx->ItemExists("##bg_color_section/##swatch");
+        hasPreset = ctx->ItemExists("##bg_color_section/$$0/##swatch") ||
+                    ctx->ItemExists("##note_text_section/$$0/##swatch");
+        hasActionRow = ctx->ItemExists("##fullscreen") || ctx->ItemExists("##copy_item") ||
+                       ctx->ItemExists("##move_item");
+    });
+    EXPECT_TRUE(hasBackgroundPicker);
+    EXPECT_TRUE(hasTextPicker);
+    EXPECT_TRUE(hasWhite);
+    EXPECT_FALSE(hasPreset);
+    EXPECT_FALSE(hasActionRow);
+}
+
 // ===== The canvas bar's tiles =====
 
 class CanvasBarMenuUiTest : public UiTest {

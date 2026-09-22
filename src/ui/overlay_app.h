@@ -678,12 +678,12 @@ private:
     // "More" button opened it on.
     void RenderItemPropertiesPopover();
     // Its sections, top to bottom, for the item it is open on: the two
-    // opacities, the background colour, the text's size and colour, and
-    // the row of actions.
+    // opacities, the background colour, and the text's size and colour.
+    // What is done *to* a snippet - fullscreen, copy, restack, move - is
+    // the context menu's (see below), not the popover's.
     void RenderItemOpacity(Item& item);
     void RenderItemBackgroundColour(Layer& picture);
     void RenderItemTextStyle(Item& item);
-    void RenderItemActions(Item& item);
 
     // The context menu a right-click on a snippet opens - the popover's
     // actions as a list of named rows with their shortcuts beside them,
@@ -1169,9 +1169,9 @@ private:
 
 
 
-    // Overview: switch canvases, delete/reorder them, or (when opened via
-    // the Properties popover's Move or Copy button) pick a target canvas
-    // for that item.
+    // Overview: switch canvases, delete/reorder them, or (when opened from
+    // the context menu's Move to canvas) pick a target canvas for that
+    // item.
     void OpenOverview();
     void OpenPicker(ItemId itemId, bool isCopy);
     void CloseOverview();

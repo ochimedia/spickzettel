@@ -554,7 +554,7 @@ void OverlayApp::OffsetCopiedItem(ItemId itemId) {
 // A press that selects a snippet brings it to the front while
 // AppConfig::raiseSelectedSnippet is on (the default), the way a window
 // manager raises a window you take hold of; off, the stacking order is the
-// Properties popover's alone to change, as in a drawing program. A press
+// context menu's alone to change, as in a drawing program. A press
 // on a snippet of a multi-selection brings the whole selection forward,
 // keeping its own order: it is the selection that is taken hold of. A
 // Shift-click that adds to or takes from the selection restacks nothing.

@@ -229,7 +229,8 @@ struct AppConfig {
     // Whether selecting a snippet - a click on it, or the press that starts
     // dragging it - brings it in front of the others, the way a window
     // manager raises a window you take hold of. Off, the stacking order is
-    // the Properties popover's alone to change, as in a drawing program.
+    // the context menu's alone to change (Send backward, Bring forward), as
+    // in a drawing program.
     // See OverlayApp::HandleItemGesture.
     bool raiseSelectedSnippet = true;
     // The two bars that float over the selection: which buttons each one
