@@ -28,6 +28,7 @@ add_executable(sz_core_tests
     platform/pen_glyph_test.cpp
     ui/icon_draw_test.cpp
     ui/shortcut_targets_test.cpp
+    ui/ui_strings_file_test.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # sz_app, not only sz_core: the headless frame tests and the tray controller
@@ -39,6 +40,11 @@ spickzettel_set_warnings(sz_core_tests)
 # The benchmark reads its scenario from the environment; MSVC deprecates
 # getenv for a shared-state reason that does not apply to a test.
 set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
+
+# The string catalogue as it is in the source tree, for the test that parses
+# it strictly - see ui/ui_strings_file_test.cpp.
+set_source_files_properties(ui/ui_strings_file_test.cpp PROPERTIES COMPILE_DEFINITIONS
+    "SPICKZETTEL_UI_STRINGS_JSON=\"${CMAKE_SOURCE_DIR}/assets/ui_strings.json\"")
 
 include(GoogleTest)
 gtest_discover_tests(sz_core_tests)
