@@ -82,5 +82,82 @@ TEST_F(ContextMenuUiTest, ARowWithNothingToDoIsThereButDisabled) {
     EXPECT_EQ(duplicateFlags & ImGuiItemFlags_Disabled, 0);
 }
 
+// ===== The canvas bar's tiles =====
+
+class CanvasBarMenuUiTest : public UiTest {
+protected:
+    // A second canvas, so that deleting one still leaves the bar with
+    // something on it and the count is unambiguous.
+    void MakeASecondCanvas() {
+        ShowEditMode();
+        StepFrame();
+        controller_->GetSession().Manager().AddCanvas("Second");
+        StepFrame();
+        ASSERT_EQ(Canvases().Canvases().size(), 2u);
+    }
+
+    // The bar hides against the bottom edge; the pointer there brings it
+    // out, as it does for a hand.
+    static void RevealTheBar(ImGuiTestContext* ctx) {
+        ctx->MouseMoveToPos(ImVec2(kDisplayWidth * 0.5f, kDisplayHeight - 1.0f));
+        ctx->Yield(30);
+    }
+};
+
+// Right-clicking a tile opens its menu without switching to that canvas -
+// a menu is opened to act on something, not to go to it.
+TEST_F(CanvasBarMenuUiTest, ARightClickOnATileOpensItsMenuAndDoesNotSwitch) {
+    MakeASecondCanvas();
+    const CanvasId before = Canvases().CurrentCanvasId();
+
+    RunUi("right-click a tile", [this](ImGuiTestContext* ctx) {
+        RevealTheBar(ctx);
+        IM_CHECK(App().CanvasBarReveal() >= 1.0f);
+        ctx->SetRef("//##canvas_bar");
+        ctx->ItemClick("##canvasbar_tile_0", ImGuiMouseButton_Right);
+        ctx->Yield(2);
+    });
+    EXPECT_TRUE(App().IsCanvasContextMenuOpen());
+    EXPECT_EQ(Canvases().CurrentCanvasId(), before) << "the right click switched canvas";
+}
+
+// Delete asks first, through the same confirmation the Overview's own
+// delete button uses - a canvas takes every snippet on it along, and
+// unlike a snippet there is no undo entry to take it back with.
+TEST_F(CanvasBarMenuUiTest, DeleteFromTheTileMenuAsksAndThenDeletes) {
+    MakeASecondCanvas();
+    const size_t before = Canvases().Canvases().size();
+
+    RunUi("delete a canvas from its tile", [this](ImGuiTestContext* ctx) {
+        RevealTheBar(ctx);
+        ctx->SetRef("//##canvas_bar");
+        ctx->ItemClick("##canvasbar_tile_0", ImGuiMouseButton_Right);
+        ctx->Yield(2);
+        IM_CHECK(App().IsCanvasContextMenuOpen());
+
+        ctx->SetRef("//$FOCUSED");
+        ctx->ItemClick("##canvasmenu_delete");
+        ctx->Yield(3);
+        // Nothing is gone yet: the row only asked.
+        IM_CHECK(Canvases().Canvases().size() == 2u);
+
+        ctx->SetRef("//$FOCUSED");
+        ctx->ItemClick("##confirmdelete");
+        ctx->Yield(3);
+    });
+    // Deleted things stay in the library, marked, and can be restored from
+    // the Recently deleted list - so the count is unchanged and what
+    // changed is that one of them is now deleted.
+    EXPECT_EQ(Canvases().Canvases().size(), before);
+    size_t alive = 0;
+    for (const Canvas& canvas : Canvases().Canvases()) {
+        if (!Canvases().IsDeleted(canvas)) {
+            ++alive;
+        }
+    }
+    EXPECT_EQ(alive, 1u);
+    EXPECT_FALSE(App().IsCanvasContextMenuOpen());
+}
+
 }  // namespace
 }  // namespace sz::test

@@ -151,6 +151,12 @@ enum class ItemMenuAction {
     MoveToNewCanvas,
 };
 
+// The same, for the context menu on a canvas bar tile. One row so far;
+// see BuildCanvasContextMenuRows.
+enum class CanvasMenuAction {
+    Delete,
+};
+
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
 // attached to via Dear ImGui. Contains no OS-specific code: rendering is
 // entirely through ImGui's platform-agnostic API.
@@ -287,6 +293,9 @@ public:
     // see RenderItemContextMenu.
     bool IsItemContextMenuOpen() const { return itemContextMenu_.IsOpen(); }
     std::optional<ItemId> ItemContextMenuItem() const { return itemContextMenuItemId_; }
+    // The same for the canvas bar's tiles - see RenderCanvasContextMenu.
+    bool IsCanvasContextMenuOpen() const { return canvasContextMenu_.IsOpen(); }
+    std::optional<CanvasId> CanvasContextMenuCanvas() const { return canvasContextMenuCanvasId_; }
     // How far out the canvas bar is, 0 to 1 - see EdgeReveal and
     // UpdateEdgePanels.
     float CanvasBarReveal() const { return canvasBarReveal_.amount; }
@@ -615,6 +624,15 @@ private:
     // committing a note being typed - what every way of switching from the
     // canvas itself has to do.
     void SwitchToCanvasSettled(CanvasId id);
+    // The context menu a right-click on a canvas bar tile opens. Rendered
+    // at the top level of the frame rather than inside the bar's own
+    // window, like every other popup here; the bar is held out for as long
+    // as the menu is up (see UpdateEdgePanels), since a menu floating over
+    // the panel it belongs to having slid away would be a puzzle.
+    void OpenCanvasContextMenu(CanvasId canvasId, ImVec2 at);
+    void RenderCanvasContextMenu();
+    void BuildCanvasContextMenuRows(const Canvas& canvas, std::vector<ContextMenuEntry>& rows) const;
+    void RunCanvasMenuAction(CanvasMenuAction action, CanvasId canvasId);
     // The colour chooser: one picker, and what it is set to is the colour
     // drawn with. Opened by the drawing bar's colour button, next to
     // `from`, the point it was pressed from; OpenColorChooser only asks,
@@ -1539,6 +1557,9 @@ private:
     // between the right-click and the menu appearing.
     ContextMenu itemContextMenu_{"##item_context_menu"};
     std::optional<ItemId> itemContextMenuItemId_ = std::nullopt;
+    // The canvas bar's own, and which tile's canvas it is up for.
+    ContextMenu canvasContextMenu_{"##canvas_context_menu"};
+    std::optional<CanvasId> canvasContextMenuCanvasId_ = std::nullopt;
     // Why the popovers open through request flags (this one, and
     // itemPropertiesPopoverRequested_ below) rather than calling
     // ImGui::OpenPopup where the button fires: a selection bar button

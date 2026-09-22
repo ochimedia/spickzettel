@@ -131,7 +131,12 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
                       itemGesture_.has_value();
     const bool atBottom = pointerKnown && pointer.y >= displayH - kRevealZonePx;
     const bool onBar = pointerKnown && Near(canvasBarRect_, pointer, kHoverSlackPx);
-    const bool barWanted = cfg.showCanvasBar && !busy && (atBottom || onBar);
+    // And while a tile's context menu is up: the pointer has left the bar
+    // for the menu, and a menu hanging over the panel it was opened from
+    // having slid away would be a puzzle. The menu closes itself on the
+    // click that chooses or dismisses it, so this cannot hold the bar out.
+    const bool barWanted =
+        cfg.showCanvasBar && !busy && (atBottom || onBar || canvasContextMenu_.IsOpen());
     const float barBefore = canvasBarReveal_.amount;
     canvasBarReveal_.Update(barWanted, now, io.DeltaTime);
     if (!cfg.showCanvasBar) {
@@ -231,6 +236,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     const PreviewTextureFn previewTexture = PreviewTextureLookup();
 
     std::optional<CanvasId> clicked;
+    std::optional<CanvasId> rightClicked;
     ImGui::PushClipRect(ImVec2(regionMinX, bar.y), ImVec2(regionMaxX, bar.y + bar.h), true);
     for (size_t i = 0; i < ids.size(); ++i) {
         const float x = regionMinX + static_cast<float>(i) * (tileW + kBarGap) - canvasBarScroll_;
@@ -258,6 +264,13 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
             clicked = canvas->id;
         }
         const bool hovered = ImGui::IsItemHovered();
+        // The tile's InvisibleButton answers the left button alone, so the
+        // right one is read off the hover - and deliberately does not also
+        // switch to the canvas: a menu is opened to act on something, not
+        // to go to it.
+        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+            rightClicked = canvas->id;
+        }
         const bool isCurrent = canvas->id == currentId;
         dl->AddRect(tileMin, tileMax,
                     ImGui::GetColorU32(isCurrent ? theme::Accent() : hovered ? theme::kGraphite200 : theme::kGraphite500),
@@ -293,6 +306,9 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);
 
+    if (rightClicked.has_value()) {
+        OpenCanvasContextMenu(*rightClicked, io.MousePos);
+    }
     if (clicked.has_value()) {
         SwitchToCanvasSettled(*clicked);
     }
@@ -310,6 +326,65 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     }
     if (openOverview) {
         OpenOverview();
+    }
+}
+
+// ================= A tile's context menu =================
+
+void OverlayApp::OpenCanvasContextMenu(CanvasId canvasId, ImVec2 at) {
+    canvasContextMenuCanvasId_ = canvasId;
+    canvasContextMenu_.RequestOpenAt(at);
+}
+
+void OverlayApp::RenderCanvasContextMenu() {
+    // Looked up afresh every frame, like the snippet menu's: a canvas can
+    // be deleted or moved to another folder from elsewhere while this is
+    // up, and either takes it off the bar.
+    const Canvas* canvas = nullptr;
+    if (canvasContextMenuCanvasId_.has_value()) {
+        const Canvas* found = Manager().FindCanvas(*canvasContextMenuCanvasId_);
+        if (found != nullptr && !Manager().IsDeleted(*found)) {
+            canvas = found;
+        }
+    }
+    const std::optional<int> chosen = canvasContextMenu_.Render([&](std::vector<ContextMenuEntry>& rows) {
+        if (canvas != nullptr) {
+            BuildCanvasContextMenuRows(*canvas, rows);
+        }
+    });
+    if (chosen.has_value()) {
+        RunCanvasMenuAction(static_cast<CanvasMenuAction>(*chosen), *canvasContextMenuCanvasId_);
+    }
+    if (!canvasContextMenu_.IsOpen()) {
+        canvasContextMenuCanvasId_.reset();
+    }
+}
+
+void OverlayApp::BuildCanvasContextMenuRows(const Canvas& canvas, std::vector<ContextMenuEntry>& rows) const {
+    // Deliberately short. The last canvas of a folder is deletable like
+    // any other - see the Overview's own delete button for why there is no
+    // "and this folder holds more than one" condition on it - so there is
+    // nothing here to grey out yet.
+    (void)canvas;
+    rows.push_back(ContextMenuEntry{static_cast<int>(CanvasMenuAction::Delete), "##canvasmenu_delete", &icons::kTrash,
+                                     strings::kMenuDeleteCanvas});
+}
+
+void OverlayApp::RunCanvasMenuAction(CanvasMenuAction action, CanvasId canvasId) {
+    switch (action) {
+        case CanvasMenuAction::Delete: {
+            const Canvas* canvas = Manager().FindCanvas(canvasId);
+            if (canvas == nullptr) {
+                return;
+            }
+            // Through the same confirmation the Overview's own delete
+            // button asks for, rather than deleting outright: a canvas
+            // takes every snippet on it along, and unlike a snippet's own
+            // delete there is no undo entry to take it back with.
+            confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, canvasId, canvas->name};
+            confirmDeletePopoverRequested_ = true;
+            return;
+        }
     }
 }
 

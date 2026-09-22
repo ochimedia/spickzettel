@@ -1339,6 +1339,15 @@ moment when the overlay comes up; it stays in while a gesture is in
 flight, so a stroke run into the bottom of the screen cannot pull a bar
 out from under the pointer.
 
+A tile's own context menu is a right click on it, which does not also
+switch to that canvas: a menu is opened to act on something, not to go
+to it. The bar is held out for as long as the menu is up, since the
+pointer has left the bar for the menu and a menu hanging over a panel
+that slid away would be a puzzle. Delete goes through the same
+confirmation the Overview's delete button asks for - a canvas takes
+every snippet on it along, and unlike a snippet's own delete there is no
+undo entry to take it back with.
+
 The wheel sets the size of Draw or Erase; with Alt it steps through the
 canvases of the folder the *current canvas* lives in (not the browsed
 folder), without wrapping, and ends any gesture in flight first by

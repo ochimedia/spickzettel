@@ -1271,6 +1271,11 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // different ways, and only one of them can be up at a time anyway,
     // since opening either closes whatever popup was there.
     RenderItemContextMenu();
+    // And the canvas bar's, for the tile that was right-clicked - out here
+    // rather than inside the bar's own window so that it is a popup at the
+    // same level as every other, and so it survives a frame in which the
+    // bar itself does not draw.
+    RenderCanvasContextMenu();
     // After both things that can open it, so it opens on the frame after
     // either asked - and at the top level every frame, so the popup always
     // belongs to the same window whichever of the two it came from.
