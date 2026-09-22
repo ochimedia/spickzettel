@@ -478,8 +478,17 @@ library/
 Every directory is `<slug of its current name>-<uid>`. The readable half
 is regenerated on every save so it stays true after a rename; the
 trailing uid is the identity, so a rename is cosmetic and a failed one
-costs a stale label. Every id inside a record is spelled the same
-six-character way, so a record and its directory can be matched by eye.
+costs a stale label. A *move* - a snippet to another canvas, a canvas to
+another folder - is the same rename with a different parent, and one
+that fails is not cosmetic: the tree is the index, so a record left under
+its old parent is a move the next load undoes. The record is still
+written where the directory is, so nothing in it is lost, but the save
+reports failure, is retried, and is said on screen, where a failed
+relabel is acknowledged. The first version reported both as success, and
+a snippet moved while a picture viewer held its capture open was back on
+its old canvas at the next start. Every id inside a record is spelled the
+same six-character way, so a record and its directory can be matched by
+eye.
 
 A tree rather than one file because one file is rewritten whole on every
 save: 50 canvases of ordinary drawing is a 42 MB document taking half a

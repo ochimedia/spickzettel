@@ -972,6 +972,67 @@ TEST_F(LibraryStoreTest, MovingASnippetInTheAppMovesItsDirectory) {
         << "moved, not copied and orphaned";
 }
 
+#if defined(_WIN32)
+// Windows will not rename a directory while a file inside it is held open
+// without delete sharing, which a picture viewer looking at a capture is.
+// A move the disk refused is not a save that landed: the tree is what a
+// load believes, and it would put the snippet back on the canvas it left.
+TEST_F(LibraryStoreTest, AMoveWhoseDirectoryCannotBeRenamedFailsTheSaveUntilItCan) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    Canvas other;
+    other.id = 8;
+    other.name = "Other";
+    other.folderId = 1;
+    snapshot.canvases.push_back(other);
+    ASSERT_TRUE(store.Save(snapshot));
+
+    Item moved = snapshot.canvases[0].items[1];
+    snapshot.canvases[0].items.pop_back();
+    snapshot.canvases[1].items.push_back(moved);
+    const std::filesystem::path movedTo = dir_ / "folders" / "folder-1-000001" / "other-000008" / "shot-1-000004";
+    {
+        std::ifstream held(ShotItemDir() / "000004.qoi");  // no delete sharing
+        ASSERT_TRUE(held.is_open());
+        EXPECT_FALSE(store.Save(snapshot)) << "the snippet is still under the canvas it left";
+        EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "item.json")) << "and its record is kept there";
+        EXPECT_FALSE(std::filesystem::exists(movedTo));
+    }
+    EXPECT_TRUE(store.Save(snapshot)) << "retried once the file was let go of";
+    EXPECT_TRUE(std::filesystem::exists(movedTo / "item.json"));
+    EXPECT_TRUE(std::filesystem::exists(movedTo / "000004.qoi"));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir()));
+}
+
+// A rename that the disk refused is another matter: the uid is the
+// identity, so the record under its old label is still exactly where a
+// load looks for it, and the save counts.
+TEST_F(LibraryStoreTest, ARenameWhoseDirectoryCannotBeRenamedStillCountsAsSaved) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    ASSERT_TRUE(store.Save(snapshot));
+
+    snapshot.canvases[0].name = "Renamed";
+    const std::filesystem::path oldCanvasDir = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002";
+    {
+        std::ifstream held(ShotItemDir() / "000004.qoi");  // two levels down, and enough
+        ASSERT_TRUE(held.is_open());
+        EXPECT_TRUE(store.Save(snapshot)) << "a stale label is not a failed save";
+        EXPECT_EQ(nlohmann::json::parse(std::ifstream(oldCanvasDir / "canvas.json"))["name"], "Renamed")
+            << "the record is current where the directory is";
+    }
+    EXPECT_TRUE(store.Save(snapshot));
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001" / "renamed-000002" / "canvas.json"))
+        << "relabelled once it could be";
+}
+#endif
+
 TEST_F(LibraryStoreTest, ACopiedSnippetDirectoryBecomesASnippetOfItsOwn) {
     LibraryStore store(dir_);
     ASSERT_TRUE(store.Save(MakeSampleSnapshot()));

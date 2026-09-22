@@ -1426,10 +1426,19 @@ bool LibraryStore::Save(const LibraryView& view) const {
     // store's to write into (see IsOurs), so the record - and everything
     // under it - is skipped, the save reports failure, and the next one
     // tries again.
+    //
+    // `misplaced` is true when the rename that failed was a *move* - to a
+    // different parent: a snippet to another canvas, a canvas to another
+    // folder. That is not a stale label. The tree is the index, so a record
+    // left under its old parent is a move the next load undoes. The record
+    // is still written where the directory is, so nothing in it is lost,
+    // but the save reports failure so that it is retried and said on
+    // screen rather than acknowledged.
     struct Placed {
         std::filesystem::path dir;
         bool kept;
         bool usable = true;
+        bool misplaced = false;
     };
     const auto placeDirectory = [this, &ec](std::map<uint64_t, std::filesystem::path>& index, uint64_t id,
                                             const std::filesystem::path& wanted,
@@ -1445,11 +1454,17 @@ bool LibraryStore::Save(const LibraryView& view) const {
         }
         if (it != index.end()) {
             const std::filesystem::path old = it->second;
+            // Where it is, whatever its name says - what a rename that does
+            // not happen leaves. See Placed::misplaced for why a move that
+            // did not happen is more than a stale label.
+            const auto stayed = [&old, &wanted] {
+                return Placed{old, true, /*usable=*/true, /*misplaced=*/old.parent_path() != wanted.parent_path()};
+            };
             if (!IsOurs(wanted)) {
                 // A link is in the way of where its name says. It stays
                 // where it is, indexed and real, with a stale label - the
                 // same as a rename that failed.
-                return Placed{old, true};
+                return stayed();
             }
             std::filesystem::create_directories(wanted.parent_path(), ec);
             ec.clear();
@@ -1469,7 +1484,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
             }
             ec.clear();
             if (std::filesystem::exists(old, ec)) {
-                return Placed{old, true};
+                return stayed();
             }
             // Gone from where the index said - rearranged under a running
             // instance, which is undefined but shouldn't lose what is in
@@ -1499,6 +1514,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
             wroteEverything = false;
             continue;
         }
+        wroteEverything &= !placedFolder.misplaced;
         wroteEverything &= writeIfChanged("folder:" + std::to_string(folder.id), folderDir / kFolderFile,
                                            ToJson(folder).dump(2), !placedFolder.kept);
 
@@ -1514,6 +1530,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 wroteEverything = false;
                 continue;
             }
+            wroteEverything &= !placedCanvas.misplaced;
             wroteEverything &= writeIfChanged("canvas:" + std::to_string(canvas.id), canvasDir / kCanvasFile,
                                                ToJson(canvas).dump(2), !placedCanvas.kept);
 
@@ -1527,6 +1544,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
                     wroteEverything = false;
                     continue;
                 }
+                wroteEverything &= !placedItem.misplaced;
 
                 // The one place where skipping the work is worth real time,
                 // and the only one that answers "changed?" without
