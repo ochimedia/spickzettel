@@ -481,6 +481,25 @@ TEST_F(HeadlessAppTest, ACutSnippetStaysUntilItIsPastedSomewhereElse) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
+// A cut pasted back onto its own canvas is the snippet itself, put back
+// where it was: nothing moved, so nothing is offset the way a copy is.
+TEST_F(HeadlessAppTest, ACutPastedOntoItsOwnCanvasStaysWhereItWas) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const ItemId cut = Canvases().CurrentOrNull()->items[0].id;
+    const Rect before = Canvases().CurrentOrNull()->items[0].rect;
+
+    PressCtrlKey(ImGuiKey_X);
+    PressCtrlKey(ImGuiKey_V);
+
+    ASSERT_EQ(Canvases().CurrentOrNull()->items.size(), 1u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].id, cut);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].rect, before) << "not offset: nothing is on top of anything";
+    EXPECT_EQ(App().Selection(), std::vector<ItemId>{cut});
+}
+
 // The clipboard holds ids, so a paste asks for the snippets as they are
 // now: one deleted in between is simply not pasted.
 TEST_F(HeadlessAppTest, ASnippetDeletedAfterBeingCopiedIsNotPasted) {

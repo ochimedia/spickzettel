@@ -287,10 +287,12 @@ bool OverlayApp::IsWaitingToBeCut(ItemId id) const {
 // left says so instead of pasting an empty selection. That check is the
 // whole reason the clipboard holds ids.
 //
-// A paste lands on top of its source when the source is on this canvas, so
+// A copy lands on top of its source when the source is on this canvas, so
 // there it is offset the way the Properties popover's own Copy is - far
 // enough to see that there are now two. Pasted onto another canvas it
-// keeps its place exactly, which is where the eye expects it.
+// keeps its place exactly, which is where the eye expects it. A cut pasted
+// back onto its own canvas is the snippet itself, and there is nothing to
+// tell apart: it stays exactly where it was.
 void OverlayApp::PasteFromClipboard() {
     if (clipboard_.empty() || Manager().CurrentOrNull() == nullptr) {
         return;
@@ -321,7 +323,7 @@ void OverlayApp::PasteFromClipboard() {
             // texture - see Session::ClonePicturesForCopy.
             pictureLost = !session_.ClonePicturesForCopy(id, placed) || pictureLost;
         }
-        fromThisCanvas = fromThisCanvas || *from == here;
+        fromThisCanvas = fromThisCanvas || (!cut && *from == here);
         pasted.push_back(placed);
     }
     if (pasted.empty()) {
