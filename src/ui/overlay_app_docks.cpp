@@ -191,13 +191,6 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
                       ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing);
     ImDrawList* dl = ImGui::GetWindowDrawList();
 
-    // Which of the library's folders these canvases are - where a new one
-    // goes.
-    FolderId folderId = Manager().CurrentFolderId();
-    if (const Canvas* current = Manager().CurrentOrNull()) {
-        folderId = current->folderId;
-    }
-
     // The tiles, before the buttons, scrolled when there are more than fit.
     // The wheel over the bar scrolls it (Alt+wheel still switches canvas,
     // as it does everywhere); a change of canvas brings the current one
@@ -310,16 +303,9 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         SwitchToCanvasSettled(*clicked);
     }
     if (makeNew) {
-        const CanvasId made = CreateCanvasInCurrentFolder();
-        // Into the folder the bar is showing, which need not be the one the
-        // Overview last browsed.
-        for (const Canvas& canvas : Manager().Canvases()) {
-            if (canvas.id == made && canvas.folderId != folderId) {
-                Manager().MoveCanvasToFolder(made, folderId);
-                break;
-            }
-        }
-        SwitchToCanvasSettled(made);
+        // Into the folder the bar is showing - the current canvas's, which
+        // need not be the one the Overview last browsed.
+        SwitchToCanvasSettled(CreateCanvasBesideCurrent());
     }
     if (openOverview) {
         OpenOverview();

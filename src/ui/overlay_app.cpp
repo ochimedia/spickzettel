@@ -925,20 +925,12 @@ void OverlayApp::QuickCapture(float displayW, float displayH) {
     // hotkey can arrive mid-stroke: it is global, and nothing about holding
     // the mouse down stops it.
     SettleHand();
-    // In the folder the canvas being worked on lives in, not the one the
-    // Overview happens to be browsing - those are deliberately decoupled
-    // (see CanvasManager's class comment), and a capture is about where you
-    // are, not where you were last looking. Usually the same folder;
-    // browsing elsewhere without opening anything is what tells them
-    // apart. SwitchToCanvas below re-syncs the browsed folder anyway.
-    if (const Canvas* current = Manager().CurrentOrNull()) {
-        Manager().SwitchToFolder(current->folderId);
-    }
-    // A canvas of its own, at the end of that folder, and we go to it: a
-    // screen full of captures piled on the canvas you were drawing on is
-    // hard to tell apart later, where one capture per canvas is a strip of
-    // tiles you can read at a glance in the Overview.
-    Manager().SwitchToCanvas(CreateCanvasInCurrentFolder());
+    // A canvas of its own, beside the one being worked on - a capture is
+    // about where you are, not where you were last looking - and we go to
+    // it: a screen full of captures piled on the canvas you were drawing
+    // on is hard to tell apart later, where one capture per canvas is a
+    // strip of tiles you can read at a glance in the Overview.
+    Manager().SwitchToCanvas(CreateCanvasBesideCurrent());
     CreateFullscreenItem(ItemCreationKind::Screenshot, displayW, displayH);
     ShowActionToast(strings::kToastCapturedScreenshot);
 }

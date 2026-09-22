@@ -1028,9 +1028,16 @@ private:
     // caller that wants that says so. Returns its id, or 0 if the library
     // couldn't take one.
     CanvasId CreateCanvasInCurrentFolder();
-    // New canvas (its shortcut): create a new canvas in the current folder
-    // and switch straight to it - jumping there immediately is the useful
-    // default when there's no Overview grid open to decide from.
+    // The same, in the folder the current canvas lives in - where the work
+    // is - rather than the one the Overview happens to be browsing, which
+    // is only the same folder until someone browses elsewhere and closes
+    // the Overview without switching. What every way of making a canvas
+    // from the canvas itself uses; the Overview's own button means the
+    // browsed folder, which is the one on screen there.
+    CanvasId CreateCanvasBesideCurrent();
+    // New canvas (its shortcut): create a new canvas beside the current
+    // one and switch straight to it - jumping there immediately is the
+    // useful default when there's no Overview grid open to decide from.
     void CreateAndSwitchToNewCanvas();
     // That, taking the selected snippets along - see its definition.
     void MoveSelectionToNewCanvas();

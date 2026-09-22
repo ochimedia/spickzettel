@@ -86,12 +86,23 @@ CanvasId OverlayApp::CreateCanvasInCurrentFolder() {
     return id;
 }
 
+CanvasId OverlayApp::CreateCanvasBesideCurrent() {
+    // The browsed folder and the current canvas's are deliberately
+    // decoupled (see CanvasManager's class comment); browsing elsewhere
+    // without opening anything is what tells them apart. A switch to the
+    // new canvas re-syncs the browsed folder anyway.
+    if (const Canvas* current = Manager().CurrentOrNull()) {
+        Manager().SwitchToFolder(current->folderId);
+    }
+    return CreateCanvasInCurrentFolder();
+}
+
 void OverlayApp::CreateAndSwitchToNewCanvas() {
     // Settled like any other switch: the shortcut can land mid-gesture.
     // Nothing to settle when the new canvas is already current - the
     // library had none, and the press that asked for a snippet is what is
     // in flight (see EnsureCanvasForNewItem).
-    SwitchToCanvasSettled(CreateCanvasInCurrentFolder());
+    SwitchToCanvasSettled(CreateCanvasBesideCurrent());
 }
 
 // A new canvas that the selected snippets come along to - "these belong
@@ -115,7 +126,7 @@ void OverlayApp::CreateAndSwitchToNewCanvas() {
 void OverlayApp::MoveSelectionToNewCanvas() {
     SettleHand();
     const CanvasId source = Manager().CurrentCanvasId();
-    const CanvasId target = CreateCanvasInCurrentFolder();
+    const CanvasId target = CreateCanvasBesideCurrent();
     std::vector<ItemId> moved;
     for (const ItemId id : selection_) {
         if (Manager().IsItemDeleted(id)) {

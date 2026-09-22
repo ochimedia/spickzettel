@@ -617,6 +617,30 @@ TEST_F(HeadlessAppTest, TheSelectionCanBeTakenToANewCanvas) {
     EXPECT_EQ(left.items[0].id, staying) << "what was not selected stayed where it was";
 }
 
+// The browsed folder and the current canvas's are decoupled: browsing
+// another folder in the Overview and closing it without switching leaves
+// them apart. A canvas made from the canvas itself goes beside the work,
+// not wherever the Overview was last looking.
+TEST_F(HeadlessAppTest, ACanvasMadeFromTheCanvasGoesBesideTheCurrentOneNotTheBrowsedFolder) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    CanvasManager& manager = controller_->GetSession().Manager();
+    const FolderId workFolder = manager.CurrentOrNull()->folderId;
+    const FolderId browsed = manager.AddFolder("Elsewhere");  // browsed, as the Overview would leave it
+    ASSERT_EQ(manager.CurrentFolderId(), browsed);
+    ASSERT_EQ(manager.CurrentOrNull()->folderId, workFolder);
+
+    PressCtrlShiftKey(ImGuiKey_N);
+
+    ASSERT_EQ(manager.Canvases().size(), 2u);
+    EXPECT_EQ(manager.CurrentOrNull()->folderId, workFolder) << "beside the canvas the work was on";
+    EXPECT_EQ(manager.CurrentFolderId(), workFolder) << "and the Overview follows";
+    for (const Canvas& canvas : manager.Canvases()) {
+        EXPECT_EQ(canvas.folderId, workFolder);
+    }
+}
+
 TEST_F(HeadlessAppTest, TakingNothingToANewCanvasIsJustANewCanvas) {
     ShowEditMode();
     StepFrame();
