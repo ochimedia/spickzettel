@@ -1271,6 +1271,64 @@ TEST_F(LibraryStoreTest, RemoveOfAFolderTakesEverythingInIt) {
     EXPECT_FALSE(std::filesystem::exists(dir_ / "retired")) << "its canvas and snippets went with it, not astray";
 }
 
+// What someone else put beside a record is not the store's to delete: a
+// permanent delete takes the records and pictures and leaves the rest, and
+// the directory with it - which, holding no record, nothing reads back and
+// nothing sets aside.
+TEST_F(LibraryStoreTest, RemoveLeavesWhatIsNotTheLibrarysAndStillCountsAsDone) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    ASSERT_TRUE(store.Save(snapshot));
+    std::ofstream(ShotItemDir() / "notes.txt") << "mine";
+    std::ofstream(ShotItemDir() / "item.json.tmp2") << "{";  // a temporary of ours a crash left
+    std::filesystem::create_directories(ShotItemDir() / "scans");
+    std::ofstream(ShotItemDir() / "scans" / "page.txt") << "mine too";
+
+    EXPECT_TRUE(store.Remove(4)) << "everything of the library's is gone";
+    EXPECT_FALSE(store.HasPendingRemoval(4));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "item.json"));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "item.json.tmp2"));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000004.thumb.qoi"));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / ".removed"));
+    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "notes.txt"));
+    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "scans" / "page.txt"));
+
+    snapshot.canvases[0].items.pop_back();
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired")) << "not the store's, so not set aside either";
+    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "notes.txt"));
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    EXPECT_EQ(loaded->canvases[0].items.size(), 1u) << "a directory with no record is not a snippet";
+}
+
+// The same a level up: a folder deleted for good takes its canvases and
+// snippets, and leaves a directory of someone else's inside it standing.
+TEST_F(LibraryStoreTest, RemoveOfAFolderLeavesADirectoryThatIsNotTheLibrarys) {
+    LibraryStore store(dir_);
+    ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+    const std::filesystem::path folderDir = dir_ / "folders" / "folder-1-000001";
+    std::filesystem::create_directories(folderDir / "reference");
+    std::ofstream(folderDir / "reference" / "map.txt") << "mine";
+
+    ASSERT_TRUE(store.Remove(1));
+    EXPECT_FALSE(std::filesystem::exists(folderDir / "folder.json"));
+    EXPECT_FALSE(std::filesystem::exists(folderDir / "order.json"));
+    EXPECT_FALSE(std::filesystem::exists(folderDir / "canvas-1-000002")) << "empty once its own went, so gone";
+    EXPECT_TRUE(std::filesystem::exists(folderDir / "reference" / "map.txt"));
+
+    ASSERT_TRUE(store.Save(CanvasManagerSnapshot{}));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_TRUE(loaded->folders.empty()) << "a directory with no record is not a folder";
+}
+
 // The net: whatever a snapshot lacks without a Remove is set aside whole,
 // merging into what is set aside already, and never read back.
 TEST_F(LibraryStoreTest, WhatASnapshotLacksIsSetAsideWholeAndNotReadBack) {

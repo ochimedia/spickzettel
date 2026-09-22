@@ -714,6 +714,90 @@ bool RemoveTree(const std::filesystem::path& path) {
     return !ec;
 }
 
+// ===== What a permanent delete may take =====
+//
+// A directory of the library's can hold what someone else put there - a
+// note beside a record, a folder of scans beside a canvas - and none of it
+// is the store's to delete. A permanent delete therefore takes what the
+// store writes and nothing else: the records, the order files, the
+// pictures and thumbnails (the same rule the per-snippet sweep in Save
+// keeps, see IsPictureFilename), the removed mark, and a temporary a crash
+// left one of those as. It recurses only into a directory that is the
+// store's by Load's own rule - one holding a record, or the mark - and
+// removes a directory only once it is empty. What is left standing
+// afterwards holds no record, so Load does not read it and Save, which
+// never indexed it, does not set it aside.
+
+// Whether `name` is a file this store writes beside a record. "<file>.tmp"
+// and "<file>.tmp3" are the temporaries WriteFileAtomically makes.
+bool IsOwnFilename(const std::string& name) {
+    std::string_view base(name);
+    if (const size_t tmp = base.rfind(".tmp"); tmp != std::string_view::npos) {
+        const std::string_view suffix = base.substr(tmp + 4);
+        if (std::all_of(suffix.begin(), suffix.end(), [](char c) { return c >= '0' && c <= '9'; })) {
+            base = base.substr(0, tmp);
+        }
+    }
+    for (const char* own : {kFolderFile, kCanvasFile, kItemFile, kOrderFile, kRemovedMarker}) {
+        if (base == own) {
+            return true;
+        }
+    }
+    return IsPictureFilename(std::string(base));
+}
+
+// Whether `dir` is a directory of the store's: it holds a record, or the
+// removed mark left in one whose record went before the rest could.
+bool HoldsOwnRecord(const std::filesystem::path& dir) {
+    std::error_code ec;
+    for (const char* record : {kFolderFile, kCanvasFile, kItemFile, kRemovedMarker}) {
+        if (std::filesystem::exists(dir / record, ec)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Takes everything of the store's out of `dir`, recursively, and `dir`
+// itself once that leaves it empty. True once nothing of the store's is
+// left under it - a file held open by another program keeps it false, and
+// the removed mark is left in place then, so that the intent survives.
+bool RemoveOwnContents(const std::filesystem::path& dir) {
+    std::error_code ec;
+    bool clean = true;
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+        const std::filesystem::path& path = entry.path();
+        if (IsLink(path)) {
+            continue;  // never the store's, whatever it points at
+        }
+        std::error_code kindEc;
+        if (entry.is_directory(kindEc)) {
+            if (HoldsOwnRecord(path)) {
+                clean = RemoveOwnContents(path) && clean;
+            }
+            continue;
+        }
+        const std::string name = path.filename().string();
+        if (!entry.is_regular_file(kindEc) || !IsOwnFilename(name) || name == kRemovedMarker) {
+            continue;
+        }
+        std::filesystem::remove(path, ec);
+        clean = clean && !std::filesystem::exists(std::filesystem::symlink_status(path, ec));
+    }
+    if (!clean) {
+        return false;
+    }
+    // The mark goes last, and only once everything it stood for has: it
+    // is what a restart reads the owed removal from.
+    const std::filesystem::path marker = dir / kRemovedMarker;
+    std::filesystem::remove(marker, ec);
+    if (std::filesystem::exists(std::filesystem::symlink_status(marker, ec))) {
+        return false;
+    }
+    std::filesystem::remove(dir, ec);  // refused when someone else's files keep it: theirs to keep
+    return true;
+}
+
 // Sorted, so that what a directory holds is walked in the same order twice
 // running. Enumeration order is not specified by the filesystem, and an
 // unlisted member's position (see ApplyOrder) would otherwise wander.
@@ -923,13 +1007,15 @@ bool LibraryStore::RemoveOwnDirectory(const std::filesystem::path& path) const {
     if (!IsOurs(path)) {
         return false;
     }
-    RemoveTree(path);
-    // Whether it is gone is the answer, not whether remove_all complained:
-    // a recursive delete that met one file it could not remove - held open
-    // without delete sharing by another process, on Windows - has removed
-    // everything else and left the directory standing around that file.
     std::error_code ec;
-    return !std::filesystem::exists(std::filesystem::symlink_status(path, ec));
+    if (!std::filesystem::exists(std::filesystem::symlink_status(path, ec))) {
+        return true;  // gone already - by hand, or by an earlier run at it
+    }
+    // Whether nothing of the store's is left is the answer, not whether the
+    // directory is gone: a file held open without delete sharing by another
+    // process, on Windows, keeps it there and the removal owed, where a file
+    // of someone else's beside the record keeps it there and is theirs.
+    return RemoveOwnContents(path);
 }
 
 void LibraryStore::ForgetUnder(const std::filesystem::path& dir) const {

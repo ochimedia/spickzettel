@@ -136,10 +136,13 @@ public:
     uint64_t WriteGeneration() const { return writeGeneration_; }
 
     // Deletes the directory of the folder, canvas or snippet `uid` names,
-    // with everything inside it, for good and now - what "Delete
-    // permanently" is on disk, once the model no longer holds the thing.
-    // Now rather than at the next save, which would take a directory the
-    // model has lost for something gone missing, and set it aside.
+    // with everything of the library's inside it, for good and now - what
+    // "Delete permanently" is on disk, once the model no longer holds the
+    // thing. Now rather than at the next save, which would take a
+    // directory the model has lost for something gone missing, and set it
+    // aside. Only what the store writes goes (see RemoveOwnDirectory):
+    // anything someone else put beside a record stays, and the directory
+    // stands for it, holding no record - which nothing reads back.
     //
     // True only once the directory is gone. False if this store knows no
     // directory for it - a thing never saved has none, and a capture of one
@@ -308,9 +311,12 @@ private:
     void ForgetUnder(const std::filesystem::path& dir) const;
     // Where the folder directories are: folders/ under the root.
     std::filesystem::path FoldersRoot() const;
-    // The one way this store deletes a directory: recursively, and only
-    // if it IsOurs, so that nothing outside the library is ever emptied
-    // through something pointing at it. True once `path` is gone.
+    // The one way this store deletes a directory: what the store itself
+    // writes, recursively through the directories that hold its records,
+    // and only if it IsOurs, so that nothing outside the library is ever
+    // emptied through something pointing at it. A directory goes once it
+    // is empty; one that someone else's files keep stays for them. True
+    // once nothing of the library's is left under `path`.
     bool RemoveOwnDirectory(const std::filesystem::path& path) const;
     // Puts the removed mark into `dir` - a directory RemoveOwnDirectory
     // could not finish with - so that the intent outlives the process.

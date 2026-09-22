@@ -600,6 +600,18 @@ runs, and the pass finds nothing. It is the net under a snapshot that
 lacks something nobody deleted, the kind of disagreement that once
 emptied a library.
 
+A permanent delete takes what the store writes and nothing else: the
+records and order files, the pictures and thumbnails, its own mark, and
+a temporary a crash left one of those as. It recurses only into a
+directory that holds a record of ours, which is Load's rule for what is
+ours asked at delete time, and removes a directory only once it is
+empty. A note someone kept beside a record, or a directory of scans
+beside a canvas, stays, and the directory stands for it holding no
+record, which nothing reads back and, never having been indexed,
+nothing sets aside. The first version deleted the directory whole, with
+whatever anyone had put in it, while every other path in the store left
+foreign files alone.
+
 A permanent delete that cannot finish - Windows refuses to delete a
 file another program holds open without delete sharing, and a picture
 viewer looking at a capture is exactly that - reports so rather than
