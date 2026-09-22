@@ -423,6 +423,11 @@ inline constexpr float kPillButtonSize = 28.0f;
 // text by 10, so this is the name's width plus room to breathe.
 inline constexpr float kOverviewSidebarWidth = 200.0f;
 
+// How much of itself every snippet keeps while a new one is being made -
+// see OverlayApp::ItemsFadedForCreation. Enough to tell where things are,
+// little enough that what is being framed is what is seen.
+inline constexpr float kCreationFadeAlpha = 0.2f;
+
 // ----- Show deleted (see overlay_app_deleted.cpp) -----
 
 // Between a deleted thing's Restore and its Delete permanently.

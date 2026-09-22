@@ -666,6 +666,21 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
         drawList->AddRectFilled(pMin, pMax, theme::AccentU32(40));
         drawList->AddRect(pMin, pMax, theme::AccentU32(255), 0.0f, 2.0f, ImDrawFlags_None);
     }
+    // Faded back while a snippet is being made, so the screen it is made
+    // from shows through what sits on it - faint rather than gone, so where
+    // things are stays in view. Done to the finished vertices, which is the
+    // one way to reach every part of a snippet alike: its pictures are
+    // drawn in their own colours, not the style's, and PushStyleVar(Alpha)
+    // would only reach what asks the style. Only the look: the capture
+    // itself never sees the overlay (see IOverlayWindow::
+    // CaptureRegionAsTexture).
+    if (ItemsFadedForCreation()) {
+        for (ImDrawVert& vertex : drawList->VtxBuffer) {
+            const ImU32 alpha = (vertex.col >> IM_COL32_A_SHIFT) & 0xFFu;
+            const auto faded = static_cast<ImU32>(static_cast<float>(alpha) * kCreationFadeAlpha + 0.5f);
+            vertex.col = (vertex.col & ~IM_COL32_A_MASK) | (faded << IM_COL32_A_SHIFT);
+        }
+    }
     EndScreenLayer();
     // Above the canvas layer, which was created before it: both carry
     // NoBringToFrontOnFocus, so each went in at the back on creation.

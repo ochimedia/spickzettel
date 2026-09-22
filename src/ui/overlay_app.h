@@ -286,6 +286,14 @@ public:
         return creation_.has_value() ? std::optional<ItemCreationKind>(creation_->kind)
                                      : CreationKindFor(activeTool_);
     }
+    // Whether the snippets are faded back so that what a new snippet is
+    // made from shows through them: while a creation tool is in hand, and
+    // while a region is being dragged out - not for a press that has not
+    // moved yet, which may still be a click, and would flicker. See
+    // kCreationFadeAlpha.
+    bool ItemsFadedForCreation() const {
+        return CreationKindFor(activeTool_).has_value() || (creation_.has_value() && creation_->dragTo.has_value());
+    }
     bool IsOverviewOpen() const { return overviewOpen_; }
     // Whether the colour chooser is up - see RenderColorChooser.
     bool IsColorChooserOpen() const { return colorChooserOpen_; }

@@ -1248,6 +1248,16 @@ for good if nothing was put into it. And making one is on the history:
 undo marks the snippet deleted, where a screenshot taken by mistake can
 still be found.
 
+While one is being made the others fade to a fifth of themselves - with
+a creation tool in hand, and while a region is dragged out - so what is
+being framed shows through what sits on it. Faint rather than hidden, so
+where things are stays in view; not on a press that has not moved yet,
+which may still be a click and would only flicker. The capture never saw
+the overlay anyway (see Screen capture), so this is only about what the
+hand can see. It is done to the finished vertices of the snippets'
+layer, because a picture is drawn in its own colours and the style's
+alpha would not reach it.
+
 ### Tools, and what a modifier does
 
 Six tools, exactly one in hand at a time, so the one lit on the bar is

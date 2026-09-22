@@ -16,6 +16,8 @@
 #include "core/util/uid.h"
 #include "ui/overlay_app_internal.h"
 
+#include <imgui_internal.h>
+
 namespace sz::test {
 namespace {
 
@@ -2804,6 +2806,57 @@ TEST_F(HeadlessSaveTest, TheLibraryTreeHudReadsTheDiskAgainAfterEveryWrite) {
     ASSERT_TRUE(store_->Save(Canvases().ExportSnapshot()));
     StepFrame();
     EXPECT_NE(find("stray.txt"), lines.end()) << "the next write brought it into view";
+}
+
+// The most opaque any vertex of the snippets' layer was drawn last frame -
+// 0 with nothing on it.
+unsigned MostOpaqueSnippetVertex() {
+    const ImGuiWindow* layer = ImGui::FindWindowByName("##sz_items_layer");
+    unsigned most = 0;
+    if (layer != nullptr) {
+        for (const ImDrawVert& vertex : layer->DrawList->VtxBuffer) {
+            most = std::max(most, static_cast<unsigned>((vertex.col >> IM_COL32_A_SHIFT) & 0xFFu));
+        }
+    }
+    return most;
+}
+
+// While a snippet is being made the others fade back, so what is being
+// framed shows through them: with a creation tool in hand, and while a
+// region is dragged out on empty canvas - but not for a press that has not
+// moved, which may be a click and would only flicker.
+TEST_F(HeadlessAppTest, SnippetsFadeBackWhileANewOneIsBeingMade) {
+    ShowEditMode();
+    StepFrame();
+    PressKey(ImGuiKey_D);
+    Drag(200.0f, 200.0f, 600.0f, 500.0f);
+    PressKey(ImGuiKey_Escape);  // out of drawing mode
+    PressKey(ImGuiKey_Escape);  // and nothing selected
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    ASSERT_FALSE(App().ItemsFadedForCreation());
+    const unsigned faint = static_cast<unsigned>(255.0f * ui::overlay_detail::kCreationFadeAlpha) + 1u;
+    ASSERT_GT(MostOpaqueSnippetVertex(), faint) << "a border at full strength, at least";
+
+    MoveTo(1000.0f, 100.0f);
+    StepFrame();
+    RawMouse(1000.0f, 100.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    EXPECT_FALSE(App().ItemsFadedForCreation()) << "not yet a drag";
+    RawMouse(1150.0f, 250.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    EXPECT_TRUE(App().ItemsFadedForCreation());
+    EXPECT_LE(MostOpaqueSnippetVertex(), faint);
+    RawMouse(1150.0f, 250.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "the region was made";
+    EXPECT_FALSE(App().ItemsFadedForCreation());
+    EXPECT_GT(MostOpaqueSnippetVertex(), faint);
+
+    PressKey(ImGuiKey_S);  // the screenshot tool, in hand before any press
+    EXPECT_TRUE(App().ItemsFadedForCreation());
+    EXPECT_LE(MostOpaqueSnippetVertex(), faint);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(App().ItemsFadedForCreation());
 }
 
 }  // namespace
