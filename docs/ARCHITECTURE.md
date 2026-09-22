@@ -419,8 +419,21 @@ A deleted folder, canvas or snippet stays exactly where it is, with
 thing counts as deleted when it or anything holding it is marked, so
 deleting a canvas stamps only the canvas, restoring it brings back
 exactly what went with it, and a snippet deleted earlier keeps its own
-mark. Restoring a snippet inside a deleted canvas restores the canvas
-too. "Delete permanently" is the erasure the `Delete*` methods perform.
+mark. "Delete permanently" is the erasure the `Delete*` methods perform.
+
+Restoring is aimed at what the Overview shows (see Show deleted). A
+folder's restore clears its own mark and those of every canvas in it,
+so it brings back everything deleted there, whether the folder went
+whole or only some canvases in it did. A canvas restored out of a
+deleted folder needs the folder back to be seen, but clearing the
+folder's mark would bring back every canvas that went with it; so those
+are marked instead, each with the folder's stamp, and exactly one canvas
+comes back while the rest stay deleted as of when they went.
+
+A snippet's mark is only ever cleared by undo, and no history outlives
+its session, so `Session::ImportLibrary` erases every snippet that comes
+in marked. That includes one deleted before its canvas: restoring the
+canvas would not bring it back either.
 
 Two designs preceded this. A reserved Trash folder inside the library
 grouped three structurally different things under one "dig through the
@@ -1092,13 +1105,13 @@ naming something gone does nothing and is dropped rather than moved to
 the other stack.
 
 Deliberately narrow: moves, resizes, reorders and renames are not
-tracked, and deleting a canvas or folder gets a confirmation and Recently
+tracked, and deleting a canvas or folder gets a confirmation and Show
 deleted instead of an undo entry.
 
 ### Making a snippet is on the history, and an untouched one goes
 
 Snippets are made through `Session::CreateItem`, so a screenshot taken
-by mistake can be undone into Recently deleted and redone out of it. A
+by mistake can be undone into its deletion mark and redone out of it. A
 drawing a press made is watched until the hand moves on, and
 `DiscardIfUntouched` erases it for good if nothing was put into it: no
 strokes, no paint, no text, no picture. A screenshot is content even when
@@ -1317,8 +1330,8 @@ mode and opens nothing.
 
 The menu itself knows nothing about the app - rows in, the chosen row's
 action out, every colour read from the current ImGui style rather than
-the palette - so the dock's canvases and the Recently deleted list can
-have their own without it growing a second personality. Each row carries
+the palette - so the dock's canvases can have their own, and anything
+after them, without it growing a second personality. Each row carries
 the shortcut of the action it runs, read from the live binding, which
 makes the menu the place the keys are learned as well as pressed; a row
 whose action has no binding shows nothing rather than the key editor's
@@ -1431,17 +1444,36 @@ of the app's own combos never reaches the capture loop as a key - Windows
 hands it to its hotkey - so the hotkey handlers ask first, and while a
 row is armed the hotkey firing *is* the press.
 
-### Recently deleted
+### Show deleted
 
-A switch on the Canvases row swaps the folders and the grid for a list of
-everything with a stamp of its own, newest first, with a preview, what it
-held and when it went, and Restore and Delete permanently. Nothing in
-the list is opened or browsed: restoring is how a thing is seen again,
-which keeps a deleted folder one row rather than a tree to look into. A
-first version showed deleted things in place, outlined in red, in a mode
-that let them be looked at but not changed - which needed a read-only
-check at every edit and a banner for a deleted canvas, for a question
-("what did I delete half an hour ago?") that is about time, not place.
+A checkbox on the Canvases row adds what is deleted to the same sidebar
+and grid, where it was: deleted folders in the sidebar and deleted
+canvases in the grid, marked out in red with a Restore and a Delete
+permanently each, and everything else dimmed. A folder is marked out
+when it is deleted or holds a deleted canvas, and both its buttons act on
+what is deleted in it - all of it back, or all of it gone for good, the
+folder too only if the folder is what was deleted. Putting the buttons
+on the thing, where it would come back to, says where a restore lands
+without a line of text to explain it.
+
+A deleted folder is looked into rather than browsed: the browsed folder
+is where a new canvas lands, and the manager never lets that be a
+deleted one, so the UI keeps the deleted folder it is showing
+(`deletedFolderShown_`) and New canvas is off while it does. Restored,
+the folder becomes the browsed one. A deleted canvas cannot be opened -
+restoring it is how it is opened - so nothing needs a read-only check;
+the live folders and canvases around it stay fully usable, only dimmed.
+Snippets are left out: a deleted snippet comes back by undo or not at
+all (see Deletion is a mark).
+
+Two designs came before. The first showed deleted things in place in a
+mode that let them be looked at but not changed, which needed a
+read-only check at every edit and a banner for a deleted canvas. The
+second was a list of everything with a stamp of its own, newest first,
+with a preview, what it held and when it went. It answered "what did I
+delete half an hour ago", but not where a restore would put a thing, and
+snippets - which undo already covers - crowded out the folders and
+canvases it was for.
 
 ### Cursors and the demo mark
 
@@ -2005,6 +2037,8 @@ one twice.
   or a screenshot; replaced by a caption any item can carry.
 - **A trash folder, then a trash library.** Replaced by a deletion mark
   in place and a Recently deleted list.
+- **A Recently deleted list.** Newest first, snippets and all; could not
+  show where a restore puts a thing. Replaced by Show deleted, in place.
 - **Profiles based on other profiles.** A third level nobody could see;
   replaced by exactly two levels.
 - **One library file.** 42 MB rewritten every two seconds at fifty

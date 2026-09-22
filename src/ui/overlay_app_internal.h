@@ -17,6 +17,7 @@
 // one file, not listed here.
 
 #include <cstdint>
+#include <ctime>
 #include <functional>
 #include <optional>
 #include <string>
@@ -80,6 +81,10 @@ inline constexpr ImVec4 kPanelBorderStrong(0.961f, 0.969f, 0.976f, 0.14f);
 inline constexpr ImVec4 kFieldBg(0.961f, 0.969f, 0.976f, 0.05f);
 inline constexpr ImVec4 kHoverWash(0.961f, 0.969f, 0.976f, 0.09f);   // .tb-btn:hover / .btn:hover background
 inline constexpr ImVec4 kDangerSoft(0.898f, 0.282f, 0.302f, 0.16f);
+// The danger red lifted for text on the panel - a deleted folder's or
+// canvas's name with Show deleted on. kDanger itself is a fill, and as
+// small text on graphite it reads darker than it is.
+inline constexpr ImVec4 kDeletedInk(0.965f, 0.525f, 0.537f, 1.00f);
 
 // Safe for FrameRounding/GrabRounding/ScrollbarRounding: ImDrawList's own
 // AddRectFilled/AddRect clamp rounding to half the shape's own size before
@@ -388,14 +393,13 @@ void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbM
                         StrokeMeshSlot meshCache);
 // One item as a preview draws it into `pMin..pMax`: each layer with the
 // texture `previewTexture` has for it, then its strokes scaled from the
-// item's native size to the box. What DrawCanvasPreview draws per item, and
-// what the Recently deleted list draws for a snippet on its own.
+// item's native size to the box. What DrawCanvasPreview draws per item.
 void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
                      bool showStrokes,
                      const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
                      StrokeMeshSlot meshCache);
 // An icon+text button in the accent colour - the Overview's primary actions
-// (New folder, New canvas, Restore). Defined in overlay_app_overview.cpp.
+// (New folder, New canvas). Defined in overlay_app_overview.cpp.
 bool PrimaryButton(const char* strId, const Icon& icon, const char* text);
 
 // Smallest positive integer N such that `prefix + std::to_string(N)` isn't
@@ -405,6 +409,40 @@ bool PrimaryButton(const char* strId, const Icon& icon, const char* text);
 // - a kind and a number, which is as much as an item's name is ever asked
 // to carry (a tooltip in the dock, a line in a toast).
 int NextAvailableNumber(const std::string& prefix, const std::vector<std::string>& existingNames);
+
+// PillIconButton's and DangerIconButton's size.
+inline constexpr float kPillButtonSize = 28.0f;
+
+// The folder list down the Overview's left side - the sidebar's width, and
+// where the footer's "New canvas" lines up (see
+// OverlayApp::OverviewSidebarWidth, which adds to it with Show deleted on).
+// Wide enough for a folder's default name, which is a full timestamp
+// ("2026-09-07 22:53:26" - see TimestampName). Narrower clips the last digit
+// of the seconds, which reads as a rendering bug rather than as a name that
+// is simply long. The row reserves 34 for the delete button and insets the
+// text by 10, so this is the name's width plus room to breathe.
+inline constexpr float kOverviewSidebarWidth = 200.0f;
+
+// ----- Show deleted (see overlay_app_deleted.cpp) -----
+
+// Between a deleted thing's Restore and its Delete permanently.
+inline constexpr float kDeletedButtonGap = 4.0f;
+// How much of itself a folder or canvas with nothing deleted about it keeps
+// while Show deleted is on: there, still usable, and plainly not what the
+// view is about.
+inline constexpr float kDimmedAlpha = 0.4f;
+
+// "Deleted today, 14:05 - 32 min ago": the day in words while that is
+// shorter than a date, and how long ago while that is the quicker thing to
+// read - which is what "I deleted something half an hour ago" is looking
+// for. `now` is passed in, so a test can say when that is.
+std::string DeletedWhen(int64_t deletedAt, std::time_t now);
+
+// A deleted folder's or canvas's two buttons, side by side at the cursor:
+// Restore, and Delete permanently. Ids "##restore" and "##deleteforgood",
+// under whatever the caller has pushed.
+enum class DeletedButton { None, Restore, DeleteForGood };
+DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip);
 
 // What a folder or canvas is called until someone renames it is
 // TimestampName() - in core/util now, since CanvasManager names the ones

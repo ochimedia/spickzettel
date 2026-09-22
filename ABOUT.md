@@ -36,16 +36,17 @@ hold) for a fullscreen one. A plain click makes nothing.
   of the folder you are in.
 - The bar along the bottom edge shows the canvases of the folder; it
   slides out when the pointer reaches the edge. Its buttons make a new
-  canvas and open the Overview, where folders, canvases, Recently deleted
-  and Settings live.
+  canvas and open the Overview, where folders, canvases and Settings
+  live.
 
 
 ## Notes for testers
 
 - Everything autosaves on its own. There is no save button, and closing
   the overlay is not "discarding" anything.
-- Deleting hides a thing where it is. Recently deleted, in the Overview,
-  lists everything deleted and restores it or deletes it for good.
+- Deleting a folder or canvas hides it where it is. "Show deleted", in
+  the Overview, shows it there again in red, to restore or delete for
+  good. A deleted snippet comes back with undo, until the app restarts.
 - Screenshots are captured with the overlay hidden, so nothing the
   overlay draws - including the demo watermark - ends up in them.
 
@@ -61,6 +62,6 @@ hold) for a fullscreen one. A plain click makes nothing.
 - Per-canvas undo history, and per-canvas GPU textures so only the canvas
   you are looking at holds video memory.
 - Folders and canvases, an Overview to move and reorder them, and
-  Recently deleted to get things back.
+  Show deleted to get them back.
 - Per-application profiles for the input options, and a Settings tab for
   everything else.

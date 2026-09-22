@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <ctime>
 #include <iterator>
 #include <limits>
 #include <string>
@@ -362,20 +363,6 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 
 }  // namespace overlay_detail
 
-namespace {
-
-// The folder list down the Overview's left side - the sidebar's width, and
-// where the footer's "New canvas" lines up. Wide enough for a folder's
-// default name, which is a full timestamp ("2026-09-07 22:53:26" - see
-// TimestampName). Narrower clips the last digit of the seconds, which
-// reads as a rendering bug rather than as a name that is simply long. The
-// row reserves 34 for the delete
-// button and insets the text by 10, so this is the name's width plus room
-// to breathe.
-constexpr float kOverviewSidebarWidth = 200.0f;
-
-}  // namespace
-
 void OverlayApp::RenderOverview(float displayW, float displayH) {
     if (!overviewOpen_) {
         return;
@@ -424,10 +411,6 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     // Canvases body regardless of whatever overviewTab_ happens to still
     // hold from a previous, non-picker visit.
     const bool showCanvasesBody = pickerItemId_.has_value() || overviewTab_ == OverviewTab::Canvases;
-    // ...and within it the Recently deleted list instead of the folders and
-    // the grid - never while picking where a snippet goes, which is a place
-    // among the live ones.
-    const bool showDeletedList = showCanvasesBody && recentlyDeletedOpen_ && !pickerItemId_.has_value();
 
     OverviewActions actions;
     ImGui::BeginChild("##overview_body", ImVec2(0.0f, -40.0f), ImGuiChildFlags_None);
@@ -444,16 +427,15 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
         RenderOverviewAboutPanel();
     } else if (!showCanvasesBody) {
         RenderOverviewSettingsPanel();
-    } else if (showDeletedList) {
-        RenderRecentlyDeleted(displayW, displayH);
     } else {
+        SettleDeletedFolderShown();
         RenderFolderSidebar(actions);
         ImGui::SameLine();
         RenderCanvasGrid(displayW, displayH, actions);
     }
     ImGui::EndChild();  // ##overview_body
 
-    RenderOverviewFooter(showCanvasesBody, showDeletedList);
+    RenderOverviewFooter(showCanvasesBody);
 
     ImGui::End();
     // Anything opened from inside this panel that has no Begin/End pair of
@@ -570,16 +552,19 @@ void OverlayApp::RenderOverviewHeader() {
     // Only while a canvas grid is showing: a preview toggle over the About
     // text is a control with nothing to act on.
     //
-    // The way to what is deleted, and back: a switch of the body rather
-    // than a tab of its own, since it is another way of looking at the
-    // library the Canvases tab is about.
+    // What is deleted is shown in the same folders and grid, where it was,
+    // rather than on a page of its own - so this is a way of looking at
+    // them, beside the other two, and says how much there is to see.
     char deletedLabel[96];
-    std::snprintf(deletedLabel, sizeof(deletedLabel), strings::kOverviewRecentlyDeletedCount,
-                  Manager().DeletedThings().size());
-    const char* switchLabel = recentlyDeletedOpen_ ? strings::kOverviewBackToCanvases : deletedLabel;
+    const size_t deletedCount = Manager().DeletedFolderAndCanvasCount();
+    if (deletedCount > 0) {
+        std::snprintf(deletedLabel, sizeof(deletedLabel), strings::kOverviewShowDeletedCount, deletedCount);
+    } else {
+        std::snprintf(deletedLabel, sizeof(deletedLabel), "%s", strings::kOverviewShowDeleted);
+    }
     const float checkboxWidth = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x;
     const float gapBeforePreviews = ImGui::GetStyle().ItemSpacing.x * 4.0f;
-    const float controlsWidth = ImGui::CalcTextSize(switchLabel).x + ImGui::GetStyle().FramePadding.x * 2.0f +
+    const float controlsWidth = checkboxWidth + ImGui::CalcTextSize(deletedLabel).x +
                                 gapBeforePreviews + ImGui::CalcTextSize(strings::kOverviewPreviewsLabel).x +
                                 ImGui::GetStyle().ItemSpacing.x + checkboxWidth +
                                 ImGui::CalcTextSize(strings::kOverviewPreviewsVector).x +
@@ -592,9 +577,11 @@ void OverlayApp::RenderOverviewHeader() {
     // than a checkbox's own frame.
     const float rowCenterOffset = (ImGui::GetItemRectSize().y - ImGui::GetFrameHeight()) * 0.5f;
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(0.0f, rowCenterOffset));
-    if (ImGui::Button(Labeled(switchLabel, "recentlydeleted"))) {
-        recentlyDeletedOpen_ = !recentlyDeletedOpen_;
-        overviewBodyScrollToTop_ = true;
+    if (ImGui::Checkbox(Labeled(deletedLabel, "showdeleted"), &showDeleted_)) {
+        SettleDeletedFolderShown();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kOverviewShowDeletedHelp);
     }
     ImGui::SameLine(0.0f, gapBeforePreviews);
     ImGui::AlignTextToFramePadding();
@@ -624,10 +611,13 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
     constexpr float kFolderRowHeight = 34.0f;
     constexpr float kFolderRowGap = 4.0f;
     const std::vector<Folder>& folders = Manager().Folders();
-    const FolderId currentFolderId = Manager().CurrentFolderId();
+    const FolderId currentFolderId = OverviewFolderId();
+    const bool showingDeleted = ShowingDeleted();
+    const std::time_t now = std::time(nullptr);
 
-    ImGui::BeginChild("##folder_sidebar", ImVec2(kOverviewSidebarWidth, 0.0f), ImGuiChildFlags_None);
-    if (std::all_of(folders.begin(), folders.end(), [&](const Folder& f) { return Manager().IsDeleted(f); })) {
+    ImGui::BeginChild("##folder_sidebar", ImVec2(OverviewSidebarWidth(), 0.0f), ImGuiChildFlags_None);
+    if (!showingDeleted &&
+        std::all_of(folders.begin(), folders.end(), [&](const Folder& f) { return Manager().IsDeleted(f); })) {
         // Every folder has been deleted - legal now (see CanvasManager's
         // class comment), and reachable in one step from a library with a
         // single folder in it. "New folder" in the footer is still right
@@ -638,25 +628,39 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
     }
     for (size_t fi = 0; fi < folders.size(); ++fi) {
         const Folder& f = folders[fi];
+        const bool deleted = Manager().IsDeleted(f);
         // Skipped here rather than filtered out beforehand, so that `fi`
         // stays the folder's place in Folders(), which ReorderFolder takes.
-        if (Manager().IsDeleted(f)) {
+        if (deleted && !showingDeleted) {
             continue;
         }
+        // With Show deleted on, a folder that is deleted or holds a deleted
+        // canvas is marked out, with the two buttons that act on what is
+        // deleted in it, and every other folder is dimmed.
+        const bool marked = showingDeleted && Manager().HoldsDeleted(f);
+        const bool dimmed = showingDeleted && !marked;
         const bool isCurrentFolder = f.id == currentFolderId;
         const bool isRenamingThis = renamingFolderId_ == f.id;
         ImGui::PushID(static_cast<int>(f.id));
+        if (dimmed) {
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * kDimmedAlpha);
+        }
 
         const ImVec2 rowMin = ImGui::GetCursorScreenPos();
         const float rowWidth = ImGui::GetContentRegionAvail().x;
-        // Room for the delete button is always reserved: the last folder is
+        // Room for the buttons is always reserved: the last folder is
         // deletable like any other.
-        const float selectWidth = rowWidth - 34.0f;
+        const float buttonsWidth = marked ? kPillButtonSize * 2.0f + kDeletedButtonGap : kPillButtonSize;
+        const float selectWidth = rowWidth - buttonsWidth - 6.0f;
         const ImVec2 rowMax(rowMin.x + rowWidth, rowMin.y + kFolderRowHeight);
         ImDrawList* sidebarDrawList = ImGui::GetWindowDrawList();
+        // Through GetColorU32, which a dimmed row's alpha applies to.
         if (isCurrentFolder) {
-            sidebarDrawList->AddRectFilled(
-                rowMin, rowMax, theme::AccentU32(51), theme::kRadiusSm);  // the accent at ~20% alpha
+            const ImVec4 fill = marked ? ImVec4(theme::kDanger.x, theme::kDanger.y, theme::kDanger.z, 0.32f)
+                                       : ImVec4(theme::Accent().x, theme::Accent().y, theme::Accent().z, 0.2f);
+            sidebarDrawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(fill), theme::kRadiusSm);
+        } else if (marked) {
+            sidebarDrawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(theme::kDangerSoft), theme::kRadiusSm);
         }
 
         if (isRenamingThis) {
@@ -668,10 +672,16 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             ImGui::Dummy(ImVec2(selectWidth, kFolderRowHeight));
         } else {
             if (ImGui::InvisibleButton("##folderrow", ImVec2(selectWidth, kFolderRowHeight))) {
-                actions.switchToFolder = f.id;
+                // A deleted folder is looked into, not browsed - see
+                // deletedFolderShown_.
+                if (deleted) {
+                    actions.showDeletedFolder = f.id;
+                } else {
+                    actions.switchToFolder = f.id;
+                }
             }
             const bool rowHovered = ImGui::IsItemHovered();
-            if (rowHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            if (rowHovered && !deleted && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 renamingFolderId_ = f.id;
                 renamingCanvasId_.reset();
                 std::snprintf(renameBuffer_, sizeof(renameBuffer_), "%s", f.name.c_str());
@@ -680,25 +690,37 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             }
             if (rowHovered && !isCurrentFolder) {
                 sidebarDrawList->AddRectFilled(rowMin, ImVec2(rowMin.x + selectWidth, rowMax.y),
-                                                ImGui::ColorConvertFloat4ToU32(theme::kHoverWash), theme::kRadiusSm);
+                                                ImGui::GetColorU32(theme::kHoverWash), theme::kRadiusSm);
             }
-            if (ImGui::BeginDragDropSource()) {
-                ImGui::SetDragDropPayload("HB_FOLDER_REORDER", &f.id, sizeof(FolderId));
-                ImGui::TextUnformatted(f.name.c_str());
-                ImGui::EndDragDropSource();
+            if (rowHovered && marked) {
+                if (deleted) {
+                    ImGui::SetTooltip("%s", DeletedWhen(f.deletedAt, now).c_str());
+                } else {
+                    const size_t count = Manager().MarkedCanvasesIn(f.id).size();
+                    ImGui::SetTooltip(count == 1 ? strings::kDeletedHoldsOne : strings::kDeletedHoldsMany, count);
+                }
             }
-            if (ImGui::BeginDragDropTarget()) {
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_FOLDER_REORDER")) {
-                    const FolderId draggedId = *static_cast<const FolderId*>(payload->Data);
-                    if (draggedId != f.id) {
-                        actions.folderReorder = {draggedId, fi};
+            // Nothing is dragged out of or into what is deleted: it stays
+            // where it was until it is restored.
+            if (!deleted) {
+                if (ImGui::BeginDragDropSource()) {
+                    ImGui::SetDragDropPayload("HB_FOLDER_REORDER", &f.id, sizeof(FolderId));
+                    ImGui::TextUnformatted(f.name.c_str());
+                    ImGui::EndDragDropSource();
+                }
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_FOLDER_REORDER")) {
+                        const FolderId draggedId = *static_cast<const FolderId*>(payload->Data);
+                        if (draggedId != f.id) {
+                            actions.folderReorder = {draggedId, fi};
+                        }
                     }
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_CANVAS_REORDER")) {
+                        const CanvasId draggedCanvasId = *static_cast<const CanvasId*>(payload->Data);
+                        actions.canvasToFolder = {draggedCanvasId, f.id};
+                    }
+                    ImGui::EndDragDropTarget();
                 }
-                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_CANVAS_REORDER")) {
-                    const CanvasId draggedCanvasId = *static_cast<const CanvasId*>(payload->Data);
-                    actions.canvasToFolder = {draggedCanvasId, f.id};
-                }
-                ImGui::EndDragDropTarget();
             }
         }
 
@@ -719,22 +741,45 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                 window_->ReleaseTextInput();
             }
         } else {
-            const ImU32 textColor = ImGui::ColorConvertFloat4ToU32(isCurrentFolder ? theme::kWhite : theme::kGraphite200);
+            const ImVec4& ink = marked && !isCurrentFolder ? theme::kDeletedInk
+                                : isCurrentFolder         ? theme::kWhite
+                                                          : theme::kGraphite200;
             const ImVec2 textPos(rowMin.x + 10.0f, rowMin.y + (kFolderRowHeight - ImGui::GetTextLineHeight()) * 0.5f);
             sidebarDrawList->PushClipRect(rowMin, ImVec2(rowMin.x + selectWidth - 4.0f, rowMax.y), true);
-            sidebarDrawList->AddText(textPos, textColor, f.name.c_str());
+            sidebarDrawList->AddText(textPos, ImGui::GetColorU32(ink), f.name.c_str());
             sidebarDrawList->PopClipRect();
         }
 
         if (!isRenamingThis) {
-            const float buttonY = rowMin.y + (kFolderRowHeight - 28.0f) * 0.5f;
+            const float buttonY = rowMin.y + (kFolderRowHeight - kPillButtonSize) * 0.5f;
             ImGui::SetCursorScreenPos(ImVec2(rowMin.x + selectWidth + 4.0f, buttonY));
-            if (DangerIconButton("##delfolder", icons::kTrash)) {
-                confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Folder, f.id, f.name};
-                confirmDeletePopoverRequested_ = true;
-            }
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("%s", strings::kOverviewDeleteFolder);
+            if (marked) {
+                // Both act on what is deleted in the folder: all of it back,
+                // or all of it gone for good - the folder with it only if
+                // the folder is what was deleted.
+                switch (DeletedButtons(strings::kDeletedRestoreFolderTip,
+                                       deleted ? strings::kDeletedDeleteForGoodTip
+                                               : strings::kDeletedDeleteDeletedInFolderTip)) {
+                    case DeletedButton::Restore:
+                        actions.restore = f.id;
+                        break;
+                    case DeletedButton::DeleteForGood:
+                        confirmDeleteTarget_ = ConfirmDeleteTarget{
+                            deleted ? ConfirmDeleteTarget::Kind::Folder : ConfirmDeleteTarget::Kind::DeletedCanvasesIn,
+                            f.id, f.name, /*forGood=*/true};
+                        confirmDeletePopoverRequested_ = true;
+                        break;
+                    case DeletedButton::None:
+                        break;
+                }
+            } else {
+                if (DangerIconButton("##delfolder", icons::kTrash)) {
+                    confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Folder, f.id, f.name};
+                    confirmDeletePopoverRequested_ = true;
+                }
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s", strings::kOverviewDeleteFolder);
+                }
             }
         }
 
@@ -747,6 +792,9 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             ImGui::SetScrollFromPosY(rowMin.y - ImGui::GetWindowPos().y, 0.5f);
         }
         ImGui::SetCursorScreenPos(ImVec2(rowMin.x, rowMax.y + kFolderRowGap));
+        if (dimmed) {
+            ImGui::PopStyleVar();
+        }
         ImGui::PopID();
     }
     // Whether or not it was found, so a stale id can't keep pulling the
@@ -764,13 +812,15 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
     constexpr float kSpacing = 14.0f;
     const std::vector<Canvas>& canvases = Manager().Canvases();
     const CanvasId currentCanvasId = Manager().CurrentCanvasId();  // 0 when there is none
-    const FolderId currentFolderId = Manager().CurrentFolderId();
+    const FolderId currentFolderId = OverviewFolderId();
+    const bool showingDeleted = ShowingDeleted();
+    const std::time_t now = std::time(nullptr);
 
-    // Canvases belonging to the browsed folder that aren't deleted, in
-    // Canvases() order, and beside each its place among *all* of that
-    // folder's canvases - which is what ReorderCanvas expects for `newIndex`
-    // (it's scoped within the moved canvas's own folder, hidden ones and
-    // all).
+    // Canvases belonging to the shown folder that aren't deleted (or all of
+    // them, with Show deleted on), in Canvases() order, and beside each its
+    // place among *all* of that folder's canvases - which is what
+    // ReorderCanvas expects for `newIndex` (it's scoped within the moved
+    // canvas's own folder, hidden ones and all).
     std::vector<size_t> folderCanvasIndices;
     std::vector<size_t> folderCanvasPlaces;
     size_t placeInFolder = 0;
@@ -778,7 +828,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         if (canvases[i].folderId != currentFolderId) {
             continue;
         }
-        if (!Manager().IsDeleted(canvases[i])) {
+        if (showingDeleted || !Manager().IsDeleted(canvases[i])) {
             folderCanvasIndices.push_back(i);
             folderCanvasPlaces.push_back(placeInFolder);
         }
@@ -810,6 +860,13 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
             ImGui::SameLine(0.0f, kSpacing);
         }
         ImGui::PushID(static_cast<int>(c.id));
+        // Only ever with Show deleted on: deleted on its own or with its
+        // folder, and marked out either way. Everything else is dimmed.
+        const bool deleted = Manager().IsDeleted(c);
+        const bool dimmed = showingDeleted && !deleted;
+        if (dimmed) {
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * kDimmedAlpha);
+        }
         ImGui::BeginGroup();
 
         const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
@@ -818,18 +875,35 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         DrawCanvasPreview(drawList, c, thumbMin, thumbMax, displayW, displayH, Cfg().strokeRenderMode,
                            Cfg().overviewShowsStrokes, previewTexture, PreviewMeshSlot());
         const bool isActive = c.id == currentCanvasId;
-        drawList->AddRect(thumbMin, thumbMax, isActive ? theme::AccentU32(255) : IM_COL32(70, 76, 88, 255),
-                           4.0f, isActive ? 2.0f : 1.0f, ImDrawFlags_None);
+        if (deleted) {
+            drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDangerSoft), 4.0f);
+            drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDanger), 4.0f, ImDrawFlags_None, 2.0f);
+        } else {
+            // The preview's own pictures are drawn at full strength whatever
+            // the style's alpha, so a dimmed tile is dimmed by a veil.
+            if (dimmed) {
+                drawList->AddRectFilled(thumbMin, thumbMax, IM_COL32(14, 16, 20, 150), 4.0f);
+            }
+            drawList->AddRect(thumbMin, thumbMax,
+                               ImGui::GetColorU32(isActive ? theme::Accent() : ImVec4(0.275f, 0.298f, 0.345f, 1.0f)),
+                               4.0f, ImDrawFlags_None, isActive ? 2.0f : 1.0f);
+        }
 
-        if (ImGui::InvisibleButton("##tile", kTileSize)) {
+        if (ImGui::InvisibleButton("##tile", kTileSize) && !deleted) {
             actions.clickedCanvas = c.id;
         }
-        if (ImGui::BeginDragDropSource()) {
+        if (deleted && ImGui::IsItemHovered()) {
+            // Its own stamp, or its folder's when it went with the folder.
+            const Folder* folder = Manager().FindFolder(c.folderId);
+            const int64_t stamp = c.deletedAt != 0 ? c.deletedAt : folder != nullptr ? folder->deletedAt : 0;
+            ImGui::SetTooltip("%s\n%s", DeletedWhen(stamp, now).c_str(), strings::kDeletedRestoreToOpen);
+        }
+        if (!deleted && ImGui::BeginDragDropSource()) {
             ImGui::SetDragDropPayload("HB_CANVAS_REORDER", &c.id, sizeof(CanvasId));
             ImGui::TextUnformatted(c.name.c_str());
             ImGui::EndDragDropSource();
         }
-        if (ImGui::BeginDragDropTarget()) {
+        if (!deleted && ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_CANVAS_REORDER")) {
                 const CanvasId draggedId = *static_cast<const CanvasId*>(payload->Data);
                 if (draggedId != c.id) {
@@ -856,8 +930,8 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
                 window_->ReleaseTextInput();
             }
         } else {
-            ImGui::TextColored(theme::kWhite, "%s", c.name.c_str());
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            ImGui::TextColored(deleted ? theme::kDeletedInk : theme::kWhite, "%s", c.name.c_str());
+            if (!deleted && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                 renamingCanvasId_ = c.id;
                 renamingFolderId_.reset();
                 std::snprintf(renameBuffer_, sizeof(renameBuffer_), "%s", c.name.c_str());
@@ -869,8 +943,29 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         // canvas in a folder is deletable, and a button that is simply not
         // drawn reads as a bug. See CanvasManager's class comment for the
         // invariant behind it, now gone.
-        if (!isRenamingThisCanvas) {
-            ImGui::SameLine(kTileSize.x - 28.0f);
+        if (deleted) {
+            ImGui::SameLine(kTileSize.x - kPillButtonSize * 2.0f - kDeletedButtonGap);
+            // Out of a deleted folder the folder comes back to hold it, and
+            // the rest of what went with the folder stays deleted - see
+            // CanvasManager::Restore.
+            const Folder* folder = Manager().FindFolder(c.folderId);
+            const bool folderDeleted = folder != nullptr && Manager().IsDeleted(*folder);
+            switch (DeletedButtons(folderDeleted ? strings::kDeletedRestoreCanvasAndFolderTip
+                                                 : strings::kDeletedRestoreCanvasTip,
+                                   strings::kDeletedDeleteForGoodTip)) {
+                case DeletedButton::Restore:
+                    actions.restore = c.id;
+                    break;
+                case DeletedButton::DeleteForGood:
+                    confirmDeleteTarget_ =
+                        ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name, /*forGood=*/true};
+                    confirmDeletePopoverRequested_ = true;
+                    break;
+                case DeletedButton::None:
+                    break;
+            }
+        } else if (!isRenamingThisCanvas) {
+            ImGui::SameLine(kTileSize.x - kPillButtonSize);
             if (DangerIconButton("##delcanvas", icons::kTrash)) {
                 confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name};
                 confirmDeletePopoverRequested_ = true;
@@ -881,6 +976,9 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         }
 
         ImGui::EndGroup();
+        if (dimmed) {
+            ImGui::PopStyleVar();
+        }
         // A just-created canvas is at the end of its folder, which may be
         // past the bottom of this list - scroll it into view once (see
         // overviewScrollToCanvasId_). Centred rather than merely made
@@ -898,7 +996,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
     ImGui::EndChild();
 }
 
-void OverlayApp::RenderOverviewFooter(bool showCanvasesBody, bool showDeletedList) {
+void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
     if (!showCanvasesBody && overviewTab_ == OverviewTab::About) {
         // In the footer rather than at the end of the text it belongs to:
         // the licences run to a couple of hundred lines, and a way out
@@ -917,13 +1015,6 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody, bool showDeletedLis
         }
         return;
     }
-    if (showDeletedList) {
-        // What the list's buttons do, where the grid has New folder and New
-        // canvas.
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(theme::kGraphite300, "%s", strings::kDeletedHint);
-        return;
-    }
     if (!showCanvasesBody) {
         return;
     }
@@ -934,6 +1025,7 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody, bool showDeletedLis
         // button at the bottom of it, and matches where a new canvas
         // lands in its own list.
         overviewScrollToFolderId_ = Manager().AddFolder(TimestampName());
+        deletedFolderShown_.reset();
         // With a canvas already in it. A folder is where canvases live, so
         // an empty one is a step rather than a result, and an empty folder
         // reads as a dead end: no tile to click, nothing to drop an item
@@ -942,8 +1034,14 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody, bool showDeletedLis
         // it, the canvas it makes is switched to.
         Manager().SwitchToCanvas(CreateCanvasInCurrentFolder());
     }
-    ImGui::SameLine(kOverviewSidebarWidth + ImGui::GetStyle().ItemSpacing.x);
-    if (PrimaryButton("##newcanvas", icons::kPlus, strings::kOverviewNewCanvas)) {
+    ImGui::SameLine(OverviewSidebarWidth() + ImGui::GetStyle().ItemSpacing.x);
+    // Not into a deleted folder, which is the one on show: a new canvas goes
+    // to the folder being browsed, and that would be somewhere else.
+    const bool showsDeletedFolder = ShowingDeleted() && deletedFolderShown_.has_value();
+    ImGui::BeginDisabled(showsDeletedFolder);
+    const bool newCanvasPressed = PrimaryButton("##newcanvas", icons::kPlus, strings::kOverviewNewCanvas);
+    ImGui::EndDisabled();
+    if (newCanvasPressed) {
         const CanvasId id = Manager().AddCanvas(TimestampName());
         // Made at the end of the folder, so the grid may have to scroll for
         // it to be seen at all - see overviewScrollToCanvasId_. Set on both
@@ -980,6 +1078,14 @@ void OverlayApp::ApplyOverviewActions(const OverviewActions& actions) {
     }
     if (actions.switchToFolder.has_value()) {
         Manager().SwitchToFolder(*actions.switchToFolder);
+        deletedFolderShown_.reset();
+    }
+    if (actions.showDeletedFolder.has_value()) {
+        deletedFolderShown_ = *actions.showDeletedFolder;
+    }
+    if (actions.restore.has_value() && session_.Restore(*actions.restore)) {
+        ShowActionToast(strings::kToastRestored);
+        SettleDeletedFolderShown();
     }
     if (actions.clickedCanvas.has_value()) {
         if (pickerItemId_.has_value()) {
@@ -2465,14 +2571,18 @@ void OverlayApp::RenderConfirmDeletePopover() {
     }
     const ConfirmDeleteTarget target = *confirmDeleteTarget_;
     const bool isFolder = target.kind == ConfirmDeleteTarget::Kind::Folder;
-    const char* word = isFolder                                             ? strings::kDeleteConfirmFolderWord
-                       : target.kind == ConfirmDeleteTarget::Kind::Snippet ? strings::kDeleteConfirmSnippetWord
-                                                                            : strings::kDeleteConfirmCanvasWord;
+    const bool deletedIn = target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
+    const char* word = isFolder ? strings::kDeleteConfirmFolderWord : strings::kDeleteConfirmCanvasWord;
     // A delete marks the thing, which can be restored, and says so; a delete
     // of something deleted already is for good, and says that.
-    const bool forGood = target.forGood;
+    const bool forGood = target.forGood || deletedIn;
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 220.0f);
-    ImGui::Text(forGood ? strings::kDeleteConfirmPromptForGood : strings::kDeleteConfirmPrompt, word, target.name.c_str());
+    if (deletedIn) {
+        ImGui::Text(strings::kDeleteConfirmPromptDeletedIn, target.name.c_str());
+    } else {
+        ImGui::Text(forGood ? strings::kDeleteConfirmPromptForGood : strings::kDeleteConfirmPrompt, word,
+                    target.name.c_str());
+    }
     if (isFolder) {
         ImGui::TextColored(theme::kDanger, "%s", strings::kDeleteConfirmAlsoCanvases);
     }
@@ -2500,7 +2610,8 @@ void OverlayApp::RenderConfirmDeletePopover() {
         // Session::Delete and DeletePermanently - and its history only with
         // the thing itself, for good.
         if (forGood) {
-            switch (session_.DeletePermanently(target.id)) {
+            switch (deletedIn ? session_.DeleteMarkedCanvasesPermanently(target.id)
+                              : session_.DeletePermanently(target.id)) {
                 case Session::Removal::Removed:
                     ShowActionToast(strings::kToastDeletedForGood);
                     break;
@@ -2580,7 +2691,8 @@ void OverlayApp::OpenOverview() {
     pickerItemId_.reset();
     overviewOpen_ = true;
     overviewTab_ = OverviewTab::Canvases;
-    recentlyDeletedOpen_ = false;
+    showDeleted_ = false;
+    deletedFolderShown_.reset();
     if (displayListCallback_) {
         displays_ = displayListCallback_();
     }

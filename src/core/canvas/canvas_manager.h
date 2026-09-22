@@ -37,15 +37,6 @@ struct LibraryView {
     CanvasId currentCanvasId = 0;
 };
 
-// One thing that is deleted and can be restored - see
-// CanvasManager::DeletedThings.
-struct DeletedThing {
-    enum class Kind { Folder, Canvas, Snippet };
-    Kind kind = Kind::Snippet;
-    uint64_t id = 0;
-    int64_t deletedAt = 0;
-};
-
 // Owns the folders and canvases, which folder is browsed and which canvas
 // is current, and every operation on the items they hold.
 //
@@ -59,7 +50,7 @@ struct DeletedThing {
 // deleted folder, canvas or snippet stays exactly where it was, stamped
 // with when it went, and is hidden until it is restored or deleted for
 // good. A deleted folder or canvas is restored or deleted for good from
-// the Overview; a deleted snippet only ever comes
+// the Overview, with Show deleted on; a deleted snippet only ever comes
 // back by undo, and is erased when the library is next opened (see
 // Session::ImportLibrary). Restoring is clearing marks (see Restore). A
 // thing counts as deleted when it or anything holding it is marked (see
@@ -488,11 +479,6 @@ public:
     size_t DeletedFolderAndCanvasCount() const;
     // Every snippet carrying a mark of its own, wherever it is.
     std::vector<ItemId> MarkedSnippets() const;
-    // Everything carrying a mark of its own - what there is to restore -
-    // newest first. A canvas or snippet inside a deleted container is listed
-    // only if it was marked itself: what went with the container comes back
-    // with it, and is part of the container's entry.
-    std::vector<DeletedThing> DeletedThings() const;
 
 private:
     // Where the mark of the folder, canvas or snippet `id` names is kept.

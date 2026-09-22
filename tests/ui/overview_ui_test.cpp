@@ -135,9 +135,13 @@ TEST_F(UiTest, DeletingAFoldersOnlyCanvasLeavesTheFolderEmpty) {
     EXPECT_NE(deleted->deletedAt, 0);
 }
 
-// A deleted canvas is hidden where it was and listed under Recently
-// deleted, where Restore clears its mark.
-TEST_F(UiTest, ADeletedCanvasIsInRecentlyDeletedAndRestoreBringsItBack) {
+// "$$n" is how the engine spells a PushID(n) - every sidebar row and grid
+// tile is under its folder's or canvas's own.
+std::string Under(uint64_t id, const char* item) { return "**/$$" + std::to_string(id) + "/" + item; }
+
+// With Show deleted on, a deleted canvas is shown where it was, with a
+// Restore of its own that clears its mark.
+TEST_F(UiTest, ShowDeletedShowsADeletedCanvasWhereItWasAndRestoreBringsItBack) {
     ShowEditMode();
     StepFrame();
     OpenOverviewUi();
@@ -157,19 +161,20 @@ TEST_F(UiTest, ADeletedCanvasIsInRecentlyDeletedAndRestoreBringsItBack) {
     ASSERT_NE(Canvases().FindCanvas(doomed), nullptr);
     EXPECT_NE(Canvases().FindCanvas(doomed)->deletedAt, 0);
 
-    RunUi("recently deleted, and restore it", [](ImGuiTestContext* ctx) {
+    const std::string restore = Under(doomed, "##restore");
+    RunUi("show deleted, and restore it", [&](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
-        ctx->ItemClick("**/###recentlydeleted");
-        ctx->ItemClick("**/##restoredeleted");
+        ctx->ItemClick("**/###showdeleted");
+        ctx->ItemClick(restore.c_str());
     });
     EXPECT_EQ(Canvases().FindCanvas(doomed)->deletedAt, 0);
     EXPECT_EQ(Canvases().FindCanvas(doomed)->folderId, folder);
     EXPECT_EQ(CanvasesInFolder(Canvases(), folder), 1u);
-    EXPECT_TRUE(Canvases().DeletedThings().empty());
+    EXPECT_EQ(Canvases().DeletedFolderAndCanvasCount(), 0u);
 }
 
-// The list's other button deletes for good, after asking.
-TEST_F(UiTest, DeletingPermanentlyFromRecentlyDeletedErasesIt) {
+// Its other button deletes it for good, after asking.
+TEST_F(UiTest, DeletingPermanentlyWithShowDeletedErasesIt) {
     ShowEditMode();
     StepFrame();
     OpenOverviewUi();
@@ -186,14 +191,112 @@ TEST_F(UiTest, DeletingPermanentlyFromRecentlyDeletedErasesIt) {
     });
     ASSERT_NE(Canvases().FindCanvas(doomed), nullptr);
 
-    RunUi("recently deleted, and delete it for good", [](ImGuiTestContext* ctx) {
+    const std::string deleteForGood = Under(doomed, "##deleteforgood");
+    RunUi("show deleted, and delete it for good", [&](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
-        ctx->ItemClick("**/###recentlydeleted");
-        ctx->ItemClick("**/##deleteforgood");
+        ctx->ItemClick("**/###showdeleted");
+        ctx->ItemClick(deleteForGood.c_str());
         ctx->ItemClick("//$FOCUSED/##confirmdelete");
     });
     EXPECT_EQ(Canvases().FindCanvas(doomed), nullptr);
-    EXPECT_TRUE(Canvases().DeletedThings().empty());
+    EXPECT_EQ(Canvases().DeletedFolderAndCanvasCount(), 0u);
+}
+
+// A new folder holding two canvases, the second current - what the tests
+// below delete bits of.
+struct TwoCanvasFolder {
+    FolderId folder = 0;
+    CanvasId first = 0;
+    CanvasId second = 0;
+};
+
+class ShowDeletedUiTest : public UiTest {
+protected:
+    TwoCanvasFolder MakeTwoCanvasFolder() {
+        RunUi("new folder and a second canvas", [](ImGuiTestContext* ctx) {
+            ctx->SetRef("//##overview_panel");
+            ctx->ItemClick("**/##newfolder");
+            ctx->ItemClick("**/##newcanvas");
+        });
+        TwoCanvasFolder made;
+        made.folder = Canvases().CurrentFolderId();
+        made.second = Canvases().CurrentOrNull()->id;
+        for (const Canvas& canvas : Canvases().Canvases()) {
+            if (canvas.folderId == made.folder && canvas.id != made.second) {
+                made.first = canvas.id;
+            }
+        }
+        return made;
+    }
+};
+
+// A deleted folder is looked into from the sidebar, and one canvas can be
+// restored out of it: the folder comes back to hold it, and the canvas that
+// went with the folder stays deleted, as of when the folder went.
+TEST_F(ShowDeletedUiTest, RestoringOneCanvasOfADeletedFolderLeavesTheOtherDeleted) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    const TwoCanvasFolder made = MakeTwoCanvasFolder();
+    ASSERT_NE(made.first, 0u);
+    ASSERT_TRUE(controller_->GetSession().Delete(made.folder));
+    const int64_t folderStamp = Canvases().FindFolder(made.folder)->deletedAt;
+    ASSERT_NE(Canvases().CurrentFolderId(), made.folder) << "a deleted folder is not browsed";
+
+    const std::string folderRow = Under(made.folder, "##folderrow");
+    const std::string restoreFirst = Under(made.first, "##restore");
+    RunUi("show deleted, open the folder, restore one canvas", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###showdeleted");
+        ctx->ItemClick(folderRow.c_str());
+        ctx->ItemClick(restoreFirst.c_str());
+    });
+    EXPECT_EQ(Canvases().FindFolder(made.folder)->deletedAt, 0);
+    EXPECT_EQ(Canvases().FindCanvas(made.first)->deletedAt, 0);
+    EXPECT_EQ(Canvases().FindCanvas(made.second)->deletedAt, folderStamp);
+    EXPECT_EQ(Canvases().CurrentFolderId(), made.folder) << "still the folder on show, browsed now it is back";
+}
+
+// A folder's Restore brings back every deleted canvas in it, and the folder
+// itself if it was deleted.
+TEST_F(ShowDeletedUiTest, AFoldersRestoreBringsBackAllOfIt) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    const TwoCanvasFolder made = MakeTwoCanvasFolder();
+    ASSERT_TRUE(controller_->GetSession().Delete(made.first));
+    ASSERT_TRUE(controller_->GetSession().Delete(made.folder));
+
+    const std::string restoreFolder = Under(made.folder, "##restore");
+    RunUi("show deleted, restore the folder", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###showdeleted");
+        ctx->ItemClick(restoreFolder.c_str());
+    });
+    EXPECT_EQ(Canvases().FindFolder(made.folder)->deletedAt, 0);
+    EXPECT_EQ(CanvasesInFolder(Canvases(), made.folder), 2u) << "the canvas deleted on its own before too";
+}
+
+// A folder that is not deleted but holds a deleted canvas: its Delete
+// permanently erases what is deleted in it, and nothing else.
+TEST_F(ShowDeletedUiTest, AFoldersDeletePermanentlyErasesOnlyItsDeletedCanvases) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    const TwoCanvasFolder made = MakeTwoCanvasFolder();
+    ASSERT_TRUE(controller_->GetSession().Delete(made.first));
+
+    const std::string deleteInFolder = Under(made.folder, "##deleteforgood");
+    RunUi("show deleted, delete the folder's deleted canvases", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###showdeleted");
+        ctx->ItemClick(deleteInFolder.c_str());
+        ctx->ItemClick("//$FOCUSED/##confirmdelete");
+    });
+    EXPECT_EQ(Canvases().FindCanvas(made.first), nullptr);
+    ASSERT_NE(Canvases().FindFolder(made.folder), nullptr);
+    EXPECT_EQ(Canvases().FindFolder(made.folder)->deletedAt, 0);
+    EXPECT_NE(Canvases().FindCanvas(made.second), nullptr);
 }
 
 // The same delete with a neighbour to fall back on: no canvas is created,

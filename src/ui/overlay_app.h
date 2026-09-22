@@ -736,10 +736,29 @@ private:
         std::optional<std::pair<FolderId, size_t>> folderReorder;  // folder, new place in Folders()
         std::optional<std::pair<CanvasId, size_t>> canvasReorder;  // canvas, new place in its folder
         std::optional<std::pair<CanvasId, FolderId>> canvasToFolder;
+        // A deleted folder picked in the sidebar with Show deleted on - see
+        // deletedFolderShown_.
+        std::optional<FolderId> showDeletedFolder;
+        // A folder's or canvas's Restore - see CanvasManager::Restore.
+        std::optional<uint64_t> restore;
     };
     void RenderFolderSidebar(OverviewActions& actions);
     void RenderCanvasGrid(float displayW, float displayH, OverviewActions& actions);
-    void RenderOverviewFooter(bool showCanvasesBody, bool showDeletedList);
+    void RenderOverviewFooter(bool showCanvasesBody);
+    // Whether the Canvases tab shows what is deleted - showDeleted_, never
+    // while picking where a snippet goes, which is a place among the live
+    // ones.
+    bool ShowingDeleted() const { return showDeleted_ && !pickerItemId_.has_value(); }
+    // The folder the sidebar marks as open and the grid shows: the one
+    // being browsed, or a deleted one picked with Show deleted on.
+    FolderId OverviewFolderId() const;
+    // Lets go of deletedFolderShown_ once it is no longer something to
+    // show: Show deleted is off, the folder is gone, or it has been
+    // restored - in which case it is browsed as any live folder is.
+    void SettleDeletedFolderShown();
+    // The sidebar's width: wider with Show deleted on, where a row can
+    // carry two buttons rather than one.
+    float OverviewSidebarWidth() const;
     void ApplyOverviewActions(const OverviewActions& actions);
     // The picker's one outcome: the snippet it was opened for goes to
     // `target` - moved or copied, as the picker was opened - and the
@@ -896,11 +915,6 @@ private:
     void RenderActionToast();
     // See SetConfigWriteFailed.
     void RenderPersistenceWarning();
-    // The Canvases tab's other body, in place of the folders and the grid:
-    // everything deleted, newest first, each with a preview, what it is and
-    // what is in it, where it was and when it went, and Restore and Delete
-    // permanently beside it. See CanvasManager::DeletedThings.
-    void RenderRecentlyDeleted(float displayW, float displayH);
 
     void SetTool(Tool tool);
     // Sets the draw color (see drawColorRGBA_'s own doc comment) - the
@@ -1131,12 +1145,6 @@ private:
     // by the canvas grid, the canvas bar and the recently-deleted list.
     using PreviewTextureFn = std::function<std::optional<uint64_t>(const Item&, size_t)>;
     PreviewTextureFn PreviewTextureLookup();
-    // A Recently deleted row's preview: a canvas as its tile draws it (a
-    // folder gives its first canvas), a snippet on its own, fitted to the
-    // box; an empty box when neither is given.
-    void DrawDeletedPreview(ImDrawList* drawList, const Canvas* canvas, const Item* item, ImVec2 previewMin,
-                            ImVec2 previewMax, float displayW, float displayH,
-                            const PreviewTextureFn& previewTexture);
     void ReleaseLayerPreviews();
 
     // ===== Painting (see AppConfig::paintPixelsInsteadOfStrokes) =====
@@ -1185,11 +1193,12 @@ private:
     // <name>?" text, so it doesn't need to re-look-up a possibly-renamed-since
     // target.
     struct ConfirmDeleteTarget {
-        // Snippet only ever from the Recently deleted list, where a delete
-        // is for good and so asks first.
-        enum class Kind { Canvas, Folder, Snippet };
+        // DeletedCanvasesIn is a folder that is not deleted itself, and
+        // what goes for good is the canvases in it that are - see
+        // Session::DeleteMarkedCanvasesPermanently. Always for good.
+        enum class Kind { Canvas, Folder, DeletedCanvasesIn };
         Kind kind = Kind::Canvas;
-        uint64_t id = 0;  // CanvasId, FolderId or ItemId depending on kind
+        uint64_t id = 0;  // CanvasId or FolderId depending on kind
         std::string name;
         // Deleted already, so this is Delete permanently rather than a mark.
         bool forGood = false;
@@ -1199,8 +1208,6 @@ private:
     // itemPropertiesPopoverRequested_, even though nothing here is
     // actually reached from the raw platform callback the way that is).
     bool confirmDeletePopoverRequested_ = false;
-    // The confirm popover's word for a deleted thing's kind.
-    static ConfirmDeleteTarget::Kind ConfirmKindOf(DeletedThing::Kind kind);
 
 
     // Applied once, on the first OnFrame call (ImGui's style/color tables
@@ -1676,10 +1683,18 @@ private:
     // Canvases and Settings for something read once, if ever. Not persisted
     // - a fresh About always opens on About.
     bool aboutShowsNotices_ = false;
-    // Whether the Canvases tab shows the Recently deleted list rather than
-    // the folders and the grid (see RenderRecentlyDeleted). Not persisted,
-    // and back to the grid whenever the Overview opens.
-    bool recentlyDeletedOpen_ = false;
+    // Whether the Canvases tab shows what is deleted alongside what is not:
+    // deleted folders in the sidebar and deleted canvases in the grid,
+    // marked out in red with Restore and Delete permanently on each, and
+    // everything else dimmed. Not persisted, and off whenever the Overview
+    // opens. See ShowingDeleted.
+    bool showDeleted_ = false;
+    // A deleted folder picked in the sidebar while Show deleted is on, whose
+    // canvases the grid shows. Kept here rather than as the browsed folder:
+    // that is where a new canvas lands, and the manager never lets it be a
+    // deleted one (see CanvasManager::SettleOffDeleted). See
+    // SettleDeletedFolderShown for when it lets go.
+    std::optional<FolderId> deletedFolderShown_;
     // Set by anything that changes what the body is showing; consumed by
     // the body itself on its next frame. All three tabs and both About
     // pages share one scrolling child, so a page arrived at from halfway

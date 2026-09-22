@@ -1060,32 +1060,6 @@ std::vector<ItemId> CanvasManager::MarkedSnippets() const {
     return marked;
 }
 
-std::vector<DeletedThing> CanvasManager::DeletedThings() const {
-    std::vector<DeletedThing> things;
-    for (const Folder& folder : folders_) {
-        if (folder.deletedAt != 0) {
-            things.push_back(DeletedThing{DeletedThing::Kind::Folder, folder.id, folder.deletedAt});
-        }
-    }
-    for (const Canvas& canvas : canvases_) {
-        if (canvas.deletedAt != 0) {
-            things.push_back(DeletedThing{DeletedThing::Kind::Canvas, canvas.id, canvas.deletedAt});
-        }
-    }
-    for (const Canvas& canvas : canvases_) {
-        for (const Item& item : canvas.items) {
-            if (item.deletedAt != 0) {
-                things.push_back(DeletedThing{DeletedThing::Kind::Snippet, item.id, item.deletedAt});
-            }
-        }
-    }
-    // Newest first. Stable, so what went in the same second keeps the order
-    // above: a folder before a canvas before a snippet.
-    std::stable_sort(things.begin(), things.end(),
-                     [](const DeletedThing& a, const DeletedThing& b) { return a.deletedAt > b.deletedAt; });
-    return things;
-}
-
 void CanvasManager::SyncShotTexturesToCanvas(CanvasId canvasId,
                                               const std::function<uint64_t(const Item&, Layer&)>& loadLayer,
                                               const std::function<void(Layer&)>& releaseLayer) {
