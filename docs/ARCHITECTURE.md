@@ -306,10 +306,15 @@ plus which folder is browsed and which canvas is current.
 
 Two pieces of "current" are deliberately decoupled: the current canvas
 is what is on screen and drawn on; the browsed folder is what the
-Overview shows and where a new canvas lands. Browsing a folder never
-switches away from the canvas being edited. Code that wants one of them
-has to say which: "where am I working" is the current canvas's folder,
-"what am I looking at" is the browsed folder.
+Overview shows and where its own "New canvas" lands. Browsing a folder
+never switches away from the canvas being edited. Code that wants one of
+them has to say which: "where am I working" is the current canvas's
+folder, "what am I looking at" is the browsed folder. A canvas made from
+the canvas itself - the shortcuts, the canvas bar, a capture - lands
+beside the current one, in the working folder: the two differ only after
+the Overview has been browsed elsewhere and closed without switching, and
+a canvas that then landed where the user was last *looking* rather than
+working was a surprise.
 
 There is no "always at least one canvas" invariant. An empty folder is a
 legal state the moment one is created, so refusing to let the library
@@ -1085,7 +1090,10 @@ by mistake can be undone into Recently deleted and redone out of it. A
 drawing a press made is watched until the hand moves on, and
 `DiscardIfUntouched` erases it for good if nothing was put into it: no
 strokes, no paint, no text, no picture. A screenshot is content even when
-its capture failed.
+its capture failed. The watch ends the frame after something first goes
+in, not when the hand moves on: a drawing that has held a stroke is a
+drawing, and an undo that empties it again must leave an empty drawing
+behind rather than erase it - which took the redo of the stroke with it.
 
 ### Freezing the screen
 
@@ -1195,9 +1203,10 @@ nothing open that a click outside of is meant to close, or every
 dismissal would leave a drawing behind.
 
 Two things make it cheap to hit by accident. A drawing a press made is
-watched until the hand moves on, and discarded for good if nothing was
-put into it. And making one is on the history: undo marks the snippet
-deleted, where a screenshot taken by mistake can still be found.
+watched until the hand moves on or something goes into it, and discarded
+for good if nothing was put into it. And making one is on the history:
+undo marks the snippet deleted, where a screenshot taken by mistake can
+still be found.
 
 ### Tools, and what a modifier does
 
