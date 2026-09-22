@@ -604,6 +604,16 @@ private:
     // the group keeps its shape and its spacing. `dx`/`dy` are the whole
     // drag, from the press to now, as every other resize is computed.
     void ResizeSelectionAsAGroup(float dx, float dy);
+    // The wheel over a selection outside drawing mode: every selected
+    // snippet scaled by kWheelScaleStep per notch, as a group about the
+    // middle of the box around them - the same scaling a corner handle
+    // does, so shapes and spacing are kept, and the smallest snippet's
+    // floor stops all of them. A fullscreen snippet is left as it is.
+    void ScaleSelectionByWheel(int steps);
+    // Ctrl or Shift with the wheel: the selection's background or
+    // foreground opacity, kWheelOpacityStep per notch, within the ranges
+    // the Properties popover's sliders have. Says the new value in a toast.
+    void StepSelectionOpacity(int steps, bool background);
     // Moves every selected snippet by (dx, dy), clamped on screen - the
     // arrow keys.
     void NudgeSelection(float dx, float dy);
@@ -1808,6 +1818,10 @@ private:
     // over from resizing a brush must not count toward a canvas switch.
     float sizeWheelRemainder_ = 0.0f;
     float canvasWheelRemainder_ = 0.0f;
+    // For the selection: its scale, and its two opacities. One between the
+    // three, since they are one hand on one selection, told apart by a
+    // modifier held for the whole spin.
+    float selectionWheelRemainder_ = 0.0f;
 
     // See RequestWelcomeNote/PlaceWelcomeNote. Cleared the moment the note
     // is placed, so it can never be placed twice.

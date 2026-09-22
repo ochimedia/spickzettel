@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -928,6 +929,102 @@ void OverlayApp::ResizeSelectionAsAGroup(float dx, float dy) {
         Manager().MarkChanged();
         Manager().CommitItemLayout(item->id);
     }
+}
+
+void OverlayApp::ScaleSelectionByWheel(int steps) {
+    if (steps == 0 || !SelectionLive()) {
+        return;
+    }
+    // The snippets to scale, as they are now: fullscreen ones fill the
+    // screen by definition and have no size of their own to change.
+    std::vector<Item*> items;
+    for (const ItemId id : selection_) {
+        Item* item = Manager().FindItemAnywhere(id);
+        if (item != nullptr && !item->isFullscreen && item->rect.w > 0.0f && item->rect.h > 0.0f) {
+            items.push_back(item);
+        }
+    }
+    if (items.empty()) {
+        return;
+    }
+    float minX = std::numeric_limits<float>::max();
+    float minY = std::numeric_limits<float>::max();
+    float maxX = std::numeric_limits<float>::lowest();
+    float maxY = std::numeric_limits<float>::lowest();
+    float floorScale = 0.0f;
+    for (const Item* item : items) {
+        minX = std::min(minX, item->rect.x);
+        minY = std::min(minY, item->rect.y);
+        maxX = std::max(maxX, item->rect.x + item->rect.w);
+        maxY = std::max(maxY, item->rect.y + item->rect.h);
+        const MinItemSize smallest = MinimumSizeForAspectRatio(item->rect.w / item->rect.h);
+        floorScale = std::max({floorScale, smallest.w / item->rect.w, smallest.h / item->rect.h});
+    }
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    const float boxW = maxX - minX;
+    const float boxH = maxY - minY;
+    float scale = std::pow(kWheelScaleStep, static_cast<float>(steps));
+    // Down to the smallest snippet's floor, and up to where the group fills
+    // the screen - past that, growing would only push snippets against its
+    // edges, one at a time, and out of step with the rest.
+    const float ceilingScale =
+        std::max(1.0f, std::min(display.x > 0.0f ? display.x / boxW : 1.0f, display.y > 0.0f ? display.y / boxH : 1.0f));
+    scale = std::clamp(scale, std::min(floorScale, 1.0f), ceilingScale);
+    if (scale == 1.0f) {
+        return;
+    }
+    const float anchorX = minX + boxW * 0.5f;
+    const float anchorY = minY + boxH * 0.5f;
+    for (Item* item : items) {
+        const Rect scaled{anchorX + (item->rect.x - anchorX) * scale, anchorY + (item->rect.y - anchorY) * scale,
+                           item->rect.w * scale, item->rect.h * scale};
+        item->rect = ClampRectToViewport(scaled, display.x, display.y);
+        Manager().CommitItemLayout(item->id);
+    }
+    Manager().MarkChanged();
+    // A drawing placed and then scaled is one someone wants, as one moved
+    // or resized by hand is.
+    KeepPlacedDrawings();
+}
+
+void OverlayApp::StepSelectionOpacity(int steps, bool background) {
+    if (steps == 0 || !SelectionLive()) {
+        return;
+    }
+    const float delta = kWheelOpacityStep * static_cast<float>(steps);
+    // On the popover's whole-percent grid, so the wheel and the slider
+    // never disagree about what a value is.
+    const auto stepped = [delta](float value, float lowest) {
+        return std::clamp(std::round((value + delta) * 100.0f) / 100.0f, lowest, 1.0f);
+    };
+    std::optional<float> shown;
+    for (const ItemId id : selection_) {
+        Item* item = Manager().FindItemAnywhere(id);
+        if (item == nullptr) {
+            continue;
+        }
+        if (background) {
+            // A snippet with no picture has no background to fade.
+            if (Layer* picture = item->ImageLayer()) {
+                picture->opacity = stepped(picture->opacity, 0.0f);
+                shown = picture->opacity;
+            }
+        } else {
+            // Not below a tenth - see RenderItemOpacity.
+            item->foregroundOpacity = stepped(item->foregroundOpacity, 0.1f);
+            shown = item->foregroundOpacity;
+        }
+    }
+    if (!shown.has_value()) {
+        return;
+    }
+    Manager().MarkChanged();
+    // The value, since the change itself can be hard to judge by eye: the
+    // last snippet's, which with several selected is the one selected last.
+    char text[64];
+    std::snprintf(text, sizeof(text), background ? strings::kToastBackgroundOpacity : strings::kToastForegroundOpacity,
+                  static_cast<int>(std::round(*shown * 100.0f)));
+    ShowActionToast(text);
 }
 
 // ================= Making a snippet: a press on empty canvas =================

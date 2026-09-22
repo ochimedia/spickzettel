@@ -32,8 +32,9 @@ hold) for a fullscreen one. A plain click makes nothing.
 - Delete removes the selection; Ctrl+Z brings it back. Ctrl+C, Ctrl+X and
   Ctrl+V copy, cut and paste snippets, between canvases too.
 - Ctrl+Z - undo. Ctrl+Y or Ctrl+Shift+Z - redo.
-- Mouse wheel - pen or eraser size. Alt+wheel - step between the canvases
-  of the folder you are in.
+- Mouse wheel - the selected snippets' size; while drawing, the pen or
+  eraser size. Ctrl+wheel - background opacity, Shift+wheel - foreground
+  opacity. Alt+wheel - step between the canvases of the folder you are in.
 - The bar along the bottom edge shows the canvases of the folder; it
   slides out when the pointer reaches the edge. Its buttons make a new
   canvas and open the Overview, where folders, canvases and Settings

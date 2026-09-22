@@ -423,6 +423,11 @@ inline constexpr float kPillButtonSize = 28.0f;
 // text by 10, so this is the name's width plus room to breathe.
 inline constexpr float kOverviewSidebarWidth = 200.0f;
 
+// What a notch of the wheel does to the selection - see
+// OverlayApp::ScaleSelectionByWheel and StepSelectionOpacity.
+inline constexpr float kWheelScaleStep = 1.1f;
+inline constexpr float kWheelOpacityStep = 0.05f;
+
 // How much of itself every snippet keeps while a new one is being made -
 // see OverlayApp::ItemsFadedForCreation. Enough to tell where things are,
 // little enough that what is being framed is what is seen.

@@ -1424,13 +1424,24 @@ tile's place is looked up in the whole folder rather than read off its
 position on the bar - otherwise a deleted canvas between two tiles would
 make a drop land one short.
 
-The wheel sets the size of Draw or Erase; with Alt it steps through the
-canvases of the folder the *current canvas* lives in (not the browsed
-folder), without wrapping, and ends any gesture in flight first by
-feeding the release the handler is waiting for. Both honour how far the
-wheel actually turned, keeping a remainder across frames, so a fast spin
-is not truncated to one step and a precision touchpad's fractions are
-not rounded to nothing. A transient size preview at the cursor is the
+Without a modifier the wheel sets a size, and the mode says which: in
+drawing mode the size of Draw or Erase, and outside it the selection's,
+scaled as a group about its middle the way a corner handle scales it,
+kept between the smallest snippet's floor and the screen. The mode
+decides rather than whether anything is selected, because in drawing
+mode something always is - the snippet under the pen, which a size
+meant for the brush must not start scaling. Ctrl and Shift with the
+wheel set the selection's background and foreground opacity, in either
+mode, five percent a notch within the Properties sliders' ranges, and a
+toast says the value reached.
+
+With Alt the wheel steps through the canvases of the folder the
+*current canvas* lives in (not the browsed folder), without wrapping,
+and ends any gesture in flight first by feeding the release the handler
+is waiting for. All of these honour how far the wheel actually turned,
+keeping a remainder across frames, so a fast spin is not truncated to
+one step and a precision touchpad's fractions are not rounded to
+nothing. For the brush, a transient size preview at the cursor is the
 feedback; a permanent brush cursor is what made an earlier design feel
 busy over a game.
 

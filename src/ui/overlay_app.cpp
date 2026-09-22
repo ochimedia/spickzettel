@@ -972,20 +972,28 @@ struct OverlayApp::MeshCacheFrame {
 };
 
 void OverlayApp::HandleMouseWheel() {
-    // The wheel does two things, told apart by Alt - the same modifier
-    // that already means "select, whatever tool is in hand" for a press
-    // (see HandleItemGesture). Both are suppressed
-    // while the Overview is up: it has its own canvas navigation and its
-    // own scroll, and having the wheel quietly change something
-    // underneath it would be a surprise.
+    // What the wheel does is told apart by a modifier, and without one by
+    // the mode. All of it is suppressed while the Overview is up: it has
+    // its own canvas navigation and its own scroll, and having the wheel
+    // quietly change something underneath it would be a surprise.
     //
     // Alt held: step between the canvases of the current canvas's own
-    // folder. Otherwise: stroke/eraser size, the near-universal convention
-    // in drawing tools and the one tool "option" reached for *during* work
-    // rather than while configuring - which is why there is no width
-    // slider anywhere. Plain
-    // (unmodified) scrolling still yields to whatever ImGui widget wants
-    // it; the Alt gesture deliberately doesn't, matching an Alt press.
+    // folder - Alt being the modifier that already means "select, whatever
+    // tool is in hand" for a press (see HandleItemGesture). This one
+    // deliberately does not yield to an ImGui widget, matching an Alt
+    // press; everything below does.
+    //
+    // Ctrl or Shift held: the selection's background or foreground
+    // opacity, in either mode - in drawing mode the selection is the
+    // snippet being drawn on.
+    //
+    // Nothing held: in drawing mode, stroke/eraser size, the near-universal
+    // convention in drawing tools and the one tool "option" reached for
+    // *during* work rather than while configuring - which is why there is
+    // no width slider anywhere. Outside it, the selection's size. The mode
+    // is what decides, not whether something happens to be selected: in
+    // drawing mode something always is, and the wheel must not start
+    // scaling the snippet under the pen.
     const ImGuiIO& io = ImGui::GetIO();
     if (io.MouseWheel == 0.0f || overviewOpen_) {
         return;
@@ -997,7 +1005,19 @@ void OverlayApp::HandleMouseWheel() {
             if (const int steps = TakeWheelSteps(canvasWheelRemainder_, io.MouseWheel); steps != 0) {
                 SwitchCanvasByOffset(-steps);
             }
-        } else if (!ImGui::GetIO().WantCaptureMouse) {
+        } else if (io.WantCaptureMouse) {
+            // A widget under the pointer has the wheel.
+        } else if (io.KeyCtrl != io.KeyShift) {
+            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, io.MouseWheel); steps != 0) {
+                StepSelectionOpacity(steps, /*background=*/io.KeyCtrl);
+            }
+        } else if (io.KeyCtrl) {
+            // Both held: neither opacity is meant more than the other.
+        } else if (!drawingItem_.has_value()) {
+            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, io.MouseWheel); steps != 0) {
+                ScaleSelectionByWheel(steps);
+            }
+        } else {
             const int steps = TakeWheelSteps(sizeWheelRemainder_, io.MouseWheel);
             if (steps == 0) {
                 // Nothing whole came out of the accumulator yet (a

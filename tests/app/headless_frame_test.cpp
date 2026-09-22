@@ -2420,6 +2420,75 @@ TEST_F(HeadlessAppTest, TheWheelsPenWidthIsKeptOnceThePreviewFades) {
     EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, before + 2.0f);
 }
 
+// Out of drawing mode the wheel is the selection's size: scaled about the
+// middle, shape kept - and in drawing mode it stays the pen's, and the
+// snippet under the pen keeps its size.
+TEST_F(HeadlessAppTest, TheWheelScalesTheSelectionOutsideDrawingModeAndSizesThePenInIt) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    ASSERT_TRUE(App().DrawingItem().has_value());
+    const ItemId id = *App().DrawingItem();
+    const Rect before = controller_->GetSession().Manager().FindItemAnywhere(id)->rect;
+    const float widthBefore = AppSettings().Stored().strokeWidth;
+
+    MoveTo(500.0f, 400.0f);
+    Wheel(1.0f);
+    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w) << "drawing mode: the pen, not the snippet";
+    StepFrames(400);
+    EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, widthBefore + 1.0f);
+
+    PressKey(ImGuiKey_Escape);  // out of drawing mode, still selected
+    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
+    Wheel(2.0f);
+    const Rect after = controller_->GetSession().Manager().FindItemAnywhere(id)->rect;
+    EXPECT_NEAR(after.w, before.w * 1.21f, 0.5f);
+    EXPECT_NEAR(after.h, before.h * 1.21f, 0.5f);
+    EXPECT_NEAR(after.x + after.w * 0.5f, before.x + before.w * 0.5f, 0.5f) << "about its middle";
+    EXPECT_NEAR(after.y + after.h * 0.5f, before.y + before.h * 0.5f, 0.5f);
+    Wheel(-2.0f);
+    EXPECT_NEAR(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w, 0.5f) << "and back";
+    EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, widthBefore + 1.0f) << "the pen untouched";
+
+    PressKey(ImGuiKey_Escape);  // nothing selected: the wheel has nothing to do
+    Wheel(1.0f);
+    EXPECT_NEAR(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w, 0.5f);
+}
+
+// Ctrl with the wheel is the selection's background opacity, Shift its
+// foreground's, five percent a notch, within the popover's ranges.
+TEST_F(HeadlessAppTest, CtrlAndShiftWithTheWheelSetTheSelectionsOpacities) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 700.0f, 550.0f);  // a region: a screenshot, with a picture layer
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const ItemId id = Canvases().CurrentOrNull()->items[0].id;
+    RawClick(500.0f, 400.0f);
+    ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
+    ASSERT_FALSE(App().DrawingItem().has_value());
+    const Rect before = controller_->GetSession().Manager().FindItemAnywhere(id)->rect;
+
+    const auto wheelWith = [this](ImGuiKey modifier, float notches) {
+        ImGui::GetIO().AddKeyEvent(modifier, true);
+        StepFrame();
+        Wheel(notches);
+        ImGui::GetIO().AddKeyEvent(modifier, false);
+        StepFrame();
+    };
+    wheelWith(ImGuiMod_Ctrl, -2.0f);
+    const Item* item = controller_->GetSession().Manager().FindItemAnywhere(id);
+    ASSERT_NE(item->ImageLayer(), nullptr);
+    EXPECT_FLOAT_EQ(item->ImageLayer()->opacity, 0.9f);
+    EXPECT_FLOAT_EQ(item->foregroundOpacity, 1.0f);
+
+    wheelWith(ImGuiMod_Shift, -40.0f);
+    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->foregroundOpacity, 0.1f) << "not below a tenth";
+    wheelWith(ImGuiMod_Ctrl, 5.0f);
+    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->ImageLayer()->opacity, 1.0f) << "not above whole";
+    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w) << "a modified wheel does not scale";
+}
+
 // ===== Draw and Erase: the shape comes from the modifier =====
 
 TEST_F(HeadlessAppTest, ShiftDrawsALineAndCtrlARectangle) {

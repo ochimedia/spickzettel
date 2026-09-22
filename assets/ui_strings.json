@@ -99,6 +99,8 @@
   "toast.copiedWithoutPicture": "Copied without its picture - the original's could not be read",
   "toast.deleted": "Deleted",
   "toast.restored": "Restored",
+  "toast.foregroundOpacity": "Foreground %d%%",
+  "toast.backgroundOpacity": "Background %d%%",
   "toast.deletedForGood": "Deleted permanently",
   "toast.deletedForGoodFilesRemain": "Deleted permanently - one of its files is still in use and goes with the next save",
   "toast.clearedDrawing": "Cleared drawing",
