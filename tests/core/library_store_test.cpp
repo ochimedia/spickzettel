@@ -476,6 +476,34 @@ TEST_F(LibraryStoreTest, LoadReadsANumberTooLargeForAFloatAsTheDefault) {
     EXPECT_FLOAT_EQ(item.layers[0].resolutionScale, 16.0f);
 }
 
+// ...and what was repaired reaches the disk with the next save. A record
+// read back exactly as a save would write it is noted as written and left
+// alone (see IncrementalSaveTest); one the read had to change is not.
+TEST_F(LibraryStoreTest, TheNextSaveWritesBackWhatTheLoadRepaired) {
+    WriteLibraryTree(dir_, R"({
+        "currentFolderId": 1, "currentCanvasId": 2,
+        "folders": [{"id": 1, "name": "F"}],
+        "canvases": [{"id": 2, "folderId": 1, "name": "C", "items": [{
+            "id": 3, "name": "Huge", "nativeW": 1e6, "layers": [{"opacity": 5}]
+        }]}]
+    })");
+    LibraryStore store(dir_);
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_TRUE(store.Save(*loaded));
+
+    // Under whatever the save named the snippet's directory.
+    nlohmann::json record;
+    for (const auto& entry : std::filesystem::directory_iterator(dir_ / "folders" / "f-000001" / "c-000002")) {
+        if (entry.is_directory()) {
+            record = nlohmann::json::parse(std::ifstream(entry.path() / "item.json"));
+        }
+    }
+    ASSERT_TRUE(record.is_object());
+    EXPECT_FLOAT_EQ(record["nativeW"].get<float>(), 65536.0f) << "held to the range, on disk now";
+    EXPECT_FLOAT_EQ(record["layers"][0]["opacity"].get<float>(), 1.0f);
+}
+
 TEST_F(LibraryStoreTest, LoadClampsAnOutOfRangeNoteTextSize) {
     std::filesystem::create_directories(dir_);
     WriteLibraryTree(dir_, R"({

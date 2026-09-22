@@ -60,18 +60,35 @@ uint64_t ReadId(const json& j, const char* key) {
 // float a record holds comes through here: a value that is not finite
 // reads as the field's default, and the fields with a meaningful range are
 // held inside it. Clamped or defaulted, never refused: the rest of the
-// record is still the user's, and a save writes the repaired value back.
-float FiniteOr(const json& j, const char* key, float fallback) {
+// record is still the user's, and a save writes the repaired value back -
+// which is what `repaired` is for: a record the load had to change on the
+// way in is not noted as already written (see ReadTree), so the next save
+// writes it. A key that is simply absent reads as its default and is not
+// a repair: written back, it reads the same next time.
+float FiniteOr(const json& j, const char* key, float fallback, bool& repaired) {
     const auto it = j.find(key);
-    if (it == j.end() || !it->is_number()) {
+    if (it == j.end()) {
+        return fallback;
+    }
+    if (!it->is_number()) {
+        repaired = true;
         return fallback;
     }
     const float value = it->get<float>();
-    return std::isfinite(value) ? value : fallback;
+    if (!std::isfinite(value)) {
+        repaired = true;
+        return fallback;
+    }
+    return value;
 }
 
-float ClampedOr(const json& j, const char* key, float fallback, float min, float max) {
-    return std::clamp(FiniteOr(j, key, fallback), min, max);
+float ClampedOr(const json& j, const char* key, float fallback, float min, float max, bool& repaired) {
+    const float value = FiniteOr(j, key, fallback, repaired);
+    const float held = std::clamp(value, min, max);
+    if (held != value) {
+        repaired = true;
+    }
+    return held;
 }
 
 // A stroke's width or an item's native size: positive, and no wider than a
@@ -81,9 +98,9 @@ constexpr float kMaxSensibleExtent = 65536.0f;
 
 json ToJson(const StrokePoint& p) { return json{{"x", p.x}, {"y", p.y}}; }
 
-void FromJson(const json& j, StrokePoint& out) {
-    out.x = FiniteOr(j, "x", 0.0f);
-    out.y = FiniteOr(j, "y", 0.0f);
+void FromJson(const json& j, StrokePoint& out, bool& repaired) {
+    out.x = FiniteOr(j, "x", 0.0f, repaired);
+    out.y = FiniteOr(j, "y", 0.0f, repaired);
 }
 
 json ToJson(const Stroke& s) {
@@ -94,18 +111,19 @@ json ToJson(const Stroke& s) {
     return json{{"colorRGBA", s.colorRGBA}, {"width", s.width}, {"points", std::move(points)}};
 }
 
-void FromJson(const json& j, Stroke& out) {
+void FromJson(const json& j, Stroke& out, bool& repaired) {
     out.colorRGBA = j.value("colorRGBA", 0xFF0000FFu);
-    out.width = FiniteOr(j, "width", 3.0f);
+    out.width = FiniteOr(j, "width", 3.0f, repaired);
     if (out.width <= 0.0f || out.width > kMaxSensibleExtent) {
         out.width = 3.0f;
+        repaired = true;
     }
     out.points.clear();
     if (const auto it = j.find("points"); it != j.end() && it->is_array()) {
         out.points.reserve(it->size());
         for (const auto& pointJson : *it) {
             StrokePoint point;
-            FromJson(pointJson, point);
+            FromJson(pointJson, point, repaired);
             out.points.push_back(point);
         }
     }
@@ -113,11 +131,11 @@ void FromJson(const json& j, Stroke& out) {
 
 json ToJson(const Rect& r) { return json{{"x", r.x}, {"y", r.y}, {"w", r.w}, {"h", r.h}}; }
 
-void FromJson(const json& j, Rect& out) {
-    out.x = FiniteOr(j, "x", 0.0f);
-    out.y = FiniteOr(j, "y", 0.0f);
-    out.w = FiniteOr(j, "w", 0.0f);
-    out.h = FiniteOr(j, "h", 0.0f);
+void FromJson(const json& j, Rect& out, bool& repaired) {
+    out.x = FiniteOr(j, "x", 0.0f, repaired);
+    out.y = FiniteOr(j, "y", 0.0f, repaired);
+    out.w = FiniteOr(j, "w", 0.0f, repaired);
+    out.h = FiniteOr(j, "h", 0.0f, repaired);
 }
 
 // A bare filename and nothing else: no separators, no ".", no "..", no
@@ -165,19 +183,20 @@ json ToJson(const Layer& layer) {
     };
 }
 
-bool FromJson(const json& j, Layer& out) {
+bool FromJson(const json& j, Layer& out, bool& repaired) {
     if (!j.is_object()) {
         return false;
     }
     out.kind = j.value("kind", std::string("image")) == "painted" ? LayerKind::Painted : LayerKind::Image;
-    out.opacity = ClampedOr(j, "opacity", 0.0f, 0.0f, 1.0f);
-    out.resolutionScale = ClampedOr(j, "resolutionScale", 1.0f, 0.05f, 16.0f);
+    out.opacity = ClampedOr(j, "opacity", 0.0f, 0.0f, 1.0f, repaired);
+    out.resolutionScale = ClampedOr(j, "resolutionScale", 1.0f, 0.05f, 16.0f, repaired);
     out.tintColorRGBA = j.value("tintColorRGBA", uint32_t{0xFFFFFFFF});
     out.showsPlaceholder = j.value("showsPlaceholder", false);
-    out.placeholderHue = ClampedOr(j, "placeholderHue", 0.0f, 0.0f, 360.0f);
+    out.placeholderHue = ClampedOr(j, "placeholderHue", 0.0f, 0.0f, 360.0f, repaired);
     out.imageFile = j.value("imageFile", std::string());
-    if (!IsPlainFilename(out.imageFile)) {
+    if (!out.imageFile.empty() && !IsPlainFilename(out.imageFile)) {
         out.imageFile.clear();  // a layer with no picture, rather than one somewhere else
+        repaired = true;
     }
     return true;
 }
@@ -192,10 +211,13 @@ bool FromJson(const json& j, Layer& out) {
 Layer LayerFromPreLayersItemJson(const json& j, bool hasBackground) {
     Layer layer;
     layer.kind = LayerKind::Image;
-    layer.opacity = ClampedOr(j, "backgroundOpacity", hasBackground ? 1.0f : 0.0f, 0.0f, 1.0f);
+    // Whether anything had to be repaired is not asked: a record in this
+    // shape is rewritten by the next save whatever it held (see ReadTree).
+    bool repaired = false;
+    layer.opacity = ClampedOr(j, "backgroundOpacity", hasBackground ? 1.0f : 0.0f, 0.0f, 1.0f, repaired);
     layer.tintColorRGBA = j.value("backgroundColorRGBA", uint32_t{0xFFFFFFFF});
     layer.showsPlaceholder = hasBackground;
-    layer.placeholderHue = ClampedOr(j, "seedHue", 0.0f, 0.0f, 360.0f);
+    layer.placeholderHue = ClampedOr(j, "seedHue", 0.0f, 0.0f, 360.0f, repaired);
     layer.imageFile = j.value("shotImageFile", std::string());
     if (!IsPlainFilename(layer.imageFile)) {
         layer.imageFile.clear();
@@ -360,7 +382,11 @@ uint64_t HashItem(const Item& item) {
 // Every layer's textureHandle is deliberately left at its default (0): a
 // GPU handle from a previous run is never valid to reuse - see OverlayApp's
 // own reload, which re-derives it from the layer's imageFile instead.
-bool FromJson(const json& j, Item& out) {
+//
+// `repaired` is set when a value the record carried had to be changed to
+// be usable - see FiniteOr - and is what keeps the repaired record from
+// being noted as already written (see ReadTree).
+bool FromJson(const json& j, Item& out, bool& repaired) {
     if (!j.is_object()) {
         return false;
     }
@@ -371,11 +397,11 @@ bool FromJson(const json& j, Item& out) {
     out.hasBackground = j.value("hasBackground", false);
     out.name = j.value("name", std::string());
     if (const auto it = j.find("rect"); it != j.end()) {
-        FromJson(*it, out.rect);
+        FromJson(*it, out.rect, repaired);
     }
-    out.nativeW = ClampedOr(j, "nativeW", 0.0f, 0.0f, kMaxSensibleExtent);
-    out.nativeH = ClampedOr(j, "nativeH", 0.0f, 0.0f, kMaxSensibleExtent);
-    out.foregroundOpacity = ClampedOr(j, "foregroundOpacity", 1.0f, 0.0f, 1.0f);
+    out.nativeW = ClampedOr(j, "nativeW", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
+    out.nativeH = ClampedOr(j, "nativeH", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
+    out.foregroundOpacity = ClampedOr(j, "foregroundOpacity", 1.0f, 0.0f, 1.0f, repaired);
     out.isFullscreen = j.value("isFullscreen", false);
     out.isFullscreenStretch = j.value("isFullscreenStretch", false);
     out.minimized = j.value("minimized", false);
@@ -389,8 +415,10 @@ bool FromJson(const json& j, Item& out) {
     if (const auto layersIt = j.find("layers"); layersIt != j.end() && layersIt->is_array()) {
         for (const json& layerJson : *layersIt) {
             Layer layer;
-            if (FromJson(layerJson, layer)) {
+            if (FromJson(layerJson, layer, repaired)) {
                 out.layers.push_back(std::move(layer));
+            } else {
+                repaired = true;  // an entry that was not a layer, left out
             }
         }
     } else {
@@ -401,13 +429,14 @@ bool FromJson(const json& j, Item& out) {
         // was unreadable. Item::layers is never empty - see its own comment
         // - so this is where that promise is kept for a loaded item.
         out.layers.push_back(Layer{});
+        repaired = true;
     }
     out.noteText = j.value("noteText", std::string());
     out.noteTextColorRGBA = j.value("noteTextColorRGBA", uint32_t{0xFFFFFFFF});
     // Clamped, not rejected, and the fallback is the same default a fresh
     // Item carries - a library written before these two fields existed
     // reads back as a note styled exactly the way it was drawn then.
-    out.noteTextSizePx = ClampedOr(j, "noteTextSizePx", 17.0f, kNoteTextSizeMin, kNoteTextSizeMax);
+    out.noteTextSizePx = ClampedOr(j, "noteTextSizePx", 17.0f, kNoteTextSizeMin, kNoteTextSizeMax, repaired);
     // anchorRect defaults to a zero Rect (via FromJson(Rect)'s own
     // per-field 0.0f defaults) and anchorDisplayWidth/Height default to 0
     // - together, "not yet anchored" (see Item::anchorRect's own doc
@@ -415,10 +444,10 @@ bool FromJson(const json& j, Item& out) {
     // field existed. CanvasManager::SyncItemsToDisplaySize adopts the
     // loaded `rect` as the anchor the first time it runs.
     if (const auto it = j.find("anchorRect"); it != j.end()) {
-        FromJson(*it, out.anchorRect);
+        FromJson(*it, out.anchorRect, repaired);
     }
-    out.anchorDisplayWidth = ClampedOr(j, "anchorDisplayWidth", 0.0f, 0.0f, kMaxSensibleExtent);
-    out.anchorDisplayHeight = ClampedOr(j, "anchorDisplayHeight", 0.0f, 0.0f, kMaxSensibleExtent);
+    out.anchorDisplayWidth = ClampedOr(j, "anchorDisplayWidth", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
+    out.anchorDisplayHeight = ClampedOr(j, "anchorDisplayHeight", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
     out.createdAt = j.value("createdAt", int64_t{0});
     out.deletedAt = j.value("deletedAt", int64_t{0});
     out.strokes.clear();
@@ -426,7 +455,7 @@ bool FromJson(const json& j, Item& out) {
         out.strokes.reserve(it->size());
         for (const auto& strokeJson : *it) {
             Stroke stroke;
-            FromJson(strokeJson, stroke);
+            FromJson(strokeJson, stroke, repaired);
             out.strokes.push_back(std::move(stroke));
         }
     }
@@ -479,7 +508,8 @@ bool FromJson(const json& j, Canvas& out) {
         out.items.reserve(it->size());
         for (const auto& itemJson : *it) {
             Item item;
-            if (FromJson(itemJson, item)) {
+            bool repaired = false;  // not asked: these are never noted as written
+            if (FromJson(itemJson, item, repaired)) {
                 out.items.push_back(std::move(item));
             }
         }
@@ -558,6 +588,16 @@ template <typename T>
 bool ReadRecord(const json& j, T& out) {
     try {
         return FromJson(j, out);
+    } catch (const json::exception&) {
+        return false;
+    }
+}
+
+// The same for a snippet's record, which also says whether it had to be
+// repaired on the way in - see FromJson(Item).
+bool ReadItemRecord(const json& j, Item& out, bool& repaired) {
+    try {
+        return FromJson(j, out, repaired);
     } catch (const json::exception&) {
         return false;
     }
@@ -1100,7 +1140,8 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                     continue;
                 }
                 Item item;
-                if (!ReadRecord(*itemDoc, item)) {
+                bool repaired = false;
+                if (!ReadItemRecord(*itemDoc, item, repaired)) {
                     continue;
                 }
                 const uint64_t recordedItemId = item.id;
@@ -1113,12 +1154,13 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                 itemDirs_[item.id] = itemDir;
                 // The hash of what was read, not a comparison of the text:
                 // the record is where the bulk is, and serialising it to
-                // compare would cost the load half a save. What FromJson
-                // normalises on the way in reads back the same next time,
-                // so it is no reason to write; a record in the shape from
-                // before layers existed is, and is left unnoted so the next
-                // save brings it into the current one.
-                if (item.id == recordedItemId && itemDoc->contains("layers")) {
+                // compare would cost the load half a save. A key the record
+                // lacks reads as its default and reads back the same next
+                // time, so it is no reason to write; a value the read had
+                // to repair is (see FiniteOr), and so is a record in the
+                // shape from before layers existed - both are left unnoted
+                // so the next save writes them as they now are.
+                if (item.id == recordedItemId && itemDoc->contains("layers") && !repaired) {
                     writtenItemHashes_[item.id] = HashItem(item);
                 }
                 foundItems.emplace_back(itemDir.filename().string(), std::move(item));
