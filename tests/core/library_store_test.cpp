@@ -1639,10 +1639,7 @@ TEST_F(LibraryStoreTest, ARecordWithAFieldOfTheWrongTypeIsSkippedAndLeftWhereItI
 // library.json holds pointers and preferences. Anything wrong with it is a
 // reason to default those, never a reason to report the library absent
 // while a tree is there - because "absent" starts the app fresh, and a
-// fresh library's first save retires everything it finds. That is exactly
-// what happened: an older build that could not read the pointer file wrote
-// its own single-file library.json over it, and the next start of the
-// current build lost the whole tree.
+// fresh library's first save retires everything it finds.
 
 TEST_F(LibraryStoreTest, AGarbagePointerFileDoesNotHideTheTree) {
     ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
@@ -1665,32 +1662,6 @@ TEST_F(LibraryStoreTest, AMissingPointerFileDoesNotHideTheTree) {
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
     ASSERT_TRUE(loaded.has_value());
     EXPECT_EQ(loaded->canvases.size(), 1u);
-}
-
-// The measured sequence, end to end at the store level: the tree survives
-// the old-shaped file, the file is set aside, and a save afterwards leaves
-// every snippet where it was.
-TEST_F(LibraryStoreTest, AnOldSingleFileLibraryJsonBesideATreeCostsThePointersNotTheTree) {
-    ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
-    std::ofstream(dir_ / "library.json") << R"({"version": 1, "currentFolderId": 1, "currentCanvasId": 2,
-        "folders": [{"id": 1, "name": "Old"}],
-        "canvases": [{"id": 2, "folderId": 1, "name": "Old canvas", "items": [{"id": 4, "name": "Welcome"}]}]})";
-
-    LibraryStore store(dir_);
-    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
-    ASSERT_TRUE(loaded.has_value()) << "the tree is the library";
-    ASSERT_EQ(loaded->canvases.size(), 1u);
-    EXPECT_EQ(loaded->canvases[0].name, "Canvas 1") << "read from the tree, not from the old file";
-    EXPECT_EQ(loaded->canvases[0].items.size(), 2u);
-    EXPECT_TRUE(std::filesystem::exists(dir_ / "library.json.v0"));
-
-    ASSERT_TRUE(store.Save(*loaded));
-    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "item.json")) << "nothing was retired";
-    EXPECT_TRUE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" /
-                                         "drawing-1-000003" / "item.json"));
-    const std::optional<CanvasManagerSnapshot> again = LibraryStore(dir_).Load();
-    ASSERT_TRUE(again.has_value());
-    EXPECT_EQ(again->canvases[0].items.size(), 2u);
 }
 
 // The second line of defence, for whatever else might start a fresh
@@ -1722,31 +1693,6 @@ TEST_F(LibraryStoreTest, AStoreThatNeverLoadedRetiresNothingItFoundOnDisk) {
     ASSERT_TRUE(loaded.has_value());
     EXPECT_EQ(loaded->folders.size(), 2u) << "both libraries are there to be read";
     EXPECT_EQ(loaded->canvases.size(), 2u);
-}
-
-// The single file that held everything before the tree. It was never
-// shipped, so there is no migration - but reading it as an empty library
-// and then overwriting it on the first save was the one way this format
-// change could have lost a library, so it is set aside instead. Without a
-// tree beside it the library starts fresh; with one, see above.
-TEST_F(LibraryStoreTest, AnOldSingleFileLibraryIsSetAsideRatherThanReadAsEmpty) {
-    std::filesystem::create_directories(dir_);
-    const std::string old = R"({"version": 1, "currentFolderId": 1, "currentCanvasId": 2,
-        "folders": [{"id": 1, "name": "Old"}],
-        "canvases": [{"id": 2, "folderId": 1, "name": "Old canvas", "items": [{"id": 4, "name": "Old note"}]}]})";
-    std::ofstream(dir_ / "library.json") << old;
-
-    LibraryStore store(dir_);
-    EXPECT_FALSE(store.Load().has_value()) << "not read as an empty library";
-    EXPECT_FALSE(std::filesystem::exists(dir_ / "library.json"));
-    ASSERT_TRUE(std::filesystem::exists(dir_ / "library.json.v0"));
-    std::ifstream in(dir_ / "library.json.v0");
-    const std::string kept((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    EXPECT_EQ(kept, old);
-    // A fresh library saves beside it without touching it.
-    ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
-    EXPECT_TRUE(std::filesystem::exists(dir_ / "library.json.v0"));
-    EXPECT_TRUE(std::filesystem::exists(dir_ / "library.json"));
 }
 
 // ===== Nothing the store deletes or writes is outside the library =====

@@ -190,9 +190,8 @@ public:
     // cannot save over the tree.
     //
     // The tree is the library; library.json is a pointer file beside it.
-    // So a library.json that is missing, not JSON, or in the single-file
-    // shape from before the tree (set aside as library.json.v0, for the
-    // record) costs the pointers it held and nothing else: the tree is
+    // So a library.json that is missing or not JSON costs the pointers it
+    // held and nothing else: the tree is
     // read as usual and the pointers are repaired from it. Reporting the
     // library absent over its pointer file would start the app fresh, and
     // a fresh library saved over a tree is how a tree gets retired.

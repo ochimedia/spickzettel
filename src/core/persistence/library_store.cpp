@@ -1296,14 +1296,15 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
 std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     // The tree is the library, and library.json is a pointer file beside
     // it. That ordering decides everything below: whatever is wrong with
-    // library.json - missing, not JSON, a shape from before the tree - is a
+    // library.json - missing, not JSON, a field of the wrong type - is a
     // reason to default what it holds, and never a reason to report the
     // library absent while a tree is sitting there. Reporting it absent
     // starts the app fresh, and a fresh library's first save would then
     // retire every directory it found on disk as something the library no
-    // longer holds - which is exactly how a whole tree once went missing.
-    // Before anything is read or set aside: nothing of a newer library is
-    // this build's to touch.
+    // longer holds.
+
+    // Before anything is read: nothing of a newer library is this build's
+    // to touch.
     if (WrittenByANewerVersion()) {
         return std::nullopt;
     }
@@ -1311,8 +1312,6 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     std::error_code ec;
     const bool treeExists = std::filesystem::is_directory(foldersRoot, ec);
 
-    // Read and closed before anything below: the old-shape guard renames
-    // this file, and Windows refuses to rename a file something holds open.
     json doc = json::object();
     const std::optional<std::string> text = ReadFileText(rootDir_ / "library.json");
     if (!text && !treeExists) {
@@ -1326,22 +1325,6 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
             }
             doc = json::object();  // a broken pointer file costs its pointers, not the tree
         }
-    }
-
-    // The single file that held everything before the tree did. This reader
-    // takes folders and canvases from directories only, so the old shape
-    // would read as no pointers at all; it is set aside under a name nothing
-    // writes to, for the record, and the tree beside it - if there is one -
-    // is read as usual. It was never shipped, so there is no migration:
-    // without a tree the library starts fresh beside the file.
-    if (const auto canvases = doc.find("canvases");
-        canvases != doc.end() && canvases->is_array() && !canvases->empty()) {
-        std::filesystem::rename(rootDir_ / "library.json", rootDir_ / "library.json.v0", ec);
-        ++writeGeneration_;
-        if (!treeExists) {
-            return std::nullopt;
-        }
-        doc = json::object();
     }
 
     // A load replaces everything this store believed about the tree. The walk
@@ -1370,9 +1353,8 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
 
     ReadTree(foldersRoot, snapshot);
 
-    // Dangling now means "repair", not "refuse". The old single file could
-    // only be right or corrupt; a tree that people are invited to rearrange
-    // is routinely a little out of date, and refusing to open a library
+    // Dangling means "repair", not "refuse". A tree that people are invited
+    // to rearrange is routinely a little out of date, and refusing to open a library
     // because the canvas that was current has been moved out of it would be
     // the worst possible answer to a supported gesture.
     const auto folderExists = [&snapshot](FolderId id) {
