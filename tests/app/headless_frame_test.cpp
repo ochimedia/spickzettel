@@ -1866,6 +1866,39 @@ TEST_F(OverlappingItemsTest, DraggingASelectedSnippetMovesItAndSelectingRaisedIt
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u);
 }
 
+// Taking hold of a multi-selection raises all of it, as a block and in
+// its own order - not the one snippet under the pointer out of the group.
+TEST_F(OverlappingItemsTest, DraggingAMultiSelectionRaisesItAsABlockInItsOwnOrder) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    const ItemId backId = backId_;
+    const ItemId frontId = frontId_;
+    SelectTheBackItem(items);
+    RawClickWith(ImGuiMod_Shift, items.front.x + items.front.w - 30.0f, items.front.y + items.front.h - 30.0f);
+    ASSERT_EQ(App().Selection().size(), 2u);
+    // Something else made since, on top of both.
+    const ItemId otherId = controller_->GetSession().Manager().CreateItem(false, Rect{1200.0f, 100.0f, 200.0f, 200.0f}, "Other");
+    StepFrame();
+    const auto order = [this] {
+        std::vector<ItemId> ids;
+        for (const Item& item : Canvases().CurrentOrNull()->items) {
+            ids.push_back(item.id);
+        }
+        return ids;
+    };
+    ASSERT_EQ(order(), (std::vector<ItemId>{backId, frontId, otherId}));
+
+    // Taken hold of by the one at the back of the two.
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    Drag(x, y, x + 30.0f, y + 10.0f);
+
+    EXPECT_EQ(order(), (std::vector<ItemId>{otherId, backId, frontId}));
+    EXPECT_FLOAT_EQ(ItemById(backId).rect.x, items.back.x + 30.0f);
+    EXPECT_FLOAT_EQ(ItemById(frontId).rect.x, items.front.x + 30.0f) << "the group moved together";
+}
+
 // With the setting off, selecting leaves the stacking order alone - a
 // drawing program's selection.
 TEST_F(OverlappingItemsTest, WithRaisingOffSelectingLeavesTheOrderAlone) {

@@ -492,6 +492,20 @@ void CanvasManager::BringItemToFront(ItemId id) {
     MarkChanged();
 }
 
+void CanvasManager::BringItemsToFront(const std::vector<ItemId>& ids) {
+    Canvas* canvas = CurrentOrNull();
+    if (!canvas) {
+        return;
+    }
+    const auto stays = [&ids](const Item& item) { return std::find(ids.begin(), ids.end(), item.id) == ids.end(); };
+    auto& items = canvas->items;
+    if (std::is_partitioned(items.begin(), items.end(), stays)) {
+        return;  // none of them here, or on top already
+    }
+    std::stable_partition(items.begin(), items.end(), stays);
+    MarkChanged();
+}
+
 void CanvasManager::ToggleFullscreen(ItemId id, float viewportW, float viewportH, bool stretch) {
     Item* item = FindInCurrent(id);
     if (!item) {

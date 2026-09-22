@@ -223,6 +223,14 @@ public:
     // every drag, and the common case - the frontmost item dragged again -
     // must not dirty the library for no change.
     void BringItemToFront(ItemId id);
+    // BringItemToFront for several at once: the ones among `ids` on the
+    // current canvas go to the top as a block, in the order they already
+    // had among themselves, and everything else keeps its order below
+    // them. What a multi-selection taken hold of does - raising only the
+    // snippet under the pointer would pull it out of the group. The same
+    // no-op, without MarkChanged(), when they are the top of the stack
+    // already.
+    void BringItemsToFront(const std::vector<ItemId>& ids);
 
     // Toggles fullscreen. Entering fits the item's own aspect ratio into the
     // viewport, centered, unless `stretch` asks for an exact fill; either

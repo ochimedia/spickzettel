@@ -910,6 +910,32 @@ TEST(CanvasManagerTest, BringItemToFrontMovesItemToTopPreservingOtherOrder) {
     EXPECT_EQ(manager.CurrentOrNull()->items[2].id, a);
 }
 
+TEST(CanvasManagerTest, BringItemsToFrontRaisesThemAsABlockInTheirOwnOrder) {
+    CanvasManager manager;
+    const ItemId a = manager.CreateItem(false, Rect{}, "A");
+    const ItemId b = manager.CreateItem(false, Rect{}, "B");
+    const ItemId c = manager.CreateItem(false, Rect{}, "C");
+    const ItemId d = manager.CreateItem(false, Rect{}, "D");
+    const auto order = [&manager] {
+        std::vector<ItemId> ids;
+        for (const Item& item : manager.CurrentOrNull()->items) {
+            ids.push_back(item.id);
+        }
+        return ids;
+    };
+
+    // In whatever order they are named: their own order is the stack's.
+    manager.BringItemsToFront({c, a});
+    EXPECT_EQ(order(), (std::vector<ItemId>{b, d, a, c}));
+
+    const uint64_t before = manager.Generation();
+    manager.BringItemsToFront({a, c});
+    manager.BringItemsToFront({});
+    manager.BringItemsToFront({424242});
+    EXPECT_EQ(order(), (std::vector<ItemId>{b, d, a, c}));
+    EXPECT_EQ(manager.Generation(), before) << "on top already, or nothing of theirs here: no change";
+}
+
 TEST(CanvasManagerTest, BringItemToFrontOnAlreadyTopItemIsNoOp) {
     CanvasManager manager;
     const ItemId a = manager.CreateItem(false, Rect{}, "A");

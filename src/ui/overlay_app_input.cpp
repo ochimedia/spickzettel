@@ -553,7 +553,9 @@ void OverlayApp::OffsetCopiedItem(ItemId itemId) {
 // A press that selects a snippet brings it to the front while
 // AppConfig::raiseSelectedSnippet is on (the default), the way a window
 // manager raises a window you take hold of; off, the stacking order is the
-// Properties popover's alone to change, as in a drawing program.
+// Properties popover's alone to change, as in a drawing program. A press
+// on a snippet of a multi-selection brings the whole selection forward,
+// keeping its own order: it is the selection that is taken hold of.
 //
 // The selection bar's buttons ride the same pipeline: a press on one is
 // held until release, and fires only if the release lands on the same
@@ -706,9 +708,10 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             SelectOnly(target.item);
         }
         if (Cfg().raiseSelectedSnippet) {
+            // The whole selection, as a block - see BringItemsToFront.
             // Reorders canvas.items, so `item` is found again afterwards
             // rather than read through the pointer from before.
-            Manager().BringItemToFront(target.item);
+            Manager().BringItemsToFront(selection_);
             item = Manager().FindItemAnywhere(target.item);
             if (item == nullptr) {
                 return false;
@@ -770,7 +773,10 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                 SelectOnly(target.item);
             }
             if (Cfg().raiseSelectedSnippet) {
-                Manager().BringItemToFront(target.item);
+                // What is taken hold of is the selection, so the selection
+                // comes forward - as a block, in its own order, rather than
+                // the one snippet under the pointer out of it.
+                Manager().BringItemsToFront(selection_);
             }
             gesture.item = target.item;
             for (const ItemId id : selection_) {
