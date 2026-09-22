@@ -346,6 +346,13 @@ bool Session::Flush() { return FlushIfDirty(library_); }
 
 // ================= Deleting and restoring =================
 
+void Session::ImportLibrary(CanvasManagerSnapshot snapshot) {
+    library_.manager.ImportSnapshot(std::move(snapshot));
+    for (const ItemId id : Manager().MarkedSnippets()) {
+        DeletePermanently(id);
+    }
+}
+
 bool Session::Delete(uint64_t id) {
     if (!Manager().MarkDeleted(id, static_cast<int64_t>(std::time(nullptr)))) {
         return false;
@@ -409,6 +416,17 @@ Session::Removal Session::DeletePermanently(uint64_t id) {
     }
     SyncTexturesToCurrentCanvas();
     return removal;
+}
+
+Session::Removal Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
+    Removal result = Removal::NotFound;
+    for (const CanvasId id : Manager().MarkedCanvasesIn(folderId)) {
+        const Removal removal = DeletePermanently(id);
+        if (removal == Removal::FilesRemain || (removal == Removal::Removed && result == Removal::NotFound)) {
+            result = removal;
+        }
+    }
+    return result;
 }
 
 // ================= Capturing the screen =================

@@ -887,37 +887,55 @@ bool CanvasManager::MarkDeleted(uint64_t id, int64_t when) {
 }
 
 bool CanvasManager::Restore(uint64_t id) {
-    // Every mark that keeps `id` deleted: its own and its containers'.
-    std::vector<int64_t*> stamps;
-    const auto folderStamp = [this](FolderId folderId) -> int64_t* {
-        for (Folder& folder : folders_) {
-            if (folder.id == folderId) {
-                return &folder.deletedAt;
+    bool changed = false;
+    const auto clear = [&changed](int64_t& stamp) {
+        if (stamp != 0) {
+            stamp = 0;
+            changed = true;
+        }
+    };
+    const auto folderById = [this](FolderId folderId) -> Folder* {
+        const auto it =
+            std::find_if(folders_.begin(), folders_.end(), [folderId](const Folder& f) { return f.id == folderId; });
+        return it == folders_.end() ? nullptr : &*it;
+    };
+    // A canvas back on its own: out of a deleted folder, the folder comes
+    // back and what went with it is marked in its place, as of when it went.
+    const auto restoreCanvas = [&](Canvas& canvas) {
+        clear(canvas.deletedAt);
+        Folder* folder = folderById(canvas.folderId);
+        if (folder == nullptr || folder->deletedAt == 0) {
+            return;
+        }
+        const int64_t when = folder->deletedAt;
+        clear(folder->deletedAt);
+        for (Canvas& other : canvases_) {
+            if (other.folderId == folder->id && other.id != canvas.id && other.deletedAt == 0) {
+                other.deletedAt = when;
             }
         }
-        return nullptr;
     };
-    if (int64_t* own = folderStamp(id)) {
-        stamps.push_back(own);
+
+    if (Folder* folder = folderById(id)) {
+        clear(folder->deletedAt);
+        for (Canvas& canvas : canvases_) {
+            if (canvas.folderId == id) {
+                clear(canvas.deletedAt);
+            }
+        }
     } else {
         for (Canvas& canvas : canvases_) {
             if (canvas.id == id) {
-                stamps = {&canvas.deletedAt, folderStamp(canvas.folderId)};
+                restoreCanvas(canvas);
                 break;
             }
             const auto item = std::find_if(canvas.items.begin(), canvas.items.end(),
                                            [id](const Item& i) { return i.id == id; });
             if (item != canvas.items.end()) {
-                stamps = {&item->deletedAt, &canvas.deletedAt, folderStamp(canvas.folderId)};
+                clear(item->deletedAt);
+                restoreCanvas(canvas);
                 break;
             }
-        }
-    }
-    bool changed = false;
-    for (int64_t* stamp : stamps) {
-        if (stamp != nullptr && *stamp != 0) {
-            *stamp = 0;
-            changed = true;
         }
     }
     if (changed) {
@@ -1006,6 +1024,40 @@ void CanvasManager::SettleOffDeleted() {
         }
         currentFolderId_ = next;
     }
+}
+
+bool CanvasManager::HoldsDeleted(const Folder& folder) const {
+    return IsDeleted(folder) || std::any_of(canvases_.begin(), canvases_.end(), [&folder](const Canvas& canvas) {
+               return canvas.folderId == folder.id && canvas.deletedAt != 0;
+           });
+}
+
+std::vector<CanvasId> CanvasManager::MarkedCanvasesIn(FolderId folderId) const {
+    std::vector<CanvasId> marked;
+    for (const Canvas& canvas : canvases_) {
+        if (canvas.folderId == folderId && canvas.deletedAt != 0) {
+            marked.push_back(canvas.id);
+        }
+    }
+    return marked;
+}
+
+size_t CanvasManager::DeletedFolderAndCanvasCount() const {
+    const auto marked = [](const auto& thing) { return thing.deletedAt != 0; };
+    return static_cast<size_t>(std::count_if(folders_.begin(), folders_.end(), marked) +
+                               std::count_if(canvases_.begin(), canvases_.end(), marked));
+}
+
+std::vector<ItemId> CanvasManager::MarkedSnippets() const {
+    std::vector<ItemId> marked;
+    for (const Canvas& canvas : canvases_) {
+        for (const Item& item : canvas.items) {
+            if (item.deletedAt != 0) {
+                marked.push_back(item.id);
+            }
+        }
+    }
+    return marked;
 }
 
 std::vector<DeletedThing> CanvasManager::DeletedThings() const {

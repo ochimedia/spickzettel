@@ -1903,44 +1903,89 @@ TEST(CanvasManagerTest, DeletingTheCurrentCanvasMovesToTheShownOneBeforeIt) {
     EXPECT_EQ(manager.CurrentCanvasId(), first) << "a hidden canvas isn't switched to";
 }
 
-TEST(CanvasManagerTest, DeletedThingsAreWhatWasMarkedNewestFirst) {
+TEST(CanvasManagerTest, WhatIsMarkedIsCountedAndFoundByFolder) {
     CanvasManager manager("First");
     const FolderId folder = manager.CurrentFolderId();
     const CanvasId first = manager.CurrentCanvasId();
     const ItemId early = manager.CreateItem(false, Rect{0, 0, 100, 100}, "Early");
     manager.CreateItem(false, Rect{0, 0, 100, 100}, "WentWithTheCanvas");
-    manager.AddCanvas("Second");
-    EXPECT_TRUE(manager.DeletedThings().empty());
+    const CanvasId second = manager.AddCanvas("Second");
+    const FolderId other = manager.AddFolder("Other");
+    manager.AddCanvas("Elsewhere");
+    EXPECT_EQ(manager.DeletedFolderAndCanvasCount(), 0u);
+    EXPECT_FALSE(manager.HoldsDeleted(*manager.FindFolder(folder)));
 
     ASSERT_TRUE(manager.MarkDeleted(early, 100));
     ASSERT_TRUE(manager.MarkDeleted(first, 200));
-    ASSERT_TRUE(manager.MarkDeleted(folder, 300));
+    EXPECT_TRUE(manager.HoldsDeleted(*manager.FindFolder(folder))) << "a canvas in it is deleted";
+    EXPECT_FALSE(manager.HoldsDeleted(*manager.FindFolder(other)));
+    EXPECT_EQ(manager.MarkedCanvasesIn(folder), std::vector<CanvasId>{first});
 
-    const std::vector<DeletedThing> things = manager.DeletedThings();
-    ASSERT_EQ(things.size(), 3u) << "the snippet that went with its canvas has no mark of its own";
-    EXPECT_EQ(things[0].kind, DeletedThing::Kind::Folder);
-    EXPECT_EQ(things[0].id, folder);
-    EXPECT_EQ(things[1].kind, DeletedThing::Kind::Canvas);
-    EXPECT_EQ(things[1].id, first);
-    EXPECT_EQ(things[2].kind, DeletedThing::Kind::Snippet);
-    EXPECT_EQ(things[2].id, early);
-    EXPECT_EQ(things[2].deletedAt, 100);
+    ASSERT_TRUE(manager.MarkDeleted(folder, 300));
+    EXPECT_EQ(manager.DeletedFolderAndCanvasCount(), 2u) << "the folder and the canvas marked before it";
+    EXPECT_EQ(manager.MarkedCanvasesIn(folder), std::vector<CanvasId>{first})
+        << "not the canvas that is deleted only because its folder is";
+    EXPECT_TRUE(manager.IsDeleted(*manager.FindCanvas(second)));
+    EXPECT_EQ(manager.MarkedSnippets(), std::vector<ItemId>{early})
+        << "the snippet that went with its canvas has no mark of its own";
 }
 
-TEST(CanvasManagerTest, RestoreClearsTheMarksOfWhatHoldsIt) {
-    CanvasManager manager("Canvas");
+TEST(CanvasManagerTest, RestoringAFolderBringsBackEveryCanvasInIt) {
+    CanvasManager manager("First");
     const FolderId folder = manager.CurrentFolderId();
-    const CanvasId canvas = manager.CurrentCanvasId();
+    const CanvasId first = manager.CurrentCanvasId();
+    const CanvasId second = manager.AddCanvas("Second");
+    manager.SwitchToCanvas(second);
     const ItemId item = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    manager.AddFolder("Other");
+    manager.AddCanvas("Elsewhere");
     ASSERT_TRUE(manager.MarkDeleted(item, 1));
-    ASSERT_TRUE(manager.MarkDeleted(canvas, 2));
+    ASSERT_TRUE(manager.MarkDeleted(first, 2));
     ASSERT_TRUE(manager.MarkDeleted(folder, 3));
 
-    ASSERT_TRUE(manager.Restore(canvas));
-    EXPECT_EQ(manager.FindFolder(folder)->deletedAt, 0) << "a restored canvas's folder comes back with it";
-    EXPECT_EQ(manager.FindCanvas(canvas)->deletedAt, 0);
+    ASSERT_TRUE(manager.Restore(folder));
+    EXPECT_EQ(manager.FindFolder(folder)->deletedAt, 0);
+    EXPECT_EQ(manager.FindCanvas(first)->deletedAt, 0) << "deleted on its own before the folder, and back too";
+    EXPECT_FALSE(manager.IsDeleted(*manager.FindCanvas(second)));
+    EXPECT_TRUE(manager.IsItemDeleted(item)) << "a snippet is not the Overview's to bring back";
+    EXPECT_FALSE(manager.Restore(folder)) << "nothing left deleted in it";
+}
+
+TEST(CanvasManagerTest, RestoringAFolderThatIsNotDeletedBringsBackItsDeletedCanvases) {
+    CanvasManager manager("First");
+    const FolderId folder = manager.CurrentFolderId();
+    const CanvasId first = manager.CurrentCanvasId();
+    const CanvasId second = manager.AddCanvas("Second");
+    manager.AddCanvas("Third");
+    ASSERT_TRUE(manager.MarkDeleted(first, 1));
+    ASSERT_TRUE(manager.MarkDeleted(second, 2));
+
+    ASSERT_TRUE(manager.Restore(folder));
+    EXPECT_EQ(manager.FindCanvas(first)->deletedAt, 0);
+    EXPECT_EQ(manager.FindCanvas(second)->deletedAt, 0);
+    EXPECT_FALSE(manager.HoldsDeleted(*manager.FindFolder(folder)));
+}
+
+TEST(CanvasManagerTest, RestoringACanvasOutOfADeletedFolderLeavesTheRestDeleted) {
+    CanvasManager manager("First");
+    const FolderId folder = manager.CurrentFolderId();
+    const CanvasId first = manager.CurrentCanvasId();
+    const ItemId item = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const CanvasId second = manager.AddCanvas("Second");
+    const CanvasId third = manager.AddCanvas("Third");
+    manager.AddFolder("Other");
+    manager.AddCanvas("Elsewhere");
+    ASSERT_TRUE(manager.MarkDeleted(item, 1));
+    ASSERT_TRUE(manager.MarkDeleted(third, 2));
+    ASSERT_TRUE(manager.MarkDeleted(folder, 3));
+
+    ASSERT_TRUE(manager.Restore(first));
+    EXPECT_EQ(manager.FindFolder(folder)->deletedAt, 0) << "the folder comes back to hold it";
+    EXPECT_EQ(manager.FindCanvas(first)->deletedAt, 0);
+    EXPECT_EQ(manager.FindCanvas(second)->deletedAt, 3) << "went with the folder, and stays gone as of then";
+    EXPECT_EQ(manager.FindCanvas(third)->deletedAt, 2) << "deleted on its own before, and keeps its own stamp";
     EXPECT_TRUE(manager.IsItemDeleted(item)) << "deleted on its own, before its canvas";
-    EXPECT_FALSE(manager.Restore(canvas)) << "nothing left deleted about it";
+    EXPECT_FALSE(manager.Restore(first)) << "nothing left deleted about it";
     ASSERT_TRUE(manager.Restore(item));
     EXPECT_FALSE(manager.IsItemDeleted(item));
 }

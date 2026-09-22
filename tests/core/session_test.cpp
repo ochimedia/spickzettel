@@ -65,7 +65,8 @@ std::vector<float> StrokeHeights(const CanvasManager& manager, ItemId id) {
 
 TEST(SessionTest, StartsWithNothingDeleted) {
     Session session;
-    EXPECT_TRUE(session.Manager().DeletedThings().empty());
+    EXPECT_EQ(session.Manager().DeletedFolderAndCanvasCount(), 0u);
+    EXPECT_TRUE(session.Manager().MarkedSnippets().empty());
     EXPECT_TRUE(session.Manager().HasCurrentCanvas());
     EXPECT_FALSE(session.CanUndo());
 }
@@ -93,6 +94,48 @@ TEST(SessionTest, DeletingOrRestoringWhatIsNotThereDoesNothing) {
     EXPECT_FALSE(session.Restore(424242));
     EXPECT_EQ(session.DeletePermanently(424242), Session::Removal::NotFound);
     EXPECT_FALSE(session.Restore(session.Manager().CurrentCanvasId())) << "nothing deleted to restore";
+}
+
+// Undo is the only way a deleted snippet comes back, and no history
+// outlives its session - so a library opened again has no use for one.
+TEST(SessionTest, ALibraryOpenedErasesTheSnippetsMarkedDeleted) {
+    CanvasManager source("First");
+    const CanvasId first = source.CurrentCanvasId();
+    const ItemId gone = source.CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
+    const ItemId kept = source.CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
+    const ItemId inDeletedCanvas = source.CreateItem(false, Rect{0, 0, 100, 100}, "InDeletedCanvas");
+    const ItemId wentWithIt = source.CreateItem(false, Rect{0, 0, 100, 100}, "WentWithIt");
+    ASSERT_TRUE(source.MarkDeleted(gone, 1));
+    ASSERT_TRUE(source.MarkDeleted(inDeletedCanvas, 2));
+    const CanvasId second = source.AddCanvas("Second");
+    ASSERT_TRUE(source.MarkDeleted(first, 3));
+
+    Session session;
+    session.ImportLibrary(source.ExportSnapshot());
+    CanvasManager& manager = session.Manager();
+    EXPECT_EQ(manager.FindItemAnywhere(gone), nullptr);
+    EXPECT_EQ(manager.FindItemAnywhere(inDeletedCanvas), nullptr) << "restoring its canvas would not bring it back";
+    EXPECT_NE(manager.FindItemAnywhere(kept), nullptr);
+    EXPECT_NE(manager.FindItemAnywhere(wentWithIt), nullptr) << "comes back with its canvas";
+    ASSERT_NE(manager.FindCanvas(first), nullptr) << "a deleted canvas is kept to be restored";
+    EXPECT_NE(manager.FindCanvas(second), nullptr);
+}
+
+TEST(SessionTest, ErasingAFoldersDeletedCanvasesLeavesTheFolderAndTheRest) {
+    Session session;
+    const FolderId folder = session.Manager().CurrentFolderId();
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const CanvasId second = session.Manager().AddCanvas("Second");
+    const CanvasId third = session.Manager().AddCanvas("Third");
+    EXPECT_EQ(session.DeleteMarkedCanvasesPermanently(folder), Session::Removal::NotFound) << "nothing deleted in it";
+    ASSERT_TRUE(session.Delete(first));
+    ASSERT_TRUE(session.Delete(third));
+
+    EXPECT_EQ(session.DeleteMarkedCanvasesPermanently(folder), Session::Removal::Removed);
+    EXPECT_EQ(session.Manager().FindCanvas(first), nullptr);
+    EXPECT_EQ(session.Manager().FindCanvas(third), nullptr);
+    ASSERT_NE(session.Manager().FindFolder(folder), nullptr);
+    EXPECT_NE(session.Manager().FindCanvas(second), nullptr);
 }
 
 TEST(SessionTest, AStrokeIsUndoneAndRedone) {

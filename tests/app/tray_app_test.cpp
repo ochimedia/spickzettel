@@ -513,9 +513,11 @@ protected:
     std::filesystem::path dir_;
 };
 
-// What is deleted is loaded with the rest, hidden - and a library saved
-// looking at a canvas since deleted opens on one that is shown.
-TEST_F(TrayControllerPersistenceTest, InitializeLoadsDeletedThingsHiddenInPlace) {
+// A deleted canvas is loaded with the rest, hidden - and a library saved
+// looking at a canvas since deleted opens on one that is shown. A deleted
+// snippet is not: only undo could have brought it back, and no history
+// survives a restart.
+TEST_F(TrayControllerPersistenceTest, InitializeLoadsDeletedCanvasesHiddenAndErasesDeletedSnippets) {
     CanvasManagerSnapshot snapshot;
     Folder folder;
     folder.id = 1;
@@ -548,7 +550,8 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsDeletedThingsHiddenInPlace)
 
     const CanvasManager& manager = controller.GetSession().Manager();
     EXPECT_EQ(manager.CurrentCanvasId(), 2u) << "not the deleted canvas it was saved on";
-    EXPECT_TRUE(manager.IsItemDeleted(3));
+    ASSERT_NE(manager.FindCanvas(2), nullptr);
+    EXPECT_TRUE(manager.FindCanvas(2)->items.empty());
     ASSERT_NE(manager.FindCanvas(4), nullptr);
     EXPECT_TRUE(manager.IsDeleted(*manager.FindCanvas(4)));
 }

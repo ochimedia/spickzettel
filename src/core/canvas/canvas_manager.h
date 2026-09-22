@@ -58,13 +58,16 @@ struct DeletedThing {
 // What the app calls deleting is a mark, made in place (see MarkDeleted): a
 // deleted folder, canvas or snippet stays exactly where it was, stamped
 // with when it went, and is hidden until it is restored or deleted for
-// good, both of which happen from the list DeletedThings returns.
-// Restoring is clearing the mark. A thing counts as deleted when it or
-// anything holding it is marked (see IsDeleted), so a canvas deleted with
-// its snippets marks only the canvas, restoring it brings back exactly what
-// went with it, and a snippet deleted before it keeps its own mark. The
-// Delete* functions below are something else: the erasure that "Delete
-// permanently" is, immediate and final.
+// good. A deleted folder or canvas is restored or deleted for good from
+// the Overview; a deleted snippet only ever comes
+// back by undo, and is erased when the library is next opened (see
+// Session::ImportLibrary). Restoring is clearing marks (see Restore). A
+// thing counts as deleted when it or anything holding it is marked (see
+// IsDeleted), so a canvas deleted with its snippets marks only the canvas,
+// restoring it brings back exactly what went with it, and a snippet
+// deleted before it keeps its own mark. The Delete* functions below are
+// something else: the erasure that "Delete permanently" is, immediate and
+// final.
 //
 // `currentFolderId_` (the folder the Overview is browsing, and where a new
 // canvas lands) and `currentCanvasId_` (the canvas on screen) are
@@ -447,11 +450,18 @@ public:
     // current moves off it (see SettleOffDeleted). False, doing nothing, if
     // nothing has that id or it is marked already.
     bool MarkDeleted(uint64_t id, int64_t when);
-    // Clears the mark on `id` and on everything holding it - a snippet
-    // restored out of a deleted canvas brings the canvas back too, and its
-    // folder if that was deleted, since a thing inside something deleted
-    // is still deleted. False if `id` names nothing, or nothing that
-    // counted as deleted.
+    // Brings `id` back, and whatever has to come back for it to be seen:
+    //  - a folder: its own mark and those of every canvas in it, so that
+    //    restoring a folder brings back all of it, whether it was deleted
+    //    whole or only some canvases in it were;
+    //  - a canvas: its own mark, and if its folder is deleted, the
+    //    folder's - which would bring back every canvas that went with the
+    //    folder, so those are marked instead, each with the folder's stamp:
+    //    the one canvas comes back, and the rest stay deleted as and when
+    //    they were;
+    //  - a snippet: its own mark, and its canvas as above if that counts
+    //    as deleted.
+    // False if `id` names nothing, or nothing that counted as deleted.
     bool Restore(uint64_t id);
     // Erases `id` for good, whatever kind of thing it is - DeleteFolder,
     // DeleteCanvas or DeleteItemFromCanvas. False if nothing has that id.
@@ -466,6 +476,18 @@ public:
     // snippet.
     bool IsItemDeleted(ItemId id) const;
 
+    // Whether the folder is deleted or holds a canvas that is - what the
+    // Overview marks out with Show deleted on, and what a folder's Restore
+    // has something to do for.
+    bool HoldsDeleted(const Folder& folder) const;
+    // The canvases in `folderId` carrying a mark of their own, in
+    // Canvases() order. Not those deleted only because the folder is.
+    std::vector<CanvasId> MarkedCanvasesIn(FolderId folderId) const;
+    // How many folders and canvases carry a mark of their own - what there
+    // is to restore from the Overview.
+    size_t DeletedFolderAndCanvasCount() const;
+    // Every snippet carrying a mark of its own, wherever it is.
+    std::vector<ItemId> MarkedSnippets() const;
     // Everything carrying a mark of its own - what there is to restore -
     // newest first. A canvas or snippet inside a deleted container is listed
     // only if it was marked itself: what went with the container comes back

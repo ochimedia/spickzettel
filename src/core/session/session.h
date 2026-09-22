@@ -45,7 +45,10 @@ public:
 
     // Wholesale-replaces the library with a previously-saved one - see
     // CanvasManager::ImportSnapshot. Called once, right after startup.
-    void ImportLibrary(CanvasManagerSnapshot snapshot) { library_.manager.ImportSnapshot(std::move(snapshot)); }
+    // Every snippet that comes in marked deleted is then deleted for good:
+    // a deleted snippet only ever comes back by undo, and a history never
+    // outlives the session it was made in, so nothing could reach it again.
+    void ImportLibrary(CanvasManagerSnapshot snapshot);
 
     // The library: what every gesture, the Overview and the texture sync act
     // on.
@@ -55,8 +58,7 @@ public:
     // ===== Deleting and restoring =====
     //
     // A delete is a mark made in place, hidden until it is restored or
-    // deleted for good - see CanvasManager's class comment, and its
-    // DeletedThings for the list both happen from.
+    // deleted for good - see CanvasManager's class comment.
 
     // Marks the folder, canvas or snippet `id` names deleted, now. What
     // every delete is but a snippet's own, which is DeleteItem, undoably.
@@ -75,6 +77,12 @@ public:
     // that left files behind; the store retries at every save.
     enum class Removal { NotFound, Removed, FilesRemain };
     Removal DeletePermanently(uint64_t id);
+    // DeletePermanently for every canvas in `folderId` that carries a mark
+    // of its own (see CanvasManager::MarkedCanvasesIn) - what a folder's
+    // "Delete permanently" is while the folder itself is not deleted: what
+    // is deleted in it goes, and the folder and the rest stay. FilesRemain
+    // if any of them left files behind; NotFound if there was none.
+    Removal DeleteMarkedCanvasesPermanently(FolderId folderId);
     // ===== Keeping the disk and the GPU in step =====
 
     // The debounced autosave - see kAutosaveQuietSeconds for the policy.
