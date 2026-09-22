@@ -1406,6 +1406,14 @@ confirmation the Overview's delete button asks for - a canvas takes
 every snippet on it along, and unlike a snippet's own delete there is no
 undo entry to take it back with.
 
+A tile dragged onto another takes that one's place, the others shifting
+along, which is the order Alt+wheel walks. The move is made by
+`ReorderCanvas`, which counts places among all of a folder's canvases,
+deleted ones included; the bar leaves the deleted ones out, so each
+tile's place is looked up in the whole folder rather than read off its
+position on the bar - otherwise a deleted canvas between two tiles would
+make a drop land one short.
+
 The wheel sets the size of Draw or Erase; with Alt it steps through the
 canvases of the folder the *current canvas* lives in (not the browsed
 folder), without wrapping, and ends any gesture in flight first by

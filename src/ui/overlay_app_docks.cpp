@@ -11,7 +11,9 @@
 #include <algorithm>
 #include <cstdio>
 #include <functional>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ui/icons_generated.h"
@@ -225,8 +227,32 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     BeginOverviewPreviewFrame();
     const PreviewTextureFn previewTexture = PreviewTextureLookup();
 
+    // Each tile's place among *all* its folder's canvases, deleted ones
+    // included - what ReorderCanvas counts in, as the Overview's grid does.
+    std::vector<size_t> placeInFolder(ids.size(), 0);
+    {
+        const Canvas* current = Manager().CurrentOrNull();
+        const FolderId folder = current != nullptr ? current->folderId : Manager().CurrentFolderId();
+        size_t place = 0;
+        for (const Canvas& c : Manager().Canvases()) {
+            if (c.folderId != folder) {
+                continue;
+            }
+            const auto at = std::find(ids.begin(), ids.end(), c.id);
+            if (at != ids.end()) {
+                placeInFolder[static_cast<size_t>(at - ids.begin())] = place;
+            }
+            ++place;
+        }
+    }
+    const bool dragging = ImGui::GetDragDropPayload() != nullptr;
+
     std::optional<CanvasId> clicked;
     std::optional<CanvasId> rightClicked;
+    // A tile dragged onto another takes that one's place, the rest shifting
+    // along - the order Alt+wheel walks. Applied after the loop, which
+    // reads the list the move changes.
+    std::optional<std::pair<CanvasId, size_t>> reorder;
     ImGui::PushClipRect(ImVec2(regionMinX, bar.y), ImVec2(regionMaxX, bar.y + bar.h), true);
     for (size_t i = 0; i < ids.size(); ++i) {
         const float x = regionMinX + static_cast<float>(i) * (tileW + kBarGap) - canvasBarScroll_;
@@ -261,11 +287,27 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
             rightClicked = canvas->id;
         }
+        if (ImGui::BeginDragDropSource()) {
+            ImGui::SetDragDropPayload("SZ_CANVAS_BAR_TILE", &canvas->id, sizeof(CanvasId));
+            ImGui::TextUnformatted(canvas->name.c_str());
+            ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SZ_CANVAS_BAR_TILE")) {
+                const CanvasId draggedId = *static_cast<const CanvasId*>(payload->Data);
+                if (draggedId != canvas->id) {
+                    reorder = {draggedId, placeInFolder[i]};
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
         const bool isCurrent = canvas->id == currentId;
         dl->AddRect(tileMin, tileMax,
                     ImGui::GetColorU32(isCurrent ? theme::Accent() : hovered ? theme::kGraphite200 : theme::kGraphite500),
                     3.0f, 0, isCurrent ? 2.0f : 1.0f);
-        if (hovered) {
+        // Not while a tile is being dragged, whose own name follows the
+        // pointer instead.
+        if (hovered && !dragging) {
             ImGui::SetTooltip(strings::kCanvasBarTileTip, canvas->name.c_str(), static_cast<int>(i + 1),
                               static_cast<int>(ids.size()));
         }
@@ -298,6 +340,9 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
 
     if (rightClicked.has_value()) {
         OpenCanvasContextMenu(*rightClicked, io.MousePos);
+    }
+    if (reorder.has_value()) {
+        Manager().ReorderCanvas(reorder->first, reorder->second);
     }
     if (clicked.has_value()) {
         SwitchToCanvasSettled(*clicked);
