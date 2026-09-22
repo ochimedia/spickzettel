@@ -31,9 +31,7 @@ using nlohmann::json;
 // An id in a record is spelled the way the directory names spell it: six
 // base36 characters (see util/uid.h). One spelling everywhere, so that a
 // record and the directory holding it, or a pointer and the thing it points
-// at, can be matched by eye. Records written before this carry the same id
-// as a number, and are read either way; the first save writes them back in
-// this form.
+// at, can be matched by eye.
 json IdJson(uint64_t id) { return FormatUid(id); }
 
 uint64_t ReadId(const json& j, const char* key) {
@@ -43,9 +41,6 @@ uint64_t ReadId(const json& j, const char* key) {
     }
     if (it->is_string()) {
         return ParseUid(it->get<std::string>()).value_or(0);
-    }
-    if (it->is_number_unsigned()) {
-        return it->get<uint64_t>();
     }
     return 0;  // anything else is no id, and 0 is "no id" everywhere
 }

@@ -131,9 +131,9 @@ CanvasManagerSnapshot MakeSampleSnapshot() {
 // whole library in one convenient blob; the ones that care what the *tree*
 // says place directories themselves, because that is the thing under test.
 
-// An id as a test document spells it: either a number, the way records
-// were written before ids took the directories' base36 spelling, or that
-// spelling itself.
+// An id as a test document spells it: a number, for brevity, or the
+// base36 spelling records use. WriteLibraryTree writes either as the
+// latter.
 uint64_t IdOf(const nlohmann::json& record, const char* key = "id") {
     const auto it = record.find(key);
     if (it == record.end()) {
@@ -147,11 +147,21 @@ uint64_t IdOf(const nlohmann::json& record, const char* key = "id") {
 
 // Splays a whole library, written in one piece, into the directories the
 // store actually reads. Folders and canvases go where their ids say.
+// The keys of `record` that hold an id, spelled as records spell them.
+nlohmann::json WithIdsSpelled(nlohmann::json record) {
+    for (const char* key : {"id", "folderId", "currentFolderId", "currentCanvasId"}) {
+        if (const auto it = record.find(key); it != record.end() && it->is_number_unsigned()) {
+            *it = FormatUid(it->get<uint64_t>());
+        }
+    }
+    return record;
+}
+
 void WriteLibraryTree(const std::filesystem::path& root, const std::string& document) {
     nlohmann::json doc = nlohmann::json::parse(document);
     std::filesystem::create_directories(root);
 
-    nlohmann::json globals = doc;
+    nlohmann::json globals = WithIdsSpelled(doc);
     globals.erase("folders");
     globals.erase("canvases");
     std::ofstream(root / "library.json") << globals.dump(2);
@@ -160,7 +170,7 @@ void WriteLibraryTree(const std::filesystem::path& root, const std::string& docu
         const std::string dirName = "f-" + FormatUid(IdOf(folder));
         const std::filesystem::path folderDir = root / "folders" / dirName;
         std::filesystem::create_directories(folderDir);
-        std::ofstream(folderDir / "folder.json") << folder.dump(2);
+        std::ofstream(folderDir / "folder.json") << WithIdsSpelled(folder).dump(2);
 
         for (const auto& canvas : doc.value("canvases", nlohmann::json::array())) {
             if (IdOf(canvas, "folderId") != IdOf(folder)) {
@@ -169,7 +179,7 @@ void WriteLibraryTree(const std::filesystem::path& root, const std::string& docu
             const std::filesystem::path canvasDir =
                 folderDir / ("c-" + FormatUid(IdOf(canvas)));
             std::filesystem::create_directories(canvasDir);
-            nlohmann::json canvasRecord = canvas;
+            nlohmann::json canvasRecord = WithIdsSpelled(canvas);
             canvasRecord.erase("items");
             std::ofstream(canvasDir / "canvas.json") << canvasRecord.dump(2);
 
@@ -179,7 +189,7 @@ void WriteLibraryTree(const std::filesystem::path& root, const std::string& docu
             for (const auto& item : canvas.value("items", nlohmann::json::array())) {
                 const std::string itemDirName = "i-" + FormatUid(IdOf(item));
                 std::filesystem::create_directories(canvasDir / itemDirName);
-                std::ofstream(canvasDir / itemDirName / "item.json") << item.dump(2);
+                std::ofstream(canvasDir / itemDirName / "item.json") << WithIdsSpelled(item).dump(2);
                 itemOrder.push_back(itemDirName);
             }
             std::ofstream(canvasDir / "order.json") << nlohmann::json{{"items", itemOrder}}.dump(2);
@@ -193,7 +203,7 @@ std::filesystem::path PlaceFolder(const std::filesystem::path& root, const std::
                                    uint64_t id, const std::string& name) {
     const std::filesystem::path dir = root / "folders" / dirName;
     std::filesystem::create_directories(dir);
-    std::ofstream(dir / "folder.json") << nlohmann::json{{"id", id}, {"name", name}}.dump(2);
+    std::ofstream(dir / "folder.json") << nlohmann::json{{"id", FormatUid(id)}, {"name", name}}.dump(2);
     return dir;
 }
 
@@ -201,9 +211,9 @@ std::filesystem::path PlaceCanvas(const std::filesystem::path& folderDir, const 
                                    uint64_t id, const std::string& name, uint64_t claimsFolderId = 0) {
     const std::filesystem::path dir = folderDir / dirName;
     std::filesystem::create_directories(dir);
-    std::ofstream(dir / "canvas.json") << nlohmann::json{{"id", id},
+    std::ofstream(dir / "canvas.json") << nlohmann::json{{"id", FormatUid(id)},
                                                           {"name", name},
-                                                          {"folderId", claimsFolderId},
+                                                          {"folderId", FormatUid(claimsFolderId)},
                                                           {"items", nlohmann::json::array()}}
                                               .dump(2);
     return dir;
@@ -921,8 +931,7 @@ TEST_F(LibraryStoreTest, SavingTwiceLeavesTheSameTree) {
 // ===== Snippets, one directory each =====
 
 // An id in a record reads the same as the directory's trailing uid, so the
-// two can be matched by eye - and a record from before that carries the
-// same id as a number, which still reads and is rewritten on the first save.
+// two can be matched by eye.
 TEST_F(LibraryStoreTest, IdsAreWrittenTheWayTheDirectoriesSpellThem) {
     LibraryStore store(dir_);
     ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
@@ -935,17 +944,6 @@ TEST_F(LibraryStoreTest, IdsAreWrittenTheWayTheDirectoriesSpellThem) {
     const nlohmann::json library = nlohmann::json::parse(std::ifstream(dir_ / "library.json"));
     EXPECT_EQ(library["currentFolderId"], "000001");
     EXPECT_EQ(library["currentCanvasId"], "000002");
-
-    // The number form, as every record was written before.
-    std::ofstream(folderDir / "folder.json") << R"({"id": 1, "name": "Folder 1"})";
-    LibraryStore reopened(dir_);
-    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
-    ASSERT_TRUE(loaded.has_value());
-    ASSERT_EQ(loaded->folders.size(), 1u);
-    EXPECT_EQ(loaded->folders[0].id, 1u);
-    ASSERT_TRUE(reopened.Save(*loaded));
-    EXPECT_EQ(nlohmann::json::parse(std::ifstream(folderDir / "folder.json"))["id"], "000001")
-        << "brought into the one spelling by the first save";
 }
 
 TEST_F(LibraryStoreTest, SaveWritesADirectoryPerSnippet) {
@@ -1568,7 +1566,7 @@ TEST_F(LibraryStoreTest, ADirectoryWhoseRecordCannotBeReadSurvivesASave) {
 
 TEST_F(LibraryStoreTest, AFieldOfTheWrongTypeInLibraryJsonReadsAsItsDefault) {
     ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
-    std::ofstream(dir_ / "library.json") << R"({"currentFolderId": 1, "currentCanvasId": "wrong type",
+    std::ofstream(dir_ / "library.json") << R"({"currentFolderId": "000001", "currentCanvasId": 12,
                                                  "favoriteToolIds": "also wrong"})";
 
     LibraryStore store(dir_);
@@ -1582,7 +1580,7 @@ TEST_F(LibraryStoreTest, AFieldOfTheWrongTypeInLibraryJsonReadsAsItsDefault) {
 TEST_F(LibraryStoreTest, ARecordWithAFieldOfTheWrongTypeIsSkippedAndLeftWhereItIs) {
     ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
     const std::filesystem::path drawingDir = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" / "drawing-1-000003";
-    std::ofstream(drawingDir / "item.json") << R"({"id": 3, "name": 12345, "rect": "not a rect"})";
+    std::ofstream(drawingDir / "item.json") << R"({"id": "000003", "name": 12345, "rect": "not a rect"})";
 
     LibraryStore store(dir_);
     std::optional<CanvasManagerSnapshot> loaded;
@@ -1699,7 +1697,7 @@ TEST_F(LibraryStoreTest, AnImageFileThatNamesAPathIsDroppedOnLoad) {
 std::filesystem::path MakeJunctionTo(const std::filesystem::path& link, const std::filesystem::path& outside) {
     std::filesystem::remove_all(outside);
     std::filesystem::create_directories(outside);
-    std::ofstream(outside / "item.json") << R"({"id": 77, "name": "Linked", "layers": []})";
+    std::ofstream(outside / "item.json") << R"({"id": "000025", "name": "Linked", "layers": []})";
     std::ofstream(outside / "precious.txt") << "not the library's to delete";
     std::filesystem::create_directories(link.parent_path());
     const std::string command = "mklink /J \"" + link.string() + "\" \"" + outside.string() + "\" >nul";
@@ -1749,7 +1747,7 @@ TEST_F(LibraryStoreTest, ASaveDoesNotWriteThroughAJunctionSittingWhereItsDirecto
     EXPECT_FALSE(store.Save(snapshot)) << "the record has nowhere of the library's to go";
 
     nlohmann::json record = nlohmann::json::parse(std::ifstream(outside / "item.json"));
-    EXPECT_EQ(record["id"], 77) << "the record behind the link is untouched";
+    EXPECT_EQ(record["id"], "000025") << "the record behind the link is untouched";
     EXPECT_FALSE(record.contains("noteText")) << "nothing was written through the link";
     EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt"));
 
@@ -1778,7 +1776,7 @@ TEST_F(LibraryStoreTest, RetiringOntoAJunctionReplacesTheLinkNotWhatItPointsTo) 
     EXPECT_TRUE(std::filesystem::exists(RetiredCanvasDir() / "shot-1-000004" / "item.json")) << "set aside";
     EXPECT_FALSE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001" / "canvas-1-000002"));
     nlohmann::json record = nlohmann::json::parse(std::ifstream(outside / "item.json"));
-    EXPECT_EQ(record["id"], 77) << "nothing was moved into where the link pointed";
+    EXPECT_EQ(record["id"], "000025") << "nothing was moved into where the link pointed";
     EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt"));
     std::filesystem::remove_all(outside);
 }
@@ -1797,7 +1795,7 @@ TEST_F(LibraryStoreTest, NothingIsWrittenOrReadThroughAJunctionAtFolders) {
 
     // Not read either: a folder behind the link is not the library's.
     std::filesystem::create_directories(outside / "folder-1-000001");
-    std::ofstream(outside / "folder-1-000001" / "folder.json") << R"({"id": 1, "name": "Behind the link"})";
+    std::ofstream(outside / "folder-1-000001" / "folder.json") << R"({"id": "000001", "name": "Behind the link"})";
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
     ASSERT_TRUE(loaded.has_value());
     EXPECT_TRUE(loaded->folders.empty());
@@ -1849,7 +1847,7 @@ TEST_F(LibraryStoreTest, AJunctionPutInPlaceOfAnIndexedDirectoryIsNotWrittenThro
     snapshot.canvases[0].items[1].noteText = "would land outside";
     EXPECT_FALSE(store.Save(snapshot)) << "the record has nowhere of the library's to go";
     nlohmann::json record = nlohmann::json::parse(std::ifstream(outside / "item.json"));
-    EXPECT_EQ(record["id"], 77) << "the record behind the link is untouched";
+    EXPECT_EQ(record["id"], "000025") << "the record behind the link is untouched";
     EXPECT_FALSE(record.contains("noteText"));
     EXPECT_TRUE(std::filesystem::exists(outside / "precious.txt"));
 
