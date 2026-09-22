@@ -1246,6 +1246,47 @@ TEST(TrayControllerPinnedTest, ASilentCaptureInThePinnedViewKeepsThePinnedCanvas
     EXPECT_TRUE(controller.Overlay().IsPinnedOnly());
 }
 
+// The capture lands on a canvas that is not current, so its texture is
+// pure cost: handed back at once, rather than held until the next real
+// canvas switch - which the frame's own sync, gated on a change of
+// current canvas, would never see here.
+TEST_F(TrayControllerPersistenceTest, ASilentCaptureInThePinnedViewGivesItsTextureBack) {
+    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_;
+    host.overlayWindow.captureReturnsHandle = 7;
+    host.overlayWindow.captureReturnsWidth = 2;
+    host.overlayWindow.captureReturnsHeight = 1;
+    host.overlayWindow.captureReturnsPixelsRGBA = {1, 2, 3, 255, 4, 5, 6, 255};
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    const int editId = FindHotkeyId(host, config.hotkeyEditMode);
+    host.TriggerHotkey(editId);
+    PinASnippet(controller);
+    host.TriggerHotkey(editId);
+    ASSERT_TRUE(controller.Overlay().IsPinnedOnly());
+    const CanvasId pinnedCanvas = controller.GetSession().Manager().CurrentCanvasId();
+    const int releasedBefore = host.overlayWindow.releaseTextureCallCount;
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
+
+    ASSERT_EQ(controller.GetSession().Manager().CurrentCanvasId(), pinnedCanvas);
+    const Item* shot = nullptr;
+    for (const Canvas& canvas : controller.GetSession().Manager().Canvases()) {
+        if (canvas.id == pinnedCanvas) {
+            continue;
+        }
+        for (const Item& item : canvas.items) {
+            shot = &item;
+        }
+    }
+    ASSERT_NE(shot, nullptr);
+    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty()) << "on disk, so the texture is not the only copy";
+    EXPECT_EQ(shot->ImageLayer()->textureHandle, 0u) << "not resident on a canvas nobody is looking at";
+    EXPECT_EQ(host.overlayWindow.releaseTextureCallCount, releasedBefore + 1);
+}
+
 TEST_F(TrayControllerPersistenceTest, PinnedSnippetsAreOnScreenFromTheStart) {
     CanvasManagerSnapshot snapshot;
     Folder folder;

@@ -120,7 +120,7 @@ public:
         return textureHandle != 0;
     }
 
-    void ReleaseTexture(uint64_t /*textureHandle*/) override {}
+    void ReleaseTexture(uint64_t /*textureHandle*/) override { ++releaseTextureCallCount; }
 
     void Destroy() override {
         created = false;
@@ -166,6 +166,7 @@ public:
     int captureReturnsHeight = 0;
     int captureCallCount = 0;
     platform::Rect lastCaptureRect{};
+    int releaseTextureCallCount = 0;
     // 0 by default, same as a capture: an upload that fails. A crop out of
     // a frozen screen is only kept when its upload succeeds.
     uint64_t createTextureFromPixelsReturnsHandle = 0;
