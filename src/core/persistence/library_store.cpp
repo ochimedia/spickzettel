@@ -28,8 +28,6 @@ namespace {
 
 using nlohmann::json;
 
-constexpr int kLibraryFormatVersion = 1;
-
 // An id in a record is spelled the way the directory names spell it: six
 // base36 characters (see util/uid.h). One spelling everywhere, so that a
 // record and the directory holding it, or a pointer and the thing it points
@@ -922,7 +920,7 @@ json OrderFileJson(const char* key, const std::vector<std::string>& names) {
 // writes.
 json LibraryJson(FolderId currentFolderId, CanvasId currentCanvasId) {
     json doc;
-    doc["version"] = kLibraryFormatVersion;
+    doc["version"] = LibraryStore::kFormatVersion;
     doc["currentFolderId"] = IdJson(currentFolderId);
     doc["currentCanvasId"] = IdJson(currentCanvasId);
     return doc;
@@ -1028,7 +1026,26 @@ void LibraryStore::ForgetUnder(const std::filesystem::path& dir) const {
     }
 }
 
+bool LibraryStore::WrittenByANewerVersion() const {
+    if (!writtenByANewerVersion_) {
+        const std::optional<std::string> text = ReadFileText(rootDir_ / "library.json");
+        if (!text) {
+            return false;
+        }
+        const json doc = json::parse(*text, /*callback=*/nullptr, /*allow_exceptions=*/false);
+        if (doc.is_object()) {
+            const auto version = doc.find("version");
+            writtenByANewerVersion_ = version != doc.end() && version->is_number_integer() &&
+                                      version->get<int64_t>() > kFormatVersion;
+        }
+    }
+    return writtenByANewerVersion_;
+}
+
 bool LibraryStore::Remove(uint64_t uid) const {
+    if (writtenByANewerVersion_) {
+        return false;
+    }
     std::filesystem::path dir;
     for (const auto* index : {&folderDirs_, &canvasDirs_, &itemDirs_}) {
         if (const auto it = index->find(uid); it != index->end()) {
@@ -1285,6 +1302,11 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     // starts the app fresh, and a fresh library's first save would then
     // retire every directory it found on disk as something the library no
     // longer holds - which is exactly how a whole tree once went missing.
+    // Before anything is read or set aside: nothing of a newer library is
+    // this build's to touch.
+    if (WrittenByANewerVersion()) {
+        return std::nullopt;
+    }
     const std::filesystem::path foldersRoot = FoldersRoot();
     std::error_code ec;
     const bool treeExists = std::filesystem::is_directory(foldersRoot, ec);
@@ -1444,6 +1466,9 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
 // here; unreadable must not become deleted. Deletion is a statement about
 // something this store once read, and nothing else.
 bool LibraryStore::Save(const LibraryView& view) const {
+    if (writtenByANewerVersion_) {
+        return false;  // not this build's to write - see WrittenByANewerVersion
+    }
     std::error_code ec;
     const std::filesystem::path foldersRoot = FoldersRoot();
     if (!IsOurs(foldersRoot)) {
@@ -1906,6 +1931,9 @@ bool LibraryStore::Save(const LibraryView& view) const {
 
 std::optional<std::string> LibraryStore::SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int width,
                                                      int height) const {
+    if (writtenByANewerVersion_) {
+        return std::nullopt;
+    }
     // The same base36 spelling the slugs use, so an id reads the same
     // wherever it appears rather than being decimal in a filename and
     // base36 in the directory beside it.
@@ -1949,7 +1977,7 @@ std::string LibraryStore::ThumbnailFilename(const std::string& imageFilename) {
 }
 
 bool LibraryStore::SaveThumbnail(uint64_t itemId, const std::string& imageFilename, const DecodedImage& image) const {
-    if (!IsPlainFilename(imageFilename) || image.width <= 0 || image.height <= 0) {
+    if (writtenByANewerVersion_ || !IsPlainFilename(imageFilename) || image.width <= 0 || image.height <= 0) {
         return false;
     }
     const DecodedImage small = DownscaleToFit(image, kThumbnailMaxExtent);

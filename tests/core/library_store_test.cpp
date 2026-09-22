@@ -237,6 +237,65 @@ TEST_F(LibraryStoreTest, LoadReturnsNulloptWhenNothingSavedYet) {
     EXPECT_FALSE(store.Load().has_value());
 }
 
+// Sets library.json's version to `version`, or removes it for nullopt,
+// keeping everything else in the file as the save wrote it.
+void StampLibraryVersion(const std::filesystem::path& dir, std::optional<int> version) {
+    std::ifstream in(dir / "library.json");
+    nlohmann::json doc = nlohmann::json::parse(in);
+    in.close();
+    if (version) {
+        doc["version"] = *version;
+    } else {
+        doc.erase("version");
+    }
+    std::ofstream(dir / "library.json") << doc.dump();
+}
+
+std::string FileText(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
+// A library a newer build wrote is neither read nor written: Load reads
+// nothing, and every write fails, leaving the files as they were - one
+// saved back by this build would lose what the newer one put there.
+TEST_F(LibraryStoreTest, ALibraryWrittenByANewerVersionIsNeitherReadNorWritten) {
+    const CanvasManagerSnapshot original = MakeSampleSnapshot();
+    ASSERT_TRUE(LibraryStore(dir_).Save(original));
+    StampLibraryVersion(dir_, LibraryStore::kFormatVersion + 1);
+    const std::string pointerFile = FileText(dir_ / "library.json");
+    const std::string shotRecord = FileText(ShotItemDir() / "item.json");
+    ASSERT_FALSE(shotRecord.empty());
+
+    LibraryStore store(dir_);
+    EXPECT_TRUE(store.WrittenByANewerVersion());
+    EXPECT_FALSE(store.Load().has_value());
+
+    CanvasManagerSnapshot changed = original;
+    changed.canvases[0].name = "Renamed";
+    changed.canvases[0].items[1].rect.x += 50.0f;
+    EXPECT_FALSE(store.Save(changed));
+    EXPECT_FALSE(store.Remove(4));
+    const uint8_t pixels[4] = {1, 2, 3, 255};
+    EXPECT_FALSE(store.SaveImage(4, pixels, 1, 1).has_value());
+    EXPECT_EQ(store.WriteGeneration(), 0u);
+
+    EXPECT_EQ(FileText(dir_ / "library.json"), pointerFile);
+    EXPECT_EQ(FileText(ShotItemDir() / "item.json"), shotRecord);
+}
+
+// This build's own version, and a library.json without one, open as usual.
+TEST_F(LibraryStoreTest, ALibraryOfThisVersionOrWithoutOneOpens) {
+    ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
+    for (const std::optional<int> version : {std::optional<int>(LibraryStore::kFormatVersion), std::optional<int>()}) {
+        StampLibraryVersion(dir_, version);
+        LibraryStore store(dir_);
+        EXPECT_FALSE(store.WrittenByANewerVersion());
+        ASSERT_TRUE(store.Load().has_value());
+        EXPECT_TRUE(store.Save(MakeSampleSnapshot()));
+    }
+}
+
 TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsEverything) {
     LibraryStore store(dir_);
     const CanvasManagerSnapshot original = MakeSampleSnapshot();

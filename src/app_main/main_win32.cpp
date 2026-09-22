@@ -65,7 +65,10 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         // A message box because there is no tray icon yet to hang a
         // notice on, and a tray app that starts and silently isn't there
         // is indistinguishable from one that never started.
-        MessageBoxA(nullptr, sz::strings::kStartupFailed, "Spickzettel", MB_OK | MB_ICONWARNING);
+        MessageBoxA(nullptr,
+                    trayController.RefusedANewerLibrary() ? sz::strings::kStartupNewerLibrary
+                                                          : sz::strings::kStartupFailed,
+                    "Spickzettel", MB_OK | MB_ICONWARNING);
         return 1;
     }
 

@@ -80,6 +80,7 @@ TEST(TrayControllerTest, InitializeFailsIfTrayIconFails) {
     TrayController controller(host, DefaultConfig());
 
     EXPECT_FALSE(controller.Initialize());
+    EXPECT_FALSE(controller.RefusedANewerLibrary()) << "a failure of its own, told as such";
 }
 
 TEST(TrayControllerTest, InitializeFailsWhenAnotherCopyIsRunning) {
@@ -600,6 +601,35 @@ TEST_F(TrayControllerPersistenceTest, InitializeErasesWhatWasDeletedLongerAgoTha
         EXPECT_EQ(manager.FindCanvas(3) == nullptr, purge) << (purge ? "past the period" : "retention is off");
         EXPECT_NE(manager.FindCanvas(4), nullptr) << "not deleted long enough ago";
     }
+}
+
+// A library a newer build wrote refuses the start, before the tray icon,
+// and says so apart from any other failure; the library is left as it was.
+TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryWrittenByANewerVersion) {
+    CanvasManagerSnapshot snapshot;
+    Folder folder;
+    folder.id = 1;
+    folder.name = "F";
+    snapshot.folders.push_back(folder);
+    Canvas canvas;
+    canvas.id = 2;
+    canvas.name = "C";
+    canvas.folderId = 1;
+    snapshot.canvases.push_back(canvas);
+    snapshot.currentFolderId = 1;
+    snapshot.currentCanvasId = 2;
+    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(snapshot));
+    const std::string newer =
+        "{\"version\":" + std::to_string(persistence::LibraryStore::kFormatVersion + 1) + "}";
+    std::ofstream(dir_ / "library.json") << newer;
+
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_;
+    TrayController controller(host, DefaultConfig());
+    EXPECT_FALSE(controller.Initialize());
+    EXPECT_TRUE(controller.RefusedANewerLibrary());
+    EXPECT_FALSE(host.trayIconShown);
+    EXPECT_EQ(ReadFile(dir_ / "library.json"), newer);
 }
 
 TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {

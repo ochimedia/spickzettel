@@ -126,6 +126,23 @@ class LibraryStore {
 public:
     explicit LibraryStore(std::filesystem::path rootDir);
 
+    // The shape of the library this build reads and writes, stamped into
+    // library.json by every save. It goes up whenever a build writes
+    // something an older one would misread or drop - a new field in a
+    // record, a new kind of file - and a build that raises it reads every
+    // lower one, migrating as it loads.
+    static constexpr int kFormatVersion = 1;
+    // Whether library.json says a newer build wrote this library: a
+    // version above kFormatVersion. Such a library is not this build's to
+    // open - every record it rewrote would lose what the newer build put
+    // there - so once this has been seen, by this or by Load, the store
+    // writes nothing at all: Save, Remove, SaveImage and SaveThumbnail all
+    // fail. TrayController::Initialize asks before loading, and refuses to
+    // start. A library.json that is missing, unreadable or has no version
+    // is not newer: the version has been written since the first save
+    // there ever was.
+    bool WrittenByANewerVersion() const;
+
     // Where the library lives - for a diagnostic that shows the tree as it
     // is on disk (see OverlayApp::DrawLibraryTreeHud).
     const std::filesystem::path& RootDir() const { return rootDir_; }
@@ -167,7 +184,10 @@ public:
     // Loads the on-disk library, or returns nullopt only if `rootDir` has
     // none at all - no library.json *and* no folders/ tree - which is a
     // first run (see TrayController::Initialize, which falls back to
-    // CanvasManager's own freshly-constructed default state).
+    // CanvasManager's own freshly-constructed default state). Or if a newer
+    // build wrote it (see WrittenByANewerVersion), which reads nothing and
+    // leaves the store writing nothing, so that a fresh start over it
+    // cannot save over the tree.
     //
     // The tree is the library; library.json is a pointer file beside it.
     // So a library.json that is missing, not JSON, or in the single-file
@@ -368,6 +388,9 @@ private:
     mutable std::map<uint64_t, std::filesystem::path> pendingRemovals_;
     // See WriteGeneration.
     mutable uint64_t writeGeneration_ = 0;
+    // See WrittenByANewerVersion: set once a newer library has been seen,
+    // and never cleared.
+    mutable bool writtenByANewerVersion_ = false;
 
     // What was last written, so a save can tell what has actually changed.
     //

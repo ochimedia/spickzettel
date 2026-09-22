@@ -44,6 +44,14 @@ bool TrayController::Initialize() {
     if (!host_.AcquireSingleInstance()) {
         return false;
     }
+    // A library a newer build wrote is not this one's to open: every
+    // record it saved back would lose what the newer build put there.
+    // Refused before the tray icon, like a second copy, and with its own
+    // message - see RefusedANewerLibrary.
+    if (!host_.GetDataDirectoryPath().empty() && libraryStore_.WrittenByANewerVersion()) {
+        refusedANewerLibrary_ = true;
+        return false;
+    }
     if (!host_.ShowTrayIcon()) {
         return false;
     }

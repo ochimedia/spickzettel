@@ -72,8 +72,12 @@ public:
     // (see Session::SetLibraryStore) and CaptureShotItem's synchronous image
     // writes actually persist anything from here on. Returns false if any
     // hotkey/tray registration fails (e.g. a hotkey combination is
-    // already taken).
+    // already taken), or if the library was written by a newer build.
     bool Initialize();
+    // After a failed Initialize: whether it was the library that refused -
+    // a newer build wrote it (see LibraryStore::WrittenByANewerVersion) -
+    // which the person has to be told apart from a hotkey held elsewhere.
+    bool RefusedANewerLibrary() const { return refusedANewerLibrary_; }
 
     const OverlayApp& Overlay() const { return overlayApp_; }
     // Non-const for the tests that have to *arrange* a world before driving
@@ -272,6 +276,8 @@ private:
     // empty) but only ever used - Load()'d from, attached to overlayApp_ -
     // when that path is non-empty; see Initialize().
     persistence::LibraryStore libraryStore_;
+    // See RefusedANewerLibrary.
+    bool refusedANewerLibrary_ = false;
     // What the app is working on - the library, what is on disk
     // and on the GPU. The overlay is a view of it.
     Session session_;
