@@ -199,30 +199,6 @@ bool FromJson(const json& j, Layer& out, bool& repaired) {
     return true;
 }
 
-// The one layer an item had before layers existed, read back out of the
-// item's own record: backgroundOpacity, backgroundColorRGBA, hasBackground,
-// seedHue and shotImageFile were exactly a single Image layer written
-// longhand. Only used for a record with no "layers" key of its own, which
-// is every item in a library written before this - they load unchanged
-// rather than losing their screenshots, and are written back in the new
-// shape on the next save.
-Layer LayerFromPreLayersItemJson(const json& j, bool hasBackground) {
-    Layer layer;
-    layer.kind = LayerKind::Image;
-    // Whether anything had to be repaired is not asked: a record in this
-    // shape is rewritten by the next save whatever it held (see ReadTree).
-    bool repaired = false;
-    layer.opacity = ClampedOr(j, "backgroundOpacity", hasBackground ? 1.0f : 0.0f, 0.0f, 1.0f, repaired);
-    layer.tintColorRGBA = j.value("backgroundColorRGBA", uint32_t{0xFFFFFFFF});
-    layer.showsPlaceholder = hasBackground;
-    layer.placeholderHue = ClampedOr(j, "seedHue", 0.0f, 0.0f, 360.0f, repaired);
-    layer.imageFile = j.value("shotImageFile", std::string());
-    if (!IsPlainFilename(layer.imageFile)) {
-        layer.imageFile.clear();
-    }
-    return layer;
-}
-
 json ToJson(const Item& item) {
     json j{
         {"id", IdJson(item.id)},
@@ -404,11 +380,6 @@ bool FromJson(const json& j, Item& out, bool& repaired) {
     out.isFullscreenStretch = j.value("isFullscreenStretch", false);
     out.minimized = j.value("minimized", false);
     out.pinned = j.value("pinned", false);
-    // A record from before layers existed carries its one layer as five
-    // fields of its own - see LayerFromPreLayersItemJson. Told apart by the
-    // key rather than by a version number: the absence of "layers" is
-    // exactly the condition, and a version field would have to be invented
-    // and then maintained to say the same thing.
     out.layers.clear();
     if (const auto layersIt = j.find("layers"); layersIt != j.end() && layersIt->is_array()) {
         for (const json& layerJson : *layersIt) {
@@ -419,11 +390,9 @@ bool FromJson(const json& j, Item& out, bool& repaired) {
                 repaired = true;  // an entry that was not a layer, left out
             }
         }
-    } else {
-        out.layers.push_back(LayerFromPreLayersItemJson(j, out.hasBackground));
     }
     if (out.layers.empty()) {
-        // A record with an explicitly empty list, or one whose every entry
+        // A record with no list, an empty one, or one whose every entry
         // was unreadable. Item::layers is never empty - see its own comment
         // - so this is where that promise is kept for a loaded item.
         out.layers.push_back(Layer{});
@@ -1260,10 +1229,9 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                 // compare would cost the load half a save. A key the record
                 // lacks reads as its default and reads back the same next
                 // time, so it is no reason to write; a value the read had
-                // to repair is (see FiniteOr), and so is a record in the
-                // shape from before layers existed - both are left unnoted
-                // so the next save writes them as they now are.
-                if (item.id == recordedItemId && itemDoc->contains("layers") && !repaired) {
+                // to repair is (see FiniteOr) - left unnoted so the next
+                // save writes it as it now is.
+                if (item.id == recordedItemId && !repaired) {
                     writtenItemHashes_[item.id] = HashItem(item);
                 }
                 foundItems.emplace_back(itemDir.filename().string(), std::move(item));

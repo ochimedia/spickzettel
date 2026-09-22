@@ -343,46 +343,6 @@ TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsEverything) {
     EXPECT_EQ(shot.ImageLayer()->imageFile, "000004.png");
 }
 
-// The migration that matters: every library written before layers existed
-// carries an item's one layer as five fields of the item's own. Those items
-// have to come back with their screenshot, their opacity and their tint
-// intact - losing them would be losing the picture.
-TEST_F(LibraryStoreTest, LoadReadsAPreLayersItemAsOneLayer) {
-    std::filesystem::create_directories(dir_);
-    WriteLibraryTree(dir_, R"({
-        "currentFolderId": 1, "currentCanvasId": 2, "nextId": 10,
-        "folders": [{"id": 1, "name": "F", "slug": "f-1"}],
-        "canvases": [{"id": 2, "name": "C", "slug": "c-2", "folderId": 1, "items": [
-            {"id": 3, "name": "Shot", "hasBackground": true, "backgroundOpacity": 0.8,
-             "backgroundColorRGBA": 305419896, "seedHue": 42.5, "shotImageFile": "000003.png"},
-            {"id": 4, "name": "Drawing", "hasBackground": false}
-        ]}]
-    })");
-
-    LibraryStore store(dir_);
-    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
-
-    ASSERT_TRUE(loaded.has_value());
-    ASSERT_EQ(loaded->canvases[0].items.size(), 2u);
-
-    const Item& shot = loaded->canvases[0].items[0];
-    ASSERT_EQ(shot.layers.size(), 1u);
-    EXPECT_EQ(shot.layers[0].kind, LayerKind::Image);
-    EXPECT_FLOAT_EQ(shot.layers[0].opacity, 0.8f);
-    EXPECT_EQ(shot.layers[0].tintColorRGBA, 305419896u);
-    EXPECT_TRUE(shot.layers[0].showsPlaceholder);
-    EXPECT_FLOAT_EQ(shot.layers[0].placeholderHue, 42.5f);
-    EXPECT_EQ(shot.layers[0].imageFile, "000003.png");
-
-    // A drawing had no background keys at all, and its layer falls back to
-    // the same transparent default CanvasManager::CreateItem gives one.
-    const Item& drawing = loaded->canvases[0].items[1];
-    ASSERT_EQ(drawing.layers.size(), 1u);
-    EXPECT_FLOAT_EQ(drawing.layers[0].opacity, 0.0f);
-    EXPECT_FALSE(drawing.layers[0].showsPlaceholder);
-    EXPECT_TRUE(drawing.layers[0].imageFile.empty());
-}
-
 // An item is never layerless, however broken the record - everything
 // downstream reaches for ImageLayer() without checking.
 TEST_F(LibraryStoreTest, LoadGivesAnItemALayerEvenIfTheListIsEmpty) {
@@ -2343,34 +2303,6 @@ TEST_F(IncrementalSaveTest, TheFirstSaveWritesALibraryRecordTheLoadHadToRepair) 
     ASSERT_TRUE(loaded.has_value());
     EXPECT_EQ(loaded->currentCanvasId, 2u);
     EXPECT_EQ(FilesTouchedBy([&] { store.Save(*loaded); }), std::vector<std::string>{"library.json"});
-}
-
-// A record in the shape from before layers existed reads fine (see
-// LoadReadsAPreLayersItemAsOneLayer) and is rewritten in the current shape
-// by the first save - which is what keeps the compatibility path from having
-// to be kept forever.
-TEST_F(IncrementalSaveTest, TheFirstSaveBringsAPreLayersRecordUpToDate) {
-    WriteLibraryTree(dir_, R"({
-        "currentFolderId": 1, "currentCanvasId": 2,
-        "folders": [{"id": "000001", "name": "F"}],
-        "canvases": [{"id": 2, "name": "C", "slug": "c-2", "folderId": 1, "items": [
-            {"id": 3, "name": "Shot", "hasBackground": true, "backgroundOpacity": 0.8,
-             "backgroundColorRGBA": 305419896, "seedHue": 42.5, "shotImageFile": "000003.png"}
-        ]}]
-    })");
-    const LibraryStore store{dir_};
-    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
-    ASSERT_TRUE(loaded.has_value());
-
-    const std::vector<std::string> touched = FilesTouchedBy([&] { store.Save(*loaded); });
-    // The snippet's directory is renamed to its slug on the way, so the
-    // record appears under its new name.
-    const std::string itemFile = "folders/f-000001/c-000002/shot-000003/item.json";
-    EXPECT_NE(std::find(touched.begin(), touched.end(), itemFile), touched.end()) << "the record kept its old shape";
-    EXPECT_EQ(std::find(touched.begin(), touched.end(), "folders/f-000001/folder.json"), touched.end())
-        << "the folder record was already what a save writes";
-    const nlohmann::json rewritten = nlohmann::json::parse(std::ifstream(dir_ / itemFile));
-    EXPECT_TRUE(rewritten.contains("layers"));
 }
 
 // The safety net under all of the above, and the one test that would catch a
