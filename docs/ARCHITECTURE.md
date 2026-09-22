@@ -613,10 +613,7 @@ directories claiming one id - what copying one produces - is not
 corruption, the second gets a fresh id; a current-canvas pointer naming
 nothing falls back to a canvas that exists. The same reconciliation is
 what makes a half-finished save survivable: a crash mid-write leaves the
-same kind of inconsistency a hand edit does. The reader also tolerates a
-few pre-release record shapes (numeric ids, an item's single layer
-written as five fields, order files listing directory names); they are
-cheap and the tree invites old files.
+same kind of inconsistency a hand edit does.
 
 The tree also invites files that are not ours, so what is read has a
 budget checked before anything is allocated for it: a record is refused
@@ -815,7 +812,7 @@ library is a working surface autosaved every few seconds, not a
 document with a save button, and a few seconds of ink is the most a
 power loss can take.
 
-### Images: QOI, decoded by magic bytes
+### Images: QOI
 
 Pixels are written as QOI. Measured on this app's own screenshots
 against stb's PNG:
@@ -2194,7 +2191,7 @@ one twice.
   canvases; replaced by a directory tree that is its own index, and then
   by a save whose writes are bounded by what changed.
 - **PNG for captures.** Six to twenty times slower than QOI on this
-  app's own screenshots; PNG is still decoded.
+  app's own screenshots.
 - **Loading every canvas's textures at startup.** 1.6 GB of VRAM behind a
   game for fifty 4K captures; replaced by per-canvas residency.
 - **A global undo stack.** Undid strokes on canvases not on screen;

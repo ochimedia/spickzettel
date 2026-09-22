@@ -26,7 +26,7 @@ struct DecodedImage {
 //
 // Shared by the sidecar thumbnails written beside each image (see
 // LibraryStore::SaveThumbnail) and the Overview's own fallback for a
-// library that has none yet, so both produce the same picture.
+// picture whose thumbnail is missing, so both produce the same picture.
 DecodedImage DownscaleToFit(const uint8_t* pixelsRGBA, int width, int height, int maxExtent);
 DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent);
 

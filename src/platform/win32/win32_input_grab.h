@@ -54,7 +54,7 @@ public:
     void SetKeyboardSuspended(bool suspended);
 
     // Whether the game underneath still holds OS focus - i.e. whether
-    // edit_mode_no_activate is on. The precondition for grabbing anything
+    // dontStealFocus is on. The precondition for grabbing anything
     // at all: with edit mode holding focus the ordinary way, the game has
     // already stopped receiving input (raw input included, since a game
     // registers without RIDEV_INPUTSINK and so only receives it while

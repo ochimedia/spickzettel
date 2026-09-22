@@ -154,11 +154,7 @@ bool IsPlainFilename(const std::string& name) {
 // capture or painted layer or a thumbnail beside one, all .qoi. What the
 // per-snippet collection below is limited to.
 bool IsPictureFilename(const std::string& name) {
-    const auto endsWith = [&name](std::string_view suffix) {
-        return name.size() >= suffix.size() &&
-               std::string_view(name).substr(name.size() - suffix.size()) == suffix;
-    };
-    return endsWith(".qoi");
+    return name.size() >= 4 && std::string_view(name).substr(name.size() - 4) == ".qoi";
 }
 
 json ToJson(const Layer& layer) {
@@ -427,11 +423,11 @@ bool FromJson(const json& j, Item& out, bool& repaired) {
 // Only what the tree cannot say. No items: each one is a directory of its
 // own beside this file, so that a snippet - its record, its picture and its
 // thumbnail - is a single thing to move. No folderId: the directory this
-// sits in says which folder it is in, and a copy of that here was ignored
-// on load and wrong on disk from the moment someone dragged the directory
-// somewhere else. No slug: the directory name is regenerated from the
-// current name on every save, and a stored one was stale from the first
-// rename on. A record that repeats what the tree says can only agree with
+// sits in says which folder it is in, and a copy of that here would be
+// wrong from the moment someone dragged the directory somewhere else. No
+// slug: the directory name is regenerated from the current name on every
+// save, and a stored one would be stale from the first rename on. A
+// record that repeats what the tree says can only agree with
 // it or disagree with it, and there is nothing to do with the second case.
 // The two timestamps every record can carry - see Folder::createdAt - are
 // written only when set, so a record that was never stamped carries no key
@@ -1176,8 +1172,8 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             // no record anywhere left saying otherwise.
             canvas.folderId = folder.id;
             canvasDirs_[canvas.id] = canvasDir;
-            // A record whose folderId disagreed with where it sits is not
-            // noted here, and is thereby rewritten to agree.
+            // A record that is not exactly what a save writes - a key it
+            // does not write, say - is not noted here, and is rewritten.
             if (canvas.id == recordedCanvasId && ToJson(canvas) == *canvasDoc) {
                 writtenFileText_["canvas:" + std::to_string(canvas.id)] = ToJson(canvas).dump(2);
             }
@@ -1281,8 +1277,8 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     // record: each one that came back exactly as a save would write it is
     // noted as already written, so the first save afterwards costs what
     // changed, like every save after it. Anything the load had to repair -
-    // an id reassigned, a folderId corrected, an order file that disagreed
-    // with the directories beside it - is left out, and so is written. See writtenItemHashes_.
+    // an id reassigned, an order file that disagreed with the directories
+    // beside it - is left out, and so is written. See writtenItemHashes_.
     folderDirs_.clear();
     canvasDirs_.clear();
     itemDirs_.clear();

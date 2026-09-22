@@ -119,10 +119,10 @@ public:
     Canvas* CurrentOrNull();
     const Canvas* CurrentOrNull() const;
     bool HasCurrentCanvas() const { return CurrentOrNull() != nullptr; }
-    // 0 when there is no current canvas - never a real CanvasId (ids start
-    // at 1; see nextId_). For callers that only want to key something by
-    // canvas (OverlayApp's per-canvas undo stacks) rather than reach into
-    // its contents.
+    // 0 when there is no current canvas - never a real CanvasId (0 is "no
+    // id" everywhere; see util/uid.h). For callers that only want to key
+    // something by canvas (OverlayApp's per-canvas undo stacks) rather than
+    // reach into its contents.
     CanvasId CurrentCanvasId() const { return currentCanvasId_; }
     const std::vector<Canvas>& Canvases() const { return canvases_; }
     // Mutable access for the one caller that has to touch every canvas

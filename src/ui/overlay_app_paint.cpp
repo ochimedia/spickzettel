@@ -39,8 +39,7 @@ namespace {
 // the thumbnails fill in over a fraction of a second and the panel stays
 // responsive throughout.
 //
-// This is the fallback path. An image written by this version has a
-// thumbnail beside it (see LibraryStore::SaveThumbnail), and those are read
+// This is the fallback path. A picture normally has a thumbnail beside it (see LibraryStore::SaveThumbnail), and those are read
 // under a much larger budget below, because a 256px QOI decodes in well
 // under a millisecond.
 constexpr int kOverviewFullDecodesPerFrame = 2;
@@ -89,8 +88,8 @@ std::optional<uint64_t> OverlayApp::LayerPreviewTexture(const Item& item, size_t
         return 0;  // never had pixels of its own: the placeholder is the answer
     }
 
-    // The sidecar first, and on its own budget: this is the path an image
-    // written by this version takes, and it is cheap enough that a whole
+    // The sidecar first, and on its own budget: this is the path nearly
+    // every picture takes, and it is cheap enough that a whole
     // folder's worth lands on the first frame.
     if (layerPreviewThumbnailBudget_ > 0) {
         --layerPreviewThumbnailBudget_;

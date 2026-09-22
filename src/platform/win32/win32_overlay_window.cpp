@@ -1007,7 +1007,7 @@ void Win32OverlayWindow::RenderFrame() {
 
     // Modifier state from two sources that between them cover every case.
     // ImGui's backend learns Ctrl/Shift/Alt from key messages, which need
-    // keyboard focus - and edit_mode_no_activate exists precisely to keep
+    // keyboard focus - and dontStealFocus exists precisely to keep
     // focus with the game, which is how Alt-drag stopped working under it.
     // GetAsyncKeyState sees a key whoever has focus. What it cannot see is
     // a key the keyboard grab swallowed, because a swallowed event updates

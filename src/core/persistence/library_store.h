@@ -19,7 +19,7 @@ namespace sz::core::persistence {
 // directory - the sole persistence boundary for "everything" the overlay
 // shows: there's no explicit save/load anywhere else in the app (see
 // OverlayApp's debounced autosave, which is what actually calls Save()).
-// Pure <filesystem>/<fstream> plus the vendored stb PNG codec - no
+// Pure <filesystem>/<fstream> plus the vendored QOI codec - no
 // OS-specific dependency, so (unlike the real screen-capture code it
 // complements) this is fully exercised by linux-tests.
 //
@@ -395,9 +395,8 @@ private:
     // session costs what changed like every save after it. Each record that
     // came back exactly as a save would write it is noted as written;
     // anything the load had to repair - an id reassigned because two
-    // directories claimed it, a folderId corrected to where the canvas
-    // sits, an order file that disagreed with the directories beside it -
-    // is left out and therefore written. Making
+    // directories claimed it, an order file that disagreed with the
+    // directories beside it - is left out and therefore written. Making
     // the first save a full one instead costs seconds on a large library
     // for the sake of exactly those repaired records.
     //

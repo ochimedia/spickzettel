@@ -642,8 +642,8 @@ TEST_F(LibraryStoreTest, LoadLeavesNothingCurrentWhenThereIsNothing) {
     EXPECT_EQ(loaded->currentCanvasId, 0u);
 }
 
-// There is no "next id" left to heal - ids are drawn at random and checked
-// against what is actually loaded - so the property that matters is that a
+// Ids are drawn at random and checked against what is actually loaded, so
+// the property that matters is that a
 // hand-written library, whatever ids it happens to name, cannot make the
 // allocator hand out one that is already in use.
 TEST_F(LibraryStoreTest, IdsMintedAfterLoadingAHandWrittenLibraryAvoidWhatItNames) {
@@ -860,7 +860,7 @@ TEST_F(LibraryStoreTest, MovingACanvasToAnotherFolderInTheAppMovesItsDirectory) 
 }
 
 // A snapshot that lacks something nobody deleted for good - which no delete
-// the app makes produces any more - takes it out of the library's tree,
+// the app makes produces - takes it out of the library's tree,
 // setting it aside rather than deleting it. The folder it was in stays.
 TEST_F(LibraryStoreTest, ACanvasTheSnapshotLacksIsSetAsideOutOfTheTree) {
     LibraryStore store(dir_);
@@ -940,7 +940,7 @@ TEST_F(LibraryStoreTest, SaveWritesADirectoryPerSnippet) {
     const std::filesystem::path canvasDir = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002";
     EXPECT_TRUE(std::filesystem::exists(canvasDir / "drawing-1-000003" / "item.json"));
     EXPECT_TRUE(std::filesystem::exists(canvasDir / "shot-1-000004" / "item.json"));
-    // The canvas record no longer carries its snippets - the directories do.
+    // The canvas record does not carry its snippets - the directories do.
     std::ifstream in(canvasDir / "canvas.json");
     const nlohmann::json canvasRecord = nlohmann::json::parse(in);
     EXPECT_FALSE(canvasRecord.contains("items"));
@@ -1581,8 +1581,8 @@ TEST_F(LibraryStoreTest, ARecordWithAFieldOfTheWrongTypeIsSkippedAndLeftWhereItI
 
 // ===== The tree is the library, whatever the pointer file says =====
 //
-// library.json holds pointers and preferences. Anything wrong with it is a
-// reason to default those, never a reason to report the library absent
+// library.json holds the format version and two pointers. Anything wrong
+// with it is a reason to default those, never a reason to report the library absent
 // while a tree is there - because "absent" starts the app fresh, and a
 // fresh library's first save retires everything it finds.
 

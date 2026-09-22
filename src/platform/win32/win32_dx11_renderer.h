@@ -33,7 +33,7 @@ public:
     // after the Win32 backend's own bookkeeping. The backend learns
     // modifiers from key messages, and key messages need keyboard focus -
     // which the overlay deliberately withholds from itself under
-    // edit_mode_no_activate, and which never carries a key the input grab
+    // dontStealFocus, and which never carries a key the input grab
     // has swallowed. Alt-drag lives or dies by this.
     void SetModifierOverride(bool ctrl, bool shift, bool alt);
 

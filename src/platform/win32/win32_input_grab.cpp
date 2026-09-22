@@ -1275,7 +1275,7 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // of edit mode rather than only while grabbing: the input options HUD
     // offers a number key per option, and the situation those options exist
     // for is precisely the one where the overlay has no keyboard focus to
-    // receive them - edit_mode_no_activate leaves focus with the game on
+    // receive them - dontStealFocus leaves focus with the game on
     // purpose. So the bare digits the HUD advertises are taken here and
     // handed to the overlay, and every other key passes through untouched.
     // Remove this branch (and restore WantKeyboard to requiring
