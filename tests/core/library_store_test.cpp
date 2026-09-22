@@ -421,11 +421,10 @@ TEST_F(LibraryStoreTest, SaveKeepsImagesReferencedByAnyLayer) {
     EXPECT_FALSE(std::filesystem::exists(dir_ / "images" / "000007.qoi")) << "staging is drained";
 }
 
-TEST_F(LibraryStoreTest, LoadDefaultsItemAnchorToNotYetAnchoredWhenLibraryPredatesThem) {
+TEST_F(LibraryStoreTest, LoadDefaultsAMissingItemAnchorToNotYetAnchored) {
     std::filesystem::create_directories(dir_);
-    // A library.json written before resolution-relative item sizing
-    // existed - the missing keys fall back to 0/a zero Rect, which
-    // CanvasManager::SyncItemsToDisplaySize already reads as "not yet
+    // A record without the anchor keys - they fall back to 0/a zero Rect,
+    // which CanvasManager::SyncItemsToDisplaySize reads as "not yet
     // anchored" (see Item::anchorRect's own doc comment) rather than a
     // real 0x0 anchor - it just adopts the loaded rect as-is the first
     // time it runs.
@@ -446,17 +445,16 @@ TEST_F(LibraryStoreTest, LoadDefaultsItemAnchorToNotYetAnchoredWhenLibraryPredat
     EXPECT_FLOAT_EQ(loaded->canvases[0].items[0].anchorDisplayHeight, 0.0f);
 }
 
-// Text styling is per item (see Item::noteTextColorRGBA/noteTextSizePx),
-// which means a library written before it existed has neither key - and
-// has to read back as exactly the fixed look it was drawn with then:
-// opaque white at the UI font's own 17px.
-TEST_F(LibraryStoreTest, LoadDefaultsNoteTextStyleToTheOldFixedLookWhenLibraryPredatesIt) {
+// Text styling is per item (see Item::noteTextColorRGBA/noteTextSizePx);
+// a record with neither key reads back in the default style: opaque white
+// at the UI font's own 17px.
+TEST_F(LibraryStoreTest, LoadDefaultsAMissingNoteTextStyle) {
     std::filesystem::create_directories(dir_);
     WriteLibraryTree(dir_, R"({
         "currentFolderId": 1, "currentCanvasId": 2, "nextId": 10,
         "folders": [{"id": 1, "name": "F", "slug": "f-1"}],
         "canvases": [{"id": 2, "name": "C", "slug": "c-2", "folderId": 1, "items": [
-            {"id": 3, "name": "A", "noteText": "written before text had a color"}
+            {"id": 3, "name": "A", "noteText": "no style of its own"}
         ]}]
     })");
 
@@ -1949,10 +1947,9 @@ TEST_F(LibraryStoreTest, AnImageThatIsAlreadySmallKeepsItsSize) {
     EXPECT_EQ(thumb->pixelsRGBA, pixels);
 }
 
-TEST_F(LibraryStoreTest, LoadThumbnailReturnsNulloptForALibraryThatHasNone) {
+TEST_F(LibraryStoreTest, LoadThumbnailReturnsNulloptForAPictureWithoutOne) {
     LibraryStore store(dir_);
-    // Exactly the state a library written before thumbnails existed is in:
-    // the image is there, the sidecar isn't, and that is not an error.
+    // The image is there, the sidecar isn't, and that is not an error.
     const std::vector<uint8_t> pixels = {1, 2, 3, 255};
     ASSERT_TRUE(store.SaveImage(7, pixels.data(), 1, 1).has_value());
     std::filesystem::remove(dir_ / "images" / "000007.thumb.qoi");

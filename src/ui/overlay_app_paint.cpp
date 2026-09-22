@@ -106,8 +106,7 @@ std::optional<uint64_t> OverlayApp::LayerPreviewTexture(const Item& item, size_t
         return std::nullopt;  // even the cheap path is spoken for this frame
     }
 
-    // No sidecar: a library written before they existed, or one whose
-    // thumbnail didn't survive. Decode the real thing under the small
+    // No sidecar: its thumbnail was never written or didn't survive. Decode the real thing under the small
     // budget, and write the sidecar on the way out so this is the last time
     // this image costs that.
     if (layerPreviewLoadBudget_ <= 0) {

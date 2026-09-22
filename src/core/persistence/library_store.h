@@ -129,8 +129,7 @@ public:
     // The shape of the library this build reads and writes, stamped into
     // library.json by every save. It goes up whenever a build writes
     // something an older one would misread or drop - a new field in a
-    // record, a new kind of file - and a build that raises it reads every
-    // lower one, migrating as it loads.
+    // record, a new kind of file.
     static constexpr int kFormatVersion = 1;
     // Whether library.json says a newer build wrote this library: a
     // version above kFormatVersion. Such a library is not this build's to
@@ -139,8 +138,7 @@ public:
     // writes nothing at all: Save, Remove, SaveImage and SaveThumbnail all
     // fail. TrayController::Initialize asks before loading, and refuses to
     // start. A library.json that is missing, unreadable or has no version
-    // is not newer: the version has been written since the first save
-    // there ever was.
+    // is not newer.
     bool WrittenByANewerVersion() const;
 
     // Where the library lives - for a diagnostic that shows the tree as it
@@ -276,16 +274,14 @@ public:
     // correctness, so nothing that saves an image cares whether this
     // succeeded.
     //
-    // Called for every picture written from now on (see WritePicture), and from
-    // the Overview for a library that predates thumbnails - which is how an
-    // existing library gets them, one visit at a time, rather than needing
-    // a migration pass.
+    // Called for every picture written (see WritePicture), and from the
+    // Overview for a picture whose thumbnail is missing - which puts it
+    // back, one visit at a time.
     bool SaveThumbnail(uint64_t itemId, const std::string& imageFilename, const DecodedImage& image) const;
 
     // The thumbnail for snippet `itemId`'s `imageFilename`, or nullopt if
-    // there isn't one - which is not an error: every library written before
-    // this existed has none, and the caller falls back to decoding the full
-    // image.
+    // there isn't one - which is not an error: the caller falls back to
+    // decoding the full image, and writes the thumbnail on the way.
     std::optional<DecodedImage> LoadThumbnail(uint64_t itemId, const std::string& imageFilename) const;
 
 private:
@@ -400,8 +396,8 @@ private:
     // came back exactly as a save would write it is noted as written;
     // anything the load had to repair - an id reassigned because two
     // directories claimed it, a folderId corrected to where the canvas
-    // sits, an order file that disagreed with the directories beside it, a
-    // record in an older shape - is left out and therefore written. Making
+    // sits, an order file that disagreed with the directories beside it -
+    // is left out and therefore written. Making
     // the first save a full one instead costs seconds on a large library
     // for the sake of exactly those repaired records.
     //

@@ -396,15 +396,15 @@ bool FromJson(const json& j, Item& out, bool& repaired) {
     out.noteText = j.value("noteText", std::string());
     out.noteTextColorRGBA = j.value("noteTextColorRGBA", uint32_t{0xFFFFFFFF});
     // Clamped, not rejected, and the fallback is the same default a fresh
-    // Item carries - a library written before these two fields existed
-    // reads back as a note styled exactly the way it was drawn then.
+    // Item carries: a record without these two fields reads back as a
+    // note in the default style.
     out.noteTextSizePx = ClampedOr(j, "noteTextSizePx", 17.0f, kNoteTextSizeMin, kNoteTextSizeMax, repaired);
     // anchorRect defaults to a zero Rect (via FromJson(Rect)'s own
     // per-field 0.0f defaults) and anchorDisplayWidth/Height default to 0
     // - together, "not yet anchored" (see Item::anchorRect's own doc
-    // comment), the correct fallback for a library saved before this
-    // field existed. CanvasManager::SyncItemsToDisplaySize adopts the
-    // loaded `rect` as the anchor the first time it runs.
+    // comment), the correct fallback for a record without them.
+    // CanvasManager::SyncItemsToDisplaySize adopts the loaded `rect` as the
+    // anchor the first time it runs.
     if (const auto it = j.find("anchorRect"); it != j.end()) {
         FromJson(*it, out.anchorRect, repaired);
     }
@@ -1293,8 +1293,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     // noted as already written, so the first save afterwards costs what
     // changed, like every save after it. Anything the load had to repair -
     // an id reassigned, a folderId corrected, an order file that disagreed
-    // with the directories beside it, a record in an older shape - is left
-    // out, and so is written. See writtenItemHashes_.
+    // with the directories beside it - is left out, and so is written. See writtenItemHashes_.
     folderDirs_.clear();
     canvasDirs_.clear();
     itemDirs_.clear();

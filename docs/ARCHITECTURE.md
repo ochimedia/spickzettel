@@ -564,23 +564,21 @@ library/
 
 `library.json` carries `LibraryStore::kFormatVersion`, stamped by every
 save. It goes up whenever a build writes something an older one would
-misread or drop, and from the first build handed to anyone that is a
-promise with two halves: a build reads every lower version, migrating as
-it loads, and never writes a higher one. A library stamped higher than
-the build knows is refused whole. `TrayController::Initialize` checks
-before the tray icon and the app does not start, saying why in a message
-box of its own. The store backs that up by itself: once it has seen a
-newer stamp, `Load` reads nothing and `Save`, `Remove`, `SaveImage` and
-`SaveThumbnail` all fail, so a path that forgot to ask still cannot
-write. Opening read-only was the alternative, and was not worth its
-cost: every write path would need a read-only state, for a case whose
-fix is running the newer build. A `library.json` with no version, or
-none readable, counts as not newer - every tree-shaped library has had
-one from its first save.
+misread or drop. A library stamped higher than the build knows is
+refused whole. `TrayController::Initialize` checks before the tray icon
+and the app does not start, saying why in a message box of its own. The
+store backs that up by itself: once it has seen a newer stamp, `Load`
+reads nothing and `Save`, `Remove`, `SaveImage` and `SaveThumbnail` all
+fail, so a path that forgot to ask still cannot write. Opening read-only
+was the alternative, and was not worth its cost: every write path would
+need a read-only state, for a case whose fix is running the newer
+build. A `library.json` with no version, or none readable, counts as
+not newer.
 
-`config.json` is not versioned. A newer build's settings read by an
-older one lose only the fields the older one does not know, the next
-time it writes the file - a setting, not the library.
+`config.json` carries a version of its own, which nothing reads yet. A
+newer build's settings read by an older one lose only the fields the
+older one does not know, the next time it writes the file - a setting,
+not the library.
 
 Every directory is `<slug of its current name>-<uid>`. The readable half
 is regenerated on every save so it stays true after a rename; the

@@ -240,12 +240,7 @@ std::filesystem::path AppDataBase() {
         base = appData;
     }
     // Capitalised because %APPDATA% is somewhere people actually browse,
-    // and the name is a proper noun there. Safe to change after the fact:
-    // Windows paths are case-insensitive, so an install that already has a
-    // lowercase "spickzettel" folder keeps using that exact folder (with
-    // its existing on-disk casing) rather than getting a second, empty
-    // one - verified, not assumed. Only fresh installs are spelled this
-    // way on disk.
+    // and the name is a proper noun there.
     return base / "Spickzettel";
 }
 }  // namespace
