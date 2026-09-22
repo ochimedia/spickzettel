@@ -126,7 +126,8 @@ overlay is not shown at all, and on a first run it comes up fullscreen,
 topmost and in edit mode. So `WinMain` shows it before the tray
 controller initialises - before the overlay exists to cover it or take
 its input. A second copy started by mistake shows the notice before it
-fails on its hotkeys; that is the price of the ordering.
+finds the first one running and stops; that is the price of the
+ordering.
 
 The version lives in `VERSION` at the repo root, read by CMake and fed to
 both `project()` and the header, so a release script can bump it without
