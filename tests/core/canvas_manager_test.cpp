@@ -1874,6 +1874,34 @@ TEST(CanvasManagerTest, ADeletedSnippetStaysWhereItIsAndIsHidden) {
     EXPECT_FALSE(manager.MarkDeleted(a, 5678)) << "marked already";
 }
 
+// Folders first, each once; a canvas with its folder going is left to go
+// with it; one that went only with its folder is never listed on its own;
+// and a stamp at the cutoff is not before it.
+TEST(CanvasManagerTest, MarkedBeforeListsWhatWasDeletedLongEnoughAgo) {
+    CanvasManager manager("First");
+    const FolderId home = manager.CurrentFolderId();
+    const CanvasId current = manager.CurrentCanvasId();
+    const CanvasId early = manager.AddCanvas("Early");
+    const CanvasId atCutoff = manager.AddCanvas("At cutoff");
+    const FolderId folder = manager.AddFolder("Folder");
+    manager.SwitchToFolder(folder);
+    const CanvasId markedFirst = manager.AddCanvas("Marked first");
+    const CanvasId wentWithIt = manager.AddCanvas("Went with it");
+    manager.SwitchToFolder(home);
+    manager.SwitchToCanvas(current);
+    ASSERT_TRUE(manager.MarkDeleted(early, 10));
+    ASSERT_TRUE(manager.MarkDeleted(atCutoff, 50));
+    ASSERT_TRUE(manager.MarkDeleted(markedFirst, 20));
+    ASSERT_TRUE(manager.MarkDeleted(folder, 60));
+
+    EXPECT_TRUE(manager.MarkedBefore(10).empty());
+    EXPECT_EQ(manager.MarkedBefore(50), (std::vector<uint64_t>{early, markedFirst}))
+        << "the folder is not due yet; a canvas marked in it before it went is";
+    EXPECT_EQ(manager.MarkedBefore(100), (std::vector<uint64_t>{folder, early, atCutoff}))
+        << "what is in the folder goes with it";
+    (void)wentWithIt;
+}
+
 TEST(CanvasManagerTest, WhatIsInsideADeletedThingCountsAsDeleted) {
     CanvasManager manager("Canvas");
     const FolderId folder = manager.CurrentFolderId();

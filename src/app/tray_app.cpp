@@ -1,5 +1,7 @@
 #include "app/tray_app.h"
 
+#include <cstdint>
+#include <ctime>
 #include <iterator>
 #include <optional>
 #include <utility>
@@ -116,6 +118,14 @@ bool TrayController::Initialize() {
         session_.SetLibraryStore(&libraryStore_);
         if (std::optional<CanvasManagerSnapshot> snapshot = libraryStore_.Load()) {
             session_.ImportLibrary(std::move(*snapshot));
+            // The retention period: only here, at startup, rather than on a
+            // clock as well - an instance left running for days keeps what
+            // it has until it is next started, which is soon enough.
+            if (settings_.Stored().purgeDeleted) {
+                const int64_t day = 24 * 60 * 60;
+                session_.EraseDeletedBefore(static_cast<int64_t>(std::time(nullptr)) -
+                                            settings_.Stored().purgeDeletedAfterDays * day);
+            }
         } else {
             // Nothing on disk to load: a genuinely first run. Distinct from
             // a library someone deliberately emptied, which loads fine and

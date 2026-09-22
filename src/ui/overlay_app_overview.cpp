@@ -1575,6 +1575,26 @@ void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
 
     SettingsGroupBreak();
 
+    // One row: the switch, the number of days, the unit. The days are
+    // disabled while the switch is off but keep their value, so turning it
+    // back on brings back the period chosen before.
+    SettingsHeading("deletedheading", strings::kSettingsDeletedHeading, strings::kSettingsPurgeDeletedHelp);
+    anyChanged |= ImGui::Checkbox(Labeled(strings::kSettingsPurgeDeleted, "purgedeleted"), &Cfg().purgeDeleted);
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!Cfg().purgeDeleted);
+    ImGui::SetNextItemWidth(110.0f);
+    int days = Cfg().purgeDeletedAfterDays;
+    if (ImGui::InputInt("##purgedeleteddays", &days, 1, 7)) {
+        Cfg().purgeDeletedAfterDays = std::clamp(days, kPurgeDeletedAfterDaysMin, kPurgeDeletedAfterDaysMax);
+        anyChanged = true;
+    }
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(strings::kSettingsPurgeDeletedDays);
+    ImGui::EndDisabled();
+
+    SettingsGroupBreak();
+
     SettingsHeading("barsheading", strings::kBarsHeading, strings::kBarsHelp);
     anyChanged |= RenderBarButtonRow("snippetbar", strings::kBarsSnippetRow, Cfg().snippetBar);
     anyChanged |= RenderBarButtonRow("drawingbar", strings::kBarsDrawingRow, Cfg().drawingBar);

@@ -479,6 +479,14 @@ public:
     size_t DeletedFolderAndCanvasCount() const;
     // Every snippet carrying a mark of its own, wherever it is.
     std::vector<ItemId> MarkedSnippets() const;
+    // The folders and canvases whose own mark is older than `cutoff`
+    // (seconds since the epoch), folders first - what a retention period
+    // deletes for good. A canvas in a folder on the list is left off it:
+    // it goes with the folder. One that went only with its folder has no
+    // mark of its own and is never listed alone; one marked on its own
+    // before its folder went can be, and going first leaves the folder as
+    // it would be had it been deleted for good by hand.
+    std::vector<uint64_t> MarkedBefore(int64_t cutoff) const;
 
 private:
     // Where the mark of the folder, canvas or snippet `id` names is kept.

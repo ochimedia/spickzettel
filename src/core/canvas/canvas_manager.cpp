@@ -1060,6 +1060,25 @@ std::vector<ItemId> CanvasManager::MarkedSnippets() const {
     return marked;
 }
 
+std::vector<uint64_t> CanvasManager::MarkedBefore(int64_t cutoff) const {
+    const auto due = [cutoff](int64_t stamp) { return stamp != 0 && stamp < cutoff; };
+    std::vector<uint64_t> ids;
+    for (const Folder& folder : folders_) {
+        if (due(folder.deletedAt)) {
+            ids.push_back(folder.id);
+        }
+    }
+    const auto foldersEnd = ids.end();
+    std::vector<uint64_t> canvasIds;
+    for (const Canvas& canvas : canvases_) {
+        if (due(canvas.deletedAt) && std::find(ids.begin(), foldersEnd, canvas.folderId) == foldersEnd) {
+            canvasIds.push_back(canvas.id);
+        }
+    }
+    ids.insert(ids.end(), canvasIds.begin(), canvasIds.end());
+    return ids;
+}
+
 void CanvasManager::SyncShotTexturesToCanvas(CanvasId canvasId,
                                               const std::function<uint64_t(const Item&, Layer&)>& loadLayer,
                                               const std::function<void(Layer&)>& releaseLayer) {

@@ -206,6 +206,17 @@ void ReadBool(const json& j, const char* key, bool& out) {
     }
 }
 
+// A whole number held to [min, max]; a fraction is rounded, and anything
+// that is not a finite number keeps the default.
+void ReadInt(const json& j, const char* key, int& out, int min, int max) {
+    const auto it = j.find(key);
+    if (it != j.end() && it->is_number()) {
+        if (const double value = it->get<double>(); std::isfinite(value)) {
+            out = static_cast<int>(std::lround(std::clamp(value, static_cast<double>(min), static_cast<double>(max))));
+        }
+    }
+}
+
 void ReadString(const json& j, const char* key, std::string& out) {
     const auto it = j.find(key);
     if (it != j.end() && it->is_string()) {
@@ -499,6 +510,10 @@ AppConfig ParseConfig(std::string_view text) {
     ReadBool(overview, "showStrokes", config.overviewShowsStrokes);
     ReadBool(overview, "showBitmaps", config.overviewShowsBitmaps);
 
+    const json& deleted = Group(doc, "deleted");
+    ReadBool(deleted, "deleteForGoodAutomatically", config.purgeDeleted);
+    ReadInt(deleted, "afterDays", config.purgeDeletedAfterDays, kPurgeDeletedAfterDaysMin, kPurgeDeletedAfterDaysMax);
+
     const json& display = Group(doc, "display");
     ReadString(display, "id", config.overlayDisplayId);
     ReadString(display, "name", config.overlayDisplayName);
@@ -623,6 +638,11 @@ std::string SerializeConfig(const AppConfig& config) {
     doc["overview"] = {
         {"showStrokes", config.overviewShowsStrokes},
         {"showBitmaps", config.overviewShowsBitmaps},
+    };
+
+    doc["deleted"] = {
+        {"deleteForGoodAutomatically", config.purgeDeleted},
+        {"afterDays", config.purgeDeletedAfterDays},
     };
 
     doc["display"] = {

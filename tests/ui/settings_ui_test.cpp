@@ -200,6 +200,30 @@ TEST_F(UiTest, TheColourTileSwitchesOffLikeEveryOtherButton) {
     EXPECT_EQ(AppSettings().Stored().snippetBar, DefaultSnippetBar()) << "the other row is untouched";
 }
 
+// The retention period's row: the days are there but disabled while the
+// switch is off, and once it is on they step a day at a time - both saved
+// as settings are.
+TEST_F(UiTest, TheRetentionPeriodIsSwitchedOnAndItsDaysSet) {
+    ShowEditMode();
+    StepFrame();
+    ASSERT_FALSE(AppSettings().Stored().purgeDeleted);
+    const int days = AppSettings().Stored().purgeDeletedAfterDays;
+
+    OpenOverviewUi();
+    bool disabledWhileOff = false;
+    RunUi("switch retention on and add a day", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectioninteraction");
+        disabledWhileOff = (ctx->ItemInfo("**/##purgedeleteddays").ItemFlags & ImGuiItemFlags_Disabled) != 0;
+        ctx->ItemClick("**/###purgedeleted");
+        ctx->ItemClick("**/##purgedeleteddays/+");
+    });
+    EXPECT_TRUE(disabledWhileOff);
+    EXPECT_TRUE(AppSettings().Stored().purgeDeleted);
+    EXPECT_EQ(AppSettings().Stored().purgeDeletedAfterDays, days + 1);
+}
+
 TEST_F(UiTest, MakingAProfileForWhatIsUnderneathTakesOneClick) {
     host_.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "Test Game"};
     ShowEditMode();

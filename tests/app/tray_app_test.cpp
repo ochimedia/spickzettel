@@ -1,9 +1,12 @@
 #include "app/tray_app.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
+#include <string>
 
 #include <gtest/gtest.h>
 
@@ -554,6 +557,49 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsDeletedCanvasesHiddenAndEra
     EXPECT_TRUE(manager.FindCanvas(2)->items.empty());
     ASSERT_NE(manager.FindCanvas(4), nullptr);
     EXPECT_TRUE(manager.IsDeleted(*manager.FindCanvas(4)));
+}
+
+// The retention period runs as the library is opened: with it on, a canvas
+// deleted longer ago than the period is erased, and one deleted since is
+// kept; with it off, both are kept.
+TEST_F(TrayControllerPersistenceTest, InitializeErasesWhatWasDeletedLongerAgoThanTheRetentionPeriod) {
+    const int64_t now = static_cast<int64_t>(std::time(nullptr));
+    const int64_t day = 24 * 60 * 60;
+    CanvasManagerSnapshot snapshot;
+    Folder folder;
+    folder.id = 1;
+    folder.name = "F";
+    snapshot.folders.push_back(folder);
+    const auto canvas = [&snapshot](CanvasId id, int64_t deletedAt) {
+        Canvas c;
+        c.id = id;
+        c.name = "C" + std::to_string(id);
+        c.folderId = 1;
+        c.deletedAt = deletedAt;
+        snapshot.canvases.push_back(c);
+    };
+    canvas(2, 0);
+    canvas(3, now - 40 * day);
+    canvas(4, now - 20 * day);
+    snapshot.currentFolderId = 1;
+    snapshot.currentCanvasId = 2;
+
+    for (const bool purge : {false, true}) {
+        std::filesystem::remove_all(dir_);
+        ASSERT_TRUE(persistence::LibraryStore(dir_).Save(snapshot));
+        AppConfig config = DefaultConfig();
+        config.purgeDeleted = purge;
+        config.purgeDeletedAfterDays = 30;
+        test::FakePlatformHost host;
+        host.dataDirectoryPath = dir_;
+        TrayController controller(host, config);
+        ASSERT_TRUE(controller.Initialize());
+
+        const CanvasManager& manager = controller.GetSession().Manager();
+        EXPECT_NE(manager.FindCanvas(2), nullptr);
+        EXPECT_EQ(manager.FindCanvas(3) == nullptr, purge) << (purge ? "past the period" : "retention is off");
+        EXPECT_NE(manager.FindCanvas(4), nullptr) << "not deleted long enough ago";
+    }
 }
 
 TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {

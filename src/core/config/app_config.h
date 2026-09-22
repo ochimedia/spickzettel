@@ -21,10 +21,9 @@ namespace sz::core {
 // resolution happen outside this type.
 //
 // The fields here are flat; the file groups them (`hotkeys`, `drawing`,
-// `appearance`, `bars`, `overview`, `input`, `shortcuts`, `diagnostics`)
-// and the
-// mapping lives in one place, the serializer. The grouping is not
-// cosmetic: `input` and `shortcuts` are exactly the settings a
+// `appearance`, `bars`, `overview`, `deleted`, `input`, `shortcuts`,
+// `diagnostics`) and the mapping lives in one place, the serializer. The
+// grouping is not cosmetic: `input` and `shortcuts` are exactly the settings a
 // per-application profile may override - the ones that are about the
 // machine in front of you rather than about you - so a profile is the same
 // two objects again, sparse.
@@ -299,6 +298,18 @@ struct AppConfig {
     // dragged it out - see Session::CaptureShotItem.
     bool freezeScreenInEditMode = true;
 
+    // Whether a deleted folder or canvas is deleted for good once it has
+    // been deleted for longer than purgeDeletedAfterDays - checked when the
+    // library is opened, which is at startup (see Session::
+    // EraseDeletedBefore for what counts, and how long, for what). Off by
+    // default: nothing is erased that the person did not ask to be, and
+    // the number of days is kept while it is off so switching it on again
+    // is one click. Deleted snippets are not a question here: they are
+    // erased on every open (see Session::ImportLibrary). Chosen in
+    // Settings > Interaction.
+    bool purgeDeleted = false;
+    int purgeDeletedAfterDays = 30;
+
     // Which display the overlay comes up on, remembered by the id and the
     // name it was listed under (see platform::DisplayInfo for what each is).
     // Empty: the primary display, whichever that is at the time. A chosen
@@ -317,6 +328,12 @@ struct AppConfig {
 // mostly usable.
 inline constexpr float kEditModeBorderWidthMin = 1.0f;
 inline constexpr float kEditModeBorderWidthMax = 48.0f;
+
+// The band purgeDeletedAfterDays is held to: at least a day, since "delete
+// for good at the next start" is what Delete permanently is for, and at
+// most ten years, past which the setting is "never" by another name.
+inline constexpr int kPurgeDeletedAfterDaysMin = 1;
+inline constexpr int kPurgeDeletedAfterDaysMax = 3650;
 
 // Returns hardcoded defaults, matching the values a freshly-written config
 // file would contain.

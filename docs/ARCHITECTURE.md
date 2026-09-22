@@ -439,6 +439,17 @@ window has made its device, so that sync would load nothing and still
 record the current canvas as loaded, and its pictures would stay
 placeholders until the canvas changed.
 
+Folders and canvases can be given a retention period
+(`AppConfig::purgeDeleted`, off by default, and `purgeDeletedAfterDays`):
+once the library is opened, `Session::EraseDeletedBefore` deletes for good
+whatever carries a mark older than the period, by the same erase and for
+the same reason. Only its own mark counts. A canvas that went with its
+folder has none and goes when the folder does; one marked on its own
+before the folder went can go first, which leaves the folder as a
+Delete permanently by hand would. It runs at startup only: an instance
+left running for days keeps what is due until it is next started, which
+costs nothing but the wait.
+
 Two designs preceded this. A reserved Trash folder inside the library
 grouped three structurally different things under one "dig through the
 bin" model that fit none of them. A trash that was a second library of

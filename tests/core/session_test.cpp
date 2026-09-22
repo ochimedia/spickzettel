@@ -169,6 +169,34 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
     std::filesystem::remove_all(dir);
 }
 
+// The retention period: what has been deleted since before the cutoff goes
+// for good, whatever else is deleted stays, and nothing live is touched.
+TEST(SessionTest, ErasingWhatWasDeletedBeforeACutoffLeavesTheRest) {
+    Session session;
+    CanvasManager& manager = session.Manager();
+    const FolderId home = manager.CurrentFolderId();
+    const CanvasId live = manager.CurrentCanvasId();
+    const CanvasId old = manager.AddCanvas("Old");
+    const CanvasId recent = manager.AddCanvas("Recent");
+    const FolderId oldFolder = manager.AddFolder("Old folder");
+    manager.SwitchToFolder(oldFolder);
+    const CanvasId inOldFolder = manager.AddCanvas("In old folder");
+    manager.SwitchToCanvas(live);
+    ASSERT_TRUE(manager.MarkDeleted(old, 100));
+    ASSERT_TRUE(manager.MarkDeleted(recent, 300));
+    ASSERT_TRUE(manager.MarkDeleted(oldFolder, 150));
+
+    EXPECT_EQ(session.EraseDeletedBefore(200), 2u) << "the old canvas, and the old folder with what is in it";
+    EXPECT_EQ(manager.FindCanvas(old), nullptr);
+    EXPECT_EQ(manager.FindFolder(oldFolder), nullptr);
+    EXPECT_EQ(manager.FindCanvas(inOldFolder), nullptr);
+    ASSERT_NE(manager.FindCanvas(recent), nullptr);
+    EXPECT_NE(manager.FindCanvas(recent)->deletedAt, 0) << "still deleted, to be restored";
+    EXPECT_NE(manager.FindCanvas(live), nullptr);
+    EXPECT_NE(manager.FindFolder(home), nullptr);
+    EXPECT_EQ(session.EraseDeletedBefore(200), 0u) << "nothing left that old";
+}
+
 TEST(SessionTest, ErasingAFoldersDeletedCanvasesLeavesTheFolderAndTheRest) {
     Session session;
     const FolderId folder = session.Manager().CurrentFolderId();

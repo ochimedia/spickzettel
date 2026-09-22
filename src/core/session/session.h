@@ -83,6 +83,13 @@ public:
     // is deleted in it goes, and the folder and the rest stay. FilesRemain
     // if any of them left files behind; NotFound if there was none.
     Removal DeleteMarkedCanvasesPermanently(FolderId folderId);
+    // Deletes for good every folder and canvas deleted before `cutoff`
+    // (seconds since the epoch) - see CanvasManager::MarkedBefore for which
+    // those are - and returns how many went. The retention period
+    // (AppConfig::purgeDeleted), run once the library is opened. Without
+    // DeletePermanently's texture sync, like ImportLibrary's own erasing and
+    // for the same reason; and nothing deleted has a texture to give back.
+    size_t EraseDeletedBefore(int64_t cutoff);
     // ===== Keeping the disk and the GPU in step =====
 
     // The debounced autosave - see kAutosaveQuietSeconds for the policy.

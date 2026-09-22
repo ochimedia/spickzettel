@@ -441,6 +441,16 @@ Session::Removal Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
     return result;
 }
 
+size_t Session::EraseDeletedBefore(int64_t cutoff) {
+    size_t erased = 0;
+    for (const uint64_t id : Manager().MarkedBefore(cutoff)) {
+        if (Erase(id) != Removal::NotFound) {
+            ++erased;
+        }
+    }
+    return erased;
+}
+
 // ================= Capturing the screen =================
 
 void Session::FreezeScreen(const platform::DisplayInfo& display) {

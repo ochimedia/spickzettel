@@ -254,6 +254,8 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.raiseSelectedSnippet = false;
     config.overviewShowsStrokes = false;
     config.overviewShowsBitmaps = true;
+    config.purgeDeleted = true;
+    config.purgeDeletedAfterDays = 14;
     config.showEditModeBorder = false;
     config.editModeBorderColorRGBA = 0x5AA9FFFFu;
     config.editModeBorderOpacity = 0.4f;
@@ -528,6 +530,21 @@ TEST(AppConfigTest, OverviewPreviewTogglesRoundTrip) {
     EXPECT_FALSE(DefaultConfig().overviewShowsBitmaps);
     EXPECT_FALSE(ParseConfig(One("overview", "showStrokes", "false")).overviewShowsStrokes);
     EXPECT_TRUE(ParseConfig(One("overview", "showBitmaps", "true")).overviewShowsBitmaps);
+}
+
+// Off by default - nothing is erased unasked - with a period ready for when
+// it is switched on. The days are held to a day at least and ten years at
+// most, rounded if fractional, and ignored if not a number at all.
+TEST(AppConfigTest, PurgingDeletedThingsDefaultsToOffAndParsesItsDays) {
+    EXPECT_FALSE(DefaultConfig().purgeDeleted);
+    EXPECT_EQ(DefaultConfig().purgeDeletedAfterDays, 30);
+    EXPECT_TRUE(ParseConfig(One("deleted", "deleteForGoodAutomatically", "true")).purgeDeleted);
+    EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "7")).purgeDeletedAfterDays, 7);
+    EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "0")).purgeDeletedAfterDays, kPurgeDeletedAfterDaysMin);
+    EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "-5")).purgeDeletedAfterDays, kPurgeDeletedAfterDaysMin);
+    EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "1e9")).purgeDeletedAfterDays, kPurgeDeletedAfterDaysMax);
+    EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "2.6")).purgeDeletedAfterDays, 3);
+    EXPECT_EQ(ParseConfig(One("deleted", "afterDays", R"("7")")).purgeDeletedAfterDays, 30);
 }
 
 TEST(AppConfigTest, EditModeBorderDefaultsToTranslucentWhiteTenPixelsAlwaysShown) {
