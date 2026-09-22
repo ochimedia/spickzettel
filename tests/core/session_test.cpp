@@ -140,21 +140,21 @@ TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
     session.EndTextEdit(std::string("first"));
     EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "first");
 
-    // Undone with the note open: nothing happens, and - as for any entry
-    // that no longer applies - it is dropped rather than kept for later.
+    // Undone with the note open: nothing happens, and the entry is kept -
+    // unlike one that no longer applies, it still does, once the note is
+    // closed.
     session.BeginTextEdit(item);
     EXPECT_FALSE(session.Undo().has_value()) << "the edit in progress would overwrite it anyway";
-    session.EndTextEdit(std::nullopt);  // abandoned: nothing filed
     EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "first");
-    EXPECT_FALSE(session.CanUndo());
+    EXPECT_TRUE(session.CanUndo()) << "kept for when the note is closed";
+    session.EndTextEdit(std::nullopt);  // abandoned: nothing filed
 
     // Undone with the note closed, it goes back.
-    session.BeginTextEdit(item);
-    session.EndTextEdit(std::string("second"));
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::TextEdit);
-    EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "first");
+    EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "");
+    EXPECT_FALSE(session.CanUndo());
 }
 
 TEST(SessionTest, ClearingADrawingIsOneStep) {

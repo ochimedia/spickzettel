@@ -288,14 +288,8 @@ std::optional<Session::UndoWhat> Session::ApplyUndoEntry(UndoEntry& entry, bool 
             break;
         }
         case UndoEntry::Kind::NoteTextChanged: {
-            // If this item's text is being edited right now (a second note
-            // was opened straight from a first, which committed the first
-            // without closing the second), neither direction should yank
-            // the item's committed noteText out from under that edit; its
-            // own eventual commit would just overwrite it right back anyway.
-            if (textEditItemId_ == entry.itemId) {
-                return std::nullopt;
-            }
+            // Not while the note is open - see StepHistory, which keeps the
+            // entry for later rather than letting it reach here.
             Item* item = Manager().FindItemAnywhere(entry.itemId);
             if (!item) {
                 return std::nullopt;
@@ -331,6 +325,16 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     const CanvasId canvasId = Manager().CurrentCanvasId();
     const auto stackIt = from.find(canvasId);
     if (stackIt == from.end() || stackIt->second.empty()) {
+        return std::nullopt;
+    }
+    // An entry that applies, only not now, stays where it is: a note's text
+    // while that note is being edited (a second note opened straight from
+    // a first commits the first without closing the second). Yanking the
+    // committed text out from under the edit would be undone by the edit's
+    // own commit anyway, and the entry is still good once the note is
+    // closed. A stale entry is another matter, and is dropped below.
+    const UndoEntry& next = stackIt->second.back();
+    if (next.kind == UndoEntry::Kind::NoteTextChanged && textEditItemId_ == next.itemId) {
         return std::nullopt;
     }
     // Not const - the swap kinds mutate it in place (see ApplyUndoEntry)
