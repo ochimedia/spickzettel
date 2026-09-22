@@ -465,17 +465,6 @@ bool FromJson(const json& j, Canvas& out) {
     out.name = j.value("name", std::string());
     out.createdAt = j.value("createdAt", int64_t{0});
     out.deletedAt = j.value("deletedAt", int64_t{0});
-    out.items.clear();
-    if (const auto it = j.find("items"); it != j.end() && it->is_array()) {
-        out.items.reserve(it->size());
-        for (const auto& itemJson : *it) {
-            Item item;
-            bool repaired = false;  // not asked: these are never noted as written
-            if (FromJson(itemJson, item, repaired)) {
-                out.items.push_back(std::move(item));
-            }
-        }
-    }
     return true;
 }
 
