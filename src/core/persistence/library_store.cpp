@@ -785,8 +785,7 @@ std::vector<std::filesystem::path> SortedSubdirectories(const std::filesystem::p
 // uid and nothing else, because the uid is what identifies a directory
 // (its readable half follows the name and can be renamed by hand), and
 // because it is the same spelling every record and pointer uses - see
-// IdJson. Files written before this listed whole directory names; those
-// are still read, matched on their trailing uid (see ApplyOrder).
+// IdJson.
 //
 // The file's exact text comes back beside the entries, for Load to compare
 // against what a save would write - see the baseline it establishes.
@@ -827,8 +826,7 @@ std::optional<uint64_t> UidFromDirectoryName(const std::string& name) {
     return ParseUid(std::string_view(name).substr(name.size() - kUidLength));
 }
 
-// Reorders `found` to match `order`, which is a list of uids - or, from an
-// order file written before the lists held uids, of directory names.
+// Reorders `found` to match `order`, which is a list of uids.
 //
 // This is the whole reconciliation rule in one function, and it is
 // deliberately forgiving in both directions: anything the order file names
@@ -838,25 +836,24 @@ std::optional<uint64_t> UidFromDirectoryName(const std::string& name) {
 // or out of it while the app wasn't running - which is a thing this layout
 // exists to allow.
 //
-// Matched on the uid - the entry itself, or the trailing uid of an old
-// entry's directory name - so renaming the readable half of a directory by
-// hand doesn't lose its place. The whole-name comparison is the last resort
-// for an entry that carries no uid at all.
+// Matched on the directory's trailing uid, so renaming the readable half of
+// a directory by hand doesn't lose its place. An entry that is not a uid
+// names nothing.
 template <typename T>
 void ApplyOrder(std::vector<std::pair<std::string, T>>& found, const std::vector<std::string>& order) {
     std::vector<std::pair<std::string, T>> sorted;
     sorted.reserve(found.size());
     std::vector<bool> placed(found.size(), false);
     for (const std::string& wanted : order) {
-        const std::optional<uint64_t> wantedUid =
-            wanted.size() == kUidLength ? ParseUid(wanted) : UidFromDirectoryName(wanted);
+        const std::optional<uint64_t> wantedUid = ParseUid(wanted);
+        if (!wantedUid) {
+            continue;
+        }
         for (size_t i = 0; i < found.size(); ++i) {
             if (placed[i]) {
                 continue;
             }
-            const std::optional<uint64_t> foundUid = UidFromDirectoryName(found[i].first);
-            const bool matches = (wantedUid && foundUid) ? (*wantedUid == *foundUid) : (found[i].first == wanted);
-            if (matches) {
+            if (UidFromDirectoryName(found[i].first) == wantedUid) {
                 sorted.push_back(std::move(found[i]));
                 placed[i] = true;
                 break;

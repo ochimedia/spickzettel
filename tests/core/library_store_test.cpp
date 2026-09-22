@@ -190,7 +190,7 @@ void WriteLibraryTree(const std::filesystem::path& root, const std::string& docu
                 const std::string itemDirName = "i-" + FormatUid(IdOf(item));
                 std::filesystem::create_directories(canvasDir / itemDirName);
                 std::ofstream(canvasDir / itemDirName / "item.json") << WithIdsSpelled(item).dump(2);
-                itemOrder.push_back(itemDirName);
+                itemOrder.push_back(FormatUid(IdOf(item)));
             }
             std::ofstream(canvasDir / "order.json") << nlohmann::json{{"items", itemOrder}}.dump(2);
         }
@@ -734,9 +734,8 @@ TEST_F(LibraryStoreTest, ACopiedCanvasDirectoryBecomesACanvasOfItsOwn) {
 }
 
 // An order file lists uids - the same spelling the records and directory
-// names use - and one written before that, listing whole directory names,
-// is still read.
-TEST_F(LibraryStoreTest, OrderFilesListUidsAndStillReadTheOldNames) {
+// names use.
+TEST_F(LibraryStoreTest, OrderFilesListUids) {
     LibraryStore store(dir_);
     ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
     const std::filesystem::path canvasDir = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002";
@@ -744,14 +743,6 @@ TEST_F(LibraryStoreTest, OrderFilesListUidsAndStillReadTheOldNames) {
     EXPECT_EQ(order["items"], (nlohmann::json::array({"000003", "000004"})));
     EXPECT_EQ(nlohmann::json::parse(std::ifstream(dir_ / "folders" / "order.json"))["folders"],
               (nlohmann::json::array({"000001"})));
-
-    // The old form, reversed, decides the order just the same.
-    PlaceOrderFile(canvasDir, "items", {"shot-1-000004", "drawing-1-000003"});
-    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
-    ASSERT_TRUE(loaded.has_value());
-    ASSERT_EQ(loaded->canvases[0].items.size(), 2u);
-    EXPECT_EQ(loaded->canvases[0].items[0].id, 4u);
-    EXPECT_EQ(loaded->canvases[0].items[1].id, 3u);
 }
 
 TEST_F(LibraryStoreTest, AnOrderFileDecidesTheOrderOfWhatIsThere) {
@@ -761,7 +752,7 @@ TEST_F(LibraryStoreTest, AnOrderFileDecidesTheOrderOfWhatIsThere) {
     PlaceCanvas(work, "c-000005", 5, "C");
     // Deliberately not alphabetical, so passing cannot be an accident of
     // directory enumeration order.
-    PlaceOrderFile(work, "canvases", {"c-000005", "a-000003", "b-000004"});
+    PlaceOrderFile(work, "canvases", {"000005", "000003", "000004"});
     WriteLibraryTree(dir_, R"({"currentFolderId": 1, "currentCanvasId": 3})");
 
     LibraryStore store(dir_);
@@ -776,7 +767,7 @@ TEST_F(LibraryStoreTest, AnOrderFileDecidesTheOrderOfWhatIsThere) {
 TEST_F(LibraryStoreTest, AnOrderFileNamingSomethingGoneSimplySkipsIt) {
     const std::filesystem::path work = PlaceFolder(dir_, "work-000001", 1, "Work");
     PlaceCanvas(work, "a-000003", 3, "A");
-    PlaceOrderFile(work, "canvases", {"deleted-0000zz", "a-000003"});
+    PlaceOrderFile(work, "canvases", {"0000zz", "000003"});
     WriteLibraryTree(dir_, R"({"currentFolderId": 1, "currentCanvasId": 3})");
 
     LibraryStore store(dir_);
@@ -791,7 +782,7 @@ TEST_F(LibraryStoreTest, ACanvasTheOrderFileDoesNotKnowAboutGoesToTheEnd) {
     PlaceCanvas(work, "a-000003", 3, "A");
     PlaceCanvas(work, "b-000004", 4, "B");
     // "a" is listed; "b" was dropped in afterwards and nothing knows it yet.
-    PlaceOrderFile(work, "canvases", {"a-000003"});
+    PlaceOrderFile(work, "canvases", {"000003"});
     WriteLibraryTree(dir_, R"({"currentFolderId": 1, "currentCanvasId": 3})");
 
     LibraryStore store(dir_);
@@ -808,7 +799,7 @@ TEST_F(LibraryStoreTest, RenamingTheReadableHalfOfADirectoryKeepsItsPlace) {
     const std::filesystem::path work = PlaceFolder(dir_, "work-000001", 1, "Work");
     PlaceCanvas(work, "renamed-by-hand-000003", 3, "A");
     PlaceCanvas(work, "b-000004", 4, "B");
-    PlaceOrderFile(work, "canvases", {"a-000003", "b-000004"});
+    PlaceOrderFile(work, "canvases", {"000003", "000004"});
     WriteLibraryTree(dir_, R"({"currentFolderId": 1, "currentCanvasId": 3})");
 
     LibraryStore store(dir_);
