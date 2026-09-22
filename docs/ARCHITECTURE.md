@@ -45,7 +45,8 @@ struct.
 Presets live in `CMakePresets.json`. `windows-msvc-release` is what a
 release is built with; `windows-msvc-debug` additionally builds the UI
 tests; `windows-msvc-demo` is the release build with a permanent demo
-watermark compiled in; `linux-tests` builds the portable core and its
+watermark compiled in; `windows-msvc-prerelease` is the release build
+with a not-for-redistribution notice at every start; `linux-tests` builds the portable core and its
 tests on a Linux host.
 
 Every third-party dependency is fetched with `FetchContent` and pinned to
@@ -61,7 +62,7 @@ runs, and all three land in `build/<preset>/generated/` through
 
 | Header | Holds | Regenerated | Included by |
 | --- | --- | --- | --- |
-| `build_config.h` | `kVersion`, `kDemoMode` | configure | `build_info.h`, so widely |
+| `build_config.h` | `kVersion`, `kDemoMode`, `kPrereleaseNotice` | configure | `build_info.h`, so widely |
 | `git_stamp.h` | `kGitDescribe` | **every build** | `build_info.cpp` only |
 | `about_text.h`, `notices_text.h` | `ABOUT.md`, `THIRD-PARTY-NOTICES.md` | configure | `build_info.cpp` only |
 
@@ -77,6 +78,16 @@ configuration, where an `#ifdef`-ed branch nobody builds for months has
 quietly stopped compiling; the optimiser removes the dead side either
 way. Demo mode is deliberately not a setting: a watermark that can be
 switched off in `config.json` is not a watermark.
+
+The prerelease notice follows the same reasoning. A prerelease build
+shows a message box at every start saying it is not for redistribution,
+and `VersionLine` names it a prerelease, so the About tab says so too.
+The box is native rather than drawn by the overlay: on most starts the
+overlay is not shown at all, and on a first run it comes up fullscreen,
+topmost and in edit mode. So `WinMain` shows it before the tray
+controller initialises - before the overlay exists to cover it or take
+its input. A second copy started by mistake shows the notice before it
+fails on its hotkeys; that is the price of the ordering.
 
 The version lives in `VERSION` at the repo root, read by CMake and fed to
 both `project()` and the header, so a release script can bump it without

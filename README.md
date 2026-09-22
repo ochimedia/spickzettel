@@ -28,7 +28,8 @@ ctest --preset windows-msvc-release
 third-party code is fetched by CMake on the first configure; nothing has
 to be installed or vendored by hand. `windows-msvc-debug` also builds the
 UI tests; `windows-msvc-demo` is the release build with a permanent demo
-watermark; `linux-tests` builds and tests the portable core on Linux.
+watermark; `windows-msvc-prerelease` is the release build with a
+not-for-redistribution notice at every start; `linux-tests` builds and tests the portable core on Linux.
 
 ## Configuration
 

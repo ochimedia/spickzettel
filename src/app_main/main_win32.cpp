@@ -1,10 +1,13 @@
 #include <windows.h>
 
+#include <cstdio>
 #include <filesystem>
+#include <string>
 
 #include <backends/imgui_impl_win32.h>
 
 #include "app/tray_app.h"
+#include "core/build_info/build_info.h"
 #include "core/config/app_config.h"
 #include "generated/ui_strings.h"
 #include "platform/i_platform_host.h"
@@ -23,6 +26,20 @@ sz::core::AppConfig LoadOrCreateConfig(const std::filesystem::path& path) {
     return config;
 }
 
+// A prerelease build's notice, at every start and before anything else
+// comes up. Native rather than drawn by the overlay: on most starts the
+// overlay is not shown at all, and on a first run it comes up fullscreen,
+// topmost and in edit mode - the box is shown first so it is neither
+// hidden behind that nor competing with it for input. Blocks until
+// dismissed, which is the point.
+void ShowPrereleaseNotice() {
+    const std::string version = sz::core::build::VersionLine();
+    char body[512];
+    std::snprintf(body, sizeof(body), sz::strings::kPrereleaseBody, version.c_str());
+    MessageBoxA(nullptr, body, sz::strings::kPrereleaseTitle,
+                MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST);
+}
+
 }  // namespace
 
 int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*cmdLine*/, int /*showCmd*/) {
@@ -39,11 +56,15 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
 
     const sz::core::AppConfig config = LoadOrCreateConfig(host->GetConfigFilePath());
 
+    if constexpr (sz::core::build::kPrereleaseNotice) {
+        ShowPrereleaseNotice();
+    }
+
     sz::app::TrayController trayController(*host, config);
     if (!trayController.Initialize()) {
-        // The one message box in the app: there is no tray icon yet to
-        // hang a notice on, and a tray app that starts and silently isn't
-        // there is indistinguishable from one that never started.
+        // A message box because there is no tray icon yet to hang a
+        // notice on, and a tray app that starts and silently isn't there
+        // is indistinguishable from one that never started.
         MessageBoxA(nullptr, sz::strings::kStartupFailed, "Spickzettel", MB_OK | MB_ICONWARNING);
         return 1;
     }
