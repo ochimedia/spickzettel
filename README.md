@@ -24,12 +24,14 @@ cmake --build --preset windows-msvc-release
 ctest --preset windows-msvc-release
 ```
 
-`Spickzettel.exe` lands in `build/windows-release/src/app_main/`. All
-third-party code is fetched by CMake on the first configure; nothing has
-to be installed or vendored by hand. `windows-msvc-debug` also builds the
-UI tests; `windows-msvc-demo` is the release build with a permanent demo
-watermark; `windows-msvc-prerelease` is the release build with a
-not-for-redistribution notice at every start; `linux-tests` builds and tests the portable core on Linux.
+`Spickzettel.exe` lands in `build/windows-release/src/app_main/`, and is
+copied to `dist/release/` at the repo root; each Windows preset has its
+own folder there. All third-party code is fetched by CMake on the first
+configure; nothing has to be installed or vendored by hand.
+`windows-msvc-debug` also builds the UI tests; `windows-msvc-demo` is the
+release build with a permanent demo watermark; `windows-msvc-prerelease`
+is the release build with a not-for-redistribution notice at every
+start; `linux-tests` builds and tests the portable core on Linux.
 
 ## Configuration
 

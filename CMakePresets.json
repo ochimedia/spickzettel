@@ -10,7 +10,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "SPICKZETTEL_BUILD_TESTS": "ON",
-        "SPICKZETTEL_UI_TESTS": "ON"
+        "SPICKZETTEL_UI_TESTS": "ON",
+        "SPICKZETTEL_DIST_NAME": "debug"
       },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     },
@@ -21,7 +22,8 @@
       "binaryDir": "${sourceDir}/build/windows-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "SPICKZETTEL_BUILD_TESTS": "ON"
+        "SPICKZETTEL_BUILD_TESTS": "ON",
+        "SPICKZETTEL_DIST_NAME": "release"
       },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     },
@@ -32,6 +34,7 @@
       "binaryDir": "${sourceDir}/build/windows-demo",
       "cacheVariables": {
         "SPICKZETTEL_DEMO_MODE": "ON",
+        "SPICKZETTEL_DIST_NAME": "demo",
         "SPICKZETTEL_BUILD_TESTS": "OFF"
       }
     },
@@ -42,6 +45,7 @@
       "binaryDir": "${sourceDir}/build/windows-prerelease",
       "cacheVariables": {
         "SPICKZETTEL_PRERELEASE_NOTICE": "ON",
+        "SPICKZETTEL_DIST_NAME": "prerelease",
         "SPICKZETTEL_BUILD_TESTS": "OFF"
       }
     },

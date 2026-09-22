@@ -27,6 +27,10 @@ option(SPICKZETTEL_PRERELEASE_NOTICE "Build a prerelease binary that shows a not
 # Off by default because it defines IMGUI_ENABLE_TEST_ENGINE for ImGui
 # itself, which every consumer then has to link. On in the debug preset.
 option(SPICKZETTEL_UI_TESTS "Build the UI tests, which drive real widgets by name" OFF)
+# Where a finished Spickzettel.exe is also copied to: dist/<name>/ at the
+# repo root, next to nothing else, instead of deep in the build tree. Each
+# Windows preset sets its own name; empty copies nowhere.
+set(SPICKZETTEL_DIST_NAME "" CACHE STRING "Copy Spickzettel.exe to dist/<name>/ after each build (empty: don't)")
 
 # Warnings are per target rather than global so that fetched third-party
 # code is compiled with its own defaults.

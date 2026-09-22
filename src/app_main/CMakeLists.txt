@@ -15,4 +15,19 @@ if(WIN32)
     target_compile_features(spickzettel PRIVATE cxx_std_20)
     target_link_libraries(spickzettel PRIVATE sz_app sz_platform_win32)
     spickzettel_set_warnings(spickzettel)
+
+    # See SPICKZETTEL_DIST_NAME. A target of its own rather than a
+    # POST_BUILD step, so that it runs on every build - a copy deleted or
+    # overwritten by hand comes back without a relink - and copies only
+    # when the exe differs.
+    if(SPICKZETTEL_DIST_NAME)
+        set(_dist_dir "${CMAKE_SOURCE_DIR}/dist/${SPICKZETTEL_DIST_NAME}")
+        add_custom_target(spickzettel_dist ALL
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${_dist_dir}"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:spickzettel>" "${_dist_dir}/"
+            COMMENT "Copying Spickzettel.exe to dist/${SPICKZETTEL_DIST_NAME}/"
+            VERBATIM
+        )
+        add_dependencies(spickzettel_dist spickzettel)
+    endif()
 endif()

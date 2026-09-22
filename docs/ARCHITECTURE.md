@@ -49,6 +49,14 @@ watermark compiled in; `windows-msvc-prerelease` is the release build
 with a not-for-redistribution notice at every start; `linux-tests` builds the portable core and its
 tests on a Linux host.
 
+Each Windows preset also copies the finished `Spickzettel.exe` to
+`dist/<name>/` at the repo root (`debug`, `release`, `demo`,
+`prerelease`; `SPICKZETTEL_DIST_NAME`), so a build is easy to find and
+hand on. The copy is a target of its own that runs on every build and
+copies only when the exe differs, so a copy deleted by hand comes back
+without a relink. A copy that is running cannot be overwritten, and
+fails the build just as a running build-tree exe fails the link.
+
 Every third-party dependency is fetched with `FetchContent` and pinned to
 a tag or commit, so a checkout builds with nothing installed beyond a
 compiler, CMake and Ninja. Header-only libraries are marked `SYSTEM` so
