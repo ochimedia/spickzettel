@@ -16,6 +16,12 @@ project(spickzettel VERSION ${SPICKZETTEL_VERSION} LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# The C++ runtime linked in rather than loaded from MSVCP140.dll and
+# VCRUNTIME140*.dll: a machine without the Visual C++ Redistributable
+# cannot start the exe at all, and one with an older copy of it can crash
+# a binary built with a newer toolset. Before any target is made, the
+# fetched ones included, so that everything links against the same one.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 option(SPICKZETTEL_BUILD_TESTS "Build the unit tests" ON)
 # Compile-time flag rather than a setting: a demo watermark that can be

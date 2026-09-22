@@ -57,6 +57,13 @@ copies only when the exe differs, so a copy deleted by hand comes back
 without a relink. A copy that is running cannot be overwritten, and
 fails the build just as a running build-tree exe fails the link.
 
+The C++ runtime is linked statically (`CMAKE_MSVC_RUNTIME_LIBRARY`), so
+the exe needs nothing beyond what Windows itself ships: no Visual C++
+Redistributable to install, and no risk of loading an older copy of
+`msvcp140.dll` than the toolset built against, a known cause of crashes
+at startup. It costs about 300 KB. googletest is left to pick the static
+runtime itself (`gtest_force_shared_crt` off) so the tests link.
+
 Every third-party dependency is fetched with `FetchContent` and pinned to
 a tag or commit, so a checkout builds with nothing installed beyond a
 compiler, CMake and Ninja. Header-only libraries are marked `SYSTEM` so
