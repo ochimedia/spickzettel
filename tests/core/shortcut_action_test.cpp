@@ -92,12 +92,11 @@ TEST(ShortcutActionTest, DrawAndEraseAreStoredAsPenAndEraser) {
     EXPECT_EQ(ShortcutActionKey(ShortcutAction::Select), "select");
 }
 
-// A config written while there were seven tools and a text-note action
-// names things that are gone. They are skipped, and nothing else is
+// Names that are no shortcut action are skipped, and nothing else is
 // disturbed by their being there.
-TEST(ShortcutActionTest, TheNamesOfToolsThatWentAreIgnored) {
+TEST(ShortcutActionTest, UnknownShortcutNamesAreIgnored) {
     const AppConfig config = ParseConfig(
-        R"({"shortcuts": {"rectangle": "R", "line": "L", "rectEraser": "X", "newTextNote": "N", "pen": "Q"}})");
+        R"({"shortcuts": {"wobble": "R", "zap": "L", "sparkle": "X", "doodle": "N", "pen": "Q"}})");
     EXPECT_EQ(config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)], Plain('Q'));
     EXPECT_EQ(config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Erase)], Plain('E'));
     for (const ShortcutAction action : kAllShortcutActions) {

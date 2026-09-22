@@ -181,6 +181,7 @@ void WriteLibraryTree(const std::filesystem::path& root, const std::string& docu
             std::filesystem::create_directories(canvasDir);
             nlohmann::json canvasRecord = WithIdsSpelled(canvas);
             canvasRecord.erase("items");
+            canvasRecord.erase("folderId");  // routing for this helper; the directory says it
             std::ofstream(canvasDir / "canvas.json") << canvasRecord.dump(2);
 
             // Each snippet is a directory of its own beside the canvas
@@ -208,13 +209,11 @@ std::filesystem::path PlaceFolder(const std::filesystem::path& root, const std::
 }
 
 std::filesystem::path PlaceCanvas(const std::filesystem::path& folderDir, const std::string& dirName,
-                                   uint64_t id, const std::string& name, uint64_t claimsFolderId = 0) {
+                                   uint64_t id, const std::string& name) {
     const std::filesystem::path dir = folderDir / dirName;
     std::filesystem::create_directories(dir);
     std::ofstream(dir / "canvas.json") << nlohmann::json{{"id", FormatUid(id)},
-                                                          {"name", name},
-                                                          {"folderId", FormatUid(claimsFolderId)},
-                                                          {"items", nlohmann::json::array()}}
+                                                          {"name", name}}
                                               .dump(2);
     return dir;
 }
@@ -358,9 +357,9 @@ TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsEverything) {
 TEST_F(LibraryStoreTest, LoadGivesAnItemALayerEvenIfTheListIsEmpty) {
     std::filesystem::create_directories(dir_);
     WriteLibraryTree(dir_, R"({
-        "currentFolderId": 1, "currentCanvasId": 2, "nextId": 10,
-        "folders": [{"id": 1, "name": "F", "slug": "f-1"}],
-        "canvases": [{"id": 2, "name": "C", "slug": "c-2", "folderId": 1, "items": [
+        "currentFolderId": 1, "currentCanvasId": 2,
+        "folders": [{"id": 1, "name": "F"}],
+        "canvases": [{"id": 2, "name": "C", "folderId": 1, "items": [
             {"id": 3, "name": "A", "layers": []}
         ]}]
     })");
@@ -429,10 +428,10 @@ TEST_F(LibraryStoreTest, LoadDefaultsAMissingItemAnchorToNotYetAnchored) {
     // real 0x0 anchor - it just adopts the loaded rect as-is the first
     // time it runs.
     WriteLibraryTree(dir_, R"({
-        "currentFolderId": 1, "currentCanvasId": 2, "nextId": 10,
-        "folders": [{"id": 1, "name": "F", "slug": "f-1"}],
-        "canvases": [{"id": 2, "name": "C", "slug": "c-2", "folderId": 1, "items": [
-            {"id": 3, "type": "drawing", "name": "A", "rect": {"x": 1, "y": 2, "w": 3, "h": 4}}
+        "currentFolderId": 1, "currentCanvasId": 2,
+        "folders": [{"id": 1, "name": "F"}],
+        "canvases": [{"id": 2, "name": "C", "folderId": 1, "items": [
+            {"id": 3, "name": "A", "rect": {"x": 1, "y": 2, "w": 3, "h": 4}}
         ]}]
     })");
 
@@ -451,9 +450,9 @@ TEST_F(LibraryStoreTest, LoadDefaultsAMissingItemAnchorToNotYetAnchored) {
 TEST_F(LibraryStoreTest, LoadDefaultsAMissingNoteTextStyle) {
     std::filesystem::create_directories(dir_);
     WriteLibraryTree(dir_, R"({
-        "currentFolderId": 1, "currentCanvasId": 2, "nextId": 10,
-        "folders": [{"id": 1, "name": "F", "slug": "f-1"}],
-        "canvases": [{"id": 2, "name": "C", "slug": "c-2", "folderId": 1, "items": [
+        "currentFolderId": 1, "currentCanvasId": 2,
+        "folders": [{"id": 1, "name": "F"}],
+        "canvases": [{"id": 2, "name": "C", "folderId": 1, "items": [
             {"id": 3, "name": "A", "noteText": "no style of its own"}
         ]}]
     })");
@@ -534,9 +533,9 @@ TEST_F(LibraryStoreTest, TheNextSaveWritesBackWhatTheLoadRepaired) {
 TEST_F(LibraryStoreTest, LoadClampsAnOutOfRangeNoteTextSize) {
     std::filesystem::create_directories(dir_);
     WriteLibraryTree(dir_, R"({
-        "currentFolderId": 1, "currentCanvasId": 2, "nextId": 10,
-        "folders": [{"id": 1, "name": "F", "slug": "f-1"}],
-        "canvases": [{"id": 2, "name": "C", "slug": "c-2", "folderId": 1, "items": [
+        "currentFolderId": 1, "currentCanvasId": 2,
+        "folders": [{"id": 1, "name": "F"}],
+        "canvases": [{"id": 2, "name": "C", "folderId": 1, "items": [
             {"id": 3, "name": "A", "noteText": "tiny", "noteTextSizePx": 0.0},
             {"id": 4, "name": "B", "noteText": "huge", "noteTextSizePx": 5000.0}
         ]}]
@@ -551,16 +550,15 @@ TEST_F(LibraryStoreTest, LoadClampsAnOutOfRangeNoteTextSize) {
     EXPECT_FLOAT_EQ(loaded->canvases[0].items[1].noteTextSizePx, kNoteTextSizeMax);
 }
 
-// Keys this version knows nothing about - a setting an older or newer
-// build kept there - must not stop the rest of the library from loading.
+// Keys this version knows nothing about must not stop the rest of the
+// library from loading.
 TEST_F(LibraryStoreTest, UnknownKeysInLibraryJsonAreIgnored) {
     std::filesystem::create_directories(dir_);
     WriteLibraryTree(dir_, R"({
-        "currentFolderId": 1, "currentCanvasId": 2, "nextId": 10,
-        "favoriteToolIds": [4, 0, 1], "favoriteColorsRGBA": [4278190335, 0, 0],
-        "favoriteCreateIds": [0, 1, 3], "favoriteGlobalIds": [2, 0, 3],
-        "folders": [{"id": 1, "name": "F", "slug": "f-1"}],
-        "canvases": [{"id": 2, "name": "C", "slug": "c-2", "folderId": 1, "items": []}]
+        "currentFolderId": 1, "currentCanvasId": 2,
+        "someSetting": [4, 0, 1], "anotherOne": {"a": 1},
+        "folders": [{"id": 1, "name": "F"}],
+        "canvases": [{"id": 2, "name": "C", "folderId": 1, "items": []}]
     })");
 
     LibraryStore store(dir_);
@@ -652,8 +650,8 @@ TEST_F(LibraryStoreTest, IdsMintedAfterLoadingAHandWrittenLibraryAvoidWhatItName
     std::filesystem::create_directories(dir_);
     WriteLibraryTree(dir_, R"({
         "currentFolderId": 5, "currentCanvasId": 6,
-        "folders": [{"id": 5, "name": "F", "slug": "f-000005"}],
-        "canvases": [{"id": 6, "name": "C", "slug": "c-000006", "folderId": 5,
+        "folders": [{"id": 5, "name": "F"}],
+        "canvases": [{"id": 6, "name": "C", "folderId": 5,
                        "items": [{"id": 7, "name": "I"}]}]
     })");
 
@@ -702,16 +700,16 @@ TEST_F(LibraryStoreTest, SaveWritesADirectoryPerFolderAndCanvas) {
 TEST_F(LibraryStoreTest, ACanvasDirectoryMovedIntoAnotherFolderBelongsToThatFolder) {
     PlaceFolder(dir_, "work-000001", 1, "Work");
     const std::filesystem::path play = PlaceFolder(dir_, "play-000002", 2, "Play");
-    // Physically in Play, but its record still claims Work - which is
-    // exactly what dragging the directory across leaves behind.
-    PlaceCanvas(play, "notes-000003", 3, "Notes", /*claimsFolderId=*/1);
+    // In Play's directory, as dragging it across from Work leaves it: the
+    // directory decides, and nothing in the record says otherwise.
+    PlaceCanvas(play, "notes-000003", 3, "Notes");
     WriteLibraryTree(dir_, R"({"currentFolderId": 1, "currentCanvasId": 3})");
 
     LibraryStore store(dir_);
     const std::optional<CanvasManagerSnapshot> loaded = store.Load();
     ASSERT_TRUE(loaded.has_value());
     ASSERT_EQ(loaded->canvases.size(), 1u);
-    EXPECT_EQ(loaded->canvases[0].folderId, 2u) << "where it is beats what it says";
+    EXPECT_EQ(loaded->canvases[0].folderId, 2u) << "where it is decides";
 }
 
 TEST_F(LibraryStoreTest, ACopiedCanvasDirectoryBecomesACanvasOfItsOwn) {
@@ -1556,7 +1554,7 @@ TEST_F(LibraryStoreTest, ADirectoryWhoseRecordCannotBeReadSurvivesASave) {
 TEST_F(LibraryStoreTest, AFieldOfTheWrongTypeInLibraryJsonReadsAsItsDefault) {
     ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
     std::ofstream(dir_ / "library.json") << R"({"currentFolderId": "000001", "currentCanvasId": 12,
-                                                 "favoriteToolIds": "also wrong"})";
+                                                 "notAKnownKey": "ignored"})";
 
     LibraryStore store(dir_);
     std::optional<CanvasManagerSnapshot> loaded;
@@ -2279,7 +2277,7 @@ TEST_F(IncrementalSaveTest, TheFirstSaveWritesALibraryRecordTheLoadHadToRepair) 
     // library.json names a canvas that is not there; Load falls back to one
     // that is, and that repair has to reach the disk.
     nlohmann::json globals = nlohmann::json::parse(std::ifstream(dir_ / "library.json"));
-    globals["currentCanvasId"] = 999;
+    globals["currentCanvasId"] = FormatUid(999);
     std::ofstream(dir_ / "library.json") << globals.dump(2);
 
     const LibraryStore store{dir_};

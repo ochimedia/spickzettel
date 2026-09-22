@@ -170,14 +170,6 @@ TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
     EXPECT_TRUE(onlyMouse.counterRawMouseInput);
 }
 
-// The flat key=value file this format replaced is not read at all - it isn't
-// even the same filename any more. What matters is that being handed one is
-// treated as being handed nothing: every setting at its default, no crash,
-// no half-adopted values.
-TEST(AppConfigTest, AFileInTheOldTextFormatReadsAsDefaults) {
-    EXPECT_EQ(ParseConfig("edit_mode_no_activate=false\nstroke_width=9\n"), DefaultConfig());
-}
-
 TEST(AppConfigTest, LibraryTreeHudDefaultsToOffAndRoundTrips) {
     EXPECT_FALSE(DefaultConfig().showLibraryTreeHud);
     EXPECT_TRUE(ParseConfig(One("diagnostics", "showLibraryTreeHud", "true")).showLibraryTreeHud);

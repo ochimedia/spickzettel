@@ -144,7 +144,7 @@ TEST(TrayControllerTest, ChangeHotkeySwapsTheRegistrationAndTriggersTheNewCombo)
 
 TEST(TrayControllerTest, ChangeHotkeyPersistsTheNewComboToDisk) {
     const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "spickzettel_tray_app_change_hotkey_test_config.txt";
+        std::filesystem::temp_directory_path() / "spickzettel_tray_app_change_hotkey_test_config.json";
     std::filesystem::remove(path);
 
     test::FakePlatformHost host;
@@ -178,7 +178,7 @@ int CountRegistrations(const test::FakePlatformHost& host, const platform::KeyCo
 
 TEST(TrayControllerTest, AHotkeyLeftUnboundByAnotherStaysUnboundAcrossARestart) {
     const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "spickzettel_tray_app_unbound_hotkey_test_config.txt";
+        std::filesystem::temp_directory_path() / "spickzettel_tray_app_unbound_hotkey_test_config.json";
     std::filesystem::remove(path);
 
     test::FakePlatformHost host;
