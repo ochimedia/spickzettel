@@ -717,8 +717,8 @@ private:
     // the dimming backdrop, which closes the Overview on a click outside
     // the panel; the header, which is the picker's prompt while a snippet
     // is being sent somewhere and the tabs otherwise; the body - the
-    // folder sidebar and the canvas grid, the Recently deleted list, the
-    // Settings or About panel; and the footer, whose buttons belong to
+    // folder sidebar and the canvas grid (with what is deleted in them, see
+    // ShowingDeleted), or the Settings or About panel; and the footer, whose buttons belong to
     // whichever body is showing.
     void RenderOverview(float displayW, float displayH);
     bool HandleOverviewEscape();
@@ -1186,7 +1186,7 @@ private:
     bool CanUndo() const { return session_.CanUndo(); }
 
     // A Delete button was clicked that asks first - a canvas or folder, or
-    // anything in the Recently deleted list (for good) - pending the user
+    // Delete permanently on one with Show deleted on - pending the user
     // actually confirming in RenderConfirmDeletePopover. A snippet on screen
     // doesn't ask: its delete is undoable instead (see Session::DeleteItem).
     // `name` is captured at click time purely for the popup's own "Delete

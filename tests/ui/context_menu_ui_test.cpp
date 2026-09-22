@@ -145,8 +145,8 @@ TEST_F(CanvasBarMenuUiTest, DeleteFromTheTileMenuAsksAndThenDeletes) {
         ctx->ItemClick("##confirmdelete");
         ctx->Yield(3);
     });
-    // Deleted things stay in the library, marked, and can be restored from
-    // the Recently deleted list - so the count is unchanged and what
+    // Deleted things stay in the library, marked, and can be restored with
+    // Show deleted in the Overview - so the count is unchanged and what
     // changed is that one of them is now deleted.
     EXPECT_EQ(Canvases().Canvases().size(), before);
     size_t alive = 0;
