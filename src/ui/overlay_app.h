@@ -610,6 +610,18 @@ private:
     // does, so shapes and spacing are kept, and the smallest snippet's
     // floor stops all of them. A fullscreen snippet is left as it is.
     void ScaleSelectionByWheel(int steps);
+    // What a move or resize gesture may change the placement of, taken as
+    // the press starts it - see itemGesturePlacementsBefore_.
+    void BeginPlacementRecord(const ItemGesture& gesture);
+    // Files a placement change made in one step - a fullscreen toggle, a
+    // reset to the original size - as its own undo entry.
+    void ToggleFullscreenUndoably(ItemId id, bool stretch);
+    void ResetToNativeSizeUndoably(ItemId id);
+    // Whether a wheel notch or an arrow-key nudge continues the burst the
+    // last one began: the same kind of step, soon enough after it. What
+    // decides that a burst is one undo (see Session::RecordPlacements).
+    enum class PlacementBurst { None, Wheel, Nudge };
+    bool ContinuesPlacementBurst(PlacementBurst kind);
     // Ctrl or Shift with the wheel: the selection's background or
     // foreground opacity, kWheelOpacityStep per notch, within the ranges
     // the Properties popover's sliders have. Says the new value in a toast.
@@ -1822,6 +1834,14 @@ private:
     // three, since they are one hand on one selection, told apart by a
     // modifier held for the whole spin.
     float selectionWheelRemainder_ = 0.0f;
+
+    // Where the snippets a move or resize gesture may touch were when its
+    // press came - filed as one undo entry by the release, if anything
+    // moved (see Session::RecordPlacements).
+    std::vector<Session::Placement> itemGesturePlacementsBefore_;
+    // See ContinuesPlacementBurst.
+    PlacementBurst lastPlacementBurst_ = PlacementBurst::None;
+    double lastPlacementBurstAtSeconds_ = 0.0;
 
     // See RequestWelcomeNote/PlaceWelcomeNote. Cleared the moment the note
     // is placed, so it can never be placed twice.

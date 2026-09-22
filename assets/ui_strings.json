@@ -111,6 +111,7 @@
   "undo.textEdit": "text edit",
   "undo.painting": "painting",
   "undo.create": "new snippet",
+  "undo.placement": "move",
 
   "_itemNames": "The prefixes new snippets are named with, before their number.",
   "itemName.screenshotPrefix": "Screenshot ",

@@ -397,10 +397,10 @@ void OverlayApp::RunItemMenuAction(ItemMenuAction action, ItemId itemId) {
     const ImGuiIO& io = ImGui::GetIO();
     switch (action) {
         case ItemMenuAction::ToggleFullscreen:
-            Manager().ToggleFullscreen(itemId, io.DisplaySize.x, io.DisplaySize.y, io.KeyShift);
+            ToggleFullscreenUndoably(itemId, io.KeyShift);
             return;
         case ItemMenuAction::ResetSize:
-            Manager().ResetItemToNativeSize(itemId);
+            ResetToNativeSizeUndoably(itemId);
             return;
         case ItemMenuAction::ClearDrawing:
             ClearItemDrawing(itemId);

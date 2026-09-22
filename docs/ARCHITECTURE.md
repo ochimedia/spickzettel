@@ -1119,9 +1119,30 @@ opposite stack needs. Undo is best-effort about staleness: an entry
 naming something gone does nothing and is dropped rather than moved to
 the other stack.
 
-Deliberately narrow: moves, resizes, reorders and renames are not
-tracked, and deleting a canvas or folder gets a confirmation and Show
-deleted instead of an undo entry.
+Deliberately narrow: reorders and renames are not tracked, and deleting
+a canvas or folder gets a confirmation and Show deleted instead of an
+undo entry.
+
+Moves and resizes are, since one accidental drag of a snippet in a
+carefully stacked overlay had no way back. A snippet's placement is
+changed in the model directly, event by event, and recorded afterwards
+as one `PlacementChanged` entry per gesture: the press takes the
+placements of everything the gesture may move, and the release files
+the difference, so a drag is one undo however many events it took and a
+multi-selection is one undo for all of it. A click that moved nothing
+files nothing. A placement is the whole of where a snippet is - its
+rect, its fullscreen state and the anchor its rect is recomputed from on
+a display change - because a drag takes a fullscreen snippet out of
+fullscreen, and an undo that brought back the rect but not the
+fullscreen would not be the snippet as it was. Like the painted kinds
+the entry is its own inverse, a swap each way. The one-shot changes -
+fullscreen from the bar or the menu, Original size - are an entry each.
+Steps that come in bursts, wheel notches and arrow-key nudges, fold
+into the entry the burst began, keeping its before, when they continue
+it within a second and nothing else was filed in between: a spin of the
+wheel is taken back in one step, to the size it started at, rather than
+a notch at a time. Minimizing is not a placement - the snippet does not
+move - and is not recorded.
 
 ### Making a snippet is on the history, and an untouched one goes
 

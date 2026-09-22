@@ -600,6 +600,10 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         if (event.kind == platform::MouseEventKind::Up) {
             const ItemGesture ended = *itemGesture_;
             itemGesture_.reset();
+            // The whole gesture, one entry - or none, for a press that
+            // never moved anything.
+            session_.RecordPlacements(std::move(itemGesturePlacementsBefore_));
+            itemGesturePlacementsBefore_.clear();
             if (ended.button == platform::MouseButton::Right && !ended.moved) {
                 // A right press on a snippet that never dragged is a right
                 // click - a drag resizes instead. On the snippet being
@@ -730,6 +734,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                            gesture.bottom);
         SnapshotResizeTargets(gesture, target.item);
         itemGesture_ = gesture;
+        BeginPlacementRecord(gesture);
         return true;
     }
     switch (target.kind) {
@@ -748,6 +753,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             SnapshotResizeTargets(gesture, target.item);
             gesture.moved = true;  // a handle is only ever pressed to drag it
             itemGesture_ = gesture;
+            BeginPlacementRecord(gesture);
             KeepPlacedDrawings();
             return true;
         }
@@ -789,6 +795,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                 }
             }
             itemGesture_ = gesture;
+            BeginPlacementRecord(gesture);
             // Held still instead of dragged, the press enters drawing mode
             // as a double-click would - see MatureHeldPress.
             HoldPress(event, target.item, std::nullopt);
@@ -850,6 +857,35 @@ bool OverlayApp::HandleBoxSelection(const platform::MouseEvent& event) {
         }
     }
     return true;
+}
+
+void OverlayApp::BeginPlacementRecord(const ItemGesture& gesture) {
+    std::vector<ItemId> ids;
+    for (const ItemGesture::StartRect& start : gesture.startRects) {
+        ids.push_back(start.item);
+    }
+    itemGesturePlacementsBefore_ = session_.PlacementsOf(ids);
+}
+
+void OverlayApp::ToggleFullscreenUndoably(ItemId id, bool stretch) {
+    std::vector<Session::Placement> before = session_.PlacementsOf({id});
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    Manager().ToggleFullscreen(id, display.x, display.y, stretch);
+    session_.RecordPlacements(std::move(before));
+}
+
+void OverlayApp::ResetToNativeSizeUndoably(ItemId id) {
+    std::vector<Session::Placement> before = session_.PlacementsOf({id});
+    Manager().ResetItemToNativeSize(id);
+    session_.RecordPlacements(std::move(before));
+}
+
+bool OverlayApp::ContinuesPlacementBurst(PlacementBurst kind) {
+    const double now = ImGui::GetTime();
+    const bool continues = lastPlacementBurst_ == kind && now - lastPlacementBurstAtSeconds_ < kPlacementBurstSeconds;
+    lastPlacementBurst_ = kind;
+    lastPlacementBurstAtSeconds_ = now;
+    return continues;
 }
 
 void OverlayApp::SnapshotResizeTargets(ItemGesture& gesture, ItemId itemId) {
@@ -978,6 +1014,11 @@ void OverlayApp::ScaleSelectionByWheel(int steps) {
     }
     const float anchorX = minX + boxW * 0.5f;
     const float anchorY = minY + boxH * 0.5f;
+    std::vector<ItemId> ids;
+    for (const Item* item : items) {
+        ids.push_back(item->id);
+    }
+    std::vector<Session::Placement> before = session_.PlacementsOf(ids);
     for (Item* item : items) {
         const Rect scaled{anchorX + (item->rect.x - anchorX) * scale, anchorY + (item->rect.y - anchorY) * scale,
                            item->rect.w * scale, item->rect.h * scale};
@@ -985,6 +1026,8 @@ void OverlayApp::ScaleSelectionByWheel(int steps) {
         Manager().CommitItemLayout(item->id);
     }
     Manager().MarkChanged();
+    // A spin of the wheel is one undo, back to the size it started at.
+    session_.RecordPlacements(std::move(before), ContinuesPlacementBurst(PlacementBurst::Wheel));
     // A drawing placed and then scaled is one someone wants, as one moved
     // or resized by hand is.
     KeepPlacedDrawings();

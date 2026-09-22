@@ -214,6 +214,91 @@ TEST(SessionTest, ErasingAFoldersDeletedCanvasesLeavesTheFolderAndTheRest) {
     EXPECT_NE(session.Manager().FindCanvas(second), nullptr);
 }
 
+// A placement change is one entry for everything it moved, taken back and
+// put back whole - fullscreen state and anchor with the rect - and nothing
+// at all is filed for a change that changed nothing.
+TEST(SessionTest, APlacementChangeIsUndoneAndRedoneWhole) {
+    Session session;
+    CanvasManager& manager = session.Manager();
+    const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId b = manager.CreateItem(false, Rect{200, 0, 100, 100}, "B");
+    ASSERT_FALSE(session.CanUndo());
+
+    EXPECT_FALSE(session.RecordPlacements(session.PlacementsOf({a, b}))) << "nothing changed";
+    EXPECT_FALSE(session.CanUndo());
+
+    std::vector<Session::Placement> before = session.PlacementsOf({a, b});
+    manager.FindItemAnywhere(a)->rect = Rect{10, 20, 100, 100};
+    manager.FindItemAnywhere(b)->rect = Rect{210, 20, 100, 100};
+    ASSERT_TRUE(session.RecordPlacements(std::move(before)));
+
+    std::vector<Session::Placement> beforeFullscreen = session.PlacementsOf({a});
+    manager.ToggleFullscreen(a, 1920.0f, 1080.0f, /*stretch=*/true);
+    ASSERT_TRUE(session.RecordPlacements(std::move(beforeFullscreen)));
+
+    const std::optional<Session::UndoStep> out = session.Undo();
+    ASSERT_TRUE(out.has_value());
+    EXPECT_EQ(out->what, Session::UndoWhat::Placement);
+    EXPECT_FALSE(manager.FindItemAnywhere(a)->isFullscreen);
+    EXPECT_EQ(manager.FindItemAnywhere(a)->rect, (Rect{10, 20, 100, 100}));
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(manager.FindItemAnywhere(a)->rect, (Rect{0, 0, 100, 100})) << "both, in one step";
+    EXPECT_EQ(manager.FindItemAnywhere(b)->rect, (Rect{200, 0, 100, 100}));
+
+    ASSERT_TRUE(session.Redo().has_value());
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_TRUE(manager.FindItemAnywhere(a)->isFullscreen);
+    EXPECT_EQ(manager.FindItemAnywhere(b)->rect, (Rect{210, 20, 100, 100}));
+}
+
+// A burst - wheel notches, arrow presses - folds into one entry that goes
+// back to where the burst began; anything else filed in between ends it.
+TEST(SessionTest, AMergedBurstOfPlacementChangesIsOneUndo) {
+    Session session;
+    CanvasManager& manager = session.Manager();
+    const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    for (int i = 1; i <= 3; ++i) {
+        std::vector<Session::Placement> before = session.PlacementsOf({a});
+        manager.FindItemAnywhere(a)->rect.x = static_cast<float>(i);
+        ASSERT_TRUE(session.RecordPlacements(std::move(before), /*merge=*/true));
+    }
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.x, 0.0f) << "the whole burst, at once";
+    EXPECT_FALSE(session.CanUndo());
+
+    ASSERT_TRUE(session.Redo().has_value());
+    const ItemId b = session.CreateItem(false, Rect{300, 0, 50, 50}, "B");  // something else filed
+    ASSERT_NE(b, 0u);
+    std::vector<Session::Placement> before = session.PlacementsOf({a});
+    manager.FindItemAnywhere(a)->rect.x = 9.0f;
+    ASSERT_TRUE(session.RecordPlacements(std::move(before), /*merge=*/true));
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.x, 3.0f) << "a new entry, not merged past the one between";
+}
+
+// A snippet that leaves the canvas takes its part of a group's move with
+// it; the others' part stays to be taken back.
+TEST(SessionTest, ForgettingOneSnippetLeavesTheRestOfAGroupMove) {
+    Session session;
+    CanvasManager& manager = session.Manager();
+    const CanvasId canvas = manager.CurrentCanvasId();
+    const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId b = manager.CreateItem(false, Rect{200, 0, 100, 100}, "B");
+    std::vector<Session::Placement> before = session.PlacementsOf({a, b});
+    manager.FindItemAnywhere(a)->rect.y = 50.0f;
+    manager.FindItemAnywhere(b)->rect.y = 50.0f;
+    ASSERT_TRUE(session.RecordPlacements(std::move(before)));
+
+    session.ForgetHistoryOfItem(canvas, a);
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.y, 50.0f) << "forgotten";
+    EXPECT_FLOAT_EQ(manager.FindItemAnywhere(b)->rect.y, 0.0f);
+
+    session.ForgetHistoryOfItem(canvas, b);
+    EXPECT_FALSE(session.CanRedo()) << "an entry naming nothing is gone";
+}
+
 TEST(SessionTest, AStrokeIsUndoneAndRedone) {
     Session session;
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");

@@ -102,6 +102,7 @@ size_t Session::UndoEntryBytes(const UndoEntry& entry) {
     if (entry.paintedBefore) {
         bytes += entry.paintedBefore->PixelsRGBA().size();
     }
+    bytes += entry.placements.size() * sizeof(Placement);
     // The text a NoteTextChanged entry holds - small for a note typed by
     // hand, but a note is whatever a record says it is.
     bytes += entry.previousNoteText.size();
@@ -145,7 +146,14 @@ void Session::ForgetHistoryOfItem(CanvasId canvasId, ItemId itemId) {
     // ItemDeleted is matched on deletedItemId rather than entry.itemId -
     // that kind names the deleted snippet there, and leaves entry.itemId
     // unset (see UndoEntry's own doc comment).
-    const auto namesItem = [itemId](const UndoEntry& entry) {
+    // PlacementChanged names several: this one is taken out of it, and the
+    // entry goes only once it names none - the others' move is still
+    // theirs to take back.
+    const auto namesItem = [itemId](UndoEntry& entry) {
+        if (entry.kind == UndoEntry::Kind::PlacementChanged) {
+            std::erase_if(entry.placements, [itemId](const Placement& p) { return p.itemId == itemId; });
+            return entry.placements.empty();
+        }
         return entry.kind == UndoEntry::Kind::ItemDeleted ? entry.deletedItemId == itemId : entry.itemId == itemId;
     };
     for (auto* stacks : {&undoStacks_, &redoStacks_}) {
@@ -277,6 +285,29 @@ std::optional<Session::UndoWhat> Session::ApplyUndoEntry(UndoEntry& entry, bool 
             what = UndoWhat::Delete;
             break;
         }
+        case UndoEntry::Kind::PlacementChanged: {
+            // The same swap both ways. A snippet deleted since, or gone,
+            // is skipped; if none is left the entry has nothing to do.
+            bool changed = false;
+            for (Placement& held : entry.placements) {
+                Item* item = Manager().FindItemAnywhere(held.itemId);
+                if (item == nullptr || Manager().IsItemDeleted(held.itemId)) {
+                    continue;
+                }
+                std::swap(item->rect, held.rect);
+                std::swap(item->isFullscreen, held.isFullscreen);
+                std::swap(item->isFullscreenStretch, held.isFullscreenStretch);
+                std::swap(item->anchorRect, held.anchorRect);
+                std::swap(item->anchorDisplayWidth, held.anchorDisplayWidth);
+                std::swap(item->anchorDisplayHeight, held.anchorDisplayHeight);
+                changed = true;
+            }
+            if (!changed) {
+                return std::nullopt;
+            }
+            what = UndoWhat::Placement;
+            break;
+        }
         case UndoEntry::Kind::ItemCreated: {
             // ItemDeleted the other way round: undo marks the new snippet
             // deleted, redo restores it.
@@ -406,6 +437,62 @@ bool Session::DeleteItem(ItemId itemId) {
     entry.kind = UndoEntry::Kind::ItemDeleted;
     entry.canvasId = canvasId;
     entry.deletedItemId = itemId;
+    PushUndo(std::move(entry));
+    return true;
+}
+
+std::vector<Session::Placement> Session::PlacementsOf(const std::vector<ItemId>& ids) const {
+    std::vector<Placement> placements;
+    for (const ItemId id : ids) {
+        for (const Canvas& canvas : Manager().Canvases()) {
+            const auto item =
+                std::find_if(canvas.items.begin(), canvas.items.end(), [id](const Item& i) { return i.id == id; });
+            if (item != canvas.items.end()) {
+                placements.push_back(Placement{id, item->rect, item->isFullscreen, item->isFullscreenStretch,
+                                               item->anchorRect, item->anchorDisplayWidth, item->anchorDisplayHeight});
+                break;
+            }
+        }
+    }
+    return placements;
+}
+
+bool Session::RecordPlacements(std::vector<Placement> before, bool merge) {
+    // Compared field by field against now: a gesture that ends where it
+    // began - a click, a drag back to the start - files nothing.
+    std::vector<ItemId> ids;
+    for (const Placement& p : before) {
+        ids.push_back(p.itemId);
+    }
+    const std::vector<Placement> now = PlacementsOf(ids);
+    const auto same = [](const Placement& a, const Placement& b) {
+        return a.itemId == b.itemId && a.rect == b.rect && a.isFullscreen == b.isFullscreen &&
+               a.isFullscreenStretch == b.isFullscreenStretch && a.anchorRect == b.anchorRect &&
+               a.anchorDisplayWidth == b.anchorDisplayWidth && a.anchorDisplayHeight == b.anchorDisplayHeight;
+    };
+    if (now.size() == before.size() && std::equal(now.begin(), now.end(), before.begin(), same)) {
+        return false;
+    }
+    const CanvasId canvasId = Manager().CurrentCanvasId();
+    if (merge) {
+        const auto it = undoStacks_.find(canvasId);
+        if (it != undoStacks_.end() && !it->second.empty()) {
+            const UndoEntry& last = it->second.back();
+            const auto sameItem = [](const Placement& a, const Placement& b) { return a.itemId == b.itemId; };
+            if (last.kind == UndoEntry::Kind::PlacementChanged && last.placements.size() == before.size() &&
+                std::equal(last.placements.begin(), last.placements.end(), before.begin(), sameItem)) {
+                // Its `before` is where the burst began, which is what an
+                // undo of the burst goes back to; this step's own is
+                // somewhere in the middle, and not wanted. A new edit
+                // still prunes the redo stack, as PushUndo would.
+                redoStacks_.erase(canvasId);
+                return true;
+            }
+        }
+    }
+    UndoEntry entry;
+    entry.kind = UndoEntry::Kind::PlacementChanged;
+    entry.placements = std::move(before);
     PushUndo(std::move(entry));
     return true;
 }

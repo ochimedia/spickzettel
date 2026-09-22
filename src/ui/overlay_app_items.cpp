@@ -426,6 +426,9 @@ void OverlayApp::DeleteSelection() {
 
 void OverlayApp::NudgeSelection(float dx, float dy) {
     const ImVec2 display = ImGui::GetIO().DisplaySize;
+    // A run of presses - or a key held down, repeating - is one undo, back
+    // to where the run began.
+    std::vector<Session::Placement> before = session_.PlacementsOf(selection_);
     for (const ItemId id : selection_) {
         Item* item = Manager().FindItemAnywhere(id);
         if (item == nullptr || item->isFullscreen) {
@@ -439,6 +442,7 @@ void OverlayApp::NudgeSelection(float dx, float dy) {
         Manager().MarkChanged();
         Manager().CommitItemLayout(id);
     }
+    session_.RecordPlacements(std::move(before), ContinuesPlacementBurst(PlacementBurst::Nudge));
 }
 
 // Escape puts the hand down, in stages: a creation tool in hand goes
@@ -1040,7 +1044,7 @@ void OverlayApp::ActivateBarButton(ChromeButton button) {
             DeleteSelection();
             break;
         case ChromeButton::Maximize:
-            Manager().ToggleFullscreen(*primaryId, ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+            ToggleFullscreenUndoably(*primaryId, /*stretch=*/false);
             break;
         case ChromeButton::Minimize:
             for (const ItemId id : selection_) {

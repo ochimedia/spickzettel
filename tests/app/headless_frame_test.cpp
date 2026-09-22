@@ -1905,6 +1905,57 @@ TEST_F(OverlappingItemsTest, DraggingAMultiSelectionRaisesItAsABlockInItsOwnOrde
     EXPECT_FLOAT_EQ(ItemById(frontId).rect.x, items.front.x + 30.0f) << "the group moved together";
 }
 
+// A drag of the selection is one undo for all of it, and a click that
+// never moved anything is none.
+TEST_F(OverlappingItemsTest, DraggingTheSelectionIsUndoneAndRedoneInOneStep) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    const ItemId backId = backId_;
+    const ItemId frontId = frontId_;
+    SelectTheBackItem(items);
+    RawClickWith(ImGuiMod_Shift, items.front.x + items.front.w - 30.0f, items.front.y + items.front.h - 30.0f);
+    ASSERT_EQ(App().Selection().size(), 2u);
+
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    RawClick(x, y);  // a press and release that moves nothing
+    StepFrames(60);  // not the first half of a double-click, which would draw
+    Drag(x, y, x + 40.0f, y + 25.0f);
+    ASSERT_FLOAT_EQ(ItemById(backId).rect.x, items.back.x + 40.0f);
+    ASSERT_FLOAT_EQ(ItemById(frontId).rect.x, items.front.x + 40.0f);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(ItemById(backId).rect.x, items.back.x);
+    EXPECT_FLOAT_EQ(ItemById(backId).rect.y, items.back.y);
+    EXPECT_FLOAT_EQ(ItemById(frontId).rect.x, items.front.x) << "both, in the one step";
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "the click before it filed nothing to take a snippet back with";
+
+    PressCtrlKey(ImGuiKey_Y);
+    EXPECT_FLOAT_EQ(ItemById(backId).rect.x, items.back.x + 40.0f);
+    EXPECT_FLOAT_EQ(ItemById(frontId).rect.y, items.front.y + 25.0f);
+}
+
+// A spin of the wheel is one undo, back to the size it began at.
+TEST_F(OverlappingItemsTest, ASpinOfTheWheelIsUndoneInOneStep) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    const ItemId backId = backId_;
+    SelectTheBackItem(items);
+    MoveTo(items.back.x + 60.0f, items.back.y + 100.0f);
+    StepFrame();
+    Wheel(1.0f);
+    Wheel(1.0f);
+    Wheel(1.0f);
+    ASSERT_GT(ItemById(backId).rect.w, items.back.w * 1.3f);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(ItemById(backId).rect.w, items.back.w);
+    EXPECT_FLOAT_EQ(ItemById(backId).rect.x, items.back.x);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "one undo, not four";
+}
+
 // With the setting off, selecting leaves the stacking order alone - a
 // drawing program's selection.
 TEST_F(OverlappingItemsTest, WithRaisingOffSelectingLeavesTheOrderAlone) {

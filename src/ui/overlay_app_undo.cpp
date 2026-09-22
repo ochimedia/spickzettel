@@ -53,6 +53,9 @@ void OverlayApp::ShowUndoStep(const std::optional<Session::UndoStep>& step) {
         case Session::UndoWhat::Create:
             what = strings::kUndoCreate;
             break;
+        case Session::UndoWhat::Placement:
+            what = strings::kUndoPlacement;
+            break;
     }
     ShowActionToast(std::string(step->undone ? strings::kToastUndidPrefix : strings::kToastRedidPrefix) + what);
 }

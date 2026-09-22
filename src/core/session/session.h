@@ -160,7 +160,7 @@ public:
 
     // What a step of undo or redo took back or put back - for a UI to say
     // so. `undone` is true for an undo, false for a redo.
-    enum class UndoWhat { Stroke, Erase, Delete, TextEdit, Painting, Create };
+    enum class UndoWhat { Stroke, Erase, Delete, TextEdit, Painting, Create, Placement };
     struct UndoStep {
         UndoWhat what = UndoWhat::Stroke;
         bool undone = true;
@@ -188,8 +188,10 @@ public:
     // ===== Edits that can be undone =====
     //
     // Everything that changes a snippet's ink or text goes through these,
-    // so that it goes on the history as it happens. Moves, resizes, renames
-    // and reorders are not tracked; they are edits of the model directly.
+    // so that it goes on the history as it happens. A snippet's placement -
+    // moved, resized, fullscreen - is changed in the model directly and
+    // recorded afterwards, once per gesture (see RecordPlacements).
+    // Renames and reorders are not tracked.
 
     // Moves the stroke just finished on the current canvas's live layer
     // into `itemId`, in the item's own native space, and files it.
@@ -198,6 +200,35 @@ public:
     // entry is what an undo restores. False if there is no such snippet
     // there, or it is deleted already.
     bool DeleteItem(ItemId itemId);
+
+    // Where a snippet is: everything a move, a resize or fullscreen
+    // changes, and nothing else - its rect, its fullscreen state, and the
+    // anchor its rect is recomputed from when the display changes (see
+    // Item::anchorRect). Kept whole rather than as the rect alone, so that
+    // an undo of a drag that took a snippet out of fullscreen puts it back
+    // in, and one made before a display change lands where it was.
+    struct Placement {
+        ItemId itemId = 0;
+        Rect rect;
+        bool isFullscreen = false;
+        bool isFullscreenStretch = false;
+        Rect anchorRect;
+        float anchorDisplayWidth = 0.0f;
+        float anchorDisplayHeight = 0.0f;
+    };
+    // The placements of these snippets as they are now, for a later
+    // RecordPlacements. Ids that name nothing are left out.
+    std::vector<Placement> PlacementsOf(const std::vector<ItemId>& ids) const;
+    // Files the change from `before` (taken with PlacementsOf) to how those
+    // snippets are placed now as one entry - one undo for a whole drag,
+    // however many events it took, and for every snippet it moved. Nothing
+    // is filed when nothing changed: a click that selected and never moved.
+    // With `merge`, a change that continues the last one - the same
+    // snippets, and nothing else filed since - is folded into it instead,
+    // keeping that entry's `before`: a burst of wheel notches or arrow-key
+    // nudges is taken back in one step, to where it started. The caller
+    // decides what counts as a burst. True if anything was filed or merged.
+    bool RecordPlacements(std::vector<Placement> before, bool merge = false);
     // Makes a snippet on the current canvas, undoably - see
     // CanvasManager::CreateItem for what it starts as. Undone it is marked
     // deleted, where a capture taken by mistake can still be found, and
@@ -424,6 +455,12 @@ private:
             // filed under (see CreateItem). ItemDeleted the other way
             // round: undo marks it deleted, redo restores it.
             ItemCreated,
+            // placements: where each of these snippets was before a move,
+            // a resize or a fullscreen toggle (see RecordPlacements). Its
+            // own inverse, as PaintedTilesChanged is: applying it swaps
+            // each snippet's placement with the one held here, so the
+            // entry then holds the one to go back to.
+            PlacementChanged,
         };
         // One original an erase gesture touched: where it was, what it
         // was, and what stands in its place - see Kind::Erased.
@@ -443,6 +480,7 @@ private:
         size_t layerIndex = 0;                        // Erased / PaintedTilesChanged: which of the item's layers
         std::vector<PaintedTile> paintedTiles;        // Erased (a brush erase) / PaintedTilesChanged
         std::shared_ptr<PaintedImage> paintedBefore;  // Erased only, for a whole-layer clear
+        std::vector<Placement> placements;            // PlacementChanged only
     };
     // The painted half of an edit, before it becomes an entry: the tiles a
     // brush gesture touched, or the whole image a clear replaced.
