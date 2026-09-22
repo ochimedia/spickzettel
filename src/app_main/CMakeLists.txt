@@ -22,10 +22,16 @@ if(WIN32)
     # when the exe differs.
     if(SPICKZETTEL_DIST_NAME)
         set(_dist_dir "${CMAKE_SOURCE_DIR}/dist/${SPICKZETTEL_DIST_NAME}")
+        set(_dist_symbols_dir "${CMAKE_SOURCE_DIR}/dist/symbols/${SPICKZETTEL_DIST_NAME}")
         add_custom_target(spickzettel_dist ALL
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${_dist_dir}"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:spickzettel>" "${_dist_dir}/"
-            COMMENT "Copying Spickzettel.exe to dist/${SPICKZETTEL_DIST_NAME}/"
+            # Its symbols, kept apart so that the folder can be handed on
+            # as it is: they are for reading a crash dump from this very
+            # build, and nobody else needs them.
+            COMMAND "${CMAKE_COMMAND}" -E make_directory "${_dist_symbols_dir}"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_PDB_FILE:spickzettel>" "${_dist_symbols_dir}/"
+            COMMENT "Copying Spickzettel.exe to dist/${SPICKZETTEL_DIST_NAME}/ and its PDB to dist/symbols/"
             VERBATIM
         )
         add_dependencies(spickzettel_dist spickzettel)

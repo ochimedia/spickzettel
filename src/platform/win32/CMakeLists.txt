@@ -5,6 +5,7 @@ add_library(sz_platform_win32 STATIC
     win32_overlay_window.cpp
     win32_dx11_renderer.cpp
     win32_input_grab.cpp
+    win32_crash_dump.cpp
     ${IMGUI_BACKENDS_DIR}/imgui_impl_win32.cpp
     ${IMGUI_BACKENDS_DIR}/imgui_impl_dx11.cpp
 )
@@ -38,5 +39,6 @@ target_link_libraries(sz_platform_win32
         # OpenProcessToken/GetTokenInformation, for the foreground process's
         # integrity level (win32_integrity.h).
         advapi32
+        dbghelp  # MiniDumpWriteDump (win32_crash_dump.h)
 )
 spickzettel_set_warnings(sz_platform_win32)

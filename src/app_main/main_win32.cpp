@@ -11,6 +11,7 @@
 #include "core/config/app_config.h"
 #include "generated/ui_strings.h"
 #include "platform/i_platform_host.h"
+#include "platform/win32/win32_crash_dump.h"
 
 namespace {
 
@@ -50,6 +51,11 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     ImGui_ImplWin32_EnableDpiAwareness();
 
     auto host = sz::platform::CreatePlatformHost();
+    // First, so that a crash anywhere after it - starting up included -
+    // leaves a dump to be sent in. Beside the library and config.json,
+    // in %APPDATA%\Spickzettel\crashes.
+    sz::platform::win32::InstallCrashDumpWriter(host->GetDataDirectoryPath().parent_path() / "crashes",
+                                                sz::core::build::VersionLine());
     if (!host->Initialize("Spickzettel")) {
         return 1;
     }

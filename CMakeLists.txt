@@ -22,6 +22,18 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # a binary built with a newer toolset. Before any target is made, the
 # fetched ones included, so that everything links against the same one.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# A release build with symbols, so that a crash dump from someone else's
+# machine can be read (see win32_crash_dump.h). /Z7 keeps the debug info
+# in the objects, so parallel compiles share no PDB; /DEBUG turns off
+# /OPT:REF and /OPT:ICF, which are turned back on so the exe is what it was;
+# /PDBALTPATH names the PDB without the path of the machine that built it.
+# Everything from here on, the fetched code included - a stack through
+# ImGui is read with ImGui's symbols.
+if(MSVC)
+    add_compile_options($<$<CONFIG:Release>:/Z7>)
+    add_link_options($<$<CONFIG:Release>:/DEBUG> $<$<CONFIG:Release>:/OPT:REF> $<$<CONFIG:Release>:/OPT:ICF>
+                     $<$<CONFIG:Release>:/PDBALTPATH:%_PDB%>)
+endif()
 
 option(SPICKZETTEL_BUILD_TESTS "Build the unit tests" ON)
 # Compile-time flag rather than a setting: a demo watermark that can be

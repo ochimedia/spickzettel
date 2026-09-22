@@ -46,8 +46,8 @@ Presets live in `CMakePresets.json`. `windows-msvc-release` is what a
 release is built with; `windows-msvc-debug` additionally builds the UI
 tests; `windows-msvc-demo` is the release build with a permanent demo
 watermark compiled in; `windows-msvc-prerelease` is the release build
-with a not-for-redistribution notice at every start; `linux-tests` builds the portable core and its
-tests on a Linux host.
+with a not-for-redistribution notice at every start; `linux-tests`
+builds the portable core and its tests on a Linux host.
 
 Each Windows preset also copies the finished `Spickzettel.exe` to
 `dist/<name>/` at the repo root (`debug`, `release`, `demo`,
@@ -68,6 +68,30 @@ Every third-party dependency is fetched with `FetchContent` and pinned to
 a tag or commit, so a checkout builds with nothing installed beyond a
 compiler, CMake and Ninja. Header-only libraries are marked `SYSTEM` so
 their warnings do not count against the project's own warning level.
+
+### Crash dumps and symbols
+
+A crash on someone else's machine leaves a minidump in
+`%APPDATA%\Spickzettel\crashes\`, named after the version line and the
+time (`win32_crash_dump.h`, installed first thing in `WinMain`). It
+covers an unhandled SEH exception - an access violation, a stack
+overflow, a C++ exception nothing caught - and `abort()`, which
+`std::terminate` ends in, and the CRT's invalid-parameter and pure-call
+handlers. The process then ends without Windows' own error dialog. The
+dump is written from a thread of its own: a thread cannot reliably walk
+its own stack into a dump, and one that overflowed has little left to
+do it with. Everything the crash needs - the folder, the name's prefix -
+is prepared at startup, so the crash itself allocates nothing. Each
+start keeps the newest ten dumps and deletes the rest.
+
+A dump is read with the PDB of the very build that wrote it, so release
+builds make one: `/Z7` for everything, the fetched code included,
+`/DEBUG` with `/OPT:REF` and `/OPT:ICF` turned back on so the exe is
+what it was, and `/PDBALTPATH` so the exe names its PDB without the path
+of the machine that built it. The dist copy puts the PDB in
+`dist/symbols/<name>/`, apart from the exe, so the exe's folder can be
+handed on as it is. Keep the PDB of every build you hand out: a later
+build's PDB does not match an earlier build's dump.
 
 ### Build-time configuration: version, flags, embedded text
 
