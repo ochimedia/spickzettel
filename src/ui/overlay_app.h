@@ -354,6 +354,14 @@ public:
     // wrote the note as it was when the editor opened, and typing that had
     // been visible for a minute was gone at the next start.
     void SettleForPersistence();
+    // The settling itself: the gesture under a held button ends where the
+    // pointer is, and a note being typed is committed. Every canvas switch
+    // does this first - the hand's work belongs to the canvas it started
+    // on, and a gesture carried across a switch would go on editing a
+    // snippet nobody can see, then file its undo entry under the canvas
+    // that is current when it ends. Needs a live ImGui context to ask
+    // whether the button is down; with none there is nothing in flight.
+    void SettleHand();
 
     // Asks for the first-run welcome note to be placed on the current
     // canvas. Called by TrayController when there was no library on disk to

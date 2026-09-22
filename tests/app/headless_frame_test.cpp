@@ -591,6 +591,44 @@ TEST_F(HeadlessAppTest, TakingNothingToANewCanvasIsJustANewCanvas) {
     EXPECT_EQ(Canvases().Canvases().front().items.size(), 1u) << "and the snippet stayed behind";
 }
 
+// A shortcut can land while the button is held. What the hand was doing
+// ends on the canvas it started on, before the switch: the stroke in
+// flight is committed to its snippet rather than left dangling on a canvas
+// nobody is looking at, with its undo entry filed under the new one.
+TEST_F(HeadlessAppTest, AShortcutThatSwitchesCanvasEndsTheStrokeInFlightFirst) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 400.0f, 400.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    CanvasManager& manager = controller_->GetSession().Manager();
+    const CanvasId before = manager.CurrentCanvasId();
+    const ItemId drawing = manager.CurrentOrNull()->items[0].id;
+
+    // A stroke pressed and moved, not let go of - ImGui told about the
+    // button too, since settling asks it whether the button is down.
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(150.0f, 150.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(300.0f, 300.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    ASSERT_TRUE(manager.FindCanvas(before)->liveLayer.ActiveStroke().has_value()) << "in flight";
+
+    PressCtrlShiftKey(ImGuiKey_N);
+
+    ASSERT_NE(manager.CurrentCanvasId(), before);
+    const Item* item = manager.FindItemAnywhere(drawing);
+    ASSERT_NE(item, nullptr);
+    EXPECT_EQ(item->strokes.size(), 1u) << "ended on the canvas it started on, before the switch";
+    EXPECT_FALSE(manager.FindCanvas(before)->liveLayer.ActiveStroke().has_value());
+    EXPECT_FALSE(manager.CurrentOrNull()->liveLayer.ActiveStroke().has_value());
+
+    // The real release comes later and finds nothing in flight.
+    RawMouse(300.0f, 300.0f, platform::MouseEventKind::Up);
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrames(2);
+    EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
+}
+
 // ===== The panels docked against the screen's edges =====
 
 // Enough frames for the moment the panels come out when the overlay comes

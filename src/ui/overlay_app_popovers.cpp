@@ -87,7 +87,11 @@ CanvasId OverlayApp::CreateCanvasInCurrentFolder() {
 }
 
 void OverlayApp::CreateAndSwitchToNewCanvas() {
-    Manager().SwitchToCanvas(CreateCanvasInCurrentFolder());
+    // Settled like any other switch: the shortcut can land mid-gesture.
+    // Nothing to settle when the new canvas is already current - the
+    // library had none, and the press that asked for a snippet is what is
+    // in flight (see EnsureCanvasForNewItem).
+    SwitchToCanvasSettled(CreateCanvasInCurrentFolder());
 }
 
 // A new canvas that the selected snippets come along to - "these belong
@@ -103,7 +107,13 @@ void OverlayApp::CreateAndSwitchToNewCanvas() {
 // switch happens even if every move failed - there is a new canvas either
 // way, and leaving the app on the old one would make the shortcut look
 // like it had done nothing.
+//
+// The hand is settled before the moves rather than at the switch: a
+// shortcut can land mid-gesture, and a stroke or a drag in flight on a
+// selected snippet has to end on the canvas it started on, before the
+// snippet leaves it.
 void OverlayApp::MoveSelectionToNewCanvas() {
+    SettleHand();
     const CanvasId source = Manager().CurrentCanvasId();
     const CanvasId target = CreateCanvasInCurrentFolder();
     std::vector<ItemId> moved;

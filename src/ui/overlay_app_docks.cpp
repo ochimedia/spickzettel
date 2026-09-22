@@ -93,10 +93,7 @@ void OverlayApp::SwitchToCanvasSettled(CanvasId id) {
     // on, and a note being typed is committed to the item it belongs to -
     // RenderItems only walks the current canvas, so an editor left open
     // across the switch would strand what was typed.
-    FinishLeftButtonGesture();
-    if (editingNoteItemId_.has_value()) {
-        EndEditingNote(noteEditBuffer_);
-    }
+    SettleHand();
     Manager().SwitchToCanvas(id);
 }
 

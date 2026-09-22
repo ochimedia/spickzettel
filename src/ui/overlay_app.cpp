@@ -921,24 +921,10 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
 
 void OverlayApp::QuickCapture(float displayW, float displayH) {
     // Whatever the hand is in the middle of ends on the canvas it started
-    // on, and a note being typed is committed to the item it belongs to -
-    // the same two things any other canvas switch has to settle first, for
-    // the same reasons (see SwitchCanvasByOffset). A capture hotkey can
-    // arrive mid-stroke: it is global, and nothing about holding the mouse
-    // down stops it.
-    //
-    // Only with a live ImGui context, which is what asking whether the
-    // mouse is down needs. Unlike every other canvas switch, this one can
-    // run before the overlay has ever been shown - the capture hotkey
-    // pressed first thing, with no frame ever drawn - and there is nothing
-    // in flight to settle then anyway. Same guard, same reason, as
-    // ShowActionToast's own.
-    if (ImGui::GetCurrentContext() != nullptr) {
-        FinishLeftButtonGesture();
-        if (editingNoteItemId_.has_value()) {
-            EndEditingNote(noteEditBuffer_);
-        }
-    }
+    // on, as before any other canvas switch (see SettleHand). A capture
+    // hotkey can arrive mid-stroke: it is global, and nothing about holding
+    // the mouse down stops it.
+    SettleHand();
     // In the folder the canvas being worked on lives in, not the one the
     // Overview happens to be browsing - those are deliberately decoupled
     // (see CanvasManager's class comment), and a capture is about where you
@@ -957,10 +943,12 @@ void OverlayApp::QuickCapture(float displayW, float displayH) {
     ShowActionToast(strings::kToastCapturedScreenshot);
 }
 
-void OverlayApp::SettleForPersistence() {
-    // Same guard as QuickCapture's: finishing a gesture asks ImGui whether
-    // the button is down, which needs a context, and there is nothing in
-    // flight without one.
+void OverlayApp::SettleForPersistence() { SettleHand(); }
+
+void OverlayApp::SettleHand() {
+    // Finishing a gesture asks ImGui whether the button is down, which
+    // needs a context; a flush or a capture hotkey can run before the
+    // overlay has ever been shown, and there is nothing in flight then.
     if (ImGui::GetCurrentContext() != nullptr) {
         FinishLeftButtonGesture();
     }
