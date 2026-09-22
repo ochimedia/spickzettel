@@ -1176,7 +1176,10 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // A drawing a stray click made goes once the hand has moved on from it
     // (see untouchedDrawing_). A press elsewhere settles it as it happens
     // (OnMouse); this catches moving on without one - another canvas, its
-    // own Close - on the frame after.
+    // own Close - on the frame after. And it stops being watched the frame
+    // after something has gone into it: from then on it is a drawing like
+    // any other, and an undo that empties it again is no reason to erase
+    // it for good, with the redo of what it held.
     if (untouchedDrawing_.has_value()) {
         const Canvas* current = Manager().CurrentOrNull();
         const bool onScreen =
@@ -1185,6 +1188,8 @@ void OverlayApp::OnFrame(float deltaSeconds) {
             });
         if (!onScreen) {
             SettleUntouchedDrawing();
+        } else if (!session_.IsUntouched(*untouchedDrawing_)) {
+            untouchedDrawing_.reset();
         }
     }
 

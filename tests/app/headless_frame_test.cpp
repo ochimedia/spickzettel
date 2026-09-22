@@ -329,6 +329,29 @@ TEST_F(HeadlessAppTest, ADrawingWithSomethingInItStays) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u);
 }
 
+// A drawing something has gone into is no longer a stray click, even once
+// an undo has taken that something back out: moving on leaves it there,
+// empty, and the stroke can be redone into it.
+TEST_F(HeadlessAppTest, ADrawingEmptiedByUndoIsKeptWhenTheHandMovesOn) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 400.0f, 400.0f);
+    Drag(150.0f, 150.0f, 300.0f, 300.0f);  // a stroke into it
+    const ItemId drawing = Canvases().CurrentOrNull()->items[0].id;
+    ASSERT_EQ(Canvases().CurrentOrNull()->items[0].strokes.size(), 1u);
+
+    PressCtrlKey(ImGuiKey_Z);
+    ASSERT_TRUE(Canvases().CurrentOrNull()->items[0].strokes.empty()) << "the stroke, not the drawing";
+    RawClick(900.0f, 650.0f);  // empty canvas: the hand moves on
+
+    ASSERT_EQ(Canvases().CurrentOrNull()->items.size(), 1u) << "kept, empty";
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    PressCtrlKey(ImGuiKey_Y);
+    const Item* item = Canvases().CurrentOrNull()->items.data();
+    ASSERT_EQ(item->id, drawing);
+    EXPECT_EQ(item->strokes.size(), 1u) << "and the stroke is redone into it";
+}
+
 TEST_F(HeadlessAppTest, UndoTakesBackAStrayDrawingWithoutLeavingItDeleted) {
     ShowEditMode();
     StepFrame();
@@ -2450,7 +2473,10 @@ TEST_F(HeadlessAppTest, EditingALongNoteKeepsAllOfIt) {
     ASSERT_TRUE(App().EditingNote().has_value());
     ImGui::GetIO().AddInputCharacter('b');
     StepFrames(2);
-    RawClick(1100.0f, 100.0f);  // closes the note
+    // A click elsewhere that ImGui sees, which deactivates the field and so
+    // closes the note - the drawing has text already, so it is not the
+    // stray click a raw press alone would settle.
+    Click(1100.0f, 100.0f);
     ASSERT_FALSE(App().EditingNote().has_value());
 
     const std::string& text = Canvases().CurrentOrNull()->items[0].noteText;

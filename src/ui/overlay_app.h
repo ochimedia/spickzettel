@@ -1535,7 +1535,10 @@ private:
     // Close, the overlay going away, or an undo (see SettleUntouchedDrawing). What
     // makes a snippet on every click on empty space harmless to miss with.
     // Moving, resizing or nudging it is using it (see KeepPlacedDrawings):
-    // a box someone has placed is a box they want, empty or not.
+    // a box someone has placed is a box they want, empty or not. And so is
+    // putting anything into it: once it has held a stroke it is watched no
+    // longer (see OnFrame), so an undo that empties it again leaves it as
+    // an empty drawing rather than erasing it, redo and all.
     std::optional<ItemId> untouchedDrawing_;
 
     // RectEraser's own placement gesture (see OnMouse): unlike Rectangle/

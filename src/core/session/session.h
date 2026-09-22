@@ -194,6 +194,9 @@ public:
     // click made that turned out not to be meant. False, doing nothing, for
     // a snippet with anything in it or no snippet by that id.
     bool DiscardIfUntouched(ItemId itemId);
+    // Whether nothing has been put into the snippet yet - the question
+    // DiscardIfUntouched asks, on its own. False for no snippet by that id.
+    bool IsUntouched(ItemId itemId) const;
     // Everything drawn on a snippet - its strokes and its painted pixels -
     // cleared as one undoable step. False if there was nothing to clear.
     bool ClearDrawing(ItemId itemId);

@@ -421,23 +421,26 @@ ItemId Session::CreateItem(bool hasBackground, Rect rect, std::string name) {
 namespace {
 // Nothing put into it: no ink of either kind, no text, and no picture of
 // its own - a screenshot is content even when the capture failed.
-bool IsUntouched(const Item& item) {
+bool ItemIsUntouched(const Item& item) {
     return !item.hasBackground && item.strokes.empty() && item.noteText.empty() &&
            std::none_of(item.layers.begin(), item.layers.end(),
                         [](const Layer& layer) { return layer.HasPaintedPixels(); });
 }
 }  // namespace
 
-bool Session::DiscardIfUntouched(ItemId itemId) {
-    const Item* item = nullptr;
+bool Session::IsUntouched(ItemId itemId) const {
     for (const Canvas& canvas : Manager().Canvases()) {
         for (const Item& candidate : canvas.items) {
             if (candidate.id == itemId) {
-                item = &candidate;
+                return ItemIsUntouched(candidate);
             }
         }
     }
-    if (item == nullptr || !IsUntouched(*item)) {
+    return false;
+}
+
+bool Session::DiscardIfUntouched(ItemId itemId) {
+    if (!IsUntouched(itemId)) {
         return false;
     }
     // Erased rather than marked - there is nothing in it to find again - and
