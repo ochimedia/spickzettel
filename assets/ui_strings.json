@@ -80,7 +80,7 @@
   "item.restoreSize": "Restore size",
   "item.makeFullscreen": "Make fullscreen",
   "item.minimize": "Minimize",
-  "item.moreActions": "More actions (opacity, order, copy)",
+  "item.moreActions": "Properties - opacity, background colour, text",
   "item.pin": "Pin - keep it on screen when the overlay is put away",
   "item.unpin": "Unpin",
 
