@@ -478,6 +478,10 @@ private:
     // left there that could ever want these. A canvas merely deleted keeps
     // its history for when it is restored.
     void DropHistoryOfCanvas(CanvasId canvasId);
+    // DeletePermanently without the texture sync that follows it: the
+    // thing, its textures, its history and its files. What ImportLibrary
+    // erases with, before there is a device to sync against.
+    Removal Erase(uint64_t id);
     // Starts following `itemId`'s strokes through an erase gesture: keeps
     // the list as it is now, and notes that every stroke is still its own
     // original - see eraseGestureStartSnapshot_.

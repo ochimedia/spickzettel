@@ -121,6 +121,54 @@ TEST(SessionTest, ALibraryOpenedErasesTheSnippetsMarkedDeleted) {
     EXPECT_NE(manager.FindCanvas(second), nullptr);
 }
 
+// The erasing happens at startup, before the overlay window - and with it
+// anything to make a texture with - exists. It must not count as the
+// current canvas's textures having been loaded: they could not have been,
+// and nothing would try again until the canvas changed.
+TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLater) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_erase_on_open_textures";
+    std::filesystem::remove_all(dir);
+    ItemId shot = 0;
+    {
+        persistence::LibraryStore store(dir);
+        test::FakeOverlayWindow window;
+        window.captureReturnsHandle = 7;
+        window.captureReturnsWidth = 1;
+        window.captureReturnsHeight = 1;
+        window.captureReturnsPixelsRGBA = {10, 20, 30, 255};
+        Session session;
+        session.AttachWindow(&window);
+        session.SetLibraryStore(&store);
+        shot = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Shot");
+        session.CaptureShotItem(*session.Manager().FindItemAnywhere(shot));
+        const ItemId gone = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
+        ASSERT_TRUE(session.Delete(gone));
+        ASSERT_TRUE(session.Flush());
+        session.SetLibraryStore(nullptr);
+    }
+
+    persistence::LibraryStore store(dir);
+    std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    test::FakeOverlayWindow window;
+    window.createTextureFromPixelsReturnsHandle = 0;  // no device yet
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+    session.ImportLibrary(std::move(*loaded));
+    ASSERT_TRUE(session.Manager().MarkedSnippets().empty()) << "the deleted snippet was erased";
+
+    window.createTextureFromPixelsReturnsHandle = 9;  // the window is made, and the first frame runs
+    session.EnsureTexturesForCurrentCanvas();
+    const Item* item = session.Manager().FindItemAnywhere(shot);
+    ASSERT_NE(item, nullptr);
+    EXPECT_EQ(item->ImageLayer()->textureHandle, 9u) << "not a placeholder until the canvas is switched";
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+
 TEST(SessionTest, ErasingAFoldersDeletedCanvasesLeavesTheFolderAndTheRest) {
     Session session;
     const FolderId folder = session.Manager().CurrentFolderId();

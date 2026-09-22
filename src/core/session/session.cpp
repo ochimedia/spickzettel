@@ -348,8 +348,13 @@ bool Session::Flush() { return FlushIfDirty(library_); }
 
 void Session::ImportLibrary(CanvasManagerSnapshot snapshot) {
     library_.manager.ImportSnapshot(std::move(snapshot));
+    // Without DeletePermanently's texture sync: this runs before the overlay
+    // window has made its device, so the sync could load nothing - and would
+    // still record the current canvas as loaded, leaving its pictures as
+    // placeholders until the canvas changed. Nothing is resident yet for the
+    // erasing to give back; the first frame loads what is there.
     for (const ItemId id : Manager().MarkedSnippets()) {
-        DeletePermanently(id);
+        Erase(id);
     }
 }
 
@@ -373,6 +378,14 @@ bool Session::Restore(uint64_t id) {
 }
 
 Session::Removal Session::DeletePermanently(uint64_t id) {
+    const Removal removal = Erase(id);
+    if (removal != Removal::NotFound) {
+        SyncTexturesToCurrentCanvas();
+    }
+    return removal;
+}
+
+Session::Removal Session::Erase(uint64_t id) {
     CanvasManager& manager = Manager();
     // What goes with it: the textures of every snippet under it, and the
     // history of every canvas - or, for a lone snippet, its own entries on
@@ -414,7 +427,6 @@ Session::Removal Session::DeletePermanently(uint64_t id) {
     if (Store() && !Store()->Remove(id) && Store()->HasPendingRemoval(id)) {
         removal = Removal::FilesRemain;
     }
-    SyncTexturesToCurrentCanvas();
     return removal;
 }
 

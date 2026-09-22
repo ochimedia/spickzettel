@@ -433,7 +433,11 @@ comes back while the rest stay deleted as of when they went.
 A snippet's mark is only ever cleared by undo, and no history outlives
 its session, so `Session::ImportLibrary` erases every snippet that comes
 in marked. That includes one deleted before its canvas: restoring the
-canvas would not bring it back either.
+canvas would not bring it back either. It erases without the texture
+sync a delete for good ends with: the library is opened before the overlay
+window has made its device, so that sync would load nothing and still
+record the current canvas as loaded, and its pictures would stay
+placeholders until the canvas changed.
 
 Two designs preceded this. A reserved Trash folder inside the library
 grouped three structurally different things under one "dig through the
