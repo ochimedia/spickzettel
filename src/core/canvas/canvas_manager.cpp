@@ -289,8 +289,9 @@ void CanvasManager::ReorderFolder(FolderId id, size_t newIndex) {
 void CanvasManager::MoveCanvasToFolder(CanvasId canvasId, FolderId targetFolderId) {
     const auto it = std::find_if(canvases_.begin(), canvases_.end(),
                                   [canvasId](const Canvas& c) { return c.id == canvasId; });
-    if (it == canvases_.end() || it->folderId == targetFolderId || FindFolder(targetFolderId) == nullptr) {
-        return;
+    const Folder* target = FindFolder(targetFolderId);
+    if (it == canvases_.end() || it->folderId == targetFolderId || target == nullptr || IsDeleted(*target)) {
+        return;  // a canvas moved into a deleted folder would be deleted with it
     }
     // Folders are allowed to end up empty - moving a folder's only canvas
     // elsewhere is legal, not a no-op.
@@ -647,8 +648,8 @@ std::optional<CanvasId> CanvasManager::CanvasHoldingItem(ItemId id) const {
 ItemId CanvasManager::PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool copy) {
     const auto targetIt = std::find_if(canvases_.begin(), canvases_.end(),
                                         [targetCanvasId](const Canvas& c) { return c.id == targetCanvasId; });
-    if (targetIt == canvases_.end()) {
-        return 0;
+    if (targetIt == canvases_.end() || IsDeleted(*targetIt)) {
+        return 0;  // no such canvas, or one nothing can be seen on
     }
     Canvas* source = nullptr;
     size_t at = 0;
@@ -665,6 +666,10 @@ ItemId CanvasManager::PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool
     if (copy) {
         Item copied = source->items[at];
         copied.id = NewId();
+        // A new thing, not deleted whatever its source is: a copy that
+        // arrived marked would be invisible where it landed, and listed
+        // among the deleted with a stamp from before it existed.
+        copied.deletedAt = 0;
         const ItemId newId = copied.id;
         DetachLayersForCopy(copied);
         // Read off `source` before this, which may be the very vector

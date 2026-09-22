@@ -1061,6 +1061,40 @@ TEST(CanvasManagerTest, MoveOrCopyItemToCanvasReturnsZeroOnANoOp) {
     EXPECT_EQ(manager.MoveOrCopyItemToCanvas(id, 999999, /*copy=*/true), 0u);
 }
 
+// A copy is a new thing: it starts unmarked whatever its source's mark,
+// rather than arriving invisible with a stamp from before it existed.
+TEST(CanvasManagerTest, ACopyOfADeletedSnippetIsNotDeleted) {
+    CanvasManager manager("First");
+    const ItemId id = manager.CreateItem(false, Rect{}, "A");
+    ASSERT_TRUE(manager.MarkDeleted(id, 1234));
+
+    const ItemId copy = manager.PlaceItemOnCanvas(id, manager.CurrentCanvasId(), /*copy=*/true);
+
+    ASSERT_NE(copy, 0u);
+    EXPECT_FALSE(manager.IsItemDeleted(copy));
+    EXPECT_TRUE(manager.IsItemDeleted(id)) << "the source is as it was";
+}
+
+// Nothing lands somewhere it cannot be seen: a deleted canvas takes no
+// snippet, a deleted folder takes no canvas.
+TEST(CanvasManagerTest, NothingIsPlacedOnADeletedCanvasOrMovedIntoADeletedFolder) {
+    CanvasManager manager("First");
+    const CanvasId first = manager.CurrentCanvasId();
+    const FolderId firstFolder = manager.CurrentFolderId();
+    const ItemId id = manager.CreateItem(false, Rect{}, "A");
+    const CanvasId gone = manager.AddCanvas("Gone");
+    ASSERT_TRUE(manager.MarkDeleted(gone, 1234));
+
+    EXPECT_EQ(manager.PlaceItemOnCanvas(id, gone, /*copy=*/true), 0u);
+    EXPECT_EQ(manager.PlaceItemOnCanvas(id, gone, /*copy=*/false), 0u);
+    EXPECT_EQ(manager.CanvasHoldingItem(id), std::optional<CanvasId>(first));
+
+    const FolderId deletedFolder = manager.AddFolder("Deleted");
+    ASSERT_TRUE(manager.MarkDeleted(deletedFolder, 1234));
+    manager.MoveCanvasToFolder(first, deletedFolder);
+    EXPECT_EQ(manager.FindCanvas(first)->folderId, firstFolder);
+}
+
 TEST(CanvasManagerTest, CopyItemToCanvasLeavesOriginalAndDeepCopiesStrokes) {
     CanvasManager manager("First");
     const CanvasId originalCanvasId = manager.CurrentOrNull()->id;

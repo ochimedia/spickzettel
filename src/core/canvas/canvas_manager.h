@@ -166,8 +166,9 @@ public:
     void ReorderFolder(FolderId id, size_t newIndex);
     // Reassigns the canvas to a different folder, even if that empties its
     // current one - folders are allowed to hold zero canvases. No-op if
-    // `canvasId` or `targetFolderId` doesn't exist, or `targetFolderId` is
-    // already its folder.
+    // `canvasId` or `targetFolderId` doesn't exist, `targetFolderId` is
+    // deleted (a canvas moved into it would be deleted with it), or it is
+    // already the canvas's folder.
     void MoveCanvasToFolder(CanvasId canvasId, FolderId targetFolderId);
     // No-op (name unchanged) if `id` doesn't exist or `name` is empty.
     void RenameFolder(FolderId id, std::string name);
@@ -252,8 +253,10 @@ public:
     // which may be the canvas it is already on. Returns the resulting
     // snippet's id: a new one for a copy (which owns its own strokes,
     // painted pixels and, once the caller has given it one, image file -
-    // see DetachLayersForCopy), the same one for a move. 0 if there is no
-    // such snippet or no such canvas.
+    // see DetachLayersForCopy - and starts unmarked, whatever its source's
+    // mark: a copy is a new thing), the same one for a move. 0 if there is
+    // no such snippet, no such canvas, or the canvas is deleted - nothing
+    // is placed where it cannot be seen.
     //
     // The two narrower ones stay because their guards are part of what
     // they mean - the picker's move refuses a target that is already
