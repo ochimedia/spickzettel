@@ -1276,7 +1276,10 @@ the other stack.
 A paste or a duplicate is one `ItemsArrived` entry for everything it
 brought, filed on the canvas it landed on: a copy is undone into its
 deletion mark as a new snippet is, and a snippet a cut moved here goes
-back to the canvas it came from, at the place in the stack it left. With
+back to the canvas it came from, at the place in the stack it left -
+undone last first, since each place was taken after the snippets before
+it had gone, which is what puts several cut from one stack back in its
+order rather than swapped. With
 no entry of its own, an undo after a paste reached past it and took back
 whatever came before - usually out of sight, under the copy. Unlike the
 rest, this entry can find it has nowhere to go: the canvas a cut came

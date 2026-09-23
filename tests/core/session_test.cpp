@@ -732,6 +732,35 @@ TEST(SessionTest, ACutsPasteIsUndoneBackToWhereItStood) {
     EXPECT_EQ(StackIndex(session, second, moved), 1) << "on top, as the paste put it";
 }
 
+// Several snippets cut from one stack come back into it as it was, in
+// whichever order they were selected: undone first to last, two cut
+// together came back swapped.
+TEST(SessionTest, SeveralSnippetsCutFromOneStackGoBackInItsOrder) {
+    for (const std::vector<size_t>& cutOrder : {std::vector<size_t>{1, 2}, std::vector<size_t>{3, 1},
+                                                std::vector<size_t>{2, 0, 3}}) {
+        Session session;
+        const CanvasId first = session.Manager().CurrentCanvasId();
+        std::vector<ItemId> stack;
+        for (const char* name : {"A", "B", "C", "D"}) {
+            stack.push_back(session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, name));
+        }
+        const CanvasId second = session.Manager().AddCanvas("Second");
+        session.Manager().SwitchToCanvas(second);
+        std::vector<Session::Arrival> arrivals;
+        for (const size_t at : cutOrder) {
+            arrivals.push_back(*session.MoveItemHere(stack[at]));
+        }
+        session.RecordArrivals(std::move(arrivals), /*duplicate=*/false);
+
+        ASSERT_TRUE(session.Undo().has_value());
+        std::vector<ItemId> after;
+        for (const Item& item : session.Manager().FindCanvas(first)->items) {
+            after.push_back(item.id);
+        }
+        EXPECT_EQ(after, stack) << "cut in order " << cutOrder[0] << "," << cutOrder[1];
+    }
+}
+
 // Sent back by an undo and edited where it landed, a snippet brought here
 // again by the redo takes none of that history with it: an undo there
 // would edit a snippet that is no longer on the canvas.

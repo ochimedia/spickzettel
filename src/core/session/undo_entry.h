@@ -46,6 +46,9 @@ struct Placement {
 // What a paste or a duplicate brought onto a canvas, one snippet each:
 // moved there by a cut's paste from `fromCanvas`, where it stood at
 // `fromIndex` in the stack - or, with fromCanvas 0, a copy made there.
+// The index is the stack as it was when this one left, after the
+// arrivals listed before it had gone: an ItemsArrived entry is undone
+// last first for that reason.
 struct Arrival {
     ItemId itemId = 0;
     CanvasId fromCanvas = 0;

@@ -296,7 +296,13 @@ std::optional<Session::UndoWhat> Session::Apply(undo::ItemsArrived& entry, bool 
     // good, which is skipped.
     bool changed = false;
     bool moved = false;
-    for (const undo::Arrival& arrival : entry.arrivals) {
+    // Undone last first: each fromIndex was taken once the snippets before
+    // it in the list had left (see MoveItemHere), so putting them back in
+    // the reverse order undoes each removal against the very stack it was
+    // made from, and every one lands where it stood. Forwards, two cut
+    // from one canvas came back swapped. Redone in the order they came.
+    for (size_t step = 0; step < entry.arrivals.size(); ++step) {
+        const undo::Arrival& arrival = entry.arrivals[undo ? entry.arrivals.size() - 1 - step : step];
         if (arrival.fromCanvas == 0) {
             changed = (undo ? Delete(arrival.itemId) : Restore(arrival.itemId)) || changed;
             continue;
