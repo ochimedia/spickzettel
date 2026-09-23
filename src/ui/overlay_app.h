@@ -945,7 +945,10 @@ private:
     // want" rather than checkboxes plus a letter picker, which could not
     // represent a function key at all. See TryChangeHotkey for how a
     // captured combo takes effect.
-    void RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, platform::KeyCombo current);
+    // `buttonX` is where the key's button starts, the same for every row
+    // of the section - see KeyButtonColumn.
+    void RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, platform::KeyCombo current,
+                            float buttonX);
     // Offers `combo` to hotkeyChangeCallback_ (see its own doc comment)
     // before it is stored as the matching hotkey in the settings. Returns
     // false (and leaves that hotkey untouched) if the callback rejects it -
@@ -987,7 +990,8 @@ private:
     // One row of it. `capturing` rows read the next key pressed; Escape
     // unbinds, and Backspace/Delete do too, since a row showing "(none)" is
     // exactly what someone reaches for those keys to get.
-    void RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label);
+    void RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label, float buttonX);
+    float KeyButtonColumn() const;
     // Binds `combo` to `action`, taking it off whatever else held it -
     // rejecting the change would leave the user to find the other holder
     // themselves, and two rows claiming one key is a state where only one

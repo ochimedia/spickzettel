@@ -1837,7 +1837,7 @@ void OverlayApp::RenderSettingsDebug(bool& anyChanged) {
 }
 
 
-void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label) {
+void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label, float buttonX) {
     const size_t index = ShortcutActionIndex(action);
     // What the target being edited says, which is not necessarily what is
     // running - see RenderEditTargetPicker.
@@ -1860,7 +1860,7 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
     } else {
         ImGui::TextUnformatted(label);
     }
-    ImGui::SameLine(160.0f);
+    ImGui::SameLine(buttonX);
 
     if (ImGui::Button(capturing ? Labeled(strings::kHotkeysShortcutPrompt, "shortcut_btn")
                                  : (FormatKeyComboLabel(current) + "##shortcut_btn").c_str(),
@@ -2320,6 +2320,34 @@ bool OverlayApp::RenderProfileRow(size_t index, Profile& profile, bool& remove) 
     return changed;
 }
 
+// Where every key button in the Hotkeys section starts: past the longest
+// label there, measured rather than fixed, since a fixed column is what
+// "New canvas with the selection" ran into. One column for the summon
+// hotkeys and the shortcuts alike, so the two lists line up.
+float OverlayApp::KeyButtonColumn() const {
+    constexpr float kShortcutLabelX = 30.0f;  // past the row's icon - see RenderShortcutEditor
+    constexpr float kGap = 16.0f;
+    float widest = 0.0f;
+    for (const char* label : {strings::kHotkeysEditMode, strings::kHotkeysViewMode, strings::kHotkeysQuickCapture,
+                              strings::kHotkeysSilentCapture}) {
+        widest = std::max(widest, ImGui::CalcTextSize(label).x);
+    }
+    const auto shortcutLabel = [&widest, kShortcutLabelX](const char* label) {
+        widest = std::max(widest, kShortcutLabelX + ImGui::CalcTextSize(label).x);
+    };
+    for (const GalleryTool& tool : kGalleryTools) {
+        shortcutLabel(tool.name);
+    }
+    for (const CreateActionInfo& info : kCreateActions) {
+        shortcutLabel(info.name);
+    }
+    for (const ClipboardActionInfo& info : kClipboardActions) {
+        shortcutLabel(info.name);
+    }
+    shortcutLabel(strings::kMenuCheatSheet);
+    return widest + kGap;
+}
+
 void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
     // Above the picker, and that position is the whole point of moving them
     // here: these are global, and while they sat under a picker that said
@@ -2328,10 +2356,13 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
     // have nothing above it that it doesn't govern.
     SettingsHeading("hotkeyssummoningheading", strings::kHotkeysSummoningHeading,
                      strings::kHotkeysSummoningHelp);
-    RenderHotkeyEditor("hkedit", strings::kHotkeysEditMode, HotkeySlot::EditMode, Cfg().hotkeyEditMode);
-    RenderHotkeyEditor("hkview", strings::kHotkeysViewMode, HotkeySlot::ViewMode, Cfg().hotkeyViewMode);
-    RenderHotkeyEditor("hkquick", strings::kHotkeysQuickCapture, HotkeySlot::QuickCapture, Cfg().hotkeyQuickCapture);
-    RenderHotkeyEditor("hksilent", strings::kHotkeysSilentCapture, HotkeySlot::SilentCapture, Cfg().hotkeySilentCapture);
+    const float buttonX = KeyButtonColumn();
+    RenderHotkeyEditor("hkedit", strings::kHotkeysEditMode, HotkeySlot::EditMode, Cfg().hotkeyEditMode, buttonX);
+    RenderHotkeyEditor("hkview", strings::kHotkeysViewMode, HotkeySlot::ViewMode, Cfg().hotkeyViewMode, buttonX);
+    RenderHotkeyEditor("hkquick", strings::kHotkeysQuickCapture, HotkeySlot::QuickCapture, Cfg().hotkeyQuickCapture,
+                       buttonX);
+    RenderHotkeyEditor("hksilent", strings::kHotkeysSilentCapture, HotkeySlot::SilentCapture,
+                       Cfg().hotkeySilentCapture, buttonX);
     anyChanged |= CheckboxWithHelp("hotkeyssaywhenhidden", strings::kHotkeysSayWhenHidden, &Cfg().showToastsWhileHidden,
         strings::kHotkeysSayWhenHiddenHelp);
 
@@ -2343,27 +2374,27 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
                      strings::kHotkeysShortcutsHelp);
     ImGui::Spacing();
     for (const GalleryTool& tool : kGalleryTools) {
-        RenderShortcutEditor(ShortcutForTool(tool.tool), *tool.icon, tool.name);
+        RenderShortcutEditor(ShortcutForTool(tool.tool), *tool.icon, tool.name, buttonX);
     }
 
     SettingsGroupBreak();
     SettingsHeading("hotkeysshortcutcreateheading", strings::kHotkeysShortcutCreateHeading);
     ImGui::Spacing();
     for (const CreateActionInfo& info : kCreateActions) {
-        RenderShortcutEditor(ShortcutForCreateAction(info.action), *info.icon, info.name);
+        RenderShortcutEditor(ShortcutForCreateAction(info.action), *info.icon, info.name, buttonX);
     }
 
     SettingsGroupBreak();
     SettingsHeading("hotkeysshortcutclipboardheading", strings::kHotkeysShortcutClipboardHeading);
     ImGui::Spacing();
     for (const ClipboardActionInfo& info : kClipboardActions) {
-        RenderShortcutEditor(ShortcutForClipboardAction(info.action), *info.icon, info.name);
+        RenderShortcutEditor(ShortcutForClipboardAction(info.action), *info.icon, info.name, buttonX);
     }
 
     SettingsGroupBreak();
     SettingsHeading("hotkeysshortcuthelpheading", strings::kHotkeysShortcutHelpHeading);
     ImGui::Spacing();
-    RenderShortcutEditor(ShortcutAction::CheatSheet, icons::kKeyboard, strings::kMenuCheatSheet);
+    RenderShortcutEditor(ShortcutAction::CheatSheet, icons::kKeyboard, strings::kMenuCheatSheet, buttonX);
 }
 
 namespace {
@@ -2558,15 +2589,17 @@ void OverlayApp::RenderOverviewAboutPanel() {
 // to undo: the next frame's `current` is still whatever was last actually
 // committed, and the widgets below just render that again, snapping the
 // UI back to it on their own.
-void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, platform::KeyCombo current) {
+void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, platform::KeyCombo current,
+                                    float buttonX) {
     ImGui::PushID(id);
+    ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(120.0f);
+    ImGui::SameLine(buttonX);
 
     const bool capturing = hotkeyCaptureSlot_ == slot;
     if (ImGui::Button(capturing ? Labeled(strings::kHotkeysComboPrompt, "combo_btn")
                                  : (FormatKeyComboLabel(current) + "##combo_btn").c_str(),
-                       ImVec2(180.0f, 0.0f))) {
+                       ImVec2(200.0f, 0.0f))) {
         // Clicking the armed row's own button cancels capture instead of
         // re-arming it. Escape does too, but only as a side effect of
         // closing the whole Overview - RenderOverview's own Escape-to-close
