@@ -362,14 +362,20 @@ void OverlayApp::BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEnt
     add(ItemMenuAction::ClearDrawing, "##menu_clear_drawing", icons::kEraser, strings::kMenuClearDrawing,
         /*enabled=*/!nothingToClear);
 
-    // Duplicate is the selection's, not this one snippet's. A right-click
-    // has already made this snippet part of the selection (see
-    // HandleItemGesture), so the two agree whenever only it is selected,
-    // and where they differ the shortcut shown beside the row is the honest
-    // answer: Ctrl+D does the whole selection, so the row that names Ctrl+D
-    // has to as well.
+    // Copy, Cut and Duplicate are the selection's, not this one snippet's.
+    // A right-click has already made this snippet part of the selection
+    // (see HandleItemGesture), so the two agree whenever only it is
+    // selected, and where they differ the shortcut shown beside the row is
+    // the honest answer: Ctrl+D does the whole selection, so the row that
+    // names Ctrl+D has to as well. Paste is empty canvas's (see
+    // BuildEmptyCanvasMenuRows): what it does has nothing to do with the
+    // snippet it would be opened over.
+    add(ItemMenuAction::Copy, "##menu_copy", icons::kCopy, strings::kMenuCopy, /*enabled=*/true,
+        MenuShortcutLabel(ShortcutAction::Copy), /*separatorAbove=*/true);
+    add(ItemMenuAction::Cut, "##menu_cut", icons::kScissors, strings::kMenuCut, /*enabled=*/true,
+        MenuShortcutLabel(ShortcutAction::Cut));
     add(ItemMenuAction::Duplicate, "##menu_duplicate", icons::kCopy, strings::kMenuDuplicate, /*enabled=*/true,
-        MenuShortcutLabel(ShortcutAction::Duplicate), /*separatorAbove=*/true);
+        MenuShortcutLabel(ShortcutAction::Duplicate));
     // Disabled when nothing *overlapping* this snippet is in that
     // direction, rather than at the ends of the stack - see
     // CanvasManager::MoveItemLayer for why that is the useful rule.
@@ -404,6 +410,12 @@ void OverlayApp::RunItemMenuAction(ItemMenuAction action, ItemId itemId) {
             return;
         case ItemMenuAction::ClearDrawing:
             ClearItemDrawing(itemId);
+            return;
+        case ItemMenuAction::Copy:
+            RunClipboardAction(ClipboardAction::Copy);
+            return;
+        case ItemMenuAction::Cut:
+            RunClipboardAction(ClipboardAction::Cut);
             return;
         case ItemMenuAction::Duplicate:
             DuplicateSelection();

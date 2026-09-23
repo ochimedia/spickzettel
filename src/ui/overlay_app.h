@@ -149,6 +149,8 @@ enum class ItemMenuAction {
     ToggleFullscreen,
     ResetSize,
     ClearDrawing,
+    Copy,
+    Cut,
     Duplicate,
     SendBackward,
     BringForward,

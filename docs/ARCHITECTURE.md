@@ -1607,10 +1607,11 @@ own, and anything after them, without it growing a second personality. Each row 
 the shortcut of the action it runs, read from the live binding, which
 makes the menu the place the keys are learned as well as pressed; a row
 whose action has no binding shows nothing rather than the key editor's
-"(none)". Two rows say the selection's name and not the snippet's -
-Duplicate and Move to new canvas - because the shortcut printed beside
-each is the selection's, and a row that names Ctrl+D has to do what
-Ctrl+D does. A row that cannot be chosen right now is greyed rather than
+"(none)". Four rows act on the selection and not only the snippet -
+Copy, Cut, Duplicate and Move to new canvas - because the shortcut
+printed beside each is the selection's, and a row that names Ctrl+D has
+to do what Ctrl+D does. Paste is not among them: it has nothing to do
+with the snippet the menu is over, and is on empty canvas's menu. A row that cannot be chosen right now is greyed rather than
 dropped, so the menu is the same shape over every snippet and a hand can
 learn where a row is. While it is up ImGui claims the mouse, so the press
 that dismisses it does nothing else - which is what a context menu does

@@ -51,6 +51,8 @@
   "menu.restoreSize": "Restore size",
   "menu.originalSize": "Original size",
   "menu.clearDrawing": "Clear drawing",
+  "menu.copy": "Copy",
+  "menu.cut": "Cut",
   "menu.duplicate": "Duplicate",
   "menu.sendBackward": "Send backward",
   "menu.bringForward": "Bring forward",
