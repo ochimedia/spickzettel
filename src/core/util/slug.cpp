@@ -7,7 +7,11 @@
 namespace sz::core {
 
 namespace {
-constexpr size_t kMaxBaseLength = 40;
+// Long enough for a default name whole - TimestampName's
+// "2026-09-07 22:36:14" is 19 - and short because every level of the tree
+// pays it: a snippet's files sit three slugs below the library root, and
+// past MAX_PATH a record is neither written nor read back.
+constexpr size_t kMaxBaseLength = 20;
 }  // namespace
 
 std::string MakeSlug(const std::string& name, uint64_t id) {

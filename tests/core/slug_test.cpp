@@ -39,8 +39,17 @@ TEST(SlugTest, NonAsciiBytesCollapseToSeparatorsRatherThanBreakingTheSlug) {
 TEST(SlugTest, LongNameIsTruncated) {
     const std::string longName(200, 'a');
     const std::string result = MakeSlug(longName, 2);
-    // 40-char base + "-2".
-    EXPECT_EQ(result, std::string(40, 'a') + "-000002");
+    // 20-char base + "-2".
+    EXPECT_EQ(result, std::string(20, 'a') + "-000002");
+}
+
+TEST(SlugTest, ADefaultTimestampNameIsKeptWhole) {
+    EXPECT_EQ(MakeSlug("2026-09-07 22:36:14", 2), "2026-09-07-22-36-14-000002");
+}
+
+TEST(SlugTest, ATruncatedNameNeverEndsInASeparator) {
+    // The cut lands just after the space, which became a separator.
+    EXPECT_EQ(MakeSlug("abcdefghijklmnopqrs tuvwxyz", 2), "abcdefghijklmnopqrs-000002");
 }
 
 TEST(SlugTest, ResultNeverExactlyMatchesAWindowsReservedDeviceName) {

@@ -611,6 +611,14 @@ its old canvas at the next start. Every id inside a record is spelled the
 same six-character way, so a record and its directory can be matched by
 eye.
 
+The readable half is capped at 20 characters - the default timestamp
+names fit whole. It was 40, and at 40 a snippet's files sit up to 141
+characters of slugs below the library root: long names on a long profile
+path, or in the recovery copy beside it (29 characters longer again), ran
+past MAX_PATH, where a record is neither written nor read back and the
+snippet was gone at the next start. The label is the only thing lost to
+a shorter cap; the name itself is in the record.
+
 A tree rather than one file because one file is rewritten whole on every
 save: 50 canvases of ordinary drawing is a 42 MB document taking half a
 second to serialise, on the render thread, every couple of seconds of
