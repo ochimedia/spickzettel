@@ -633,11 +633,17 @@ same kind of inconsistency a hand edit does.
 
 The tree also invites files that are not ours, so what is read has a
 budget checked before anything is allocated for it: a record is refused
-unread past 64 MB (two million stroke points on one snippet), a picture
-past 256 MB of file, 16384 pixels on a side or 64 million pixels, with
-the picture's header checked before the decoder is handed the bytes - a
-QOI header claiming 100000x100000 asked for a 40 GB allocation before
-that. Every float a record carries is read through one function that
+unread past 64 MB (some seven hundred thousand stroke points on one
+snippet, as the records are written), a picture past 256 MB of file,
+16384 pixels on a side or 64 million pixels, with the picture's header
+checked before the decoder is handed the bytes - a QOI header claiming
+100000x100000 asked for a 40 GB allocation before that. The record
+budget binds the writer too. `Save` wrote whatever a snippet had grown
+to and counted it saved, and the next `Load` skipped the record whole -
+the snippet gone, with nothing to say why. A record past the budget is
+now not written: the save fails, the last record that fitted stays on
+disk to load, and the warning along the bottom says a snippet is too
+large rather than promising a retry that cannot succeed. Every float a record carries is read through one function that
 turns a value too large for a float (`1e100` is valid JSON and infinite
 as a float) into the field's default and holds the fields with a range
 inside it, rather than letting one infinite coordinate poison every

@@ -552,9 +552,11 @@ bool ReadItemRecord(const json& j, Item& out, bool& repaired) {
 
 // The most a record may be before it is read at all. A snippet's record
 // is a JSON object per stroke point, and a heavily drawn-on snippet runs to
-// a few megabytes; 64 MB is two million points on one snippet, far past
-// anything a hand draws, and a file bigger than that in a record's place is
-// not a record. Refused unread rather than parsed into memory to find out.
+// a few megabytes; 64 MB is some seven hundred thousand points on one
+// snippet, far past anything a hand draws, and a file bigger than that in a
+// record's place is not a record. Refused unread rather than parsed into
+// memory to find out - and never written either (see Save), so that a
+// record this store writes is always one it reads back.
 constexpr uintmax_t kMaxRecordBytes = uintmax_t{64} << 20;
 
 std::optional<std::string> ReadFileText(const std::filesystem::path& path) {
@@ -1436,6 +1438,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
         return false;  // not this build's to write - see WrittenByANewerVersion
     }
     std::error_code ec;
+    oversizedRecords_.clear();
     const std::filesystem::path foldersRoot = FoldersRoot();
     if (!IsOurs(foldersRoot)) {
         // folders/ is a junction: there is nowhere of the library's to
@@ -1674,8 +1677,17 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 if (placedItem.kept && known != writtenItemHashes_.end() && known->second == hash) {
                     continue;
                 }
+                // A record past what Load reads is not written: acknowledged,
+                // it would vanish at the next start with everything in it,
+                // where refused, the save fails and says so, and the last
+                // record that fitted stays on disk to load.
+                const std::string text = ToJson(item).dump(2);
+                const bool fits = text.size() <= kMaxRecordBytes;
+                if (!fits) {
+                    oversizedRecords_.insert(item.id);
+                }
                 const bool recordWritten =
-                    IsOurs(itemDir / kItemFile) && WriteFileAtomically(itemDir / kItemFile, ToJson(item).dump(2));
+                    fits && IsOurs(itemDir / kItemFile) && WriteFileAtomically(itemDir / kItemFile, text);
                 if (recordWritten) {
                     writtenItemHashes_[item.id] = hash;
                 } else {

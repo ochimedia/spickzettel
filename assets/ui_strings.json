@@ -144,6 +144,7 @@
   "_status": "The warning along the bottom while the disk cannot be written to - see OverlayApp::RenderPersistenceWarning. %s is a path.",
   "status.saveFailed": "Could not save the library to %s - your changes are kept in memory and saving is retried",
   "status.configWriteFailed": "Could not write the settings to %s",
+  "status.recordTooLarge": "A snippet has grown too large to save - its last saved version stays on disk. Erasing some of its strokes lets it save again",
   "_startup": "The message boxes shown when the app cannot start at all, before there is a tray icon to say so.",
   "startup.failed": "Spickzettel could not start. Another copy may already be running, or one of its hotkeys is held by another application.",
   "startup.newerLibrary": "Spickzettel could not start: your library was saved by a newer version of Spickzettel. This version would lose what the newer one saved, so it leaves the library alone. Please use the newer version.",

@@ -2673,8 +2673,15 @@ std::string OverlayApp::PersistenceWarning() const {
     std::string warning;
     char line[1024];
     if (session_.LastSaveFailed() && session_.Store() != nullptr) {
-        std::snprintf(line, sizeof(line), strings::kStatusSaveFailed, session_.Store()->RootDir().string().c_str());
-        warning = line;
+        // Retrying cannot help a record that is too large, and saying it
+        // is retried would promise what will not happen.
+        if (!session_.Store()->OversizedRecords().empty()) {
+            warning = strings::kStatusRecordTooLarge;
+        } else {
+            std::snprintf(line, sizeof(line), strings::kStatusSaveFailed,
+                          session_.Store()->RootDir().string().c_str());
+            warning = line;
+        }
     }
     if (configWriteFailedPath_.has_value()) {
         std::snprintf(line, sizeof(line), strings::kStatusConfigWriteFailed, configWriteFailedPath_->c_str());

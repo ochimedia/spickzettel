@@ -1288,6 +1288,31 @@ TEST_F(LibraryStoreTest, ADeletedSnippetStaysInPlaceStampedAcrossARestart) {
     EXPECT_FALSE(nlohmann::json::parse(std::ifstream(ShotItemDir() / "item.json")).contains("deletedAt"));
 }
 
+// A record larger than Load reads is not written, and the save says so:
+// acknowledged, the snippet would be skipped at the next start with all of
+// it gone. The last record that fitted stays, and loads.
+TEST_F(LibraryStoreTest, ARecordTooLargeToReadBackIsNotWrittenAndFailsTheSave) {
+    LibraryStore store(dir_);
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_TRUE(store.OversizedRecords().empty());
+
+    snapshot.canvases[0].items[0].noteText.assign(std::size_t{65} << 20, 'a');
+    snapshot.canvases[0].items[1].name = "Renamed alongside";
+    EXPECT_FALSE(store.Save(snapshot));
+    EXPECT_EQ(store.OversizedRecords(), std::set<uint64_t>{3});
+
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases[0].items.size(), 2u) << "the snippet is still there to load";
+    EXPECT_EQ(loaded->canvases[0].items[0].noteText, MakeSampleSnapshot().canvases[0].items[0].noteText);
+    EXPECT_EQ(loaded->canvases[0].items[1].name, "Renamed alongside") << "the rest of the save landed";
+
+    snapshot.canvases[0].items[0].noteText = "Short again";
+    EXPECT_TRUE(store.Save(snapshot));
+    EXPECT_TRUE(store.OversizedRecords().empty());
+}
+
 // Deleting for good is Remove, at once - and the save after it agrees about
 // what went, setting nothing aside.
 TEST_F(LibraryStoreTest, RemoveDeletesASnippetForGoodAndTheNextSaveAgrees) {

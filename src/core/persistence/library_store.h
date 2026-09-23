@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -236,6 +237,10 @@ public:
     // it is, a directory not yet retired costs disk space, and the next save
     // takes another run at both.
     bool Save(const LibraryView& view) const;
+    // The snippets the last Save could not write because their record
+    // would be larger than Load reads (see kMaxRecordBytes) - so that a UI
+    // can say why the save failed. Empty after a save that had none.
+    const std::set<uint64_t>& OversizedRecords() const { return oversizedRecords_; }
     bool Save(const CanvasManagerSnapshot& snapshot) const {
         return Save(LibraryView{snapshot.folders, snapshot.canvases, snapshot.currentFolderId,
                                 snapshot.currentCanvasId});
@@ -395,6 +400,8 @@ private:
     // nothing under it is placed, retired or read meanwhile: it was
     // deleted, not lost.
     mutable std::map<uint64_t, std::filesystem::path> pendingRemovals_;
+    // See OversizedRecords.
+    mutable std::set<uint64_t> oversizedRecords_;
     // See WriteGeneration.
     mutable uint64_t writeGeneration_ = 0;
     // See WrittenByANewerVersion: set once a newer library has been seen,

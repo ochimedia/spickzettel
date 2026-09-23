@@ -2879,6 +2879,17 @@ TEST_F(HeadlessSaveTest, AFailedSaveIsSaidOnScreenUntilItLands) {
     EXPECT_TRUE(App().PersistenceWarning().empty()) << "gone with the save that landed";
 }
 
+// A snippet too large to save is said as such: "retried" would promise a
+// save that no retry can make.
+TEST_F(HeadlessSaveTest, ASnippetTooLargeToSaveIsSaidAsSuch) {
+    PlaceADrawing();
+    controller_->GetSession().Manager().CurrentOrNull()->items[0].noteText.assign(std::size_t{65} << 20, 'a');
+    controller_->GetSession().Manager().MarkChanged();
+    AttachStore();
+    StepFrames(130);  // past the quiet period: one attempt, which failed
+    EXPECT_EQ(App().PersistenceWarning(), std::string(strings::kStatusRecordTooLarge));
+}
+
 // The record went through and the picture didn't: the save must not be
 // acknowledged on the strength of the half that worked, or the picture
 // waits for some unrelated edit to trigger the next save - and a hide or
