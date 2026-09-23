@@ -237,10 +237,10 @@ TEST(StrokeClipTest, RectMidSegmentDipThroughTopAndBottomEdges) {
 
 // A multi-point polyline with two sample points exactly on the rect's
 // boundary: the crossing finder deliberately reports no crossing at an
-// existing vertex (see SegmentRectCrossings), so only the state comparison
-// against the pointwise test can split the run there. Without it the walk
-// bridges the erased middle into one fragment spanning the whole polyline,
-// which looks exactly like not having erased anything.
+// existing vertex (see SegmentRectCrossings), so only the segments either
+// side of it can split the run there. Without that the walk bridges the
+// erased middle into one fragment spanning the whole polyline, which looks
+// exactly like not having erased anything.
 TEST(StrokeClipTest, RectMultiPointPolylineWithVerticesExactlyOnBoundarySplitsCorrectly) {
     const Stroke stroke = MakeStroke({
         StrokePoint{-15, 0},
@@ -276,6 +276,41 @@ TEST(StrokeClipTest, RectFragmentsPreserveColorAndWidth) {
     for (const Stroke& fragment : *result) {
         EXPECT_EQ(fragment.colorRGBA, 0x11223344u);
         EXPECT_FLOAT_EQ(fragment.width, 12.5f);
+    }
+}
+
+// A line that only touches the eraser - tangent to its circle - meets its
+// boundary once and never goes in. Nothing is erased, and above all
+// nothing is doubled: taking the touch for a way in once handed back the
+// first half of the segment twice, which a translucent stroke showed as a
+// darker stretch and every further touch added to.
+TEST(StrokeClipTest, ATangentTouchLeavesTheStrokeAsItWas) {
+    const Stroke across = MakeStroke({StrokePoint{-10, 1}, StrokePoint{10, 1}});
+    EXPECT_FALSE(ClipStrokeOutsideCircle(across, StrokePoint{0, 0}, 1.0f).has_value());
+    const Stroke back = MakeStroke({StrokePoint{10, 1}, StrokePoint{-10, 1}});
+    EXPECT_FALSE(ClipStrokeOutsideCircle(back, StrokePoint{0, 0}, 1.0f).has_value());
+    const Stroke polyline = MakeStroke({StrokePoint{-10, 1}, StrokePoint{10, 1}, StrokePoint{10, 20}});
+    EXPECT_FALSE(ClipStrokeOutsideCircle(polyline, StrokePoint{0, 0}, 1.0f).has_value());
+}
+
+// The same through a corner of the rectangle eraser, where the way in and
+// the way out are one point.
+TEST(StrokeClipTest, ALineThroughARectanglesCornerOnlyLeavesTheStrokeAsItWas) {
+    const Stroke corner = MakeStroke({StrokePoint{0, 10}, StrokePoint{10, 0}});
+    EXPECT_FALSE(ClipStrokeOutsideRect(corner, -5, -5, 5, 5).has_value());
+    const Stroke back = MakeStroke({StrokePoint{10, 0}, StrokePoint{0, 10}});
+    EXPECT_FALSE(ClipStrokeOutsideRect(back, -5, -5, 5, 5).has_value());
+}
+
+// A real bite taken twice over the same place takes nothing the second
+// time: what is left lies outside the eraser, touching it at most.
+TEST(StrokeClipTest, ErasingTheSamePlaceAgainChangesNothing) {
+    const Stroke stroke = MakeStroke({StrokePoint{-20, 0}, StrokePoint{20, 0}, StrokePoint{20, 20}});
+    const auto first = ClipStrokeOutsideCircle(stroke, StrokePoint{0, 0}, 5.0f);
+    ASSERT_TRUE(first.has_value());
+    ASSERT_EQ(first->size(), 2u);
+    for (const Stroke& fragment : *first) {
+        EXPECT_FALSE(ClipStrokeOutsideCircle(fragment, StrokePoint{0, 0}, 5.0f).has_value());
     }
 }
 

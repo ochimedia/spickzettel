@@ -12,15 +12,28 @@ StrokePoint Lerp(const StrokePoint& a, const StrokePoint& b, float t) {
 }
 
 // Shared walk: given a per-point inside-the-region test and a per-segment
-// boundary-crossing finder (at most 2 crossings, ascending t in (0, 1) -
-// true of both a circle and a convex polygon like a rectangle, since a
-// straight line can enter/exit a convex region at most once each), walks
-// `stroke`'s polyline and returns the runs of points that lie *outside*
-// the region, split at every crossing - the actual "cut a bite out of the
-// ink" logic, region-agnostic. `IsInside`/`Crossings` are the only
-// region-specific pieces; the circle and the rectangle wire their own
-// geometry into this once, so the two can never disagree on how a
-// crossing splits a stroke.
+// boundary finder (at most 2 values, ascending t in (0, 1) - true of both a
+// circle and a convex polygon like a rectangle, since a straight line meets
+// a convex region's boundary at most twice), walks `stroke`'s polyline and
+// returns the runs of it that lie *outside* the region, split wherever it
+// goes in - the actual "cut a bite out of the ink" logic, region-agnostic.
+// `IsInside`/`Crossings` are the only region-specific pieces; the circle and
+// the rectangle wire their own geometry into this once, so the two can
+// never disagree on how a crossing splits a stroke.
+//
+// The boundary points cut each segment into pieces, and each piece is
+// classified by the point halfway along it, rather than each boundary point
+// being taken as a change from outside to inside or back. A line that only
+// touches the region - tangent to the circle, through a rectangle's corner
+// - meets its boundary once without going in: the finder reports that
+// point once, and a walk that toggled at it believed itself inside for the
+// rest of the segment, then rebuilt the segment from its start when its
+// end turned out to be outside, and handed back the first half twice. A
+// piece is inside or it is not, whatever the boundary did at its ends, so
+// a touch leaves the stroke as it was. It also covers a vertex exactly on
+// the boundary, which the finder deliberately does not report (t = 0 or 1
+// would make a zero-length fragment): the pieces either side of it say
+// what happened there.
 template <typename IsInsideFn, typename CrossingsFn>
 std::optional<std::vector<Stroke>> ClipStrokeOutsideRegion(const Stroke& stroke, IsInsideFn isInside,
                                                             CrossingsFn crossings) {
@@ -49,69 +62,35 @@ std::optional<std::vector<Stroke>> ClipStrokeOutsideRegion(const Stroke& stroke,
         currentRun.clear();
     };
 
-    bool stateInside = isInside(pts[0]);
-    if (stateInside) {
-        changed = true;
-    } else {
-        currentRun.push_back(pts[0]);
-    }
-
     for (size_t i = 1; i < pts.size(); ++i) {
         const StrokePoint& p0 = pts[i - 1];
         const StrokePoint& p1 = pts[i];
-        const bool p1Inside = isInside(p1);
-
-        const std::vector<float> crossingTs = crossings(p0, p1);
-        if (!crossingTs.empty()) {
-            changed = true;
+        std::vector<float> cuts{0.0f};
+        for (const float t : crossings(p0, p1)) {
+            cuts.push_back(t);
         }
-        for (const float t : crossingTs) {
-            const StrokePoint crossPoint = Lerp(p0, p1, t);
-            if (stateInside) {
-                // Re-entering the outside partway along this segment -
-                // start a fresh run right here.
-                currentRun.clear();
-                currentRun.push_back(crossPoint);
-            } else {
-                // Leaving the outside partway along this segment - close
-                // the run off right here.
-                currentRun.push_back(crossPoint);
-                finalizeRun();
-            }
-            stateInside = !stateInside;
-        }
+        cuts.push_back(1.0f);
 
-        // Normally, having walked every crossing above, `stateInside`
-        // already agrees with `p1Inside` (computed directly from p1's own
-        // position) - a convex region's entry/exit exactly matches point
-        // classification. The one case they can disagree: one of this
-        // segment's own endpoints lies exactly on the region's boundary
-        // (isInside's own comparisons are inclusive), so the true crossing
-        // t is 0 or 1 - which the crossings() finder deliberately excludes
-        // (see its own comment) to avoid a zero-length fragment at an
-        // existing vertex. Which endpoint depends on the transition
-        // direction: entering (outside -> inside) can only reach this
-        // branch with no interior crossing if p1 itself is the boundary
-        // point (p0 was genuinely outside, established by the previous
-        // iteration), so close the run there. Exiting (inside -> outside)
-        // is the mirror case: p0 was already inside, so an empty crossing
-        // list here means p0 itself is exactly the boundary (p1 is
-        // genuinely outside) - start the new run at p0, then keep p1 too.
-        if (stateInside != p1Inside) {
-            changed = true;
-            if (stateInside) {
-                currentRun.clear();
-                currentRun.push_back(p0);
-                currentRun.push_back(p1);
-            } else {
-                currentRun.push_back(p1);
+        for (size_t piece = 0; piece + 1 < cuts.size(); ++piece) {
+            const float from = cuts[piece];
+            if (isInside(Lerp(p0, p1, (from + cuts[piece + 1]) * 0.5f))) {
+                changed = true;
                 finalizeRun();
+                continue;
             }
-            stateInside = p1Inside;
-        } else if (p1Inside) {
-            changed = true;
-        } else {
-            currentRun.push_back(p1);
+            // Outside, and on to the end of every outside piece after it -
+            // a boundary point between two outside pieces is a touch, not a
+            // vertex of the stroke.
+            size_t last = piece;
+            while (last + 2 < cuts.size() &&
+                   !isInside(Lerp(p0, p1, (cuts[last + 1] + cuts[last + 2]) * 0.5f))) {
+                ++last;
+            }
+            if (currentRun.empty()) {
+                currentRun.push_back(Lerp(p0, p1, from));
+            }
+            currentRun.push_back(last + 2 == cuts.size() ? p1 : Lerp(p0, p1, cuts[last + 1]));
+            piece = last;
         }
     }
     finalizeRun();

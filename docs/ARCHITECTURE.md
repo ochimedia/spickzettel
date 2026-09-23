@@ -265,13 +265,21 @@ bounded piece of segment geometry solves while keeping every stroke a
 plain, inspectable polyline. (Painted layers, below, are the case where
 pixels are the right answer and are treated as such.)
 
-One edge case earned its own test: a crossing that lands within 1e-6 of
-an existing vertex is deliberately not reported, to avoid a zero-length
-fragment, and when a sample point sits exactly on the boundary that
-leaves the walk's inside/outside state disagreeing with the pointwise
-test. The walk compares the two after each segment and splits there;
-without that it silently bridged the erased middle into one fragment,
-which looks exactly like not having erased anything.
+The boundary points only cut a segment into pieces; each piece is then
+classified by its midpoint, rather than each boundary point being taken
+as a way in or out. A line that merely touches the region - tangent to
+the circle, through a rectangle's corner - meets the boundary once
+without entering: a walk that toggled its state there thought itself
+inside for the rest of the segment, rebuilt the segment from its start
+when the far end turned out to be outside, and handed back the first
+half twice - darker on a translucent stroke, and longer with every
+touch, since the fragments replace the stroke and are saved. Classifying
+pieces also covers the older edge case: a crossing within 1e-6 of an
+existing vertex is deliberately not reported, to avoid a zero-length
+fragment, so a sample point exactly on the boundary has no crossing of
+its own, and the pieces either side of it are what split the stroke
+there. Before either, the walk bridged the erased middle into one
+fragment, which looks exactly like not having erased anything.
 
 ### Tessellation, and its cache
 
