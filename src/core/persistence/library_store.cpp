@@ -1874,6 +1874,15 @@ bool LibraryStore::Save(const LibraryView& view) const {
     // is written the moment it is taken so that it survives such a crash;
     // deleting it at the next start would undo that promise. A move that
     // fails stays, readably - see FindImage.
+    //
+    // A file of the same name already at home is newer than the one
+    // waiting, never older: a picture is written to staging only while its
+    // snippet has no directory, and to the directory from the moment it
+    // has one (see ImageHome). So the waiting one is what a move that
+    // failed left behind - a file held open at the save that made the
+    // directory - and the painting has been saved again at home since.
+    // Moving it in would put the older pixels back over the newer, under a
+    // layer that believes itself saved; it is set aside instead.
     const std::filesystem::path stagingDir = rootDir_ / kStagingDir;
     if (std::filesystem::exists(stagingDir, ec) && IsOurs(stagingDir)) {
         for (const auto& entry : std::filesystem::directory_iterator(stagingDir, ec)) {
@@ -1883,11 +1892,14 @@ bool LibraryStore::Save(const LibraryView& view) const {
             }
             const std::string name = entry.path().filename().string();
             if (const auto owner = pictureOwner.find(name); owner != pictureOwner.end()) {
-                if (const auto home = itemDirs_.find(owner->second);
-                    home != itemDirs_.end() && IsOurs(home->second)) {
-                    std::filesystem::rename(entry.path(), home->second / name, ec);
+                const auto home = itemDirs_.find(owner->second);
+                if (home == itemDirs_.end() || !IsOurs(home->second)) {
+                    continue;
                 }
-                continue;
+                if (!std::filesystem::exists(home->second / name, isFileEc)) {
+                    std::filesystem::rename(entry.path(), home->second / name, ec);
+                    continue;
+                }
             }
             const std::filesystem::path setAside = rootDir_ / kRetiredDir / kStagingDir;
             if (!IsOurs(setAside)) {

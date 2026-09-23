@@ -1081,6 +1081,37 @@ TEST_F(LibraryStoreTest, ARemovalWaitsForAMoveOutOfItThatCannotLandYet) {
     EXPECT_EQ(reloaded->pixelsRGBA, pixels);
     EXPECT_TRUE(std::filesystem::exists(movedTo / "000004.qoi"));
 }
+
+// A picture waiting in staging that could not be moved home when its
+// snippet got a directory, and written again since - at home, where every
+// write goes from then on. The waiting one is the older, and must not be
+// moved over the newer once it can be.
+TEST_F(LibraryStoreTest, AStagedPictureNeverReplacesANewerOneAtHome) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> older = Checkerboard(64, 64);
+    std::vector<uint8_t> newer = older;
+    std::reverse(newer.begin(), newer.end());
+    ASSERT_TRUE(store.SaveImage(4, older.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    {
+        std::ifstream held(dir_ / "images" / "000004.qoi");  // no delete sharing
+        ASSERT_TRUE(held.is_open());
+        ASSERT_TRUE(store.Save(snapshot));
+        ASSERT_TRUE(std::filesystem::exists(dir_ / "images" / "000004.qoi")) << "the move was refused";
+        ASSERT_TRUE(store.SaveImage(4, newer.data(), 64, 64).has_value());
+        ASSERT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi")) << "written at home";
+    }
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "images" / "000004.qoi"));
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "retired" / "images" / "000004.qoi")) << "set aside, not deleted";
+
+    LibraryStore reopened(dir_);
+    ASSERT_TRUE(reopened.Load().has_value());
+    const std::optional<DecodedImage> image = reopened.LoadImage(4, "000004.qoi");
+    ASSERT_TRUE(image.has_value());
+    EXPECT_EQ(image->pixelsRGBA, newer);
+}
 #endif
 
 // A snippet moved to another canvas, and the canvas it left deleted for

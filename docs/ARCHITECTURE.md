@@ -858,6 +858,16 @@ which nobody wants, or the capture a crash left without its record,
 which is exactly what writing it early was for, and the two cannot be
 told apart. `retired/` is the user's to empty.
 
+A picture waiting in staging whose snippet's directory already holds a
+file of the same name is set aside the same way, not moved in over it.
+A picture goes to staging only while its snippet has no directory and
+to the directory from the moment it has one, so the one at home is
+always the newer: the waiting one is what a move refused at the save
+that made the directory left behind - a file held open - and the
+painting has been saved again at home since. Moving it in once the file
+was let go of put the older pixels back under a layer that believed
+itself saved, where no later save would notice.
+
 ## Configuration
 
 `AppConfig` is every user-editable setting, read from and written to
