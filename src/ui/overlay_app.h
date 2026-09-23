@@ -405,7 +405,7 @@ public:
     // whether the button is down; with none there is nothing in flight.
     void SettleHand();
 
-    // Asks for the first-run welcome note to be placed on the current
+    // Asks for the first-run notes to be placed on the current
     // canvas. Called by TrayController when there was no library on disk to
     // load - i.e. a genuinely fresh install, not merely an empty library
     // someone deliberately cleared out (that one loads fine and says so).
@@ -1034,13 +1034,14 @@ private:
     // Shared by both item-creation paths so neither has to decide what an
     // empty library means on its own.
     Canvas& EnsureCanvasForNewItem();
-    // Places the first-run welcome note, centered - see RequestWelcomeNote.
-    // An ordinary item, deliberately: it can be moved, edited, or closed
-    // like anything else, and it autosaves, so it stays until the user is
-    // done with it and then stops existing for good. A modal dialog would
+    // Places the first-run notes, centred as a group: the welcome, and the
+    // two warnings beside it - see RequestWelcomeNote.
+    // Ordinary items, deliberately: each can be moved, edited, or closed
+    // like anything else, and they autosave, so they stay until the user is
+    // done with them and then they stop existing for good. A modal dialog would
     // have to be dismissed before the app could be touched at all, and
     // would teach nothing about how the app actually works.
-    void PlaceWelcomeNote(float displayW, float displayH);
+    void PlaceWelcomeNotes(float displayW, float displayH);
     ItemId CreateFullscreenItem(ItemCreationKind kind, float displayW, float displayH);
     struct CreationGesture;
     ItemId FinishRegionCapture(const CreationGesture& gesture);
@@ -1954,8 +1955,8 @@ private:
     PlacementBurst lastPlacementBurst_ = PlacementBurst::None;
     double lastPlacementBurstAtSeconds_ = 0.0;
 
-    // See RequestWelcomeNote/PlaceWelcomeNote. Cleared the moment the note
-    // is placed, so it can never be placed twice.
+    // See RequestWelcomeNote/PlaceWelcomeNotes. Cleared the moment the notes
+    // are placed, so they can never be placed twice.
     bool welcomeNotePending_ = false;
 };
 

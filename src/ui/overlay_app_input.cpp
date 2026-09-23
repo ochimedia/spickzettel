@@ -453,29 +453,52 @@ Canvas& OverlayApp::EnsureCanvasForNewItem() {
     return *Manager().CurrentOrNull();
 }
 
-void OverlayApp::PlaceWelcomeNote(float displayW, float displayH) {
-    // Sized to the text rather than to the screen, then clamped, so it
-    // stays readable on a small display without becoming a banner on a
-    // large one.
-    // Fitted to the text below at 18px - 10 lines plus padding, and a hair
-    // wider than its longest line - rather than to some round number, so
-    // the panel doesn't sit there mostly empty. The min() is only a guard
-    // for a display too small to hold it.
-    const float w = std::min(400.0f, displayW * 0.8f);
-    const float h = std::min(214.0f, displayH * 0.7f);
-    const Rect rect{(displayW - w) * 0.5f, (displayH - h) * 0.5f, w, h};
+void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
+    // Each sized to its text rather than to the screen - fitted to the
+    // hand-wrapped lines at their size, a hair wider than the longest -
+    // so none sits there mostly empty. The welcome is 10 lines at 18px;
+    // the two warnings 8 lines at 22px, larger because they are the two
+    // things a new user must not skip.
+    const ImVec2 welcomeSize(400.0f, 214.0f);
+    const ImVec2 warningSize(300.0f, 214.0f);
+    constexpr float kGap = 24.0f;
+    constexpr float kWarningTextPx = 22.0f;
+    // A light red: a warning, readable on the note's dark backing, and not
+    // the danger red of a delete button.
+    constexpr uint32_t kWarningTextRGBA = 0xFF8C80FFu;
+
+    // In a row, the welcome first, centred - or, on a screen too narrow
+    // for that, in a column. On one too small for either they overlap
+    // rather than going off screen, which ClampRectToViewport sees to.
+    const float rowW = welcomeSize.x + 2.0f * (warningSize.x + kGap);
+    const bool row = rowW <= displayW * 0.95f;
+    const ImVec2 group = row ? ImVec2(rowW, welcomeSize.y)
+                             : ImVec2(welcomeSize.x, welcomeSize.y + 2.0f * (warningSize.y + kGap));
+    ImVec2 at((displayW - group.x) * 0.5f, (displayH - group.y) * 0.5f);
 
     Canvas& canvas = EnsureCanvasForNewItem();
-    const ItemId id = Manager().CreateItem(/*hasBackground=*/false, rect, strings::kWelcomeName);
-    if (id == 0) {
+    const auto place = [&](ImVec2 size, const char* name) -> Item* {
+        const Rect rect = ClampRectToViewport(Rect{at.x, at.y, size.x, size.y}, displayW, displayH);
+        (row ? at.x : at.y) += (row ? size.x : size.y) + kGap;
+        if (Manager().CreateItem(/*hasBackground=*/false, rect, name) == 0) {
+            return nullptr;
+        }
+        Item& item = canvas.items.back();
+        // A Text Note's backing (see kNoteBackgroundColorRGBA), but darker:
+        // these land on whatever the desktop happens to show, and half
+        // transparent over a white window left the red text washed out.
+        if (Layer* picture = item.ImageLayer()) {
+            picture->tintColorRGBA = kNoteBackgroundColorRGBA;
+            picture->opacity = 0.8f;
+        }
+        return &item;
+    };
+
+    Item* welcome = place(welcomeSize, strings::kWelcomeName);
+    if (welcome == nullptr) {
         return;
     }
-    Item& item = canvas.items.back();
-    // The same backing a Text Note gets - see kNoteBackgroundColorRGBA.
-    if (Layer* picture = item.ImageLayer()) {
-        picture->tintColorRGBA = kNoteBackgroundColorRGBA;
-        picture->opacity = kNoteBackgroundOpacity;
-    }
+    Item& item = *welcome;
     // Deliberately short. This is the first thing anyone sees, and its job
     // is only to get them to the point where the app can explain itself:
     // one gesture, the right-click menus, the key that brings the overlay
@@ -497,6 +520,22 @@ void OverlayApp::PlaceWelcomeNote(float displayW, float displayH) {
     }
     item.noteText = text;
     item.noteTextSizePx = 18.0f;
+
+    // Finished with `item` before the next note is made: that can move
+    // canvas.items, and the reference with it.
+    //
+    // Behavior and profiles, because the right input settings differ by
+    // game and the defaults will be wrong for some; anti-cheat, because
+    // hooking input and drawing over a game is what such a system looks
+    // for, and a ban is not something to find out about afterwards.
+    for (const auto& [name, body] : {std::pair{strings::kWelcomeBehaviorName, strings::kWelcomeBehaviorBody},
+                                     std::pair{strings::kWelcomeAntiCheatName, strings::kWelcomeAntiCheatBody}}) {
+        if (Item* warning = place(warningSize, name)) {
+            warning->noteText = body;
+            warning->noteTextSizePx = kWarningTextPx;
+            warning->noteTextColorRGBA = kWarningTextRGBA;
+        }
+    }
     Manager().MarkChanged();
 }
 

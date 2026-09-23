@@ -1955,6 +1955,16 @@ mode with a welcome note, since an app that installs a tray icon and then
 waits for a chord it never mentioned is indistinguishable from one that
 did not start.
 
+Two notes sit beside the welcome, in larger, light-red text. One says to
+set up Behavior and profiles per program, because no one set of input
+defaults suits every game. The other warns that anti-cheat systems may
+object to an input hook drawing over a game. They are notes rather than
+a dialog for the reason the welcome is: they can be moved or deleted
+like anything else, and they show how the app works. Being deletable is
+also why the About text repeats both warnings. They sit in a row with
+the welcome, or in a column on a screen too narrow for that, so that
+none of them covers another.
+
 `Flush` is called before hiding and before exiting, the two places
 content stops being editable and no frame will come soon enough to catch
 the debounce.

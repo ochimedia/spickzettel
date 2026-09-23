@@ -147,10 +147,14 @@
   "hud.useSoftwarePointer": "Use a software pointer",
   "hud.freezeScreenWhileEditing": "Freeze screen while editing",
 
-  "_welcome": "The note a fresh install opens with, and what that note is called. The %s are the edit-mode hotkey and the cheat sheet's key, as they are bound; the second body is for a cheat sheet with no key.",
+  "_welcome": "The notes a fresh install opens with - the welcome, and the two warnings beside it - and what each is called. Wrapped by hand, since a note is drawn as written. The %s are the edit-mode hotkey and the cheat sheet's key, as they are bound; the second body is for a cheat sheet with no key.",
   "welcome.name": "Welcome",
-  "welcome.body": "Welcome to Spickzettel\n\nDrag on empty space to take a screenshot of it.\nRight-click anything to see what it can do.\n\n%s  -  show or hide this overlay\n%s  -  the cheat sheet: every key and gesture\n\nEverything saves itself. To remove this note,\nclick it and press Delete.",
-  "welcome.bodyNoCheatSheetKey": "Welcome to Spickzettel\n\nDrag on empty space to take a screenshot of it.\nRight-click anything to see what it can do.\n\n%s  -  show or hide this overlay\nRight-click empty space for the cheat sheet:\nevery key and gesture.\n\nEverything saves itself. To remove this note,\nclick it and press Delete.",
+  "welcome.body": "Welcome to Spickzettel\n\nDrag on empty space to take a screenshot of it.\nRight-click anything to see what it can do.\n\n%s  -  show or hide this overlay\n%s  -  the cheat sheet: every key and gesture\n\nEverything saves itself. To remove a note,\nclick it and press Delete.",
+  "welcome.behaviorName": "Set it up for your programs",
+  "welcome.behaviorBody": "Set it up for your programs\n\nSome games break when the\noverlay takes focus; others\nneed it to. Look through\nSettings > Behavior, and make\na profile for each program\nthat needs its own.",
+  "welcome.antiCheatName": "Careful with anti-cheat",
+  "welcome.antiCheatBody": "Careful with anti-cheat\n\nSome games watch for tools\nthat draw over them or read\ntheir input. If a game might\nobject, quit Spickzettel\nbefore you start it.",
+  "welcome.bodyNoCheatSheetKey": "Welcome to Spickzettel\n\nDrag on empty space to take a screenshot of it.\nRight-click anything to see what it can do.\n\n%s  -  show or hide this overlay\nRight-click empty space for the cheat sheet:\nevery key and gesture.\n\nEverything saves itself. To remove a note,\nclick it and press Delete.",
 
   "_cheatSheet": "The cheat sheet (Ctrl+H by default): every key and gesture, in groups. Each row is what you press, then what it does; a shortcut that is unbound drops its row. After a modifier, a gesture is capitalised like a key (Ctrl+Drag), so the left column reads as one kind of thing.",
   "cheatSheet.title": "Cheat sheet",

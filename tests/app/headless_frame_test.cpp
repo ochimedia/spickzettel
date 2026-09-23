@@ -3452,7 +3452,7 @@ TEST_F(HeadlessAppTest, TheWelcomeNotePointsAtTheCheatSheet) {
     controller_->Overlay().RequestWelcomeNote();
     ShowEditMode();
     StepFrames(2);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u);
     const std::string& text = Canvases().CurrentOrNull()->items[0].noteText;
     EXPECT_NE(text.find("Ctrl+Alt+O"), std::string::npos) << text;
     EXPECT_NE(text.find("Ctrl+H"), std::string::npos) << text;
@@ -3464,10 +3464,48 @@ TEST_F(HeadlessAppTest, WithTheCheatSheetUnboundTheWelcomeNoteSendsYouToTheMenu)
     controller_->Overlay().RequestWelcomeNote();
     ShowEditMode();
     StepFrames(2);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u);
     const std::string& text = Canvases().CurrentOrNull()->items[0].noteText;
     EXPECT_NE(text.find("Right-click empty space for the cheat sheet"), std::string::npos) << text;
     EXPECT_EQ(text.find("(none)"), std::string::npos) << text;
+}
+
+// Beside the welcome, the two things a new user must not skip: set the
+// behaviour up per program, and beware of anti-cheat. Larger and in red,
+// side by side with the welcome rather than over it, and all on screen.
+TEST_F(HeadlessAppTest, AFirstRunOpensWithTheWelcomeAndTwoWarnings) {
+    controller_->Overlay().RequestWelcomeNote();
+    ShowEditMode();
+    StepFrames(2);
+    const Canvas& canvas = *Canvases().CurrentOrNull();
+    ASSERT_EQ(canvas.items.size(), 3u);
+    EXPECT_EQ(canvas.items[0].name, strings::kWelcomeName);
+    EXPECT_EQ(canvas.items[1].name, strings::kWelcomeBehaviorName);
+    EXPECT_EQ(canvas.items[2].name, strings::kWelcomeAntiCheatName);
+    EXPECT_NE(canvas.items[1].noteText.find("Settings > Behavior"), std::string::npos);
+    EXPECT_NE(canvas.items[2].noteText.find("anti-cheat"), std::string::npos);
+
+    const Item& welcome = canvas.items[0];
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    for (size_t i = 0; i < canvas.items.size(); ++i) {
+        const Item& note = canvas.items[i];
+        EXPECT_FALSE(note.hasBackground);
+        EXPECT_GE(note.rect.x, 0.0f);
+        EXPECT_GE(note.rect.y, 0.0f);
+        EXPECT_LE(note.rect.x + note.rect.w, display.x);
+        EXPECT_LE(note.rect.y + note.rect.h, display.y);
+        for (size_t j = i + 1; j < canvas.items.size(); ++j) {
+            const Rect& a = note.rect;
+            const Rect& b = canvas.items[j].rect;
+            const bool apart = a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y;
+            EXPECT_TRUE(apart) << "notes " << i << " and " << j << " overlap";
+        }
+        if (i > 0) {
+            EXPECT_GT(note.noteTextSizePx, welcome.noteTextSizePx) << "the warnings are the larger text";
+            EXPECT_NE(note.noteTextColorRGBA, welcome.noteTextColorRGBA);
+            EXPECT_GT(note.noteTextColorRGBA >> 24, (note.noteTextColorRGBA >> 16) & 0xFFu) << "red over green";
+        }
+    }
 }
 
 }  // namespace

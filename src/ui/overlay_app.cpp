@@ -1166,7 +1166,7 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // startup.
     if (welcomeNotePending_ && displayW > 0.0f && displayH > 0.0f) {
         welcomeNotePending_ = false;
-        PlaceWelcomeNote(displayW, displayH);
+        PlaceWelcomeNotes(displayW, displayH);
     }
 
     if (viewOnly_) {

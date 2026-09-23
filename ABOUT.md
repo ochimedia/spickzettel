@@ -45,6 +45,16 @@ menu with every way to make one, Paste, the Overview and Settings.
   live.
 
 
+## Before using it over a game
+
+- Every game takes an overlay differently. Some break when it takes
+  focus; others need it to. Look through Settings > Behavior, and make a
+  profile (Settings > Profiles) for each program that needs its own.
+- Some games watch for tools that draw over them or read their input,
+  and may treat this one as a cheat. If a game might object, quit
+  Spickzettel before you start it.
+
+
 ## Notes for testers
 
 - Everything autosaves on its own. There is no save button, and closing
