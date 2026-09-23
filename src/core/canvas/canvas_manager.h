@@ -265,7 +265,12 @@ public:
     // current, Duplicate is a copy that can only land here - and because
     // this one is the clipboard's, where the snippet being pasted may
     // have been copied on a canvas nobody is looking at any more.
-    ItemId PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool copy);
+    //
+    // Placed on top of the target's stack, or at `atIndex` in it for a
+    // move - where an undone paste puts a snippet back (see
+    // Session::RecordArrivals); past the end is the top.
+    ItemId PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool copy,
+                             std::optional<size_t> atIndex = std::nullopt);
     // Which canvas holds `id`, deleted or not - nullopt if nothing does.
     // What a paste asks about the snippet it is about to move, whose
     // history is filed under the canvas it is leaving.

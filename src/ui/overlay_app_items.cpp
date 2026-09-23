@@ -293,6 +293,9 @@ bool OverlayApp::IsWaitingToBeCut(ItemId id) const {
 // keeps its place exactly, which is where the eye expects it. A cut pasted
 // back onto its own canvas is the snippet itself, and there is nothing to
 // tell apart: it stays exactly where it was.
+//
+// One undo takes the whole paste back: the copies go, and what a cut
+// moved here goes back where it came from - see Session::RecordArrivals.
 void OverlayApp::PasteFromClipboard() {
     if (clipboard_.empty() || Manager().CurrentOrNull() == nullptr) {
         return;
@@ -300,6 +303,7 @@ void OverlayApp::PasteFromClipboard() {
     const CanvasId here = Manager().CurrentCanvasId();
     const bool cut = clipboardIsCut_;
     std::vector<ItemId> pasted;
+    std::vector<Session::Arrival> arrivals;
     bool fromThisCanvas = false;
     bool pictureLost = false;  // a copy whose source's picture could not be read
     for (const ItemId id : clipboard_) {
@@ -307,23 +311,26 @@ void OverlayApp::PasteFromClipboard() {
         if (!from.has_value() || Manager().IsItemDeleted(id)) {
             continue;  // deleted, or deleted for good, since it was copied
         }
-        const ItemId placed = Manager().PlaceItemOnCanvas(id, here, /*copy=*/!cut);
-        if (placed == 0) {
+        if (cut && *from == here) {
+            pasted.push_back(id);  // already here: nothing moves, nothing to undo
             continue;
         }
         if (cut) {
-            if (*from != here) {
-                // Its history is filed under the canvas it has left, and
-                // an undo there would now edit a snippet living here -
-                // see Session::ForgetHistoryOfItem.
-                session_.ForgetHistoryOfItem(*from, placed);
+            if (const std::optional<Session::Arrival> moved = session_.MoveItemHere(id)) {
+                arrivals.push_back(*moved);
+                pasted.push_back(id);
             }
-        } else {
-            // A copy must never share its source's picture file or its
-            // texture - see Session::ClonePicturesForCopy.
-            pictureLost = !session_.ClonePicturesForCopy(id, placed) || pictureLost;
+            continue;
         }
-        fromThisCanvas = fromThisCanvas || (!cut && *from == here);
+        const ItemId placed = Manager().PlaceItemOnCanvas(id, here, /*copy=*/true);
+        if (placed == 0) {
+            continue;
+        }
+        // A copy must never share its source's picture file or its
+        // texture - see Session::ClonePicturesForCopy.
+        pictureLost = !session_.ClonePicturesForCopy(id, placed) || pictureLost;
+        fromThisCanvas = fromThisCanvas || *from == here;
+        arrivals.push_back(Session::Arrival{placed});
         pasted.push_back(placed);
     }
     if (pasted.empty()) {
@@ -335,6 +342,7 @@ void OverlayApp::PasteFromClipboard() {
             OffsetCopiedItem(id);
         }
     }
+    session_.RecordArrivals(std::move(arrivals), /*duplicate=*/false);
     // Whatever arrived needs a texture now: this is the current canvas,
     // and the only other time the sync runs is a canvas switch.
     session_.SyncTexturesToCurrentCanvas();
@@ -366,6 +374,7 @@ void OverlayApp::DuplicateSelection() {
         return;
     }
     std::vector<ItemId> made;
+    std::vector<Session::Arrival> arrivals;
     bool pictureLost = false;  // a copy whose source's picture could not be read
     for (const ItemId id : selection_) {
         if (Manager().IsItemDeleted(id)) {
@@ -380,10 +389,12 @@ void OverlayApp::DuplicateSelection() {
         pictureLost = !session_.ClonePicturesForCopy(id, copy) || pictureLost;
         OffsetCopiedItem(copy);
         made.push_back(copy);
+        arrivals.push_back(Session::Arrival{copy});
     }
     if (made.empty()) {
         return;
     }
+    session_.RecordArrivals(std::move(arrivals), /*duplicate=*/true);
     // The copies are on the current canvas, so a painted layer's pixels
     // need a texture now rather than at the next canvas switch, which is
     // the only other time the sync runs.

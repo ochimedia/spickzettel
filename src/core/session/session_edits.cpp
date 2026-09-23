@@ -103,6 +103,7 @@ size_t Session::UndoEntryBytes(const UndoEntry& entry) {
         bytes += entry.paintedBefore->PixelsRGBA().size();
     }
     bytes += entry.placements.size() * sizeof(Placement);
+    bytes += entry.arrivals.size() * sizeof(Arrival);
     // The text a NoteTextChanged entry holds - small for a note typed by
     // hand, but a note is whatever a record says it is.
     bytes += entry.previousNoteText.size();
@@ -146,13 +147,17 @@ void Session::ForgetHistoryOfItem(CanvasId canvasId, ItemId itemId) {
     // ItemDeleted is matched on deletedItemId rather than entry.itemId -
     // that kind names the deleted snippet there, and leaves entry.itemId
     // unset (see UndoEntry's own doc comment).
-    // PlacementChanged names several: this one is taken out of it, and the
-    // entry goes only once it names none - the others' move is still
-    // theirs to take back.
+    // PlacementChanged and ItemsArrived name several: this one is taken
+    // out of it, and the entry goes only once it names none - the others'
+    // move or paste is still theirs to take back.
     const auto namesItem = [itemId](UndoEntry& entry) {
         if (entry.kind == UndoEntry::Kind::PlacementChanged) {
             std::erase_if(entry.placements, [itemId](const Placement& p) { return p.itemId == itemId; });
             return entry.placements.empty();
+        }
+        if (entry.kind == UndoEntry::Kind::ItemsArrived) {
+            std::erase_if(entry.arrivals, [itemId](const Arrival& a) { return a.itemId == itemId; });
+            return entry.arrivals.empty();
         }
         return entry.kind == UndoEntry::Kind::ItemDeleted ? entry.deletedItemId == itemId : entry.itemId == itemId;
     };
@@ -318,6 +323,48 @@ std::optional<Session::UndoWhat> Session::ApplyUndoEntry(UndoEntry& entry, bool 
             what = UndoWhat::Create;
             break;
         }
+        case UndoEntry::Kind::ItemsArrived: {
+            // StepHistory has already asked ArrivalsCanMove, so every moved
+            // snippet has somewhere to go; what may have gone since is a
+            // copy deleted for good, which is skipped.
+            bool changed = false;
+            bool moved = false;
+            for (const Arrival& arrival : entry.arrivals) {
+                if (arrival.fromCanvas == 0) {
+                    changed = (undo ? Delete(arrival.itemId) : Restore(arrival.itemId)) || changed;
+                    continue;
+                }
+                const std::optional<CanvasId> holder = Manager().CanvasHoldingItem(arrival.itemId);
+                if (!holder.has_value()) {
+                    continue;
+                }
+                const CanvasId to = undo ? arrival.fromCanvas : entry.canvasId;
+                if (*holder == to ||
+                    Manager().PlaceItemOnCanvas(arrival.itemId, to, /*copy=*/false,
+                                                undo ? std::optional<size_t>(arrival.fromIndex) : std::nullopt) == 0) {
+                    continue;
+                }
+                // Back here from the canvas it was sent back to: whatever
+                // was done to it there is filed there, and would edit a
+                // snippet that is not on it - see ForgetHistoryOfItem.
+                // Sent back, it leaves nothing behind here that is not
+                // this canvas's to keep: its later edits, already undone,
+                // wait on the redo stack for it to come again.
+                if (!undo) {
+                    ForgetHistoryOfItem(*holder, arrival.itemId);
+                }
+                moved = true;
+            }
+            if (moved) {
+                // Arrived on, or left, the canvas being looked at.
+                SyncTexturesToCurrentCanvas();
+            }
+            if (!changed && !moved) {
+                return std::nullopt;
+            }
+            what = entry.duplicate ? UndoWhat::Duplicate : UndoWhat::Paste;
+            break;
+        }
         case UndoEntry::Kind::NoteTextChanged: {
             // Not while the note is open - see StepHistory, which keeps the
             // entry for later rather than letting it reach here.
@@ -368,6 +415,14 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     if (next.kind == UndoEntry::Kind::NoteTextChanged && textEditItemId_ == next.itemId) {
         return std::nullopt;
     }
+    // A paste whose snippets cannot go the way asked is not left on the
+    // stack, where it would stand in front of every older step for good:
+    // it is dropped, with nothing moved, and the step says so.
+    if (next.kind == UndoEntry::Kind::ItemsArrived && !ArrivalsCanMove(next, undo)) {
+        const UndoWhat what = next.duplicate ? UndoWhat::Duplicate : UndoWhat::Paste;
+        stackIt->second.pop_back();
+        return UndoStep{what, undo, /*refused=*/true};
+    }
     // Not const - the swap kinds mutate it in place (see ApplyUndoEntry)
     // before it goes onto the opposite stack, which is what makes it that
     // stack's entry.
@@ -383,6 +438,26 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     // of redos after the first.
     PushCapped(to[canvasId], std::move(entry));
     return UndoStep{*what, undo};
+}
+
+bool Session::ArrivalsCanMove(const UndoEntry& entry, bool undo) const {
+    for (const Arrival& arrival : entry.arrivals) {
+        if (arrival.fromCanvas == 0) {
+            continue;
+        }
+        // Where it has to go (undo), or where it is now (redo): a canvas
+        // that is there and not deleted - with its folder - either way.
+        const std::optional<CanvasId> holder = Manager().CanvasHoldingItem(arrival.itemId);
+        const CanvasId canvasId = undo ? arrival.fromCanvas : holder.value_or(0);
+        const Canvas* canvas = Manager().FindCanvas(canvasId);
+        if (canvas == nullptr || Manager().IsDeleted(*canvas)) {
+            return false;
+        }
+        if (!undo && Manager().IsItemDeleted(arrival.itemId)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::optional<Session::UndoStep> Session::Undo() { return StepHistory(/*undo=*/true); }
@@ -518,6 +593,39 @@ bool ItemIsUntouched(const Item& item) {
                         [](const Layer& layer) { return layer.HasPaintedPixels(); });
 }
 }  // namespace
+
+std::optional<Session::Arrival> Session::MoveItemHere(ItemId itemId) {
+    const CanvasId here = Manager().CurrentCanvasId();
+    const std::optional<CanvasId> from = Manager().CanvasHoldingItem(itemId);
+    if (!from.has_value() || *from == here || Manager().IsItemDeleted(itemId)) {
+        return std::nullopt;
+    }
+    // Where it stands in its stack now - what an undo puts it back at.
+    const Canvas* source = Manager().FindCanvas(*from);
+    size_t index = 0;
+    while (index < source->items.size() && source->items[index].id != itemId) {
+        ++index;
+    }
+    if (Manager().PlaceItemOnCanvas(itemId, here, /*copy=*/false) == 0) {
+        return std::nullopt;
+    }
+    // Its history is filed under the canvas it has left, and an undo there
+    // would now edit a snippet living here.
+    ForgetHistoryOfItem(*from, itemId);
+    return Arrival{itemId, *from, index};
+}
+
+void Session::RecordArrivals(std::vector<Arrival> arrivals, bool duplicate) {
+    if (arrivals.empty()) {
+        return;
+    }
+    UndoEntry entry;
+    entry.kind = UndoEntry::Kind::ItemsArrived;
+    entry.canvasId = Manager().CurrentCanvasId();
+    entry.arrivals = std::move(arrivals);
+    entry.duplicate = duplicate;
+    PushUndo(std::move(entry));
+}
 
 bool Session::IsUntouched(ItemId itemId) const {
     for (const Canvas& canvas : Manager().Canvases()) {

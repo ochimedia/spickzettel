@@ -1240,7 +1240,7 @@ stack reached across canvases and failed invisibly: draw on A, switch to
 B, draw, come back to A, press Ctrl+Z, and the stroke that vanished was
 B's, on a canvas you were not looking at.
 
-Six kinds of entry, and every one is either its own inverse or a mirror
+Eight kinds of entry, and every one is either its own inverse or a mirror
 with the direction as the only difference, so undo and redo are one walk
 in opposite directions through one dispatch. A `StrokeBaked` entry
 carries the stroke so redo can push it back, and undo takes off that
@@ -1266,9 +1266,26 @@ opposite stack needs. Undo is best-effort about staleness: an entry
 naming something gone does nothing and is dropped rather than moved to
 the other stack.
 
+A paste or a duplicate is one `ItemsArrived` entry for everything it
+brought, filed on the canvas it landed on: a copy is undone into its
+deletion mark as a new snippet is, and a snippet a cut moved here goes
+back to the canvas it came from, at the place in the stack it left. With
+no entry of its own, an undo after a paste reached past it and took back
+whatever came before - usually out of sight, under the copy. Unlike the
+rest, this entry can find it has nowhere to go: the canvas a cut came
+from deleted, or deleted for good, before the undo. Sending the snippets
+there would hide them in the trash, or have nowhere to put them at all,
+so they stay, and the step is *refused*: dropped, with a toast saying
+why, so that the next undo reaches the step before it rather than
+finding the same refusal forever. A redo refuses the same way when the
+snippets it would bring have been deleted since. The move each way also
+leaves the history behind that it would otherwise carry to a canvas it
+is not on - see `ForgetHistoryOfItem`.
+
 Deliberately narrow: reorders and renames are not tracked, and deleting
 a canvas or folder gets a confirmation and Show deleted instead of an
-undo entry.
+undo entry. Moving a snippet to another canvas from its menu, or to a
+new canvas with Ctrl+Shift+N, is not on the history either.
 
 Moves and resizes are, since one accidental drag of a snippet in a
 carefully stacked overlay had no way back. A snippet's placement is

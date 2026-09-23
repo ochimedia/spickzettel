@@ -40,6 +40,12 @@ void OverlayApp::ShowUndoStep(const std::optional<Session::UndoStep>& step) {
     if (!step.has_value()) {
         return;
     }
+    if (step->refused) {
+        // Nothing changed, and the step is gone from the history - see
+        // Session::UndoStep::refused. Only a paste is ever refused.
+        ShowActionToast(step->undone ? strings::kToastPasteStays : strings::kToastPasteNotRedone);
+        return;
+    }
     // What the toast calls it - chosen once per kind, so the two directions
     // can't name the same thing differently.
     const char* what = strings::kUndoStroke;
@@ -64,6 +70,12 @@ void OverlayApp::ShowUndoStep(const std::optional<Session::UndoStep>& step) {
             break;
         case Session::UndoWhat::Placement:
             what = strings::kUndoPlacement;
+            break;
+        case Session::UndoWhat::Paste:
+            what = strings::kUndoPaste;
+            break;
+        case Session::UndoWhat::Duplicate:
+            what = strings::kUndoDuplicate;
             break;
     }
     ShowActionToast(std::string(step->undone ? strings::kToastUndidPrefix : strings::kToastRedidPrefix) + what);

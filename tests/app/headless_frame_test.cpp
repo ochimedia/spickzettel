@@ -502,6 +502,61 @@ TEST_F(HeadlessAppTest, ACutPastedOntoItsOwnCanvasStaysWhereItWas) {
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{cut});
 }
 
+// Undo right after a paste takes the paste back - and only that. It used
+// to have no step of its own, so the undo reached past it and took back
+// whatever came before, out of sight under the copy.
+TEST_F(HeadlessAppTest, UndoTakesAPasteBackAndNothingBeforeIt) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    const ItemId original = Canvases().CurrentOrNull()->items[0].id;
+    PressCtrlKey(ImGuiKey_C);
+    PressCtrlKey(ImGuiKey_V);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    EXPECT_FALSE(Canvases().IsItemDeleted(original)) << "the copy went, not the original";
+    PressCtrlKey(ImGuiKey_Y);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u);
+}
+
+TEST_F(HeadlessAppTest, UndoTakesADuplicateBack) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    const ItemId original = Canvases().CurrentOrNull()->items[0].id;
+    PressCtrlKey(ImGuiKey_D);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    EXPECT_FALSE(Canvases().IsItemDeleted(original)) << "the copy went, not the original";
+}
+
+// A cut's paste undone sends the snippet back to the canvas it was cut
+// on, and redone brings it again.
+TEST_F(HeadlessAppTest, UndoSendsACutsPasteBackWhereItCameFrom) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    CanvasManager& manager = controller_->GetSession().Manager();
+    const ItemId cut = manager.CurrentOrNull()->items[0].id;
+    const CanvasId first = manager.CurrentCanvasId();
+    PressCtrlKey(ImGuiKey_X);
+    const CanvasId second = manager.AddCanvas("Second");
+    manager.SwitchToCanvas(second);
+    StepFrame();
+    PressCtrlKey(ImGuiKey_V);
+    ASSERT_EQ(manager.CanvasHoldingItem(cut), std::optional<CanvasId>(second));
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(manager.CanvasHoldingItem(cut), std::optional<CanvasId>(first));
+    EXPECT_TRUE(App().Selection().empty()) << "nothing selected that is not here";
+    PressCtrlKey(ImGuiKey_Y);
+    EXPECT_EQ(manager.CanvasHoldingItem(cut), std::optional<CanvasId>(second));
+}
+
 // The clipboard holds ids, so a paste asks for the snippets as they are
 // now: one deleted in between is simply not pasted.
 TEST_F(HeadlessAppTest, ASnippetDeletedAfterBeingCopiedIsNotPasted) {

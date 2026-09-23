@@ -692,6 +692,170 @@ TEST(SessionTest, DeletingASnippetPermanentlyLeavesItsCanvasHistoryAlone) {
     EXPECT_TRUE(session.CanUndo());
 }
 
+// Where `id` stands in `canvasId`'s stack, or -1 if it is not on it.
+int StackIndex(const Session& session, CanvasId canvasId, ItemId id) {
+    const Canvas* canvas = session.Manager().FindCanvas(canvasId);
+    for (size_t i = 0; canvas != nullptr && i < canvas->items.size(); ++i) {
+        if (canvas->items[i].id == id) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+// A cut's paste, undone, puts the snippet back where it stood in the
+// stack it came from; redone, it comes back on top.
+TEST(SessionTest, ACutsPasteIsUndoneBackToWhereItStood) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Below");
+    const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Above");
+    const CanvasId second = session.Manager().AddCanvas("Second");
+    session.Manager().SwitchToCanvas(second);
+    session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Resident");
+
+    const std::optional<Session::Arrival> arrival = session.MoveItemHere(moved);
+    ASSERT_TRUE(arrival.has_value());
+    session.RecordArrivals({*arrival}, /*duplicate=*/false);
+    ASSERT_EQ(StackIndex(session, second, moved), 1);
+
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Paste);
+    EXPECT_FALSE(undone->refused);
+    EXPECT_EQ(StackIndex(session, second, moved), -1);
+    EXPECT_EQ(StackIndex(session, first, moved), 1) << "between the two it stood between";
+
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_EQ(StackIndex(session, first, moved), -1);
+    EXPECT_EQ(StackIndex(session, second, moved), 1) << "on top, as the paste put it";
+}
+
+// Sent back by an undo and edited where it landed, a snippet brought here
+// again by the redo takes none of that history with it: an undo there
+// would edit a snippet that is no longer on the canvas.
+TEST(SessionTest, ARedonePasteLeavesTheHistoryItGatheredMeanwhileBehind) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId stays = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Stays");
+    const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    DrawStrokeInto(session, stays);
+    const CanvasId second = session.Manager().AddCanvas("Second");
+    session.Manager().SwitchToCanvas(second);
+    session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+    ASSERT_TRUE(session.Undo().has_value());
+
+    session.Manager().SwitchToCanvas(first);
+    DrawStrokeInto(session, moved);
+    session.Manager().SwitchToCanvas(second);
+    ASSERT_TRUE(session.Redo().has_value());
+    ASSERT_EQ(StackIndex(session, second, moved), 0);
+
+    session.Manager().SwitchToCanvas(first);
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(ItemById(session.Manager(), stays)->strokes.empty()) << "the stroke on what stayed";
+    EXPECT_EQ(ItemById(session.Manager(), moved)->strokes.size(), 1u) << "not the one on what left";
+}
+
+// The canvas a cut came from, deleted - marked, or for good - before the
+// paste is undone: the snippet stays where it was pasted rather than go
+// somewhere nobody can see it, or nowhere at all, and the step says so
+// and is dropped, so that the next undo reaches the step before it.
+TEST(SessionTest, APasteWhoseSourceCanvasIsDeletedIsNotUndoneAndSaysSo) {
+    for (const bool forGood : {false, true}) {
+        SCOPED_TRACE(forGood ? "deleted for good" : "deleted");
+        Session session;
+        const CanvasId first = session.Manager().CurrentCanvasId();
+        const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+        const CanvasId second = session.Manager().AddCanvas("Second");
+        session.Manager().SwitchToCanvas(second);
+        const ItemId made = session.CreateItem(false, Rect{0, 0, 100, 100}, "Made");
+        session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+        ASSERT_TRUE(session.Delete(first));
+        if (forGood) {
+            ASSERT_EQ(session.DeletePermanently(first), Session::Removal::Removed);
+        }
+
+        const std::optional<Session::UndoStep> refused = session.Undo();
+        ASSERT_TRUE(refused.has_value());
+        EXPECT_TRUE(refused->refused);
+        EXPECT_EQ(refused->what, Session::UndoWhat::Paste);
+        EXPECT_EQ(StackIndex(session, second, moved), 1) << "still where it was pasted, on top";
+        EXPECT_FALSE(session.Manager().IsItemDeleted(moved));
+
+        const std::optional<Session::UndoStep> next = session.Undo();
+        ASSERT_TRUE(next.has_value());
+        EXPECT_EQ(next->what, Session::UndoWhat::Create);
+        EXPECT_TRUE(session.Manager().IsItemDeleted(made));
+    }
+}
+
+// Sent back by an undo, then deleted there: nothing to bring again, and
+// the redo says so rather than moving a deleted snippet here.
+TEST(SessionTest, ARedoOfAPasteWhoseSnippetWasDeletedSinceIsRefused) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    const CanvasId second = session.Manager().AddCanvas("Second");
+    session.Manager().SwitchToCanvas(second);
+    session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+    ASSERT_TRUE(session.Undo().has_value());
+    ASSERT_TRUE(session.Delete(moved));
+
+    const std::optional<Session::UndoStep> refused = session.Redo();
+    ASSERT_TRUE(refused.has_value());
+    EXPECT_TRUE(refused->refused);
+    EXPECT_EQ(StackIndex(session, first, moved), 0) << "left where it is";
+    EXPECT_FALSE(session.CanRedo()) << "and the step is gone";
+}
+
+// Copies, pasted or duplicated, are undone into their deletion mark - as
+// a new snippet is - and redone out of it; the source is not touched.
+TEST(SessionTest, CopiesArriveAndGoWithOneUndo) {
+    for (const bool duplicate : {false, true}) {
+        SCOPED_TRACE(duplicate ? "duplicate" : "paste");
+        Session session;
+        const ItemId source = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Source");
+        const ItemId copyA = session.Manager().DuplicateItem(source);
+        const ItemId copyB = session.Manager().DuplicateItem(source);
+        session.RecordArrivals({Session::Arrival{copyA}, Session::Arrival{copyB}}, duplicate);
+
+        const std::optional<Session::UndoStep> undone = session.Undo();
+        ASSERT_TRUE(undone.has_value());
+        EXPECT_EQ(undone->what, duplicate ? Session::UndoWhat::Duplicate : Session::UndoWhat::Paste);
+        EXPECT_TRUE(session.Manager().IsItemDeleted(copyA));
+        EXPECT_TRUE(session.Manager().IsItemDeleted(copyB));
+        EXPECT_FALSE(session.Manager().IsItemDeleted(source));
+
+        ASSERT_TRUE(session.Redo().has_value());
+        EXPECT_FALSE(session.Manager().IsItemDeleted(copyA));
+        EXPECT_FALSE(session.Manager().IsItemDeleted(copyB));
+    }
+}
+
+// A snippet of a paste moved on elsewhere since is taken out of the
+// paste's entry; the rest of the paste is still one undo.
+TEST(SessionTest, ForgettingOneSnippetLeavesTheRestOfAPaste) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId one = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "One");
+    const ItemId other = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Other");
+    const CanvasId second = session.Manager().AddCanvas("Second");
+    session.Manager().SwitchToCanvas(second);
+    session.RecordArrivals({*session.MoveItemHere(one), *session.MoveItemHere(other)}, /*duplicate=*/false);
+    const CanvasId third = session.Manager().AddCanvas("Third");
+    session.Manager().SwitchToCanvas(third);
+    ASSERT_TRUE(session.MoveItemHere(one).has_value());
+    session.Manager().SwitchToCanvas(second);
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(StackIndex(session, first, other), 0) << "went back";
+    EXPECT_EQ(StackIndex(session, third, one), 0) << "was not the paste's any more";
+}
+
 // With the screen frozen, a shot is cut out of the frozen picture rather
 // than captured again - the live screen has moved on, and the user framed
 // what they were looking at. The cut is a plain sub-rectangle, saved to

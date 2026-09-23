@@ -659,7 +659,8 @@ std::optional<CanvasId> CanvasManager::CanvasHoldingItem(ItemId id) const {
     return std::nullopt;
 }
 
-ItemId CanvasManager::PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool copy) {
+ItemId CanvasManager::PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool copy,
+                                        std::optional<size_t> atIndex) {
     const auto targetIt = std::find_if(canvases_.begin(), canvases_.end(),
                                         [targetCanvasId](const Canvas& c) { return c.id == targetCanvasId; });
     if (targetIt == canvases_.end() || IsDeleted(*targetIt)) {
@@ -695,7 +696,8 @@ ItemId CanvasManager::PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool
     if (source->id == targetCanvasId) {
         return id;  // already there: a move onto its own canvas moves nothing
     }
-    targetIt->items.push_back(std::move(source->items[at]));
+    const size_t to = std::min(atIndex.value_or(targetIt->items.size()), targetIt->items.size());
+    targetIt->items.insert(targetIt->items.begin() + static_cast<long>(to), std::move(source->items[at]));
     source->items.erase(source->items.begin() + static_cast<long>(at));
     MarkChanged();
     return id;

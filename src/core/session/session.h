@@ -162,10 +162,15 @@ public:
 
     // What a step of undo or redo took back or put back - for a UI to say
     // so. `undone` is true for an undo, false for a redo.
-    enum class UndoWhat { Stroke, Erase, Delete, TextEdit, Painting, Create, Placement };
+    enum class UndoWhat { Stroke, Erase, Delete, TextEdit, Painting, Create, Placement, Paste, Duplicate };
     struct UndoStep {
         UndoWhat what = UndoWhat::Stroke;
         bool undone = true;
+        // The step could not be taken, and was dropped so that the next
+        // one can be: a paste whose snippets were moved here and have
+        // nowhere to go back to, or no longer anything to come back from
+        // - see RecordArrivals. Nothing changed, and a UI says why.
+        bool refused = false;
     };
     // Takes back the current canvas's most recent edit, or puts back the
     // one most recently taken back. History is kept *per canvas* - see
@@ -236,6 +241,30 @@ public:
     // deleted, where a capture taken by mistake can still be found, and
     // redone it is restored. 0, having made nothing, without a canvas.
     ItemId CreateItem(bool hasBackground, Rect rect, std::string name);
+    // What a paste or a duplicate brought onto the current canvas, one
+    // snippet each: moved here by a cut's paste from `fromCanvas`, where it
+    // stood at `fromIndex` in the stack - or, with fromCanvas 0, a copy
+    // made here.
+    struct Arrival {
+        ItemId itemId = 0;
+        CanvasId fromCanvas = 0;
+        size_t fromIndex = 0;
+    };
+    // A cut's paste of one snippet: moves `itemId` from the canvas holding
+    // it onto the current one, on top, and leaves its history behind (see
+    // ForgetHistoryOfItem). Nullopt, moving nothing, for no such snippet,
+    // one deleted, or one already here.
+    std::optional<Arrival> MoveItemHere(ItemId itemId);
+    // Files everything one paste or duplicate brought as one entry. Undone,
+    // the copies are marked deleted, as a new snippet undone is, and what
+    // was moved goes back to where it stood on the canvas it came from.
+    // When that canvas is gone or deleted, nothing moves: undone, the
+    // snippets would land somewhere nobody can see them, and with a canvas
+    // deleted for good nowhere at all - so they stay, and the step is
+    // refused (see UndoStep::refused). Redone, the copies are restored and
+    // what was moved comes back on top, or is refused the same way if it
+    // has been deleted since. Nothing is filed for no arrivals.
+    void RecordArrivals(std::vector<Arrival> arrivals, bool duplicate);
     // Removes a snippet nothing has been put into - no strokes, no painted
     // pixels, no text, no picture of its own - as if it had never been
     // made: erased rather than marked, and off the history. For a snippet a
@@ -472,6 +501,12 @@ private:
             // each snippet's placement with the one held here, so the
             // entry then holds the one to go back to.
             PlacementChanged,
+            // canvasId + arrivals: a paste or a duplicate brought these
+            // snippets onto canvasId (see RecordArrivals); `duplicate` only
+            // says which, for the UI. Not a swap: undo sends each back -
+            // a copy into its deletion mark, a moved one to its old canvas
+            // and place in the stack - and redo brings it again.
+            ItemsArrived,
         };
         // One original an erase gesture touched: where it was, what it
         // was, and what stands in its place - see Kind::Erased.
@@ -492,6 +527,8 @@ private:
         std::vector<PaintedTile> paintedTiles;        // Erased (a brush erase) / PaintedTilesChanged
         std::shared_ptr<PaintedImage> paintedBefore;  // Erased only, for a whole-layer clear
         std::vector<Placement> placements;            // PlacementChanged only
+        std::vector<Arrival> arrivals;                // ItemsArrived only
+        bool duplicate = false;                       // ItemsArrived only
     };
     // The painted half of an edit, before it becomes an entry: the tiles a
     // brush gesture touched, or the whole image a clear replaced.
@@ -525,6 +562,10 @@ private:
     // strokes are not the list the entry describes.
     static bool RestoreStrokesBeforeErase(Item& item, const UndoEntry& entry);
     static bool ReapplyErase(Item& item, const UndoEntry& entry);
+    // Whether every snippet an ItemsArrived entry moved can go the way
+    // `undo` says: back to a canvas that is still there and not deleted,
+    // or here again from one, itself not deleted. A copy always can.
+    bool ArrivalsCanMove(const UndoEntry& entry, bool undo) const;
     // The painted half of an entry, applied in either direction: puts back
     // the tiles (or the whole image) the entry holds and keeps what they
     // replaced, so the entry is its own inverse afterwards.
