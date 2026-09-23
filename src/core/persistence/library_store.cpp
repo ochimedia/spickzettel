@@ -1991,4 +1991,9 @@ std::optional<DecodedImage> LibraryStore::LoadImage(uint64_t itemId, const std::
     return DecodeQoiFromFile(FindImage(itemId, filename));
 }
 
+bool LibraryStore::HasImage(uint64_t itemId, const std::string& filename) const {
+    std::error_code ec;
+    return !filename.empty() && std::filesystem::exists(FindImage(itemId, filename), ec);
+}
+
 }  // namespace sz::core::persistence

@@ -347,6 +347,14 @@ while still mapping coordinates 1:1 cropped everything past the cap and
 stretched the rest, putting a stroke a quarter of the way across the
 item from the pen.
 
+A painted layer without pixels gets fresh, blank ones when a brush
+first touches it - but only if it has no file, or its file is gone. A
+file that is there and could not be read when the canvas came back
+(another program holding it) is read again as the brush starts, and
+while it still cannot be, the brush paints nothing. Taking the failed
+load for an empty layer painted on blank pixels, and the next save wrote
+them over the drawing in the file.
+
 ## Canvases, items and folders
 
 `Item` is a snippet: freehand strokes over a stack of layers, at a

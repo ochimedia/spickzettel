@@ -169,6 +169,75 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
     std::filesystem::remove_all(dir);
 }
 
+// A painted layer whose file was there but could not be read when its
+// canvas came back - held by another program, say; here, unreadable for a
+// while. Painting must not start the layer over from blank, which the next
+// save would write over the drawing; it waits until the file reads again,
+// and then paints onto what is in it.
+TEST(SessionTest, PaintingNeverStartsOverALayerWhoseFileCouldNotBeRead) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_paint_unreadable";
+    std::filesystem::remove_all(dir);
+    persistence::LibraryStore store(dir);
+    test::FakeOverlayWindow window;
+    window.createTextureFromPixelsReturnsHandle = 9;
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+    const CanvasId home = session.Manager().CurrentCanvasId();
+    const ItemId drawing = session.Manager().CreateItem(false, Rect{0.0f, 0.0f, 32.0f, 32.0f}, "Drawing");
+    session.BeginPaint(drawing, 4.0f, 4.0f, 0xFF0000FFu, 4.0f);
+    session.ExtendPaint(12.0f, 4.0f);
+    session.EndPaint();
+    ASSERT_TRUE(session.Flush());
+    const auto paintedLayer = [&]() -> Layer& {
+        return *Session::FindPaintedLayer(*session.Manager().FindItemAnywhere(drawing));
+    };
+    const std::vector<uint8_t> first = paintedLayer().painted->PixelsRGBA();
+    std::filesystem::path file;
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
+        file = entry.path().filename() == paintedLayer().imageFile ? entry.path() : file;
+    }
+    ASSERT_FALSE(file.empty());
+
+    // Away, so its pixels are let go of; the file unreadable; and back.
+    session.Manager().SwitchToCanvas(session.Manager().AddCanvas("Elsewhere"));
+    session.EnsureTexturesForCurrentCanvas();
+    ASSERT_EQ(paintedLayer().painted, nullptr);
+    const std::string saved = [&] {
+        std::ifstream in(file, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(in), {});
+    }();
+    std::ofstream(file, std::ios::binary | std::ios::trunc) << "not a picture";
+    session.Manager().SwitchToCanvas(home);
+    session.EnsureTexturesForCurrentCanvas();
+    ASSERT_EQ(paintedLayer().painted, nullptr) << "could not be read";
+
+    session.BeginPaint(drawing, 4.0f, 20.0f, 0xFF0000FFu, 4.0f);
+    session.EndPaint();
+    EXPECT_EQ(paintedLayer().painted, nullptr) << "painted into blank pixels in its place";
+    ASSERT_TRUE(session.Flush());
+
+    // Readable again: painting goes onto the drawing that is there.
+    std::ofstream(file, std::ios::binary | std::ios::trunc) << saved;
+    session.BeginPaint(drawing, 4.0f, 20.0f, 0xFF0000FFu, 4.0f);
+    session.EndPaint();
+    ASSERT_NE(paintedLayer().painted, nullptr);
+    ASSERT_TRUE(session.Flush());
+    const std::optional<persistence::DecodedImage> onDisk = store.LoadImage(drawing, paintedLayer().imageFile);
+    ASSERT_TRUE(onDisk.has_value());
+    ASSERT_EQ(onDisk->pixelsRGBA.size(), first.size());
+    for (size_t i = 3; i < first.size(); i += 4) {
+        if (first[i] != 0) {
+            ASSERT_NE(onDisk->pixelsRGBA[i], 0) << "the first stroke was painted over with blank";
+        }
+    }
+    EXPECT_NE(onDisk->pixelsRGBA, first) << "and the second stroke is there too";
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+
 // The retention period: what has been deleted since before the cutoff goes
 // for good, whatever else is deleted stays, and nothing live is touched.
 TEST(SessionTest, ErasingWhatWasDeletedBeforeACutoffLeavesTheRest) {

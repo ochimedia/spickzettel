@@ -269,6 +269,9 @@ public:
     // empty filename or if the file is missing/undecodable. The snippet is
     // what says where to look - see FindImage.
     std::optional<DecodedImage> LoadImage(uint64_t itemId, const std::string& filename) const;
+    // Whether that picture is there at all - what tells a picture that
+    // could not be read (held open, say) from one that does not exist.
+    bool HasImage(uint64_t itemId, const std::string& filename) const;
 
     // The longest edge a thumbnail is written at. A canvas tile in the
     // Overview is 200x130 and an item inside one is smaller still, so this

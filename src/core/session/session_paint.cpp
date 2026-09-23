@@ -76,6 +76,21 @@ Layer* Session::EnsurePaintedLayer(Item& item) {
         // for good. Without a texture: a
         // copy whose pixels came with it but whose texture didn't - give it
         // one here rather than painting into something invisible.
+        //
+        // A file that is there and could not be read is neither: the
+        // texture sync failed to load it - another program holding it, say
+        // - and fresh pixels here would be painted on and saved over the
+        // drawing in it. It is read again now, and while it still cannot
+        // be, there is nothing to paint into.
+        if (!existing->HasPaintedPixels() && !existing->imageFile.empty() && Store()) {
+            if (const std::optional<persistence::DecodedImage> decoded =
+                    Store()->LoadImage(item.id, existing->imageFile)) {
+                existing->painted = std::make_shared<PaintedImage>(
+                    PaintedImage::FromPixels(decoded->width, decoded->height, decoded->pixelsRGBA));
+            } else if (Store()->HasImage(item.id, existing->imageFile)) {
+                return nullptr;
+            }
+        }
         if (!existing->HasPaintedPixels()) {
             // Its own scale where that still fits the cap - see the fresh
             // layer below for why the scale is what gets capped.
