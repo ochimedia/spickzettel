@@ -141,8 +141,11 @@ void Session::UploadPaintedRegion(Layer& layer, const PixelRect& region) {
     // The one place every path that changes painted pixels passes through,
     // which is why the dirty flag is set here rather than at each of them.
     // Missing one would mean losing those pixels the next time their canvas
-    // stops being current.
+    // stops being current. The revision is the same fact for the autosave,
+    // which cannot wait for the gesture's end to hear of it - see
+    // LibraryInstance::paintRevision.
     layer.paintedDirty = true;
+    ++library_.paintRevision;
     if (!window_ || layer.textureHandle == 0) {
         return;
     }

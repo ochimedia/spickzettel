@@ -2792,6 +2792,78 @@ TEST_F(HeadlessSaveTest, AFailedSaveIsRetriedOnItsOwnClockNotEveryFrame) {
 
 // A save that fails is said on screen for as long as it stays failed -
 // what is drawn looks saved whether or not it is.
+// Escape with the button still held, halfway through a stroke of painted
+// pixels on a layer whose earlier strokes are saved: the stroke is ended
+// there as a release would end it - one undo step, and a change the next
+// save writes. Dropped instead, the pixels stayed on screen with nothing
+// recorded, so a flush wrote nothing and they were gone at the next start.
+TEST_F(HeadlessSaveTest, LeavingDrawingModeMidPaintStrokeKeepsAndSavesTheStroke) {
+    AppConfig config = DefaultConfig();
+    config.paintPixelsInsteadOfStrokes = true;
+    StartWith(config);
+    host_.overlayWindow.createTextureFromPixelsReturnsHandle = 7;
+    AttachStore();
+    PlaceADrawing();
+    Session& session = controller_->GetSession();
+    const ItemId drawing = Canvases().CurrentOrNull()->items[0].id;
+    const auto paintedPixels = [&]() -> std::vector<uint8_t> {
+        for (const Layer& layer : session.Manager().FindItemAnywhere(drawing)->layers) {
+            if (layer.kind == LayerKind::Painted && layer.painted) {
+                return layer.painted->PixelsRGBA();
+            }
+        }
+        return {};
+    };
+
+    // A first stroke, whole, and saved.
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(300.0f, 300.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(400.0f, 300.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(400.0f, 300.0f, platform::MouseEventKind::Up);
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrame();
+    ASSERT_TRUE(session.Flush());
+    ASSERT_FALSE(session.HasUnsavedChanges());
+    const std::vector<uint8_t> afterFirst = paintedPixels();
+    ASSERT_FALSE(afterFirst.empty());
+
+    // A second, left mid-way.
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(300.0f, 500.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(500.0f, 500.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    EXPECT_TRUE(session.HasUnsavedChanges()) << "painted pixels are unsaved work before the stroke ends";
+    PressKey(ImGuiKey_Escape);
+    ASSERT_FALSE(App().DrawingItem().has_value());
+    RawMouse(500.0f, 500.0f, platform::MouseEventKind::Up);
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrames(2);
+    const std::vector<uint8_t> afterSecond = paintedPixels();
+    ASSERT_NE(afterSecond, afterFirst);
+
+    EXPECT_TRUE(session.HasUnsavedChanges());
+    ASSERT_TRUE(session.Flush());
+    persistence::LibraryStore reopened(root_);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    std::string file;
+    for (const Item& item : loaded->canvases[0].items) {
+        for (const Layer& layer : item.layers) {
+            file = item.id == drawing && layer.kind == LayerKind::Painted ? layer.imageFile : file;
+        }
+    }
+    const std::optional<persistence::DecodedImage> onDisk = reopened.LoadImage(drawing, file);
+    ASSERT_TRUE(onDisk.has_value());
+    EXPECT_EQ(onDisk->pixelsRGBA, afterSecond) << "the second stroke is on disk";
+
+    // And it is one undo step of its own, taken back whole.
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(paintedPixels(), afterFirst);
+}
+
 TEST_F(HeadlessSaveTest, AFailedSaveIsSaidOnScreenUntilItLands) {
     PlaceADrawing();
     std::filesystem::create_directories(root_ / "library.json");

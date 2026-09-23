@@ -1079,6 +1079,19 @@ dirty. Waiting for the debounced save was not good enough: switching
 canvas bumps the generation, which pushes the save *further away* at the
 exact moment the pixels are thrown out.
 
+Painted pixels also count as a change on their own. The generation only
+follows a brush stroke when it ends (`EndPaintStroke`), and a stroke
+whose end never came - drawing mode left with Escape or the view-only
+hotkey while the button was held - left its pixels on screen and dirty
+with the generation unchanged: nothing looked unsaved, a flush wrote
+nothing, and the stroke was gone at the next start. Every pixel change
+now bumps a paint revision beside the generation, which `HasUnsavedChanges`
+and the autosave's quiet period both read, so pixels on screen are saved
+whether or not their gesture ever ends - and a stroke in progress holds
+the quiet period off the way a drag does. Leaving drawing mode also ends
+a stroke in flight as a release would, so it is its own undo step rather
+than one the next stroke files late.
+
 **One writer per library.** Two copies of the app would each save the
 library from a stale picture of it, through the same temp-file names.
 The tray claims a per-user named mutex before it does anything else,

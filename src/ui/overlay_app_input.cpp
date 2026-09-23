@@ -282,8 +282,20 @@ void OverlayApp::ExitDrawingMode() {
     if (!drawingItem_.has_value()) {
         return;
     }
-    // Nothing of a stroke survives the mode: a press elsewhere is what
-    // leaves it, and no stroke is in flight then.
+    // A press elsewhere is the usual way out, with no stroke in flight -
+    // but Escape and the view-only hotkey can come with the button still
+    // held. Such a stroke ends here as a release where the pointer is would
+    // end it, the way a canvas switch settles one (see SettleHand): kept,
+    // and filed as its undo step. Dropping the gesture instead left painted
+    // pixels on screen with no change recorded, so nothing saved them, and
+    // left the brush session open for the next stroke to file late. Handed
+    // to the stroke alone rather than through OnMouse: this can run inside
+    // the handling of a press, which a synthesized release would end.
+    if (strokeGesture_ != StrokeGesture::None && ImGui::GetCurrentContext() != nullptr) {
+        const ImVec2 mouse = ImGui::GetMousePos();
+        HandleStrokeEvent(platform::MouseEvent{platform::Vec2{mouse.x, mouse.y}, platform::MouseButton::Left,
+                                               platform::MouseEventKind::Up});
+    }
     if (Canvas* canvas = Manager().CurrentOrNull()) {
         canvas->liveLayer.Clear();
     }

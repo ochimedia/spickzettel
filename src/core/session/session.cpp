@@ -183,7 +183,8 @@ bool Session::WriteRecoveryCopy(const std::filesystem::path& dir) {
 }
 
 bool Session::HasUnsavedChanges() const {
-    return library_.manager.Generation() != library_.lastSavedGeneration || !pendingPictures_.empty() ||
+    return library_.manager.Generation() != library_.lastSavedGeneration ||
+           library_.paintRevision != library_.lastSavedPaintRevision || !pendingPictures_.empty() ||
            (library_.store && library_.store->HasPendingRemovals());
 }
 
@@ -257,8 +258,9 @@ void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {
     }
 
     const uint64_t generation = instance.manager.Generation();
-    if (generation != instance.lastObservedGeneration) {
+    if (generation != instance.lastObservedGeneration || instance.paintRevision != instance.lastObservedPaintRevision) {
         instance.lastObservedGeneration = generation;
+        instance.lastObservedPaintRevision = instance.paintRevision;
         instance.secondsSinceLastChange = 0.0f;
     } else {
         instance.secondsSinceLastChange += deltaSeconds;
@@ -283,8 +285,9 @@ void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {
     // Nothing owed but a removal - the records are saved and no picture
     // is waiting - is on its own clock (see kRemovalRetrySeconds), unless a
     // failed save's retry is what brought us here, which goes ahead.
-    const bool onlyARemovalOwed =
-        generation == instance.lastSavedGeneration && pendingPictures_.empty() && instance.saveRetryBackoffSeconds <= 0.0f;
+    const bool onlyARemovalOwed = generation == instance.lastSavedGeneration &&
+                                  instance.paintRevision == instance.lastSavedPaintRevision &&
+                                  pendingPictures_.empty() && instance.saveRetryBackoffSeconds <= 0.0f;
     if (onlyARemovalOwed) {
         instance.removalRetryCountdownSeconds -= deltaSeconds;
         if (instance.removalRetryCountdownSeconds > 0.0f) {
@@ -313,12 +316,14 @@ bool Session::SaveLibraryNow(LibraryInstance& instance) {
     // picture wasn't - what did land is worth having, and the whole thing
     // is retried until all of it has.
     const uint64_t generation = instance.manager.Generation();
+    const uint64_t paintRevision = instance.paintRevision;
     const bool pixelsSaved = SavePaintedLayers(instance);
     const bool picturesSaved = SavePendingPictures(instance);
     const bool metadataSaved = instance.store->Save(instance.manager.View());
     const bool saved = pixelsSaved && picturesSaved && metadataSaved;
     if (saved) {
         instance.lastSavedGeneration = generation;
+        instance.lastSavedPaintRevision = paintRevision;
         instance.saveRetryBackoffSeconds = 0.0f;
         if (instance.store->HasPendingRemovals()) {
             instance.removalRetryCountdownSeconds = kRemovalRetrySeconds;

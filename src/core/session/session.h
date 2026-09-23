@@ -106,11 +106,13 @@ public:
     // Whether anything is owed to the disk: a change since the last save
     // that landed, a capture whose picture could not be written yet (see
     // CaptureShotItem), or a permanent delete whose directory could not
-    // be wholly removed yet (see DeletePermanently). What the autosave and
-    // Flush act on, and what a UI can show. The last of the three keeps
-    // this true across a Flush that returned true: the intent is on disk
-    // and the save counted, but the autosave's clock keeps asking until
-    // the directory is gone, rather than waiting for an unrelated edit.
+    // be wholly removed yet (see DeletePermanently) - and painted pixels
+    // changed since the last save, whether or not the gesture that changed
+    // them has ended. What the autosave and Flush act on, and what a UI
+    // can show. The removal keeps this true across a Flush that returned
+    // true: the intent is on disk and the save counted, but the autosave's
+    // clock keeps asking until the directory is gone, rather than waiting
+    // for an unrelated edit.
     bool HasUnsavedChanges() const;
     // Whether the most recent save attempt failed and is waiting to be
     // retried - for a UI to say so. Cleared by the save that lands.
@@ -348,6 +350,15 @@ private:
         // LibraryStore::HasPendingRemovals) is tried again on this clock,
         // not every frame - see UpdateAutosave.
         float removalRetryCountdownSeconds = 0.0f;
+        // Bumped by every change to painted pixels (see
+        // UploadPaintedRegion), which the generation only follows once the
+        // brush gesture ends. Counted as a change of its own, so that
+        // pixels on screen are saved even if that end never comes - and
+        // a stroke still in progress keeps the quiet period from running
+        // out under it, as a moving drag does through the generation.
+        uint64_t paintRevision = 0;
+        uint64_t lastObservedPaintRevision = 0;
+        uint64_t lastSavedPaintRevision = 0;
     };
 
     // Writes every painted layer's pixels out as QOI and records the
