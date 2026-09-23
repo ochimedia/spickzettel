@@ -90,7 +90,7 @@ std::optional<size_t> FindMatchingProfile(const std::vector<Profile>& profiles,
 
 size_t ProfileOverrides::OverriddenCount(ProfileGroup group) const {
     size_t count = 0;
-    if (group == ProfileGroup::Input) {
+    if (group == ProfileGroup::Behavior) {
         for (const ProfileableField& field : kProfileableFields) {
             count += (this->*field.override).has_value() ? 1 : 0;
         }

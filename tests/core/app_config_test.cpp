@@ -54,12 +54,12 @@ TEST(AppConfigTest, DefaultHotkeysAreAllDistinct) {
 TEST(AppConfigTest, EditModeNoActivateDefaultsToOn) { EXPECT_TRUE(DefaultConfig().editModeNoActivate); }
 
 TEST(AppConfigTest, ParsesEditModeNoActivate) {
-    EXPECT_TRUE(ParseConfig(One("input", "dontStealFocus", "true")).editModeNoActivate);
-    EXPECT_FALSE(ParseConfig(One("input", "dontStealFocus", "false")).editModeNoActivate);
+    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", "true")).editModeNoActivate);
+    EXPECT_FALSE(ParseConfig(One("behavior", "dontStealFocus", "false")).editModeNoActivate);
     // A value of the wrong type is a value the file failed to state, so the
     // default stands.
-    EXPECT_TRUE(ParseConfig(One("input", "dontStealFocus", R"("yes")")).editModeNoActivate);
-    EXPECT_TRUE(ParseConfig(One("input", "dontStealFocus", "1")).editModeNoActivate);
+    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", R"("yes")")).editModeNoActivate);
+    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", "1")).editModeNoActivate);
 }
 
 // On by default, because over an elevated application every other input
@@ -71,9 +71,9 @@ TEST(AppConfigTest, TakeFocusOverElevatedDefaultsToOn) {
 }
 
 TEST(AppConfigTest, ParsesTakeFocusOverElevated) {
-    EXPECT_TRUE(ParseConfig(One("input", "takeFocusOverElevated", "true")).takeFocusOverElevated);
-    EXPECT_FALSE(ParseConfig(One("input", "takeFocusOverElevated", "false")).takeFocusOverElevated);
-    EXPECT_TRUE(ParseConfig(One("input", "takeFocusOverElevated", R"("no")")).takeFocusOverElevated);
+    EXPECT_TRUE(ParseConfig(One("behavior", "takeFocusOverElevated", "true")).takeFocusOverElevated);
+    EXPECT_FALSE(ParseConfig(One("behavior", "takeFocusOverElevated", "false")).takeFocusOverElevated);
+    EXPECT_TRUE(ParseConfig(One("behavior", "takeFocusOverElevated", R"("no")")).takeFocusOverElevated);
 }
 
 TEST(AppConfigTest, EveryEditModeInputOptionDefaultsToOn) {
@@ -153,17 +153,17 @@ TEST(AppConfigTest, LosingFocusDisablesTheWholePointerChain) {
 }
 
 TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
-    EXPECT_FALSE(ParseConfig(One("input", "softwarePointer", "false")).editModeInput.useSoftwarePointer);
-    EXPECT_FALSE(ParseConfig(One("input", "rawMouseInput", "false")).editModeInput.useRawMouseInput);
+    EXPECT_FALSE(ParseConfig(One("behavior", "softwarePointer", "false")).editModeInput.useSoftwarePointer);
+    EXPECT_FALSE(ParseConfig(One("behavior", "rawMouseInput", "false")).editModeInput.useRawMouseInput);
     EXPECT_FALSE(
-        ParseConfig(One("input", "dontForwardKeystrokes", "false")).editModeInput.dontForwardKeystrokes);
+        ParseConfig(One("behavior", "dontForwardKeystrokes", "false")).editModeInput.dontForwardKeystrokes);
     EXPECT_FALSE(
-        ParseConfig(One("input", "counterRawMouseInput", "false")).editModeInput.counterRawMouseInput);
+        ParseConfig(One("behavior", "counterRawMouseInput", "false")).editModeInput.counterRawMouseInput);
 
     // Disabling one leaves the others alone - they're separate experiments,
     // not one setting with four names.
     const platform::EditModeInputOptions onlyMouse =
-        ParseConfig(One("input", "rawMouseInput", "false")).editModeInput;
+        ParseConfig(One("behavior", "rawMouseInput", "false")).editModeInput;
     EXPECT_FALSE(onlyMouse.useRawMouseInput);
     EXPECT_TRUE(onlyMouse.useSoftwarePointer);
     EXPECT_TRUE(onlyMouse.dontForwardKeystrokes);
@@ -199,7 +199,7 @@ TEST(AppConfigTest, ParseGarbageYieldsDefaults) {
 TEST(AppConfigTest, AGroupOfTheWrongTypeReadsAsAbsent) {
     // Not a crash and not a partial read: a `input: 5` is a file that said
     // nothing about any input setting.
-    EXPECT_EQ(ParseConfig(R"({"input": 5})"), DefaultConfig());
+    EXPECT_EQ(ParseConfig(R"({"behavior": 5})"), DefaultConfig());
     EXPECT_EQ(ParseConfig(R"({"appearance": "wide"})"), DefaultConfig());
 }
 
@@ -609,8 +609,8 @@ TEST(AppConfigTest, FreezeScreenInEditModeDefaultsToOn) {
 }
 
 TEST(AppConfigTest, ParsesAndSerializesFreezeScreenInEditMode) {
-    EXPECT_TRUE(ParseConfig(One("input", "freezeScreen", "true")).freezeScreenInEditMode);
-    EXPECT_FALSE(ParseConfig(One("input", "freezeScreen", "false")).freezeScreenInEditMode);
+    EXPECT_TRUE(ParseConfig(One("behavior", "freezeScreen", "true")).freezeScreenInEditMode);
+    EXPECT_FALSE(ParseConfig(One("behavior", "freezeScreen", "false")).freezeScreenInEditMode);
 
     AppConfig config = DefaultConfig();
     config.freezeScreenInEditMode = false;

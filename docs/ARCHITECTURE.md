@@ -914,9 +914,9 @@ in the binary for the library.
 Three things about the file are deliberate:
 
 - **Groups, not a flat namespace** (`hotkeys`, `drawing`, `appearance`,
-  `bars`, `overview`, `display`, `input`, `shortcuts`, `diagnostics`).
+  `bars`, `overview`, `display`, `behavior`, `shortcuts`, `diagnostics`).
   `AppConfig`'s fields stay flat and the mapping lives in the
-  serializer. The grouping is not cosmetic: `input` and `shortcuts` are
+  serializer. The grouping is not cosmetic: `behavior` and `shortcuts` are
   exactly the settings a per-application profile may override, so a
   profile is those two objects again, sparse.
 - **Absent means inherit, `null` means explicitly unset.** "Said
@@ -1008,7 +1008,7 @@ and only the second should survive a later change to the defaults. So
 overrides are written directly, and the UI makes the state visible and
 reversible with a marker and a revert arrow per row.
 
-What is overridable is exactly the `input` and `shortcuts` groups: the
+What is overridable is exactly the `behavior` and `shortcuts` groups: the
 settings about the machine in front of you rather than about you.
 Colours and the rest are deliberately not.
 

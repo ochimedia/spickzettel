@@ -26,9 +26,9 @@ enum class CreationTrigger { Plain, Ctrl, Alt, Off };
 // resolution happen outside this type.
 //
 // The fields here are flat; the file groups them (`hotkeys`, `drawing`,
-// `appearance`, `bars`, `overview`, `deleted`, `input`, `shortcuts`,
+// `appearance`, `bars`, `overview`, `deleted`, `behavior`, `shortcuts`,
 // `diagnostics`) and the mapping lives in one place, the serializer. The
-// grouping is not cosmetic: `input` and `shortcuts` are exactly the settings a
+// grouping is not cosmetic: `behavior` and `shortcuts` are exactly the settings a
 // per-application profile may override - the ones that are about the
 // machine in front of you rather than about you - so a profile is the same
 // two objects again, sparse.
@@ -86,7 +86,7 @@ struct AppConfig {
     // That is also why they're allowed to be bare letters - "P" costs
     // nothing outside edit mode.
     ShortcutBindings toolShortcuts = DefaultShortcuts();
-    // Per-application overrides for the two groups above (`input` and
+    // Per-application overrides for the two groups above (`behavior` and
     // `toolShortcuts`) - see Profile. In list order, first match wins, and
     // an empty list is the ordinary case: the settings here are then simply
     // what runs, everywhere.

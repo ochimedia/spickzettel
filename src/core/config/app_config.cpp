@@ -394,7 +394,7 @@ void ReadShortcuts(const json& j, ShortcutBindings& out) {
     }
 }
 
-// The `input` group's key names, in one place: the base config writes all
+// The `behavior` group's key names, in one place: the base config writes all
 // of them, a profile writes whichever it overrides, and both have to agree
 // on what they are called.
 struct InputKeys {
@@ -603,7 +603,7 @@ AppConfig ParseConfig(std::string_view text) {
     ReadString(display, "id", config.overlayDisplayId);
     ReadString(display, "name", config.overlayDisplayName);
 
-    const json& input = Group(doc, "input");
+    const json& input = Group(doc, "behavior");
     ReadBool(input, InputKeys::kDontStealFocus, config.editModeNoActivate);
     ReadBool(input, InputKeys::kTakeFocusOverElevated, config.takeFocusOverElevated);
     ReadBool(input, InputKeys::kSoftwarePointer, config.editModeInput.useSoftwarePointer);
@@ -639,7 +639,7 @@ AppConfig ParseConfig(std::string_view text) {
             profile.match.executables = ReadStringList(match, "exe");
             profile.match.titleContains = ReadStringList(match, "titleContains");
 
-            const json& profileInput = Group(entry, "input");
+            const json& profileInput = Group(entry, "behavior");
             ReadOptionalBool(profileInput, InputKeys::kDontStealFocus, profile.overrides.dontStealFocus);
             ReadOptionalBool(profileInput, InputKeys::kTakeFocusOverElevated,
                               profile.overrides.takeFocusOverElevated);
@@ -741,7 +741,7 @@ std::string SerializeConfig(const AppConfig& config) {
     // The group a per-application profile overrides - see AppConfig's own
     // doc comment on which settings are about the machine in front of you
     // rather than about you.
-    doc["input"] = json{
+    doc["behavior"] = json{
         {InputKeys::kDontStealFocus, config.editModeNoActivate},
         {InputKeys::kTakeFocusOverElevated, config.takeFocusOverElevated},
         {InputKeys::kSoftwarePointer, config.editModeInput.useSoftwarePointer},
@@ -783,7 +783,7 @@ std::string SerializeConfig(const AppConfig& config) {
         WriteOptionalBool(input, InputKeys::kCounterRawMouseInput, profile.overrides.counterRawMouseInput);
         WriteOptionalBool(input, InputKeys::kFreezeScreen, profile.overrides.freezeScreen);
         if (!input.empty()) {
-            entry["input"] = std::move(input);
+            entry["behavior"] = std::move(input);
         }
 
         json shortcuts = json::object();

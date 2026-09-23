@@ -1723,7 +1723,7 @@ void OverlayApp::RenderSettingsBehavior([[maybe_unused]] bool& anyChanged) {
         SettingsGroupBreak();
     }
 
-    RenderEditTargetPicker(ProfileGroup::Input);
+    RenderEditTargetPicker(ProfileGroup::Behavior);
 
     SettingsHeading("inputeditmodeheading", strings::kInputEditModeHeading,
                      strings::kInputEditModeHelp);
@@ -1948,10 +1948,10 @@ void OverlayApp::RenderEditTargetPicker(ProfileGroup group) {
     // much of it this target
     // states for itself. The rest - what a profile leaves to the defaults,
     // and what the marks below mean - is behind the "?" next to the picker.
-    const char* noun = group == ProfileGroup::Input ? "setting" : "shortcut";
+    const char* noun = group == ProfileGroup::Behavior ? "setting" : "shortcut";
     ImGui::SameLine();
     HelpMarker("profilesshowing", strings::kProfilesShowing,
-                group == ProfileGroup::Input
+                group == ProfileGroup::Behavior
                     ? strings::kProfilesShowingSettingsHelp
                     : strings::kProfilesShowingShortcutsHelp);
 
@@ -2077,7 +2077,7 @@ std::string ProfileSummary(const Profile& profile) {
             summary += strings::kProfilesSummaryAnd + std::to_string(rules - 1);
         }
     }
-    const size_t inputCount = profile.overrides.OverriddenCount(ProfileGroup::Input);
+    const size_t inputCount = profile.overrides.OverriddenCount(ProfileGroup::Behavior);
     const size_t shortcutCount = profile.overrides.OverriddenCount(ProfileGroup::Shortcuts);
     // Two numbers rather than one: Input and Shortcuts are two different
     // places to go and change them.

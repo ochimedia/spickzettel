@@ -143,16 +143,16 @@ TEST(ProfileTest, AnOverrideThatMatchesTheDefaultStillPins) {
 // the Behavior section, where nothing would be marked.
 TEST(ProfileTest, OverriddenCountIsPerGroup) {
     Profile profile = GameProfile("Game", "game.exe");
-    EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Input), 0u);
+    EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Behavior), 0u);
     EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Shortcuts), 0u);
 
     profile.overrides.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)] = platform::KeyCombo{};
-    EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Input), 0u);
+    EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Behavior), 0u);
     EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Shortcuts), 1u);
 
     profile.overrides.freezeScreen = false;
     profile.overrides.dontStealFocus = true;
-    EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Input), 2u);
+    EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Behavior), 2u);
     EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Shortcuts), 1u);
     EXPECT_FALSE(profile.overrides.Empty());
 }
@@ -215,7 +215,7 @@ TEST(ProfileTest, AProfileThatOverridesNothingWritesNoGroupsAndComesBackEmpty) {
     ASSERT_TRUE(config.profiles[0].overrides.Empty());
 
     const std::string text = SerializeConfig(config);
-    EXPECT_EQ(text.find("\"input\": {}"), std::string::npos);
+    EXPECT_EQ(text.find("\"behavior\": {}"), std::string::npos);
 
     const AppConfig reparsed = ParseConfig(text);
     ASSERT_EQ(reparsed.profiles.size(), 1u);

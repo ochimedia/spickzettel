@@ -21,7 +21,7 @@ namespace sz::core {
 
 // The two halves of what a profile can override, which are also the two
 // Settings sections they are edited in.
-enum class ProfileGroup { Input, Shortcuts };
+enum class ProfileGroup { Behavior, Shortcuts };
 
 struct ProfileMatch {
     // Lowercased executable names, matched exactly. Several because one
@@ -42,7 +42,7 @@ struct ProfileMatch {
     bool operator==(const ProfileMatch&) const = default;
 };
 
-// Exactly the settings a profile may override: the config file's `input`
+// Exactly the settings a profile may override: the config file's `behavior`
 // and `shortcuts` groups, the ones that are about the machine in front of
 // you rather than about you. Colours and the rest are deliberately absent
 // - making them per-application would be a settings maze for no gain.
