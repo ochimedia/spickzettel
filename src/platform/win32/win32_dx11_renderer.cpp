@@ -67,6 +67,7 @@ bool Win32Dx11Renderer::Initialize(HWND hwnd) {
 }
 
 void Win32Dx11Renderer::Shutdown() {
+    ReleaseDeferredTextures();
     if (imguiInitialized_) {
         ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
@@ -166,6 +167,7 @@ void Win32Dx11Renderer::NewFrame() {
     constexpr float kMaxFrameDelta = 0.1f;
     ImGui::GetIO().DeltaTime = std::min(ImGui::GetIO().DeltaTime, kMaxFrameDelta);
     ImGui::NewFrame();
+    inFrame_ = true;
 }
 
 ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t* pixelsRGBA, int width,
@@ -242,9 +244,22 @@ bool Win32Dx11Renderer::UpdateTextureRegionRGBA(ID3D11ShaderResourceView* srv, c
 }
 
 void Win32Dx11Renderer::ReleaseTexture(ID3D11ShaderResourceView* srv) {
-    if (srv) {
+    if (!srv) {
+        return;
+    }
+    if (inFrame_) {
+        releaseAfterFrame_.push_back(srv);
+        return;
+    }
+    srv->Release();
+}
+
+void Win32Dx11Renderer::ReleaseDeferredTextures() {
+    for (ID3D11ShaderResourceView* srv : releaseAfterFrame_) {
         srv->Release();
     }
+    releaseAfterFrame_.clear();
+    inFrame_ = false;
 }
 
 void Win32Dx11Renderer::RenderAndPresent() {
@@ -256,6 +271,7 @@ void Win32Dx11Renderer::RenderAndPresent() {
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
     swapChain_->Present(1, 0);  // vsync-paced; avoids busy-spinning while visible
+    ReleaseDeferredTextures();
 }
 
 }  // namespace sz::platform::win32

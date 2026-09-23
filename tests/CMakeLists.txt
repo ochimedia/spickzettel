@@ -73,6 +73,7 @@ if(WIN32)
     add_executable(sz_win32_tests
         platform/win32_crash_dump_test.cpp
         platform/win32_displays_test.cpp
+        platform/win32_dx11_renderer_test.cpp
         platform/win32_input_grab_test.cpp
         platform/win32_integrity_test.cpp
         platform/win32_platform_host_test.cpp

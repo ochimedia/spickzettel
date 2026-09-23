@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <vector>
 
 #include <d3d11.h>
 #include <wrl/client.h>
@@ -65,11 +66,20 @@ public:
     bool UpdateTextureRegionRGBA(ID3D11ShaderResourceView* srv, const uint8_t* pixelsRGBA, int sourceWidth,
                                   int x, int y, int w, int h);
     // Releases a texture returned by CreateTextureFromRGBA. No-op for nullptr.
+    // Between NewFrame and RenderAndPresent the release waits until the
+    // frame has been drawn: ImGui's draw commands carry the raw pointer and
+    // no reference, and they are only submitted in RenderAndPresent - so a
+    // texture drawn earlier in the frame and released later in it (a tile
+    // clicked in the overview, an item moved away) would otherwise be drawn
+    // from freed memory.
     void ReleaseTexture(ID3D11ShaderResourceView* srv);
 
 private:
     bool CreateRenderTarget();
     void CleanupRenderTarget();
+    // Once the frame's draw commands are with D3D, which keeps what they
+    // use alive itself from there on.
+    void ReleaseDeferredTextures();
 
     HWND hwnd_ = nullptr;
     Microsoft::WRL::ComPtr<ID3D11Device> device_;
@@ -77,6 +87,9 @@ private:
     Microsoft::WRL::ComPtr<IDXGISwapChain> swapChain_;
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> renderTargetView_;
     bool imguiInitialized_ = false;
+    // See ReleaseTexture.
+    bool inFrame_ = false;
+    std::vector<ID3D11ShaderResourceView*> releaseAfterFrame_;
     // See SetMousePositionOverride.
     bool mouseOverrideActive_ = false;
     float mouseOverrideX_ = 0.0f;

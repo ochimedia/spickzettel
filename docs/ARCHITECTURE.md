@@ -1137,6 +1137,16 @@ switch can happen mid-frame (Alt+wheel is handled from the frame), and
 one frame drawn between the switch and the load renders every shot as
 the placeholder gradient - the gradient flash the gate removed.
 
+**A release waits for the frame.** Anything may release a texture
+mid-frame after it has already been drawn into that frame: clicking an
+overview tile drops the tile previews, moving an item to another canvas
+drops its texture. ImGui's draw commands hold the raw pointer without a
+reference and are only submitted at the end of the frame, so the D3D11
+renderer holds releases made between `NewFrame` and `RenderAndPresent`
+until the frame has been handed to D3D, which keeps what it uses alive
+from there. Doing it in the renderer covers every caller, rather than
+asking each of them to order its mutations before its drawing.
+
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
 copy made from them (paste, duplicate, copy to another canvas) must
 share neither a file nor a texture with its source. `CanvasManager`
