@@ -738,6 +738,21 @@ kept the removal pending but let the next save count as clean, so
 nothing retried until an unrelated edit, and a restart reloaded the
 record.
 
+A permanent delete must not take what was moved out of it. A move
+changes the model at once and the directories at the next save, so a
+snippet moved to another canvas, or a canvas to another folder, is still
+inside its old parent on disk until then - and deleting that parent for
+good in between took the moved snippet's pictures with it, while the
+model kept the snippet and the next save wrote its record afresh,
+without them. `Remove` is therefore handed the library as it stands
+without the thing, and when anything that library still holds is
+indexed inside the directory, nothing is deleted yet: the removal is
+owed, with no mark written - a restart must still find what was moved -
+and a save, which places everything before it runs the owed removals,
+finishes it once nothing held is left inside. The session makes that
+save at once, so the ordinary case completes as the delete is asked
+for; if the move cannot land, the removal waits with it.
+
 A snippet's directory is swept for pictures its layers no longer name
 only after the record that stopped naming them is on disk. Until then
 the old record is what a restart reloads, and the pictures it names have

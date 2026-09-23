@@ -170,7 +170,21 @@ public:
     // the removal too, so a restart cannot bring back what was deleted for
     // good. The caller can tell the two falses apart with
     // HasPendingRemoval.
-    bool Remove(uint64_t uid) const;
+    //
+    // `remaining` is the library without it, which is what says whether
+    // anything under the directory has been moved out in the model and not
+    // yet on disk - a snippet moved to another canvas, a canvas out of a
+    // folder, before the save that moves its directory. Deleting the
+    // directory now would take that with it. The removal is then owed
+    // instead, with nothing touched and no mark written - the mark would
+    // hide what was moved from a restart - and the next save, which places
+    // what was moved before it runs the removals owed, finishes it once
+    // nothing the library holds is left inside.
+    bool Remove(uint64_t uid, const LibraryView& remaining) const;
+    bool Remove(uint64_t uid, const CanvasManagerSnapshot& remaining) const {
+        return Remove(uid, LibraryView{remaining.folders, remaining.canvases, remaining.currentFolderId,
+                                       remaining.currentCanvasId});
+    }
     // Whether a Remove of `uid` is still owed: it was asked for and the
     // directory is still there, whole or in part.
     bool HasPendingRemoval(uint64_t uid) const { return pendingRemovals_.count(uid) > 0; }
@@ -317,7 +331,10 @@ private:
     bool IsOurs(const std::filesystem::path& path) const;
     // Drops every index entry that points under `dir` - what a removed or
     // retired directory takes with it.
-    void ForgetUnder(const std::filesystem::path& dir) const;
+    // Entries whose id is in `keep` stay.
+    void ForgetUnder(const std::filesystem::path& dir, const std::unordered_set<uint64_t>& keep = {}) const;
+    // Whether a directory of anything in `ids` is indexed under `dir`.
+    bool HoldsAnyOf(const std::filesystem::path& dir, const std::unordered_set<uint64_t>& ids) const;
     // Where the folder directories are: folders/ under the root.
     std::filesystem::path FoldersRoot() const;
     // The one way this store deletes a directory: what the store itself

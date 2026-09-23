@@ -946,6 +946,46 @@ TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
     std::filesystem::remove_all(dir);
 }
 
+// Move a captured snippet to another canvas and delete the canvas it left
+// for good, all before the autosave: the picture is still in the old
+// canvas's directory on disk, and must not go with it.
+TEST(SessionTest, APermanentDeleteRightAfterAMoveKeepsWhatWasMoved) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_delete_after_move";
+    std::filesystem::remove_all(dir);
+    const std::vector<uint8_t> pixels = {10, 20, 30, 255, 40, 50, 60, 255};
+    ItemId id = 0;
+    {
+        persistence::LibraryStore store(dir);
+        Session session;
+        session.SetLibraryStore(&store);
+        const CanvasId left = session.Manager().CurrentCanvasId();
+        id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+        const std::optional<std::string> file = store.SaveImage(id, pixels.data(), 2, 1);
+        ASSERT_TRUE(file.has_value());
+        session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile = *file;
+        const CanvasId other = session.Manager().AddCanvas("Other");
+        ASSERT_TRUE(session.Flush());
+
+        ASSERT_NE(session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
+        ASSERT_TRUE(session.Delete(left));
+        EXPECT_EQ(session.DeletePermanently(left), Session::Removal::Removed);
+        EXPECT_TRUE(session.Flush());
+        session.SetLibraryStore(nullptr);
+    }
+    persistence::LibraryStore reopened(dir);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    ASSERT_EQ(loaded->canvases[0].items.size(), 1u);
+    const Item& item = loaded->canvases[0].items[0];
+    ASSERT_EQ(item.id, id);
+    const std::optional<persistence::DecodedImage> image = reopened.LoadImage(id, item.ImageLayer()->imageFile);
+    ASSERT_TRUE(image.has_value()) << "the picture went with the canvas the snippet left";
+    EXPECT_EQ(image->pixelsRGBA, pixels);
+    std::filesystem::remove_all(dir);
+}
+
 #if defined(_WIN32)
 // Windows refuses to delete a file another handle holds open without
 // delete sharing - which is what a picture viewer looking at a capture

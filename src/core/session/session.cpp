@@ -423,11 +423,18 @@ Session::Removal Session::Erase(uint64_t id) {
     // one of two things: nothing was ever saved for it, which is fine, or
     // something in its directory could not be removed, which the store
     // keeps a note of and the caller is told about.
-    Removal removal = Removal::Removed;
-    if (Store() && !Store()->Remove(id) && Store()->HasPendingRemoval(id)) {
-        removal = Removal::FilesRemain;
+    //
+    // Owed is also what the store answers when something the library still
+    // holds has been moved out of that directory since the last save - a
+    // snippet to another canvas, then its old canvas deleted for good - and
+    // deleting the directory would take the moved thing's pictures with it.
+    // The save that moves it is then made now, and finishes the removal on
+    // its way; only what is still owed after it is reported.
+    if (!Store() || Store()->Remove(id, manager.View()) || !Store()->HasPendingRemoval(id)) {
+        return Removal::Removed;
     }
-    return removal;
+    SaveLibraryNow(library_);
+    return Store()->HasPendingRemoval(id) ? Removal::FilesRemain : Removal::Removed;
 }
 
 Session::Removal Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {

@@ -284,7 +284,7 @@ TEST_F(LibraryStoreTest, ALibraryWrittenByANewerVersionIsNeitherReadNorWritten) 
     changed.canvases[0].name = "Renamed";
     changed.canvases[0].items[1].rect.x += 50.0f;
     EXPECT_FALSE(store.Save(changed));
-    EXPECT_FALSE(store.Remove(4));
+    EXPECT_FALSE(store.Remove(4, changed));
     const uint8_t pixels[4] = {1, 2, 3, 255};
     EXPECT_FALSE(store.SaveImage(4, pixels, 1, 1).has_value());
     EXPECT_EQ(store.WriteGeneration(), 0u);
@@ -1039,6 +1039,115 @@ TEST_F(LibraryStoreTest, AMoveWhoseDirectoryCannotBeRenamedFailsTheSaveUntilItCa
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir()));
 }
 
+// The same held file, and then the canvas it is leaving deleted for good:
+// the removal waits for the move, however many saves that takes, and never
+// marks the directory the moved snippet is still in.
+TEST_F(LibraryStoreTest, ARemovalWaitsForAMoveOutOfItThatCannotLandYet) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    Canvas other;
+    other.id = 8;
+    other.name = "Other";
+    other.folderId = 1;
+    snapshot.canvases.push_back(other);
+    ASSERT_TRUE(store.Save(snapshot));
+
+    Item moved = snapshot.canvases[0].items[1];
+    snapshot.canvases[1].items.push_back(moved);
+    snapshot.canvases.erase(snapshot.canvases.begin());
+    const std::filesystem::path oldCanvasDir = ShotItemDir().parent_path();
+    const std::filesystem::path movedTo = dir_ / "folders" / "folder-1-000001" / "other-000008" / "shot-1-000004";
+    {
+        std::ifstream held(ShotItemDir() / "000004.qoi");  // no delete sharing
+        ASSERT_TRUE(held.is_open());
+        EXPECT_FALSE(store.Remove(2, snapshot));
+        EXPECT_TRUE(store.HasPendingRemoval(2));
+        EXPECT_FALSE(store.Save(snapshot)) << "the move did not land";
+        EXPECT_TRUE(store.HasPendingRemoval(2));
+        EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
+        EXPECT_FALSE(std::filesystem::exists(oldCanvasDir / ".removed")) << "a restart must still find it";
+    }
+    EXPECT_TRUE(store.Save(snapshot));
+    EXPECT_FALSE(store.HasPendingRemoval(2));
+    EXPECT_FALSE(std::filesystem::exists(oldCanvasDir));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
+    LibraryStore reopened(dir_);
+    ASSERT_TRUE(reopened.Load().has_value());
+    const std::optional<DecodedImage> reloaded = reopened.LoadImage(4, "000004.qoi");
+    ASSERT_TRUE(reloaded.has_value());
+    EXPECT_EQ(reloaded->pixelsRGBA, pixels);
+    EXPECT_TRUE(std::filesystem::exists(movedTo / "000004.qoi"));
+}
+#endif
+
+// A snippet moved to another canvas, and the canvas it left deleted for
+// good before the save that would have moved its directory: the directory
+// is still inside the one being removed, and removing that now would take
+// the snippet's pictures with it.
+TEST_F(LibraryStoreTest, RemovingAParentSparesWhatWasMovedOutOfItAndNotYetSaved) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    Canvas other;
+    other.id = 8;
+    other.name = "Other";
+    other.folderId = 1;
+    snapshot.canvases.push_back(other);
+    ASSERT_TRUE(store.Save(snapshot));
+
+    Item moved = snapshot.canvases[0].items[1];
+    snapshot.canvases[1].items.push_back(moved);
+    snapshot.canvases.erase(snapshot.canvases.begin());
+    EXPECT_FALSE(store.Remove(2, snapshot));
+    EXPECT_TRUE(store.HasPendingRemoval(2)) << "owed until the move has landed";
+    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
+
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_FALSE(store.HasPendingRemoval(2));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir().parent_path())) << "the canvas went";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired")) << "deleted, not set aside";
+    LibraryStore reopened(dir_);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    ASSERT_EQ(loaded->canvases[0].items.size(), 1u);
+    const std::optional<DecodedImage> image = reopened.LoadImage(4, "000004.qoi");
+    ASSERT_TRUE(image.has_value());
+    EXPECT_EQ(image->pixelsRGBA, pixels);
+}
+
+// The same a level up: a canvas moved to another folder, then the folder.
+TEST_F(LibraryStoreTest, RemovingAFolderSparesACanvasMovedOutOfItAndNotYetSaved) {
+    LibraryStore store(dir_);
+    const std::vector<uint8_t> pixels = Checkerboard(64, 64);
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
+    Folder second;
+    second.id = 9;
+    second.name = "Second";
+    snapshot.folders.push_back(second);
+    ASSERT_TRUE(store.Save(snapshot));
+
+    snapshot.canvases[0].folderId = 9;
+    snapshot.folders.erase(snapshot.folders.begin());
+    EXPECT_FALSE(store.Remove(1, snapshot));
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_FALSE(store.HasPendingRemoval(1));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001"));
+    LibraryStore reopened(dir_);
+    ASSERT_TRUE(reopened.Load().has_value());
+    const std::optional<DecodedImage> image = reopened.LoadImage(4, "000004.qoi");
+    ASSERT_TRUE(image.has_value());
+    EXPECT_EQ(image->pixelsRGBA, pixels);
+}
+#if defined(_WIN32)
+
 // A rename that the disk refused is another matter: the uid is the
 // identity, so the record under its old label is still exactly where a
 // load looks for it, and the save counts.
@@ -1158,12 +1267,12 @@ TEST_F(LibraryStoreTest, RemoveDeletesASnippetForGoodAndTheNextSaveAgrees) {
     snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
     ASSERT_TRUE(store.Save(snapshot));
 
-    ASSERT_TRUE(store.Remove(4));
+    snapshot.canvases[0].items.pop_back();
+    ASSERT_TRUE(store.Remove(4, snapshot));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir()));
     EXPECT_FALSE(store.LoadImage(4, "000004.qoi").has_value());
-    EXPECT_FALSE(store.Remove(4)) << "nothing by that id left to remove";
+    EXPECT_FALSE(store.Remove(4, snapshot)) << "nothing by that id left to remove";
 
-    snapshot.canvases[0].items.pop_back();
     ASSERT_TRUE(store.Save(snapshot));
     EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
@@ -1184,7 +1293,7 @@ TEST_F(LibraryStoreTest, ARemoveThatCouldNotFinishIsRetriedByTheNextSaveNotSetAs
     {
         std::ifstream held(ShotItemDir() / "000004.qoi");  // no delete sharing
         ASSERT_TRUE(held.is_open());
-        EXPECT_FALSE(store.Remove(4)) << "not gone, so not done";
+        EXPECT_FALSE(store.Remove(4, snapshot)) << "not gone, so not done";
         EXPECT_TRUE(store.HasPendingRemoval(4));
         EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
         EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / ".removed")) << "the intent is on disk";
@@ -1215,7 +1324,7 @@ TEST_F(LibraryStoreTest, ARemovalStillOwedFollowsItsParentsRename) {
     {
         std::ifstream held(ShotItemDir() / "000004.qoi");
         ASSERT_TRUE(held.is_open());
-        EXPECT_FALSE(store.Remove(4));
+        EXPECT_FALSE(store.Remove(4, snapshot));
         ASSERT_TRUE(store.HasPendingRemoval(4));
     }
     // Let go - and the folder and the canvas renamed before the next save.
@@ -1242,9 +1351,10 @@ TEST_F(LibraryStoreTest, ARemovalStillOwedSurvivesARestart) {
     snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
     ASSERT_TRUE(store.Save(snapshot));
 
+    snapshot.canvases[0].items.pop_back();
     std::ifstream held(ShotItemDir() / "000004.qoi");  // no delete sharing
     ASSERT_TRUE(held.is_open());
-    EXPECT_FALSE(store.Remove(4));
+    EXPECT_FALSE(store.Remove(4, snapshot));
     ASSERT_TRUE(std::filesystem::exists(ShotItemDir() / ".removed"));
 
     LibraryStore reopened(dir_);
@@ -1269,7 +1379,7 @@ TEST_F(LibraryStoreTest, RemoveOfAFolderTakesEverythingInIt) {
     LibraryStore store(dir_);
     ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
 
-    ASSERT_TRUE(store.Remove(1));
+    ASSERT_TRUE(store.Remove(1, CanvasManagerSnapshot{}));
     EXPECT_FALSE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001"));
     ASSERT_TRUE(store.Save(CanvasManagerSnapshot{}));
     EXPECT_FALSE(std::filesystem::exists(dir_ / "retired")) << "its canvas and snippets went with it, not astray";
@@ -1291,7 +1401,8 @@ TEST_F(LibraryStoreTest, RemoveLeavesWhatIsNotTheLibrarysAndStillCountsAsDone) {
     std::filesystem::create_directories(ShotItemDir() / "scans");
     std::ofstream(ShotItemDir() / "scans" / "page.txt") << "mine too";
 
-    EXPECT_TRUE(store.Remove(4)) << "everything of the library's is gone";
+    snapshot.canvases[0].items.pop_back();
+    EXPECT_TRUE(store.Remove(4, snapshot)) << "everything of the library's is gone";
     EXPECT_FALSE(store.HasPendingRemoval(4));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "item.json"));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "item.json.tmp2"));
@@ -1301,7 +1412,6 @@ TEST_F(LibraryStoreTest, RemoveLeavesWhatIsNotTheLibrarysAndStillCountsAsDone) {
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "notes.txt"));
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "scans" / "page.txt"));
 
-    snapshot.canvases[0].items.pop_back();
     ASSERT_TRUE(store.Save(snapshot));
     EXPECT_FALSE(std::filesystem::exists(dir_ / "retired")) << "not the store's, so not set aside either";
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "notes.txt"));
@@ -1320,7 +1430,7 @@ TEST_F(LibraryStoreTest, RemoveOfAFolderLeavesADirectoryThatIsNotTheLibrarys) {
     std::filesystem::create_directories(folderDir / "reference");
     std::ofstream(folderDir / "reference" / "map.txt") << "mine";
 
-    ASSERT_TRUE(store.Remove(1));
+    ASSERT_TRUE(store.Remove(1, CanvasManagerSnapshot{}));
     EXPECT_FALSE(std::filesystem::exists(folderDir / "folder.json"));
     EXPECT_FALSE(std::filesystem::exists(folderDir / "order.json"));
     EXPECT_FALSE(std::filesystem::exists(folderDir / "canvas-1-000002")) << "empty once its own went, so gone";

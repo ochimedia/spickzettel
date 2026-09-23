@@ -922,6 +922,27 @@ void Rehome(std::map<uint64_t, std::filesystem::path>& index, const std::filesys
     }
 }
 
+// Every folder, canvas and snippet `view` holds, by id - ids are unique
+// across all three (see util/uid.h).
+std::unordered_set<uint64_t> IdsIn(const LibraryView& view) {
+    std::unordered_set<uint64_t> ids;
+    for (const Folder& folder : view.folders) {
+        ids.insert(folder.id);
+    }
+    for (const Canvas& canvas : view.canvases) {
+        ids.insert(canvas.id);
+        for (const Item& item : canvas.items) {
+            ids.insert(item.id);
+        }
+    }
+    return ids;
+}
+
+bool IsUnder(const std::filesystem::path& path, const std::filesystem::path& dir) {
+    const std::filesystem::path relative = path.lexically_relative(dir);
+    return !relative.empty() && *relative.begin() != "..";
+}
+
 }  // namespace
 
 LibraryStore::LibraryStore(std::filesystem::path rootDir) : rootDir_(std::move(rootDir)) {}
@@ -962,14 +983,24 @@ bool LibraryStore::RemoveOwnDirectory(const std::filesystem::path& path) const {
     return RemoveOwnContents(path);
 }
 
-void LibraryStore::ForgetUnder(const std::filesystem::path& dir) const {
+void LibraryStore::ForgetUnder(const std::filesystem::path& dir, const std::unordered_set<uint64_t>& keep) const {
     for (auto* index : {&folderDirs_, &canvasDirs_, &itemDirs_}) {
         for (auto it = index->begin(); it != index->end();) {
-            const std::filesystem::path relative = it->second.lexically_relative(dir);
-            const bool under = !relative.empty() && *relative.begin() != "..";
-            it = under ? index->erase(it) : std::next(it);
+            const bool forget = IsUnder(it->second, dir) && keep.count(it->first) == 0;
+            it = forget ? index->erase(it) : std::next(it);
         }
     }
+}
+
+bool LibraryStore::HoldsAnyOf(const std::filesystem::path& dir, const std::unordered_set<uint64_t>& ids) const {
+    for (const auto* index : {&folderDirs_, &canvasDirs_, &itemDirs_}) {
+        for (const auto& [id, path] : *index) {
+            if (ids.count(id) > 0 && IsUnder(path, dir)) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 bool LibraryStore::WrittenByANewerVersion() const {
@@ -988,7 +1019,7 @@ bool LibraryStore::WrittenByANewerVersion() const {
     return writtenByANewerVersion_;
 }
 
-bool LibraryStore::Remove(uint64_t uid) const {
+bool LibraryStore::Remove(uint64_t uid, const LibraryView& remaining) const {
     if (writtenByANewerVersion_) {
         return false;
     }
@@ -1002,6 +1033,15 @@ bool LibraryStore::Remove(uint64_t uid) const {
     // Every path in the index was made under the root, so one that isn't is
     // a bug - and a bug here leaves the directory alone.
     if (dir.empty() || !WithinRoot(dir)) {
+        return false;
+    }
+    // Something the library still holds is in there - moved out in the
+    // model, not yet on disk. Owed, untouched and unmarked, until a save has
+    // moved it; see the header. What is not held any more is forgotten as
+    // usual, so that nothing of it is set aside meanwhile.
+    if (const std::unordered_set<uint64_t> held = IdsIn(remaining); HoldsAnyOf(dir, held)) {
+        pendingRemovals_[uid] = dir;
+        ForgetUnder(dir, held);
         return false;
     }
     ++writeGeneration_;
@@ -1717,6 +1757,13 @@ bool LibraryStore::Save(const LibraryView& view) const {
             // The path is kept current through every rename and retirement
             // of a parent (see Rehome), so "gone" here means gone, not moved.
             const std::filesystem::path& dir = pending->second;
+            // A move out of it that did not happen above - see Remove.
+            // Left, unmarked, for the save that manages the move; that
+            // failure has already failed this save.
+            if (HoldsAnyOf(dir, liveFolderIds) || HoldsAnyOf(dir, liveCanvasIds) || HoldsAnyOf(dir, liveItemIds)) {
+                ++pending;
+                continue;
+            }
             if (RemoveOwnDirectory(dir)) {
                 ForgetUnder(dir);
                 pending = pendingRemovals_.erase(pending);
