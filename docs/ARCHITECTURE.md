@@ -1556,7 +1556,9 @@ held bar button fires. `EndGesture` keeps what is done and makes nothing
 new - what delete, undo, redo and leaving drawing mode do: a move is
 filed, a stroke kept, and a region not yet made is dropped. An undo
 pressed mid-drag or mid-stroke therefore takes back what the hand has
-done so far, the most recent thing done. Either way the rest of the held
+done so far, the most recent thing done. Both also disarm a press held
+still, whose hold would otherwise enter drawing mode half a second after
+the press it came with had been ended. Either way the rest of the held
 button's drag finds nothing in flight and does nothing.
 
 The selection bar floats over the selection's bounding box, or below it

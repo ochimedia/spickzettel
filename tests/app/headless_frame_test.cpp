@@ -2369,6 +2369,27 @@ TEST_F(OverlappingItemsTest, DeletingMidDragStopsTheDragWhereItWas) {
     EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the second takes the drag back";
 }
 
+// Undo with a press on a snippet held still: the press is over, and so is
+// the hold it might have become - it no longer enters drawing mode once
+// the hold's time is up.
+TEST_F(OverlappingItemsTest, UndoDuringAHeldPressCancelsTheHold) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+
+    RawMouse(x, y, platform::MouseEventKind::Down);
+    StepFrame();
+    PressCtrlKey(ImGuiKey_Z);
+    StepFrames(35);  // well past kHoldSeconds, still held
+    RawMouse(x, y, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FALSE(App().DrawingItem().has_value());
+}
+
 // Undo with the button still down: what it takes back is the drag so far,
 // and the rest of the drag leaves that alone. It used to undo the step
 // before and let the drag write over it, losing that step unseen.

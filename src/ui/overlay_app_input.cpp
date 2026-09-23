@@ -586,6 +586,10 @@ void OverlayApp::ReleaseGesture() {
 // press elsewhere leaves drawing mode - which a synthesized release would
 // end. Each kind is ended by hand instead, keeping what it has done.
 void OverlayApp::EndGesture() {
+    // A press held still is the gesture's too: left armed, it went on to
+    // enter drawing mode on its snippet half a second after an undo or a
+    // delete had ended the press it came with.
+    heldPress_.reset();
     if (GestureIf<StrokeInFlight>() != nullptr) {
         // As its release would end it: the stroke, the shape or the erase
         // kept and filed as one undo step - see HandleStrokeEvent.
