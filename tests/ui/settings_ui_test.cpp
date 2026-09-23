@@ -38,7 +38,7 @@ TEST_F(UiTest, TheSettingsSectionsAreAllReachable) {
         // in overlay_app_overview.cpp, and assets/ui_strings.json for where
         // the words live now. A test that reached for "Appearance" broke the
         // moment anyone reworded it, which is the coupling this removed.
-        for (const char* section : {"sectionappearance", "sectioninteraction", "sectioninput",
+        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior",
                                      "sectionhotkeys", "sectionprofiles", "sectiondebug"}) {
             const std::string path = std::string("**/###") + section;
             ctx->ItemClick(path.c_str());
@@ -69,7 +69,7 @@ TEST_F(UiTest, TheEditTargetDropdownOpensInFrontOfThePanel) {
     RunUi("edit target dropdown", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
-        ctx->ItemClick("**/###sectioninput");
+        ctx->ItemClick("**/###sectionbehavior");
         // By path rather than by "**/" like the rows above: a combo
         // registers no label with the test engine (ImGui::BeginCombo makes
         // no IMGUI_TEST_ENGINE_ITEM_INFO call), so a label search cannot
@@ -139,7 +139,7 @@ TEST_F(UiTest, TogglingAnInputSettingWhileAProfileIsActiveLandsInTheProfile) {
     RunUi("toggle freeze", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
-        ctx->ItemClick("**/###sectioninput");
+        ctx->ItemClick("**/###sectionbehavior");
         ctx->ItemClick("**/###freezescreen");
     });
 
@@ -282,7 +282,7 @@ TEST_F(UiTest, AHelpMarkerOpensItsExplanationInFront) {
     RunUi("help popover", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
-        ctx->ItemClick("**/###sectioninput");
+        ctx->ItemClick("**/###sectionbehavior");
         ctx->ItemClick("**/##help_freezescreen");
 
         ImGuiWindow* popover = ctx->WindowInfo("//$FOCUSED").Window;
@@ -312,7 +312,7 @@ TEST_F(UiTest, TurningAParentOffLeavesItsDependentsSetButUnavailable) {
     RunUi("dependent rows", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
-        ctx->ItemClick("**/###sectioninput");
+        ctx->ItemClick("**/###sectionbehavior");
         // Everything below it needs this one, directly or through the row
         // between them.
         ctx->ItemClick("**/###dontstealfocus");
@@ -347,7 +347,7 @@ TEST_F(UiTest, TheDrawnPointerIsNotAPreconditionOfTakingTheMouse) {
     RunUi("pointer independence", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
-        ctx->ItemClick("**/###sectioninput");
+        ctx->ItemClick("**/###sectionbehavior");
         ctx->ItemClick("**/###softwarepointer");
         IM_CHECK((ctx->ItemInfo("**/###rawmouse").ItemFlags & ImGuiItemFlags_Disabled) == 0);
         IM_CHECK((ctx->ItemInfo("**/###counterrawmouse").ItemFlags &

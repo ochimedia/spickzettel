@@ -67,7 +67,7 @@ struct ProfileOverrides {
     // the Settings panel counts to say "it sets 3 of these". Per group and
     // not in total, because the two are edited in different sections: a
     // profile that only rebinds keys would otherwise claim to have set
-    // something on the Input section with nothing marked there.
+    // something on the Behavior section with nothing marked there.
     size_t OverriddenCount(ProfileGroup group) const;
     bool operator==(const ProfileOverrides&) const = default;
 };

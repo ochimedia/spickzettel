@@ -140,7 +140,7 @@ TEST(ProfileTest, AnOverrideThatMatchesTheDefaultStillPins) {
 
 // Counted per group, because the two are edited in different sections: a
 // profile that only rebinds keys must not claim to have set something on
-// the Input section, where nothing would be marked.
+// the Behavior section, where nothing would be marked.
 TEST(ProfileTest, OverriddenCountIsPerGroup) {
     Profile profile = GameProfile("Game", "game.exe");
     EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Input), 0u);

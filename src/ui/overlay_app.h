@@ -877,7 +877,7 @@ private:
     // it on or off when clicked and can be dragged onto another to move it
     // there. True when the row changed anything.
     bool RenderBarButtonRow(const char* id, const char* label, BarButtonList& buttons);
-    void RenderSettingsInput(bool& anyChanged);
+    void RenderSettingsBehavior(bool& anyChanged);
     void RenderSettingsDebug(bool& anyChanged);
     // The list of profiles, and what the overlay is up over. Edits are
     // collected into a copy and handed to Settings::SetProfiles once, at
@@ -1856,7 +1856,7 @@ private:
     // Input/Shortcuts are about whatever is underneath, and are what a
     // per-application profile may override - see
     // RenderOverviewSettingsPanel.
-    enum class SettingsSection { Appearance, Interaction, Input, Hotkeys, Profiles, Debug };
+    enum class SettingsSection { Appearance, Interaction, Behavior, Hotkeys, Profiles, Debug };
     SettingsSection settingsSection_ = SettingsSection::Appearance;
     // Whose values the Input and Shortcuts sections are showing. Nullopt is
     // the defaults; otherwise an index into Settings::Profiles. Reset to the

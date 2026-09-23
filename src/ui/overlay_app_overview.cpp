@@ -1190,7 +1190,7 @@ void OverlayApp::SendPickedItemTo(CanvasId target) {
 // order they happened to be added.
 //
 // The split is not only tidiness: "Appearance", "Interaction" and "Debug"
-// are about you and are always global, while "Input" and "Hotkeys" are about
+// are about you and are always global, while "Behavior" and "Hotkeys" are about
 // whatever is underneath and are what a per-application profile may
 // override. Making that the *section* boundary means the rule is one
 // sentence per section rather than a marker per row.
@@ -1207,7 +1207,7 @@ void OverlayApp::RenderOverviewSettingsPanel() {
     static constexpr SectionRow kSections[] = {
         {SettingsSection::Appearance, "sectionappearance", strings::kSettingsTabAppearance},
         {SettingsSection::Interaction, "sectioninteraction", strings::kSettingsTabInteraction},
-        {SettingsSection::Input, "sectioninput", strings::kSettingsTabInput},
+        {SettingsSection::Behavior, "sectionbehavior", strings::kSettingsTabBehavior},
         {SettingsSection::Hotkeys, "sectionhotkeys", strings::kSettingsTabHotkeys},
         {SettingsSection::Profiles, "sectionprofiles", strings::kSettingsTabProfiles},
         {SettingsSection::Debug, "sectiondebug", strings::kSettingsTabDebug},
@@ -1251,8 +1251,8 @@ void OverlayApp::RenderOverviewSettingsPanel() {
         case SettingsSection::Interaction:
             RenderSettingsInteraction(anyChanged);
             break;
-        case SettingsSection::Input:
-            RenderSettingsInput(anyChanged);
+        case SettingsSection::Behavior:
+            RenderSettingsBehavior(anyChanged);
             break;
         case SettingsSection::Hotkeys:
             RenderSettingsHotkeys(anyChanged);
@@ -1692,7 +1692,7 @@ void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
 // OnSettingsChanged, which deliberately copies no input setting). The
 // parameter stays for the uniform signature RenderSettingsBody dispatches
 // on.
-void OverlayApp::RenderSettingsInput([[maybe_unused]] bool& anyChanged) {
+void OverlayApp::RenderSettingsBehavior([[maybe_unused]] bool& anyChanged) {
     // What the overlay is up over. Read-only for now, and the reason it is
     // here at all: every setting in this section is an answer to a question
     // about *that* application, and until now there was nothing on screen
@@ -1964,7 +1964,7 @@ void OverlayApp::RenderEditTargetPicker(ProfileGroup group) {
                             isActive ? strings::kProfilesRunningNow : strings::kProfilesNotRunning);
         // Counted for *this* section only. The total would read as a claim
         // about what is on screen, and a profile that only rebinds keys
-        // would announce settings on the Input section with nothing marked
+        // would announce settings on the Behavior section with nothing marked
         // anywhere below.
         const size_t count = profile.overrides.OverriddenCount(group);
         ImGui::SameLine();

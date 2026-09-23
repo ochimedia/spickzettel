@@ -1731,7 +1731,7 @@ gradient, which would read as thumbnails being wrong and then correcting
 themselves.
 
 Settings is a list of sections down the left, not one long scroll.
-Appearance, Drawing and Debug are about *you* and always global; Input
+Appearance, Drawing and Debug are about *you* and always global; Behavior
 and Hotkeys are about *whatever is underneath* and are what a profile may
 override, which makes the section boundary the rule. Hotkeys holds the
 three global summon keys above its profile picker and the rebindable tool
