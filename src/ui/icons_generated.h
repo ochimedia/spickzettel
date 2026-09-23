@@ -347,4 +347,24 @@ constexpr IconCmd kClipboardCmds[] = {
 };
 constexpr Icon kClipboard = {kClipboardCmds, IM_ARRAYSIZE(kClipboardCmds)};
 
+constexpr IconCmd kKeyboardCmds[] = {
+    {IconOp::RoundedRect, 2.0000f, 5.0000f, 22.0000f, 19.0000f, 2.0000f, 0.0000f},
+    {IconOp::MoveTo, 5.5000f, 9.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 6.5000f, 9.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::EndSubpath, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::MoveTo, 9.5000f, 9.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 10.5000f, 9.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::EndSubpath, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::MoveTo, 13.5000f, 9.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 14.5000f, 9.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::EndSubpath, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::MoveTo, 17.5000f, 9.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 18.5000f, 9.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::EndSubpath, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::MoveTo, 8.0000f, 14.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 16.0000f, 14.5000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::EndSubpath, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+};
+constexpr Icon kKeyboard = {kKeyboardCmds, IM_ARRAYSIZE(kKeyboardCmds)};
+
 }  // namespace sz::ui::icons

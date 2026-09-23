@@ -477,6 +477,8 @@ void OverlayApp::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) c
     add(EmptyCanvasMenuAction::Overview, "##emptymenu_overview", &icons::kLayoutGrid, strings::kMenuOverview, true,
         {}, /*separatorAbove=*/true);
     add(EmptyCanvasMenuAction::Settings, "##emptymenu_settings", nullptr, strings::kMenuSettings);
+    add(EmptyCanvasMenuAction::CheatSheet, "##emptymenu_cheat_sheet", &icons::kKeyboard, strings::kMenuCheatSheet, true,
+        MenuShortcutLabel(ShortcutAction::CheatSheet));
 }
 
 void OverlayApp::RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action) {
@@ -508,6 +510,9 @@ void OverlayApp::RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action) {
         case EmptyCanvasMenuAction::Settings:
             OpenOverview();
             SwitchOverviewTab(OverviewTab::Settings);
+            return;
+        case EmptyCanvasMenuAction::CheatSheet:
+            cheatSheetOpen_ = true;
             return;
     }
 }

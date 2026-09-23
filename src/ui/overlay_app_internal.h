@@ -165,7 +165,7 @@ extern const CreateActionInfo kCreateActions[2];
 extern const ClipboardActionInfo kClipboardActions[4];
 
 // What a ShortcutAction means in the app's own terms - exactly one of the
-// three is set. This is the single place the config layer's flat list of
+// four is set. This is the single place the config layer's flat list of
 // bindable actions (which cannot see Tool or CreateAction, being below
 // them) is tied to the enums the app acts on, and it is one table rather
 // than a pair of switches so the two directions cannot drift: the
@@ -176,6 +176,8 @@ struct ShortcutTarget {
     std::optional<Tool> tool;
     std::optional<CreateAction> create;
     std::optional<ClipboardAction> clipboard;
+    // Opens or closes the cheat sheet - see OverlayApp::cheatSheetOpen_.
+    bool cheatSheet = false;
 };
 extern const ShortcutTarget kShortcutTargets[kShortcutActionCount];
 const ShortcutTarget& TargetForShortcut(ShortcutAction action);
@@ -197,6 +199,23 @@ ImGuiKey ImGuiKeyForCombo(const platform::KeyCombo& combo);
 // "Ctrl+Alt+O" / "F9" / "(none)" - what a key editor's button reads while
 // it isn't capturing.
 std::string FormatKeyComboLabel(const platform::KeyCombo& combo);
+
+// The cheat sheet's content (see OverlayApp::RenderCheatSheet), apart from
+// drawing it so the tests can read it: groups of rows, each what to press
+// and what it does. A row with no keys is a line of context for the rows
+// under it ("On empty canvas"). Built from the bindings as they are - the
+// global hotkeys, the tool shortcuts `shortcuts` resolves to, the creation
+// triggers - so a rebound key reads as bound, and an unbound one, or a
+// trigger set to Off, drops its row rather than promising nothing.
+struct CheatSheetRow {
+    std::string keys;
+    std::string what;
+};
+struct CheatSheetSection {
+    const char* title;
+    std::vector<CheatSheetRow> rows;
+};
+std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const ShortcutBindings& shortcuts);
 
 // An ImGui label whose words and whose identity are separate things:
 // returns "<text>###<id>", and ImGui hashes only what follows the "###".

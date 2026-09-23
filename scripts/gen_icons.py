@@ -31,7 +31,7 @@ ICONS = [
     "layer-down", "layer-up", "move",
     "copy", "trash", "plus", "x", "undo", "rectangle", "line", "type",
     "minimize", "maximize", "restore", "more-vertical", "target", "note",
-    "pin", "select", "scissors", "clipboard",
+    "pin", "select", "scissors", "clipboard", "keyboard",
 ]
 
 

@@ -18,6 +18,8 @@ the repo root and rebuild to change it.
 - Ctrl+Alt+C - capture the screen onto a new canvas and open the overlay
   on it.
 - Ctrl+Alt+S - the same capture, without opening anything.
+- Ctrl+H, with the overlay up - the cheat sheet: every key and gesture,
+  as they are bound right now.
 
 Making a snippet is a press on empty canvas: drag to capture a
 screenshot of a region, Ctrl-drag to frame a drawing, double-click (or

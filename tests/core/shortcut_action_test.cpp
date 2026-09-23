@@ -57,6 +57,12 @@ TEST(ShortcutActionTest, DuplicateAndTheCanvasThatTakesTheSelectionShipBound) {
         << "the plain new canvas keeps no key of its own";
 }
 
+// Ctrl+H, "help" - the key the welcome note names.
+TEST(ShortcutActionTest, TheCheatSheetShipsOnCtrlH) {
+    EXPECT_EQ(BindingFor(DefaultShortcuts(), ShortcutAction::CheatSheet), WithCtrl('H'));
+    EXPECT_EQ(ShortcutActionKey(ShortcutAction::CheatSheet), "cheatSheet");
+}
+
 TEST(ShortcutActionTest, EverythingElseStartsUnbound) {
     const ShortcutBindings bindings = DefaultShortcuts();
     for (const ShortcutAction action : kAllShortcutActions) {
@@ -64,7 +70,8 @@ TEST(ShortcutActionTest, EverythingElseStartsUnbound) {
                            action == ShortcutAction::Erase || action == ShortcutAction::Draw ||
                            action == ShortcutAction::Copy || action == ShortcutAction::Cut ||
                            action == ShortcutAction::Paste || action == ShortcutAction::Duplicate ||
-                           action == ShortcutAction::NewCanvasWithSelection;
+                           action == ShortcutAction::NewCanvasWithSelection ||
+                           action == ShortcutAction::CheatSheet;
         EXPECT_EQ(BindingFor(bindings, action).key != 0, bound)
             << "action " << ShortcutActionKey(action);
     }

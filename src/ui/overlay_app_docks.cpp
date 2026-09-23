@@ -126,7 +126,7 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     // Overview is up, which covers it.
     const bool pointerKnown = ImGui::IsMousePosValid(&io.MousePos);
     const ImVec2 pointer = io.MousePos;
-    const bool busy = overviewOpen_ || GestureIf<CreationGesture>() != nullptr ||
+    const bool busy = PanelOpen() || GestureIf<CreationGesture>() != nullptr ||
                       GestureIf<StrokeInFlight>() != nullptr || GestureIf<ItemGesture>() != nullptr;
     const bool atBottom = pointerKnown && pointer.y >= displayH - kRevealZonePx;
     const bool onBar = pointerKnown && Near(canvasBarRect_, pointer, kHoverSlackPx);
@@ -143,14 +143,14 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     }
     // Thumbnails of other canvases are loaded to be looked at; once the bar
     // is back behind its edge, nothing is - unless the Overview has them.
-    if (barBefore > 0.0f && canvasBarReveal_.amount <= 0.0f && !overviewOpen_) {
+    if (barBefore > 0.0f && canvasBarReveal_.amount <= 0.0f && !PanelOpen()) {
         ReleaseLayerPreviews();
     }
 
     // ----- The canvas bar: centred on the bottom edge -----
     canvasBarRect_.reset();
     float bottomTop = displayH;  // the top of whatever is out on the bottom edge
-    if (cfg.showCanvasBar && canvasBarReveal_.amount > 0.0f && !overviewOpen_) {
+    if (cfg.showCanvasBar && canvasBarReveal_.amount > 0.0f && !PanelOpen()) {
         const size_t count = CanvasBarCanvases().size();
         const float tiles = count == 0 ? 0.0f
                                        : static_cast<float>(count) * TileWidth(displayW, displayH) +

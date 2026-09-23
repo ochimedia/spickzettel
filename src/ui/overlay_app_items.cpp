@@ -467,17 +467,18 @@ void OverlayApp::NudgeSelection(float dx, float dy) {
 // called off, then a selection clears. An open
 // popover - the colour chooser, a snippet's properties - closes first and
 // takes the press. Not while typing, where Escape is the field's, and not
-// while the Overview is up, which closes its own. The same gates hold for
+// while a panel is up - the Overview, the cheat sheet - which closes its
+// own. The same gates hold for
 // Delete and the
 // arrows: a note being typed into keeps its own Delete and Backspace - and
 // in drawing mode neither acts on the snippet, which is being worked in,
 // not on.
 void OverlayApp::HandleSelectionKeys() {
     const ImGuiIO& io = ImGui::GetIO();
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !io.WantTextInput && !overviewOpen_ && CloseTopmostPopover()) {
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !io.WantTextInput && !PanelOpen() && CloseTopmostPopover()) {
         return;
     }
-    const bool keysFree = !io.WantTextInput && !overviewOpen_ && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+    const bool keysFree = !io.WantTextInput && !PanelOpen() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) && keysFree) {
         if (CreationKindFor(activeTool_).has_value()) {
             ClearCreationGesture();

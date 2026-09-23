@@ -952,8 +952,9 @@ possible later restriction rather than a rule today.
 Every drawing tool, creation tool and clipboard action can carry a key,
 pressed while the overlay is up in edit mode. Four ship bound (`S`
 screenshot, `D` drawing, `E` eraser, `P` pen) plus the clipboard's usual
-`Ctrl+C/X/V`, `Ctrl+D` to duplicate the selection and `Ctrl+Shift+N` for
-a new canvas the selection comes along to; the rest start unset, because
+`Ctrl+C/X/V`, `Ctrl+D` to duplicate the selection, `Ctrl+Shift+N` for
+a new canvas the selection comes along to and `Ctrl+H` for the cheat
+sheet; the rest start unset, because
 a shortcut that fires a tool you did not want is worse than no shortcut.
 The two chords are safe to ship where a letter would not be, since a
 chord cannot fire from ordinary typing - `Ctrl+D` sits beside the plain
@@ -1747,6 +1748,38 @@ from it rather than refused. While a row waits for a key, a press of one
 of the app's own combos never reaches the capture loop as a key - Windows
 hands it to its hotkey - so the hotkey handlers ask first, and while a
 row is armed the hotkey firing *is* the press.
+
+### The cheat sheet
+
+Every key and gesture on one panel, `Ctrl+H` by default and in the
+empty canvas's menu. It exists mostly for what nothing else shows: a
+tool key is on its button's tooltip, but Alt-drag in drawing mode, a
+right-drag that resizes or the modifier that makes a press a drawing are
+nowhere on screen. The welcome note shrank to match: one gesture, the
+right-click menus, the key that brings the overlay back and the sheet's
+own key. The other hotkeys moved to the sheet, where they can be kept
+current.
+
+Rows are built from the bindings as they are (`BuildCheatSheet`): the
+summon hotkeys, the shortcuts the active profile resolves to and the
+creation triggers. A rebound key reads as rebound, and an unbound one or
+a trigger set to Off drops its row rather than showing "(none)". The
+text of each row is fixed, while the keys come from the settings. A
+hand-written page could not do this: it would be out of date the first
+time someone rebound a key. The welcome note fills in its two keys the
+same way. When the sheet's key is unbound, the note sends you to the
+menu instead.
+
+The sheet is a panel over a dimmed canvas, like the Overview, and shares
+its backdrop. `PanelOpen()` is the one condition the canvas's keys,
+wheel and pointer defer to for both panels. While the sheet is up its
+own key is the only shortcut that runs, and Escape closes it and does
+nothing else. A tool picked up under a panel that hides the canvas
+would be a change nobody saw happen. Its own key is a `ShortcutAction`
+like the tools, so it is rebound in Settings > Hotkeys and a profile can
+override it. The panel sizes itself to its text and fits up to three
+columns within the Overview's margins. Its six groups are split across
+the columns so that the tallest column is as short as it can be.
 
 ### Show deleted
 

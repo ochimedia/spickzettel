@@ -28,6 +28,8 @@ std::string_view ShortcutActionKey(ShortcutAction action) {
             return "paste";
         case ShortcutAction::Duplicate:
             return "duplicate";
+        case ShortcutAction::CheatSheet:
+            return "cheatSheet";
     }
     return "";
 }
@@ -59,6 +61,7 @@ ShortcutBindings DefaultShortcuts() {
     bindWithCtrl(ShortcutAction::Cut, 'X');
     bindWithCtrl(ShortcutAction::Paste, 'V');
     bindWithCtrl(ShortcutAction::Duplicate, 'D');
+    bindWithCtrl(ShortcutAction::CheatSheet, 'H');
     // Ctrl+Shift+N rather than Ctrl+N: the plain chord is "new" in every
     // browser and editor there is, and this one takes the selection with
     // it, which is the heavier of the two things to do by accident.

@@ -16,9 +16,10 @@ TEST(ShortcutTargetsTest, EveryActionRunsExactlyOneThing) {
         const overlay_detail::ShortcutTarget& target = overlay_detail::TargetForShortcut(action);
         EXPECT_EQ(target.action, action) << "no target for " << ShortcutActionKey(action);
         const int set = static_cast<int>(target.tool.has_value()) + static_cast<int>(target.create.has_value()) +
-                        static_cast<int>(target.clipboard.has_value());
+                        static_cast<int>(target.clipboard.has_value()) + static_cast<int>(target.cheatSheet);
         EXPECT_EQ(set, 1) << ShortcutActionKey(action)
-                          << " must be a tool, a create action or a clipboard action, and only one of them";
+                          << " must be a tool, a create action, a clipboard action or the cheat sheet, and only one"
+                             " of them";
     }
 }
 

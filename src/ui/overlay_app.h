@@ -182,6 +182,7 @@ enum class EmptyCanvasMenuAction {
     Paste,
     Overview,
     Settings,
+    CheatSheet,
 };
 
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
@@ -323,6 +324,8 @@ public:
         return CreationKindFor(activeTool_).has_value() || (creation != nullptr && creation->dragTo.has_value());
     }
     bool IsOverviewOpen() const { return overviewOpen_; }
+    // Whether the cheat sheet is up - see RenderCheatSheet.
+    bool IsCheatSheetOpen() const { return cheatSheetOpen_; }
     // Whether the colour chooser is up - see RenderColorChooser.
     bool IsColorChooserOpen() const { return colorChooserOpen_; }
     // Whether the snippet context menu is up, and over which snippet -
@@ -802,7 +805,18 @@ private:
     // whichever body is showing.
     void RenderOverview(float displayW, float displayH);
     bool HandleOverviewEscape();
-    void RenderOverviewBackdrop(float displayW, float displayH);
+    // Dims the whole screen behind a panel - the Overview, the cheat sheet
+    // - and is true for a click on it, outside the panel, which closes it.
+    bool RenderPanelBackdrop(const char* windowId, float displayW, float displayH);
+    // Every key and gesture, grouped, with the keys as they are bound - see
+    // BuildCheatSheet. A panel over a dimmed canvas like the Overview, but
+    // with nothing in it to click: Escape, its own key again, or a click
+    // outside it closes it.
+    void RenderCheatSheet(float displayW, float displayH);
+    // Whether a panel covering the canvas is up, which the canvas's own
+    // keys, wheel and pointer then leave alone - the Overview or the cheat
+    // sheet.
+    bool PanelOpen() const { return overviewOpen_ || cheatSheetOpen_; }
     void RenderOverviewHeader();
     // What the sidebar and the grid ask for, applied once both have
     // finished reading the folders and canvases rather than mutating the
@@ -1783,6 +1797,9 @@ private:
 
     // Overview (canvas switcher / manager / move-copy picker).
     bool overviewOpen_ = false;
+    // See RenderCheatSheet. Toggled by its shortcut (RunShortcutAction) and
+    // the empty canvas's menu.
+    bool cheatSheetOpen_ = false;
     // Which of the Overview's two tabs is showing - Canvases (the
     // original/default content: folder sidebar + canvas tile grid) or
     // Settings (RenderOverviewSettingsPanel, added once there were enough

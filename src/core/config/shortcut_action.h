@@ -10,8 +10,8 @@
 namespace sz::core {
 
 // Everything a key can be bound to while the overlay is up in edit mode:
-// the drawing tools, the create actions, and what the clipboard does with
-// the selection. One flat list rather than the two enums the app itself uses
+// the drawing tools, the create actions, what the clipboard does with
+// the selection, and the cheat sheet. One flat list rather than the two enums the app itself uses
 // (`Tool`, `CreateAction`), for two reasons: a shortcut list is one list to
 // the person reading it, and this is the layer that persists it - config
 // sits below the app and cannot see those enums at all.
@@ -37,13 +37,15 @@ enum class ShortcutAction {
     Cut,
     Paste,
     Duplicate,
+    CheatSheet,
 };
 
-inline constexpr std::array<ShortcutAction, 12> kAllShortcutActions = {
+inline constexpr std::array<ShortcutAction, 13> kAllShortcutActions = {
     ShortcutAction::Draw,      ShortcutAction::Erase,    ShortcutAction::Text,
     ShortcutAction::Select,    ShortcutAction::NewScreenshot, ShortcutAction::NewDrawing,
     ShortcutAction::NewCanvas, ShortcutAction::NewCanvasWithSelection, ShortcutAction::Copy,
     ShortcutAction::Cut,       ShortcutAction::Paste,    ShortcutAction::Duplicate,
+    ShortcutAction::CheatSheet,
 };
 inline constexpr size_t kShortcutActionCount = kAllShortcutActions.size();
 

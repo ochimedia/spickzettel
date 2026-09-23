@@ -3408,5 +3408,67 @@ TEST_F(HeadlessAppTest, SnippetsFadeBackWhileANewOneIsBeingMade) {
     EXPECT_FALSE(App().ItemsFadedForCreation());
 }
 
+// ===== The cheat sheet =====
+
+// Its key opens it and closes it again, and while it is up the canvas
+// underneath takes none of the keys or presses meant for it: a tool key
+// picks nothing, Escape closes the sheet and nothing else, and a press on
+// the dimmed canvas makes no snippet.
+TEST_F(HeadlessAppTest, CtrlHOpensTheCheatSheetAndTheCanvasWaitsUnderIt) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 600.0f, 500.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    ASSERT_EQ(App().Selection().size(), 1u);
+
+    PressCtrlKey(ImGuiKey_H);
+    ASSERT_TRUE(App().IsCheatSheetOpen());
+    PressKey(ImGuiKey_E);  // the eraser, for the selected snippet - were the sheet not up
+    EXPECT_EQ(App().ActiveTool(), Tool::Select);
+    EXPECT_FALSE(App().DrawingItem().has_value());
+    Drag(700.0f, 200.0f, 900.0f, 400.0f);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "a drag over the sheet's backdrop makes nothing";
+
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(App().IsCheatSheetOpen());
+    EXPECT_EQ(App().Selection().size(), 1u) << "Escape closed the sheet, and did not also deselect";
+
+    PressCtrlKey(ImGuiKey_H);
+    ASSERT_TRUE(App().IsCheatSheetOpen());
+    PressCtrlKey(ImGuiKey_H);
+    EXPECT_FALSE(App().IsCheatSheetOpen()) << "its own key closes it";
+
+    PressCtrlKey(ImGuiKey_H);
+    ASSERT_TRUE(App().IsCheatSheetOpen());
+    Click(4.0f, 4.0f);  // the backdrop, in the corner, as far from the panel as it gets
+    EXPECT_FALSE(App().IsCheatSheetOpen());
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+}
+
+// The welcome note names the key that brings the overlay back and the
+// cheat sheet's, as they are bound, and no other hotkey: the sheet has
+// the rest.
+TEST_F(HeadlessAppTest, TheWelcomeNotePointsAtTheCheatSheet) {
+    controller_->Overlay().RequestWelcomeNote();
+    ShowEditMode();
+    StepFrames(2);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const std::string& text = Canvases().CurrentOrNull()->items[0].noteText;
+    EXPECT_NE(text.find("Ctrl+Alt+O"), std::string::npos) << text;
+    EXPECT_NE(text.find("Ctrl+H"), std::string::npos) << text;
+    EXPECT_EQ(text.find("Ctrl+Alt+V"), std::string::npos) << text;
+}
+
+TEST_F(HeadlessAppTest, WithTheCheatSheetUnboundTheWelcomeNoteSendsYouToTheMenu) {
+    controller_->GetSettings().SetShortcut(std::nullopt, ShortcutAction::CheatSheet, platform::KeyCombo{});
+    controller_->Overlay().RequestWelcomeNote();
+    ShowEditMode();
+    StepFrames(2);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const std::string& text = Canvases().CurrentOrNull()->items[0].noteText;
+    EXPECT_NE(text.find("Right-click empty space for the cheat sheet"), std::string::npos) << text;
+    EXPECT_EQ(text.find("(none)"), std::string::npos) << text;
+}
+
 }  // namespace
 }  // namespace sz::test

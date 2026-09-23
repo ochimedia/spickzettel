@@ -416,9 +416,9 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     if (HandleOverviewEscape()) {
         return;
     }
-    RenderOverviewBackdrop(displayW, displayH);
-    if (!overviewOpen_) {
-        return;  // the backdrop click may have just closed it
+    if (RenderPanelBackdrop("##overview_backdrop", displayW, displayH)) {
+        CloseOverview();
+        return;
     }
 
     constexpr float kPanelMarginFrac = 0.08f;
@@ -526,9 +526,7 @@ bool OverlayApp::HandleOverviewEscape() {
     return true;
 }
 
-void OverlayApp::RenderOverviewBackdrop(float displayW, float displayH) {
-    // Dims everything else and closes the Overview on a click outside the
-    // panel.
+bool OverlayApp::RenderPanelBackdrop(const char* windowId, float displayW, float displayH) {
     ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(displayW, displayH));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.039f, 0.051f, 0.071f, 0.72f));
@@ -537,15 +535,16 @@ void OverlayApp::RenderOverviewBackdrop(float displayW, float displayH) {
     // triangles out of the screen's own corners - zero it out here only
     // (the overview panel keeps the global radius-lg rounding).
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    ImGui::Begin("##overview_backdrop", nullptr,
+    // No padding, or the button below starts that far in from the corner
+    // and a click in the strip along the screen's edges closes nothing.
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::Begin(windowId, nullptr,
                   ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
                       ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav |
                       ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoMove);
-    if (ImGui::InvisibleButton("##overview_backdrop_btn", ImVec2(displayW, displayH))) {
-        CloseOverview();
-    }
+    const bool clicked = ImGui::InvisibleButton("##backdrop_btn", ImVec2(displayW, displayH));
     ImGui::End();
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar(3);
     ImGui::PopStyleColor();
     // Ordinary windows only get pushed to the front of ImGui's own window
     // stack automatically once, the first frame they're created - items
@@ -554,7 +553,8 @@ void OverlayApp::RenderOverviewBackdrop(float displayW, float displayH) {
     // RenderCanvasBar both run before the Overview every frame, that left
     // them ending up in front of (and clickable over) an Overview that's
     // been open more than one frame, without this doing the same.
-    BringToFront("##overview_backdrop");
+    BringToFront(windowId);
+    return clicked;
 }
 
 void OverlayApp::RenderOverviewHeader() {
@@ -2359,6 +2359,11 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
     for (const ClipboardActionInfo& info : kClipboardActions) {
         RenderShortcutEditor(ShortcutForClipboardAction(info.action), *info.icon, info.name);
     }
+
+    SettingsGroupBreak();
+    SettingsHeading("hotkeysshortcuthelpheading", strings::kHotkeysShortcutHelpHeading);
+    ImGui::Spacing();
+    RenderShortcutEditor(ShortcutAction::CheatSheet, icons::kKeyboard, strings::kMenuCheatSheet);
 }
 
 namespace {

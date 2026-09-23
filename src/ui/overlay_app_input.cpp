@@ -166,6 +166,10 @@ void OverlayApp::RunShortcutAction(ShortcutAction action) {
     }
     if (target.clipboard.has_value()) {
         RunClipboardAction(*target.clipboard);
+        return;
+    }
+    if (target.cheatSheet) {
+        cheatSheetOpen_ = !cheatSheetOpen_;
     }
 }
 
@@ -196,6 +200,12 @@ void OverlayApp::HandleToolShortcuts() {
         return;
     }
     for (const ShortcutAction action : kAllShortcutActions) {
+        // Over the cheat sheet, only its own key, which closes it: a tool
+        // picked up under a panel that hides the canvas would be a change
+        // nobody saw happen.
+        if (cheatSheetOpen_ && action != ShortcutAction::CheatSheet) {
+            continue;
+        }
         const platform::KeyCombo& combo = settings_.Live().shortcuts[ShortcutActionIndex(action)];
         if (combo.key == 0) {
             continue;  // unbound
@@ -443,29 +453,16 @@ Canvas& OverlayApp::EnsureCanvasForNewItem() {
     return *Manager().CurrentOrNull();
 }
 
-namespace {
-// Deliberately short. This is the first thing anyone sees, and its job is
-// only to get them to the point where the app can explain itself - the
-// two kinds of snippet, the right-click menus, the hotkeys, and where the
-// full guide lives.
-// Wrapped by hand at a width the note's own rect fits, since Item::noteText
-// is drawn as-is (DrawItemContent wraps too, but on its own boundaries -
-// keeping the shortcut lines intact reads better than letting them break
-// wherever the item's width happens to fall).
-constexpr const char* kWelcomeNoteText =
-    strings::kWelcomeBody;
-}  // namespace
-
 void OverlayApp::PlaceWelcomeNote(float displayW, float displayH) {
     // Sized to the text rather than to the screen, then clamped, so it
     // stays readable on a small display without becoming a banner on a
     // large one.
-    // Fitted to the text above at 18px - 13 lines plus padding, and a hair
+    // Fitted to the text below at 18px - 10 lines plus padding, and a hair
     // wider than its longest line - rather than to some round number, so
     // the panel doesn't sit there mostly empty. The min() is only a guard
     // for a display too small to hold it.
-    const float w = std::min(480.0f, displayW * 0.8f);
-    const float h = std::min(272.0f, displayH * 0.7f);
+    const float w = std::min(400.0f, displayW * 0.8f);
+    const float h = std::min(214.0f, displayH * 0.7f);
     const Rect rect{(displayW - w) * 0.5f, (displayH - h) * 0.5f, w, h};
 
     Canvas& canvas = EnsureCanvasForNewItem();
@@ -479,7 +476,26 @@ void OverlayApp::PlaceWelcomeNote(float displayW, float displayH) {
         picture->tintColorRGBA = kNoteBackgroundColorRGBA;
         picture->opacity = kNoteBackgroundOpacity;
     }
-    item.noteText = kWelcomeNoteText;
+    // Deliberately short. This is the first thing anyone sees, and its job
+    // is only to get them to the point where the app can explain itself:
+    // one gesture, the right-click menus, the key that brings the overlay
+    // back, and the cheat sheet for everything else - with the keys as
+    // they are bound, which a config carried over from elsewhere may have
+    // changed. Wrapped by hand at a width the note's own rect fits, since
+    // Item::noteText is drawn as-is (DrawItemContent wraps too, but on its
+    // own boundaries - keeping the key lines intact reads better than
+    // letting them break wherever the item's width happens to fall).
+    const std::string showKey = FormatKeyComboLabel(Cfg().hotkeyEditMode);
+    const platform::KeyCombo& sheetKey =
+        settings_.Live().shortcuts[ShortcutActionIndex(ShortcutAction::CheatSheet)];
+    char text[512];
+    if (sheetKey.key != 0) {
+        std::snprintf(text, sizeof(text), strings::kWelcomeBody, showKey.c_str(),
+                      FormatKeyComboLabel(sheetKey).c_str());
+    } else {
+        std::snprintf(text, sizeof(text), strings::kWelcomeBodyNoCheatSheetKey, showKey.c_str());
+    }
+    item.noteText = text;
     item.noteTextSizePx = 18.0f;
     Manager().MarkChanged();
 }
@@ -1193,7 +1209,7 @@ bool OverlayApp::PressMakesASnippet(const platform::MouseEvent& event) const {
     // something open - the Overview, a popover, a note being
     // typed into - which that click is for closing. Making a snippet as
     // well would turn every dismissal into a new drawing.
-    if (ImGui::GetIO().WantCaptureMouse || overviewOpen_ || editingNoteItemId_.has_value() || noteOpenAtPress_ ||
+    if (ImGui::GetIO().WantCaptureMouse || PanelOpen() || editingNoteItemId_.has_value() || noteOpenAtPress_ ||
         ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
         return false;
     }
@@ -1414,7 +1430,7 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
     // moving on from it - see untouchedDrawing_. Not a press on a panel,
     // which is as likely to be picking a colour to draw in it with.
     if (event.kind == platform::MouseEventKind::Down && untouchedDrawing_.has_value() &&
-        !ImGui::GetIO().WantCaptureMouse && !overviewOpen_) {
+        !ImGui::GetIO().WantCaptureMouse && !PanelOpen()) {
         // A press on the selection bar is not moving on either: the bar is
         // the selection's, and the drawing may be in it - its Pin, its
         // drawing buttons, and its Close, which settles it itself.

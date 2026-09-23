@@ -27,6 +27,7 @@ add_executable(sz_core_tests
     core/uid_test.cpp
     platform/pen_glyph_test.cpp
     ui/icon_draw_test.cpp
+    ui/cheat_sheet_test.cpp
     ui/shortcut_targets_test.cpp
     ui/ui_strings_file_test.cpp
 )

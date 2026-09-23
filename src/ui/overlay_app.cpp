@@ -296,6 +296,7 @@ const ShortcutTarget kShortcutTargets[kShortcutActionCount] = {
     {ShortcutAction::Cut, std::nullopt, std::nullopt, ClipboardAction::Cut},
     {ShortcutAction::Paste, std::nullopt, std::nullopt, ClipboardAction::Paste},
     {ShortcutAction::Duplicate, std::nullopt, std::nullopt, ClipboardAction::Duplicate},
+    {ShortcutAction::CheatSheet, std::nullopt, std::nullopt, std::nullopt, /*cheatSheet=*/true},
 };
 
 const ShortcutTarget& TargetForShortcut(ShortcutAction action) {
@@ -1006,7 +1007,7 @@ void OverlayApp::HandleMouseWheel() {
     // drawing mode something always is, and the wheel must not start
     // scaling the snippet under the pen.
     const ImGuiIO& io = ImGui::GetIO();
-    if (io.MouseWheel == 0.0f || overviewOpen_) {
+    if (io.MouseWheel == 0.0f || PanelOpen()) {
         return;
     }
     {
@@ -1309,6 +1310,7 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // own BringToFront - see the include comment for why that'd otherwise
     // be necessary.
     RenderOverview(displayW, displayH);
+    RenderCheatSheet(displayW, displayH);
     RenderConfirmDeletePopover();
     RenderActionToast();
     RenderPersistenceWarning();
@@ -1940,7 +1942,7 @@ platform::CursorShape OverlayApp::WantedPointerShape() const {
     // what's left when ImGui wants nothing more specific, which
     // ApplyPointerShape has already checked before this answer is used at
     // all.
-    if (ImGui::GetIO().WantCaptureMouse || overviewOpen_) {
+    if (ImGui::GetIO().WantCaptureMouse || PanelOpen()) {
         return platform::CursorShape::Arrow;
     }
     const ImVec2 mouse = ImGui::GetMousePos();
@@ -1975,7 +1977,7 @@ platform::CursorShape OverlayApp::WantedPointerShape() const {
 }
 
 void OverlayApp::RenderToolModifierBadge() {
-    if (overviewOpen_ || ArmedCreation().has_value() ||
+    if (PanelOpen() || ArmedCreation().has_value() ||
         (activeTool_ != Tool::Draw && activeTool_ != Tool::Erase)) {
         return;
     }
@@ -2259,7 +2261,7 @@ void OverlayApp::RenderBrushSizePreview() {
         }
         return;
     }
-    if (overviewOpen_) {
+    if (PanelOpen()) {
         return;
     }
     const std::optional<float> diameter = ActiveToolSizePx();
