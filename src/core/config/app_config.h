@@ -325,7 +325,7 @@ struct AppConfig {
     // the number of days is kept while it is off so switching it on again
     // is one click. Deleted snippets are not a question here: they are
     // erased on every open (see Session::ImportLibrary). Chosen in
-    // Settings > Interaction.
+    // Settings > Behavior.
     bool purgeDeleted = false;
     int purgeDeletedAfterDays = 30;
 

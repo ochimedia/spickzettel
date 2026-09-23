@@ -1629,9 +1629,24 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
 }
 
 void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
+    // What a pen stroke becomes and how strokes are drawn, as one group: the
+    // two are the same question - what a mark is - asked from either end.
     SettingsHeading("drawingpenheading", strings::kDrawingPenHeading);
     anyChanged |= CheckboxWithHelp("drawingpaintpixels", strings::kDrawingPaintPixels, &Cfg().paintPixelsInsteadOfStrokes,
         strings::kDrawingPaintPixelsHelp);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(strings::kDrawingStrokeRenderingHeading);
+    ImGui::SameLine();
+    HelpMarker("drawingstrokerenderingheading", strings::kDrawingStrokeRenderingHeading,
+               strings::kDrawingStrokeRenderingHelp);
+    ImGui::SameLine();
+    int renderMode = static_cast<int>(Cfg().strokeRenderMode);
+    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingTessellated, "strokemodetess"), &renderMode, static_cast<int>(StrokeRenderMode::Tessellated));
+    ImGui::SameLine();
+    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingPolyline, "strokemodepoly"), &renderMode, static_cast<int>(StrokeRenderMode::Polyline));
+    ImGui::SameLine();
+    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingRasterized, "strokemoderaster"), &renderMode, static_cast<int>(StrokeRenderMode::Rasterized));
+    Cfg().strokeRenderMode = static_cast<StrokeRenderMode>(renderMode);
 
     SettingsGroupBreak();
 
@@ -1649,6 +1664,18 @@ void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
 
     SettingsGroupBreak();
 
+    SettingsHeading("barsheading", strings::kBarsHeading, strings::kBarsHelp);
+    anyChanged |= RenderBarButtonRow("snippetbar", strings::kBarsSnippetRow, Cfg().snippetBar);
+    anyChanged |= RenderBarButtonRow("drawingbar", strings::kBarsDrawingRow, Cfg().drawingBar);
+}
+
+// Two halves, like Hotkeys. On top what is global - what happens to
+// deleted folders and canvases, which reports through `anyChanged` like any
+// plain setting. Below the profile picker the rows a profile may state for
+// itself, every one a ProfileableCheckbox, which writes and persists
+// through the profile path on its own (see TrayController::
+// OnSettingsChanged, which deliberately copies no behavior setting).
+void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     // One row: the switch, the number of days, the unit. The days are
     // disabled while the switch is off but keep their value, so turning it
     // back on brings back the period chosen before.
@@ -1669,30 +1696,6 @@ void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
 
     SettingsGroupBreak();
 
-    SettingsHeading("barsheading", strings::kBarsHeading, strings::kBarsHelp);
-    anyChanged |= RenderBarButtonRow("snippetbar", strings::kBarsSnippetRow, Cfg().snippetBar);
-    anyChanged |= RenderBarButtonRow("drawingbar", strings::kBarsDrawingRow, Cfg().drawingBar);
-
-    SettingsGroupBreak();
-
-    SettingsHeading("drawingstrokerenderingheading", strings::kDrawingStrokeRenderingHeading,
-        strings::kDrawingStrokeRenderingHelp);
-    int renderMode = static_cast<int>(Cfg().strokeRenderMode);
-    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingTessellated, "strokemodetess"), &renderMode, static_cast<int>(StrokeRenderMode::Tessellated));
-    ImGui::SameLine();
-    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingPolyline, "strokemodepoly"), &renderMode, static_cast<int>(StrokeRenderMode::Polyline));
-    ImGui::SameLine();
-    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingRasterized, "strokemoderaster"), &renderMode, static_cast<int>(StrokeRenderMode::Rasterized));
-    Cfg().strokeRenderMode = static_cast<StrokeRenderMode>(renderMode);
-}
-
-// The one settings section that reports nothing back through `anyChanged`:
-// every row in it is a ProfileableCheckbox, which writes and persists
-// through the profile path on its own (see TrayController::
-// OnSettingsChanged, which deliberately copies no input setting). The
-// parameter stays for the uniform signature RenderSettingsBody dispatches
-// on.
-void OverlayApp::RenderSettingsBehavior([[maybe_unused]] bool& anyChanged) {
     // What the overlay is up over. Read-only for now, and the reason it is
     // here at all: every setting in this section is an answer to a question
     // about *that* application, and until now there was nothing on screen

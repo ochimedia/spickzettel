@@ -200,6 +200,22 @@ TEST_F(UiTest, TheColourTileSwitchesOffLikeEveryOtherButton) {
     EXPECT_EQ(AppSettings().Stored().snippetBar, DefaultSnippetBar()) << "the other row is untouched";
 }
 
+// Stroke rendering is a row of the Pen group now, and still chooses.
+TEST_F(UiTest, StrokeRenderingIsChosenInThePenGroup) {
+    ShowEditMode();
+    StepFrame();
+    ASSERT_EQ(AppSettings().Stored().strokeRenderMode, StrokeRenderMode::Tessellated);
+
+    OpenOverviewUi();
+    RunUi("pick polyline", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectioninteraction");
+        ctx->ItemClick("**/###strokemodepoly");
+    });
+    EXPECT_EQ(AppSettings().Stored().strokeRenderMode, StrokeRenderMode::Polyline);
+}
+
 // The retention period's row: the days are there but disabled while the
 // switch is off, and once it is on they step a day at a time - both saved
 // as settings are.
@@ -214,7 +230,7 @@ TEST_F(UiTest, TheRetentionPeriodIsSwitchedOnAndItsDaysSet) {
     RunUi("switch retention on and add a day", [&](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
-        ctx->ItemClick("**/###sectioninteraction");
+        ctx->ItemClick("**/###sectionbehavior");
         disabledWhileOff = (ctx->ItemInfo("**/##purgedeleteddays").ItemFlags & ImGuiItemFlags_Disabled) != 0;
         ctx->ItemClick("**/###purgedeleted");
         ctx->ItemClick("**/##purgedeleteddays/+");
