@@ -325,6 +325,9 @@ private:
     void LoadPointerBallistics();
     float BallisticGain(float mickeysPerMs) const;
     void MoveVirtualCursorRaw(LONG rawDx, LONG rawDy);
+    // The integration itself, under pointerMutex_ - what MoveVirtualCursorRaw
+    // does before it publishes the result, which it does unlocked.
+    void IntegrateRawMovement(LONG rawDx, LONG rawDy);
     // Puts the position the grab keeps where the user can see it, when it
     // is not being drawn: SetCursorPos to the whole-pixel position, once
     // per report. Generates no raw input, so the game's camera never learns
@@ -414,9 +417,18 @@ private:
     // hook thread writes it and the render thread reads it every frame.
     std::atomic<LONG> virtualCursorX_{0};
     std::atomic<LONG> virtualCursorY_{0};
+    // Everything from here to lastGain_ is the pointer's integration state:
+    // the raw-input sink moves it on the hook thread, report by report, and
+    // BeginVirtualCursor seeds it on the app thread whenever the virtual
+    // pointer starts driving - which can happen while the sink is still up,
+    // since raw mouse input can go off and on again before the hook thread
+    // has reconciled and taken the sink down. Diagnostics reads it from the
+    // app thread too. So all of it is under this lock, which nothing else
+    // takes: uncontended but for those moments, and never held across
+    // SetCursorPos.
+    mutable std::mutex pointerMutex_;
     // The sub-pixel part of the above, and the scale applied to raw device
-    // counts - see MoveVirtualCursorRaw. Only the raw-input sink touches
-    // these, and it runs on one thread, so they need no synchronisation.
+    // counts - see MoveVirtualCursorRaw.
     // The pointer's real position, unrounded, so that movement smaller than
     // a pixel accumulates instead of vanishing. virtualCursorX_/Y_ above are
     // this floored to whole pixels - the only form anything outside this
@@ -425,14 +437,14 @@ private:
     float preciseY_ = 0.0f;
     float pointerScale_ = 1.0f;
     // The acceleration curve and the clock its speeds are measured against -
-    // see LoadPointerBallistics. Touched only by the raw-input sink, which
-    // runs on one thread.
+    // see LoadPointerBallistics.
     bool ballisticsEnabled_ = false;
     bool curveValid_ = false;
     float curveSpeed_[5]{};
     float curveOutput_[5]{};
     LARGE_INTEGER reportFrequency_{};
-    // Debug scaffolding - see InputGrabDiagnostics.
+    // Debug scaffolding - see InputGrabDiagnostics. The last of what
+    // pointerMutex_ guards.
     float lastGain_ = 0.0f;
     std::atomic<int> stepCounts_[4]{};
     std::atomic<int> frameSteps_[4]{};

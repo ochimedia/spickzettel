@@ -1997,6 +1997,16 @@ Consequences that shape `Win32InputGrab`:
   timed-out stop posted to a thread that was about to quit. These paths
   are established from the source: the class offers no fault injection,
   and the rapid start/stop test exercises ordinary timing.
+- **The pointer's integration state has a lock of its own.** The
+  raw-input sink integrates reports into it on the hook thread, and the
+  app thread seeds it whenever the virtual pointer starts driving. The
+  two were assumed never to overlap, but they can: the hook thread
+  outlives a raw-mouse toggle while the keyboard grab keeps it up, and
+  the sink is only taken down once that thread reconciles, so switching
+  raw input off and on again can seed the position under a sink still
+  moving it. A dedicated mutex, taken per report and at seeding, never
+  across `SetCursorPos`, is uncontended the rest of the time; the
+  diagnostics read their gain under it too.
 - **Movement is never posted.** Windows coalesces `WM_MOUSEMOVE` to about
   one per frame; re-posting every swallowed report made a 1000 Hz mouse a
   message flood. The render thread emits one Move per frame while a

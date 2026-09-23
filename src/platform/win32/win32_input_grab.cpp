@@ -257,6 +257,12 @@ void Win32InputGrab::BeginVirtualCursor() {
     if (!PtInRect(&bounds, seed)) {
         seed = POINT{bounds.left + (bounds.right - bounds.left) / 2, bounds.top + (bounds.bottom - bounds.top) / 2};
     }
+    // Under the pointer lock throughout, the registry reads included: the
+    // raw-input sink may still be up on the hook thread and integrating
+    // reports into the very fields being seeded (see pointerMutex_). A
+    // report waits here for a moment once per grab; one integrated halfway
+    // through a seed would put the pointer somewhere neither meant.
+    std::lock_guard<std::mutex> lock(pointerMutex_);
     virtualCursorX_.store(seed.x);
     virtualCursorY_.store(seed.y);
     preciseX_ = static_cast<float>(seed.x);
@@ -270,6 +276,7 @@ void Win32InputGrab::BeginVirtualCursor() {
     lastFramePoint_ = POINT{virtualCursorX_.load(), virtualCursorY_.load()};
     QueryPerformanceFrequency(&reportFrequency_);
     lastReportTime_.QuadPart = 0;
+    lastGain_ = 0.0f;
     LoadPointerBallistics();
 }
 
@@ -600,21 +607,24 @@ void Win32InputGrab::FlushPendingCorrection() {
 // histogram, so the HUD reads the same way on either kind of device.
 void Win32InputGrab::SetVirtualCursorAbsolute(LONG x, LONG y) {
     const RECT bounds = PointerBounds();
-    preciseX_ = std::clamp(static_cast<float>(x), static_cast<float>(bounds.left),
-                           static_cast<float>(bounds.right - 1));
-    preciseY_ = std::clamp(static_cast<float>(y), static_cast<float>(bounds.top),
-                           static_cast<float>(bounds.bottom - 1));
+    {
+        std::lock_guard<std::mutex> lock(pointerMutex_);
+        preciseX_ = std::clamp(static_cast<float>(x), static_cast<float>(bounds.left),
+                               static_cast<float>(bounds.right - 1));
+        preciseY_ = std::clamp(static_cast<float>(y), static_cast<float>(bounds.top),
+                               static_cast<float>(bounds.bottom - 1));
 
-    const LONG beforeX =
-        virtualCursorX_.exchange(static_cast<LONG>(std::floor(preciseX_)), std::memory_order_relaxed);
-    const LONG beforeY =
-        virtualCursorY_.exchange(static_cast<LONG>(std::floor(preciseY_)), std::memory_order_relaxed);
-    const LONG stepX = std::labs(virtualCursorX_.load(std::memory_order_relaxed) - beforeX);
-    const LONG stepY = std::labs(virtualCursorY_.load(std::memory_order_relaxed) - beforeY);
-    stepCounts_[std::clamp<LONG>(std::max(stepX, stepY), 0, 3)].fetch_add(1, std::memory_order_relaxed);
-    // Gain is meaningless here and the HUD says so by reading zero rather
-    // than showing the last relative report's figure forever.
-    lastGain_ = 0.0f;
+        const LONG beforeX =
+            virtualCursorX_.exchange(static_cast<LONG>(std::floor(preciseX_)), std::memory_order_relaxed);
+        const LONG beforeY =
+            virtualCursorY_.exchange(static_cast<LONG>(std::floor(preciseY_)), std::memory_order_relaxed);
+        const LONG stepX = std::labs(virtualCursorX_.load(std::memory_order_relaxed) - beforeX);
+        const LONG stepY = std::labs(virtualCursorY_.load(std::memory_order_relaxed) - beforeY);
+        stepCounts_[std::clamp<LONG>(std::max(stepX, stepY), 0, 3)].fetch_add(1, std::memory_order_relaxed);
+        // Gain is meaningless here and the HUD says so by reading zero rather
+        // than showing the last relative report's figure forever.
+        lastGain_ = 0.0f;
+    }
 
     PublishVirtualCursor();
 }
@@ -715,6 +725,12 @@ float Win32InputGrab::BallisticGain(float mickeysPerMs) const {
 // precision" curve when that is on, so the pointer travels roughly the
 // distance the desktop one would from the same hand movement.
 void Win32InputGrab::MoveVirtualCursorRaw(LONG rawDx, LONG rawDy) {
+    IntegrateRawMovement(rawDx, rawDy);
+    PublishVirtualCursor();
+}
+
+void Win32InputGrab::IntegrateRawMovement(LONG rawDx, LONG rawDy) {
+    std::lock_guard<std::mutex> lock(pointerMutex_);
     float gain = pointerScale_;
     if (ballisticsEnabled_ && curveValid_) {
         // Speed needs the interval between reports, which is why this keeps
@@ -769,8 +785,6 @@ void Win32InputGrab::MoveVirtualCursorRaw(LONG rawDx, LONG rawDy) {
     const LONG stepX = std::labs(virtualCursorX_.load(std::memory_order_relaxed) - beforeX);
     const LONG stepY = std::labs(virtualCursorY_.load(std::memory_order_relaxed) - beforeY);
     stepCounts_[std::clamp<LONG>(std::max(stepX, stepY), 0, 3)].fetch_add(1, std::memory_order_relaxed);
-
-    PublishVirtualCursor();
 }
 
 bool Win32InputGrab::VirtualCursorActive() const { return WantPointerGrab() && overlay_ != nullptr; }
@@ -822,8 +836,11 @@ bool Win32InputGrab::SoftwarePointerWanted() const {
 
 InputGrabDiagnostics Win32InputGrab::Diagnostics() const {
     InputGrabDiagnostics out;
-    out.pointerGain = lastGain_;
-    out.ballisticsEnabled = ballisticsEnabled_ && curveValid_;
+    {
+        std::lock_guard<std::mutex> lock(pointerMutex_);
+        out.pointerGain = lastGain_;
+        out.ballisticsEnabled = ballisticsEnabled_ && curveValid_;
+    }
     for (int i = 0; i < 4; ++i) {
         out.stepCounts[i] = stepCounts_[i].load(std::memory_order_relaxed);
         out.frameSteps[i] = frameSteps_[i].load(std::memory_order_relaxed);
