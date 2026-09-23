@@ -11,13 +11,13 @@ the repo root and rebuild to change it.
 
 ## Getting around
 
-- Ctrl+Alt+O - show or hide the overlay in edit mode, where you capture,
+- Ctrl+Alt+S - show or hide the overlay in edit mode, where you capture,
   draw, place and arrange.
 - Ctrl+Alt+V - show or hide it in view-only mode, where your clicks pass
   straight through to whatever is underneath.
 - Ctrl+Alt+C - capture the screen onto a new canvas and open the overlay
   on it.
-- Ctrl+Alt+S - the same capture, without opening anything.
+- Ctrl+Alt+X - the same capture, without opening anything.
 - Ctrl+H, with the overlay up - the cheat sheet: every key and gesture,
   as they are bound right now.
 

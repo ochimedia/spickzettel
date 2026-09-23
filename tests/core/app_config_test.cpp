@@ -25,7 +25,7 @@ TEST(AppConfigTest, DefaultConfigMatchesHotkeyEditMode) {
     EXPECT_TRUE(config.hotkeyEditMode.ctrl);
     EXPECT_TRUE(config.hotkeyEditMode.alt);
     EXPECT_FALSE(config.hotkeyEditMode.shift);
-    EXPECT_EQ(config.hotkeyEditMode.key, 'O');
+    EXPECT_EQ(config.hotkeyEditMode.key, 'S');
 }
 
 TEST(AppConfigTest, DefaultConfigMatchesHotkeyViewMode) {

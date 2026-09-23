@@ -39,7 +39,7 @@ struct AppConfig {
     // Overview's own Settings tab - see OverlayApp::SetHotkeyChangeCallback
     // and TrayController::ChangeHotkey for how an in-app edit reaches the
     // OS and gets persisted back here.
-    platform::KeyCombo hotkeyEditMode{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'O'};
+    platform::KeyCombo hotkeyEditMode{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'S'};
     // Shows (or, pressed again in the same mode, hides) the overlay in
     // view-only mode: the current canvas is displayed read-only, with no
     // chrome and no input captured at all - clicks and keyboard input
@@ -72,9 +72,9 @@ struct AppConfig {
     // The one hotkey whose registration is allowed to fail: the other
     // three are how the overlay is reached at all, so the app refuses to
     // start without them, while this one is an extra, and a machine where
-    // another application already owns Ctrl+Alt+S should still get an app
+    // another application already owns Ctrl+Alt+X should still get an app
     // that runs. Rebind it in Settings if that happens.
-    platform::KeyCombo hotkeySilentCapture{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'S'};
+    platform::KeyCombo hotkeySilentCapture{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'X'};
     // What each tool and create action is bound to while the overlay is up
     // in edit mode - see ShortcutAction, and the Overview's own Shortcuts
     // tab, which is where these are edited.

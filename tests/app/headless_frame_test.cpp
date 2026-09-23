@@ -3454,7 +3454,7 @@ TEST_F(HeadlessAppTest, TheWelcomeNotePointsAtTheCheatSheet) {
     StepFrames(2);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u);
     const std::string& text = Canvases().CurrentOrNull()->items[0].noteText;
-    EXPECT_NE(text.find("Ctrl+Alt+O"), std::string::npos) << text;
+    EXPECT_NE(text.find("Ctrl+Alt+S"), std::string::npos) << text;
     EXPECT_NE(text.find("Ctrl+H"), std::string::npos) << text;
     EXPECT_EQ(text.find("Ctrl+Alt+V"), std::string::npos) << text;
 }

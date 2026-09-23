@@ -36,7 +36,8 @@ std::string KeysFor(const std::vector<CheatSheetSection>& sections, const char* 
 TEST(CheatSheetTest, ShowsTheKeysAsShipped) {
     const AppConfig config = DefaultConfig();
     const auto sheet = BuildCheatSheet(config, config.toolShortcuts);
-    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetShowHide), "Ctrl+Alt+O");
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetShowHide), "Ctrl+Alt+S");
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetSilentCapture), "Ctrl+Alt+X");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetSelf), "Ctrl+H");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetPen), "P");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetCopy), "Ctrl+C");

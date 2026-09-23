@@ -43,10 +43,10 @@ in the config file can be changed from the overlay's own Settings tab,
 which writes it back at once; editing the file by hand works too, and is
 read at startup.
 
-Default hotkeys: `Ctrl+Alt+O` shows or hides the overlay in edit mode,
+Default hotkeys: `Ctrl+Alt+S` shows or hides the overlay in edit mode,
 `Ctrl+Alt+V` in view-only mode (read-only and click-through),
 `Ctrl+Alt+C` captures the screen onto a new canvas and opens the overlay
-on it, and `Ctrl+Alt+S` captures without opening anything. `ABOUT.md`,
+on it, and `Ctrl+Alt+X` captures without opening anything. `ABOUT.md`,
 shown on the overlay's About tab, has the rest of the controls.
 
 ## Layout

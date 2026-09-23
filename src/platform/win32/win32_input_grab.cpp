@@ -1261,7 +1261,7 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // A key-up is only ours to swallow if we swallowed its key-down.
     //
     // The hotkey that turns edit mode on is the case that matters, and it is
-    // unavoidable rather than unlikely: the overlay is hidden when Ctrl+Alt+O
+    // unavoidable rather than unlikely: the overlay is hidden when its hotkey
     // is pressed, so nothing is installed yet and those key-downs reach the
     // OS normally. The hotkey then shows the overlay, which installs this
     // hook - and the key-*ups* a moment later were being swallowed. Windows
