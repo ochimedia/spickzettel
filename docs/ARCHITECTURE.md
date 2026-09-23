@@ -1291,6 +1291,13 @@ wheel is taken back in one step, to the size it started at, rather than
 a notch at a time. Minimizing is not a placement - the snippet does not
 move - and is not recorded.
 
+Delete, undo and redo pressed with a drag still in flight end the drag
+where it stands first, filed as its release would file it; the rest of
+the drag moves nothing. Left running, a drag went on moving a snippet
+the delete had hidden and filed that move after the delete, so the
+first undo did nothing to be seen - and an undo mid-drag restored a
+placement the drag then wrote over, losing that step from the history.
+
 ### Making a snippet is on the history, and an untouched one goes
 
 Snippets are made through `Session::CreateItem`, so a screenshot taken

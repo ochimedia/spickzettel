@@ -2216,6 +2216,70 @@ TEST_F(OverlappingItemsTest, DeleteRemovesTheSelectionAndUndoBringsItBack) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u);
 }
 
+// Delete with the button still down, halfway through a drag: the drag
+// stops there. It used to go on moving the hidden snippet and file that
+// move after the delete, so the first undo did nothing to be seen and the
+// snippet came back wherever the hand let go.
+TEST_F(OverlappingItemsTest, DeletingMidDragStopsTheDragWhereItWas) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+
+    RawMouse(x, y, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(x, y + 100.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    PressKey(ImGuiKey_Delete);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    RawMouse(x, y + 250.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(x, y + 250.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 100.0f) << "not moved on after the delete";
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "and the rest of the drag made nothing";
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "the first undo brings it back";
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 100.0f);
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the second takes the drag back";
+}
+
+// Undo with the button still down: what it takes back is the drag so far,
+// and the rest of the drag leaves that alone. It used to undo the step
+// before and let the drag write over it, losing that step unseen.
+TEST_F(OverlappingItemsTest, UndoMidDragTakesBackTheDragSoFar) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+    Drag(x, y, x, y + 50.0f);
+    ASSERT_FLOAT_EQ(BackItem().rect.y, items.back.y + 50.0f);
+    StepFrames(30);
+
+    RawMouse(x, y + 50.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(x, y + 150.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 50.0f);
+    RawMouse(x, y + 300.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(x, y + 300.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 50.0f) << "the rest of the drag moved nothing";
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the first move is still there to undo";
+}
+
 TEST_F(OverlappingItemsTest, TheArrowKeysNudgeTheSelection) {
     ShowEditMode();
     StepFrame();

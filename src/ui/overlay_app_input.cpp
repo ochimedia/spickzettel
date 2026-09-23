@@ -579,6 +579,15 @@ void OverlayApp::OffsetCopiedItem(ItemId itemId) {
 // own normal handling); false lets it fall through to whatever it would
 // otherwise do - a stroke or a creation gesture for the left button, a
 // drawing for the right.
+void OverlayApp::EndItemGesture() {
+    if (!itemGesture_.has_value()) {
+        return;
+    }
+    itemGesture_.reset();
+    session_.RecordPlacements(std::move(itemGesturePlacementsBefore_));
+    itemGesturePlacementsBefore_.clear();
+}
+
 bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
     if (event.button != platform::MouseButton::Left && event.button != platform::MouseButton::Right) {
         return false;

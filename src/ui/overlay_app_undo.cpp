@@ -13,6 +13,10 @@ using namespace overlay_detail;
 // here is saying what a step did.
 
 void OverlayApp::Undo() {
+    // Mid-drag, the drag so far is the most recent thing done, and this
+    // takes it back; carrying on, it would overwrite whatever the undo
+    // restored and drop that step from the history unseen.
+    EndItemGesture();
     // A drawing a click made and nothing was put into is taken back by
     // going, not by leaving an empty snippet behind, marked deleted. It is always
     // the most recent thing done on its canvas: anything done since began
@@ -25,7 +29,12 @@ void OverlayApp::Undo() {
     ShowUndoStep(session_.Undo());
 }
 
-void OverlayApp::Redo() { ShowUndoStep(session_.Redo()); }
+void OverlayApp::Redo() {
+    // See Undo. A drag that moved anything is a new step, so this finds
+    // nothing left to redo - as it would once the drag was let go.
+    EndItemGesture();
+    ShowUndoStep(session_.Redo());
+}
 
 void OverlayApp::ShowUndoStep(const std::optional<Session::UndoStep>& step) {
     if (!step.has_value()) {

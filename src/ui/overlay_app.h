@@ -1020,6 +1020,11 @@ private:
     // handling for that button); false lets it fall through to whatever it
     // would otherwise do.
     bool HandleItemGesture(const platform::MouseEvent& event);
+    // Ends a move or resize in flight where it stands, recorded as its
+    // release would record it; the rest of the drag then moves nothing.
+    // For what the keyboard does to the snippets mid-drag - see Undo and
+    // DeleteSelection.
+    void EndItemGesture();
     // The one creation gesture, press to release: a press on empty canvas
     // starts it with either button - the left makes a screenshot, the
     // right a drawing - and so does a left press anywhere while a creation

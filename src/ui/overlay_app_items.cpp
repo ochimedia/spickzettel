@@ -415,6 +415,11 @@ void OverlayApp::AddTouchedToSelection(const Rect& box) {
 }
 
 void OverlayApp::DeleteSelection() {
+    // Delete pressed mid-drag: the drag stops where it is, rather than go
+    // on moving a snippet nobody can see and file that move after the
+    // delete - an undo that visibly did nothing, and a snippet restored
+    // wherever the hand happened to let go.
+    EndItemGesture();
     // A copy: deleting clears nothing itself, but the toast and the
     // session are free to look at the selection while this runs.
     const std::vector<ItemId> doomed = selection_;
