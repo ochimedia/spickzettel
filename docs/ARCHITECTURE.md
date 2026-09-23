@@ -1242,7 +1242,14 @@ B's, on a canvas you were not looking at.
 
 Eight kinds of entry, and every one is either its own inverse or a mirror
 with the direction as the only difference, so undo and redo are one walk
-in opposite directions through one dispatch. A `StrokeBaked` entry
+in opposite directions through one dispatch. Each kind is a struct of
+its own in one `std::variant` (`core/session/undo_entry.h`), holding
+only its own fields and saying itself what it weighs and which snippets
+it names; applying it is one `Session::Apply` overload per kind, so a
+kind added without all of that does not compile. It was one struct with
+every kind's fields side by side, most of them commented "X only", and
+adding a kind meant finding the four switches that had to agree about
+it. A `StrokeBaked` entry
 carries the stroke so redo can push it back, and undo takes off that
 stroke, found from the back, rather than whatever is last. An `Erased`
 entry is a list of *replacements*: for each original a gesture clipped,

@@ -12,6 +12,7 @@
 #include "core/drawing/painted_image.h"
 #include "core/drawing/stroke.h"
 #include "core/persistence/library_store.h"
+#include "core/session/undo_entry.h"
 #include "platform/i_overlay_window.h"
 #include "platform/platform_types.h"
 
@@ -208,21 +209,8 @@ public:
     // there, or it is deleted already.
     bool DeleteItem(ItemId itemId);
 
-    // Where a snippet is: everything a move, a resize or fullscreen
-    // changes, and nothing else - its rect, its fullscreen state, and the
-    // anchor its rect is recomputed from when the display changes (see
-    // Item::anchorRect). Kept whole rather than as the rect alone, so that
-    // an undo of a drag that took a snippet out of fullscreen puts it back
-    // in, and one made before a display change lands where it was.
-    struct Placement {
-        ItemId itemId = 0;
-        Rect rect;
-        bool isFullscreen = false;
-        bool isFullscreenStretch = false;
-        Rect anchorRect;
-        float anchorDisplayWidth = 0.0f;
-        float anchorDisplayHeight = 0.0f;
-    };
+    // Where a snippet is - see undo::Placement.
+    using Placement = undo::Placement;
     // The placements of these snippets as they are now, for a later
     // RecordPlacements. Ids that name nothing are left out.
     std::vector<Placement> PlacementsOf(const std::vector<ItemId>& ids) const;
@@ -242,14 +230,8 @@ public:
     // redone it is restored. 0, having made nothing, without a canvas.
     ItemId CreateItem(bool hasBackground, Rect rect, std::string name);
     // What a paste or a duplicate brought onto the current canvas, one
-    // snippet each: moved here by a cut's paste from `fromCanvas`, where it
-    // stood at `fromIndex` in the stack - or, with fromCanvas 0, a copy
-    // made here.
-    struct Arrival {
-        ItemId itemId = 0;
-        CanvasId fromCanvas = 0;
-        size_t fromIndex = 0;
-    };
+    // snippet each - see undo::Arrival.
+    using Arrival = undo::Arrival;
     // A cut's paste of one snippet: moves `itemId` from the canvas holding
     // it onto the current one, on top, and leaves its history behind (see
     // ForgetHistoryOfItem). Nullopt, moving nothing, for no such snippet,
@@ -421,155 +403,49 @@ private:
 
     // ----- Undo -----
 
-    // A single reversible action, pushed at the moment it happens and
-    // reversed by Undo, which in turn pushes the very same entry onto the
-    // redo stack for Redo to reapply. Deliberately narrow in scope - covers
-    // exactly the frequent, low-stakes case (a quick way to take back the
-    // last drawing change or an accidental snippet delete) rather than a
-    // full command-pattern undo for every mutation. Session-only, never
-    // persisted.
-    //
-    // Every field an undo needs to reverse an action is also everything a
-    // redo needs to reapply it - Undo moves the popped entry onto the redo
-    // stack unchanged for every kind but the swapping ones, which exchange
-    // their own contents with the item's as they apply, so the entry that
-    // lands on the opposite stack holds exactly what that direction needs.
-    struct UndoEntry {
-        enum class Kind {
-            // itemId + strokes[0]: a stroke was appended to item.strokes -
-            // undo pops it back off; redo pushes strokes[0] back on, which
-            // is why this is populated at push time even though undo itself
-            // only needs itemId.
-            StrokeBaked,
-            // One erase gesture - the circular eraser, the rectangular one,
-            // or "Clear drawing" - over an item that may carry vector
-            // strokes, painted pixels, or both. One entry for the whole
-            // gesture, whichever kinds of ink it touched: an eraser that
-            // took two undos to take back one drag, because the strokes and
-            // the pixels went on the stack separately, read as a bug.
-            //
-            // The vector half is itemId + strokeCountBefore + replacements
-            // (see CanvasManager::EraseAt - a stroke only partly within the
-            // eraser is shortened/split rather than removed outright, and
-            // the fragments stand where it stood). Each replacement names
-            // one original by its index in the list as it was before the
-            // gesture, carries that original exactly, and carries the
-            // fragments that stand in its place afterwards. Undo rebuilds
-            // the before-list from the after-list, redo the reverse, both
-            // by position and neither by value: an undo that matched
-            // strokes by value put the restored originals at the end,
-            // which changed the draw order and left the next undo of a
-            // stroke taking off a different stroke than the one it was
-            // for, and could not tell two equal strokes apart. Empty when
-            // the gesture clipped nothing.
-            //
-            // The painted half is layerIndex + paintedTiles (the tiles the
-            // brush touched, as they were before - see PaintedImage::
-            // EndStroke) or layerIndex + paintedBefore (the whole image, for
-            // a clear). Undo puts them back and keeps what they replaced,
-            // which is the redo state - so this half is its own inverse and
-            // the entry swaps its own contents each way (SwapPaintedUndoState).
-            // Empty when the gesture touched no pixels.
-            Erased,
-            // canvasId + deletedItemId: this snippet on canvasId was
-            // deleted. The snippet itself is still there, marked - undo
-            // clears the mark, redo makes it again.
-            ItemDeleted,
-            // itemId + previousNoteText: a text edit (see BeginTextEdit/
-            // EndTextEdit) actually changed the note - undo swaps
-            // previousNoteText back in. One entry per edit, not per
-            // keystroke.
-            NoteTextChanged,
-            // itemId + layerIndex + paintedTiles: a brush stroke painted
-            // onto a painted layer (an erase that touches pixels is an
-            // Erased entry above, since it may have touched strokes too).
-            // `paintedTiles` holds the pixels of every tile it touched
-            // *before* it ran - see PaintedImage::EndStroke, which
-            // produces exactly this. Undo puts them back and keeps what it
-            // replaced, which is the redo state, so one entry serves both
-            // directions by swapping its own contents. Tiles rather than
-            // the whole layer because a fullscreen layer is 8 MB and a
-            // stroke touches a few hundred kilobytes of it.
-            PaintedTilesChanged,
-            // itemId: this snippet was made, on the canvas the entry is
-            // filed under (see CreateItem). ItemDeleted the other way
-            // round: undo marks it deleted, redo restores it.
-            ItemCreated,
-            // placements: where each of these snippets was before a move,
-            // a resize or a fullscreen toggle (see RecordPlacements). Its
-            // own inverse, as PaintedTilesChanged is: applying it swaps
-            // each snippet's placement with the one held here, so the
-            // entry then holds the one to go back to.
-            PlacementChanged,
-            // canvasId + arrivals: a paste or a duplicate brought these
-            // snippets onto canvasId (see RecordArrivals); `duplicate` only
-            // says which, for the UI. Not a swap: undo sends each back -
-            // a copy into its deletion mark, a moved one to its old canvas
-            // and place in the stack - and redo brings it again.
-            ItemsArrived,
-        };
-        // One original an erase gesture touched: where it was, what it
-        // was, and what stands in its place - see Kind::Erased.
-        struct StrokeReplacement {
-            size_t index = 0;
-            Stroke original;
-            std::vector<Stroke> fragments;
-        };
-        Kind kind = Kind::StrokeBaked;
-        ItemId itemId = 0;
-        CanvasId canvasId = 0;
-        std::vector<Stroke> strokes;                  // StrokeBaked: the one stroke, strokes[0]
-        std::vector<StrokeReplacement> replacements;  // Erased only, ascending by index
-        size_t strokeCountBefore = 0;                 // Erased only: the list's length before the gesture
-        ItemId deletedItemId = 0;                     // ItemDeleted only
-        std::string previousNoteText;        // NoteTextChanged only
-        size_t layerIndex = 0;                        // Erased / PaintedTilesChanged: which of the item's layers
-        std::vector<PaintedTile> paintedTiles;        // Erased (a brush erase) / PaintedTilesChanged
-        std::shared_ptr<PaintedImage> paintedBefore;  // Erased only, for a whole-layer clear
-        std::vector<Placement> placements;            // PlacementChanged only
-        std::vector<Arrival> arrivals;                // ItemsArrived only
-        bool duplicate = false;                       // ItemsArrived only
-    };
-    // The painted half of an edit, before it becomes an entry: the tiles a
-    // brush gesture touched, or the whole image a clear replaced.
-    struct PaintedUndo {
-        ItemId itemId = 0;
-        size_t layerIndex = 0;
-        std::vector<PaintedTile> tiles;
-        std::shared_ptr<PaintedImage> wholeImage;
-        bool Empty() const { return tiles.empty() && !wholeImage; }
-    };
+    // The painted half of an edit, before it becomes an entry - see
+    // undo::Painted.
+    using PaintedUndo = undo::Painted;
 
     // Appends `entry` to the current canvas's history, evicting past the
     // caps, and clears that canvas's redo stack: a new action makes whatever
     // was on it unreachable by any sequence of undos.
-    void PushUndo(UndoEntry entry);
+    void PushUndo(undo::Entry entry);
     // The one push every stack goes through - PushUndo's, and the two
     // hand-overs between undo and redo - so the caps live in one place: at
     // most kUndoStackCap entries, and at most kUndoStackCapBytes of pixels
     // and points between them. Evicts from the oldest end until both hold,
     // always keeping the entry just pushed.
-    static void PushCapped(std::deque<UndoEntry>& stack, UndoEntry entry);
-    static size_t UndoEntryBytes(const UndoEntry& entry);
+    static void PushCapped(std::deque<undo::Entry>& stack, undo::Entry entry);
     // Pops the current canvas's top entry off one stack, applies it, and -
     // if it took effect - pushes it onto the other.
     std::optional<UndoStep> StepHistory(bool undo);
-    // Applies `entry` one way or the other and says what it was - nullopt
-    // when the item or canvas it names is already gone.
-    std::optional<UndoWhat> ApplyUndoEntry(UndoEntry& entry, bool undo);
+    // Applies an entry one way or the other and says what it was - nullopt
+    // when the item or canvas it names is already gone. One overload per
+    // kind of entry (see undo::Entry), so that a kind added without one
+    // does not compile.
+    std::optional<UndoWhat> Apply(undo::StrokeBaked& entry, bool undo);
+    std::optional<UndoWhat> Apply(undo::Erased& entry, bool undo);
+    std::optional<UndoWhat> Apply(undo::ItemDeleted& entry, bool undo);
+    std::optional<UndoWhat> Apply(undo::NoteTextChanged& entry, bool undo);
+    std::optional<UndoWhat> Apply(undo::PaintedTilesChanged& entry, bool undo);
+    std::optional<UndoWhat> Apply(undo::ItemCreated& entry, bool undo);
+    std::optional<UndoWhat> Apply(undo::PlacementChanged& entry, bool undo);
+    std::optional<UndoWhat> Apply(undo::ItemsArrived& entry, bool undo);
     // The vector half of an Erased entry, one function per direction - see
-    // UndoEntry::Kind::Erased. False, changing nothing, when the item's
-    // strokes are not the list the entry describes.
-    static bool RestoreStrokesBeforeErase(Item& item, const UndoEntry& entry);
-    static bool ReapplyErase(Item& item, const UndoEntry& entry);
+    // undo::Erased. False, changing nothing, when the item's strokes are
+    // not the list the entry describes.
+    static bool RestoreStrokesBeforeErase(Item& item, const undo::Erased& entry);
+    static bool ReapplyErase(Item& item, const undo::Erased& entry);
     // Whether every snippet an ItemsArrived entry moved can go the way
     // `undo` says: back to a canvas that is still there and not deleted,
     // or here again from one, itself not deleted. A copy always can.
-    bool ArrivalsCanMove(const UndoEntry& entry, bool undo) const;
+    bool ArrivalsCanMove(const undo::ItemsArrived& entry, bool undo) const;
     // The painted half of an entry, applied in either direction: puts back
-    // the tiles (or the whole image) the entry holds and keeps what they
-    // replaced, so the entry is its own inverse afterwards.
-    bool SwapPaintedUndoState(UndoEntry& entry);
+    // the tiles (or the whole image) it holds and keeps what they
+    // replaced, so it is its own inverse afterwards. False when there is
+    // no painted half, or no layer for it.
+    bool SwapPainted(undo::Painted& painted);
     // Forgets everything recorded for a canvas - called when the canvas is
     // deleted for good, which is safe precisely because there is nothing
     // left there that could ever want these. A canvas merely deleted keeps
@@ -651,9 +527,9 @@ private:
     // could outlive that - its item being moved to another canvas - is
     // closed by ForgetHistoryOfItem. A canvas's entries are dropped outright
     // when it is deleted for good (see DropHistoryOfCanvas).
-    std::unordered_map<CanvasId, std::deque<UndoEntry>> undoStacks_;
+    std::unordered_map<CanvasId, std::deque<undo::Entry>> undoStacks_;
     // What Undo has taken back, most recent last - same keying and caps.
-    std::unordered_map<CanvasId, std::deque<UndoEntry>> redoStacks_;
+    std::unordered_map<CanvasId, std::deque<undo::Entry>> redoStacks_;
     // A copy of the erased item's whole stroke list, taken as an eraser
     // gesture begins, and beside it where every stroke currently in the
     // list came from: eraseOrigins_ is parallel to the item's strokes and
@@ -663,7 +539,7 @@ private:
     // end, exactly which fragments stand for which original - however many
     // times a fragment was clipped again by a later call in the same drag -
     // which is what one entry for the *whole* gesture needs, and what a
-    // before/after diff by value could not say (see UndoEntry::Kind::Erased).
+    // before/after diff by value could not say (see undo::Erased).
     std::vector<Stroke> eraseGestureStartSnapshot_;
     std::vector<size_t> eraseOrigins_;
     std::vector<bool> eraseReplaced_;

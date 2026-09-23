@@ -25,18 +25,10 @@ constexpr size_t kUndoStackCap = 50;
 // clears or several hundred strokes, on each of the two stacks.
 constexpr size_t kUndoStackCapBytes = size_t{128} << 20;
 
-size_t StrokesBytes(const std::vector<Stroke>& strokes) {
-    size_t bytes = 0;
-    for (const Stroke& stroke : strokes) {
-        bytes += stroke.points.size() * sizeof(StrokePoint);
-    }
-    return bytes;
-}
-
 }  // namespace
 
 // The two directions of an Erased entry's vector half, each a rebuild of
-// one list from the other by position - see UndoEntry::Kind::Erased. Both
+// one list from the other by position - see undo::Erased. Both
 // refuse, changing nothing, when the list is not the length the entry says
 // it should be: that means something other than this history has changed
 // the strokes since, and rebuilding from a list that is not the one the
@@ -45,7 +37,7 @@ size_t StrokesBytes(const std::vector<Stroke>& strokes) {
 // Undo: the item holds the after-list. Every original the entry names goes
 // back where it was, in place of the fragments that stood for it; every
 // other stroke is carried over in order.
-bool Session::RestoreStrokesBeforeErase(Item& item, const UndoEntry& entry) {
+bool Session::RestoreStrokesBeforeErase(Item& item, const undo::Erased& entry) {
     size_t expectedAfter = entry.strokeCountBefore - entry.replacements.size();
     for (const auto& replacement : entry.replacements) {
         expectedAfter += replacement.fragments.size();
@@ -72,7 +64,7 @@ bool Session::RestoreStrokesBeforeErase(Item& item, const UndoEntry& entry) {
 
 // Redo: the item holds the before-list. Every original the entry names is
 // replaced, in place, by the fragments the gesture left of it.
-bool Session::ReapplyErase(Item& item, const UndoEntry& entry) {
+bool Session::ReapplyErase(Item& item, const undo::Erased& entry) {
     if (item.strokes.size() != entry.strokeCountBefore) {
         return false;
     }
@@ -91,39 +83,18 @@ bool Session::ReapplyErase(Item& item, const UndoEntry& entry) {
     return true;
 }
 
-size_t Session::UndoEntryBytes(const UndoEntry& entry) {
-    size_t bytes = StrokesBytes(entry.strokes);
-    for (const UndoEntry::StrokeReplacement& replacement : entry.replacements) {
-        bytes += replacement.original.points.size() * sizeof(StrokePoint) + StrokesBytes(replacement.fragments);
-    }
-    for (const PaintedTile& tile : entry.paintedTiles) {
-        bytes += tile.pixelsRGBA.size();
-    }
-    if (entry.paintedBefore) {
-        bytes += entry.paintedBefore->PixelsRGBA().size();
-    }
-    bytes += entry.placements.size() * sizeof(Placement);
-    bytes += entry.arrivals.size() * sizeof(Arrival);
-    // The text a NoteTextChanged entry holds - small for a note typed by
-    // hand, but a note is whatever a record says it is.
-    bytes += entry.previousNoteText.size();
-    // An ItemDeleted entry holds an id; the snippet itself stays in the
-    // library, marked (see UndoEntry::deletedItemId).
-    return bytes;
-}
-
-void Session::PushCapped(std::deque<UndoEntry>& stack, UndoEntry entry) {
+void Session::PushCapped(std::deque<undo::Entry>& stack, undo::Entry entry) {
     stack.push_back(std::move(entry));
     // Summed fresh each push rather than tracked incrementally: the stacks
     // are fifty entries at most, an entry's size is a handful of vector
     // sizes, and the swaps Undo/Redo do on an entry in place would make a
     // running total another thing to keep right.
     size_t total = 0;
-    for (const UndoEntry& e : stack) {
-        total += UndoEntryBytes(e);
+    for (const undo::Entry& e : stack) {
+        total += undo::Bytes(e);
     }
     while (stack.size() > 1 && (stack.size() > kUndoStackCap || total > kUndoStackCapBytes)) {
-        total -= UndoEntryBytes(stack.front());
+        total -= undo::Bytes(stack.front());
         stack.pop_front();
     }
 }
@@ -144,34 +115,20 @@ void Session::DropHistoryOfCanvas(CanvasId canvasId) {
 }
 
 void Session::ForgetHistoryOfItem(CanvasId canvasId, ItemId itemId) {
-    // ItemDeleted is matched on deletedItemId rather than entry.itemId -
-    // that kind names the deleted snippet there, and leaves entry.itemId
-    // unset (see UndoEntry's own doc comment).
-    // PlacementChanged and ItemsArrived name several: this one is taken
-    // out of it, and the entry goes only once it names none - the others'
-    // move or paste is still theirs to take back.
-    const auto namesItem = [itemId](UndoEntry& entry) {
-        if (entry.kind == UndoEntry::Kind::PlacementChanged) {
-            std::erase_if(entry.placements, [itemId](const Placement& p) { return p.itemId == itemId; });
-            return entry.placements.empty();
-        }
-        if (entry.kind == UndoEntry::Kind::ItemsArrived) {
-            std::erase_if(entry.arrivals, [itemId](const Arrival& a) { return a.itemId == itemId; });
-            return entry.arrivals.empty();
-        }
-        return entry.kind == UndoEntry::Kind::ItemDeleted ? entry.deletedItemId == itemId : entry.itemId == itemId;
-    };
+    // An entry about several snippets loses this one and stays for the
+    // rest - see undo::Forget.
+    const auto namesItem = [itemId](undo::Entry& entry) { return undo::Forget(entry, itemId); };
     for (auto* stacks : {&undoStacks_, &redoStacks_}) {
         const auto it = stacks->find(canvasId);
         if (it == stacks->end()) {
             continue;
         }
-        std::deque<UndoEntry>& stack = it->second;
+        std::deque<undo::Entry>& stack = it->second;
         stack.erase(std::remove_if(stack.begin(), stack.end(), namesItem), stack.end());
     }
 }
 
-void Session::PushUndo(UndoEntry entry) {
+void Session::PushUndo(undo::Entry entry) {
     // Filed under whichever canvas is current, which is by definition the
     // one the action just happened on - every edit that pushes is made on
     // the visible canvas.
@@ -191,18 +148,18 @@ void Session::PushUndo(UndoEntry entry) {
     redoStacks_.erase(canvasId);
 }
 
-bool Session::SwapPaintedUndoState(UndoEntry& entry) {
-    if (entry.paintedTiles.empty() && !entry.paintedBefore) {
+bool Session::SwapPainted(undo::Painted& painted) {
+    if (painted.Empty()) {
         return false;  // no painted half
     }
-    Item* item = Manager().FindItemAnywhere(entry.itemId);
-    if (!item || entry.layerIndex >= item->layers.size() || !item->layers[entry.layerIndex].painted) {
+    Item* item = Manager().FindItemAnywhere(painted.itemId);
+    if (!item || painted.layerIndex >= item->layers.size() || !item->layers[painted.layerIndex].painted) {
         return false;
     }
-    Layer& layer = item->layers[entry.layerIndex];
-    if (entry.paintedBefore) {
+    Layer& layer = item->layers[painted.layerIndex];
+    if (painted.wholeImage) {
         // The whole image, a pointer each way - no pixels copied.
-        std::swap(layer.painted, entry.paintedBefore);
+        std::swap(layer.painted, painted.wholeImage);
         UploadPaintedRegion(layer, PixelRect{0, 0, layer.painted->Width(), layer.painted->Height()});
         return true;
     }
@@ -210,190 +167,168 @@ bool Session::SwapPaintedUndoState(UndoEntry& entry) {
     // becomes its own redo (or undo) entry, with no second copy of the
     // pixels anywhere.
     PixelRect changed;
-    entry.paintedTiles = layer.painted->RestoreTiles(entry.paintedTiles, changed);
+    painted.tiles = layer.painted->RestoreTiles(painted.tiles, changed);
     UploadPaintedRegion(layer, changed);
     return true;
 }
 
-// The one dispatch for both directions. Every kind is either its own
-// inverse - a swap, for NoteTextChanged, PaintedTilesChanged and Erased's
-// painted half - or a mirror in which two arrays trade roles (Erased's
-// strokes) or one action has an opposite (StrokeBaked's pop/push,
-// ItemDeleted's restore/delete). So a single function with the direction as
-// a parameter says each of those once.
+// One overload per kind, each for both directions. Every kind is either its
+// own inverse - a swap, for NoteTextChanged, PaintedTilesChanged,
+// PlacementChanged and Erased's painted half - or a mirror in which two
+// arrays trade roles (Erased's strokes) or one action has an opposite
+// (StrokeBaked's pop/push, ItemDeleted's restore/delete, ItemsArrived's
+// send-back/bring). So a function with the direction as a parameter says
+// each of those once.
 //
-// Returns what was undone or redone, or nullopt if nothing changed. A no-op
-// - the item or canvas the entry names is already gone - has nothing
+// Each returns what was undone or redone, or nullopt if nothing changed. A
+// no-op - the item or canvas the entry names is already gone - has nothing
 // meaningful to put on the opposite stack either, so the caller drops it
 // rather than leaving a dead entry there.
-std::optional<Session::UndoWhat> Session::ApplyUndoEntry(UndoEntry& entry, bool undo) {
-    std::optional<UndoWhat> what;
-    switch (entry.kind) {
-        case UndoEntry::Kind::StrokeBaked: {
-            Item* item = Manager().FindItemAnywhere(entry.itemId);
-            if (!item) {
-                return std::nullopt;
-            }
-            if (undo) {
-                // The stroke this entry is for - which is the last one
-                // whenever history alone has touched the list, and is
-                // looked for from the back so that it still is the last
-                // of two equal strokes. Nothing to do if it is gone.
-                if (entry.strokes.empty()) {
-                    return std::nullopt;
-                }
-                const auto it = std::find(item->strokes.rbegin(), item->strokes.rend(), entry.strokes.front());
-                if (it == item->strokes.rend()) {
-                    return std::nullopt;
-                }
-                item->strokes.erase(std::next(it).base());
-            } else {
-                // entry.strokes[0] is the exact value the undo popped - see
-                // UndoEntry::Kind::StrokeBaked's own doc comment for why
-                // it's captured at push time rather than reconstructed.
-                if (entry.strokes.empty()) {
-                    return std::nullopt;
-                }
-                item->strokes.push_back(entry.strokes.front());
-            }
-            what = UndoWhat::Stroke;
-            break;
-        }
-        case UndoEntry::Kind::Erased: {
-            Item* item = Manager().FindItemAnywhere(entry.itemId);
-            if (!item) {
-                return std::nullopt;
-            }
-            // The vector half, rebuilt by position in either direction -
-            // see RestoreStrokesBeforeErase/ReapplyErase - and the painted
-            // half, which is its own inverse. Either half having something
-            // to do is enough for the entry to count.
-            const bool strokesChanged =
-                !entry.replacements.empty() && (undo ? RestoreStrokesBeforeErase(*item, entry) : ReapplyErase(*item, entry));
-            const bool paintChanged = SwapPaintedUndoState(entry);
-            if (!strokesChanged && !paintChanged) {
-                return std::nullopt;
-            }
-            what = UndoWhat::Erase;
-            break;
-        }
-        case UndoEntry::Kind::ItemDeleted: {
-            // The snippet is still where it was, marked: undo clears the
-            // mark, redo makes it again, and the pictures come and go with
-            // it (see Delete). False when there is nothing to change - the
-            // snippet deleted for good since, say - which is this case's
-            // no-op.
-            const bool changed = undo ? Restore(entry.deletedItemId) : Delete(entry.deletedItemId);
-            if (!changed) {
-                return std::nullopt;
-            }
-            what = UndoWhat::Delete;
-            break;
-        }
-        case UndoEntry::Kind::PlacementChanged: {
-            // The same swap both ways. A snippet deleted since, or gone,
-            // is skipped; if none is left the entry has nothing to do.
-            bool changed = false;
-            for (Placement& held : entry.placements) {
-                Item* item = Manager().FindItemAnywhere(held.itemId);
-                if (item == nullptr || Manager().IsItemDeleted(held.itemId)) {
-                    continue;
-                }
-                std::swap(item->rect, held.rect);
-                std::swap(item->isFullscreen, held.isFullscreen);
-                std::swap(item->isFullscreenStretch, held.isFullscreenStretch);
-                std::swap(item->anchorRect, held.anchorRect);
-                std::swap(item->anchorDisplayWidth, held.anchorDisplayWidth);
-                std::swap(item->anchorDisplayHeight, held.anchorDisplayHeight);
-                changed = true;
-            }
-            if (!changed) {
-                return std::nullopt;
-            }
-            what = UndoWhat::Placement;
-            break;
-        }
-        case UndoEntry::Kind::ItemCreated: {
-            // ItemDeleted the other way round: undo marks the new snippet
-            // deleted, redo restores it.
-            const bool changed = undo ? Delete(entry.itemId) : Restore(entry.itemId);
-            if (!changed) {
-                return std::nullopt;
-            }
-            what = UndoWhat::Create;
-            break;
-        }
-        case UndoEntry::Kind::ItemsArrived: {
-            // StepHistory has already asked ArrivalsCanMove, so every moved
-            // snippet has somewhere to go; what may have gone since is a
-            // copy deleted for good, which is skipped.
-            bool changed = false;
-            bool moved = false;
-            for (const Arrival& arrival : entry.arrivals) {
-                if (arrival.fromCanvas == 0) {
-                    changed = (undo ? Delete(arrival.itemId) : Restore(arrival.itemId)) || changed;
-                    continue;
-                }
-                const std::optional<CanvasId> holder = Manager().CanvasHoldingItem(arrival.itemId);
-                if (!holder.has_value()) {
-                    continue;
-                }
-                const CanvasId to = undo ? arrival.fromCanvas : entry.canvasId;
-                if (*holder == to ||
-                    Manager().PlaceItemOnCanvas(arrival.itemId, to, /*copy=*/false,
-                                                undo ? std::optional<size_t>(arrival.fromIndex) : std::nullopt) == 0) {
-                    continue;
-                }
-                // Back here from the canvas it was sent back to: whatever
-                // was done to it there is filed there, and would edit a
-                // snippet that is not on it - see ForgetHistoryOfItem.
-                // Sent back, it leaves nothing behind here that is not
-                // this canvas's to keep: its later edits, already undone,
-                // wait on the redo stack for it to come again.
-                if (!undo) {
-                    ForgetHistoryOfItem(*holder, arrival.itemId);
-                }
-                moved = true;
-            }
-            if (moved) {
-                // Arrived on, or left, the canvas being looked at.
-                SyncTexturesToCurrentCanvas();
-            }
-            if (!changed && !moved) {
-                return std::nullopt;
-            }
-            what = entry.duplicate ? UndoWhat::Duplicate : UndoWhat::Paste;
-            break;
-        }
-        case UndoEntry::Kind::NoteTextChanged: {
-            // Not while the note is open - see StepHistory, which keeps the
-            // entry for later rather than letting it reach here.
-            Item* item = Manager().FindItemAnywhere(entry.itemId);
-            if (!item) {
-                return std::nullopt;
-            }
-            // Swap rather than assign: on the way in item->noteText holds
-            // one direction's text and entry.previousNoteText the other's -
-            // after this the item has the right one and the entry has become
-            // exactly what the opposite direction needs, with no separate
-            // capture step.
-            std::swap(item->noteText, entry.previousNoteText);
-            what = UndoWhat::TextEdit;
-            break;
-        }
-        case UndoEntry::Kind::PaintedTilesChanged: {
-            // Its own inverse - see SwapPaintedUndoState.
-            if (!SwapPaintedUndoState(entry)) {
-                return std::nullopt;
-            }
-            what = UndoWhat::Painting;
-            break;
-        }
+
+std::optional<Session::UndoWhat> Session::Apply(undo::StrokeBaked& entry, bool undo) {
+    Item* item = Manager().FindItemAnywhere(entry.itemId);
+    if (!item) {
+        return std::nullopt;
     }
-    if (what) {
-        Manager().MarkChanged();
+    if (undo) {
+        // The stroke this entry is for - which is the last one whenever
+        // history alone has touched the list, and is looked for from the
+        // back so that it still is the last of two equal strokes. Nothing to
+        // do if it is gone.
+        const auto it = std::find(item->strokes.rbegin(), item->strokes.rend(), entry.stroke);
+        if (it == item->strokes.rend()) {
+            return std::nullopt;
+        }
+        item->strokes.erase(std::next(it).base());
+    } else {
+        item->strokes.push_back(entry.stroke);
     }
-    return what;
+    return UndoWhat::Stroke;
+}
+
+std::optional<Session::UndoWhat> Session::Apply(undo::Erased& entry, bool undo) {
+    Item* item = Manager().FindItemAnywhere(entry.itemId);
+    if (!item) {
+        return std::nullopt;
+    }
+    // The vector half, rebuilt by position in either direction - see
+    // RestoreStrokesBeforeErase/ReapplyErase - and the painted half, which
+    // is its own inverse. Either half having something to do is enough for
+    // the entry to count.
+    const bool strokesChanged =
+        !entry.replacements.empty() && (undo ? RestoreStrokesBeforeErase(*item, entry) : ReapplyErase(*item, entry));
+    const bool paintChanged = SwapPainted(entry.painted);
+    if (!strokesChanged && !paintChanged) {
+        return std::nullopt;
+    }
+    return UndoWhat::Erase;
+}
+
+std::optional<Session::UndoWhat> Session::Apply(undo::ItemDeleted& entry, bool undo) {
+    // The snippet is still where it was, marked: undo clears the mark, redo
+    // makes it again, and the pictures come and go with it (see Delete).
+    // False when there is nothing to change - the snippet deleted for good
+    // since, say - which is this kind's no-op.
+    if (!(undo ? Restore(entry.itemId) : Delete(entry.itemId))) {
+        return std::nullopt;
+    }
+    return UndoWhat::Delete;
+}
+
+std::optional<Session::UndoWhat> Session::Apply(undo::NoteTextChanged& entry, bool /*undo*/) {
+    // Not while the note is open - see StepHistory, which keeps the entry
+    // for later rather than letting it reach here.
+    Item* item = Manager().FindItemAnywhere(entry.itemId);
+    if (!item) {
+        return std::nullopt;
+    }
+    // Swap rather than assign: on the way in item->noteText holds one
+    // direction's text and the entry the other's - after this the item has
+    // the right one and the entry has become exactly what the opposite
+    // direction needs, with no separate capture step.
+    std::swap(item->noteText, entry.previousText);
+    return UndoWhat::TextEdit;
+}
+
+std::optional<Session::UndoWhat> Session::Apply(undo::PaintedTilesChanged& entry, bool /*undo*/) {
+    // Its own inverse - see SwapPainted.
+    if (!SwapPainted(entry.painted)) {
+        return std::nullopt;
+    }
+    return UndoWhat::Painting;
+}
+
+std::optional<Session::UndoWhat> Session::Apply(undo::ItemCreated& entry, bool undo) {
+    // ItemDeleted the other way round: undo marks the new snippet deleted,
+    // redo restores it.
+    if (!(undo ? Delete(entry.itemId) : Restore(entry.itemId))) {
+        return std::nullopt;
+    }
+    return UndoWhat::Create;
+}
+
+std::optional<Session::UndoWhat> Session::Apply(undo::PlacementChanged& entry, bool /*undo*/) {
+    // The same swap both ways. A snippet deleted since, or gone, is
+    // skipped; if none is left the entry has nothing to do.
+    bool changed = false;
+    for (undo::Placement& held : entry.placements) {
+        Item* item = Manager().FindItemAnywhere(held.itemId);
+        if (item == nullptr || Manager().IsItemDeleted(held.itemId)) {
+            continue;
+        }
+        std::swap(item->rect, held.rect);
+        std::swap(item->isFullscreen, held.isFullscreen);
+        std::swap(item->isFullscreenStretch, held.isFullscreenStretch);
+        std::swap(item->anchorRect, held.anchorRect);
+        std::swap(item->anchorDisplayWidth, held.anchorDisplayWidth);
+        std::swap(item->anchorDisplayHeight, held.anchorDisplayHeight);
+        changed = true;
+    }
+    if (!changed) {
+        return std::nullopt;
+    }
+    return UndoWhat::Placement;
+}
+
+std::optional<Session::UndoWhat> Session::Apply(undo::ItemsArrived& entry, bool undo) {
+    // StepHistory has already asked ArrivalsCanMove, so every moved snippet
+    // has somewhere to go; what may have gone since is a copy deleted for
+    // good, which is skipped.
+    bool changed = false;
+    bool moved = false;
+    for (const undo::Arrival& arrival : entry.arrivals) {
+        if (arrival.fromCanvas == 0) {
+            changed = (undo ? Delete(arrival.itemId) : Restore(arrival.itemId)) || changed;
+            continue;
+        }
+        const std::optional<CanvasId> holder = Manager().CanvasHoldingItem(arrival.itemId);
+        if (!holder.has_value()) {
+            continue;
+        }
+        const CanvasId to = undo ? arrival.fromCanvas : entry.canvasId;
+        if (*holder == to ||
+            Manager().PlaceItemOnCanvas(arrival.itemId, to, /*copy=*/false,
+                                        undo ? std::optional<size_t>(arrival.fromIndex) : std::nullopt) == 0) {
+            continue;
+        }
+        // Back here from the canvas it was sent back to: whatever was done
+        // to it there is filed there, and would edit a snippet that is not
+        // on it - see ForgetHistoryOfItem. Sent back, it leaves nothing
+        // behind here that is not this canvas's to keep: its later edits,
+        // already undone, wait on the redo stack for it to come again.
+        if (!undo) {
+            ForgetHistoryOfItem(*holder, arrival.itemId);
+        }
+        moved = true;
+    }
+    if (moved) {
+        // Arrived on, or left, the canvas being looked at.
+        SyncTexturesToCurrentCanvas();
+    }
+    if (!changed && !moved) {
+        return std::nullopt;
+    }
+    return entry.duplicate ? UndoWhat::Duplicate : UndoWhat::Paste;
 }
 
 std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
@@ -411,27 +346,28 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     // committed text out from under the edit would be undone by the edit's
     // own commit anyway, and the entry is still good once the note is
     // closed. A stale entry is another matter, and is dropped below.
-    const UndoEntry& next = stackIt->second.back();
-    if (next.kind == UndoEntry::Kind::NoteTextChanged && textEditItemId_ == next.itemId) {
+    const undo::Entry& next = stackIt->second.back();
+    if (const auto* note = std::get_if<undo::NoteTextChanged>(&next); note && textEditItemId_ == note->itemId) {
         return std::nullopt;
     }
     // A paste whose snippets cannot go the way asked is not left on the
     // stack, where it would stand in front of every older step for good:
     // it is dropped, with nothing moved, and the step says so.
-    if (next.kind == UndoEntry::Kind::ItemsArrived && !ArrivalsCanMove(next, undo)) {
-        const UndoWhat what = next.duplicate ? UndoWhat::Duplicate : UndoWhat::Paste;
+    if (const auto* arrived = std::get_if<undo::ItemsArrived>(&next); arrived && !ArrivalsCanMove(*arrived, undo)) {
+        const UndoWhat what = arrived->duplicate ? UndoWhat::Duplicate : UndoWhat::Paste;
         stackIt->second.pop_back();
         return UndoStep{what, undo, /*refused=*/true};
     }
-    // Not const - the swap kinds mutate it in place (see ApplyUndoEntry)
-    // before it goes onto the opposite stack, which is what makes it that
-    // stack's entry.
-    UndoEntry entry = std::move(stackIt->second.back());
+    // Not const - the swap kinds mutate it in place (see Apply) before it
+    // goes onto the opposite stack, which is what makes it that stack's
+    // entry.
+    undo::Entry entry = std::move(stackIt->second.back());
     stackIt->second.pop_back();
-    const std::optional<UndoWhat> what = ApplyUndoEntry(entry, undo);
+    const std::optional<UndoWhat> what = std::visit([&](auto& e) { return Apply(e, undo); }, entry);
     if (!what) {
         return std::nullopt;
     }
+    Manager().MarkChanged();
     // Onto the opposite stack only if it took effect. Straight onto it,
     // deliberately not via PushUndo: that would clear the redo stack, which
     // on a redo is the very stack this was just taken from, and break a run
@@ -440,8 +376,8 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     return UndoStep{*what, undo};
 }
 
-bool Session::ArrivalsCanMove(const UndoEntry& entry, bool undo) const {
-    for (const Arrival& arrival : entry.arrivals) {
+bool Session::ArrivalsCanMove(const undo::ItemsArrived& entry, bool undo) const {
+    for (const undo::Arrival& arrival : entry.arrivals) {
         if (arrival.fromCanvas == 0) {
             continue;
         }
@@ -488,17 +424,12 @@ void Session::CommitLiveStroke(ItemId itemId) {
     // CanvasManager's own methods - see MarkChanged()'s own doc comment.
     Manager().MarkChanged();
 
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::StrokeBaked;
-    entry.itemId = itemId;
-    // Undo itself only needs itemId (it just pops the last stroke), but
-    // redo needs the actual value back - see UndoEntry::Kind::StrokeBaked.
-    entry.strokes = {itemIt->strokes.back()};
-    PushUndo(std::move(entry));
+    // The value, not only the id: redo pushes it back - see
+    // undo::StrokeBaked.
+    PushUndo(undo::StrokeBaked{itemId, itemIt->strokes.back()});
 }
 
 bool Session::DeleteItem(ItemId itemId) {
-    const CanvasId canvasId = Manager().CurrentCanvasId();
     // Only a snippet on this canvas: the entry pushed afterwards is filed
     // under it. Marked where it is (see Delete), and that entry is what an
     // undo restores.
@@ -508,11 +439,7 @@ bool Session::DeleteItem(ItemId itemId) {
     if (!onThisCanvas || !Delete(itemId)) {
         return false;
     }
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::ItemDeleted;
-    entry.canvasId = canvasId;
-    entry.deletedItemId = itemId;
-    PushUndo(std::move(entry));
+    PushUndo(undo::ItemDeleted{itemId});
     return true;
 }
 
@@ -552,10 +479,10 @@ bool Session::RecordPlacements(std::vector<Placement> before, bool merge) {
     if (merge) {
         const auto it = undoStacks_.find(canvasId);
         if (it != undoStacks_.end() && !it->second.empty()) {
-            const UndoEntry& last = it->second.back();
+            const auto* last = std::get_if<undo::PlacementChanged>(&it->second.back());
             const auto sameItem = [](const Placement& a, const Placement& b) { return a.itemId == b.itemId; };
-            if (last.kind == UndoEntry::Kind::PlacementChanged && last.placements.size() == before.size() &&
-                std::equal(last.placements.begin(), last.placements.end(), before.begin(), sameItem)) {
+            if (last != nullptr && last->placements.size() == before.size() &&
+                std::equal(last->placements.begin(), last->placements.end(), before.begin(), sameItem)) {
                 // Its `before` is where the burst began, which is what an
                 // undo of the burst goes back to; this step's own is
                 // somewhere in the middle, and not wanted. A new edit
@@ -565,10 +492,7 @@ bool Session::RecordPlacements(std::vector<Placement> before, bool merge) {
             }
         }
     }
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::PlacementChanged;
-    entry.placements = std::move(before);
-    PushUndo(std::move(entry));
+    PushUndo(undo::PlacementChanged{std::move(before)});
     return true;
 }
 
@@ -577,10 +501,7 @@ ItemId Session::CreateItem(bool hasBackground, Rect rect, std::string name) {
     if (itemId == 0) {
         return 0;
     }
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::ItemCreated;
-    entry.itemId = itemId;
-    PushUndo(std::move(entry));
+    PushUndo(undo::ItemCreated{itemId});
     return itemId;
 }
 
@@ -619,12 +540,7 @@ void Session::RecordArrivals(std::vector<Arrival> arrivals, bool duplicate) {
     if (arrivals.empty()) {
         return;
     }
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::ItemsArrived;
-    entry.canvasId = Manager().CurrentCanvasId();
-    entry.arrivals = std::move(arrivals);
-    entry.duplicate = duplicate;
-    PushUndo(std::move(entry));
+    PushUndo(undo::ItemsArrived{Manager().CurrentCanvasId(), std::move(arrivals), duplicate});
 }
 
 bool Session::IsUntouched(ItemId itemId) const {
@@ -664,16 +580,14 @@ bool Session::ClearDrawing(ItemId itemId) {
     if (item->strokes.empty() && painted.Empty()) {
         return false;
     }
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::Erased;
+    undo::Erased entry;
     entry.itemId = itemId;
     entry.strokeCountBefore = item->strokes.size();
     entry.replacements.reserve(item->strokes.size());
     for (size_t index = 0; index < item->strokes.size(); ++index) {
         entry.replacements.push_back({index, std::move(item->strokes[index]), {}});
     }
-    entry.layerIndex = painted.layerIndex;
-    entry.paintedBefore = std::move(painted.wholeImage);
+    entry.painted = std::move(painted);
     PushUndo(std::move(entry));
     item->strokes.clear();
     Manager().MarkChanged();
@@ -703,11 +617,7 @@ void Session::EndTextEdit(std::optional<std::string> text) {
     if (!item || !text.has_value() || *text == textEditOriginal_) {
         return;
     }
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::NoteTextChanged;
-    entry.itemId = itemId;
-    entry.previousNoteText = textEditOriginal_;
-    PushUndo(std::move(entry));
+    PushUndo(undo::NoteTextChanged{itemId, textEditOriginal_});
     item->noteText = std::move(*text);
     Manager().MarkChanged();
 }
@@ -819,7 +729,7 @@ void Session::PushEraseGestureUndoEntry(ItemId itemId, PaintedUndo painted) {
     // origin it is, in order (see NoteEraseOutcome). Only while the list
     // is still the one being followed; a mismatch means the vector half
     // is unknown and is left off rather than guessed at.
-    std::vector<UndoEntry::StrokeReplacement> replacements;
+    std::vector<undo::Erased::Replacement> replacements;
     if (eraseOrigins_.size() == item->strokes.size()) {
         // One pass over both: origins never decrease along the list, since
         // erasing keeps the order and each original's fragments stand
@@ -832,7 +742,7 @@ void Session::PushEraseGestureUndoEntry(ItemId itemId, PaintedUndo painted) {
             if (!eraseReplaced_[origin]) {
                 continue;
             }
-            UndoEntry::StrokeReplacement replacement;
+            undo::Erased::Replacement replacement;
             replacement.index = origin;
             replacement.original = eraseGestureStartSnapshot_[origin];
             for (; current < eraseOrigins_.size() && eraseOrigins_[current] == origin; ++current) {
@@ -844,18 +754,10 @@ void Session::PushEraseGestureUndoEntry(ItemId itemId, PaintedUndo painted) {
     if (replacements.empty() && painted.Empty()) {
         return;  // the gesture touched nothing of either kind
     }
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::Erased;
-    entry.itemId = itemId;
-    entry.strokeCountBefore = eraseGestureStartSnapshot_.size();
-    entry.replacements = std::move(replacements);
     // The painted half, if the gesture had one. Its own item is by
     // construction this one - the eraser only acts on the snippet being
     // drawn on.
-    entry.layerIndex = painted.layerIndex;
-    entry.paintedTiles = std::move(painted.tiles);
-    entry.paintedBefore = std::move(painted.wholeImage);
-    PushUndo(std::move(entry));
+    PushUndo(undo::Erased{itemId, eraseGestureStartSnapshot_.size(), std::move(replacements), std::move(painted)});
 }
 
 }  // namespace sz::core

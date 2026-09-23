@@ -268,13 +268,7 @@ void Session::PushPaintedTilesUndo(PaintedUndo painted) {
     if (painted.Empty()) {
         return;
     }
-    UndoEntry entry;
-    entry.kind = UndoEntry::Kind::PaintedTilesChanged;
-    entry.itemId = painted.itemId;
-    entry.layerIndex = painted.layerIndex;
-    entry.paintedTiles = std::move(painted.tiles);
-    entry.paintedBefore = std::move(painted.wholeImage);
-    PushUndo(std::move(entry));
+    PushUndo(undo::PaintedTilesChanged{std::move(painted)});
 }
 
 Session::PaintedUndo Session::ErasePaintedLayersInRect(Item& item, float minX, float minY, float maxX, float maxY) {
