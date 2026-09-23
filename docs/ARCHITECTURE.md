@@ -1736,7 +1736,11 @@ and Hotkeys are about *whatever is underneath* and are what a profile may
 override, which makes the section boundary the rule. Hotkeys holds the
 three global summon keys above its profile picker and the rebindable tool
 keys below it, since a control that governs what is below it must have
-nothing above it that it does not govern. Most rows bind ImGui widgets
+nothing above it that it does not govern. Behavior does the same with
+deleted-item retention. In both sections each half sits in its own box,
+badged Global or Per profile, and the per-profile box carries the accent
+down its edge. A heading alone read as one more group of the list,
+rather than as the line past which a profile changes things. Most rows bind ImGui widgets
 straight to the settings' fields and commit on a finished edit; colour
 swatches commit on deactivation rather than on every frame of a drag,
 which wrote the file sixty times a second.

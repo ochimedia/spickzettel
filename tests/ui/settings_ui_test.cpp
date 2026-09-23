@@ -299,7 +299,7 @@ TEST_F(UiTest, AHelpMarkerOpensItsExplanationInFront) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
         ctx->ItemClick("**/###sectionbehavior");
-        ctx->ItemClick("**/##help_freezescreen");
+        ctx->ItemClick("**/##help_dontstealfocus");
 
         ImGuiWindow* popover = ctx->WindowInfo("//$FOCUSED").Window;
         IM_CHECK(popover != nullptr);

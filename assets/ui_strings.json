@@ -302,6 +302,10 @@
   "deleteConfirm.deleteForGood": "Delete permanently",
 
   "_settingsTabs": "The list down the left of the Settings tab.",
+  "settings.scopeGlobal": "Global",
+  "settings.scopeGlobalNote": "The same for every program",
+  "settings.scopeProfile": "Per profile",
+  "settings.scopeProfileNote": "The defaults, or what a profile changes - pick which below",
   "settings.tabAppearance": "Appearance",
   "settings.tabInteraction": "Interaction",
   "settings.tabBehavior": "Behavior",

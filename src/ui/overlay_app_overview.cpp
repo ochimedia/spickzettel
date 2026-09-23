@@ -2,6 +2,7 @@
 #include "ui/overlay_app_internal.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -214,6 +215,85 @@ void SettingsHeading(const char* id, const char* title, const char* help = nullp
 void SettingsGroupBreak() {
     ImGui::Spacing();
     ImGui::Separator();
+    ImGui::Spacing();
+}
+
+// The two halves of a section that has both - Behavior, Hotkeys - each in
+// a box of its own with a badge saying which half it is. A heading alone
+// read as one more group of the list; the box says where the half ends,
+// and the per-profile one carries the accent down its edge, the color the
+// picker's "running now" is in, so the part a profile can change is the
+// part that looks different.
+//
+// Drawn behind its contents after they are laid out - its height is not
+// known before - on a draw list split in two, contents on top. The
+// contents sit in a group so that the rows' own SameLine offsets are
+// measured from the box's inside rather than from the window's edge.
+enum class SettingsScope { Global, Profile };
+struct SettingsScopeBox {
+    ImDrawListSplitter splitter;
+    ImVec2 start;
+    float width = 0.0f;
+    SettingsScope scope = SettingsScope::Global;
+};
+constexpr float kScopeBoxPadding = 12.0f;
+
+void BeginSettingsScope(SettingsScopeBox& box, SettingsScope scope) {
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    box.scope = scope;
+    box.start = ImGui::GetCursorScreenPos();
+    box.width = ImGui::GetContentRegionAvail().x;
+    box.splitter.Split(drawList, 2);
+    box.splitter.SetCurrentChannel(drawList, 1);
+    // A group's separators run to the window's edge; this stops them, and
+    // anything else, the box's padding short of its border.
+    ImGui::PushClipRect(box.start, ImVec2(box.start.x + box.width - kScopeBoxPadding, FLT_MAX), true);
+
+    ImGui::Dummy(ImVec2(0.0f, kScopeBoxPadding - ImGui::GetStyle().ItemSpacing.y));
+    ImGui::Indent(kScopeBoxPadding);
+    ImGui::BeginGroup();
+    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + box.width - 2.0f * kScopeBoxPadding);
+
+    // The badge: a pill with the half's name, and a line of what it means.
+    const bool global = scope == SettingsScope::Global;
+    const char* name = global ? strings::kSettingsScopeGlobal : strings::kSettingsScopeProfile;
+    const ImVec2 textSize = ImGui::CalcTextSize(name);
+    const ImVec2 pad(8.0f, 2.0f);
+    const ImVec2 pillMin = ImGui::GetCursorScreenPos();
+    const ImVec2 pillMax(pillMin.x + textSize.x + 2.0f * pad.x, pillMin.y + textSize.y + 2.0f * pad.y);
+    drawList->AddRectFilled(pillMin, pillMax,
+                            global ? ImGui::GetColorU32(theme::kGraphite600) : theme::AccentU32(),
+                            (pillMax.y - pillMin.y) * 0.5f);
+    drawList->AddText(ImVec2(pillMin.x + pad.x, pillMin.y + pad.y),
+                      ImGui::GetColorU32(global ? theme::kGraphite100 : theme::AccentInk()), name);
+    ImGui::Dummy(ImVec2(pillMax.x - pillMin.x, pillMax.y - pillMin.y));
+    ImGui::SameLine(0.0f, 10.0f);
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + pad.y);
+    ImGui::TextColored(theme::kGraphite300, "%s",
+                       global ? strings::kSettingsScopeGlobalNote : strings::kSettingsScopeProfileNote);
+    ImGui::Spacing();
+    ImGui::Spacing();
+}
+
+void EndSettingsScope(SettingsScopeBox& box) {
+    ImGui::PopClipRect();
+    ImGui::PopTextWrapPos();
+    ImGui::EndGroup();
+    ImGui::Unindent(kScopeBoxPadding);
+    ImGui::Dummy(ImVec2(0.0f, kScopeBoxPadding - ImGui::GetStyle().ItemSpacing.y));
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    box.splitter.SetCurrentChannel(drawList, 0);
+    const ImVec2 max(box.start.x + box.width, ImGui::GetCursorScreenPos().y - ImGui::GetStyle().ItemSpacing.y);
+    constexpr float kRounding = 8.0f;
+    drawList->AddRectFilled(box.start, max, ImGui::GetColorU32(theme::kFieldBg), kRounding);
+    drawList->AddRect(box.start, max, ImGui::GetColorU32(theme::kPanelBorderStrong), kRounding);
+    if (box.scope == SettingsScope::Profile) {
+        drawList->AddRectFilled(box.start, ImVec2(box.start.x + 4.0f, max.y), theme::AccentU32(), kRounding,
+                                ImDrawFlags_RoundCornersLeft);
+    }
+    box.splitter.Merge(drawList);
+    ImGui::Spacing();
     ImGui::Spacing();
 }
 
@@ -1676,6 +1756,8 @@ void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
 // through the profile path on its own (see TrayController::
 // OnSettingsChanged, which deliberately copies no behavior setting).
 void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
+    SettingsScopeBox globalBox;
+    BeginSettingsScope(globalBox, SettingsScope::Global);
     // One row: the switch, the number of days, the unit. The days are
     // disabled while the switch is off but keep their value, so turning it
     // back on brings back the period chosen before.
@@ -1693,9 +1775,10 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(strings::kSettingsPurgeDeletedDays);
     ImGui::EndDisabled();
+    EndSettingsScope(globalBox);
 
-    SettingsGroupBreak();
-
+    SettingsScopeBox profileBox;
+    BeginSettingsScope(profileBox, SettingsScope::Profile);
     // What the overlay is up over. Read-only for now, and the reason it is
     // here at all: every setting in this section is an answer to a question
     // about *that* application, and until now there was nothing on screen
@@ -1821,6 +1904,7 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     if (!settings_.Live().freezeScreen) {
         session_.ReleaseFrozenScreen();
     }
+    EndSettingsScope(profileBox);
 }
 
 void OverlayApp::RenderSettingsDebug(bool& anyChanged) {
@@ -2357,9 +2441,11 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
     // "Showing: Defaults / some profile" they read as more rows that
     // profile could change. A control that governs what is below it has to
     // have nothing above it that it doesn't govern.
+    const float buttonX = KeyButtonColumn();
+    SettingsScopeBox globalBox;
+    BeginSettingsScope(globalBox, SettingsScope::Global);
     SettingsHeading("hotkeyssummoningheading", strings::kHotkeysSummoningHeading,
                      strings::kHotkeysSummoningHelp);
-    const float buttonX = KeyButtonColumn();
     RenderHotkeyEditor("hkedit", strings::kHotkeysEditMode, HotkeySlot::EditMode, Cfg().hotkeyEditMode, buttonX);
     RenderHotkeyEditor("hkview", strings::kHotkeysViewMode, HotkeySlot::ViewMode, Cfg().hotkeyViewMode, buttonX);
     RenderHotkeyEditor("hkquick", strings::kHotkeysQuickCapture, HotkeySlot::QuickCapture, Cfg().hotkeyQuickCapture,
@@ -2368,9 +2454,10 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
                        Cfg().hotkeySilentCapture, buttonX);
     anyChanged |= CheckboxWithHelp("hotkeyssaywhenhidden", strings::kHotkeysSayWhenHidden, &Cfg().showToastsWhileHidden,
         strings::kHotkeysSayWhenHiddenHelp);
+    EndSettingsScope(globalBox);
 
-    SettingsGroupBreak();
-
+    SettingsScopeBox profileBox;
+    BeginSettingsScope(profileBox, SettingsScope::Profile);
     RenderEditTargetPicker(ProfileGroup::Shortcuts);
 
     SettingsHeading("hotkeysshortcuttoolsheading", strings::kHotkeysShortcutToolsHeading,
@@ -2398,6 +2485,7 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
     SettingsHeading("hotkeysshortcuthelpheading", strings::kHotkeysShortcutHelpHeading);
     ImGui::Spacing();
     RenderShortcutEditor(ShortcutAction::CheatSheet, icons::kKeyboard, strings::kMenuCheatSheet, buttonX);
+    EndSettingsScope(profileBox);
 }
 
 namespace {
