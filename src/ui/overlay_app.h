@@ -162,6 +162,18 @@ enum class CanvasMenuAction {
     Delete,
 };
 
+// The same, for the context menu a right click on empty canvas opens - see
+// BuildEmptyCanvasMenuRows.
+enum class EmptyCanvasMenuAction {
+    NewScreenshot,
+    NewDrawing,
+    FullscreenScreenshot,
+    FullscreenDrawing,
+    Paste,
+    Overview,
+    Settings,
+};
+
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
 // attached to via Dear ImGui. Contains no OS-specific code: rendering is
 // entirely through ImGui's platform-agnostic API.
@@ -310,6 +322,8 @@ public:
     // The same for the canvas bar's tiles - see RenderCanvasContextMenu.
     bool IsCanvasContextMenuOpen() const { return canvasContextMenu_.IsOpen(); }
     std::optional<CanvasId> CanvasContextMenuCanvas() const { return canvasContextMenuCanvasId_; }
+    // And for empty canvas - see RenderEmptyCanvasMenu.
+    bool IsEmptyCanvasMenuOpen() const { return emptyCanvasMenu_.IsOpen(); }
     // How far out the canvas bar is, 0 to 1 - see EdgeReveal and
     // UpdateEdgePanels.
     float CanvasBarReveal() const { return canvasBarReveal_.amount; }
@@ -728,6 +742,14 @@ private:
     // opened.
     void BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEntry>& rows);
     void RunItemMenuAction(ItemMenuAction action, ItemId itemId);
+    // The context menu a right click on empty canvas opens: the ways to
+    // make a snippet, Paste, and the way to the Overview and Settings -
+    // what the canvas itself offers, with no snippet to act on. Asked for
+    // the same way as the snippet's (see HandleEmptyCanvasRightPress).
+    void OpenEmptyCanvasMenu(ImVec2 at);
+    void RenderEmptyCanvasMenu();
+    void BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) const;
+    void RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action);
     // "Ctrl+D" for a bound action, empty for an unbound one - what a menu
     // row shows on its right. FormatKeyComboLabel's "(none)" is the right
     // answer for a key editor and the wrong one here, where an action
@@ -1039,14 +1061,22 @@ private:
     // handling for that button); false lets it fall through to whatever it
     // would otherwise do.
     bool HandleItemGesture(const platform::MouseEvent& event);
-    // The one creation gesture, press to release: a press on empty canvas
-    // starts it with either button - the left makes a screenshot, the
-    // right a drawing - and so does a left press anywhere while a creation
-    // is armed. Dragged, it frames the snippet; the second press of a
-    // double-click makes it fullscreen; a plain click makes nothing (with
-    // a creation tool in hand, which was picked on purpose, a click is
-    // fullscreen too). Returns true if the event was the gesture's.
+    // The one creation gesture, press to release, on the left button: a
+    // press on empty canvas starts it - making whichever kind the modifier
+    // held picks (see EmptyCanvasCreationKind) - and so does a press
+    // anywhere while a creation is armed. Dragged, it frames the snippet;
+    // the second press of a double-click makes it fullscreen; a plain
+    // click makes nothing (with a creation tool in hand, which was picked
+    // on purpose, a click is fullscreen too). Returns true if the event
+    // was the gesture's.
     bool HandleCreationGesture(const platform::MouseEvent& event);
+    // What a left press on empty canvas makes with the modifiers held right
+    // now, by AppConfig::screenshotTrigger and drawingTrigger - nothing if
+    // neither is set to them.
+    std::optional<ItemCreationKind> EmptyCanvasCreationKind() const;
+    // A right press on empty canvas, press to release: a click opens the
+    // empty canvas's menu where it landed, and a drag does nothing.
+    void HandleEmptyCanvasRightPress(const platform::MouseEvent& event);
     // A stroke, an erase or a note opened, on the snippet in drawing mode
     // - the marking tools' whole gesture, Down to Up. Only ever called in
     // drawing mode: the Down arms drawingItem_, and the Move and Up that
@@ -1059,9 +1089,10 @@ private:
     DrawShape ShapeForPress() const;
     // Remembers this press for the next one to be judged a double-click
     // against, and says whether it is one: the same button, within
-    // kDoubleClickSeconds and kDoubleClickPx of the last press, with no
-    // modifier held for either. A double is never the first half of the
-    // next one.
+    // kDoubleClickSeconds and kDoubleClickPx of the last press, with the
+    // same modifiers held for both - none, or one that picks what a press
+    // on empty canvas makes. A double is never the first half of the next
+    // one.
     bool NoteDoubleClick(const platform::MouseEvent& event);
     // Remembers the press in progress as one a hold can stand in for a
     // double-click on: held still for kHoldSeconds it enters drawing mode
@@ -1459,11 +1490,18 @@ private:
         float y = 0.0f;
         bool erasing = false;
     };
+    // A right press on empty canvas, until its release opens the menu - or
+    // until it drags, which ends it. See HandleEmptyCanvasRightPress.
+    struct EmptyCanvasRightPress {
+        float x = 0.0f;
+        float y = 0.0f;
+    };
     // The last press on the raw pipeline, for the next one to be judged a
     // double-click against - see NoteDoubleClick. Cleared once it has been
     // the first half of a double, so a third click starts over.
     struct LastPress {
         platform::MouseButton button = platform::MouseButton::Left;
+        CreationTrigger modifiers = CreationTrigger::Plain;
         double atSeconds = 0.0;
         float x = 0.0f;
         float y = 0.0f;
@@ -1556,9 +1594,6 @@ private:
     // by a press on empty canvas (see HandleCreationGesture).
     struct CreationGesture {
         ItemCreationKind kind = ItemCreationKind::Screenshot;
-        // Which button it was pressed with: the left for a creation tool
-        // picked by key, either for a press on empty canvas.
-        platform::MouseButton button = platform::MouseButton::Left;
         float downX = 0.0f;  // where it was pressed
         float downY = 0.0f;
         // Where the pointer is now, once it has travelled far enough from
@@ -1625,7 +1660,9 @@ private:
     //  - BoxSelection: the box dragged with Shift to select by;
     //  - CreationGesture: a snippet being framed or placed;
     //  - StrokeInFlight: the pen or the eraser in drawing mode;
-    //  - RightErase: the right button's erase on the snippet drawn on.
+    //  - RightErase: the right button's erase on the snippet drawn on;
+    //  - EmptyCanvasRightPress: a right click on empty canvas, until it
+    //    opens the menu.
     //
     // One field rather than one per kind, because they exclude each other,
     // and with one each nothing said so: which was live followed from the
@@ -1637,7 +1674,7 @@ private:
     // EndGesture, or by its own release; once it has ended, the rest of the
     // held button's drag finds nothing to continue and does nothing.
     using Gesture = std::variant<std::monostate, ItemGesture, BarPress, BoxSelection, CreationGesture, StrokeInFlight,
-                                 RightErase>;
+                                 RightErase, EmptyCanvasRightPress>;
     Gesture gesture_;
     template <class T>
     T* GestureIf() {
@@ -1665,6 +1702,8 @@ private:
     // The canvas bar's own, and which tile's canvas it is up for.
     ContextMenu canvasContextMenu_{"##canvas_context_menu"};
     std::optional<CanvasId> canvasContextMenuCanvasId_ = std::nullopt;
+    // Empty canvas's, which is up for nothing in particular.
+    ContextMenu emptyCanvasMenu_{"##empty_canvas_menu"};
     // Why the popovers open through request flags (this one, and
     // itemPropertiesPopoverRequested_ below) rather than calling
     // ImGui::OpenPopup where the button fires: a selection bar button

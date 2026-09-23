@@ -16,6 +16,11 @@
 
 namespace sz::core {
 
+// Which left press on empty canvas makes a snippet of one kind - see
+// AppConfig::screenshotTrigger. Shift is not one of them: a Shift-drag on
+// empty canvas is the box that selects.
+enum class CreationTrigger { Plain, Ctrl, Alt, Off };
+
 // User-editable settings, persisted as config.json (see ParseConfig/
 // SerializeConfig below). No dependency on any OS API — file I/O and path
 // resolution happen outside this type.
@@ -233,6 +238,14 @@ struct AppConfig {
     // in a drawing program.
     // See OverlayApp::HandleItemGesture.
     bool raiseSelectedSnippet = true;
+    // What a left press on empty canvas makes, by the modifier held as it
+    // starts: a plain press, one with Ctrl, one with Alt - or neither, and
+    // that kind is then made from the canvas's context menu or its tool's
+    // key alone. The two never share a trigger: ParseConfig puts back the
+    // defaults if a file says they do, and Settings swaps them rather than
+    // letting both have one. See OverlayApp::HandleCreationGesture.
+    CreationTrigger screenshotTrigger = CreationTrigger::Plain;
+    CreationTrigger drawingTrigger = CreationTrigger::Ctrl;
     // The two bars that float over the selection: which buttons each one
     // carries, in what order, and which of them are shown - see
     // BarButtonList, and Settings > Interaction, which is a row of the

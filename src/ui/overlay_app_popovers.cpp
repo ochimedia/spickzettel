@@ -427,6 +427,79 @@ void OverlayApp::RunItemMenuAction(ItemMenuAction action, ItemId itemId) {
     }
 }
 
+// ================= Empty canvas's context menu =================
+
+void OverlayApp::OpenEmptyCanvasMenu(ImVec2 at) { emptyCanvasMenu_.RequestOpenAt(at); }
+
+void OverlayApp::RenderEmptyCanvasMenu() {
+    const std::optional<int> chosen = emptyCanvasMenu_.Render(
+        [&](std::vector<ContextMenuEntry>& rows) { BuildEmptyCanvasMenuRows(rows); });
+    if (chosen.has_value()) {
+        RunEmptyCanvasMenuAction(static_cast<EmptyCanvasMenuAction>(*chosen));
+    }
+}
+
+void OverlayApp::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) const {
+    const auto add = [&rows](EmptyCanvasMenuAction action, const char* id, const Icon* icon, const char* label,
+                              bool enabled = true, std::string shortcut = {}, bool separatorAbove = false) {
+        rows.push_back(ContextMenuEntry{static_cast<int>(action), id, icon, label, std::move(shortcut), enabled,
+                                         separatorAbove});
+    };
+    // Every way to make a snippet, whatever the left button has been set
+    // to make on its own (see AppConfig::screenshotTrigger): the menu is
+    // where the kind a press does not make is still one click away. The
+    // two "New" rows pick up the creation tool, as its key does, so the
+    // next press frames or places it; the fullscreen ones make it at once.
+    add(EmptyCanvasMenuAction::NewScreenshot, "##emptymenu_new_screenshot", &icons::kCamera,
+        strings::kMenuNewScreenshot, true, MenuShortcutLabel(ShortcutAction::NewScreenshot));
+    add(EmptyCanvasMenuAction::FullscreenScreenshot, "##emptymenu_fullscreen_screenshot", &icons::kMaximize,
+        strings::kMenuFullscreenScreenshot);
+    add(EmptyCanvasMenuAction::NewDrawing, "##emptymenu_new_drawing", &icons::kPen, strings::kMenuNewDrawing, true,
+        MenuShortcutLabel(ShortcutAction::NewDrawing));
+    add(EmptyCanvasMenuAction::FullscreenDrawing, "##emptymenu_fullscreen_drawing", &icons::kMaximize,
+        strings::kMenuFullscreenDrawing);
+
+    add(EmptyCanvasMenuAction::Paste, "##emptymenu_paste", &icons::kClipboard, strings::kMenuPaste,
+        /*enabled=*/!clipboard_.empty(), MenuShortcutLabel(ShortcutAction::Paste), /*separatorAbove=*/true);
+
+    add(EmptyCanvasMenuAction::Overview, "##emptymenu_overview", &icons::kLayoutGrid, strings::kMenuOverview, true,
+        {}, /*separatorAbove=*/true);
+    add(EmptyCanvasMenuAction::Settings, "##emptymenu_settings", nullptr, strings::kMenuSettings);
+}
+
+void OverlayApp::RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action) {
+    const ImGuiIO& io = ImGui::GetIO();
+    switch (action) {
+        case EmptyCanvasMenuAction::NewScreenshot:
+            PickTool(Tool::NewScreenshot);
+            return;
+        case EmptyCanvasMenuAction::NewDrawing:
+            PickTool(Tool::NewDrawing);
+            return;
+        case EmptyCanvasMenuAction::FullscreenScreenshot:
+            // The menu is gone by now, and was never in the picture anyway:
+            // a capture leaves the overlay's own window out (see
+            // IOverlayWindow::CaptureRegionAsTexture).
+            CreateFullscreenItem(ItemCreationKind::Screenshot, io.DisplaySize.x, io.DisplaySize.y);
+            return;
+        case EmptyCanvasMenuAction::FullscreenDrawing:
+            // Asked for, so not watched as a stray the way a double-click's
+            // is (see untouchedDrawing_) - as with a creation tool.
+            CreateFullscreenItem(ItemCreationKind::Drawing, io.DisplaySize.x, io.DisplaySize.y);
+            return;
+        case EmptyCanvasMenuAction::Paste:
+            PasteFromClipboard();
+            return;
+        case EmptyCanvasMenuAction::Overview:
+            OpenOverview();
+            return;
+        case EmptyCanvasMenuAction::Settings:
+            OpenOverview();
+            SwitchOverviewTab(OverviewTab::Settings);
+            return;
+    }
+}
+
 // ================= The colour chooser =================
 
 void OverlayApp::OpenColorChooser(ImVec2 from) {

@@ -3,9 +3,9 @@
 // A context menu: a popup of action rows, each with an optional icon on
 // the left, a short name, and - right-aligned and dimmed - the keyboard
 // shortcut that does the same thing. Right-clicking a snippet opens one,
-// and so does right-clicking a canvas in the dock; other places are meant
-// to get their own, which is why this is a small class of its own rather
-// than another Render... member of OverlayApp.
+// and so does right-clicking a canvas in the dock or empty canvas; other
+// places are meant to get their own, which is why this is a small class of
+// its own rather than another Render... member of OverlayApp.
 //
 // Deliberately knows nothing about the app. It is handed rows, draws them,
 // and hands back the `action` of whichever was chosen; every colour comes

@@ -19,9 +19,11 @@ the repo root and rebuild to change it.
   on it.
 - Ctrl+Alt+S - the same capture, without opening anything.
 
-Making a snippet is a press on empty canvas: left-drag to capture a
-screenshot of a region, right-drag to frame a drawing, double-click (or
-hold) for a fullscreen one. A plain click makes nothing.
+Making a snippet is a press on empty canvas: drag to capture a
+screenshot of a region, Ctrl-drag to frame a drawing, double-click (or
+hold) for a fullscreen one. A plain click makes nothing. Which press
+makes which is up to you, in Settings. Right-click empty canvas for a
+menu with every way to make one, Paste, the Overview and Settings.
 
 - Click a snippet to select it, drag it to move it, drag a handle to
   resize it. Shift adds to the selection; Shift-drag on open canvas draws

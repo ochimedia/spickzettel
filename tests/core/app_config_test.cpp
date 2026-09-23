@@ -244,6 +244,8 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.strokeRenderMode = StrokeRenderMode::Rasterized;
     config.paintPixelsInsteadOfStrokes = true;
     config.raiseSelectedSnippet = false;
+    config.screenshotTrigger = CreationTrigger::Alt;
+    config.drawingTrigger = CreationTrigger::Off;
     config.overviewShowsStrokes = false;
     config.overviewShowsBitmaps = true;
     config.purgeDeleted = true;
@@ -515,6 +517,26 @@ TEST(AppConfigTest, PaintPixelsInsteadOfStrokesDefaultsToOffAndParses) {
     EXPECT_FALSE(ParseConfig(One("drawing", "raiseSelected", "false")).raiseSelectedSnippet);
     EXPECT_TRUE(ParseConfig(One("drawing", "paintPixels", "true")).paintPixelsInsteadOfStrokes);
     EXPECT_FALSE(ParseConfig(One("drawing", "paintPixels", "false")).paintPixelsInsteadOfStrokes);
+}
+
+// A plain press makes a screenshot and Ctrl a drawing unless told
+// otherwise; one press cannot make both, so a file that says it does gets
+// the defaults back - except that both may be off.
+TEST(AppConfigTest, CreationTriggersDefaultParseAndNeverCoincide) {
+    EXPECT_EQ(DefaultConfig().screenshotTrigger, CreationTrigger::Plain);
+    EXPECT_EQ(DefaultConfig().drawingTrigger, CreationTrigger::Ctrl);
+    EXPECT_EQ(ParseConfig(One("drawing", "drawingTrigger", R"("ALT")")).drawingTrigger, CreationTrigger::Alt);
+    EXPECT_EQ(ParseConfig(One("drawing", "drawingTrigger", R"("shift")")).drawingTrigger, CreationTrigger::Ctrl)
+        << "Shift is the selection box's";
+
+    const AppConfig clash =
+        ParseConfig(R"({"drawing": {"screenshotTrigger": "alt", "drawingTrigger": "alt"}})");
+    EXPECT_EQ(clash.screenshotTrigger, CreationTrigger::Plain);
+    EXPECT_EQ(clash.drawingTrigger, CreationTrigger::Ctrl);
+
+    const AppConfig bothOff = ParseConfig(R"({"drawing": {"screenshotTrigger": "off", "drawingTrigger": "off"}})");
+    EXPECT_EQ(bothOff.screenshotTrigger, CreationTrigger::Off);
+    EXPECT_EQ(bothOff.drawingTrigger, CreationTrigger::Off);
 }
 
 TEST(AppConfigTest, OverviewPreviewTogglesRoundTrip) {

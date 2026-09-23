@@ -1432,14 +1432,37 @@ place.
 ### Making a snippet
 
 Making a snippet is the thing done most often, so it is a press on empty
-canvas rather than a tool: the left button makes a screenshot, the right
-a drawing; dragged past a threshold it is the dragged rectangle, and a
-double-click - or a press held still for half a second, since a finger
-or a pen cannot double-click reliably - makes it fullscreen. A plain
-click makes nothing, with either button: a fullscreen snippet is too much
-to make by accident. "Empty canvas" means nothing under the pointer and
-nothing open that a click outside of is meant to close, or every
+canvas rather than a tool: dragged past a threshold it is the dragged
+rectangle, and a double-click - or a press held still for half a second,
+since a finger or a pen cannot double-click reliably - makes it
+fullscreen. A plain click makes nothing: a fullscreen snippet is too
+much to make by accident. "Empty canvas" means nothing under the pointer
+and nothing open that a click outside of is meant to close, or every
 dismissal would leave a drawing behind.
+
+Only the left button makes one, and the modifier held as it presses
+picks the kind: by default a plain press makes a screenshot and a Ctrl
+press a drawing. Which press makes which is a setting - plain, Ctrl, Alt,
+or none, for each kind - because which kind someone makes most is theirs
+to say. The two never share one: the file reader puts the defaults back
+if they do, and Settings swaps them rather than greying out the choice
+wanted. Shift is not offered, being the selection box's. A modified press
+is otherwise never half of a double-click (Shift-clicking a snippet twice
+adds and removes it); the modifier a kind is set to is let through, both
+presses needing it, so its fullscreen double-click works like the plain
+one's. In drawing mode a press on empty canvas only leaves the mode,
+modifier or not: Ctrl also draws a rectangle there, and one begun just
+outside the snippet must not make another.
+
+The right button once made drawings the same way. It opens a menu on
+empty canvas now - every way to make either kind (the "New" rows pick
+up the creation tool, the fullscreen ones make it at once), Paste, the
+Overview and Settings - so that a kind set to no press at all, or
+forgotten, is one click away, and the canvas has the menu a right click
+everywhere else has taught. It opens on release, like a snippet's; a
+right drag there does nothing, and a canvas switch or a capture during
+the press drops it rather than releasing it into a menu over a canvas
+nobody clicked on.
 
 Two things make it cheap to hit by accident. A drawing a press made is
 watched until the hand moves on or something goes into it, and discarded
@@ -1538,9 +1561,10 @@ a held finger's left press, and the app does not depend on the OS being
 asked not to.
 
 What the pointer is doing is one field, `OverlayApp::gesture_`: a
-`std::variant` of the six things a held button can be in the middle of -
+`std::variant` of the seven things a held button can be in the middle of -
 moving or resizing snippets, holding a bar button, dragging a selection
-box, framing a snippet, a stroke, a right-drag erase - or none. It was a
+box, framing a snippet, a stroke, a right-drag erase, a right click on
+empty canvas - or none. It was a
 field per kind, which excluded each other only by the order `OnMouse`
 asked in, and ending "whatever is in flight" meant knowing every field
 it might be; each place that forgot one was a bug. A drag went on moving
@@ -1578,8 +1602,8 @@ mode and opens nothing.
 
 The menu itself knows nothing about the app - rows in, the chosen row's
 action out, every colour read from the current ImGui style rather than
-the palette - so the dock's canvases can have their own, and anything
-after them, without it growing a second personality. Each row carries
+the palette - so the dock's canvases and empty canvas can have their
+own, and anything after them, without it growing a second personality. Each row carries
 the shortcut of the action it runs, read from the live binding, which
 makes the menu the place the keys are learned as well as pressed; a row
 whose action has no binding shows nothing rather than the key editor's

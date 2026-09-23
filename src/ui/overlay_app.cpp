@@ -1277,6 +1277,8 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // same level as every other, and so it survives a frame in which the
     // bar itself does not draw.
     RenderCanvasContextMenu();
+    // And empty canvas's, the same way.
+    RenderEmptyCanvasMenu();
     // After both things that can open it, so it opens on the frame after
     // either asked - and at the top level every frame, so the popup always
     // belongs to the same window whichever of the two it came from.

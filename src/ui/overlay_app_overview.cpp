@@ -217,6 +217,52 @@ void SettingsGroupBreak() {
     ImGui::Spacing();
 }
 
+// One row of what a left press on empty canvas makes: the kind, and which
+// press makes it. Choosing the press the other kind has swaps the two
+// rather than refusing - one press cannot make both, and a dropdown that
+// greys out the very choice wanted, with the reason in another row, is a
+// puzzle. See AppConfig::screenshotTrigger.
+bool CreationTriggerRow(const char* id, const char* label, CreationTrigger& trigger, CreationTrigger& other) {
+    struct Choice {
+        CreationTrigger trigger;
+        const char* label;
+    };
+    const Choice choices[] = {
+        {CreationTrigger::Plain, strings::kCreationTriggerPlain},
+        {CreationTrigger::Ctrl, strings::kCreationTriggerCtrl},
+        {CreationTrigger::Alt, strings::kCreationTriggerAlt},
+        {CreationTrigger::Off, strings::kCreationTriggerOff},
+    };
+    const char* preview = strings::kCreationTriggerPlain;
+    for (const Choice& choice : choices) {
+        if (choice.trigger == trigger) {
+            preview = choice.label;
+        }
+    }
+    constexpr float kLabelColumn = 110.0f;
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::SameLine(kLabelColumn);
+    ImGui::SetNextItemWidth(220.0f);
+    bool changed = false;
+    if (ImGui::BeginCombo(Labeled("", id), preview)) {
+        // Same reason as every other popup in this panel - see
+        // KeepPopoverInFront.
+        KeepPopoverInFront();
+        for (const Choice& choice : choices) {
+            if (ImGui::Selectable(choice.label, choice.trigger == trigger) && choice.trigger != trigger) {
+                if (choice.trigger == other && other != CreationTrigger::Off) {
+                    other = trigger;
+                }
+                trigger = choice.trigger;
+                changed = true;
+            }
+        }
+        ImGui::EndCombo();
+    }
+    return changed;
+}
+
 // One branch of the dependency tree the input options are laid out as:
 // the piece of trunk from whatever came before down to this row's middle,
 // plus the stub across to its checkbox.
@@ -1572,6 +1618,14 @@ void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
     SettingsHeading("drawingsnippetsheading", strings::kDrawingSnippetsHeading);
     anyChanged |= CheckboxWithHelp("drawingraiseselected", strings::kDrawingRaiseSelected, &Cfg().raiseSelectedSnippet,
                                     strings::kDrawingRaiseSelectedHelp);
+
+    SettingsGroupBreak();
+
+    SettingsHeading("creationheading", strings::kCreationHeading, strings::kCreationHelp);
+    anyChanged |= CreationTriggerRow("screenshottrigger", strings::kCreationScreenshot, Cfg().screenshotTrigger,
+                                     Cfg().drawingTrigger);
+    anyChanged |= CreationTriggerRow("drawingtrigger", strings::kCreationDrawing, Cfg().drawingTrigger,
+                                     Cfg().screenshotTrigger);
 
     SettingsGroupBreak();
 

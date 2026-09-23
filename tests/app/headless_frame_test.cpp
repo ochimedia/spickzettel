@@ -265,10 +265,10 @@ TEST_F(HeadlessAppTest, ADragOnEmptyCanvasFramesAScreenshot) {
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{item.id}) << "selected as made, so its bar is there";
 }
 
-TEST_F(HeadlessAppTest, ADoubleRightClickOnEmptyCanvasMakesAFullscreenDrawing) {
+TEST_F(HeadlessAppTest, ACtrlDoubleClickOnEmptyCanvasMakesAFullscreenDrawing) {
     ShowEditMode();
     StepFrame();
-    DoubleClick(640.0f, 400.0f, platform::MouseButton::Right);
+    With(ImGuiMod_Ctrl, [&] { DoubleClick(640.0f, 400.0f); });
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     const Item& item = Canvases().CurrentOrNull()->items[0];
     EXPECT_FALSE(item.hasBackground);
@@ -276,7 +276,7 @@ TEST_F(HeadlessAppTest, ADoubleRightClickOnEmptyCanvasMakesAFullscreenDrawing) {
     EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(item.id)) << "a drawing is made to be drawn in";
 }
 
-TEST_F(HeadlessAppTest, ARightDragOnEmptyCanvasFramesADrawingToDrawIn) {
+TEST_F(HeadlessAppTest, ACtrlDragOnEmptyCanvasFramesADrawingToDrawIn) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 600.0f, 500.0f);
@@ -295,31 +295,116 @@ TEST_F(HeadlessAppTest, ARightDragOnEmptyCanvasFramesADrawingToDrawIn) {
     EXPECT_GT(StrokeCountOnCurrentCanvas(), 0u);
 }
 
-// A plain right click on empty canvas makes nothing and opens nothing.
-TEST_F(HeadlessAppTest, ARightClickOnEmptyCanvasDoesNothing) {
+// The right button makes nothing on empty canvas: a click opens its menu,
+// and a drag, a double-click or a hold does nothing at all.
+TEST_F(HeadlessAppTest, ARightClickOnEmptyCanvasOpensItsMenuAndMakesNothing) {
     ShowEditMode();
     StepFrame();
     RightClick(640.0f, 400.0f);
+    EXPECT_TRUE(App().IsEmptyCanvasMenuOpen());
+    EXPECT_FALSE(App().IsItemContextMenuOpen());
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(App().IsEmptyCanvasMenuOpen());
+
+    Drag(300.0f, 300.0f, 600.0f, 500.0f, 4, platform::MouseButton::Right);
+    EXPECT_FALSE(App().IsEmptyCanvasMenuOpen()) << "a drag is no click";
+    Hold(640.0f, 400.0f, platform::MouseButton::Right);
+    PressKey(ImGuiKey_Escape);
+    DoubleClick(640.0f, 400.0f, platform::MouseButton::Right);
+    PressKey(ImGuiKey_Escape);
     StepFrames(30);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u);
 }
 
+// Right-clicking empty canvas is moving on from the snippet being drawn
+// on, as a left press there is.
+TEST_F(HeadlessAppTest, ARightClickOnEmptyCanvasLeavesDrawingModeAndOpensTheMenu) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 600.0f, 500.0f);
+    Drag(350.0f, 350.0f, 500.0f, 450.0f);  // something in it, so it stays
+    ASSERT_TRUE(App().DrawingItem().has_value());
+
+    RightClick(900.0f, 650.0f);
+    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().IsEmptyCanvasMenuOpen());
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+}
+
+// A canvas switch in the middle of a right click on empty canvas drops it:
+// the release that follows opens no menu over the canvas switched to.
+TEST_F(HeadlessAppTest, ACaptureMidRightClickOpensNoMenu) {
+    ShowEditMode();
+    StepFrame();
+    MoveTo(640.0f, 400.0f);
+    StepFrame();
+    RawMouse(640.0f, 400.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);
+    StepFrame();
+    TriggerHotkey(config_.hotkeyQuickCapture);
+    StepFrame();
+    RawMouse(640.0f, 400.0f, platform::MouseEventKind::Up, platform::MouseButton::Right);
+    StepFrames(2);
+    EXPECT_FALSE(App().IsEmptyCanvasMenuOpen());
+}
+
+// Which press makes which kind is a setting: here a plain press makes a
+// drawing, and screenshots come from the menu or their key alone.
+TEST_F(HeadlessAppTest, EachKindIsMadeByThePressItIsSetTo) {
+    AppConfig config = DefaultConfig();
+    config.screenshotTrigger = CreationTrigger::Off;
+    config.drawingTrigger = CreationTrigger::Plain;
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    EXPECT_FALSE(Canvases().CurrentOrNull()->items[0].hasBackground) << "a drawing";
+    Drag(150.0f, 150.0f, 300.0f, 250.0f);  // into it, so it stays
+    PressKey(ImGuiKey_Escape);
+
+    DragWith(ImGuiMod_Ctrl, 600.0f, 300.0f, 900.0f, 500.0f);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "Ctrl is set to nothing";
+    DoubleClick(900.0f, 650.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    EXPECT_FALSE(Canvases().CurrentOrNull()->items[1].hasBackground) << "the fullscreen one is a drawing too";
+}
+
+// With Alt set to make screenshots, an Alt double-click is a double-click:
+// a modified press is otherwise never half of one.
+TEST_F(HeadlessAppTest, AnAltDoubleClickMakesAFullscreenOfWhatAltIsSetTo) {
+    AppConfig config = DefaultConfig();
+    config.screenshotTrigger = CreationTrigger::Alt;
+    config.drawingTrigger = CreationTrigger::Plain;
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    With(ImGuiMod_Alt, [&] { DoubleClick(640.0f, 400.0f); });
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    EXPECT_TRUE(Canvases().CurrentOrNull()->items[0].isFullscreen);
+    EXPECT_TRUE(Canvases().CurrentOrNull()->items[0].hasBackground);
+}
+
 // A drawing that was not meant costs nothing: it goes as soon as the hand
-// moves on from it without putting anything in.
+// moves on from it without putting anything in. And the press that moves
+// on from it is only that, with the modifier that makes a drawing held or
+// not - the same modifier draws a rectangle in it, and one begun a little
+// outside must not make another drawing.
 TEST_F(HeadlessAppTest, AnUntouchedDrawingGoesWhenTheHandMovesOn) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 300.0f, 300.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    const ItemId first = Canvases().CurrentOrNull()->items[0].id;
+
+    MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "only moved on";
+    EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty()) << "gone, not merely deleted";
+    EXPECT_FALSE(App().DrawingItem().has_value());
 
     MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    EXPECT_NE(Canvases().CurrentOrNull()->items[0].id, first);
-    EXPECT_EQ(Canvases().CurrentOrNull()->items.size(), 1u) << "gone, not merely deleted";
     EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(Canvases().CurrentOrNull()->items[0].id))
-        << "and the new one is the one being drawn on";
+        << "and the next press makes the next one";
 }
 
 TEST_F(HeadlessAppTest, ADrawingWithSomethingInItStays) {
@@ -327,6 +412,7 @@ TEST_F(HeadlessAppTest, ADrawingWithSomethingInItStays) {
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 400.0f, 400.0f);
     Drag(150.0f, 150.0f, 300.0f, 300.0f);  // a stroke into it
+    RawClick(900.0f, 650.0f);              // moving on
     MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u);
 }
@@ -357,7 +443,7 @@ TEST_F(HeadlessAppTest, ADrawingEmptiedByUndoIsKeptWhenTheHandMovesOn) {
 TEST_F(HeadlessAppTest, UndoTakesBackAStrayDrawingWithoutLeavingItDeleted) {
     ShowEditMode();
     StepFrame();
-    DoubleClick(640.0f, 400.0f, platform::MouseButton::Right);
+    With(ImGuiMod_Ctrl, [&] { DoubleClick(640.0f, 400.0f); });
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
 
     PressCtrlKey(ImGuiKey_Z);
@@ -859,8 +945,8 @@ TEST_F(HeadlessAppTest, WithSelectInHandADragAnywhereOnASnippetPicksItUp) {
 
 // A right click on a snippet - one not being drawn on - selects it and
 // opens its context menu, and makes nothing and changes nothing else; on
-// empty canvas a right click does nothing (see the tests under "Making a
-// snippet"). Escape then closes the menu, and the *next* Escape clears
+// empty canvas a right click opens that menu instead (see the tests under
+// "Making a snippet"). Escape then closes the menu, and the *next* Escape clears
 // the selection: an open popover takes the first press (see
 // HandleSelectionKeys).
 TEST_F(HeadlessAppTest, ARightClickOnASnippetSelectsItAndOpensItsContextMenu) {
@@ -1136,10 +1222,10 @@ TEST_F(HeadlessAppTest, AHoldOnEmptyCanvasMakesAFullscreenScreenshot) {
     EXPECT_FALSE(App().ArmedCreation().has_value());
 }
 
-TEST_F(HeadlessAppTest, ARightHoldOnEmptyCanvasMakesAFullscreenDrawing) {
+TEST_F(HeadlessAppTest, ACtrlHoldOnEmptyCanvasMakesAFullscreenDrawing) {
     ShowEditMode();
     StepFrame();
-    Hold(640.0f, 400.0f, platform::MouseButton::Right);
+    With(ImGuiMod_Ctrl, [&] { Hold(640.0f, 400.0f); });
 
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     const Item& item = Canvases().CurrentOrNull()->items[0];

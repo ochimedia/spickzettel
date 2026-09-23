@@ -27,6 +27,18 @@ namespace {
 // px, click-vs-drag gesture threshold for the region-capture drag.
 constexpr float kCreationDragThreshold = 6.0f;
 
+// The modifiers held right now, as what they would trigger on empty canvas
+// (see AppConfig::screenshotTrigger): none, Ctrl alone or Alt alone -
+// nothing for Shift, whose press there is the box that selects, or for two
+// held together.
+std::optional<CreationTrigger> HeldCreationTrigger() {
+    const ImGuiIO& io = ImGui::GetIO();
+    if (io.KeyShift || io.KeySuper || (io.KeyCtrl && io.KeyAlt)) {
+        return std::nullopt;
+    }
+    return io.KeyCtrl ? CreationTrigger::Ctrl : io.KeyAlt ? CreationTrigger::Alt : CreationTrigger::Plain;
+}
+
 std::string ItemNameForKind(ItemCreationKind kind, const Canvas& canvas, bool fullscreen) {
     const bool wantsBackground = kind == ItemCreationKind::Screenshot;
     const char* base = wantsBackground ? (fullscreen ? strings::kItemNameScreenshotPrefix : strings::kItemNameRegionPrefix) : strings::kItemNameDrawingPrefix;
@@ -340,16 +352,20 @@ void OverlayApp::PickTool(Tool tool) {
 bool OverlayApp::PressPicksUp() const { return !drawingItem_.has_value() || ImGui::GetIO().KeyAlt; }
 
 bool OverlayApp::NoteDoubleClick(const platform::MouseEvent& event) {
-    const ImGuiIO& io = ImGui::GetIO();
     const double now = ImGui::GetTime();
     // A modified press is never half of a double-click: Shift+click twice
-    // on one snippet adds it and takes it out again, and nothing else.
-    if (io.KeyShift || io.KeyCtrl || io.KeyAlt) {
+    // on one snippet adds it and takes it out again, and nothing else. But
+    // for the modifier that picks what a press on empty canvas makes: with
+    // it held, a double-click there makes that kind fullscreen, as a plain
+    // one does the plain kind - and both presses have to have it.
+    const std::optional<CreationTrigger> held = HeldCreationTrigger();
+    if (!held.has_value() || (*held != CreationTrigger::Plain && *held != Cfg().screenshotTrigger &&
+                              *held != Cfg().drawingTrigger)) {
         lastPress_.reset();
         return false;
     }
     bool isDouble = false;
-    if (lastPress_.has_value() && lastPress_->button == event.button &&
+    if (lastPress_.has_value() && lastPress_->button == event.button && lastPress_->modifiers == *held &&
         now - lastPress_->atSeconds <= kDoubleClickSeconds) {
         const float dx = event.position.x - lastPress_->x;
         const float dy = event.position.y - lastPress_->y;
@@ -358,7 +374,7 @@ bool OverlayApp::NoteDoubleClick(const platform::MouseEvent& event) {
     if (isDouble) {
         lastPress_.reset();  // the pair is spent: a third press starts over
     } else {
-        lastPress_ = LastPress{event.button, now, event.position.x, event.position.y};
+        lastPress_ = LastPress{event.button, *held, now, event.position.x, event.position.y};
     }
     return isDouble;
 }
@@ -392,7 +408,7 @@ void OverlayApp::MatureHeldPress() {
     }
     if (held.creates.has_value()) {
         if (const CreationGesture* creation = GestureIf<CreationGesture>();
-            creation != nullptr && creation->button == held.button) {
+            creation != nullptr && held.button == platform::MouseButton::Left) {
             if (creation->dragTo.has_value()) {
                 return;  // became a drag after all - a frame, not a hold
             }
@@ -430,7 +446,8 @@ Canvas& OverlayApp::EnsureCanvasForNewItem() {
 namespace {
 // Deliberately short. This is the first thing anyone sees, and its job is
 // only to get them to the point where the app can explain itself - the
-// right mouse button, the three hotkeys, and where the full guide lives.
+// two kinds of snippet, the right-click menus, the hotkeys, and where the
+// full guide lives.
 // Wrapped by hand at a width the note's own rect fits, since Item::noteText
 // is drawn as-is (DrawItemContent wraps too, but on its own boundaries -
 // keeping the shortcut lines intact reads better than letting them break
@@ -544,16 +561,13 @@ std::optional<platform::MouseButton> OverlayApp::GestureButton() const {
     if (const ItemGesture* item = GestureIf<ItemGesture>()) {
         return item->button;
     }
-    if (const CreationGesture* creation = GestureIf<CreationGesture>()) {
-        return creation->button;
-    }
-    if (GestureIf<RightErase>() != nullptr) {
+    if (GestureIf<RightErase>() != nullptr || GestureIf<EmptyCanvasRightPress>() != nullptr) {
         return platform::MouseButton::Right;
     }
     if (std::holds_alternative<std::monostate>(gesture_)) {
         return std::nullopt;
     }
-    return platform::MouseButton::Left;  // a bar press, a box, a stroke
+    return platform::MouseButton::Left;  // a bar press, a box, a creation, a stroke
 }
 
 // Feeds the raw pipeline the release it is waiting for, at the pointer's
@@ -574,6 +588,13 @@ std::optional<platform::MouseButton> OverlayApp::GestureButton() const {
 // belongs to the canvas it was made on.
 void OverlayApp::ReleaseGesture() {
     heldPress_.reset();
+    // Except a right click on empty canvas: its release opens a menu, and
+    // one opened by a canvas switch or a capture would be a menu nobody
+    // asked for, over a canvas they did not click on.
+    if (GestureIf<EmptyCanvasRightPress>() != nullptr) {
+        gesture_ = std::monostate{};
+        return;
+    }
     const std::optional<platform::MouseButton> button = GestureButton();
     if (!button.has_value() || ImGui::GetCurrentContext() == nullptr) {
         return;
@@ -608,8 +629,8 @@ void OverlayApp::EndGesture() {
     } else if (const RightErase* erase = std::get_if<RightErase>(&ended); erase != nullptr && erase->erasing) {
         session_.EndErase();
     }
-    // A snippet being framed, a box, a held bar button: nothing done yet,
-    // and nothing done now.
+    // A snippet being framed, a box, a held bar button, a right click on
+    // empty canvas: nothing done yet, and nothing done now.
 }
 
 // ================= The selection's gestures: select, move, resize, and the bar's buttons =================
@@ -1180,9 +1201,51 @@ bool OverlayApp::PressMakesASnippet(const platform::MouseEvent& event) const {
     return target.kind == PointerTarget::Kind::None && !target.body.has_value();
 }
 
+std::optional<ItemCreationKind> OverlayApp::EmptyCanvasCreationKind() const {
+    const std::optional<CreationTrigger> held = HeldCreationTrigger();
+    if (!held.has_value()) {
+        return std::nullopt;
+    }
+    if (Cfg().screenshotTrigger == *held) {
+        return ItemCreationKind::Screenshot;
+    }
+    if (Cfg().drawingTrigger == *held) {
+        return ItemCreationKind::Drawing;
+    }
+    return std::nullopt;
+}
+
+void OverlayApp::HandleEmptyCanvasRightPress(const platform::MouseEvent& event) {
+    if (const EmptyCanvasRightPress* press = GestureIf<EmptyCanvasRightPress>()) {
+        if (event.kind == platform::MouseEventKind::Move) {
+            // A drag is no click, and there is nothing for one to do here:
+            // ended, so the rest of it finds nothing and does nothing.
+            const float dx = event.position.x - press->x;
+            const float dy = event.position.y - press->y;
+            if (std::sqrt(dx * dx + dy * dy) >= kSelectionDragThreshold) {
+                gesture_ = std::monostate{};
+            }
+        } else if (event.kind == platform::MouseEventKind::Up) {
+            gesture_ = std::monostate{};
+            OpenEmptyCanvasMenu(ImVec2(event.position.x, event.position.y));
+        }
+        return;
+    }
+    // Held to the same test as a press that makes a snippet: a right click
+    // that closes a note or a popover is for closing it.
+    if (event.kind != platform::MouseEventKind::Down || !std::holds_alternative<std::monostate>(gesture_) ||
+        !PressMakesASnippet(event)) {
+        return;
+    }
+    // The hand moving on from a snippet it was drawing on, as a left press
+    // here would be.
+    ExitDrawingMode();
+    gesture_ = EmptyCanvasRightPress{event.position.x, event.position.y};
+}
+
 bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
     if (CreationGesture* creation = GestureIf<CreationGesture>()) {
-        if (event.button != creation->button) {
+        if (event.button != platform::MouseButton::Left) {
             return false;  // the other button's business
         }
         switch (event.kind) {
@@ -1213,7 +1276,7 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
                 } else {
                     // A plain click on empty canvas makes nothing - a
                     // fullscreen snippet is too much to make by accident -
-                    // with either button.
+                    // whichever kind it would have been.
                     return true;
                 }
                 // A drawing a press on empty canvas made is watched until
@@ -1235,29 +1298,27 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
         }
         return true;
     }
-    if (event.kind != platform::MouseEventKind::Down || !std::holds_alternative<std::monostate>(gesture_)) {
+    if (event.kind != platform::MouseEventKind::Down || event.button != platform::MouseButton::Left ||
+        !std::holds_alternative<std::monostate>(gesture_)) {
         return false;
     }
     CreationGesture gesture;
-    gesture.button = event.button;
     gesture.downX = event.position.x;
     gesture.downY = event.position.y;
-    const std::optional<ItemCreationKind> toolKind =
-        event.button == platform::MouseButton::Left ? CreationKindFor(activeTool_) : std::nullopt;
-    if (toolKind.has_value()) {
-        // A creation tool in hand: the left button places it wherever it
-        // lands, on a snippet or not. The right still resizes a snippet,
-        // and makes a drawing on empty canvas, as with any tool.
+    if (const std::optional<ItemCreationKind> toolKind = CreationKindFor(activeTool_)) {
+        // A creation tool in hand: the press places it wherever it lands,
+        // on a snippet or not, whatever modifier is held.
         gesture.kind = *toolKind;
     } else {
-        if (!PressMakesASnippet(event)) {
+        // On empty canvas the modifier held picks the kind - and a press
+        // with one that picks nothing makes nothing.
+        const std::optional<ItemCreationKind> kind = EmptyCanvasCreationKind();
+        if (!kind.has_value() || !PressMakesASnippet(event)) {
             return false;
         }
-        // The left button makes a screenshot, the right a drawing. Either
-        // is the hand moving on from a snippet it was drawing on.
+        // The hand moving on from a snippet it was drawing on.
         ExitDrawingMode();
-        gesture.kind = event.button == platform::MouseButton::Right ? ItemCreationKind::Drawing
-                                                                    : ItemCreationKind::Screenshot;
+        gesture.kind = *kind;
         gesture.fromEmptyCanvas = true;
         gesture.isDouble = pressIsDouble_;
         // Held still instead of dragged, the press makes the snippet
@@ -1409,10 +1470,9 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
                 return;
             }
         }
-        // A press on empty canvas frames a drawing, or makes one fullscreen
-        // on a double-click or a hold, and does nothing on a plain click -
-        // see HandleCreationGesture. Nothing else is the right button's.
-        HandleCreationGesture(event);
+        // A click on empty canvas opens its menu - see
+        // HandleEmptyCanvasRightPress. Nothing else is the right button's.
+        HandleEmptyCanvasRightPress(event);
         return;
     }
     if (event.button != platform::MouseButton::Left) {
@@ -1458,20 +1518,23 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
             ExitDrawingMode();
             // Held still, though, the press is what a double-click here
             // would have been: drawing mode on the other snippet, or a
-            // fullscreen screenshot of empty canvas - see MatureHeldPress.
-            // A double-click gets there by leaving on its first press and
-            // arriving on its second; a hold has only the one.
+            // fullscreen snippet of empty canvas, of the kind the modifier
+            // held picks - see MatureHeldPress. A double-click gets there
+            // by leaving on its first press and arriving on its second; a
+            // hold has only the one.
             if (target.kind == PointerTarget::Kind::Body) {
                 HoldPress(event, target.item, std::nullopt);
-            } else if (PressMakesASnippet(event)) {
-                HoldPress(event, std::nullopt, ItemCreationKind::Screenshot);
+            } else if (const std::optional<ItemCreationKind> kind = EmptyCanvasCreationKind();
+                       kind.has_value() && PressMakesASnippet(event)) {
+                HoldPress(event, std::nullopt, *kind);
             }
         }
         return;
     }
 
-    // A press on empty canvas frames a screenshot, or makes one fullscreen
-    // on a double-click, and a press anywhere places with a creation tool -
+    // A press on empty canvas frames a snippet, of the kind the modifier
+    // held picks, or makes one fullscreen on a double-click, and a press
+    // anywhere places with a creation tool -
     // see HandleCreationGesture. A press on a snippet was
     // HandleItemGesture's already; nothing else is left for it to be.
     HandleCreationGesture(event);

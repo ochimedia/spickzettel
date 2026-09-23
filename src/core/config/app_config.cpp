@@ -181,6 +181,45 @@ const char* StrokeRenderModeName(StrokeRenderMode mode) {
     return "tessellated";
 }
 
+std::optional<CreationTrigger> ParseCreationTrigger(std::string_view text) {
+    const std::string upper = ToUpper(Trim(text));
+    if (upper == "PLAIN") {
+        return CreationTrigger::Plain;
+    }
+    if (upper == "CTRL") {
+        return CreationTrigger::Ctrl;
+    }
+    if (upper == "ALT") {
+        return CreationTrigger::Alt;
+    }
+    if (upper == "OFF") {
+        return CreationTrigger::Off;
+    }
+    return std::nullopt;
+}
+
+const char* CreationTriggerName(CreationTrigger trigger) {
+    switch (trigger) {
+        case CreationTrigger::Ctrl:
+            return "ctrl";
+        case CreationTrigger::Alt:
+            return "alt";
+        case CreationTrigger::Off:
+            return "off";
+        case CreationTrigger::Plain:
+            break;
+    }
+    return "plain";
+}
+
+void ReadCreationTrigger(const json& j, const char* key, CreationTrigger& out) {
+    if (const auto it = j.find(key); it != j.end() && it->is_string()) {
+        if (const auto trigger = ParseCreationTrigger(it->get<std::string>())) {
+            out = *trigger;
+        }
+    }
+}
+
 // ===== Reading =====
 //
 // Every setting in the file is optional and every one of these leaves its
@@ -474,6 +513,16 @@ AppConfig ParseConfig(std::string_view text) {
     }
     ReadBool(drawing, "paintPixels", config.paintPixelsInsteadOfStrokes);
     ReadBool(drawing, "raiseSelected", config.raiseSelectedSnippet);
+    ReadCreationTrigger(drawing, "screenshotTrigger", config.screenshotTrigger);
+    ReadCreationTrigger(drawing, "drawingTrigger", config.drawingTrigger);
+    // One press cannot make both: a file that gives the two the same
+    // trigger, by hand or by an edit gone wrong, gets the defaults back
+    // rather than one of them silently winning.
+    if (config.screenshotTrigger == config.drawingTrigger && config.screenshotTrigger != CreationTrigger::Off) {
+        const AppConfig defaults;
+        config.screenshotTrigger = defaults.screenshotTrigger;
+        config.drawingTrigger = defaults.drawingTrigger;
+    }
 
     const json& bars = Group(doc, "bars");
     if (std::optional<BarButtonList> snippetBar = ReadBar(bars, "snippet")) {
@@ -604,6 +653,8 @@ std::string SerializeConfig(const AppConfig& config) {
         {"renderMode", StrokeRenderModeName(config.strokeRenderMode)},
         {"paintPixels", config.paintPixelsInsteadOfStrokes},
         {"raiseSelected", config.raiseSelectedSnippet},
+        {"screenshotTrigger", CreationTriggerName(config.screenshotTrigger)},
+        {"drawingTrigger", CreationTriggerName(config.drawingTrigger)},
     };
 
     doc["appearance"] = {

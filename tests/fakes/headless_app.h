@@ -277,10 +277,21 @@ protected:
         RawMouse(x, y, platform::MouseEventKind::Up, button);
         StepFrames(2);
     }
-    // The other way in: right-drag frames a drawing, which is then in
-    // drawing mode with the pen in hand.
+    // The other way in: Ctrl-drag frames a drawing (the default - see
+    // AppConfig::drawingTrigger), which is then in drawing mode with the
+    // pen in hand.
     void MakeADrawing(float fromX, float fromY, float toX, float toY) {
-        Drag(fromX, fromY, toX, toY, 4, platform::MouseButton::Right);
+        DragWith(ImGuiMod_Ctrl, fromX, fromY, toX, toY);
+    }
+    // Whatever `gesture` does, done with `modifier` held from before it
+    // until after it - ImGuiMod_Ctrl, ImGuiMod_Alt.
+    template <class Gesture>
+    void With(ImGuiKey modifier, Gesture gesture) {
+        ImGui::GetIO().AddKeyEvent(modifier, true);
+        StepFrame();
+        gesture();
+        ImGui::GetIO().AddKeyEvent(modifier, false);
+        StepFrame();
     }
 
     // ===== Handy assertions =====
