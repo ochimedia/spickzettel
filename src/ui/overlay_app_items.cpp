@@ -808,7 +808,7 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, const Can
     drawList->PushClipRect(pMin, pMax, true);
 
     DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, StrokeRasterTextureFor(item.id),
-                    /*skipNoteText=*/editingNoteItemId_ == item.id, CanvasMeshSlot());
+                    /*skipNoteText=*/editingNoteItemId_ == item.id, CanvasMeshSlot(), PictureSampling());
 
     if (drawing) {
         // The stroke currently being drawn (not yet baked into
@@ -1334,7 +1334,7 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         // draws only those, so no item is ever in both in one frame - see
         // strokeMeshCache_'s own doc comment.
         DrawItemContent(dl, *item, contentMin, contentMax, Cfg().strokeRenderMode, StrokeRasterTextureFor(item->id),
-                         /*skipNoteText=*/false, CanvasMeshSlot());
+                         /*skipNoteText=*/false, CanvasMeshSlot(), PictureSampling());
         dl->PopClipRect();
 
         dl->AddRect(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), theme::kRadiusSm);

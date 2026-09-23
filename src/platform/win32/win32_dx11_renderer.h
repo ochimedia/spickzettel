@@ -8,6 +8,9 @@
 #include <d3d11.h>
 #include <wrl/client.h>
 
+struct ImDrawList;
+struct ImDrawCmd;
+
 namespace sz::platform::win32 {
 
 // Thin wrapper around the standard Dear ImGui Win32 + DirectX 11 example
@@ -46,9 +49,13 @@ public:
 
     void NewFrame();
     void RenderAndPresent();
+    // RenderAndPresent's drawing, into `target` and without presenting -
+    // for tests, which read the pixels back from a target of their own.
+    void RenderTo(ID3D11RenderTargetView* target);
 
     // Uploads `width`*`height` RGBA8 pixels (row-major, top-left origin, 4
-    // bytes/pixel, no row padding) as a new immutable-content GPU texture
+    // bytes/pixel, no row padding) as a new GPU texture with a full mip
+    // chain (built on the next RefreshMips)
     // and returns its shader-resource-view, ready to hand straight to
     // ImGui as an ImTextureID (see IOverlayWindow::CaptureRegionAsTexture).
     // Caller owns the returned pointer's single reference and must
@@ -74,9 +81,26 @@ public:
     // from freed memory.
     void ReleaseTexture(ID3D11ShaderResourceView* srv);
 
+    // IOverlayWindow::ImageFilterCallback. Static because ImGui calls it
+    // with nothing but the draw command; the renderer it acts for is the
+    // one inside RenderTo, which is the only place it runs.
+    static void ApplyImageFilter(const ImDrawList* parentList, const ImDrawCmd* cmd);
+
+    // Brings every mip chain up to date with its top level - what
+    // RenderTo does first. Public for tests, which read mips back.
+    void RefreshMips();
+
 private:
     bool CreateRenderTarget();
     void CleanupRenderTarget();
+    // The shaders ImGui does not have: the mip builder and the two
+    // resampling filters. False if any failed to compile, which leaves
+    // Bicubic and Lanczos drawing as Bilinear rather than the overlay not
+    // starting.
+    bool CreateFilterShaders();
+    // Rebuilds levels 1.. of `srv`'s texture from level 0.
+    void BuildMips(ID3D11ShaderResourceView* srv);
+    void ForgetTexture(ID3D11ShaderResourceView* srv);
     // Once the frame's draw commands are with D3D, which keeps what they
     // use alive itself from there on.
     void ReleaseDeferredTextures();
@@ -90,6 +114,14 @@ private:
     // See ReleaseTexture.
     bool inFrame_ = false;
     std::vector<ID3D11ShaderResourceView*> releaseAfterFrame_;
+    // Textures whose top level changed since their mips were built: every
+    // new one, and a painted layer after each brush move. Rebuilt once a
+    // frame, however many moves there were.
+    std::vector<ID3D11ShaderResourceView*> staleMips_;
+    Microsoft::WRL::ComPtr<ID3D11VertexShader> fullscreenVS_;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> mipPS_;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> bicubicPS_;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> lanczosPS_;
     // See SetMousePositionOverride.
     bool mouseOverrideActive_ = false;
     float mouseOverrideX_ = 0.0f;

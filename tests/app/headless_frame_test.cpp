@@ -385,6 +385,57 @@ TEST_F(HeadlessAppTest, AnAltDoubleClickMakesAFullscreenOfWhatAltIsSetTo) {
     EXPECT_TRUE(Canvases().CurrentOrNull()->items[0].hasBackground);
 }
 
+// The filter a picture is drawn with, as the last frame's draw lists say:
+// what the callback just before the draw of `texture` asked for, or
+// nothing if there was none - the default sampler. Read from the windows
+// rather than ImGui::GetDrawData, which with no renderer behind it lists
+// none of them.
+std::optional<platform::ImageFilter> FilterDrawnWith(uint64_t texture) {
+    for (const ImGuiWindow* window : GImGui->Windows) {
+        if (!window->Active) {
+            continue;
+        }
+        const ImVector<ImDrawCmd>& cmds = window->DrawList->CmdBuffer;
+        for (int i = 0; i < cmds.Size; ++i) {
+            // TexRef's own id rather than GetTexID, which asserts on the
+            // font atlas's commands - never uploaded, with no renderer.
+            if (cmds[i].UserCallback != nullptr || cmds[i].TexRef._TexData != nullptr ||
+                cmds[i].TexRef._TexID != static_cast<ImTextureID>(texture)) {
+                continue;
+            }
+            if (i > 0 && cmds[i - 1].UserCallback == &FakeOverlayWindow::FakeImageFilterCallback) {
+                return static_cast<platform::ImageFilter>(reinterpret_cast<intptr_t>(cmds[i - 1].UserCallbackData));
+            }
+            return std::nullopt;
+        }
+    }
+    ADD_FAILURE() << "texture " << texture << " was not drawn";
+    return std::nullopt;
+}
+
+// A screenshot is drawn through the filter in settings, and the default
+// adds nothing to the draw list - it is ImGui's own sampler.
+TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
+    AppConfig config = DefaultConfig();
+    config.imageFilter = platform::ImageFilter::Lanczos;
+    StartWith(config);
+    host_.overlayWindow.captureReturnsHandle = 7;
+    host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
+    host_.overlayWindow.captureReturnsHeight = static_cast<int>(kDisplayHeight);
+    host_.overlayWindow.captureReturnsPixelsRGBA.assign(static_cast<size_t>(kDisplayWidth * kDisplayHeight) * 4, 255);
+    host_.overlayWindow.createTextureFromPixelsReturnsHandle = 9;  // the part of the frozen screen kept
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    StepFrame();
+    EXPECT_EQ(FilterDrawnWith(9), platform::ImageFilter::Lanczos);
+
+    controller_->GetSettings().Mutable().imageFilter = platform::ImageFilter::Bilinear;
+    StepFrame();
+    EXPECT_EQ(FilterDrawnWith(9), std::nullopt);
+}
+
 // A drawing that was not meant costs nothing: it goes as soon as the hand
 // moves on from it without putting anything in. And the press that moves
 // on from it is only that, with the modifier that makes a drawing held or

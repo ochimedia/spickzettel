@@ -325,7 +325,7 @@ namespace overlay_detail {
 void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax, float displayW,
                         float displayH, StrokeRenderMode rendering, bool showStrokes,
                         const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
-                        StrokeMeshSlot meshCache) {
+                        StrokeMeshSlot meshCache, ImageSampling sampling) {
     drawList->PushClipRect(thumbMin, thumbMax, true);
     drawList->AddRectFilled(thumbMin, thumbMax, IM_COL32(14, 16, 20, 255));
 
@@ -342,7 +342,7 @@ void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbM
             }
             const ImVec2 pMin(offsetX + item.rect.x * scale, offsetY + item.rect.y * scale);
             const ImVec2 pMax(offsetX + (item.rect.x + item.rect.w) * scale, offsetY + (item.rect.y + item.rect.h) * scale);
-            DrawItemPreview(drawList, item, pMin, pMax, rendering, showStrokes, previewTexture, meshCache);
+            DrawItemPreview(drawList, item, pMin, pMax, rendering, showStrokes, previewTexture, meshCache, sampling);
         }
     }
 
@@ -352,7 +352,7 @@ void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbM
 void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
                      bool showStrokes,
                      const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
-                     StrokeMeshSlot meshCache) {
+                     StrokeMeshSlot meshCache, ImageSampling sampling) {
     // Each layer with whichever texture it can have here: the real one for
     // the current canvas (already loaded), a thumbnail-sized copy for the
     // rest if previews are on, and none at all otherwise - in which case
@@ -379,7 +379,7 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
         // The layer itself, with the texture handed in beside it. This used
         // to copy the whole Layer to override that one integer - a string
         // and a shared_ptr refcount per layer, per tile, per frame.
-        DrawLayer(drawList, layer, pMin, pMax, *texture);
+        DrawLayer(drawList, layer, pMin, pMax, *texture, sampling);
         drewAnything = true;
     }
     if (!drewAnything) {
@@ -919,7 +919,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         const ImVec2 thumbMax(thumbMin.x + kTileSize.x, thumbMin.y + kTileSize.y);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         DrawCanvasPreview(drawList, c, thumbMin, thumbMax, displayW, displayH, Cfg().strokeRenderMode,
-                           Cfg().overviewShowsStrokes, previewTexture, PreviewMeshSlot());
+                           Cfg().overviewShowsStrokes, previewTexture, PreviewMeshSlot(), PictureSampling());
         const bool isActive = c.id == currentCanvasId;
         if (deleted) {
             drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDangerSoft), 4.0f);
@@ -1371,6 +1371,26 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
     SettingsHeading("appearancedisplayheading", strings::kAppearanceDisplayHeading);
     anyChanged |= CheckboxWithHelp("appearanceshowitemborders", strings::kAppearanceShowItemBorders, &Cfg().showItemBorders,
                                     strings::kAppearanceShowItemBordersHelp);
+
+    SettingsGroupBreak();
+
+    SettingsHeading("appearanceimagefilterheading", strings::kAppearanceImageFilterHeading,
+                     strings::kAppearanceImageFilterHelp);
+    {
+        int filter = static_cast<int>(Cfg().imageFilter);
+        anyChanged |= ImGui::RadioButton(Labeled(strings::kAppearanceImageFilterBilinear, "imagefilterbilinear"),
+                                         &filter, static_cast<int>(platform::ImageFilter::Bilinear));
+        ImGui::SameLine();
+        anyChanged |= ImGui::RadioButton(Labeled(strings::kAppearanceImageFilterNearest, "imagefilternearest"),
+                                         &filter, static_cast<int>(platform::ImageFilter::Nearest));
+        ImGui::SameLine();
+        anyChanged |= ImGui::RadioButton(Labeled(strings::kAppearanceImageFilterBicubic, "imagefilterbicubic"),
+                                         &filter, static_cast<int>(platform::ImageFilter::Bicubic));
+        ImGui::SameLine();
+        anyChanged |= ImGui::RadioButton(Labeled(strings::kAppearanceImageFilterLanczos, "imagefilterlanczos"),
+                                         &filter, static_cast<int>(platform::ImageFilter::Lanczos));
+        Cfg().imageFilter = static_cast<platform::ImageFilter>(filter);
+    }
 
     SettingsGroupBreak();
 

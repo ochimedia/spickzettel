@@ -181,6 +181,37 @@ const char* StrokeRenderModeName(StrokeRenderMode mode) {
     return "tessellated";
 }
 
+std::optional<platform::ImageFilter> ParseImageFilter(std::string_view text) {
+    const std::string upper = ToUpper(Trim(text));
+    if (upper == "BILINEAR") {
+        return platform::ImageFilter::Bilinear;
+    }
+    if (upper == "NEAREST") {
+        return platform::ImageFilter::Nearest;
+    }
+    if (upper == "BICUBIC") {
+        return platform::ImageFilter::Bicubic;
+    }
+    if (upper == "LANCZOS") {
+        return platform::ImageFilter::Lanczos;
+    }
+    return std::nullopt;
+}
+
+const char* ImageFilterName(platform::ImageFilter filter) {
+    switch (filter) {
+        case platform::ImageFilter::Nearest:
+            return "nearest";
+        case platform::ImageFilter::Bicubic:
+            return "bicubic";
+        case platform::ImageFilter::Lanczos:
+            return "lanczos";
+        case platform::ImageFilter::Bilinear:
+            break;
+    }
+    return "bilinear";
+}
+
 std::optional<CreationTrigger> ParseCreationTrigger(std::string_view text) {
     const std::string upper = ToUpper(Trim(text));
     if (upper == "PLAIN") {
@@ -540,6 +571,11 @@ AppConfig ParseConfig(std::string_view text) {
     ReadBool(appearance, "showItemBorders", config.showItemBorders);
     ReadBool(appearance, "showToastsWhileHidden", config.showToastsWhileHidden);
     ReadColor(appearance, "accentColor", config.accentColorRGBA);
+    if (const auto it = appearance.find("imageFilter"); it != appearance.end() && it->is_string()) {
+        if (const auto filter = ParseImageFilter(it->get<std::string>())) {
+            config.imageFilter = *filter;
+        }
+    }
 
     const json& snippetColors = Group(appearance, "snippetColors");
     ReadColor(snippetColors, "borderFront", config.itemBorderColorFrontRGBA);
@@ -660,6 +696,7 @@ std::string SerializeConfig(const AppConfig& config) {
     doc["appearance"] = {
         {"showItemBorders", config.showItemBorders},
         {"showToastsWhileHidden", config.showToastsWhileHidden},
+        {"imageFilter", ImageFilterName(config.imageFilter)},
         {"accentColor", FormatHexColor(config.accentColorRGBA)},
         {"snippetColors",
          {

@@ -52,6 +52,9 @@ menu with every way to make one, Paste, the Overview and Settings.
   good. A deleted snippet comes back with undo, until the app restarts.
 - Screenshots are captured with the overlay hidden, so nothing the
   overlay draws - including the demo watermark - ends up in them.
+- Settings > Appearance > Picture scaling decides how a screenshot looks
+  at another size. Bicubic or Lanczos keep text readable in a snippet
+  shrunk to a third; Nearest keeps pixel art blocky.
 
 
 ## Changelog

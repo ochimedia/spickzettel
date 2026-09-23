@@ -274,6 +274,22 @@ enum class FramePacing {
     Idle,
 };
 
+// How a snippet's picture - a screenshot, a painted layer, rasterized
+// strokes - is resampled when it is drawn at a size other than its own.
+// See IOverlayWindow::ImageFilterCallback.
+enum class ImageFilter {
+    // The GPU's own bilinear filter, which is what every picture had before
+    // there was a choice: soft enlarged, and aliasing below about half size.
+    Bilinear,
+    // One texel per pixel, unblended: blocky enlarged, which is the point
+    // for pixel art and small captures blown up.
+    Nearest,
+    // Catmull-Rom, widened to the reduction when shrinking.
+    Bicubic,
+    // Lanczos-3, the same way: the sharpest of the four, at the most taps.
+    Lanczos,
+};
+
 using FrameCallback = std::function<void(float deltaSeconds)>;
 using MouseCallback = std::function<void(const MouseEvent&)>;
 using TrayCommandCallback = std::function<void(TrayCommand)>;

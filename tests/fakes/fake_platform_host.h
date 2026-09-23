@@ -122,6 +122,11 @@ public:
 
     void ReleaseTexture(uint64_t /*textureHandle*/) override { ++releaseTextureCallCount; }
 
+    // Never run - nothing renders the fake's draw lists - only looked for
+    // among their commands.
+    static void FakeImageFilterCallback(const ImDrawList* /*parentList*/, const ImDrawCmd* /*cmd*/) {}
+    platform::DrawCallback ImageFilterCallback() const override { return &FakeImageFilterCallback; }
+
     void Destroy() override {
         created = false;
         visible = false;

@@ -509,6 +509,22 @@ TEST(AppConfigTest, StrokeRenderModeRoundTripsThroughText) {
     }
 }
 
+// Bilinear by default: it is what every picture was drawn with before
+// there was a choice.
+TEST(AppConfigTest, ImageFilterDefaultsToBilinearAndRoundTripsAllFour) {
+    EXPECT_EQ(DefaultConfig().imageFilter, platform::ImageFilter::Bilinear);
+    for (const platform::ImageFilter filter : {platform::ImageFilter::Bilinear, platform::ImageFilter::Nearest,
+                                               platform::ImageFilter::Bicubic, platform::ImageFilter::Lanczos}) {
+        AppConfig config = DefaultConfig();
+        config.imageFilter = filter;
+        EXPECT_EQ(ParseConfig(SerializeConfig(config)).imageFilter, filter);
+    }
+    EXPECT_EQ(ParseConfig(One("appearance", "imageFilter", "\"Lanczos\"")).imageFilter,
+              platform::ImageFilter::Lanczos);
+    EXPECT_EQ(ParseConfig(One("appearance", "imageFilter", "\"sinc\"")).imageFilter,
+              platform::ImageFilter::Bilinear);
+}
+
 // Default off: strokes are what this app has always drawn, and painting
 // pixels gives up scaling for pixel-exact erasing - a trade to opt into.
 TEST(AppConfigTest, PaintPixelsInsteadOfStrokesDefaultsToOffAndParses) {

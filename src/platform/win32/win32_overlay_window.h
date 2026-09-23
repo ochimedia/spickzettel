@@ -57,6 +57,7 @@ public:
     bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* pixelsRGBA, int sourceWidth, int x, int y,
                               int w, int h) override;
     void ReleaseTexture(uint64_t textureHandle) override;
+    DrawCallback ImageFilterCallback() const override;
     void Destroy() override;
 
     // Called from the host's event loop while visible: pumps one ImGui +

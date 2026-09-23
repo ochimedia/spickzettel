@@ -2263,6 +2263,51 @@ comes from the overlay's display rather than from wherever its
 coordinates land on the primary. Textures are `D3D11_USAGE_DEFAULT`
 rather than immutable so a painted layer can be updated in place.
 
+### Picture scaling
+
+Every picture in a snippet - a screenshot, a painted layer, the
+Rasterized strokes - is drawn through `DrawPicture`, resampled the way
+Settings > Appearance says (`AppConfig::imageFilter`). Bilinear is the
+default and what every picture had before there was a choice; drawn
+below about half size it lands on one texel in two or three and text
+breaks up. Nearest is for pixel art and small captures blown up.
+
+**One callback, a shader swap.** The UI stays out of D3D:
+`IOverlayWindow::ImageFilterCallback` hands it a draw callback, which
+`DrawPicture` puts in front of the picture with the filter as user data,
+and ImGui's own `DrawCallback_ResetRenderState` after it. Bilinear adds
+nothing to the draw list. Nearest is ImGui's own nearest sampler. Bicubic
+and Lanczos replace ImGui's pixel shader for that one draw and leave its
+vertex shader, blend and viewport alone, so the swap is all there is to
+undo. The callback runs inside `RenderTo` and nowhere else, which is how
+a static function with nothing but the draw command finds its renderer.
+
+**Shrinking is the hard part.** A kernel the textbook size (4x4 texels
+for Catmull-Rom, 6x6 for Lanczos-3) aliases just as bilinear does when
+shrinking: it has to widen by the reduction so every texel under a pixel
+counts, and a 4K screenshot shown at a tenth of its size would be 60x60
+taps a pixel. So every texture has a full mip chain, the shader reads
+the level just above the target size and widens the kernel by what is
+left - at most 2x, so 12x12 taps at worst for Lanczos and far fewer for
+a picture shown near its own size. The mips are box-filtered, which is
+where some quality goes; this keeps most of it for a fraction of the
+cost. Other routes were weighed: a pre-scaled copy per snippet, redone
+whenever its size changes, is the best quality but a cache to invalidate
+on every resize and brush stroke; a separable two-pass filter needs an
+intermediate target per picture per frame.
+
+**The mips are built by hand.** `GenerateMips` averages what it is
+given, and the pictures are straight alpha: a painted layer is mostly
+(0,0,0,0) around its ink, so a plain average darkens every edge towards
+black as the picture shrinks. `BuildMips` averages premultiplied instead,
+one full-target triangle per level, and the resampling shader sums
+premultiplied too, then clamps - both kernels have negative lobes that
+ring past 0 and 1 at a hard edge. A texture's chain is rebuilt once at
+the start of the next frame after it is created or updated, however many
+brush moves there were in between. The chain costs a third more memory
+per picture whatever the filter, and Bilinear and Nearest never read it:
+ImGui's samplers clamp to the top level.
+
 ### Displays
 
 `EnumDisplayMonitors` gives rectangles, the primary flag and (with

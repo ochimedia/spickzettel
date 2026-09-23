@@ -33,6 +33,14 @@ namespace sz::ui {
 // here rather than every type named twice.
 using namespace ::sz::core;
 
+// How a snippet's pictures are resampled: the setting (AppConfig::
+// imageFilter) and the renderer's callback that applies it, which is null
+// where nothing renders. See overlay_detail::DrawPicture.
+struct ImageSampling {
+    platform::ImageFilter filter = platform::ImageFilter::Bilinear;
+    platform::DrawCallback apply = nullptr;
+};
+
 // How far out a panel that hides against an edge of the screen is: 0 all
 // the way in, 1 all the way out. It slides out while it is wanted or until
 // `holdUntil` (a flash), and back in once it has gone unwanted for
@@ -1403,6 +1411,11 @@ private:
     // call needs to be handed - see StrokeMeshSlot.
     StrokeMeshSlot CanvasMeshSlot() { return StrokeMeshSlot{&strokeMeshCache_, Manager().Generation()}; }
     StrokeMeshSlot PreviewMeshSlot() { return StrokeMeshSlot{&previewMeshCache_, Manager().Generation()}; }
+    // The picture filter from settings, with the callback that applies it -
+    // what every drawing call that may meet a picture is handed.
+    ImageSampling PictureSampling() const {
+        return ImageSampling{Cfg().imageFilter, window_ != nullptr ? window_->ImageFilterCallback() : nullptr};
+    }
     // Thumbnail-sized copies of layer pixels, alive only while the overview
     // is open - see LayerPreview. Emptied by ReleaseLayerPreviews when it
     // closes, or when the setting is switched off.

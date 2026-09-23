@@ -271,7 +271,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         const ImVec2 tileMin(x, bar.y + kBarPadding);
         const ImVec2 tileMax(x + tileW, tileMin.y + kBarTileHeight);
         DrawCanvasPreview(dl, *canvas, tileMin, tileMax, displayW, displayH, Cfg().strokeRenderMode,
-                          Cfg().overviewShowsStrokes, previewTexture, PreviewMeshSlot());
+                          Cfg().overviewShowsStrokes, previewTexture, PreviewMeshSlot(), PictureSampling());
 
         char tileId[48];
         std::snprintf(tileId, sizeof(tileId), "##canvasbar_tile_%zu", i);

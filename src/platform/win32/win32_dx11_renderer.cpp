@@ -1,20 +1,172 @@
 #include "platform/win32/win32_dx11_renderer.h"
 
+#include <d3dcompiler.h>
 #include <dxgi.h>
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
+#include <cstring>
 #include <iterator>
 
 #include <backends/imgui_impl_dx11.h>
 #include <backends/imgui_impl_win32.h>
 #include <imgui.h>
 
+#include "platform/platform_types.h"
 #include "platform/spickzettel_fonts.h"
 
 namespace sz::platform::win32 {
 
 using Microsoft::WRL::ComPtr;
+
+namespace {
+
+// See ApplyImageFilter.
+Win32Dx11Renderer* g_rendering = nullptr;
+
+// One triangle over the whole target, from the vertex index alone - no
+// buffers, no input layout. What each mip level is drawn with.
+constexpr const char* kFullscreenVS = R"(
+float4 main(uint id : SV_VertexID) : SV_POSITION {
+    float2 corner = float2((id << 1) & 2, id & 2);
+    return float4(corner * float2(2.0, -2.0) + float2(-1.0, 1.0), 0.0, 1.0);
+}
+)";
+
+// One mip level from the level above it: each texel the average of the
+// four it covers. Averaged premultiplied, which is the whole reason this is
+// not ID3D11DeviceContext::GenerateMips: the pictures are straight alpha,
+// and a painted layer is mostly (0,0,0,0) around its ink, so a plain
+// average darkens every edge towards black as the picture shrinks.
+constexpr const char* kMipPS = R"(
+Texture2D above : register(t0);
+float4 main(float4 pos : SV_POSITION) : SV_Target {
+    uint w, h;
+    above.GetDimensions(w, h);
+    int2 last = int2(w, h) - 1;
+    int2 first = int2(pos.xy) * 2;
+    float4 sum = 0.0;
+    [unroll] for (int y = 0; y < 2; ++y) {
+        [unroll] for (int x = 0; x < 2; ++x) {
+            float4 c = above.Load(int3(min(first + int2(x, y), last), 0));
+            sum += float4(c.rgb * c.a, c.a);
+        }
+    }
+    return sum.a > 0.0 ? float4(sum.rgb / sum.a, sum.a * 0.25) : 0.0;
+}
+)";
+
+// Bicubic (Catmull-Rom) or Lanczos-3, by LANCZOS. Takes the place of
+// ImGui's pixel shader for one picture, so it reads ImGui's vertex output
+// and returns what that shader would: straight alpha, times the vertex
+// colour (the layer's tint and opacity).
+//
+// Enlarging, the kernel is the textbook one, 4x4 or 6x6 texels. Shrinking,
+// a kernel that size would alias just as bilinear does: it has to widen by
+// the reduction so that every texel under the pixel counts. Widened all the
+// way, a screenshot shown at a tenth of its size would be 60x60 taps a
+// pixel for Lanczos. So the mip level just above the target size carries
+// the reduction down to under 2x, and the kernel widens by what is left -
+// at most 12x12 taps (8x8 bicubic), and far fewer for the usual picture
+// shown near its own size. The mips are box-filtered, which is where the
+// quality goes; this keeps most of it at a fraction of the cost.
+//
+// Premultiplied in the sum for the same reason as kMipPS, and clamped
+// after, because both kernels have negative lobes that ring past 0 and 1
+// at a hard edge.
+constexpr const char* kResamplePS = R"(
+struct PS_INPUT {
+    float4 pos : SV_POSITION;
+    float4 col : COLOR0;
+    float2 uv : TEXCOORD0;
+};
+Texture2D picture : register(t0);
+
+#if LANCZOS
+static const float kSupport = 3.0;
+float Kernel(float x) {
+    x = abs(x);
+    if (x < 1e-5) return 1.0;
+    if (x >= kSupport) return 0.0;
+    float px = 3.14159265 * x;
+    return kSupport * sin(px) * sin(px / kSupport) / (px * px);
+}
+#else
+static const float kSupport = 2.0;
+float Kernel(float x) {
+    x = abs(x);
+    if (x < 1.0) return (1.5 * x - 2.5) * x * x + 1.0;
+    if (x < 2.0) return ((-0.5 * x + 2.5) * x - 4.0) * x + 2.0;
+    return 0.0;
+}
+#endif
+// Taps along one axis with the kernel at its widest, 2x.
+static const int kMaxTaps = int(4.0 * kSupport) + 1;
+
+float4 main(PS_INPUT input) : SV_Target {
+    uint fullW, fullH, levels;
+    picture.GetDimensions(0, fullW, fullH, levels);
+    // Top-level texels per screen pixel, along each axis of the picture.
+    float2 footprint = float2(length(float2(ddx(input.uv.x), ddy(input.uv.x))) * fullW,
+                              length(float2(ddx(input.uv.y), ddy(input.uv.y))) * fullH);
+    // By the lesser reduction, so a picture squeezed along one axis is not
+    // blurred along the other; the kernel's cap then lets the squeezed
+    // axis alias a little rather than cost more.
+    uint level = uint(clamp(floor(log2(max(min(footprint.x, footprint.y), 1.0))), 0.0, float(levels - 1)));
+    uint w, h;
+    picture.GetDimensions(level, w, h, levels);
+    float2 size = float2(w, h);
+    float2 stretch = clamp(footprint * size / float2(fullW, fullH), 1.0, 2.0);
+    float2 radius = kSupport * stretch;
+
+    float2 center = input.uv * size - 0.5;
+    int2 first = int2(ceil(center - radius));
+    int2 count = min(int2(floor(center + radius)) - first + 1, kMaxTaps);
+    float weightX[kMaxTaps];
+    float weightY[kMaxTaps];
+    float sumX = 0.0;
+    float sumY = 0.0;
+    [unroll] for (int i = 0; i < kMaxTaps; ++i) {
+        weightX[i] = i < count.x ? Kernel((first.x + i - center.x) / stretch.x) : 0.0;
+        weightY[i] = i < count.y ? Kernel((first.y + i - center.y) / stretch.y) : 0.0;
+        sumX += weightX[i];
+        sumY += weightY[i];
+    }
+
+    int2 last = int2(w, h) - 1;
+    float4 sum = 0.0;
+    [loop] for (int y = 0; y < count.y; ++y) {
+        int row = clamp(first.y + y, 0, last.y);
+        float4 rowSum = 0.0;
+        [loop] for (int x = 0; x < count.x; ++x) {
+            float4 c = picture.Load(int3(clamp(first.x + x, 0, last.x), row, level));
+            rowSum += weightX[x] * float4(c.rgb * c.a, c.a);
+        }
+        sum += weightY[y] * rowSum;
+    }
+    sum /= sumX * sumY;
+
+    float alpha = saturate(sum.a);
+    float3 rgb = sum.a > 1.0 / 1024.0 ? saturate(sum.rgb / sum.a) : 0.0;
+    return float4(rgb, alpha) * input.col;
+}
+)";
+
+ComPtr<ID3DBlob> CompileShader(const char* source, const char* target, const D3D_SHADER_MACRO* defines = nullptr) {
+    ComPtr<ID3DBlob> code;
+    ComPtr<ID3DBlob> errors;
+    if (FAILED(D3DCompile(source, std::strlen(source), nullptr, defines, nullptr, "main", target,
+                          D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code, &errors))) {
+        if (errors) {
+            OutputDebugStringA(static_cast<const char*>(errors->GetBufferPointer()));
+        }
+        return nullptr;
+    }
+    return code;
+}
+
+}  // namespace
 
 bool Win32Dx11Renderer::Initialize(HWND hwnd) {
     hwnd_ = hwnd;
@@ -63,7 +215,25 @@ bool Win32Dx11Renderer::Initialize(HWND hwnd) {
         return false;
     }
     imguiInitialized_ = true;
+    CreateFilterShaders();
     return true;
+}
+
+bool Win32Dx11Renderer::CreateFilterShaders() {
+    const D3D_SHADER_MACRO bicubic[] = {{"LANCZOS", "0"}, {nullptr, nullptr}};
+    const D3D_SHADER_MACRO lanczos[] = {{"LANCZOS", "1"}, {nullptr, nullptr}};
+    const ComPtr<ID3DBlob> vs = CompileShader(kFullscreenVS, "vs_4_0");
+    const ComPtr<ID3DBlob> mip = CompileShader(kMipPS, "ps_4_0");
+    const ComPtr<ID3DBlob> cubic = CompileShader(kResamplePS, "ps_4_0", bicubic);
+    const ComPtr<ID3DBlob> lanczos3 = CompileShader(kResamplePS, "ps_4_0", lanczos);
+    return vs && mip && cubic && lanczos3 &&
+           SUCCEEDED(device_->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr,
+                                                 &fullscreenVS_)) &&
+           SUCCEEDED(device_->CreatePixelShader(mip->GetBufferPointer(), mip->GetBufferSize(), nullptr, &mipPS_)) &&
+           SUCCEEDED(device_->CreatePixelShader(cubic->GetBufferPointer(), cubic->GetBufferSize(), nullptr,
+                                                &bicubicPS_)) &&
+           SUCCEEDED(device_->CreatePixelShader(lanczos3->GetBufferPointer(), lanczos3->GetBufferSize(), nullptr,
+                                                &lanczosPS_));
 }
 
 void Win32Dx11Renderer::Shutdown() {
@@ -75,6 +245,11 @@ void Win32Dx11Renderer::Shutdown() {
         imguiInitialized_ = false;
     }
     CleanupRenderTarget();
+    staleMips_.clear();
+    fullscreenVS_.Reset();
+    mipPS_.Reset();
+    bicubicPS_.Reset();
+    lanczosPS_.Reset();
     swapChain_.Reset();
     context_.Reset();
     device_.Reset();
@@ -179,7 +354,11 @@ ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t
     D3D11_TEXTURE2D_DESC desc{};
     desc.Width = static_cast<UINT>(width);
     desc.Height = static_cast<UINT>(height);
-    desc.MipLevels = 1;
+    // The whole chain, down to 1x1. Bilinear and Nearest never look past
+    // the top level (ImGui's samplers clamp to it), so what the chain buys
+    // is Bicubic and Lanczos shrinking without aliasing - for a third more
+    // memory per picture. See kResamplePS.
+    desc.MipLevels = 0;
     desc.ArraySize = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.SampleDesc.Count = 1;
@@ -189,21 +368,22 @@ ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t
     // screenshot never takes that path and pays nothing for the difference
     // - the GPU-side placement is the same, only the promise is weaker.
     desc.Usage = D3D11_USAGE_DEFAULT;
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    // A render target as well, because that is how BuildMips writes the
+    // levels below the top.
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
 
-    D3D11_SUBRESOURCE_DATA subResource{};
-    subResource.pSysMem = pixelsRGBA;
-    subResource.SysMemPitch = static_cast<UINT>(width) * 4;
-
+    // No initial data: with a mip chain it would have to be given for
+    // every level, and only the top one exists yet.
     ComPtr<ID3D11Texture2D> texture;
-    if (FAILED(device_->CreateTexture2D(&desc, &subResource, &texture))) {
+    if (FAILED(device_->CreateTexture2D(&desc, nullptr, &texture))) {
         return nullptr;
     }
+    context_->UpdateSubresource(texture.Get(), 0, nullptr, pixelsRGBA, static_cast<UINT>(width) * 4, 0);
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc{};
     srvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = desc.MipLevels;
+    srvDesc.Texture2D.MipLevels = static_cast<UINT>(-1);
 
     ID3D11ShaderResourceView* srv = nullptr;
     if (FAILED(device_->CreateShaderResourceView(texture.Get(), &srvDesc, &srv))) {
@@ -213,6 +393,7 @@ ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t
     // (AddRef'd internally by CreateShaderResourceView) - `texture` going
     // out of scope here just drops our extra ComPtr reference, not the
     // last one.
+    staleMips_.push_back(srv);
     return srv;
 }
 
@@ -240,6 +421,9 @@ bool Win32Dx11Renderer::UpdateTextureRegionRGBA(ID3D11ShaderResourceView* srv, c
     box.back = 1;
     const uint8_t* first = pixelsRGBA + (static_cast<size_t>(y) * sourceWidth + x) * 4;
     context_->UpdateSubresource(resource.Get(), 0, &box, first, static_cast<UINT>(sourceWidth) * 4, 0);
+    if (std::find(staleMips_.begin(), staleMips_.end(), srv) == staleMips_.end()) {
+        staleMips_.push_back(srv);
+    }
     return true;
 }
 
@@ -251,26 +435,131 @@ void Win32Dx11Renderer::ReleaseTexture(ID3D11ShaderResourceView* srv) {
         releaseAfterFrame_.push_back(srv);
         return;
     }
+    ForgetTexture(srv);
     srv->Release();
+}
+
+void Win32Dx11Renderer::ForgetTexture(ID3D11ShaderResourceView* srv) {
+    staleMips_.erase(std::remove(staleMips_.begin(), staleMips_.end(), srv), staleMips_.end());
 }
 
 void Win32Dx11Renderer::ReleaseDeferredTextures() {
     for (ID3D11ShaderResourceView* srv : releaseAfterFrame_) {
+        ForgetTexture(srv);
         srv->Release();
     }
     releaseAfterFrame_.clear();
     inFrame_ = false;
 }
 
+void Win32Dx11Renderer::RefreshMips() {
+    for (ID3D11ShaderResourceView* srv : staleMips_) {
+        BuildMips(srv);
+    }
+    staleMips_.clear();
+}
+
+void Win32Dx11Renderer::BuildMips(ID3D11ShaderResourceView* srv) {
+    if (!fullscreenVS_ || !mipPS_) {
+        return;
+    }
+    ComPtr<ID3D11Resource> resource;
+    srv->GetResource(&resource);
+    ComPtr<ID3D11Texture2D> texture;
+    if (!resource || FAILED(resource.As(&texture))) {
+        return;
+    }
+    D3D11_TEXTURE2D_DESC desc{};
+    texture->GetDesc(&desc);
+
+    context_->IASetInputLayout(nullptr);
+    context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context_->VSSetShader(fullscreenVS_.Get(), nullptr, 0);
+    context_->PSSetShader(mipPS_.Get(), nullptr, 0);
+    context_->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFFu);
+    context_->OMSetDepthStencilState(nullptr, 0);
+    context_->RSSetState(nullptr);
+    ID3D11ShaderResourceView* const noTexture = nullptr;
+    for (UINT level = 1; level < desc.MipLevels; ++level) {
+        D3D11_SHADER_RESOURCE_VIEW_DESC aboveDesc{};
+        aboveDesc.Format = desc.Format;
+        aboveDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        aboveDesc.Texture2D.MostDetailedMip = level - 1;
+        aboveDesc.Texture2D.MipLevels = 1;
+        D3D11_RENDER_TARGET_VIEW_DESC targetDesc{};
+        targetDesc.Format = desc.Format;
+        targetDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        targetDesc.Texture2D.MipSlice = level;
+        ComPtr<ID3D11ShaderResourceView> above;
+        ComPtr<ID3D11RenderTargetView> target;
+        if (FAILED(device_->CreateShaderResourceView(texture.Get(), &aboveDesc, &above)) ||
+            FAILED(device_->CreateRenderTargetView(texture.Get(), &targetDesc, &target))) {
+            break;
+        }
+        // Unbound before the next level is bound as the target: D3D will
+        // not have one resource as input and output at once.
+        context_->PSSetShaderResources(0, 1, &noTexture);
+        context_->OMSetRenderTargets(1, target.GetAddressOf(), nullptr);
+        D3D11_VIEWPORT viewport{};
+        viewport.Width = static_cast<float>(std::max(1u, desc.Width >> level));
+        viewport.Height = static_cast<float>(std::max(1u, desc.Height >> level));
+        viewport.MaxDepth = 1.0f;
+        context_->RSSetViewports(1, &viewport);
+        context_->PSSetShaderResources(0, 1, above.GetAddressOf());
+        context_->Draw(3, 0);
+    }
+    context_->PSSetShaderResources(0, 1, &noTexture);
+    context_->OMSetRenderTargets(0, nullptr, nullptr);
+}
+
+void Win32Dx11Renderer::ApplyImageFilter(const ImDrawList* parentList, const ImDrawCmd* cmd) {
+    Win32Dx11Renderer* const self = g_rendering;
+    if (!self) {
+        return;
+    }
+    // Everything ImGui set up for its own shader stays as it is - the
+    // vertex shader, the blend, the sampler - so this is one swap, and
+    // DrawCallback_ResetRenderState undoes it.
+    switch (static_cast<ImageFilter>(reinterpret_cast<intptr_t>(cmd->UserCallbackData))) {
+        case ImageFilter::Nearest:
+            if (const ImDrawCallback nearest = ImGui::GetPlatformIO().DrawCallback_SetSamplerNearest) {
+                nearest(parentList, cmd);
+            }
+            break;
+        case ImageFilter::Bicubic:
+            if (self->bicubicPS_) {
+                self->context_->PSSetShader(self->bicubicPS_.Get(), nullptr, 0);
+            }
+            break;
+        case ImageFilter::Lanczos:
+            if (self->lanczosPS_) {
+                self->context_->PSSetShader(self->lanczosPS_.Get(), nullptr, 0);
+            }
+            break;
+        case ImageFilter::Bilinear:
+            break;
+    }
+}
+
 void Win32Dx11Renderer::RenderAndPresent() {
+    RenderTo(renderTargetView_.Get());
+    swapChain_->Present(1, 0);  // vsync-paced; avoids busy-spinning while visible
+}
+
+void Win32Dx11Renderer::RenderTo(ID3D11RenderTargetView* target) {
     ImGui::Render();
 
-    const float clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};  // fully transparent backdrop
-    context_->OMSetRenderTargets(1, renderTargetView_.GetAddressOf(), nullptr);
-    context_->ClearRenderTargetView(renderTargetView_.Get(), clearColor);
-    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    // Before the frame's own target is bound, since building mips binds
+    // targets of its own.
+    RefreshMips();
 
-    swapChain_->Present(1, 0);  // vsync-paced; avoids busy-spinning while visible
+    const float clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};  // fully transparent backdrop
+    context_->OMSetRenderTargets(1, &target, nullptr);
+    context_->ClearRenderTargetView(target, clearColor);
+    g_rendering = this;
+    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    g_rendering = nullptr;
+
     ReleaseDeferredTextures();
 }
 

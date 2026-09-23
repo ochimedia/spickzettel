@@ -214,6 +214,11 @@ struct AppConfig {
     // so the same drawing can be looked at three ways without redrawing it.
     // "Does this look better" is not a question any test answers.
     StrokeRenderMode strokeRenderMode = StrokeRenderMode::Tessellated;
+    // How every picture in a snippet - a screenshot, a painted layer, the
+    // Rasterized strokes - is resampled when shown at a size other than its
+    // own. The same kind of choice: nothing stored changes, and switching
+    // redraws what is already there. See platform::ImageFilter.
+    platform::ImageFilter imageFilter = platform::ImageFilter::Bilinear;
     // Whether the drawing tools produce vector strokes or paint pixels.
     // One set of tools either way - a pen is a pen, and this decides where
     // its marks land, not which tools exist.

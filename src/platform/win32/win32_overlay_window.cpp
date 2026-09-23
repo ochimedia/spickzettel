@@ -919,6 +919,8 @@ void Win32OverlayWindow::ReleaseTexture(uint64_t textureHandle) {
     renderer_->ReleaseTexture(reinterpret_cast<ID3D11ShaderResourceView*>(static_cast<uintptr_t>(textureHandle)));
 }
 
+DrawCallback Win32OverlayWindow::ImageFilterCallback() const { return &Win32Dx11Renderer::ApplyImageFilter; }
+
 void Win32OverlayWindow::Destroy() {
     // Before the window goes: the grab posts messages to it, and its hooks
     // are global state that outliving this object would be a real problem.

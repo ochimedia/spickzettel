@@ -724,8 +724,25 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
 // RenderItems' per-item interactive window, RenderViewOnly's flat
 // read-only pass, and the dock's own thumbnail chips (see RenderDock).
 // Caller owns clipping (PushClipRect/PopClipRect) around this.
+void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint,
+                  ImageSampling sampling) {
+    const bool filtered = sampling.apply != nullptr && sampling.filter != platform::ImageFilter::Bilinear;
+    if (filtered) {
+        drawList->AddCallback(sampling.apply, reinterpret_cast<void*>(static_cast<intptr_t>(sampling.filter)));
+    }
+    drawList->AddImage(ImTextureRef(static_cast<ImTextureID>(texture)), pMin, pMax, ImVec2(0.0f, 0.0f),
+                        ImVec2(1.0f, 1.0f), tint);
+    if (filtered) {
+        // Null only where no renderer backend is set up, which is also
+        // where nothing is drawn.
+        if (const ImDrawCallback reset = ImGui::GetPlatformIO().DrawCallback_ResetRenderState) {
+            drawList->AddCallback(reset, nullptr);
+        }
+    }
+}
+
 void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMax,
-                std::optional<uint64_t> textureHandle) {
+                std::optional<uint64_t> textureHandle, ImageSampling sampling) {
     if (layer.opacity <= 0.0f) {
         return;
     }
@@ -737,9 +754,7 @@ void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMa
         // no extra handling here. The tint multiplies the sampled texture
         // (see Layer::tintColorRGBA) - white, the default, leaves a capture
         // unmodified; any other color mixes into it.
-        const ImU32 tint = ToImColor(layer.tintColorRGBA, layer.opacity);
-        drawList->AddImage(ImTextureRef(static_cast<ImTextureID>(texture)), pMin, pMax, ImVec2(0.0f, 0.0f),
-                            ImVec2(1.0f, 1.0f), tint);
+        DrawPicture(drawList, texture, pMin, pMax, ToImColor(layer.tintColorRGBA, layer.opacity), sampling);
     } else if (layer.kind == LayerKind::Painted) {
         // Nothing. A painted layer with no pixels loaded has nothing to
         // stand in with: its tintColorRGBA is a tint for those pixels, not
@@ -763,11 +778,12 @@ void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMa
 }
 
 void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
-                      uint64_t strokeRasterTexture, bool skipNoteText, StrokeMeshSlot meshCache) {
+                      uint64_t strokeRasterTexture, bool skipNoteText, StrokeMeshSlot meshCache,
+                      ImageSampling sampling) {
     // Bottom-first, each layer over the one below it - a screenshot, then
     // whatever has been painted on top of it.
     for (const Layer& layer : item.layers) {
-        DrawLayer(drawList, layer, pMin, pMax);
+        DrawLayer(drawList, layer, pMin, pMax, std::nullopt, sampling);
     }
 
     if (rendering == StrokeRenderMode::Rasterized && strokeRasterTexture != 0) {
@@ -776,9 +792,8 @@ void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
         // over itself one even color instead of darker at the crossing.
         // The opacity is applied once, to the finished picture, rather than
         // per stroke.
-        drawList->AddImage(ImTextureRef(static_cast<ImTextureID>(strokeRasterTexture)), pMin, pMax,
-                            ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f),
-                            ToImColor(0xFFFFFFFFu, item.foregroundOpacity));
+        DrawPicture(drawList, strokeRasterTexture, pMin, pMax, ToImColor(0xFFFFFFFFu, item.foregroundOpacity),
+                    sampling);
     } else {
         const float scaleX = item.nativeW != 0.0f ? (pMax.x - pMin.x) / item.nativeW : 1.0f;
         const float scaleY = item.nativeH != 0.0f ? (pMax.y - pMin.y) / item.nativeH : 1.0f;
@@ -2133,7 +2148,7 @@ void OverlayApp::RenderViewOnly(float displayW, float displayH) {
             const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
             drawList->PushClipRect(pMin, pMax, true);
             DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, StrokeRasterTextureFor(item.id),
-                             /*skipNoteText=*/false, CanvasMeshSlot());
+                             /*skipNoteText=*/false, CanvasMeshSlot(), PictureSampling());
             drawList->PopClipRect();
         }
     }

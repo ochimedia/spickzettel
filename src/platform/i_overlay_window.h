@@ -5,7 +5,16 @@
 
 #include "platform/platform_types.h"
 
+// Declared, not included: the one ImGui type this header names is the
+// signature of a draw callback, which the UI hands to ImDrawList::
+// AddCallback as it is.
+struct ImDrawList;
+struct ImDrawCmd;
+
 namespace sz::platform {
+
+// ImGui's ImDrawCallback, spelled out.
+using DrawCallback = void (*)(const ImDrawList* parentList, const ImDrawCmd* cmd);
 
 // A fullscreen overlay window covering one display. Created lazily and
 // then hidden and shown without tearing down GPU resources, so that
@@ -142,6 +151,13 @@ public:
 
     // Releases a texture from either call above. No-op for 0.
     virtual void ReleaseTexture(uint64_t textureHandle) = 0;
+
+    // A draw callback that makes the pictures drawn after it resample with
+    // the ImageFilter carried as its user data (the enum's value cast to a
+    // pointer), until ImGui's DrawCallback_ResetRenderState puts the
+    // default back. Null from a backend that draws nothing, whose pictures
+    // then just keep the default.
+    virtual DrawCallback ImageFilterCallback() const = 0;
 };
 
 }  // namespace sz::platform

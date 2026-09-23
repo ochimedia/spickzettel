@@ -315,6 +315,14 @@ uint32_t FloatsToColorRGBA(const float in[3], uint8_t alpha);
 void ColorRGBAToFloats4(uint32_t colorRGBA, float out[4]);
 uint32_t FloatsToColorRGBA4(const float in[4]);
 
+// `texture` stretched to fill `pMin..pMax`, tinted by `tint`, resampled
+// the way `sampling` says - every snippet picture is drawn through here.
+// Bilinear is ImGui's own sampler and adds nothing to the draw list; any
+// other filter is the picture between two callbacks, the renderer's and
+// ImGui's reset.
+void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint,
+                  ImageSampling sampling);
+
 // One layer's pixels (its image, its placeholder gradient, or its plain
 // fill - see layer.h) stretched to fill `pMin..pMax`, at the layer's own
 // opacity. Nothing is drawn for a layer at zero opacity.
@@ -323,8 +331,10 @@ uint32_t FloatsToColorRGBA4(const float in[4]);
 // when it is 0 ("no pixels, draw the fallback"). That is what the Overview's
 // canvas previews need: the same layer drawn with a thumbnail-sized copy of
 // its pixels, or with none, without touching the layer or copying it.
+// `sampling` is how its picture, if it has one, is resampled - see
+// ImageSampling.
 void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMax,
-                std::optional<uint64_t> textureHandle = std::nullopt);
+                std::optional<uint64_t> textureHandle = std::nullopt, ImageSampling sampling = {});
 
 // An item's layers, bottom-first, plus its baked strokes, into
 // `pMin..pMax` - shared by
@@ -345,7 +355,8 @@ void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMa
 // rather than nothing.
 // `meshCache` is passed straight down to each stroke - see StrokeMeshSlot.
 void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
-                      uint64_t strokeRasterTexture = 0, bool skipNoteText = false, StrokeMeshSlot meshCache = {});
+                      uint64_t strokeRasterTexture = 0, bool skipNoteText = false, StrokeMeshSlot meshCache = {},
+                      ImageSampling sampling = {});
 
 // A scaled-down snapshot of `canvas`'s items in `thumbMin..thumbMax`, the
 // way the display shows them - uniform scale, letterboxed. What the
@@ -358,14 +369,14 @@ void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax, float displayW,
                         float displayH, StrokeRenderMode rendering, bool showStrokes,
                         const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
-                        StrokeMeshSlot meshCache);
+                        StrokeMeshSlot meshCache, ImageSampling sampling);
 // One item as a preview draws it into `pMin..pMax`: each layer with the
 // texture `previewTexture` has for it, then its strokes scaled from the
 // item's native size to the box. What DrawCanvasPreview draws per item.
 void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
                      bool showStrokes,
                      const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
-                     StrokeMeshSlot meshCache);
+                     StrokeMeshSlot meshCache, ImageSampling sampling);
 // An icon+text button in the accent colour - the Overview's primary actions
 // (New folder, New canvas). Defined in overlay_app_overview.cpp.
 bool PrimaryButton(const char* strId, const Icon& icon, const char* text);
