@@ -908,8 +908,9 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
         ignoredButton_.reset();
         itemPropertiesPopoverItemId_.reset();
         confirmDeleteTarget_.reset();
-        creation_.reset();
-        rectErase_.reset();
+        // And whatever else the hand was in the middle of, kept where it
+        // got to - see EndGesture.
+        EndGesture();
         // Normally cleared at the top of every RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle
@@ -938,12 +939,7 @@ void OverlayApp::QuickCapture(float displayW, float displayH) {
 void OverlayApp::SettleForPersistence() { SettleHand(); }
 
 void OverlayApp::SettleHand() {
-    // Finishing a gesture asks ImGui whether the button is down, which
-    // needs a context; a flush or a capture hotkey can run before the
-    // overlay has ever been shown, and there is nothing in flight then.
-    if (ImGui::GetCurrentContext() != nullptr) {
-        FinishLeftButtonGesture();
-    }
+    ReleaseGesture();
     if (editingNoteItemId_.has_value()) {
         EndEditingNote(noteEditBuffer_);
     }
@@ -1967,7 +1963,8 @@ void OverlayApp::RenderToolModifierBadge() {
         return;
     }
     const ImGuiIO& io = ImGui::GetIO();
-    const bool dragging = strokeGesture_ != StrokeGesture::None;
+    const StrokeInFlight* stroke = GestureIf<StrokeInFlight>();
+    const bool dragging = stroke != nullptr;
     if (!dragging) {
         // Only where a press would make one: over the snippet in drawing
         // mode, not a panel, and not with Alt held.
@@ -1981,14 +1978,14 @@ void OverlayApp::RenderToolModifierBadge() {
     // make now - the modifiers held, or the bar's cycled shape.
     const Icon* icon = nullptr;
     if (activeTool_ == Tool::Draw) {
-        const DrawShape shape = dragging ? strokeShape_ : ShapeForPress();
-        if (dragging && strokeGesture_ != StrokeGesture::Shape) {
+        const DrawShape shape = dragging ? stroke->shape : ShapeForPress();
+        if (dragging && stroke->kind != StrokeInFlight::Kind::Shape) {
             return;  // freehand, which needs no saying
         }
         icon = shape == DrawShape::Rectangle ? &icons::kRectangle
                : shape == DrawShape::Line    ? &icons::kLine
                                              : nullptr;
-    } else if (dragging ? strokeGesture_ == StrokeGesture::EraseRect : ShapeForPress() == DrawShape::Rectangle) {
+    } else if (dragging ? stroke->kind == StrokeInFlight::Kind::EraseRect : ShapeForPress() == DrawShape::Rectangle) {
         icon = &icons::kEraserRect;
     }
     if (icon == nullptr) {
@@ -2149,31 +2146,6 @@ void OverlayApp::RenderViewOnly(float displayW, float displayH) {
     DrawDemoWatermark(drawList, displayW, displayH);
 
     EndScreenLayer();
-}
-
-// Feeds the raw pipeline the release it is waiting for, at the pointer's
-// current position, so the gesture ends the way it always does rather than
-// being abandoned halfway. Needed when the canvas changes under a gesture:
-// Alt+wheel is handled at frame time and can land mid-stroke, and
-// SwitchToCanvas disarms, after which OnMouse ignores the rest of that
-// gesture. What that left behind depended on the tool - a brush session
-// still open in the PaintedImage, its undo entry pushed only when the next
-// gesture began and filed under whichever canvas was current *then*; an
-// in-progress vector stroke simply dropped with the live layer it sat on.
-// Ending it here files everything under the canvas it happened on.
-//
-// Through OnMouse rather than a parallel set of end-handlers: every Up
-// handler already knows how to finish its own tool, and the real release
-// arriving later finds nothing in progress, which each of them already
-// treats as nothing to do. Nothing to end unless the button is actually
-// down - ImGui's view of it, which under a mouse grab is the grab's own.
-void OverlayApp::FinishLeftButtonGesture() {
-    if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        return;
-    }
-    const ImVec2 mouse = ImGui::GetMousePos();
-    OnMouse(platform::MouseEvent{platform::Vec2{mouse.x, mouse.y}, platform::MouseButton::Left,
-                                 platform::MouseEventKind::Up});
 }
 
 // Alt+wheel's other half: a quick canvas switcher, so moving between

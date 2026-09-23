@@ -430,7 +430,7 @@ void OverlayApp::DeleteSelection() {
     // on moving a snippet nobody can see and file that move after the
     // delete - an undo that visibly did nothing, and a snippet restored
     // wherever the hand happened to let go.
-    EndItemGesture();
+    EndGesture();
     // A copy: deleting clears nothing itself, but the toast and the
     // session are free to look at the selection while this runs.
     const std::vector<ItemId> doomed = selection_;
@@ -581,22 +581,25 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // buttons, only that handle or button reacts - the rule ImGui applies
     // to its own widgets while one of them holds ActiveId, so a handle
     // dragged across a bar button doesn't light that button up.
-    const bool blocked = (itemGesture_.has_value() && itemGesture_->resize) || pressedBarButton_.has_value();
+    const ItemGesture* held = GestureIf<ItemGesture>();
+    const BarPress* pressed = GestureIf<BarPress>();
+    const bool resizing = held != nullptr && held->resize;
+    const bool blocked = resizing || pressed != nullptr;
     const bool hotHandle =
         furnitureHot && target.kind == PointerTarget::Kind::Handle &&
-        (!blocked || (itemGesture_.has_value() && itemGesture_->resize && itemGesture_->item == target.item &&
-                      itemGesture_->handle == target.handle));
+        (!blocked || (resizing && held->item == target.item && held->handle == target.handle));
     std::optional<ChromeButton> hotButton;
-    if (furnitureHot && target.kind == PointerTarget::Kind::Button && (!blocked || pressedBarButton_ == target.button)) {
+    if (furnitureHot && target.kind == PointerTarget::Kind::Button &&
+        (!blocked || (pressed != nullptr && pressed->button == target.button))) {
         hotButton = target.button;
     }
 
     // The debug overlay's readout of which handle is live, with a dragging
     // handle reported for as long as it drags, wherever the pointer is.
-    if (itemGesture_.has_value() && itemGesture_->handle.has_value()) {
+    if (held != nullptr && held->handle.has_value()) {
         char handleDebug[64];
-        std::snprintf(handleDebug, sizeof(handleDebug), "%s item=%llu (dragging)", ResizeHandleName(*itemGesture_->handle),
-                      static_cast<unsigned long long>(itemGesture_->item));
+        std::snprintf(handleDebug, sizeof(handleDebug), "%s item=%llu (dragging)", ResizeHandleName(*held->handle),
+                      static_cast<unsigned long long>(held->item));
         debugHoveredResizeHandle_ = handleDebug;
     } else if (hotHandle) {
         char handleDebug[64];
@@ -617,8 +620,8 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // the item a popover is currently showing for doesn't lose its
     // highlight the instant the mouse leaves its rect to go interact with
     // the popover instead.
-    const std::optional<ItemId> stickyItemId = itemGesture_.has_value() ? std::optional<ItemId>(itemGesture_->item)
-                                                                         : itemPropertiesPopoverItemId_;
+    const std::optional<ItemId> stickyItemId =
+        held != nullptr ? std::optional<ItemId>(held->item) : itemPropertiesPopoverItemId_;
     const std::optional<ItemId> highlightId =
         stickyItemId.has_value() ? stickyItemId : (itemsInteractive ? target.body : std::nullopt);
 
@@ -679,8 +682,8 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // the same translucent-fill-and-outline the region capture's own drag
     // preview uses, being the same gesture in a different sense: one
     // frames what is to be made, this one frames what is already there.
-    if (boxSelect_.has_value() && boxSelect_->moved) {
-        const Rect box = boxSelect_->Bounds();
+    if (const BoxSelection* selecting = GestureIf<BoxSelection>(); selecting != nullptr && selecting->moved) {
+        const Rect box = selecting->Bounds();
         const ImVec2 pMin(box.x, box.y);
         const ImVec2 pMax(box.x + box.w, box.y + box.h);
         drawList->AddRectFilled(pMin, pMax, theme::AccentU32(40));
@@ -954,7 +957,7 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
     for (const ChromeButton button : buttons) {
         const HitRect rect = BarButtonRect(bar, buttons, button);
         const bool hovered = hotButton == button;
-        const bool held = pressedBarButton_ == button;
+        const bool held = GestureIf<BarPress>() != nullptr && GestureIf<BarPress>()->button == button;
         // Close is the one danger-red button; a pinned selection's Pin
         // wears the accent, the way a selected tool does - and on the
         // drawing bar, the tool in hand does. The rest are plain pills.

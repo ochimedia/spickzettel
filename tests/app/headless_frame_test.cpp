@@ -965,6 +965,34 @@ TEST_F(HeadlessAppTest, ARightDragOnTheSnippetBeingDrawnOnErasesAndARightClickLe
     EXPECT_FALSE(App().IsItemContextMenuOpen()) << "leaving the mode is all that click did";
 }
 
+// Undo with the pen still down: what it takes back is the stroke in
+// flight, and the rest of the drag draws nothing. It used to take back the
+// stroke before, while the one in flight went on and was kept.
+TEST_F(HeadlessAppTest, UndoMidStrokeTakesBackTheStrokeInFlight) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    Drag(350.0f, 400.0f, 650.0f, 400.0f);
+    ASSERT_EQ(Canvases().CurrentOrNull()->items[0].strokes.size(), 1u);
+    const Stroke first = Canvases().CurrentOrNull()->items[0].strokes[0];
+
+    MoveTo(350.0f, 480.0f);
+    StepFrame();
+    RawMouse(350.0f, 480.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(500.0f, 480.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    PressCtrlKey(ImGuiKey_Z);
+    RawMouse(650.0f, 480.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(650.0f, 480.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+
+    const Item& item = Canvases().CurrentOrNull()->items[0];
+    ASSERT_EQ(item.strokes.size(), 1u) << "the rest of the drag drew nothing";
+    EXPECT_EQ(item.strokes[0], first) << "and the stroke before is still there";
+}
+
 // Drawing mode is entered with the pen, whatever tool was used last time.
 TEST_F(HeadlessAppTest, DrawingModeAlwaysStartsWithThePen) {
     ShowEditMode();
@@ -2119,6 +2147,43 @@ TEST_F(OverlappingItemsTest, ARightDragResizesFromTheNearestEdgeAndARightClickRe
     RightClick(items.back.x + 60.0f, items.back.y + 100.0f);
     EXPECT_EQ(App().Selection().size(), 1u) << "a right click, with no drag, only selects";
     EXPECT_FLOAT_EQ(BackItem().rect.w, after.w) << "and resized nothing";
+}
+
+// A canvas switch in the middle of a right-drag resize ends it on the
+// canvas it began on, as it ends a left-button gesture: the rest of the
+// drag resizes nothing, and the resize is one undo there. Only the left
+// button's gestures were ended, and the resize went on across the switch.
+TEST_F(OverlappingItemsTest, ACanvasSwitchEndsARightDragResizeWhereItIs) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    CanvasManager& manager = controller_->GetSession().Manager();
+    const CanvasId home = manager.CurrentCanvasId();
+    const ItemId back = backId_;
+    const float x = items.back.x + items.back.w - 20.0f;
+    const float y = items.back.y + 40.0f;
+
+    MoveTo(x, y);
+    StepFrame();
+    RawMouse(x, y, platform::MouseEventKind::Down, platform::MouseButton::Right);
+    StepFrame();
+    RawMouse(x + 30.0f, y, platform::MouseEventKind::Move, platform::MouseButton::Right);
+    StepFrame();
+    const Rect mid = manager.FindItemAnywhere(back)->rect;
+    ASSERT_GT(mid.w, items.back.w);
+
+    TriggerHotkey(config_.hotkeyQuickCapture);  // onto a canvas of its own
+    ASSERT_NE(manager.CurrentCanvasId(), home);
+    RawMouse(x + 90.0f, y, platform::MouseEventKind::Move, platform::MouseButton::Right);
+    StepFrame();
+    RawMouse(x + 90.0f, y, platform::MouseEventKind::Up, platform::MouseButton::Right);
+    StepFrames(2);
+    EXPECT_EQ(manager.FindItemAnywhere(back)->rect, mid) << "the rest of the drag resized nothing";
+
+    manager.SwitchToCanvas(home);
+    StepFrame();
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(manager.FindItemAnywhere(back)->rect, items.back) << "one undo, on the canvas it began on";
 }
 
 // A fullscreen snippet right-clicked stays fullscreen; right-dragged, it

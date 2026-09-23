@@ -485,10 +485,11 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
 // ================= Drag previews =================
 
 void OverlayApp::RenderRegionCaptureOverlay() {
-    if (!creation_.has_value() || !creation_->dragTo.has_value()) {
+    const CreationGesture* framing = GestureIf<CreationGesture>();
+    if (framing == nullptr || !framing->dragTo.has_value()) {
         return;
     }
-    const CreationGesture& gesture = *creation_;
+    const CreationGesture& gesture = *framing;
     ImDrawList* drawList = ImGui::GetForegroundDrawList();
     const ImVec2 pMin(std::min(gesture.downX, gesture.dragTo->x), std::min(gesture.downY, gesture.dragTo->y));
     const ImVec2 pMax(std::max(gesture.downX, gesture.dragTo->x), std::max(gesture.downY, gesture.dragTo->y));
@@ -500,7 +501,8 @@ void OverlayApp::RenderRegionCaptureOverlay() {
 }
 
 void OverlayApp::RenderRectEraserOverlay() {
-    if (!rectErase_.has_value()) {
+    const StrokeInFlight* stroke = GestureIf<StrokeInFlight>();
+    if (stroke == nullptr || stroke->kind != StrokeInFlight::Kind::EraseRect) {
         return;
     }
     // Same visual language as RenderRegionCaptureOverlay, in a cool tone
@@ -508,7 +510,7 @@ void OverlayApp::RenderRectEraserOverlay() {
     // preview, not a placement one, and the two shouldn't read as the
     // same affordance at a glance.
     ImDrawList* drawList = ImGui::GetForegroundDrawList();
-    const RectErase& r = *rectErase_;
+    const RectErase& r = stroke->rect;
     const ImVec2 pMin(std::min(r.x0, r.x1), std::min(r.y0, r.y1));
     const ImVec2 pMax(std::max(r.x0, r.x1), std::max(r.y0, r.y1));
     drawList->AddRectFilled(pMin, pMax, IM_COL32(120, 170, 255, 40));

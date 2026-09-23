@@ -1317,10 +1317,7 @@ move - and is not recorded.
 
 Delete, undo and redo pressed with a drag still in flight end the drag
 where it stands first, filed as its release would file it; the rest of
-the drag moves nothing. Left running, a drag went on moving a snippet
-the delete had hidden and filed that move after the delete, so the
-first undo did nothing to be seen - and an undo mid-drag restored a
-placement the drag then wrote over, losing that step from the history.
+the drag moves nothing - see "One gesture engine on the raw pipeline".
 
 ### Making a snippet is on the history, and an untouched one goes
 
@@ -1536,6 +1533,28 @@ One button at a time: the first to press owns the pointer until it lets
 go. Windows' press-and-hold on a touch screen injects a right press into
 a held finger's left press, and the app does not depend on the OS being
 asked not to.
+
+What the pointer is doing is one field, `OverlayApp::gesture_`: a
+`std::variant` of the six things a held button can be in the middle of -
+moving or resizing snippets, holding a bar button, dragging a selection
+box, framing a snippet, a stroke, a right-drag erase - or none. It was a
+field per kind, which excluded each other only by the order `OnMouse`
+asked in, and ending "whatever is in flight" meant knowing every field
+it might be; each place that forgot one was a bug. A drag went on moving
+a snippet a Delete had hidden and filed that move after the delete, so
+the first undo did nothing to be seen; an undo mid-drag restored a
+placement the drag then wrote over, losing that step; a stroke outlived
+the Escape that left its drawing mode; and a canvas switch settled the
+left button's gestures only, so a right-drag resize went on across it.
+There are two ways to end one early. `ReleaseGesture` is a release where
+the pointer is, through `OnMouse` - what a canvas switch, a capture
+hotkey and hiding the overlay do, so a region being framed is made and a
+held bar button fires. `EndGesture` keeps what is done and makes nothing
+new - what delete, undo, redo and leaving drawing mode do: a move is
+filed, a stroke kept, and a region not yet made is dropped. An undo
+pressed mid-drag or mid-stroke therefore takes back what the hand has
+done so far, the most recent thing done. Either way the rest of the held
+button's drag finds nothing in flight and does nothing.
 
 The selection bar floats over the selection's bounding box, or below it
 when there is no room, or inside its top edge for a fullscreen snippet.

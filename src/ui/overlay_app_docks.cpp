@@ -126,8 +126,8 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     // Overview is up, which covers it.
     const bool pointerKnown = ImGui::IsMousePosValid(&io.MousePos);
     const ImVec2 pointer = io.MousePos;
-    const bool busy = overviewOpen_ || creation_.has_value() || strokeGesture_ != StrokeGesture::None ||
-                      itemGesture_.has_value();
+    const bool busy = overviewOpen_ || GestureIf<CreationGesture>() != nullptr ||
+                      GestureIf<StrokeInFlight>() != nullptr || GestureIf<ItemGesture>() != nullptr;
     const bool atBottom = pointerKnown && pointer.y >= displayH - kRevealZonePx;
     const bool onBar = pointerKnown && Near(canvasBarRect_, pointer, kHoverSlackPx);
     // And while a tile's context menu is up: the pointer has left the bar

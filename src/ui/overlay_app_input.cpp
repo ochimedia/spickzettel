@@ -8,6 +8,8 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "core/canvas/item_geometry.h"
@@ -255,7 +257,11 @@ void OverlayApp::EndEditingNote(const std::string& text) {
     }
 }
 
-void OverlayApp::ClearCreationGesture() { creation_.reset(); }
+void OverlayApp::ClearCreationGesture() {
+    if (GestureIf<CreationGesture>() != nullptr) {
+        gesture_ = std::monostate{};
+    }
+}
 
 // ================= Drawing mode =================
 
@@ -282,29 +288,24 @@ void OverlayApp::ExitDrawingMode() {
     if (!drawingItem_.has_value()) {
         return;
     }
-    // A press elsewhere is the usual way out, with no stroke in flight -
-    // but Escape and the view-only hotkey can come with the button still
-    // held. Such a stroke ends here as a release where the pointer is would
-    // end it, the way a canvas switch settles one (see SettleHand): kept,
-    // and filed as its undo step. Dropping the gesture instead left painted
-    // pixels on screen with no change recorded, so nothing saved them, and
-    // left the brush session open for the next stroke to file late. Handed
-    // to the stroke alone rather than through OnMouse: this can run inside
-    // the handling of a press, which a synthesized release would end.
-    if (strokeGesture_ != StrokeGesture::None && ImGui::GetCurrentContext() != nullptr) {
-        const ImVec2 mouse = ImGui::GetMousePos();
-        HandleStrokeEvent(platform::MouseEvent{platform::Vec2{mouse.x, mouse.y}, platform::MouseButton::Left,
-                                               platform::MouseEventKind::Up});
+    // A press elsewhere is the usual way out, with nothing in flight - but
+    // Escape and the view-only hotkey can come with the button still held.
+    // What it was doing ends here, kept: a stroke as a release would end
+    // it, filed as its undo step, and a right-drag erase likewise (see
+    // EndGesture). Dropping a stroke instead left painted pixels on screen
+    // with no change recorded, so nothing saved them, and left the brush
+    // session open for the next stroke to file late.
+    //
+    // Only the mode's own gestures, though: leaving it is also what a
+    // press on another snippet does, a frame later (see PruneSelection),
+    // and the move or resize that press has just started is not the
+    // mode's to end.
+    if (GestureIf<StrokeInFlight>() != nullptr || GestureIf<RightErase>() != nullptr) {
+        EndGesture();
     }
     if (Canvas* canvas = Manager().CurrentOrNull()) {
         canvas->liveLayer.Clear();
     }
-    strokeGesture_ = StrokeGesture::None;
-    rectErase_.reset();
-    if (rightErase_.has_value() && rightErase_->erasing) {
-        session_.EndErase();
-    }
-    rightErase_.reset();
     drawingItem_.reset();
     SetTool(Tool::Select);
 }
@@ -378,25 +379,26 @@ void OverlayApp::MatureHeldPress() {
     const HeldPress held = *heldPress_;
     heldPress_.reset();
     if (held.item.has_value()) {
-        if (itemGesture_.has_value() && itemGesture_->button == held.button) {
-            if (itemGesture_->moved) {
+        if (const ItemGesture* move = GestureIf<ItemGesture>(); move != nullptr && move->button == held.button) {
+            if (move->moved) {
                 return;  // became a drag after all - a move, not a hold
             }
             // The move the press started never moved, so nothing of it was
             // written; without it the release finds nothing to end.
-            itemGesture_.reset();
+            gesture_ = std::monostate{};
         }
         EnterDrawingMode(*held.item);
         return;
     }
     if (held.creates.has_value()) {
-        if (creation_.has_value() && creation_->button == held.button) {
-            if (creation_->dragTo.has_value()) {
+        if (const CreationGesture* creation = GestureIf<CreationGesture>();
+            creation != nullptr && creation->button == held.button) {
+            if (creation->dragTo.has_value()) {
                 return;  // became a drag after all - a frame, not a hold
             }
             // Dropped from under the release, which then finds nothing to
             // place and places nothing.
-            creation_.reset();
+            gesture_ = std::monostate{};
         }
         const ImGuiIO& io = ImGui::GetIO();
         const ItemId made = CreateFullscreenItem(*held.creates, io.DisplaySize.x, io.DisplaySize.y);
@@ -481,8 +483,7 @@ ItemId OverlayApp::CreateFullscreenItem(ItemCreationKind kind, float displayW, f
     return id;
 }
 
-ItemId OverlayApp::FinishRegionCapture() {
-    const CreationGesture gesture = *creation_;
+ItemId OverlayApp::FinishRegionCapture(const CreationGesture& gesture) {
     const ItemCreationKind kind = gesture.kind;
     const ImVec2 to = gesture.dragTo.value_or(ImVec2(gesture.downX, gesture.downY));
     const Rect rect{
@@ -491,7 +492,6 @@ ItemId OverlayApp::FinishRegionCapture() {
         std::abs(gesture.downX - to.x),
         std::abs(gesture.downY - to.y),
     };
-    ClearCreationGesture();
     if (rect.w < kRegionMinSize || rect.h < kRegionMinSize) {
         return 0;
     }
@@ -538,6 +538,76 @@ void OverlayApp::OffsetCopiedItem(ItemId itemId) {
 
 // ================= Raw mouse input: pen/eraser + creation placement =================
 
+// ================= The gesture in flight =================
+
+std::optional<platform::MouseButton> OverlayApp::GestureButton() const {
+    if (const ItemGesture* item = GestureIf<ItemGesture>()) {
+        return item->button;
+    }
+    if (const CreationGesture* creation = GestureIf<CreationGesture>()) {
+        return creation->button;
+    }
+    if (GestureIf<RightErase>() != nullptr) {
+        return platform::MouseButton::Right;
+    }
+    if (std::holds_alternative<std::monostate>(gesture_)) {
+        return std::nullopt;
+    }
+    return platform::MouseButton::Left;  // a bar press, a box, a stroke
+}
+
+// Feeds the raw pipeline the release it is waiting for, at the pointer's
+// current position, so the gesture ends the way it always does rather than
+// being abandoned halfway. Needed when the canvas changes under a gesture:
+// Alt+wheel is handled at frame time and can land mid-stroke, and a capture
+// hotkey at any time. Carried across the switch, a stroke left a brush
+// session open with its undo entry filed under whichever canvas was
+// current when the next gesture began, and a vector stroke went with the
+// live layer it sat on. Ended here, everything is filed under the canvas
+// it happened on - for either button: this once ended the left button's
+// gestures only, and a right-drag resize went on across the switch.
+//
+// Through OnMouse rather than a parallel set of end-handlers: every Up
+// handler already knows how to finish its own gesture, and the real
+// release arriving later finds nothing in flight, which each of them
+// treats as nothing to do. A press held still for a hold goes too: it
+// belongs to the canvas it was made on.
+void OverlayApp::ReleaseGesture() {
+    heldPress_.reset();
+    const std::optional<platform::MouseButton> button = GestureButton();
+    if (!button.has_value() || ImGui::GetCurrentContext() == nullptr) {
+        return;
+    }
+    const ImVec2 mouse = ImGui::GetMousePos();
+    OnMouse(platform::MouseEvent{platform::Vec2{mouse.x, mouse.y}, *button, platform::MouseEventKind::Up});
+}
+
+// Not through OnMouse: this can run inside the handling of a press - a
+// press elsewhere leaves drawing mode - which a synthesized release would
+// end. Each kind is ended by hand instead, keeping what it has done.
+void OverlayApp::EndGesture() {
+    if (GestureIf<StrokeInFlight>() != nullptr) {
+        // As its release would end it: the stroke, the shape or the erase
+        // kept and filed as one undo step - see HandleStrokeEvent.
+        if (ImGui::GetCurrentContext() != nullptr) {
+            const ImVec2 mouse = ImGui::GetMousePos();
+            HandleStrokeEvent(platform::MouseEvent{platform::Vec2{mouse.x, mouse.y}, platform::MouseButton::Left,
+                                                   platform::MouseEventKind::Up});
+        }
+        gesture_ = std::monostate{};
+        return;
+    }
+    Gesture ended = std::exchange(gesture_, std::monostate{});
+    if (ItemGesture* item = std::get_if<ItemGesture>(&ended)) {
+        // Where it has got to, as one undo step - or none, if it never moved.
+        session_.RecordPlacements(std::move(item->placementsBefore));
+    } else if (const RightErase* erase = std::get_if<RightErase>(&ended); erase != nullptr && erase->erasing) {
+        session_.EndErase();
+    }
+    // A snippet being framed, a box, a held bar button: nothing done yet,
+    // and nothing done now.
+}
+
 // ================= The selection's gestures: select, move, resize, and the bar's buttons =================
 
 // Every way a snippet is selected, moved or resized comes through here, as
@@ -579,34 +649,25 @@ void OverlayApp::OffsetCopiedItem(ItemId itemId) {
 // own normal handling); false lets it fall through to whatever it would
 // otherwise do - a stroke or a creation gesture for the left button, a
 // drawing for the right.
-void OverlayApp::EndItemGesture() {
-    if (!itemGesture_.has_value()) {
-        return;
-    }
-    itemGesture_.reset();
-    session_.RecordPlacements(std::move(itemGesturePlacementsBefore_));
-    itemGesturePlacementsBefore_.clear();
-}
-
 bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
     if (event.button != platform::MouseButton::Left && event.button != platform::MouseButton::Right) {
         return false;
     }
-    if (itemGesture_.has_value() && itemGesture_->button != event.button) {
+    if (const ItemGesture* item = GestureIf<ItemGesture>(); item != nullptr && item->button != event.button) {
         // The other button's business - a drag it started is left alone
         // rather than hijacked, and it gets nothing of ours.
         return false;
     }
-    if (boxSelect_.has_value()) {
+    if (GestureIf<BoxSelection>() != nullptr) {
         return HandleBoxSelection(event);
     }
-    if (pressedBarButton_.has_value()) {
+    if (const BarPress* press = GestureIf<BarPress>()) {
         if (event.button != platform::MouseButton::Left) {
             return false;
         }
         if (event.kind == platform::MouseEventKind::Up) {
-            const ChromeButton pressed = *pressedBarButton_;
-            pressedBarButton_.reset();
+            const ChromeButton pressed = press->button;
+            gesture_ = std::monostate{};
             const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
             if (target.kind == PointerTarget::Kind::Button && target.button == pressed) {
                 ActivateBarButton(pressed);
@@ -614,17 +675,16 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         }
         return true;  // held: nothing else starts under a pressed button
     }
-    if (itemGesture_.has_value()) {
+    if (ItemGesture* gesture = GestureIf<ItemGesture>()) {
         // Continuing (or ending) the gesture - always consumed regardless
         // of Alt's current state (releasing Alt mid-drag shouldn't abandon
         // it half-finished).
         if (event.kind == platform::MouseEventKind::Up) {
-            const ItemGesture ended = *itemGesture_;
-            itemGesture_.reset();
+            ItemGesture ended = std::move(*gesture);
+            gesture_ = std::monostate{};
             // The whole gesture, one entry - or none, for a press that
             // never moved anything.
-            session_.RecordPlacements(std::move(itemGesturePlacementsBefore_));
-            itemGesturePlacementsBefore_.clear();
+            session_.RecordPlacements(std::move(ended.placementsBefore));
             if (ended.button == platform::MouseButton::Right && !ended.moved) {
                 // A right press on a snippet that never dragged is a right
                 // click - a drag resizes instead. On the snippet being
@@ -645,13 +705,13 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         if (event.kind != platform::MouseEventKind::Move) {
             return true;
         }
-        const float dx = event.position.x - itemGesture_->startMouseX;
-        const float dy = event.position.y - itemGesture_->startMouseY;
-        if (!itemGesture_->moved) {
+        const float dx = event.position.x - gesture->startMouseX;
+        const float dy = event.position.y - gesture->startMouseY;
+        if (!gesture->moved) {
             if (std::sqrt(dx * dx + dy * dy) < kSelectionDragThreshold) {
                 return true;  // still a click, as far as anyone can tell
             }
-            itemGesture_->moved = true;
+            gesture->moved = true;
             KeepPlacedDrawings();
             // A fullscreen snippet is taken out of fullscreen the moment
             // it is dragged, as a window manager un-maximizes a window you
@@ -659,7 +719,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             // that merely selects it leaves it be. The snapshot is retaken
             // from the restored rect; the few pixels the pointer has
             // travelled by then are not worth a jump.
-            for (ItemGesture::StartRect& start : itemGesture_->startRects) {
+            for (ItemGesture::StartRect& start : gesture->startRects) {
                 Item* item = Manager().FindItemAnywhere(start.item);
                 if (item != nullptr && item->isFullscreen) {
                     Manager().ToggleFullscreen(start.item, ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
@@ -669,29 +729,29 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                     }
                 }
             }
-            if (itemGesture_->group) {
+            if (gesture->group) {
                 // The box was drawn around the rects the press found, and
                 // one of them has just been restored out of fullscreen.
-                itemGesture_->startBounds = BoundsOfStartRects(itemGesture_->startRects);
+                gesture->startBounds = BoundsOfStartRects(gesture->startRects);
             }
         }
-        if (itemGesture_->resize && itemGesture_->group) {
+        if (gesture->resize && gesture->group) {
             ResizeSelectionAsAGroup(dx, dy);
             return true;
         }
         const ImVec2 display = ImGui::GetIO().DisplaySize;
-        for (const ItemGesture::StartRect& start : itemGesture_->startRects) {
+        for (const ItemGesture::StartRect& start : gesture->startRects) {
             Item* item = Manager().FindItemAnywhere(start.item);
             if (item == nullptr) {
                 continue;  // deleted mid-drag - nothing left to move/resize
             }
             Rect newRect = start.rect;
-            if (itemGesture_->resize) {
+            if (gesture->resize) {
                 // Recomputed from the modifier on every event, so Shift
                 // pressed or let go mid-drag takes effect at once.
                 const bool lockAspect = KeepsAspectRatio(*item) != ImGui::GetIO().KeyShift;
-                ApplyResizeHandleDelta(newRect, itemGesture_->left, itemGesture_->right, itemGesture_->top,
-                                       itemGesture_->bottom, dx, dy, lockAspect);
+                ApplyResizeHandleDelta(newRect, gesture->left, gesture->right, gesture->top, gesture->bottom, dx,
+                                       dy, lockAspect);
             } else {
                 newRect.x += dx;
                 newRect.y += dy;
@@ -706,11 +766,13 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         }
         return true;
     }
-    if (event.kind != platform::MouseEventKind::Down || ImGui::GetIO().WantCaptureMouse) {
+    if (event.kind != platform::MouseEventKind::Down || ImGui::GetIO().WantCaptureMouse ||
+        !std::holds_alternative<std::monostate>(gesture_)) {
         // Only a press starts one, and not a press that a panel of ImGui's
         // own is under: a popover, the canvas bar, the Overview all
         // sit above every item, and a click landing on one of them is
-        // theirs alone.
+        // theirs alone. Nor while another gesture is in flight - one at a
+        // time, see gesture_.
         return false;
     }
     const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
@@ -754,13 +816,13 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         NearestResizeEdges(item->rect, event.position.x, event.position.y, gesture.left, gesture.right, gesture.top,
                            gesture.bottom);
         SnapshotResizeTargets(gesture, target.item);
-        itemGesture_ = gesture;
         BeginPlacementRecord(gesture);
+        gesture_ = std::move(gesture);
         return true;
     }
     switch (target.kind) {
         case PointerTarget::Kind::Button:
-            pressedBarButton_ = target.button;
+            gesture_ = BarPress{target.button};
             return true;
         case PointerTarget::Kind::Handle: {
             const Item* item = Manager().FindItemAnywhere(target.item);
@@ -773,8 +835,8 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             ResizeHandleEdges(target.handle, gesture.left, gesture.right, gesture.top, gesture.bottom);
             SnapshotResizeTargets(gesture, target.item);
             gesture.moved = true;  // a handle is only ever pressed to drag it
-            itemGesture_ = gesture;
             BeginPlacementRecord(gesture);
+            gesture_ = std::move(gesture);
             KeepPlacedDrawings();
             return true;
         }
@@ -815,8 +877,8 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                     gesture.startRects.push_back({id, item->rect});
                 }
             }
-            itemGesture_ = gesture;
             BeginPlacementRecord(gesture);
+            gesture_ = std::move(gesture);
             // Held still instead of dragged, the press enters drawing mode
             // as a double-click would - see MatureHeldPress.
             HoldPress(event, target.item, std::nullopt);
@@ -835,8 +897,8 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                     // select by instead - consumed, so no snippet is
                     // framed under it, and the selection is left alone
                     // until the box says what it caught.
-                    boxSelect_ = BoxSelection{event.position.x, event.position.y, event.position.x, event.position.y,
-                                                /*moved=*/false};
+                    gesture_ = BoxSelection{event.position.x, event.position.y, event.position.x, event.position.y,
+                                            /*moved=*/false};
                     return true;
                 }
                 ClearSelection();
@@ -860,32 +922,33 @@ bool OverlayApp::HandleBoxSelection(const platform::MouseEvent& event) {
     if (event.button != platform::MouseButton::Left) {
         return false;  // the other button's business, as every gesture here
     }
+    BoxSelection& box = *GestureIf<BoxSelection>();
     if (event.kind == platform::MouseEventKind::Move) {
-        boxSelect_->toX = event.position.x;
-        boxSelect_->toY = event.position.y;
-        if (!boxSelect_->moved) {
-            const float dx = boxSelect_->toX - boxSelect_->fromX;
-            const float dy = boxSelect_->toY - boxSelect_->fromY;
-            boxSelect_->moved = std::sqrt(dx * dx + dy * dy) >= kSelectionDragThreshold;
+        box.toX = event.position.x;
+        box.toY = event.position.y;
+        if (!box.moved) {
+            const float dx = box.toX - box.fromX;
+            const float dy = box.toY - box.fromY;
+            box.moved = std::sqrt(dx * dx + dy * dy) >= kSelectionDragThreshold;
         }
         return true;
     }
     if (event.kind == platform::MouseEventKind::Up) {
-        const BoxSelection box = *boxSelect_;
-        boxSelect_.reset();
-        if (box.moved) {
-            AddTouchedToSelection(box.Bounds());
+        const BoxSelection ended = box;
+        gesture_ = std::monostate{};
+        if (ended.moved) {
+            AddTouchedToSelection(ended.Bounds());
         }
     }
     return true;
 }
 
-void OverlayApp::BeginPlacementRecord(const ItemGesture& gesture) {
+void OverlayApp::BeginPlacementRecord(ItemGesture& gesture) {
     std::vector<ItemId> ids;
     for (const ItemGesture::StartRect& start : gesture.startRects) {
         ids.push_back(start.item);
     }
-    itemGesturePlacementsBefore_ = session_.PlacementsOf(ids);
+    gesture.placementsBefore = session_.PlacementsOf(ids);
 }
 
 void OverlayApp::ToggleFullscreenUndoably(ItemId id, bool stretch) {
@@ -949,10 +1012,11 @@ void OverlayApp::SnapshotResizeTargets(ItemGesture& gesture, ItemId itemId) {
 // against it while the rest carry on shrinking and the group quietly
 // reshapes itself.
 void OverlayApp::ResizeSelectionAsAGroup(float dx, float dy) {
-    if (!itemGesture_.has_value()) {
+    const ItemGesture* held = GestureIf<ItemGesture>();
+    if (held == nullptr) {
         return;
     }
-    const ItemGesture& gesture = *itemGesture_;
+    const ItemGesture& gesture = *held;
     const Rect box = gesture.startBounds;
     if (box.w <= 0.0f || box.h <= 0.0f) {
         return;
@@ -1113,40 +1177,39 @@ bool OverlayApp::PressMakesASnippet(const platform::MouseEvent& event) const {
 }
 
 bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
-    if (creation_.has_value()) {
-        if (event.button != creation_->button) {
+    if (CreationGesture* creation = GestureIf<CreationGesture>()) {
+        if (event.button != creation->button) {
             return false;  // the other button's business
         }
         switch (event.kind) {
             case platform::MouseEventKind::Down:
                 break;
             case platform::MouseEventKind::Move:
-                if (!creation_->dragTo.has_value()) {
-                    const float dx = event.position.x - creation_->downX;
-                    const float dy = event.position.y - creation_->downY;
+                if (!creation->dragTo.has_value()) {
+                    const float dx = event.position.x - creation->downX;
+                    const float dy = event.position.y - creation->downY;
                     if (std::sqrt(dx * dx + dy * dy) <= kCreationDragThreshold) {
                         break;  // still a click, as far as anyone can tell
                     }
                 }
-                creation_->dragTo = ImVec2(event.position.x, event.position.y);
+                creation->dragTo = ImVec2(event.position.x, event.position.y);
                 break;
             case platform::MouseEventKind::Up: {
-                const CreationGesture gesture = *creation_;
+                const CreationGesture gesture = *creation;
+                gesture_ = std::monostate{};
                 ItemId made = 0;
                 if (gesture.dragTo.has_value()) {
-                    made = FinishRegionCapture();
+                    made = FinishRegionCapture(gesture);
                 } else if (gesture.isDouble || !gesture.fromEmptyCanvas) {
                     // Fullscreen: the second press of a double-click on
                     // empty canvas, or any click with a creation tool in
                     // hand, which was picked on purpose.
                     const ImGuiIO& io = ImGui::GetIO();
                     made = CreateFullscreenItem(gesture.kind, io.DisplaySize.x, io.DisplaySize.y);
-                    ClearCreationGesture();
                 } else {
                     // A plain click on empty canvas makes nothing - a
                     // fullscreen snippet is too much to make by accident -
                     // with either button.
-                    ClearCreationGesture();
                     return true;
                 }
                 // A drawing a press on empty canvas made is watched until
@@ -1168,7 +1231,7 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
         }
         return true;
     }
-    if (event.kind != platform::MouseEventKind::Down) {
+    if (event.kind != platform::MouseEventKind::Down || !std::holds_alternative<std::monostate>(gesture_)) {
         return false;
     }
     CreationGesture gesture;
@@ -1197,15 +1260,16 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
         // fullscreen as a double-click would - see MatureHeldPress.
         HoldPress(event, std::nullopt, gesture.kind);
     }
-    creation_ = gesture;
+    gesture_ = gesture;
     return true;
 }
 
 void OverlayApp::KeepPlacedDrawings() {
-    if (!untouchedDrawing_.has_value() || !itemGesture_.has_value()) {
+    const ItemGesture* gesture = GestureIf<ItemGesture>();
+    if (!untouchedDrawing_.has_value() || gesture == nullptr) {
         return;
     }
-    for (const ItemGesture::StartRect& start : itemGesture_->startRects) {
+    for (const ItemGesture::StartRect& start : gesture->startRects) {
         if (start.item == *untouchedDrawing_) {
             untouchedDrawing_.reset();
             return;
@@ -1310,21 +1374,21 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
         // a drag erases along its path, and a press that never drags is a
         // right click, which leaves the mode. The erase starts only once
         // it is a drag, so a click takes nothing away.
-        if (rightErase_.has_value()) {
+        if (RightErase* erase = GestureIf<RightErase>()) {
             if (event.kind == platform::MouseEventKind::Move) {
-                if (!rightErase_->erasing) {
-                    const float dx = event.position.x - rightErase_->x;
-                    const float dy = event.position.y - rightErase_->y;
+                if (!erase->erasing) {
+                    const float dx = event.position.x - erase->x;
+                    const float dy = event.position.y - erase->y;
                     if (std::sqrt(dx * dx + dy * dy) < kSelectionDragThreshold || !drawingItem_.has_value()) {
                         return;
                     }
-                    rightErase_->erasing = true;
-                    session_.BeginErase(*drawingItem_, rightErase_->x, rightErase_->y, eraserWidth_);
+                    erase->erasing = true;
+                    session_.BeginErase(*drawingItem_, erase->x, erase->y, eraserWidth_);
                 }
                 session_.ExtendErase(event.position.x, event.position.y, eraserWidth_);
             } else if (event.kind == platform::MouseEventKind::Up) {
-                const bool erased = rightErase_->erasing;
-                rightErase_.reset();
+                const bool erased = erase->erasing;
+                gesture_ = std::monostate{};
                 if (erased) {
                     session_.EndErase();
                 } else {
@@ -1334,10 +1398,10 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
             return;
         }
         if (event.kind == platform::MouseEventKind::Down && drawingItem_.has_value() && !ImGui::GetIO().KeyAlt &&
-            !ImGui::GetIO().WantCaptureMouse) {
+            !ImGui::GetIO().WantCaptureMouse && std::holds_alternative<std::monostate>(gesture_)) {
             const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
             if (target.kind == PointerTarget::Kind::Body && target.item == *drawingItem_) {
-                rightErase_ = RightErase{event.position.x, event.position.y, false};
+                gesture_ = RightErase{event.position.x, event.position.y, false};
                 return;
             }
         }
@@ -1361,13 +1425,13 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
     // A creation already in flight takes its moves and its release wherever
     // they land, over a panel included - only the press that starts one is
     // held to the gates below. So does a stroke.
-    if (creation_.has_value() && HandleCreationGesture(event)) {
+    if (GestureIf<CreationGesture>() != nullptr && HandleCreationGesture(event)) {
         return;
     }
     if (event.kind != platform::MouseEventKind::Down) {
         // A stroke in flight takes its moves and its release wherever they
         // land - see HandleStrokeEvent, which started it on the press.
-        if (strokeGesture_ != StrokeGesture::None) {
+        if (GestureIf<StrokeInFlight>() != nullptr) {
             HandleStrokeEvent(event);
         }
         return;
@@ -1454,26 +1518,36 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
     // With no modifier held, the shape is whatever the drawing bar has cycled
     // the tool to (see ShapeForPress), so a plain drag can be a line or a
     // rectangle for a hand with no keyboard.
+    using Kind = StrokeInFlight::Kind;
     if (event.kind == platform::MouseEventKind::Down) {
-        if (activeTool_ == Tool::Erase) {
-            strokeGesture_ = ShapeForPress() == DrawShape::Rectangle ? StrokeGesture::EraseRect : StrokeGesture::Erase;
-        } else {
-            strokeShape_ = ShapeForPress();
-            strokeGesture_ = strokeShape_ != DrawShape::Freehand ? StrokeGesture::Shape
-                             // The mode is read here rather than inside the
-                             // gesture so that flipping the setting mid-
-                             // stroke can't move the rest of that stroke
-                             // somewhere else.
-                             : Cfg().paintPixelsInsteadOfStrokes ? StrokeGesture::Paint
-                                                                 : StrokeGesture::Freehand;
+        if (!std::holds_alternative<std::monostate>(gesture_)) {
+            return;  // one gesture at a time - see gesture_
         }
+        StrokeInFlight stroke;
+        if (activeTool_ == Tool::Erase) {
+            stroke.kind = ShapeForPress() == DrawShape::Rectangle ? Kind::EraseRect : Kind::Erase;
+        } else {
+            stroke.shape = ShapeForPress();
+            stroke.kind = stroke.shape != DrawShape::Freehand ? Kind::Shape
+                          // The mode is read here rather than inside the
+                          // gesture so that flipping the setting mid-stroke
+                          // can't move the rest of that stroke somewhere
+                          // else.
+                          : Cfg().paintPixelsInsteadOfStrokes ? Kind::Paint
+                                                              : Kind::Freehand;
+        }
+        gesture_ = stroke;
+    }
+    StrokeInFlight* stroke = GestureIf<StrokeInFlight>();
+    if (stroke == nullptr) {
+        return;
     }
     const auto sessionShape = [](DrawShape shape) {
         return shape == DrawShape::Rectangle ? Session::Shape::Rectangle : Session::Shape::Line;
     };
 
-    switch (strokeGesture_) {
-        case StrokeGesture::Erase:
+    switch (stroke->kind) {
+        case Kind::Erase:
             // One gesture in the session: the strokes it clips and the
             // pixels it takes off any painted layer, snapshotted as it
             // starts and filed as a single undo entry as it ends - see
@@ -1486,22 +1560,19 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
                 session_.EndErase();
             }
             break;
-        case StrokeGesture::EraseRect:
+        case Kind::EraseRect:
             // Dragged out from a fixed corner with nothing erased while it
             // is - the rect is only a preview (RenderRectEraserOverlay) -
             // then erased once, on release, as one undoable step (see
             // Session::EraseRect). A drag too short to be meant erases
             // nothing.
             if (event.kind == platform::MouseEventKind::Down) {
-                rectErase_ = RectErase{event.position.x, event.position.y, event.position.x, event.position.y};
+                stroke->rect = RectErase{event.position.x, event.position.y, event.position.x, event.position.y};
             } else if (event.kind == platform::MouseEventKind::Move) {
-                if (rectErase_.has_value()) {
-                    rectErase_->x1 = event.position.x;
-                    rectErase_->y1 = event.position.y;
-                }
-            } else if (rectErase_.has_value()) {
-                const RectErase rect = *rectErase_;
-                rectErase_.reset();
+                stroke->rect.x1 = event.position.x;
+                stroke->rect.y1 = event.position.y;
+            } else {
+                const RectErase rect = stroke->rect;
                 const float dx = event.position.x - rect.x0;
                 const float dy = event.position.y - rect.y0;
                 if (std::sqrt(dx * dx + dy * dy) >= kRegionMinSize) {
@@ -1510,26 +1581,26 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
                 }
             }
             break;
-        case StrokeGesture::Shape:
+        case Kind::Shape:
             // The whole of a shape is the session's: its preview, how short
             // a drag is a stray click, and whether it ends as a stroke or as
             // painted pixels - see Session::BeginShape. Pressing the other
             // modifier mid-drag turns a line into a rectangle or back;
             // letting go of both leaves it as it was.
             if (event.kind == platform::MouseEventKind::Down) {
-                session_.BeginShape(armed, sessionShape(strokeShape_), event.position.x, event.position.y,
+                session_.BeginShape(armed, sessionShape(stroke->shape), event.position.x, event.position.y,
                                     drawColorRGBA_, drawWidth_, Cfg().paintPixelsInsteadOfStrokes);
             } else if (event.kind == platform::MouseEventKind::Move) {
                 if (io.KeyCtrl || io.KeyShift) {
-                    strokeShape_ = DrawShapeFor(io.KeyCtrl, io.KeyShift);
-                    session_.SetShape(sessionShape(strokeShape_));
+                    stroke->shape = DrawShapeFor(io.KeyCtrl, io.KeyShift);
+                    session_.SetShape(sessionShape(stroke->shape));
                 }
                 session_.UpdateShape(event.position.x, event.position.y);
             } else {
                 session_.EndShape(event.position.x, event.position.y);
             }
             break;
-        case StrokeGesture::Paint:
+        case Kind::Paint:
             // Freehand, in pixels: the brush writes straight into the armed
             // item's own painted layer, with no stroke stored anywhere.
             if (event.kind == platform::MouseEventKind::Down) {
@@ -1540,7 +1611,7 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
                 session_.EndPaint();
             }
             break;
-        case StrokeGesture::Freehand:
+        case Kind::Freehand:
             // Freehand, in vector: accumulated into the live layer (screen
             // space) while the stroke is in progress, then transformed into
             // native space and moved into the armed item (see
@@ -1553,11 +1624,9 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
                 session_.CommitLiveStroke(armed);
             }
             break;
-        case StrokeGesture::None:
-            break;
     }
     if (event.kind == platform::MouseEventKind::Up) {
-        strokeGesture_ = StrokeGesture::None;
+        gesture_ = std::monostate{};
     }
 }
 
