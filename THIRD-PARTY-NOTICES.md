@@ -1,6 +1,6 @@
 # Third-party notices
 
-Spickzettel is built on the components below. Each carries its own licence,
+Spickzettel is built on the components below. Each carries its own license,
 reproduced here in full because every one of them requires its copyright
 notice to travel with a binary that includes it. Spickzettel's own terms are
 separate and are in LICENSE at the repo root.
@@ -75,7 +75,7 @@ SOFTWARE.
 Decode and encode the PNGs a snippet's pixels are stored as.
 https://github.com/nothings/stb
 
-Available under two licences; Spickzettel uses it under the MIT one, quoted
+Available under two licenses; Spickzettel uses it under the MIT one, quoted
 here. The alternative is public domain dedication.
 
 MIT License
@@ -141,8 +141,8 @@ This Font Software is licensed under the SIL Open Font License, Version 1.1.
 The full text is in `assets/fonts/Manrope-OFL.txt` and at
 http://scripts.sil.org/OFL
 
-The licence permits the font to be bundled with, and sold with, software,
-provided each copy carries the notice above and the licence; it forbids only
+The license permits the font to be bundled with, and sold with, software,
+provided each copy carries the notice above and the license; it forbids only
 selling the font by itself. Its key terms follow.
 
 PERMISSION & CONDITIONS
@@ -197,7 +197,7 @@ FROM OTHER DEALINGS IN THE FONT SOFTWARE.
 
 The icons are drawn by this project from its own path data, styled after the
 Lucide set, which is itself in part derived from Feather. Neither project's
-files are copied; both licences below cover the underlying designs. The full
+files are copied; both licenses below cover the underlying designs. The full
 text, with Lucide's own list of which icons come from Feather, is in
 `assets/icons/ATTRIBUTION.txt`.
 https://lucide.dev

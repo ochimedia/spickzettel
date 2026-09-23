@@ -54,8 +54,8 @@ shown on the overlay's About tab, has the rest of the controls.
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the module layout,
 the platform boundary, and the reasoning behind the design.
 
-## Licence
+## License
 
 Spickzettel is proprietary; see [`LICENSE`](LICENSE). The third-party
-components it is built on carry their own licences, reproduced in
+components it is built on carry their own licenses, reproduced in
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
