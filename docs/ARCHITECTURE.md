@@ -970,6 +970,41 @@ would be is now passed over by the picture sweep and the staging pass,
 rather than removed or moved. The rule is the same one the tree
 already keeps for linked directories: a link is never the store's.
 
+**The disks the tests use** live in `tests/support`:
+
+- `MemoryFileSystem` is a model of the disk in memory. It is fast
+  enough to run a scenario hundreds of times, and it behaves the same
+  on Linux as on Windows.
+- `FaultyFileSystem` wraps any file system and adds three kinds of
+  misbehavior:
+  - holding a file open, which blocks removing it, renaming it,
+    replacing it and renaming any directory above it;
+  - failing a chosen operation;
+  - crashing: after N changes the disk stops changing, and the write
+    the crash interrupts leaves its first half.
+
+A model is only worth what it agrees with. So one conformance suite
+runs the same expectations against both the model and the real disk,
+a held file included (a stream open the way the MSVC runtime opens
+one). Anything the model gets wrong about Windows shows up as the two
+disagreeing.
+
+`ForEachCrashPoint` runs a scenario once to count its changes, then
+once more for every point it could crash at. Each time it restarts on
+what was left and checks the rules a crash must never break:
+
+- nothing loads twice;
+- every picture a record names loads;
+- each snippet is its version from before the change or from after it,
+  whole, in one place or the other;
+- the restart saves, and loads back as itself.
+
+Edits, moves of snippets and canvases, renames, captures and
+rewritten pictures all pass at every point. Deleting for good does not
+yet. A crash partway through removing a snippet's directory reloads
+the snippet with its picture already gone. The removal writes its mark
+only when it fails, not before it starts.
+
 ### Images: QOI
 
 Pixels are written as QOI. Measured on this app's own screenshots
