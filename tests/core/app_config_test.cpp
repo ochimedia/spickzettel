@@ -402,6 +402,17 @@ TEST(AppConfigTest, ABarReadFromTheFileEndsUpHoldingEachOfItsButtonsOnce) {
     EXPECT_EQ(config.drawingBar, DefaultDrawingBar()) << "the bar the file said nothing about is untouched";
 }
 
+// The drawing bar's color button is stored as "color", in the spelling
+// the rest of the file uses.
+TEST(AppConfigTest, TheColorButtonIsStoredAsColor) {
+    AppConfig config = DefaultConfig();
+    config.drawingBar = {{ChromeButton::Colour, false}, {ChromeButton::Pen, true}, {ChromeButton::Eraser, true},
+                         {ChromeButton::Text, true}};
+    const std::string text = SerializeConfig(config);
+    EXPECT_NE(text.find("\"color\""), std::string::npos) << text;
+    EXPECT_EQ(ParseConfig(text).drawingBar, config.drawingBar);
+}
+
 TEST(AppConfigTest, UnknownKeysAndGroupsAreIgnored) {
     const AppConfig config = ParseConfig(R"({
         "someFutureGroup": {"a": 1},

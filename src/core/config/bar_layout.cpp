@@ -59,7 +59,7 @@ std::string_view BarButtonKey(ChromeButton button) {
         case ChromeButton::Text:
             return "text";
         case ChromeButton::Colour:
-            return "colour";
+            return "color";
     }
     return "";
 }
@@ -74,11 +74,6 @@ std::optional<ChromeButton> BarButtonFromKey(std::string_view key) {
         if (BarButtonKey(button) == key) {
             return button;
         }
-    }
-    // The one spelling that is not the key: "color", for a file written by
-    // hand on a keyboard that spells it that way.
-    if (key == "color") {
-        return ChromeButton::Colour;
     }
     return std::nullopt;
 }

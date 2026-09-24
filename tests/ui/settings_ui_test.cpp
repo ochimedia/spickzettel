@@ -189,7 +189,7 @@ TEST_F(UiTest, TheColourTileSwitchesOffLikeEveryOtherButton) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
         ctx->ItemClick("**/###sectioninteraction");
-        ctx->ItemClick("**/##tilecolour");
+        ctx->ItemClick("**/##tilecolor");
     });
 
     const BarButtonList& bar = AppSettings().Stored().drawingBar;
