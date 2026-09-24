@@ -313,6 +313,11 @@ void Win32InputGrab::Refresh() {
         correctionLagMsLast_.store(0.0f, std::memory_order_relaxed);
         correctionLagMsMax_.store(0.0f, std::memory_order_relaxed);
         correctionsInjected_.store(0, std::memory_order_relaxed);
+    } else if (!countering && counteringWasOn_) {
+        // Settling the account while the hook is still installed - it is
+        // only taken down at the end of this - so the correction is
+        // swallowed like every other and does not fling the real cursor.
+        FlushPendingCorrection();
     }
     counteringWasOn_ = countering;
     if (virtualCursorWasDriving_ && !virtualCursorDriving) {
@@ -589,9 +594,9 @@ void Win32InputGrab::FlushPendingCorrection() {
     }
     correctionsInjected_.fetch_add(1, std::memory_order_relaxed);
 
-    // One correction carrying everything banked since the last one, rather
-    // than one per report. The total the game integrates is identical, and
-    // it is a good deal less synthetic input for it to look at.
+    // One correction carrying everything banked, rather than one per report
+    // or per frame. The total the game integrates is identical, and it is a
+    // good deal less synthetic input for it to look at.
     INPUT correction{};
     correction.type = INPUT_MOUSE;
     correction.mi.dx = -dx;

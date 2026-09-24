@@ -1005,7 +1005,6 @@ void Win32OverlayWindow::RenderFrame() {
     }
 
     Win32InputGrab& grab = Win32InputGrab::Instance();
-    grab.FlushPendingCorrection();
 
     // Modifier state from two sources that between them cover every case.
     // ImGui's backend learns Ctrl/Shift/Alt from key messages, which need

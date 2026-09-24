@@ -153,14 +153,6 @@ public:
         alt = altDown_;
     }
 
-    // Injects one frame's worth of accumulated camera correction, if
-    // "hold the camera still" is on. Called once per rendered frame, from
-    // the render thread on purpose: reading raw input has to be immediate,
-    // because it drives the pointer, but injecting does not, and a
-    // dedicated thread doing the injecting was tried against a real game
-    // and made it worse. No-op when there is nothing banked.
-    void FlushPendingCorrection();
-
     // Debug scaffolding for the input options HUD - see
     // InputGrabDiagnostics. SampleFrameStep is called once per rendered
     // frame; Diagnostics is read by the HUD.
@@ -217,6 +209,15 @@ private:
     // the way. Idempotent; every public setter just updates state and calls
     // this.
     void Refresh();
+    // Injects everything banked while countering was on as one correction,
+    // putting the game's camera back where it was when the overlay came up.
+    // Called by Refresh as countering ends rather than once per frame: a
+    // camera countered frame by frame visibly shakes, and each correction
+    // is a raw-input message of our own, which on a 125 Hz mouse pushes the
+    // sink past Windows' background rate cap and makes the pointer jump.
+    // Deferring is only invisible behind the frozen screen, where the
+    // camera's wandering is not seen. No-op when there is nothing banked.
+    void FlushPendingCorrection();
     void EnsureRawInputSink();
     void DestroyRawInputSink();
 
@@ -450,9 +451,9 @@ private:
     std::atomic<int> frameSteps_[4]{};
     POINT lastFramePoint_{};
     LARGE_INTEGER lastReportTime_{};
-    // Movement taken from the game since the last flush, banked by the
-    // raw-input sink on the hook thread and injected back by the render
-    // thread a frame later - see FlushPendingCorrection.
+    // Movement taken from the game since countering began, banked by the
+    // raw-input sink on the hook thread and injected back when countering
+    // ends - see FlushPendingCorrection.
     std::atomic<LONG> pendingCorrectionX_{0};
     std::atomic<LONG> pendingCorrectionY_{0};
     // QPC ticks at the moment the oldest still-uncountered report was
