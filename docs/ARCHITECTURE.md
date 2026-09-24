@@ -67,6 +67,13 @@ only when the exe differs, so a copy deleted by hand comes back without
 a relink. A copy that is running cannot be overwritten, and fails the
 build just as a running build-tree exe fails the link.
 
+`scripts/clean_build.cmd` is the release build: it deletes the Windows
+presets' build trees and `dist/`, then configures, builds and tests
+every preset in turn and stops at the first failure. Nothing an earlier
+build left behind - a stale object, a cached option, an exe in `dist/`
+from before a rename - can end up in what is handed out. It finds
+Visual Studio itself with `vswhere`, so it runs from a double-click.
+
 The C++ runtime is linked statically (`CMAKE_MSVC_RUNTIME_LIBRARY`), so
 the exe needs nothing beyond what Windows itself ships: no Visual C++
 Redistributable to install, and no risk of loading an older copy of

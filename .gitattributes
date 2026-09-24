@@ -1,4 +1,7 @@
 * text=auto eol=lf
+# cmd.exe reads a batch file with LF-only lines unreliably: a goto or call
+# to a label can miss it.
+*.cmd text eol=crlf
 *.ico binary
 *.ttf binary
 *.png binary
