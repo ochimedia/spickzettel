@@ -73,13 +73,4 @@ menu with every way to make one, Paste, the Overview and Settings.
 
 ### 0.1.0
 
-- Snippets are objects: select, move, resize by handles, multi-select,
-  clipboard, pin, minimize, fullscreen.
-- Drawing mode on a snippet, with pen, line and rectangle shapes, two
-  erasers, text, and a color chooser.
-- Per-canvas undo history, and per-canvas GPU textures so only the canvas
-  you are looking at holds video memory.
-- Folders and canvases, an Overview to move and reorder them, and
-  Show deleted to get them back.
-- Per-application profiles for the behavior options, and a Settings tab for
-  everything else.
+- First release.
