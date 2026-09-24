@@ -1873,8 +1873,19 @@ bool LibraryStore::Save(const LibraryView& view) const {
             continue;
         }
         wroteEverything &= !placedFolder.misplaced;
-        wroteEverything &= writeIfChanged("folder:" + std::to_string(folder.id), folderDir / kFolderFile,
-                                           ToJson(folder).dump(2), !placedFolder.kept);
+        const bool folderRecorded = writeIfChanged("folder:" + std::to_string(folder.id), folderDir / kFolderFile,
+                                                   ToJson(folder).dump(2), !placedFolder.kept);
+        wroteEverything &= folderRecorded;
+        // A directory with no record in it at all - made fresh, and its
+        // first record did not land - is not a place to move anything into.
+        // Load does not read it, so what moved in would be lost to a
+        // restart until the record landed: a snippet saved long before,
+        // moved into a canvas just made. Everything that belongs under it
+        // waits where it is for the save that writes the record; a record
+        // that failed to be rewritten has its last version still there.
+        if (!folderRecorded && !fs_->Exists(folderDir / kFolderFile)) {
+            continue;
+        }
 
         std::vector<std::string> canvasOrder;
         const auto inFolder = canvasesByFolder.find(folder.id);
@@ -1889,8 +1900,12 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 continue;
             }
             wroteEverything &= !placedCanvas.misplaced;
-            wroteEverything &= writeIfChanged("canvas:" + std::to_string(canvas.id), canvasDir / kCanvasFile,
-                                               ToJson(canvas).dump(2), !placedCanvas.kept);
+            const bool canvasRecorded = writeIfChanged("canvas:" + std::to_string(canvas.id), canvasDir / kCanvasFile,
+                                                       ToJson(canvas).dump(2), !placedCanvas.kept);
+            wroteEverything &= canvasRecorded;
+            if (!canvasRecorded && !fs_->Exists(canvasDir / kCanvasFile)) {
+                continue;  // see the folder's record above
+            }
 
             std::vector<std::string> itemOrder;
             for (const Item& item : canvas.items) {

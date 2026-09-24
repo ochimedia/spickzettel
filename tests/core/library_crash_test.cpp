@@ -594,6 +594,47 @@ TEST(LibraryFaultTest, ARescueWithNowhereToGoGetsAFolderOfItsOwn) {
                 again.LoadImage(kShot, reloaded->canvases[0].items[1].ImageLayer()->imageFile).has_value());
 }
 
+// A saved snippet moved into a canvas just made, and the save that would
+// write both cannot write the canvas's record. The snippet is not moved
+// into a directory Load would not read - it waits where it was, and a
+// restart finds it there.
+TEST(LibraryFaultTest, NothingIsMovedUnderADirectoryWhoseRecordDidNotLand) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    FaultyFileSystem fs(disk);
+    constexpr uint64_t kNewCanvas = 12;
+    {
+        LibraryStore store(Root(), fs);
+        CanvasManagerSnapshot library = *store.Load();
+        Canvas fresh;
+        fresh.id = kNewCanvas;
+        fresh.name = "New";
+        fresh.folderId = kFolder;
+        std::vector<Item>& onA = FindCanvas(library, kCanvasA)->items;
+        fresh.items.push_back(onA[0]);
+        onA.erase(onA.begin());
+        library.canvases.push_back(fresh);
+        fs.FailWhen(FaultyFileSystem::Op::WriteNewFile, [](const std::filesystem::path& path) {
+            return IsOf(path, kNewCanvas) && path.filename().string().rfind("canvas.json", 0) == 0;
+        });
+        EXPECT_FALSE(store.Save(library));
+    }
+    fs.ClearFailures();
+
+    LibraryStore restarted(Root(), fs);
+    const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const Layout layout = LayoutOf(*loaded);
+    ASSERT_EQ(layout.count(kShot), 1u) << "a saved snippet lost to a canvas whose record never landed";
+    EXPECT_EQ(layout.at(kShot).parent, kCanvasA);
+    CanvasManagerSnapshot copy = *loaded;
+    for (const Item& item : FindCanvas(copy, kCanvasA)->items) {
+        if (item.id == kShot) {
+            EXPECT_TRUE(restarted.LoadImage(kShot, item.ImageLayer()->imageFile).has_value());
+        }
+    }
+}
+
 // A pending.json that cannot be written deletes nothing: the removal is owed
 // in memory, and a restart finds everything as it was.
 TEST(LibraryFaultTest, ARemovalThatCannotBeRecordedRemovesNothing) {

@@ -801,6 +801,17 @@ canvas, picture and all, before reaching the canvas it went to. Retiring
 only what the index knows is what makes an unfamiliar directory safe:
 unreadable must never become deleted.
 
+Nothing is placed under a directory until that directory's record is
+on disk. Load reads only a directory that holds a record, so anything
+moved into a folder or canvas whose record has not landed is lost to a
+restart until it does. The case is ordinary: a snippet saved long ago,
+moved into a canvas just made, and a save that cannot write the new
+canvas's record. So when a folder's or canvas's record fails and none
+is there from before, its contents stay where they are, and wait for
+the save that writes the record. A record that only failed to be
+rewritten still has its previous version on disk, and does not hold
+anything back.
+
 Retiring sets aside into `retired/` rather than deleting. With a delete
 a mark and a permanent delete an eager `Remove`, the index and the
 snapshot agree about everything that went on purpose by the time a save
