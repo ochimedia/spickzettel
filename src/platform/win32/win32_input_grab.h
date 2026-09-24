@@ -169,6 +169,12 @@ public:
     // Called once at shutdown; also safe to call when nothing is installed.
     void Shutdown();
 
+    // The key-downs to hand Windows as a grab of the keyboard ends: one per
+    // side of Ctrl, Shift and Alt whose down `swallowed` (indexed by
+    // virtual key) says the hook took, each as that very key - see
+    // HandHeldModifiersToSystem. Public to be tested without injecting.
+    static std::vector<INPUT> ModifierHandBack(const bool (&swallowed)[256]);
+
 private:
     Win32InputGrab() = default;
 
@@ -198,7 +204,7 @@ private:
     bool TrackModifier(UINT vk, bool isDown);
     // Hands still-held modifiers back to Windows when the hook goes away - see
     // its definition for the hotkey that stops working without it.
-    static void HandHeldModifiersToSystem(bool ctrl, bool shift, bool alt);
+    static void HandHeldModifiersToSystem(const bool (&swallowed)[256]);
     // Posts a key-up to the overlay for every key still marked swallowed, and
     // clears the record. Called whenever a grab starts or ends - see its
     // definition for the every-other-keypress bug that needs both halves.
@@ -462,6 +468,11 @@ private:
     // the hook, read and reset by the sink, both on the hook thread; atomic
     // because BeginVirtualCursor resets it from the app thread.
     std::atomic<int> hookMovesSinceReport_{0};
+    // Which mouse buttons' downs the hook has swallowed, one bit each (left,
+    // right, middle, X1, X2) - so that the up of a button pressed before the
+    // hook was there reaches Windows. See OnMouse. Cleared as the hook goes
+    // in; written on the hook thread only.
+    std::atomic<uint8_t> swallowedButtons_{0};
     // Movement taken from the game since the last correction, banked by the
     // raw-input sink on the hook thread and injected back once it strays too
     // far or countering ends - see FlushPendingCorrection.

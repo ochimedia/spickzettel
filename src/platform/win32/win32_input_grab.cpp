@@ -198,12 +198,13 @@ void Win32InputGrab::BeginGrabbedKeyboard() {
 // and eats the next press of it; without the second, the OS has no chord to
 // match and the hotkey stops working.
 void Win32InputGrab::EndGrabbedKeyboard() {
-    const bool ctrl = ctrlDown_;
-    const bool shift = shiftDown_;
-    const bool alt = altDown_;
+    bool swallowed[kVirtualKeyCount] = {};
+    for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
+        swallowed[vk] = swallowedDown_[vk].load(std::memory_order_relaxed);
+    }
     ctrlDown_ = altDown_ = shiftDown_ = false;
     ReleaseSwallowedKeys();
-    HandHeldModifiersToSystem(ctrl, shift, alt);
+    HandHeldModifiersToSystem(swallowed);
 }
 
 // Takes the pointer over from the real cursor: start where it is, and reset
@@ -470,6 +471,7 @@ void Win32InputGrab::ReconcileHooks() {
     const bool wantKeyboard = WantKeyboard();
 
     if (wantMouse && !mouseHook_) {
+        swallowedButtons_.store(0, std::memory_order_relaxed);  // nothing is ours yet - see OnMouse
         mouseHook_ = SetWindowsHookExA(WH_MOUSE_LL, &Win32InputGrab::MouseProc, GetModuleHandleA(nullptr), 0);
     } else if (!wantMouse && mouseHook_) {
         UnhookWindowsHookEx(mouseHook_);
@@ -902,8 +904,47 @@ LRESULT CALLBACK Win32InputGrab::MouseProc(int code, WPARAM wParam, LPARAM lPara
 // Raw button events reach the game regardless of any of this: nothing in
 // user mode can stop those, which is why a game that reads its clicks that
 // way still needs the overlay to take focus outright.
-LRESULT Win32InputGrab::OnMouse(WPARAM /*message*/, const MSLLHOOKSTRUCT& /*event*/) {
-    return 1;  // every mouse event is swallowed; nothing here is interpreted
+namespace {
+// The bit a button's down or up stands for in swallowedButtons_, or 0 for a
+// message that is no button's.
+uint8_t ButtonBit(WPARAM message, DWORD mouseData) {
+    switch (message) {
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+            return 1u << 0;
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+            return 1u << 1;
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+            return 1u << 2;
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+            return HIWORD(mouseData) == XBUTTON1 ? (1u << 3) : (1u << 4);
+        default:
+            return 0;
+    }
+}
+}  // namespace
+
+LRESULT Win32InputGrab::OnMouse(WPARAM message, const MSLLHOOKSTRUCT& event) {
+    // Every mouse event is swallowed, nothing here is interpreted - with the
+    // keyboard's exception (see OnKeyboard): a button-up is only ours to
+    // swallow if we swallowed its down. A button held in the application
+    // underneath as the overlay came up - a drag in progress, a held right
+    // button in a game - had its release swallowed, and that window went on
+    // holding the button, and the mouse capture, after the overlay was gone.
+    const uint8_t bit = ButtonBit(message, event.mouseData);
+    if (bit != 0) {
+        const bool isDown = message == WM_LBUTTONDOWN || message == WM_RBUTTONDOWN ||
+                            message == WM_MBUTTONDOWN || message == WM_XBUTTONDOWN;
+        if (isDown) {
+            swallowedButtons_.fetch_or(bit, std::memory_order_relaxed);
+        } else if ((swallowedButtons_.fetch_and(static_cast<uint8_t>(~bit), std::memory_order_relaxed) & bit) == 0) {
+            return 0;
+        }
+    }
+    return 1;
 }
 
 // Everything the overlay learns about the mouse, from the one stream that
@@ -1150,30 +1191,44 @@ void Win32InputGrab::ReleaseSwallowedKeys() {
 // mean typing the letters into whatever has focus; a modifier the user is
 // genuinely holding is true information, and the physical key-up that follows
 // reaches an OS with no hook in the way and squares the books.
-void Win32InputGrab::HandHeldModifiersToSystem(bool ctrl, bool shift, bool alt) {
-    INPUT keys[3]{};
-    UINT count = 0;
-    const auto add = [&](WORD vk) {
-        keys[count].type = INPUT_KEYBOARD;
-        keys[count].ki.wVk = vk;
+//
+// Only the ones whose down was swallowed, and each as the very key it was.
+// The generic VK_CONTROL, VK_MENU and VK_SHIFT this used to send are the
+// *left* keys to Windows, while the key-up that follows is whichever side was
+// really held: AltGr - which is Ctrl+Alt, and how Ctrl+Alt+O is typed on a
+// German keyboard - came back as left Alt down with only a right Alt up to
+// follow, and left Alt stayed down on the whole desktop. And a modifier that
+// was already held when the grab began reached Windows itself; handing it
+// back again was a second down for one up.
+std::vector<INPUT> Win32InputGrab::ModifierHandBack(const bool (&swallowed)[256]) {
+    static constexpr UINT kSidedModifiers[] = {VK_LCONTROL, VK_RCONTROL, VK_LSHIFT,
+                                               VK_RSHIFT,   VK_LMENU,    VK_RMENU};
+    std::vector<INPUT> keys;
+    for (const UINT vk : kSidedModifiers) {
+        if (!swallowed[vk]) {
+            continue;
+        }
+        INPUT key{};
+        key.type = INPUT_KEYBOARD;
+        key.ki.wVk = static_cast<WORD>(vk);
+        key.ki.wScan = static_cast<WORD>(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC));
+        // The right Ctrl and Alt share their scan codes with the left ones
+        // and are told apart by the extended flag. Right Shift has its own.
+        key.ki.dwFlags = (vk == VK_RCONTROL || vk == VK_RMENU) ? KEYEVENTF_EXTENDEDKEY : 0;
         // Marked as ours: this runs on the transition, which is a moment
         // before the hook is actually taken down, so without the mark our own
         // hook would swallow these straight back and the OS would learn
         // nothing. See OnKeyboard's first line.
-        keys[count].ki.dwExtraInfo = kOwnInjectionMarker;
-        ++count;
-    };
-    if (ctrl) {
-        add(VK_CONTROL);
+        key.ki.dwExtraInfo = kOwnInjectionMarker;
+        keys.push_back(key);
     }
-    if (shift) {
-        add(VK_SHIFT);
-    }
-    if (alt) {
-        add(VK_MENU);
-    }
-    if (count > 0) {
-        SendInput(count, keys, sizeof(INPUT));
+    return keys;
+}
+
+void Win32InputGrab::HandHeldModifiersToSystem(const bool (&swallowed)[256]) {
+    std::vector<INPUT> keys = ModifierHandBack(swallowed);
+    if (!keys.empty()) {
+        SendInput(static_cast<UINT>(keys.size()), keys.data(), sizeof(INPUT));
     }
 }
 
@@ -1254,6 +1309,20 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
         return 0;
     }
 
+    // The same rule's other half: a key-down for a key Windows already has
+    // down, whose down we did not take, is the auto-repeat of a key held
+    // since before the grab. Taken and recorded like a fresh press, it made
+    // the key's up ours to swallow - and Windows, and the game, never heard
+    // the key come up: W held to walk while a note was opened kept walking
+    // after the overlay was gone, and a held Shift stayed held. Swallowed and
+    // not recorded, and not handed to the overlay, which never saw the key go
+    // down either. A modifier held that way is in the grab's record already,
+    // from BeginGrabbedKeyboard.
+    const bool isRepeat = isDown && vk < kVirtualKeyCount && swallowedDown_[vk].load(std::memory_order_relaxed);
+    if (isDown && vk < kVirtualKeyCount && !isRepeat && (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0) {
+        return 1;
+    }
+
     // Debug scaffolding, and the reason this hook is installed for the whole
     // of edit mode rather than only while grabbing: the input options HUD
     // offers a number key per option, and the situation those options exist
@@ -1278,7 +1347,10 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
         return SwallowKey(vk, isDown);
     }
 
-    if (isDown) {
+    // A hotkey fires on its press, as RegisterHotKey's MOD_NOREPEAT has it,
+    // not on the repeats of a held one: held a moment too long, the edit
+    // hotkey opened the overlay and its first repeat closed it again.
+    if (isDown && !isRepeat) {
         // Copied under the lock rather than iterated in place: the app
         // thread can add or remove hotkeys (a rebind in Settings) while
         // this runs on the hook thread.

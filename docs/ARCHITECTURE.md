@@ -2249,7 +2249,22 @@ Consequences that shape `Win32InputGrab`:
   which downs it took, seeds its modifier record from `GetAsyncKeyState`
   when it starts mid-chord, and injects still-held modifiers back to the
   OS when it ends mid-chord (only modifiers: handing back every swallowed
-  key would type its letters into whatever has focus).
+  key would type its letters into whatever has focus). Those are handed
+  back as the very keys that were held, left or right, and only the ones
+  whose down it took: the generic keys it used to send are the left ones
+  to Windows, so AltGr+O - Ctrl+Alt+O on a German keyboard - left the
+  left Alt down on the whole desktop. The rule has a second half: a
+  key-down for a key Windows already holds, whose down the grab did not
+  take, is the repeat of a key held since before it began, and is
+  swallowed without being recorded. Recorded, it made the key's up the
+  grab's to swallow, and a W held to walk kept walking after the overlay
+  was gone. A hotkey fires on a press, never on its repeat, as
+  `RegisterHotKey`'s `MOD_NOREPEAT` does; held a moment too long, the
+  edit hotkey opened the overlay and closed it again. Mouse buttons follow
+  the same rule, so a drag in the application underneath ends there when
+  its button comes up. Measured with injected input against the build
+  before these: left Alt stayed down after AltGr+O, a repeated key stayed
+  down, and the held hotkey left the overlay closed.
 - **Typing needs the keyboard, not focus.** ImGui implements text editing
   from key events; what it cannot do is turn a virtual key into a
   character, which is the layout's job and arrives as `WM_CHAR` only for

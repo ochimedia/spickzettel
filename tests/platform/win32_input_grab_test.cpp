@@ -153,5 +153,34 @@ TEST(Win32InputGrabTest, RapidStartAndStopLeavesNoHookBehind) {
     DestroyWindow(overlay);
 }
 
+// AltGr is Ctrl+Alt to Windows - a left Ctrl it makes up, and the right Alt.
+// Handed back as the generic keys, the right Alt came back as a left Alt,
+// whose key-up never follows, and stayed down on the whole desktop.
+TEST(Win32InputGrabTest, HeldModifiersAreHandedBackAsTheVeryKeysThatWereHeld) {
+    bool swallowed[256] = {};
+    swallowed[VK_LCONTROL] = true;
+    swallowed[VK_RMENU] = true;
+    swallowed['O'] = true;  // not a modifier: never typed into whatever has focus
+
+    const std::vector<INPUT> keys = Win32InputGrab::ModifierHandBack(swallowed);
+    ASSERT_EQ(keys.size(), 2u);
+    EXPECT_EQ(keys[0].ki.wVk, VK_LCONTROL);
+    EXPECT_EQ(keys[0].ki.dwFlags & KEYEVENTF_EXTENDEDKEY, 0u);
+    EXPECT_EQ(keys[1].ki.wVk, VK_RMENU);
+    EXPECT_NE(keys[1].ki.dwFlags & KEYEVENTF_EXTENDEDKEY, 0u) << "the right Alt, not the left";
+    for (const INPUT& key : keys) {
+        EXPECT_EQ(key.type, static_cast<DWORD>(INPUT_KEYBOARD));
+        EXPECT_EQ(key.ki.dwFlags & KEYEVENTF_KEYUP, 0u) << "downs: the ups are the user's own";
+        EXPECT_NE(key.ki.wScan, 0) << "with a scan code, as a real key has";
+    }
+}
+
+// A modifier held since before the grab reached Windows itself, and has
+// nothing to be handed back.
+TEST(Win32InputGrabTest, NothingSwallowedIsNothingHandedBack) {
+    const bool swallowed[256] = {};
+    EXPECT_TRUE(Win32InputGrab::ModifierHandBack(swallowed).empty());
+}
+
 }  // namespace
 }  // namespace sz::platform::win32
