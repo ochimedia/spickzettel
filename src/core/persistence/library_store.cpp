@@ -3,9 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
-#include <fstream>
 #include <functional>
-#include <sstream>
 #include <cstring>
 #include <ctime>
 #include <initializer_list>
@@ -564,22 +562,12 @@ bool ReadItemRecord(const json& j, Item& out, bool& repaired) {
 // record this store writes is always one it reads back.
 constexpr uintmax_t kMaxRecordBytes = uintmax_t{64} << 20;
 
-std::optional<std::string> ReadFileText(const std::filesystem::path& path) {
-    std::error_code ec;
-    if (std::filesystem::file_size(path, ec) > kMaxRecordBytes || ec) {
-        return std::nullopt;
-    }
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        return std::nullopt;
-    }
-    std::ostringstream buffer;
-    buffer << in.rdbuf();
-    return buffer.str();
+std::optional<std::string> ReadFileText(FileSystem& fs, const std::filesystem::path& path) {
+    return fs.Read(path, kMaxRecordBytes);
 }
 
-std::optional<json> ReadJsonFile(const std::filesystem::path& path) {
-    const std::optional<std::string> text = ReadFileText(path);
+std::optional<json> ReadJsonFile(FileSystem& fs, const std::filesystem::path& path) {
+    const std::optional<std::string> text = ReadFileText(fs, path);
     if (!text) {
         return std::nullopt;
     }
@@ -616,26 +604,21 @@ std::optional<json> ReadJsonFile(const std::filesystem::path& path) {
 // "mklink /J" makes, the reparse point Windows lets a user create without
 // privileges, and one that looks like a directory to everything that does
 // not ask.
-bool IsLink(const std::filesystem::path& path) {
-    std::error_code ec;
-    const std::filesystem::file_status status = std::filesystem::symlink_status(path, ec);
-    if (std::filesystem::is_symlink(status)) {
-        return true;
-    }
-#if defined(_MSC_VER)
-    // file_type::junction is MSVC's own extension; other standard libraries
-    // have no junctions to report.
-    return status.type() == std::filesystem::file_type::junction;
-#else
-    return false;
-#endif
+bool IsLink(FileSystem& fs, const std::filesystem::path& path) {
+    return fs.LinkStatus(path) == FileSystem::Kind::Link;
+}
+
+// Everything in `dir`, or nothing when it cannot be listed.
+std::vector<FileSystem::Entry> Listing(FileSystem& fs, const std::filesystem::path& dir) {
+    std::optional<std::vector<FileSystem::Entry>> entries = fs.List(dir);
+    return entries ? std::move(*entries) : std::vector<FileSystem::Entry>{};
 }
 
 // Whether any component of `path` from `root` down - `root` itself
 // excluded, `path` itself included - is a link. Checked before anything
 // under `path` is deleted or moved: a plain directory below a linked
 // ancestor is physically somewhere else, whatever it is called here.
-bool CrossesLink(const std::filesystem::path& root, const std::filesystem::path& path) {
+bool CrossesLink(FileSystem& fs, const std::filesystem::path& root, const std::filesystem::path& path) {
     const std::filesystem::path relative = path.lexically_relative(root);
     if (relative.empty() || *relative.begin() == "..") {
         return true;  // not under the root at all - treated as not ours either
@@ -646,7 +629,7 @@ bool CrossesLink(const std::filesystem::path& root, const std::filesystem::path&
             continue;
         }
         walked /= component;
-        if (IsLink(walked)) {
+        if (IsLink(fs, walked)) {
             return true;
         }
     }
@@ -654,18 +637,10 @@ bool CrossesLink(const std::filesystem::path& root, const std::filesystem::path&
 }
 
 // Deletes `path` with everything in it - or, for a link, the link alone,
-// whatever it points at. remove_all on a directory symlink already stops at
-// the link; a junction is reported as its own kind and has to be asked
-// about first, since a remove_all that walked into one would be emptying a
-// directory outside the library.
-bool RemoveTree(const std::filesystem::path& path) {
-    std::error_code ec;
-    if (IsLink(path)) {
-        std::filesystem::remove(path, ec);
-        return !ec;
-    }
-    std::filesystem::remove_all(path, ec);
-    return !ec;
+// whatever it points at: a removal that walked into a junction would be
+// emptying a directory outside the library (see FileSystem::RemoveAll).
+bool RemoveTree(FileSystem& fs, const std::filesystem::path& path) {
+    return fs.RemoveAll(path);
 }
 
 // ===== What a permanent delete may take =====
@@ -702,10 +677,9 @@ bool IsOwnFilename(const std::string& name) {
 
 // Whether `dir` is a directory of the store's: it holds a record, or the
 // removed mark left in one whose record went before the rest could.
-bool HoldsOwnRecord(const std::filesystem::path& dir) {
-    std::error_code ec;
+bool HoldsOwnRecord(FileSystem& fs, const std::filesystem::path& dir) {
     for (const char* record : {kFolderFile, kCanvasFile, kItemFile, kRemovedMarker}) {
-        if (std::filesystem::exists(dir / record, ec)) {
+        if (fs.Exists(dir / record)) {
             return true;
         }
     }
@@ -716,27 +690,25 @@ bool HoldsOwnRecord(const std::filesystem::path& dir) {
 // itself once that leaves it empty. True once nothing of the store's is
 // left under it - a file held open by another program keeps it false, and
 // the removed mark is left in place then, so that the intent survives.
-bool RemoveOwnContents(const std::filesystem::path& dir) {
-    std::error_code ec;
+bool RemoveOwnContents(FileSystem& fs, const std::filesystem::path& dir) {
     bool clean = true;
-    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-        const std::filesystem::path& path = entry.path();
-        if (IsLink(path)) {
+    for (const FileSystem::Entry& entry : Listing(fs, dir)) {
+        const std::filesystem::path path = dir / entry.name;
+        if (entry.kind == FileSystem::Kind::Link) {
             continue;  // never the store's, whatever it points at
         }
-        std::error_code kindEc;
-        if (entry.is_directory(kindEc)) {
-            if (HoldsOwnRecord(path)) {
-                clean = RemoveOwnContents(path) && clean;
+        if (entry.kind == FileSystem::Kind::Directory) {
+            if (HoldsOwnRecord(fs, path)) {
+                clean = RemoveOwnContents(fs, path) && clean;
             }
             continue;
         }
-        const std::string name = path.filename().string();
-        if (!entry.is_regular_file(kindEc) || !IsOwnFilename(name) || name == kRemovedMarker) {
+        const std::string name = entry.name.string();
+        if (entry.kind != FileSystem::Kind::File || !IsOwnFilename(name) || name == kRemovedMarker) {
             continue;
         }
-        std::filesystem::remove(path, ec);
-        clean = clean && !std::filesystem::exists(std::filesystem::symlink_status(path, ec));
+        fs.Remove(path);
+        clean = clean && fs.LinkStatus(path) == FileSystem::Kind::None;
     }
     if (!clean) {
         return false;
@@ -744,11 +716,11 @@ bool RemoveOwnContents(const std::filesystem::path& dir) {
     // The mark goes last, and only once everything it stood for has: it
     // is what a restart reads the owed removal from.
     const std::filesystem::path marker = dir / kRemovedMarker;
-    std::filesystem::remove(marker, ec);
-    if (std::filesystem::exists(std::filesystem::symlink_status(marker, ec))) {
+    fs.Remove(marker);
+    if (fs.LinkStatus(marker) != FileSystem::Kind::None) {
         return false;
     }
-    std::filesystem::remove(dir, ec);  // refused when someone else's files keep it: theirs to keep
+    fs.Remove(dir);  // refused when someone else's files keep it: theirs to keep
     return true;
 }
 
@@ -756,16 +728,14 @@ bool RemoveOwnContents(const std::filesystem::path& dir) {
 // running. Enumeration order is not specified by the filesystem, and an
 // unlisted member's position (see ApplyOrder) would otherwise wander.
 // Real directories only: a linked one is not part of the tree, see above.
-std::vector<std::filesystem::path> SortedSubdirectories(const std::filesystem::path& dir) {
+std::vector<std::filesystem::path> SortedSubdirectories(FileSystem& fs, const std::filesystem::path& dir) {
     std::vector<std::filesystem::path> out;
-    if (IsLink(dir)) {
+    if (IsLink(fs, dir)) {
         return out;  // nothing behind a link is read - folders/ itself included
     }
-    std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-        std::error_code isDirEc;
-        if (entry.is_directory(isDirEc) && !IsLink(entry.path())) {
-            out.push_back(entry.path());
+    for (const FileSystem::Entry& entry : Listing(fs, dir)) {
+        if (entry.kind == FileSystem::Kind::Directory) {
+            out.push_back(dir / entry.name);
         }
     }
     std::sort(out.begin(), out.end());
@@ -786,9 +756,9 @@ struct OrderFile {
     std::optional<std::string> text;
 };
 
-OrderFile ReadOrderFile(const std::filesystem::path& path, const char* key) {
+OrderFile ReadOrderFile(FileSystem& fs, const std::filesystem::path& path, const char* key) {
     OrderFile file;
-    file.text = ReadFileText(path);
+    file.text = ReadFileText(fs, path);
     if (!file.text) {
         return file;
     }
@@ -885,29 +855,27 @@ json LibraryJson(FolderId currentFolderId, CanvasId currentCanvasId) {
 // What setting a directory aside needs when its place in retired/ is
 // already taken - by a snippet set aside before its canvas was, say, or by
 // an earlier retirement of the same uid.
-bool MergeDirectoryInto(const std::filesystem::path& source, const std::filesystem::path& target) {
-    std::error_code ec;
+bool MergeDirectoryInto(FileSystem& fs, const std::filesystem::path& source, const std::filesystem::path& target) {
     bool complete = true;
-    for (const auto& entry : std::filesystem::directory_iterator(source, ec)) {
-        const std::filesystem::path to = target / entry.path().filename();
-        std::error_code kindEc;
+    for (const FileSystem::Entry& entry : Listing(fs, source)) {
+        const std::filesystem::path from = source / entry.name;
+        const std::filesystem::path to = target / entry.name;
         // A link on either side is a leaf: one in the source is moved as a
         // link, and one in the target is replaced as a link. Recursing into
         // either would be moving files into, or out of, wherever it points.
-        const bool bothRealDirectories = entry.is_directory(kindEc) && !IsLink(entry.path()) &&
-                                         std::filesystem::is_directory(to, kindEc) && !IsLink(to);
+        const bool bothRealDirectories =
+            entry.kind == FileSystem::Kind::Directory && fs.LinkStatus(to) == FileSystem::Kind::Directory;
         if (bothRealDirectories) {
-            complete = MergeDirectoryInto(entry.path(), to) && complete;
+            complete = MergeDirectoryInto(fs, from, to) && complete;
             continue;
         }
-        if (std::filesystem::exists(std::filesystem::symlink_status(to, kindEc))) {
-            RemoveTree(to);
+        if (fs.LinkStatus(to) != FileSystem::Kind::None) {
+            RemoveTree(fs, to);
         }
-        std::filesystem::rename(entry.path(), to, kindEc);
-        complete = complete && !kindEc;
+        complete = fs.Rename(from, to) && complete;
     }
     if (complete) {
-        std::filesystem::remove(source, ec);
+        fs.Remove(source);
     }
     return complete;
 }
@@ -952,7 +920,8 @@ bool IsUnder(const std::filesystem::path& path, const std::filesystem::path& dir
 
 }  // namespace
 
-LibraryStore::LibraryStore(std::filesystem::path rootDir) : rootDir_(std::move(rootDir)) {}
+LibraryStore::LibraryStore(std::filesystem::path rootDir, FileSystem& fs)
+    : rootDir_(std::move(rootDir)), fs_(&fs) {}
 
 std::filesystem::path LibraryStore::FoldersRoot() const { return rootDir_ / kFoldersDir; }
 
@@ -968,7 +937,7 @@ bool LibraryStore::WithinRoot(const std::filesystem::path& path) const {
 }
 
 bool LibraryStore::IsOurs(const std::filesystem::path& path) const {
-    return WithinRoot(path) && !CrossesLink(rootDir_, path);
+    return WithinRoot(path) && !CrossesLink(*fs_, rootDir_, path);
 }
 
 bool LibraryStore::RemoveOwnDirectory(const std::filesystem::path& path) const {
@@ -979,15 +948,14 @@ bool LibraryStore::RemoveOwnDirectory(const std::filesystem::path& path) const {
     if (!IsOurs(path)) {
         return false;
     }
-    std::error_code ec;
-    if (!std::filesystem::exists(std::filesystem::symlink_status(path, ec))) {
+    if (fs_->LinkStatus(path) == FileSystem::Kind::None) {
         return true;  // gone already - by hand, or by an earlier run at it
     }
     // Whether nothing of the store's is left is the answer, not whether the
     // directory is gone: a file held open without delete sharing by another
     // process, on Windows, keeps it there and the removal owed, where a file
     // of someone else's beside the record keeps it there and is theirs.
-    return RemoveOwnContents(path);
+    return RemoveOwnContents(*fs_, path);
 }
 
 void LibraryStore::ForgetUnder(const std::filesystem::path& dir, const std::unordered_set<uint64_t>& keep) const {
@@ -1012,7 +980,7 @@ bool LibraryStore::HoldsAnyOf(const std::filesystem::path& dir, const std::unord
 
 bool LibraryStore::WrittenByANewerVersion() const {
     if (!writtenByANewerVersion_) {
-        const std::optional<std::string> text = ReadFileText(rootDir_ / "library.json");
+        const std::optional<std::string> text = ReadFileText(*fs_, rootDir_ / "library.json");
         if (!text) {
             return false;
         }
@@ -1069,20 +1037,18 @@ bool LibraryStore::Remove(uint64_t uid, const LibraryView& remaining) const {
 }
 
 bool LibraryStore::MarkRemoved(const std::filesystem::path& dir) const {
-    std::error_code ec;
-    if (!IsOurs(dir) || !std::filesystem::is_directory(dir, ec)) {
+    if (!IsOurs(dir) || fs_->Status(dir) != FileSystem::Kind::Directory) {
         return false;
     }
     const std::filesystem::path marker = dir / kRemovedMarker;
-    if (std::filesystem::exists(marker, ec)) {
+    if (fs_->Exists(marker)) {
         return true;
     }
-    return WriteFileAtomically(marker, kRemovedMarkerText);
+    return WriteFileAtomically(*fs_, marker, kRemovedMarkerText);
 }
 
 bool LibraryStore::NotePendingRemoval(const std::filesystem::path& dir) const {
-    std::error_code ec;
-    if (!std::filesystem::exists(dir / kRemovedMarker, ec)) {
+    if (!fs_->Exists(dir / kRemovedMarker)) {
         return false;
     }
     // Owed under the uid its name ends in - what Remove keyed it by, since
@@ -1116,7 +1082,6 @@ std::filesystem::path LibraryStore::ImageHome(uint64_t itemId) const {
 // legitimately hold files of the same name, since copying a directory in a
 // file manager is a supported way to duplicate one.
 std::filesystem::path LibraryStore::FindImage(uint64_t itemId, const std::string& filename) const {
-    std::error_code ec;
     if (!IsPlainFilename(filename)) {
         // Somewhere that cannot exist, inside the library, rather than
         // wherever the name was trying to point - see IsPlainFilename.
@@ -1124,7 +1089,7 @@ std::filesystem::path LibraryStore::FindImage(uint64_t itemId, const std::string
     }
     if (const auto it = itemDirs_.find(itemId); it != itemDirs_.end()) {
         const std::filesystem::path inHome = it->second / filename;
-        if (std::filesystem::exists(inHome, ec)) {
+        if (fs_->Exists(inHome)) {
             return inHome;
         }
     }
@@ -1149,11 +1114,11 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
     };
 
     std::vector<std::pair<std::string, Folder>> foundFolders;
-    for (const std::filesystem::path& folderDir : SortedSubdirectories(foldersRoot)) {
+    for (const std::filesystem::path& folderDir : SortedSubdirectories(*fs_, foldersRoot)) {
         if (NotePendingRemoval(folderDir)) {
             continue;  // deleted for good; a removal still owed, not a folder
         }
-        const std::optional<json> folderDoc = ReadJsonFile(folderDir / kFolderFile);
+        const std::optional<json> folderDoc = ReadJsonFile(*fs_, folderDir / kFolderFile);
         if (!folderDoc) {
             continue;  // not a folder of ours; left alone rather than guessed at
         }
@@ -1192,18 +1157,18 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
         }
         return names;
     };
-    const OrderFile folderOrderFile = ReadOrderFile(foldersRoot / kOrderFile, "folders");
+    const OrderFile folderOrderFile = ReadOrderFile(*fs_, foldersRoot / kOrderFile, "folders");
     ApplyOrder(foundFolders, folderOrderFile.names);
     noteOrderFile("order:root", folderOrderFile, "folders", namesOf(foundFolders));
 
     for (auto& [folderDirName, folder] : foundFolders) {
         const std::filesystem::path folderDir = foldersRoot / folderDirName;
         std::vector<std::pair<std::string, Canvas>> foundCanvases;
-        for (const std::filesystem::path& canvasDir : SortedSubdirectories(folderDir)) {
+        for (const std::filesystem::path& canvasDir : SortedSubdirectories(*fs_, folderDir)) {
             if (NotePendingRemoval(canvasDir)) {
                 continue;
             }
-            const std::optional<json> canvasDoc = ReadJsonFile(canvasDir / kCanvasFile);
+            const std::optional<json> canvasDoc = ReadJsonFile(*fs_, canvasDir / kCanvasFile);
             if (!canvasDoc) {
                 continue;
             }
@@ -1227,11 +1192,11 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
 
             // ...and the same, one level down, for the snippets inside it.
             std::vector<std::pair<std::string, Item>> foundItems;
-            for (const std::filesystem::path& itemDir : SortedSubdirectories(canvasDir)) {
+            for (const std::filesystem::path& itemDir : SortedSubdirectories(*fs_, canvasDir)) {
                 if (NotePendingRemoval(itemDir)) {
                     continue;
                 }
-                const std::optional<json> itemDoc = ReadJsonFile(itemDir / kItemFile);
+                const std::optional<json> itemDoc = ReadJsonFile(*fs_, itemDir / kItemFile);
                 if (!itemDoc) {
                     continue;
                 }
@@ -1263,7 +1228,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             // Item order is z-order, back to front - so a snippet dropped in
             // by hand, which the order file cannot know about, arrives in
             // front rather than buried.
-            const OrderFile itemOrderFile = ReadOrderFile(canvasDir / kOrderFile, "items");
+            const OrderFile itemOrderFile = ReadOrderFile(*fs_, canvasDir / kOrderFile, "items");
             ApplyOrder(foundItems, itemOrderFile.names);
             noteOrderFile("order:canvas:" + std::to_string(canvas.id), itemOrderFile, "items", namesOf(foundItems));
             canvas.items.clear();
@@ -1274,7 +1239,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
 
             foundCanvases.emplace_back(canvasDir.filename().string(), std::move(canvas));
         }
-        const OrderFile canvasOrderFile = ReadOrderFile(folderDir / kOrderFile, "canvases");
+        const OrderFile canvasOrderFile = ReadOrderFile(*fs_, folderDir / kOrderFile, "canvases");
         ApplyOrder(foundCanvases, canvasOrderFile.names);
         noteOrderFile("order:folder:" + std::to_string(folder.id), canvasOrderFile, "canvases",
                       namesOf(foundCanvases));
@@ -1301,11 +1266,10 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
         return std::nullopt;
     }
     const std::filesystem::path foldersRoot = FoldersRoot();
-    std::error_code ec;
-    const bool treeExists = std::filesystem::is_directory(foldersRoot, ec);
+    const bool treeExists = fs_->Status(foldersRoot) == FileSystem::Kind::Directory;
 
     json doc = json::object();
-    const std::optional<std::string> text = ReadFileText(rootDir_ / "library.json");
+    const std::optional<std::string> text = ReadFileText(*fs_, rootDir_ / "library.json");
     if (!text && !treeExists) {
         return std::nullopt;  // nothing here at all: a first run
     }
@@ -1382,20 +1346,20 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
     folderDirs_.clear();
     canvasDirs_.clear();
     itemDirs_.clear();
-    for (const std::filesystem::path& folderDir : SortedSubdirectories(foldersRoot)) {
+    for (const std::filesystem::path& folderDir : SortedSubdirectories(*fs_, foldersRoot)) {
         if (NotePendingRemoval(folderDir)) {
             continue;
         }
-        if (const std::optional<json> doc = ReadJsonFile(folderDir / kFolderFile)) {
+        if (const std::optional<json> doc = ReadJsonFile(*fs_, folderDir / kFolderFile)) {
             if (const uint64_t id = ReadId(*doc, "id"); id != 0) {
                 folderDirs_.emplace(id, folderDir);
             }
         }
-        for (const std::filesystem::path& canvasDir : SortedSubdirectories(folderDir)) {
+        for (const std::filesystem::path& canvasDir : SortedSubdirectories(*fs_, folderDir)) {
             if (NotePendingRemoval(canvasDir)) {
                 continue;
             }
-            if (const std::optional<json> doc = ReadJsonFile(canvasDir / kCanvasFile)) {
+            if (const std::optional<json> doc = ReadJsonFile(*fs_, canvasDir / kCanvasFile)) {
                 if (const uint64_t id = ReadId(*doc, "id"); id != 0) {
                     canvasDirs_.emplace(id, canvasDir);
                 }
@@ -1404,11 +1368,11 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
             // only this one: moving a snippet to another canvas is a move
             // of its directory, and finding where it currently is is what
             // makes that a move rather than a copy plus an orphan.
-            for (const std::filesystem::path& itemDir : SortedSubdirectories(canvasDir)) {
+            for (const std::filesystem::path& itemDir : SortedSubdirectories(*fs_, canvasDir)) {
                 if (NotePendingRemoval(itemDir)) {
                     continue;
                 }
-                if (const std::optional<json> doc = ReadJsonFile(itemDir / kItemFile)) {
+                if (const std::optional<json> doc = ReadJsonFile(*fs_, itemDir / kItemFile)) {
                     if (const uint64_t id = ReadId(*doc, "id"); id != 0) {
                         itemDirs_.emplace(id, itemDir);
                     }
@@ -1442,7 +1406,6 @@ bool LibraryStore::Save(const LibraryView& view) const {
     if (writtenByANewerVersion_) {
         return false;  // not this build's to write - see WrittenByANewerVersion
     }
-    std::error_code ec;
     oversizedRecords_.clear();
     const std::filesystem::path foldersRoot = FoldersRoot();
     if (!IsOurs(foldersRoot)) {
@@ -1452,7 +1415,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
         // nothing - and the save fails until the link is gone.
         return false;
     }
-    std::filesystem::create_directories(foldersRoot, ec);
+    fs_->CreateDirectories(foldersRoot);
 
     // What the library holds, by id - what the retirement pass below is
     // measured against, and what everything remembered is pruned to.
@@ -1521,7 +1484,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
         // it was indexed, and a junction put in its place since is a link
         // all the same. Checked only when there is something to write, so
         // that a no-op save costs no trip to the filesystem for it.
-        if (!IsOurs(path) || !WriteFileAtomically(path, text)) {
+        if (!IsOurs(path) || !WriteFileAtomically(*fs_, path, text)) {
             // Not recorded, so the next save tries again rather than
             // believing a file it never managed to write.
             writtenFileText_.erase(key);
@@ -1567,7 +1530,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
         bool usable = true;
         bool misplaced = false;
     };
-    const auto placeDirectory = [this, &ec](std::map<uint64_t, std::filesystem::path>& index, uint64_t id,
+    const auto placeDirectory = [this](std::map<uint64_t, std::filesystem::path>& index, uint64_t id,
                                             const std::filesystem::path& wanted,
                                             std::initializer_list<std::map<uint64_t, std::filesystem::path>*> inside) {
         const auto it = index.find(id);
@@ -1593,10 +1556,8 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 // same as a rename that failed.
                 return stayed();
             }
-            std::filesystem::create_directories(wanted.parent_path(), ec);
-            ec.clear();
-            std::filesystem::rename(old, wanted, ec);
-            if (!ec) {
+            fs_->CreateDirectories(wanted.parent_path());
+            if (fs_->Rename(old, wanted)) {
                 // Everything indexed inside it moved with it - and every
                 // removal still owed inside it, which is not indexed but
                 // is a path all the same. Left at its old spelling, the
@@ -1609,19 +1570,17 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 it->second = wanted;
                 return Placed{wanted, true};
             }
-            ec.clear();
-            if (std::filesystem::exists(old, ec)) {
+            if (fs_->Exists(old)) {
                 return stayed();
             }
             // Gone from where the index said - rearranged under a running
             // instance, which is undefined but shouldn't lose what is in
             // memory. Rebuilt from that, below.
         }
-        ec.clear();
         if (!IsOurs(wanted)) {
             return Placed{wanted, false, /*usable=*/false};  // a link there, or on the way: never ours
         }
-        std::filesystem::create_directories(wanted, ec);
+        fs_->CreateDirectories(wanted);
         index[id] = wanted;
         return Placed{wanted, false};
     };
@@ -1692,7 +1651,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
                     oversizedRecords_.insert(item.id);
                 }
                 const bool recordWritten =
-                    fits && IsOurs(itemDir / kItemFile) && WriteFileAtomically(itemDir / kItemFile, text);
+                    fits && IsOurs(itemDir / kItemFile) && WriteFileAtomically(*fs_, itemDir / kItemFile, text);
                 if (recordWritten) {
                     writtenItemHashes_[item.id] = hash;
                 } else {
@@ -1722,12 +1681,11 @@ bool LibraryStore::Save(const LibraryView& view) const {
                         named.insert(ThumbnailFilename(layer.imageFile));
                     }
                 }
-                for (const auto& entry : std::filesystem::directory_iterator(itemDir, ec)) {
-                    std::error_code isFileEc;
-                    if (!entry.is_regular_file(isFileEc)) {
+                for (const FileSystem::Entry& entry : Listing(*fs_, itemDir)) {
+                    if (entry.kind != FileSystem::Kind::File) {
                         continue;
                     }
-                    const std::string name = entry.path().filename().string();
+                    const std::string name = entry.name.string();
                     // Only what this store writes: its own pictures and
                     // their thumbnails. Anything else beside the record - a
                     // note someone dropped in by hand, say - is not the
@@ -1735,7 +1693,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
                     if (name == kItemFile || named.count(name) > 0 || !IsPictureFilename(name)) {
                         continue;
                     }
-                    std::filesystem::remove(entry.path(), ec);
+                    fs_->Remove(itemDir / entry.name);
                 }
             }
             wroteEverything &= writeIfChanged("order:canvas:" + std::to_string(canvas.id), canvasDir / kOrderFile,
@@ -1821,16 +1779,9 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 if (!IsOurs(destination)) {
                     continue;
                 }
-                std::error_code moveEc;
-                std::filesystem::create_directories(destination.parent_path(), moveEc);
-                bool moved = false;
-                if (std::filesystem::exists(destination, moveEc)) {
-                    moved = MergeDirectoryInto(path, destination);
-                } else {
-                    moveEc.clear();
-                    std::filesystem::rename(path, destination, moveEc);
-                    moved = !moveEc;
-                }
+                fs_->CreateDirectories(destination.parent_path());
+                const bool moved = fs_->Exists(destination) ? MergeDirectoryInto(*fs_, path, destination)
+                                                            : fs_->Rename(path, destination);
                 // A move that failed leaves the directory where it is, and
                 // indexed, for the next save to take another run at. One
                 // that went takes the removals still owed inside it along:
@@ -1901,20 +1852,20 @@ bool LibraryStore::Save(const LibraryView& view) const {
     // Moving it in would put the older pixels back over the newer, under a
     // layer that believes itself saved; it is set aside instead.
     const std::filesystem::path stagingDir = rootDir_ / kStagingDir;
-    if (std::filesystem::exists(stagingDir, ec) && IsOurs(stagingDir)) {
-        for (const auto& entry : std::filesystem::directory_iterator(stagingDir, ec)) {
-            std::error_code isFileEc;
-            if (!entry.is_regular_file(isFileEc)) {
+    if (fs_->Exists(stagingDir) && IsOurs(stagingDir)) {
+        for (const FileSystem::Entry& entry : Listing(*fs_, stagingDir)) {
+            if (entry.kind != FileSystem::Kind::File) {
                 continue;
             }
-            const std::string name = entry.path().filename().string();
+            const std::filesystem::path waiting = stagingDir / entry.name;
+            const std::string name = entry.name.string();
             if (const auto owner = pictureOwner.find(name); owner != pictureOwner.end()) {
                 const auto home = itemDirs_.find(owner->second);
                 if (home == itemDirs_.end() || !IsOurs(home->second)) {
                     continue;
                 }
-                if (!std::filesystem::exists(home->second / name, isFileEc)) {
-                    std::filesystem::rename(entry.path(), home->second / name, ec);
+                if (!fs_->Exists(home->second / name)) {
+                    fs_->Rename(waiting, home->second / name);
                     continue;
                 }
             }
@@ -1922,15 +1873,14 @@ bool LibraryStore::Save(const LibraryView& view) const {
             if (!IsOurs(setAside)) {
                 continue;  // stays in staging, readably, rather than leaving the library
             }
-            std::filesystem::create_directories(setAside, ec);
-            std::filesystem::rename(entry.path(), setAside / name, ec);
+            fs_->CreateDirectories(setAside);
+            fs_->Rename(waiting, setAside / name);
         }
         // And gone once drained - a removal that only succeeds on an empty
         // directory, so whatever stayed keeps it. Left standing, it was an
         // empty folder in the library that a person looking in could only
         // wonder about.
-        ec.clear();
-        std::filesystem::remove(stagingDir, ec);
+        fs_->Remove(stagingDir);
     }
 
     ++writeGeneration_;  // whatever landed, or half-landed, the tree is not what it was
@@ -1964,7 +1914,7 @@ std::optional<std::string> LibraryStore::WritePicture(uint64_t itemId, const std
         return std::nullopt;  // staging, or the snippet's directory, is behind a link: not written
     }
     ++writeGeneration_;
-    if (!EncodeQoiToFile(home / filename, pixelsRGBA, width, height)) {
+    if (!EncodeQoiToFile(*fs_, home / filename, pixelsRGBA, width, height)) {
         return std::nullopt;
     }
     // And a thumbnail beside it, so the Overview never has to decode the
@@ -1974,7 +1924,7 @@ std::optional<std::string> LibraryStore::WritePicture(uint64_t itemId, const std
     // rather than through a DecodedImage, which would mean copying eight
     // megabytes to make forty kilobytes.
     const DecodedImage small = DownscaleToFit(pixelsRGBA, width, height, kThumbnailMaxExtent);
-    EncodeQoiToFile(home / ThumbnailFilename(filename), small.pixelsRGBA.data(), small.width, small.height);
+    EncodeQoiToFile(*fs_, home / ThumbnailFilename(filename), small.pixelsRGBA.data(), small.width, small.height);
     return filename;
 }
 
@@ -1996,27 +1946,26 @@ bool LibraryStore::SaveThumbnail(uint64_t itemId, const std::string& imageFilena
         return false;
     }
     ++writeGeneration_;
-    return EncodeQoiToFile(beside / ThumbnailFilename(imageFilename), small.pixelsRGBA.data(), small.width,
-                            small.height);
+    return EncodeQoiToFile(*fs_, beside / ThumbnailFilename(imageFilename), small.pixelsRGBA.data(), small.width,
+                           small.height);
 }
 
 std::optional<DecodedImage> LibraryStore::LoadThumbnail(uint64_t itemId, const std::string& imageFilename) const {
     if (imageFilename.empty()) {
         return std::nullopt;
     }
-    return DecodeQoiFromFile(FindImage(itemId, ThumbnailFilename(imageFilename)));
+    return DecodeQoiFromFile(*fs_, FindImage(itemId, ThumbnailFilename(imageFilename)));
 }
 
 std::optional<DecodedImage> LibraryStore::LoadImage(uint64_t itemId, const std::string& filename) const {
     if (filename.empty()) {
         return std::nullopt;
     }
-    return DecodeQoiFromFile(FindImage(itemId, filename));
+    return DecodeQoiFromFile(*fs_, FindImage(itemId, filename));
 }
 
 bool LibraryStore::HasImage(uint64_t itemId, const std::string& filename) const {
-    std::error_code ec;
-    return !filename.empty() && std::filesystem::exists(FindImage(itemId, filename), ec);
+    return !filename.empty() && fs_->Exists(FindImage(itemId, filename));
 }
 
 }  // namespace sz::core::persistence

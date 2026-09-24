@@ -5,6 +5,8 @@
 #include <optional>
 #include <vector>
 
+#include "core/util/file_system.h"
+
 namespace sz::core::persistence {
 
 // width*height RGBA8 pixels, row-major, top-left origin, 4 bytes/pixel, no
@@ -49,7 +51,14 @@ DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent);
 // tradeoff - and the files come out ~30% smaller than stb's PNG besides.
 // The cost is that a .qoi file opens in far fewer image viewers than a
 // .png; see FetchQoi.cmake.
-bool EncodeQoiToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height);
+//
+// Through `fs`, or the disk itself when none is given - as is the reading
+// below.
+bool EncodeQoiToFile(FileSystem& fs, const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width,
+                     int height);
+inline bool EncodeQoiToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height) {
+    return EncodeQoiToFile(DefaultFileSystem(), path, pixelsRGBA, width, height);
+}
 
 // Encodes `pixelsRGBA` as a PNG, same contract as EncodeQoiToFile above.
 // Nothing in the app writes PNG today; it is the format anything else can
@@ -73,7 +82,10 @@ constexpr uint64_t kMaxImageFileBytes = uint64_t{256} << 20;
 // IOverlayWindow::CreateTextureFromPixels). Returns nullopt if the file
 // doesn't exist, isn't QOI, or is outside the budgets above - never
 // throws.
-std::optional<DecodedImage> DecodeQoiFromFile(const std::filesystem::path& path);
+std::optional<DecodedImage> DecodeQoiFromFile(FileSystem& fs, const std::filesystem::path& path);
+inline std::optional<DecodedImage> DecodeQoiFromFile(const std::filesystem::path& path) {
+    return DecodeQoiFromFile(DefaultFileSystem(), path);
+}
 
 // The same for a PNG, under the same budgets. The library holds none;
 // like EncodePngToFile, it is here for importing pictures from elsewhere.

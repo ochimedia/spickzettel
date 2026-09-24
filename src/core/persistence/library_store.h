@@ -12,6 +12,7 @@
 
 #include "core/canvas/canvas_manager.h"
 #include "core/persistence/image_codec.h"
+#include "core/util/file_system.h"
 
 namespace sz::core::persistence {
 
@@ -20,9 +21,11 @@ namespace sz::core::persistence {
 // directory - the sole persistence boundary for "everything" the overlay
 // shows: there's no explicit save/load anywhere else in the app (see
 // OverlayApp's debounced autosave, which is what actually calls Save()).
-// Pure <filesystem>/<fstream> plus the vendored QOI codec - no
-// OS-specific dependency, so (unlike the real screen-capture code it
-// complements) this is fully exercised by linux-tests.
+// Every disk operation goes through a FileSystem (see util/file_system.h) -
+// the disk itself unless a test hands it another, which is how a test makes
+// a file fail to write, holds one open, or stops a save partway the way a
+// crash does. No OS-specific dependency, so (unlike the real screen-capture
+// code it complements) this is fully exercised by linux-tests.
 //
 // Layout under `rootDir`:
 //   library.json                     - currentFolderId and currentCanvasId,
@@ -125,7 +128,7 @@ namespace sz::core::persistence {
 // but the stamp in its record.
 class LibraryStore {
 public:
-    explicit LibraryStore(std::filesystem::path rootDir);
+    explicit LibraryStore(std::filesystem::path rootDir, FileSystem& fs = DefaultFileSystem());
 
     // The shape of the library this build reads and writes, stamped into
     // library.json by every save. It goes up whenever a build writes
@@ -435,6 +438,8 @@ private:
     mutable std::unordered_map<std::string, std::string> writtenFileText_;
 
     std::filesystem::path rootDir_;
+    // Everything above is read from and written to through this.
+    FileSystem* fs_;
 };
 
 }  // namespace sz::core::persistence

@@ -938,6 +938,38 @@ autosaved every few seconds, not a document with a save button, and with
 each file's data on the disk before its rename, the last few seconds of
 ink are the most a power loss can take.
 
+### One way to the disk
+
+Every disk operation the store makes goes through one interface,
+`FileSystem` in `core/util`, and so do the atomic writer and the QOI
+codec's file reads and writes. The store is handed one at
+construction. The disk itself (`RealFileSystem`) is the default.
+
+The reason is testing. Most of what has gone wrong in the store went
+wrong when the disk refused something: a picture held open by a viewer,
+a rename that failed, a crash between two steps. Each of those tests
+used to set up its own real failure, a file opened without delete
+sharing, say. That only works on Windows, and only for the failures
+someone thought to stage. A file system a test can hand the store
+reaches every case without staging it: one that fails a chosen
+operation, holds a chosen file, or stops changing the disk after the
+Nth change, which is all a crash leaves behind.
+
+The interface is primitive on purpose: status, list, read, make one
+directory, write a new file, rename, remove. Everything built from
+several steps is built on top of those: creating a directory with its
+parents, removing a tree, writing a file atomically. That way a test
+can stop such an operation between any two of its steps. Nothing in
+it throws. A listing is whole or absent, never partial: the standard
+iterator's `++` throws on an error partway through a directory, which
+a range-for over a library directory turned into a crash.
+
+Listing reports what an entry *is*, not what it points at. So a
+symlink that stands where a snippet's picture or a staged capture
+would be is now passed over by the picture sweep and the staging pass,
+rather than removed or moved. The rule is the same one the tree
+already keeps for linked directories: a link is never the store's.
+
 ### Images: QOI
 
 Pixels are written as QOI. Measured on this app's own screenshots

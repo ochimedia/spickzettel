@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <string_view>
 
+#include "core/util/file_system.h"
+
 namespace sz::core {
 
 // Writes `size` bytes at `data` to `path` through a fresh temporary file
@@ -26,9 +28,17 @@ namespace sz::core {
 // Returns false, and leaves nothing new behind, when the temporary cannot
 // be created, written whole, or renamed into place. Creates `path`'s
 // parent directories as needed.
-bool WriteFileAtomically(const std::filesystem::path& path, const void* data, size_t size);
+//
+// Through `fs`, or the disk itself when none is given.
+bool WriteFileAtomically(FileSystem& fs, const std::filesystem::path& path, const void* data, size_t size);
+inline bool WriteFileAtomically(FileSystem& fs, const std::filesystem::path& path, std::string_view content) {
+    return WriteFileAtomically(fs, path, content.data(), content.size());
+}
+inline bool WriteFileAtomically(const std::filesystem::path& path, const void* data, size_t size) {
+    return WriteFileAtomically(DefaultFileSystem(), path, data, size);
+}
 inline bool WriteFileAtomically(const std::filesystem::path& path, std::string_view content) {
-    return WriteFileAtomically(path, content.data(), content.size());
+    return WriteFileAtomically(DefaultFileSystem(), path, content.data(), content.size());
 }
 
 }  // namespace sz::core

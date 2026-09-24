@@ -9,6 +9,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <string>
 #include <system_error>
 
 // Only PNG is needed of stb. The library itself is QOI throughout; PNG is
@@ -145,13 +146,13 @@ DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent) {
     return DownscaleToFit(source.pixelsRGBA.data(), source.width, source.height, maxExtent);
 }
 
-bool EncodeQoiToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height) {
+bool EncodeQoiToFile(FileSystem& fs, const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width,
+                     int height) {
     if (!pixelsRGBA || width <= 0 || height <= 0) {
         return false;
     }
 
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
+    fs.CreateDirectories(path.parent_path());
 
     const qoi_desc desc{static_cast<unsigned int>(width), static_cast<unsigned int>(height),
                         /*channels=*/4, QOI_SRGB};
@@ -168,26 +169,28 @@ bool EncodeQoiToFile(const std::filesystem::path& path, const uint8_t* pixelsRGB
     // saved, and truncating that file in place left a window in which a
     // crash - or a full disk - replaced the only copy on disk of a drawing
     // with the first half of it.
-    const bool ok = WriteFileAtomically(path, encoded, static_cast<size_t>(encodedSize));
+    const bool ok = WriteFileAtomically(fs, path, encoded, static_cast<size_t>(encodedSize));
     free(encoded);
     return ok;
 }
 
-std::optional<DecodedImage> DecodeQoiFromFile(const std::filesystem::path& path) {
-    const std::vector<uint8_t> fileBytes = ReadFileBytes(path);
-    if (fileBytes.empty()) {
+std::optional<DecodedImage> DecodeQoiFromFile(FileSystem& fs, const std::filesystem::path& path) {
+    const std::optional<std::string> fileBytes = fs.Read(path, kMaxImageFileBytes);
+    if (!fileBytes || fileBytes->empty()) {
         return std::nullopt;
     }
+    const auto* bytes = reinterpret_cast<const uint8_t*>(fileBytes->data());
+    const size_t size = fileBytes->size();
 
     // The header first: "qoif", then width and height as big-endian 32-bit
     // integers. qoi_decode allocates width*height*4 on the strength of
     // those two numbers before it has looked at a single pixel.
-    if (fileBytes.size() < QOI_HEADER_SIZE || std::memcmp(fileBytes.data(), "qoif", 4) != 0 ||
-        !WithinPixelBudget(ReadBigEndian32(fileBytes.data() + 4), ReadBigEndian32(fileBytes.data() + 8))) {
+    if (size < QOI_HEADER_SIZE || std::memcmp(bytes, "qoif", 4) != 0 ||
+        !WithinPixelBudget(ReadBigEndian32(bytes + 4), ReadBigEndian32(bytes + 8))) {
         return std::nullopt;
     }
     qoi_desc desc{};
-    void* decoded = qoi_decode(fileBytes.data(), static_cast<int>(fileBytes.size()), &desc, /*channels=*/4);
+    void* decoded = qoi_decode(bytes, static_cast<int>(size), &desc, /*channels=*/4);
     if (!decoded) {
         return std::nullopt;
     }

@@ -26,6 +26,7 @@ add_library(sz_core STATIC
     session/settings.cpp
     session/undo_entry.cpp
     util/atomic_file.cpp
+    util/file_system.cpp
     util/slug.cpp
     util/timestamp_name.cpp
     util/uid.cpp
