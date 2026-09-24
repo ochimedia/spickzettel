@@ -45,6 +45,8 @@
   "popover.textNoneYet": "(none yet)",
   "popover.textSize": "Size",
   "popover.textSizeTip": "Text size, in screen pixels - it doesn't scale when the item is resized",
+  "popover.keepAspect": "Keep aspect ratio",
+  "popover.keepAspectTip": "Resizing by a handle keeps this snippet's shape - hold Shift for the other way",
 
   "_menu": "The context menus a right-click opens - on a snippet, on a canvas tile in the bar, and on empty canvas. Worded shorter than the popover's tooltips above: a menu row is read at a glance, next to its own icon and its own shortcut, not hovered for an explanation.",
   "menu.fullscreen": "Fullscreen",

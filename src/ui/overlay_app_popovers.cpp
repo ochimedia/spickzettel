@@ -180,6 +180,12 @@ void OverlayApp::RenderItemPropertiesPopover() {
         return;
     }
     RenderItemOpacity(*it);
+    if (ImGui::Checkbox(Labeled(strings::kPopoverKeepAspect, "keepaspect"), &it->keepAspect)) {
+        Manager().MarkChanged();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", strings::kPopoverKeepAspectTip);
+    }
     // Every item has a picture layer (see Item::ImageLayer) - the guard is
     // for the hypothetical one that does not, which shows its foreground
     // opacity and nothing else.

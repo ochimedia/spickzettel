@@ -131,7 +131,8 @@ public:
     // library.json by every save. It goes up whenever a build writes
     // something an older one would misread or drop - a new field in a
     // record, a new kind of file.
-    static constexpr int kFormatVersion = 1;
+    // 2: Item::keepAspect.
+    static constexpr int kFormatVersion = 2;
     // Whether library.json says a newer build wrote this library: a
     // version above kFormatVersion. Such a library is not this build's to
     // open - every record it rewrote would lose what the newer build put

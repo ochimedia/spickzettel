@@ -199,6 +199,7 @@ json ToJson(const Item& item) {
         {"nativeW", item.nativeW},
         {"nativeH", item.nativeH},
         {"foregroundOpacity", item.foregroundOpacity},
+        {"keepAspect", item.keepAspect},
         {"isFullscreen", item.isFullscreen},
         {"isFullscreenStretch", item.isFullscreenStretch},
         {"minimized", item.minimized},
@@ -303,6 +304,7 @@ uint64_t HashItem(const Item& item) {
     h.Mix(item.nativeW);
     h.Mix(item.nativeH);
     h.Mix(item.foregroundOpacity);
+    h.Mix(item.keepAspect);
     h.Mix(item.isFullscreen);
     h.Mix(item.isFullscreenStretch);
     h.Mix(item.minimized);
@@ -395,6 +397,9 @@ bool FromJson(const json& j, Item& out, bool& repaired) {
     // Item carries: a record without these two fields reads back as a
     // note in the default style.
     out.noteTextSizePx = ClampedOr(j, "noteTextSizePx", 17.0f, kNoteTextSizeMin, kNoteTextSizeMax, repaired);
+    // A record from before the field: what its handles did then, which was
+    // to keep the shape until there was text.
+    out.keepAspect = j.value("keepAspect", out.noteText.empty());
     // anchorRect defaults to a zero Rect (via FromJson(Rect)'s own
     // per-field 0.0f defaults) and anchorDisplayWidth/Height default to 0
     // - together, "not yet anchored" (see Item::anchorRect's own doc

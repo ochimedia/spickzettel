@@ -488,6 +488,18 @@ exactly on whichever axis wants the item bigger, at the price of growing
 the item when a corner is dragged inward on one axis and outward on the
 other.
 
+### Keeping the shape is the snippet's own setting
+
+Whether a handle keeps the shape is `Item::keepAspect`, set from the
+defaults when the snippet is made and changed in its popover; Shift does
+the other. It used to follow from whether the snippet had text, on the
+reasoning that a box of text is a box whose shape is the point of
+resizing it. But text is a caption any snippet can carry, so typing one
+into a screenshot changed what its handles did, with nothing on screen
+to say so. A property says it, and can be set either way on purpose. A
+record from before the field reads back as the old rule had it (no text:
+kept), so nothing already made starts behaving differently.
+
 ### Z-order steps past what actually overlaps
 
 Bring forward and send backward move an item past the nearest item that

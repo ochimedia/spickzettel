@@ -76,12 +76,10 @@ Rect BoundsOfStartRects(const std::vector<ItemGesture::StartRect>& rects) {
     return Rect{x0, y0, x1 - x0, y1 - y0};
 }
 
-// Whether a resize holds the snippet's shape unless Shift says otherwise.
-// A screenshot is a picture and a drawing's strokes scale with it, so
-// stretching either is almost never meant; a text box is a box whose
-// shape is the point of resizing it, since its text does not scale. Shift
-// flips whichever the default is.
-bool KeepsAspectRatio(const Item& item) { return item.noteText.empty(); }
+// Whether a resize holds the snippet's shape unless Shift says otherwise -
+// the snippet's own setting (see Item::keepAspect). Shift flips whichever
+// it is.
+bool KeepsAspectRatio(const Item& item) { return item.keepAspect; }
 
 // Which edge(s) of `rect` a point at (x, y) is nearest to, for the
 // Alt+right-drag "resize from nearest edge" way in (see
@@ -488,6 +486,9 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
             return nullptr;
         }
         Item& item = canvas.items.back();
+        // Boxes of text, whose shape is the point of resizing them: the text
+        // wraps to the new width rather than scaling with it.
+        item.keepAspect = false;
         // A Text Note's backing (see kNoteBackgroundColorRGBA), but darker:
         // these land on whatever the desktop happens to show, and half
         // transparent over a white window left the red text washed out.

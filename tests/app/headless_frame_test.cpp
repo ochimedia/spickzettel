@@ -3143,31 +3143,46 @@ TEST_F(HeadlessAppTest, EditingALongNoteKeepsAllOfIt) {
     EXPECT_EQ(bs, 1u) << "wherever the caret was";
 }
 
-// A text box is a box whose shape is the point of resizing it, so its
-// resize is free where a drawing's or a screenshot's keeps the shape.
-TEST_F(HeadlessAppTest, ATextBoxResizesFreely) {
-    StartWith(WithTextOnT());
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(300.0f, 300.0f, 620.0f, 440.0f);
-    PressKey(ImGuiKey_T);
-    RawClick(400.0f, 400.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    ASSERT_TRUE(App().EditingNote().has_value());
-    ImGui::GetIO().AddInputCharacter('a');
-    StepFrames(2);
-    RawClick(1100.0f, 100.0f);  // closes the note and leaves drawing mode; kept, now that it has text
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    const Rect before = Canvases().CurrentOrNull()->items[0].rect;
-    ASSERT_FALSE(Canvases().CurrentOrNull()->items[0].noteText.empty());
+// A snippet with text in it, widened by 50px from its right-hand handle.
+// What the handle does is the snippet's own setting, and `config` is where
+// the one a new drawing gets comes from.
+class TextBoxResizeTest : public HeadlessAppTest {
+protected:
+    struct Widened {
+        Rect before;
+        Rect after;
+    };
+    Widened MakeATextBoxAndWidenIt(AppConfig config) {
+        StartWith(std::move(config));
+        ShowEditMode();
+        StepFrame();
+        MakeADrawing(300.0f, 300.0f, 620.0f, 440.0f);
+        PressKey(ImGuiKey_T);
+        RawClick(400.0f, 400.0f);
+        EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+        EXPECT_TRUE(App().EditingNote().has_value());
+        ImGui::GetIO().AddInputCharacter('a');
+        StepFrames(2);
+        RawClick(1100.0f, 100.0f);  // closes the note and leaves drawing mode; kept, now that it has text
+        EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+        const Rect before = Canvases().CurrentOrNull()->items[0].rect;
+        EXPECT_FALSE(Canvases().CurrentOrNull()->items[0].noteText.empty());
 
-    RawClick(before.x + before.w * 0.5f, before.y + before.h * 0.5f);
-    ASSERT_EQ(App().Selection().size(), 1u);
-    Drag(before.x + before.w, before.y + before.h * 0.5f, before.x + before.w + 50.0f, before.y + before.h * 0.5f, 10);
+        RawClick(before.x + before.w * 0.5f, before.y + before.h * 0.5f);
+        EXPECT_EQ(App().Selection().size(), 1u);
+        Drag(before.x + before.w, before.y + before.h * 0.5f, before.x + before.w + 50.0f,
+             before.y + before.h * 0.5f, 10);
+        return {before, Canvases().CurrentOrNull()->items[0].rect};
+    }
+};
 
-    const Rect after = Canvases().CurrentOrNull()->items[0].rect;
+// Typing into a snippet does not change what its handles do: it used to
+// free its shape, so the same drag stretched a drawing the moment it had
+// a caption in it.
+TEST_F(TextBoxResizeTest, TextLeavesASnippetKeepingItsShape) {
+    const auto [before, after] = MakeATextBoxAndWidenIt(WithTextOnT());
     EXPECT_NEAR(after.w, before.w + 50.0f, 1.0f);
-    EXPECT_FLOAT_EQ(after.h, before.h) << "only the width changed";
+    EXPECT_NEAR(after.h, before.h * after.w / before.w, 1.0f) << "the height followed the width";
 }
 
 // ===== What a save that could not finish does next =====

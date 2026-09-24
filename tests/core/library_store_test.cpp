@@ -97,6 +97,7 @@ CanvasManagerSnapshot MakeSampleSnapshot() {
     drawing.noteText = "A caption, styled per snippet";
     drawing.noteTextColorRGBA = 0x4dd6b880u;  // teal at half alpha - text carries its own opacity
     drawing.noteTextSizePx = 34.0f;
+    drawing.keepAspect = false;  // not the default, so a lost field would show
     drawing.strokes.push_back(stroke);
     canvas.items.push_back(drawing);
 
@@ -329,6 +330,7 @@ TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsEverything) {
     EXPECT_EQ(drawing.noteText, "A caption, styled per snippet");
     EXPECT_EQ(drawing.noteTextColorRGBA, 0x4dd6b880u);
     EXPECT_FLOAT_EQ(drawing.noteTextSizePx, 34.0f);
+    EXPECT_FALSE(drawing.keepAspect);
     EXPECT_FLOAT_EQ(drawing.ImageLayer()->opacity, 0.3f);
     EXPECT_EQ(drawing.ImageLayer()->tintColorRGBA, 0xaabbccffu);
     EXPECT_TRUE(drawing.minimized);
@@ -465,6 +467,29 @@ TEST_F(LibraryStoreTest, LoadDefaultsAMissingNoteTextStyle) {
     ASSERT_EQ(loaded->canvases[0].items.size(), 1u);
     EXPECT_EQ(loaded->canvases[0].items[0].noteTextColorRGBA, 0xFFFFFFFFu);
     EXPECT_FLOAT_EQ(loaded->canvases[0].items[0].noteTextSizePx, 17.0f);
+}
+
+// Item::keepAspect is newer than the records, and one without it reads back
+// doing what its handles did before there was a setting: keeping the shape
+// until the snippet had text in it.
+TEST_F(LibraryStoreTest, ARecordFromBeforeKeepAspectKeepsItsShapeUnlessItHasText) {
+    std::filesystem::create_directories(dir_);
+    WriteLibraryTree(dir_, R"({
+        "currentFolderId": 1, "currentCanvasId": 2,
+        "folders": [{"id": 1, "name": "F"}],
+        "canvases": [{"id": 2, "name": "C", "folderId": 1, "items": [
+            {"id": 3, "name": "A"},
+            {"id": 4, "name": "B", "noteText": "a caption"}
+        ]}]
+    })");
+
+    LibraryStore store(dir_);
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases[0].items.size(), 2u);
+    EXPECT_TRUE(loaded->canvases[0].items[0].keepAspect);
+    EXPECT_FALSE(loaded->canvases[0].items[1].keepAspect);
 }
 
 // Out-of-band sizes are pulled into range rather than rejected outright -

@@ -45,6 +45,12 @@ struct Item {
 
     // Opacity of this item's own strokes, independent of every layer's.
     float foregroundOpacity = 1.0f;  // 0..1
+    // Whether a resize by a handle keeps the item's shape (Shift does the
+    // other). A property of its own, set from the defaults when the item
+    // is made and changed in its popover: it used to follow from whether
+    // the item had text, so that typing a caption into a screenshot
+    // quietly changed what its handles did.
+    bool keepAspect = true;
     bool isFullscreen = false;
     // Whether entering fullscreen stretched `rect` to exactly fill the
     // viewport rather than fitting the item's own aspect ratio into it,
