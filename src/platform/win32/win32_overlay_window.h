@@ -82,6 +82,9 @@ private:
     // Recomputes whether the input grab may run right now (visible, and in
     // edit mode rather than click-through view-only) and applies it.
     void RefreshEditModeInput();
+    // Puts the game's camera back and gives it time to show that, before a
+    // hide or a switch to view-only uncovers the game - see its definition.
+    void SettleCameraBeforeReveal();
     // See its definition: whether another always-on-top window is above us and
     // covering something, which the taskbar does whenever it is the foreground
     // window as the overlay comes up.

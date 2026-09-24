@@ -315,10 +315,30 @@ void Win32OverlayWindow::RefreshEditModeInput() {
     grab.SetActive(visible_ && !inputPassthrough_);
 }
 
+namespace {
+// How long the game is given to draw the camera put back before the frozen
+// picture over it goes away. The correction reaches the game's input at
+// once, but it shows only after the game's next frame and the compositor's:
+// at 60 fps, two to three refreshes. A guess on the generous side - a
+// slower game shows its last few frames of wandering all the same.
+constexpr DWORD kCameraSettleMs = 80;
+}  // namespace
+
+// Settles the camera correction while this window still covers the game,
+// and waits for the game to draw it - see kCameraSettleMs. Without this the
+// correction went out as the window went away, and the game showed where
+// the camera had wandered to for a moment before it snapped back.
+void Win32OverlayWindow::SettleCameraBeforeReveal() {
+    if (Win32InputGrab::Instance().SettleCorrection()) {
+        Sleep(kCameraSettleMs);
+    }
+}
+
 void Win32OverlayWindow::Hide() {
     if (!hwnd_ || !visible_) {
         return;
     }
+    SettleCameraBeforeReveal();
     // Only reclaim/restore focus if this window itself currently holds
     // it. `previousForegroundWindow_` is a one-time snapshot from Show()
     // - accurate for as long as this window keeps holding real OS focus
@@ -432,6 +452,9 @@ void Win32OverlayWindow::SetInputPassthrough(bool enabled) {
     // set-once color/alpha value from either applied on top of blur-behind,
     // it would fight it. WS_EX_LAYERED's bit is only being borrowed here
     // for what it does to hit-testing, not for what it can do to pixels.
+    if (enabled && visible_) {
+        SettleCameraBeforeReveal();  // view-only drops the frozen screen next
+    }
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
     if (enabled) {
         exStyle |= (WS_EX_LAYERED | WS_EX_TRANSPARENT);

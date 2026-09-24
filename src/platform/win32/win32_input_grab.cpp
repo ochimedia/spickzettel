@@ -571,12 +571,14 @@ void Win32InputGrab::DestroyRawInputSink() {
     rawInputSink_ = nullptr;
 }
 
-void Win32InputGrab::FlushPendingCorrection() {
+bool Win32InputGrab::SettleCorrection() { return countering_.load() && FlushPendingCorrection(); }
+
+bool Win32InputGrab::FlushPendingCorrection() {
     const LONG dx = pendingCorrectionX_.exchange(0);
     const LONG dy = pendingCorrectionY_.exchange(0);
     const int64_t since = pendingCorrectionSince_.exchange(0);
     if (dx == 0 && dy == 0) {
-        return;
+        return false;
     }
     // How long the game had this movement to itself. Recorded before the
     // injection rather than after, so the number is the wait rather than
@@ -605,6 +607,7 @@ void Win32InputGrab::FlushPendingCorrection() {
     correction.mi.dwFlags = MOUSEEVENTF_MOVE;
     correction.mi.dwExtraInfo = kOwnInjectionMarker;
     SendInput(1, &correction, sizeof(correction));
+    return true;
 }
 
 // The absolute counterpart of MoveVirtualCursorRaw: the device has named a

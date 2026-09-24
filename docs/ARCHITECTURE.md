@@ -2224,6 +2224,14 @@ Consequences that shape `Win32InputGrab`:
   overshoots by that part. A threshold bounds how far the camera can
   wander from where the overlay found it. In between it does wander,
   which the frozen screen hides.
+- **The last correction goes out while the game is still covered.**
+  Sent as the window went away, it reached the game in time but showed a
+  frame or two later, so hiding the overlay revealed the wandered camera
+  for a moment before it snapped back. Hiding and switching to view-only
+  (which drops the frozen screen) now settle the bank first and wait
+  80 ms, two to three refreshes of a 60 fps game, before uncovering it.
+  Measured: the correction reaches a raw-input listener about 145 ms
+  before the window is gone.
 - **Against the shake of per-frame countering**, four things were tried
   before settling in steps and are gone: injecting per report instead of
   per frame (cut the window as intended, changed nothing in a real

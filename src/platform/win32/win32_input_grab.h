@@ -153,6 +153,12 @@ public:
         alt = altDown_;
     }
 
+    // Injects the correction banked so far right now, rather than when
+    // countering next ends - for the window to call before it stops hiding
+    // the game, so that what the game shows next is already the camera put
+    // back. True if there was anything to inject.
+    bool SettleCorrection();
+
     // Debug scaffolding for the input options HUD - see
     // InputGrabDiagnostics. SampleFrameStep is called once per rendered
     // frame; Diagnostics is read by the HUD.
@@ -211,10 +217,11 @@ private:
     void Refresh();
     // Injects everything banked so far as one correction, putting the
     // game's camera back where it was. Called by the raw-input sink once the
-    // bank passes the threshold on either axis and by Refresh as countering
-    // ends - never once per frame, see EditModeInputOptions::counterThreshold.
-    // No-op when there is nothing banked.
-    void FlushPendingCorrection();
+    // bank passes the threshold on either axis, by Refresh as countering
+    // ends, and by SettleCorrection - never once per frame, see
+    // EditModeInputOptions::counterThreshold. False when there was nothing
+    // banked.
+    bool FlushPendingCorrection();
     void EnsureRawInputSink();
     void DestroyRawInputSink();
 
