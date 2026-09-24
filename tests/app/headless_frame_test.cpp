@@ -85,6 +85,35 @@ TEST_F(HeadlessAppTest, TheAccentColorRecolorsTheThemeAndTheStyle) {
     EXPECT_LT(theme::AccentInk().x, 0.5f) << "dark ink on a bright accent";
 }
 
+// The interface is drawn at Windows' scale for the display the overlay is
+// on, from the frame after it changes - or at the one set in Settings,
+// whatever Windows says. The style's sizes and its text scale together, and
+// always from the same unscaled base, so going back leaves nothing behind.
+TEST_F(HeadlessAppTest, TheInterfaceScaleFollowsWindowsUnlessOneIsSet) {
+    ShowEditMode();
+    StepFrame();
+    EXPECT_FLOAT_EQ(UiScale(), 1.0f);
+    const float padding = ImGui::GetStyle().WindowPadding.x;
+
+    host_.overlayWindow.scalePercent = 150;
+    StepFrame();
+    EXPECT_FLOAT_EQ(UiScale(), 1.5f);
+    EXPECT_FLOAT_EQ(ImGui::GetStyle().FontScaleDpi, 1.5f);
+    EXPECT_FLOAT_EQ(ImGui::GetStyle().WindowPadding.x, padding * 1.5f);
+
+    controller_->GetSettings().Mutable().uiScalePercent = 200;
+    StepFrame();
+    EXPECT_FLOAT_EQ(UiScale(), 2.0f) << "the setting, over Windows' 150";
+    EXPECT_FLOAT_EQ(ImGui::GetStyle().WindowPadding.x, padding * 2.0f) << "scaled from the base, not from 150%";
+
+    controller_->GetSettings().Mutable().uiScalePercent = 0;
+    host_.overlayWindow.scalePercent = 100;
+    StepFrame();
+    EXPECT_FLOAT_EQ(UiScale(), 1.0f);
+    EXPECT_FLOAT_EQ(ImGui::GetStyle().FontScaleDpi, 1.0f);
+    EXPECT_FLOAT_EQ(ImGui::GetStyle().WindowPadding.x, padding);
+}
+
 TEST_F(HeadlessAppTest, RendersWithNoCanvasAtAll) {
     StartWithEmptyLibrary();
     ASSERT_FALSE(Canvases().HasCurrentCanvas());
@@ -3567,6 +3596,20 @@ TEST_F(HeadlessAppTest, AFirstRunOpensWithTheWelcomeAndTwoWarnings) {
             EXPECT_GT(note.noteTextColorRGBA >> 24, (note.noteTextColorRGBA >> 16) & 0xFFu) << "red over green";
         }
     }
+}
+
+// The welcome notes are the app talking, and are made at the interface
+// scale - text and all - though a note's text is otherwise its own size.
+TEST_F(HeadlessAppTest, TheWelcomeIsMadeAtTheInterfaceScale) {
+    host_.overlayWindow.scalePercent = 150;
+    controller_->Overlay().RequestWelcomeNote();
+    ShowEditMode();
+    StepFrames(2);
+    const Canvas& canvas = *Canvases().CurrentOrNull();
+    ASSERT_EQ(canvas.items.size(), 3u);
+    EXPECT_FLOAT_EQ(canvas.items[0].noteTextSizePx, 18.0f * 1.5f);
+    EXPECT_FLOAT_EQ(canvas.items[0].rect.w, 400.0f * 1.5f);
+    EXPECT_FLOAT_EQ(canvas.items[1].noteTextSizePx, 22.0f * 1.5f);
 }
 
 }  // namespace

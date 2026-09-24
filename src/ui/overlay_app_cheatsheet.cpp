@@ -180,8 +180,8 @@ void OverlayApp::RenderCheatSheet(float displayW, float displayH) {
     const ImGuiStyle& style = ImGui::GetStyle();
     const float lineH = ImGui::GetTextLineHeightWithSpacing();
     const float sectionGap = lineH * 0.9f;
-    const float keysGap = 20.0f;
-    const float columnGap = 40.0f;
+    const float keysGap = Px(20.0f);
+    const float columnGap = Px(40.0f);
 
     // One keys column and one description column, the same widths
     // throughout, so every group lines up with every other.

@@ -1416,6 +1416,47 @@ full-viewport swapchain), pill-shaped containers, the accent for every
 active state with dark ink on top of it, a bundled UI font, and real
 vector icons on every button.
 
+### Interface scale
+
+The process is per-monitor DPI aware, so the overlay covers its display
+pixel for pixel, and nothing Windows does scales what it draws. The app
+scales its interface itself: by Windows' scale for the display the window
+is on (`IOverlayWindow::ScalePercent`, asked every frame, so a change
+made in Windows while the overlay is up lands on the next frame), or by
+`AppConfig::uiScalePercent` when that is set.
+
+It is one number for the whole frame, `UiScale()`, set at the start of
+`OnFrame` and nowhere else. Two things carry it:
+
+- **The ImGui style.** `ApplySpickzettelStyle` builds the style from a
+  fresh `ImGuiStyle` on every change and then calls `ScaleAllSizes`, and
+  sets `FontScaleDpi`, which ImGui 1.92 multiplies into every font size.
+  From a fresh one because `ScaleAllSizes` multiplies what is there:
+  scaling a scaled style would compound. The font is rasterized at the
+  size it is drawn at, so 150% text is as sharp as 100% text, not
+  magnified.
+- **`Px`.** Every size the UI code writes itself - a button's size, a
+  bar's padding, a column's x - is written in pixels at 100% and wrapped
+  in `Px`, where it is drawn and where it is hit-tested alike, so what is
+  drawn larger is also where clicks land. A named constant stays at 100%
+  and is wrapped at its use rather than scaled at its definition, which
+  keeps it `constexpr` and makes an unwrapped one easy to grep for. Line
+  widths that have to stay on the pixel grid go through `PxWhole`.
+
+What is not interface is not scaled: snippets, strokes, the eraser and
+brush sizes, and a note's text size, which is content with a size of its
+own (the note editor divides the scale back out of the font size it
+pushes, since ImGui would otherwise apply it). The welcome notes are the
+exception, made at the interface scale when they are made - they are the
+app speaking, and someone who reads at 150% should not need the
+text-size slider to read the note that says where it is. Drag thresholds
+stay in pixels too: they are about how far a hand moves, not about how
+large anything looks.
+
+The software pointer follows Windows' scale rather than the setting,
+because it stands in for the system pointer, which Windows draws larger
+on a scaled display whatever this app says.
+
 ### Icons: vector shapes, not an icon font
 
 The conventional ImGui way to get icons is an icon font merged into the

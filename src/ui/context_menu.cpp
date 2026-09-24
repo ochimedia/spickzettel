@@ -5,14 +5,17 @@
 
 #include <imgui_internal.h>
 
+#include "ui/ui_scale.h"
+
 namespace sz::ui {
 
 namespace {
 
-// The row's shape, in the units the icons and the font are already in.
-// Nothing here is themed: a menu takes its colors from the style (see the
-// header) but its metrics are its own, so every menu in the app has rows
-// of the same height however it is colored.
+// The row's shape, in pixels at 100% - each goes through Px, as the font
+// and the icons are scaled too (see UiScale). Nothing here is themed: a
+// menu takes its colors from the style (see the header) but its metrics
+// are its own, so every menu in the app has rows of the same height
+// however it is colored.
 constexpr float kIconSize = 16.0f;
 constexpr float kIconGap = 10.0f;       // icon column to the label
 constexpr float kShortcutGap = 32.0f;   // the gap a shortcut is never closer than
@@ -37,7 +40,7 @@ struct Metrics {
 
 Metrics Measure(const std::vector<ContextMenuEntry>& entries) {
     Metrics metrics;
-    metrics.rowHeight = ImGui::GetTextLineHeight() + kRowPadY * 2.0f;
+    metrics.rowHeight = ImGui::GetTextLineHeight() + Px(kRowPadY) * 2.0f;
     float labelColumn = 0.0f;
     bool anyIcon = false;
     size_t separators = 0;
@@ -54,13 +57,13 @@ Metrics Measure(const std::vector<ContextMenuEntry>& entries) {
             ++separators;
         }
     }
-    metrics.iconColumn = anyIcon ? kIconSize + kIconGap : 0.0f;
+    metrics.iconColumn = anyIcon ? Px(kIconSize) + Px(kIconGap) : 0.0f;
     // The shortcut column and its gap only exist if something is bound:
     // a menu whose actions all lack shortcuts is as narrow as its labels.
-    metrics.innerWidth = kRowPadX * 2.0f + metrics.iconColumn + labelColumn +
-                          (metrics.shortcutColumn > 0.0f ? kShortcutGap + metrics.shortcutColumn : 0.0f);
-    metrics.height = kMenuPad * 2.0f + static_cast<float>(entries.size()) * metrics.rowHeight +
-                      static_cast<float>(separators) * (kSeparatorPadY * 2.0f + 1.0f);
+    metrics.innerWidth = Px(kRowPadX) * 2.0f + metrics.iconColumn + labelColumn +
+                          (metrics.shortcutColumn > 0.0f ? Px(kShortcutGap) + metrics.shortcutColumn : 0.0f);
+    metrics.height = Px(kMenuPad) * 2.0f + static_cast<float>(entries.size()) * metrics.rowHeight +
+                      static_cast<float>(separators) * (Px(kSeparatorPadY) * 2.0f + 1.0f);
     return metrics;
 }
 
@@ -95,12 +98,12 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
     // the anchor *is* flips rather than the menu being nudged, so a menu
     // opened in a corner never covers the thing it was opened on.
     const ImVec2 display = ImGui::GetIO().DisplaySize;
-    const float width = metrics.innerWidth + kMenuPad * 2.0f;
+    const float width = metrics.innerWidth + Px(kMenuPad) * 2.0f;
     const ImVec2 pivot(anchor_.x + width > display.x ? 1.0f : 0.0f,
                         anchor_.y + metrics.height > display.y ? 1.0f : 0.0f);
     ImGui::SetNextWindowPos(anchor_, ImGuiCond_Always, pivot);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kMenuPad, kMenuPad));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Px(kMenuPad), Px(kMenuPad)));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
     const bool open = ImGui::BeginPopup(popupId_);
     ImGui::PopStyleVar(2);
@@ -139,9 +142,9 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
         const ContextMenuEntry& entry = entries[i];
         if (entry.separatorAbove && i != 0) {
             const ImVec2 at = ImGui::GetCursorScreenPos();
-            ImGui::Dummy(ImVec2(metrics.innerWidth, kSeparatorPadY * 2.0f + 1.0f));
-            drawList->AddLine(ImVec2(at.x, at.y + kSeparatorPadY),
-                               ImVec2(at.x + metrics.innerWidth, at.y + kSeparatorPadY),
+            ImGui::Dummy(ImVec2(metrics.innerWidth, Px(kSeparatorPadY) * 2.0f + 1.0f));
+            drawList->AddLine(ImVec2(at.x, at.y + Px(kSeparatorPadY)),
+                               ImVec2(at.x + metrics.innerWidth, at.y + Px(kSeparatorPadY)),
                                ImGui::GetColorU32(ImGuiCol_Separator));
         }
         // BeginDisabled rather than ImGuiSelectableFlags_Disabled: it both
@@ -161,17 +164,20 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
         const ImU32 ink = ImGui::GetColorU32(ImGuiCol_Text);
         if (entry.icon != nullptr) {
             DrawIcon(drawList, *entry.icon,
-                      ImVec2(rowMin.x + kRowPadX, rowMin.y + (metrics.rowHeight - kIconSize) * 0.5f), kIconSize, ink);
+                      ImVec2(rowMin.x + Px(kRowPadX), rowMin.y + (metrics.rowHeight - Px(kIconSize)) * 0.5f),
+                      Px(kIconSize), ink);
         }
         if (entry.label != nullptr) {
-            drawList->AddText(ImVec2(rowMin.x + kRowPadX + metrics.iconColumn, rowMin.y + kRowPadY), ink, entry.label);
+            drawList->AddText(ImVec2(rowMin.x + Px(kRowPadX) + metrics.iconColumn, rowMin.y + Px(kRowPadY)), ink,
+                               entry.label);
         }
         if (!entry.shortcut.empty()) {
             // Right-aligned to the menu's edge rather than to a column of
             // its own: the shortcuts read as one block down the right-hand
             // side, which is what makes them skimmable.
             const float shortcutWidth = ImGui::CalcTextSize(entry.shortcut.c_str()).x;
-            drawList->AddText(ImVec2(rowMin.x + metrics.innerWidth - kRowPadX - shortcutWidth, rowMin.y + kRowPadY),
+            drawList->AddText(ImVec2(rowMin.x + metrics.innerWidth - Px(kRowPadX) - shortcutWidth,
+                                     rowMin.y + Px(kRowPadY)),
                                ImGui::GetColorU32(ImGuiCol_TextDisabled), entry.shortcut.c_str());
         }
         ImGui::EndDisabled();

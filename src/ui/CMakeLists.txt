@@ -17,6 +17,7 @@ add_library(sz_ui STATIC
     overlay_app_paint.cpp
     overlay_app_popovers.cpp
     overlay_app_undo.cpp
+    ui_scale.cpp
 )
 
 target_include_directories(sz_ui PUBLIC ${CMAKE_SOURCE_DIR}/src)

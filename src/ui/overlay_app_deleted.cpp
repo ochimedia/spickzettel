@@ -100,7 +100,7 @@ DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip) {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", restoreTip);
     }
-    ImGui::SameLine(0.0f, kDeletedButtonGap);
+    ImGui::SameLine(0.0f, Px(kDeletedButtonGap));
     if (DangerIconButton("##deleteforgood", icons::kTrash)) {
         pressed = DeletedButton::DeleteForGood;
     }
@@ -135,7 +135,7 @@ void OverlayApp::SettleDeletedFolderShown() {
 float OverlayApp::OverviewSidebarWidth() const {
     // Room for the second button on top of what a row of one needs - see
     // kOverviewSidebarWidth.
-    return kOverviewSidebarWidth + (ShowingDeleted() ? kPillButtonSize + kDeletedButtonGap : 0.0f);
+    return Px(kOverviewSidebarWidth) + (ShowingDeleted() ? Px(kPillButtonSize) + Px(kDeletedButtonGap) : 0.0f);
 }
 
 }  // namespace sz::ui

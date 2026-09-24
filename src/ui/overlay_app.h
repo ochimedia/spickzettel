@@ -1944,6 +1944,9 @@ private:
     // OnFrame, which applies AppConfig::accentColorRGBA whenever it differs,
     // so a color being dragged in Settings recolors everything live.
     std::optional<uint32_t> appliedAccentRGBA_;
+    // The interface scale the style was last built for, in percent - see
+    // OnFrame.
+    int appliedUiScalePercent_ = 0;
 
     // Transient "this is how big it is now" preview at the cursor, armed
     // by a mouse-wheel size change and expiring on its own shortly after

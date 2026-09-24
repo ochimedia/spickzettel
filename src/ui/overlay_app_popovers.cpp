@@ -28,22 +28,22 @@ namespace {
 // circle, ringed in white while selected, in the panel border color while
 // merely hovered). Returns true the frame it's clicked.
 bool ColorSwatchButton(ImU32 fillColor, bool selected) {
-    constexpr float kDiameter = 22.0f;
-    ImGui::InvisibleButton("##swatch", ImVec2(kDiameter + 6.0f, kDiameter + 6.0f));
+    const float radius = Px(11.0f);
+    ImGui::InvisibleButton("##swatch", Px(28.0f, 28.0f));
     const bool pressed = ImGui::IsItemClicked();
     const ImVec2 pMin = ImGui::GetItemRectMin();
     const ImVec2 pMax = ImGui::GetItemRectMax();
     const ImVec2 center((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddCircleFilled(center, kDiameter * 0.5f, fillColor);
+    dl->AddCircleFilled(center, radius, fillColor);
     // Same reasoning as PillColorButton's rim: black, and any dark custom
     // color, needs an edge of its own to read as a swatch on a dark panel.
-    dl->AddCircle(center, kDiameter * 0.5f, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0, 1.0f);
+    dl->AddCircle(center, radius, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0, 1.0f);
     if (selected) {
-        dl->AddCircle(center, kDiameter * 0.5f + 2.0f, ImGui::ColorConvertFloat4ToU32(theme::kWhite), 0, 1.5f);
+        dl->AddCircle(center, radius + Px(2.0f), ImGui::ColorConvertFloat4ToU32(theme::kWhite), 0, Px(1.5f));
     } else if (ImGui::IsItemHovered()) {
-        dl->AddCircle(center, kDiameter * 0.5f + 2.0f, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0,
-                       1.5f);
+        dl->AddCircle(center, radius + Px(2.0f), ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0,
+                       Px(1.5f));
     }
     return pressed;
 }
@@ -202,7 +202,7 @@ void OverlayApp::RenderItemOpacity(Item& item) {
     // being nothing left to *tell* whether it's an item at all is only a
     // real state for the background.
     int foregroundPct = static_cast<int>(std::round(item.foregroundOpacity * 100.0f));
-    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SetNextItemWidth(Px(160.0f));
     // An id of its own, not shared with the background slider below: both
     // are visible at once on any snippet with a picture in it, and ###
     // hashes only the id, so one spelling for the two of them made them one
@@ -221,7 +221,7 @@ void OverlayApp::RenderItemOpacity(Item& item) {
         return;
     }
     int backgroundPct = static_cast<int>(std::round(picture->opacity * 100.0f));
-    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SetNextItemWidth(Px(160.0f));
     if (ImGui::SliderInt(Labeled(strings::kPopoverBackground, "opacitybg"), &backgroundPct, 0, 100, strings::kFormatPercent)) {
         picture->opacity = static_cast<float>(backgroundPct) / 100.0f;
         Manager().MarkChanged();
@@ -248,7 +248,7 @@ void OverlayApp::RenderItemBackgroundColor(Layer& picture) {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverBackgroundWhiteTip);
     }
-    ImGui::SameLine(0.0f, 6.0f);
+    ImGui::SameLine(0.0f, Px(6.0f));
     float rgb[3];
     ColorRGBAToFloats(picture.tintColorRGBA, rgb);
     if (ImGui::ColorEdit3("##bgcolor", rgb, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
@@ -272,7 +272,7 @@ void OverlayApp::RenderItemTextStyle(Item& item) {
         ImGui::SameLine();
         ImGui::TextColored(theme::kGraphite200, "%s", strings::kPopoverTextNoneYet);
     }
-    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SetNextItemWidth(Px(160.0f));
     if (ImGui::SliderFloat(Labeled(strings::kPopoverTextSize, "notetextsize"), &item.noteTextSizePx, kNoteTextSizeMin, kNoteTextSizeMax,
                             strings::kFormatPixels)) {
         Manager().MarkChanged();
@@ -536,13 +536,13 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
     // Beside the point it was asked from, on whichever side has room, so
     // a bar near an edge of the screen does not have its chooser placed
     // off it.
-    constexpr float kGap = 20.0f;
+    const float gap = Px(20.0f);
     const bool above = colorChooserAnchor_.y > displayH * 0.5f;
     const bool toTheLeft = colorChooserAnchor_.x > displayW * 0.5f;
-    ImGui::SetNextWindowPos(ImVec2(colorChooserAnchor_.x + (toTheLeft ? -kGap : kGap),
-                                   colorChooserAnchor_.y + (above ? -kGap : kGap)),
+    ImGui::SetNextWindowPos(ImVec2(colorChooserAnchor_.x + (toTheLeft ? -gap : gap),
+                                   colorChooserAnchor_.y + (above ? -gap : gap)),
                             ImGuiCond_Appearing, ImVec2(toTheLeft ? 1.0f : 0.0f, above ? 1.0f : 0.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Px(8.0f, 8.0f));
     const bool open = ImGui::BeginPopup(kPopupId);
     ImGui::PopStyleVar();
     if (!open) {
@@ -563,7 +563,7 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
     KeepPopoverInFront();
     float rgb[3];
     ColorRGBAToFloats(drawColorRGBA_, rgb);
-    ImGui::SetNextItemWidth(220.0f);
+    ImGui::SetNextItemWidth(Px(220.0f));
     if (ImGui::ColorPicker3("##picker", rgb,
                             ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs |
                                 ImGuiColorEditFlags_NoLabel)) {
@@ -584,10 +584,11 @@ void OverlayApp::RenderRegionCaptureOverlay() {
     const ImVec2 pMin(std::min(gesture.downX, gesture.dragTo->x), std::min(gesture.downY, gesture.dragTo->y));
     const ImVec2 pMax(std::max(gesture.downX, gesture.dragTo->x), std::max(gesture.downY, gesture.dragTo->y));
     drawList->AddRectFilled(pMin, pMax, theme::AccentU32(40));
-    drawList->AddRect(pMin, pMax, theme::AccentU32(255), 0.0f, 2.0f, ImDrawFlags_None);
+    drawList->AddRect(pMin, pMax, theme::AccentU32(255), 0.0f, PxWhole(2.0f), ImDrawFlags_None);
     char dims[32];
     std::snprintf(dims, sizeof(dims), strings::kFormatSizeWidthByHeight, pMax.x - pMin.x, pMax.y - pMin.y);
-    drawList->AddText(ImVec2(pMin.x, pMin.y - 18.0f), IM_COL32(255, 255, 255, 255), dims);
+    drawList->AddText(ImVec2(pMin.x, pMin.y - ImGui::GetTextLineHeight() - Px(1.0f)), IM_COL32(255, 255, 255, 255),
+                      dims);
 }
 
 void OverlayApp::RenderRectEraserOverlay() {
@@ -604,7 +605,7 @@ void OverlayApp::RenderRectEraserOverlay() {
     const ImVec2 pMin(std::min(r.x0, r.x1), std::min(r.y0, r.y1));
     const ImVec2 pMax(std::max(r.x0, r.x1), std::max(r.y0, r.y1));
     drawList->AddRectFilled(pMin, pMax, IM_COL32(120, 170, 255, 40));
-    drawList->AddRect(pMin, pMax, IM_COL32(120, 170, 255, 255), 0.0f, 2.0f, ImDrawFlags_None);
+    drawList->AddRect(pMin, pMax, IM_COL32(120, 170, 255, 255), 0.0f, PxWhole(2.0f), ImDrawFlags_None);
 }
 
 }  // namespace sz::ui

@@ -60,7 +60,7 @@ bool Near(const std::optional<Rect>& rect, ImVec2 point, float slack) {
 // held to sensible bounds for very wide or tall ones.
 float TileWidth(float displayW, float displayH) {
     const float aspect = displayH > 0.0f ? std::clamp(displayW / displayH, 1.0f, 2.4f) : 16.0f / 9.0f;
-    return kBarTileHeight * aspect;
+    return Px(kBarTileHeight) * aspect;
 }
 }  // namespace
 
@@ -128,8 +128,8 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     const ImVec2 pointer = io.MousePos;
     const bool busy = PanelOpen() || GestureIf<CreationGesture>() != nullptr ||
                       GestureIf<StrokeInFlight>() != nullptr || GestureIf<ItemGesture>() != nullptr;
-    const bool atBottom = pointerKnown && pointer.y >= displayH - kRevealZonePx;
-    const bool onBar = pointerKnown && Near(canvasBarRect_, pointer, kHoverSlackPx);
+    const bool atBottom = pointerKnown && pointer.y >= displayH - Px(kRevealZonePx);
+    const bool onBar = pointerKnown && Near(canvasBarRect_, pointer, Px(kHoverSlackPx));
     // And while a tile's context menu is up: the pointer has left the bar
     // for the menu, and a menu hanging over the panel it was opened from
     // having slid away would be a puzzle. The menu closes itself on the
@@ -154,14 +154,14 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
         const size_t count = CanvasBarCanvases().size();
         const float tiles = count == 0 ? 0.0f
                                        : static_cast<float>(count) * TileWidth(displayW, displayH) +
-                                             static_cast<float>(count - 1) * kBarGap;
+                                             static_cast<float>(count - 1) * Px(kBarGap);
         // Two buttons at the right end: a new canvas, and the Overview.
-        const float buttons = kBarButtonSize * 2.0f + kBarGap;
-        const float content = kBarPadding * 2.0f + tiles + (count > 0 ? kBarGap : 0.0f) + buttons;
-        const float narrowest = kBarPadding * 4.0f + buttons + TileWidth(displayW, displayH);
-        const float width = std::min(content, std::max(narrowest, displayW - kBarSideMarginPx * 2.0f));
-        const float height = kBarTileHeight + kBarPadding * 2.0f;
-        const float outY = displayH - kDockMarginPx - height;
+        const float buttons = Px(kBarButtonSize) * 2.0f + Px(kBarGap);
+        const float content = Px(kBarPadding) * 2.0f + tiles + (count > 0 ? Px(kBarGap) : 0.0f) + buttons;
+        const float narrowest = Px(kBarPadding) * 4.0f + buttons + TileWidth(displayW, displayH);
+        const float width = std::min(content, std::max(narrowest, displayW - Px(kBarSideMarginPx) * 2.0f));
+        const float height = Px(kBarTileHeight) + Px(kBarPadding) * 2.0f;
+        const float outY = displayH - Px(kDockMarginPx) - height;
         const float y = displayH + (outY - displayH) * Ease(canvasBarReveal_.amount);
         canvasBarRect_ = Rect{(displayW - width) * 0.5f, y, width, height};
         bottomTop = y;
@@ -183,7 +183,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     ImGui::SetNextWindowPos(ImVec2(bar.x, bar.y), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(bar.w, bar.h), ImGuiCond_Always);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, theme::kRadiusMd);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, Px(theme::kRadiusMd));
     ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::kPanelBg);
     ImGui::PushStyleColor(ImGuiCol_Border, theme::kPanelBorder);
     ImGui::Begin("##canvas_bar", nullptr,
@@ -197,11 +197,11 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     // The wheel over the bar scrolls it (Alt+wheel still switches canvas,
     // as it does everywhere); a change of canvas brings the current one
     // into view.
-    const float regionMinX = bar.x + kBarPadding;
-    const float regionMaxX = bar.x + bar.w - kBarPadding - (kBarButtonSize * 2.0f + kBarGap) - kBarGap;
+    const float regionMinX = bar.x + Px(kBarPadding);
+    const float regionMaxX = bar.x + bar.w - Px(kBarPadding) - (Px(kBarButtonSize) * 2.0f + Px(kBarGap)) - Px(kBarGap);
     const float regionW = std::max(0.0f, regionMaxX - regionMinX);
     const float contentW =
-        ids.empty() ? 0.0f : static_cast<float>(ids.size()) * tileW + static_cast<float>(ids.size() - 1) * kBarGap;
+        ids.empty() ? 0.0f : static_cast<float>(ids.size()) * tileW + static_cast<float>(ids.size() - 1) * Px(kBarGap);
     const float maxScroll = std::max(0.0f, contentW - regionW);
     if (canvasBarScrollToCurrent_) {
         canvasBarScrollToCurrent_ = false;
@@ -209,7 +209,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
             if (ids[i] != currentId) {
                 continue;
             }
-            const float tileX = static_cast<float>(i) * (tileW + kBarGap);
+            const float tileX = static_cast<float>(i) * (tileW + Px(kBarGap));
             if (tileX < canvasBarScroll_) {
                 canvasBarScroll_ = tileX;
             } else if (tileX + tileW > canvasBarScroll_ + regionW) {
@@ -218,7 +218,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         }
     }
     if (ImGui::IsWindowHovered() && !io.KeyAlt && (io.MouseWheel != 0.0f || io.MouseWheelH != 0.0f)) {
-        canvasBarScroll_ -= (io.MouseWheel + io.MouseWheelH) * (tileW + kBarGap);
+        canvasBarScroll_ -= (io.MouseWheel + io.MouseWheelH) * (tileW + Px(kBarGap));
     }
     canvasBarScroll_ = std::clamp(canvasBarScroll_, 0.0f, maxScroll);
 
@@ -255,7 +255,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     std::optional<std::pair<CanvasId, size_t>> reorder;
     ImGui::PushClipRect(ImVec2(regionMinX, bar.y), ImVec2(regionMaxX, bar.y + bar.h), true);
     for (size_t i = 0; i < ids.size(); ++i) {
-        const float x = regionMinX + static_cast<float>(i) * (tileW + kBarGap) - canvasBarScroll_;
+        const float x = regionMinX + static_cast<float>(i) * (tileW + Px(kBarGap)) - canvasBarScroll_;
         if (x + tileW < regionMinX || x > regionMaxX) {
             continue;  // scrolled out of view
         }
@@ -268,15 +268,15 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         if (canvas == nullptr) {
             continue;
         }
-        const ImVec2 tileMin(x, bar.y + kBarPadding);
-        const ImVec2 tileMax(x + tileW, tileMin.y + kBarTileHeight);
+        const ImVec2 tileMin(x, bar.y + Px(kBarPadding));
+        const ImVec2 tileMax(x + tileW, tileMin.y + Px(kBarTileHeight));
         DrawCanvasPreview(dl, *canvas, tileMin, tileMax, displayW, displayH, Cfg().strokeRenderMode,
                           Cfg().overviewShowsStrokes, previewTexture, PreviewMeshSlot(), PictureSampling());
 
         char tileId[48];
         std::snprintf(tileId, sizeof(tileId), "##canvasbar_tile_%zu", i);
         ImGui::SetCursorScreenPos(tileMin);
-        if (ImGui::InvisibleButton(tileId, ImVec2(tileW, kBarTileHeight))) {
+        if (ImGui::InvisibleButton(tileId, ImVec2(tileW, Px(kBarTileHeight)))) {
             clicked = canvas->id;
         }
         const bool hovered = ImGui::IsItemHovered();
@@ -304,7 +304,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         const bool isCurrent = canvas->id == currentId;
         dl->AddRect(tileMin, tileMax,
                     ImGui::GetColorU32(isCurrent ? theme::Accent() : hovered ? theme::kGraphite200 : theme::kGraphite500),
-                    3.0f, 0, isCurrent ? 2.0f : 1.0f);
+                    Px(3.0f), 0, isCurrent ? Px(2.0f) : 1.0f);
         // Not while a tile is being dragged, whose own name follows the
         // pointer instead.
         if (hovered && !dragging) {
@@ -315,8 +315,8 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     ImGui::PopClipRect();
 
     // A new canvas, at the end of the row it will join.
-    const float buttonY = bar.y + (bar.h - kBarButtonSize) * 0.5f;
-    ImGui::SetCursorScreenPos(ImVec2(regionMaxX + kBarGap, buttonY));
+    const float buttonY = bar.y + (bar.h - Px(kBarButtonSize)) * 0.5f;
+    ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap), buttonY));
     const bool makeNew = PillIconButton("##canvasbar_new", icons::kPlus, false);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarNewCanvasTip);
@@ -325,7 +325,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     // is the one panel that is always there (out of the bottom edge), so
     // this is the way to the Overview that needs nothing on screen and
     // nothing switched on.
-    ImGui::SetCursorScreenPos(ImVec2(regionMaxX + kBarGap + kBarButtonSize + kBarGap, buttonY));
+    ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap) + Px(kBarButtonSize) + Px(kBarGap), buttonY));
     const bool openOverview = PillIconButton("##canvasbar_overview", icons::kLayoutGrid, false);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarOverviewTip);

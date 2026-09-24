@@ -36,8 +36,8 @@ bool IconTextButton(const char* strId, const Icon& icon, const char* text, const
     constexpr float kGap = 7.0f;
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 textSize = ImGui::CalcTextSize(text);
-    const ImVec2 size(style.FramePadding.x * 2.0f + kIconSize + kGap + textSize.x,
-                       style.FramePadding.y * 2.0f + std::max(kIconSize, textSize.y));
+    const ImVec2 size(style.FramePadding.x * 2.0f + Px(kIconSize) + Px(kGap) + textSize.x,
+                       style.FramePadding.y * 2.0f + std::max(Px(kIconSize), textSize.y));
     ImGui::PushStyleColor(ImGuiCol_Button, fill);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, hover);
@@ -47,9 +47,9 @@ bool IconTextButton(const char* strId, const Icon& icon, const char* text, const
     const ImVec2 maxPt = ImGui::GetItemRectMax();
     const float contentH = maxPt.y - minPt.y;
     const ImU32 inkColor = ImGui::GetColorU32(ink);
-    const ImVec2 iconPos(minPt.x + style.FramePadding.x, minPt.y + (contentH - kIconSize) * 0.5f);
-    DrawIcon(ImGui::GetWindowDrawList(), icon, iconPos, kIconSize, inkColor);
-    const ImVec2 textPos(iconPos.x + kIconSize + kGap, minPt.y + (contentH - textSize.y) * 0.5f);
+    const ImVec2 iconPos(minPt.x + style.FramePadding.x, minPt.y + (contentH - Px(kIconSize)) * 0.5f);
+    DrawIcon(ImGui::GetWindowDrawList(), icon, iconPos, Px(kIconSize), inkColor);
+    const ImVec2 textPos(iconPos.x + Px(kIconSize) + Px(kGap), minPt.y + (contentH - textSize.y) * 0.5f);
     ImGui::GetWindowDrawList()->AddText(textPos, inkColor, text);
     return pressed;
 }
@@ -80,13 +80,13 @@ bool DangerButton(const char* strId, const Icon& icon, const char* text) {
 // DangerButton's bespoke icon+text placement above.
 bool TabButton(const char* id, const char* text, bool active) {
     const char* label = Labeled(text, id);
-    const ImVec2 size(84.0f, 0.0f);
+    const ImVec2 size(Px(84.0f), 0.0f);
     active = active || PressLandsThisFrame(label, size);
     ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::AccentHover() : theme::kHoverWash);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::AccentHover());
     ImGui::PushStyleColor(ImGuiCol_Text, active ? theme::AccentInk() : theme::kGraphite200);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme::kRadiusSm);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Px(theme::kRadiusSm));
     const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(4);
@@ -99,11 +99,11 @@ bool TabButton(const char* id, const char* text, bool active) {
 // it is both the indicator and the button that undoes it.
 bool RevertButton(const char* strId) {
     constexpr float kSize = 16.0f;
-    ImGui::InvisibleButton(strId, ImVec2(kSize, kSize));
+    ImGui::InvisibleButton(strId, ImVec2(Px(kSize), Px(kSize)));
     const bool pressed = ImGui::IsItemClicked();
     const ImVec2 pMin = ImGui::GetItemRectMin();
     const ImU32 color = ImGui::GetColorU32(ImGui::IsItemHovered() ? theme::AccentHover() : theme::Accent());
-    DrawIcon(ImGui::GetWindowDrawList(), icons::kUndo, pMin, kSize, color);
+    DrawIcon(ImGui::GetWindowDrawList(), icons::kUndo, pMin, Px(kSize), color);
     return pressed;
 }
 
@@ -129,7 +129,7 @@ void HelpMarker(const char* id, const char* title, const char* text) {
     std::snprintf(buttonId, sizeof(buttonId), "##help_%s", id);
     std::snprintf(popupId, sizeof(popupId), "##helppop_%s", id);
 
-    const float size = std::floor(ImGui::GetFontSize() + 2.0f);
+    const float size = std::floor(ImGui::GetFontSize() + Px(2.0f));
     // Centered on whatever else is already on this row, rather than on its
     // top edge - this is always called after a SameLine, so the cursor is
     // at the top of a line something else set the height of. Which one it
@@ -159,7 +159,7 @@ void HelpMarker(const char* id, const char* title, const char* text) {
     const ImVec2 minPt = ImGui::GetItemRectMin();
     const ImVec2 center(minPt.x + size * 0.5f, minPt.y + size * 0.5f);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    drawList->AddCircle(center, size * 0.5f, color, 0, 1.2f);
+    drawList->AddCircle(center, size * 0.5f, color, 0, Px(1.2f));
     // Centered on the glyph's own ink, not on the line box CalcTextSize
     // reports. A line box is the same height for every character in the
     // font - it has to leave room for accents above and descenders below -
@@ -182,7 +182,7 @@ void HelpMarker(const char* id, const char* title, const char* text) {
         // opened inside it has to as well or it opens behind. See
         // KeepPopoverInFront.
         KeepPopoverInFront();
-        ImGui::PushTextWrapPos(kHelpWrapWidth);
+        ImGui::PushTextWrapPos(Px(kHelpWrapWidth));
         // The title repeated inside, because a popover can land over the
         // row that opened it.
         ImGui::TextColored(theme::Accent(), "%s", title);
@@ -250,18 +250,18 @@ void BeginSettingsScope(SettingsScopeBox& box, SettingsScope scope) {
     box.splitter.SetCurrentChannel(drawList, 1);
     // A group's separators run to the window's edge; this stops them, and
     // anything else, the box's padding short of its border.
-    ImGui::PushClipRect(box.start, ImVec2(box.start.x + box.width - kScopeBoxPadding, FLT_MAX), true);
+    ImGui::PushClipRect(box.start, ImVec2(box.start.x + box.width - Px(kScopeBoxPadding), FLT_MAX), true);
 
-    ImGui::Dummy(ImVec2(0.0f, kScopeBoxPadding - ImGui::GetStyle().ItemSpacing.y));
-    ImGui::Indent(kScopeBoxPadding);
+    ImGui::Dummy(ImVec2(0.0f, Px(kScopeBoxPadding) - ImGui::GetStyle().ItemSpacing.y));
+    ImGui::Indent(Px(kScopeBoxPadding));
     ImGui::BeginGroup();
-    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + box.width - 2.0f * kScopeBoxPadding);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPos().x + box.width - 2.0f * Px(kScopeBoxPadding));
 
     // The badge: a pill with the half's name, and a line of what it means.
     const bool global = scope == SettingsScope::Global;
     const char* name = global ? strings::kSettingsScopeGlobal : strings::kSettingsScopeProfile;
     const ImVec2 textSize = ImGui::CalcTextSize(name);
-    const ImVec2 pad(8.0f, 2.0f);
+    const ImVec2 pad = Px(8.0f, 2.0f);
     const ImVec2 pillMin = ImGui::GetCursorScreenPos();
     const ImVec2 pillMax(pillMin.x + textSize.x + 2.0f * pad.x, pillMin.y + textSize.y + 2.0f * pad.y);
     drawList->AddRectFilled(pillMin, pillMax,
@@ -270,7 +270,7 @@ void BeginSettingsScope(SettingsScopeBox& box, SettingsScope scope) {
     drawList->AddText(ImVec2(pillMin.x + pad.x, pillMin.y + pad.y),
                       ImGui::GetColorU32(global ? theme::kGraphite100 : theme::AccentInk()), name);
     ImGui::Dummy(ImVec2(pillMax.x - pillMin.x, pillMax.y - pillMin.y));
-    ImGui::SameLine(0.0f, 10.0f);
+    ImGui::SameLine(0.0f, Px(10.0f));
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + pad.y);
     ImGui::TextColored(theme::kGraphite300, "%s",
                        global ? strings::kSettingsScopeGlobalNote : strings::kSettingsScopeProfileNote);
@@ -282,17 +282,17 @@ void EndSettingsScope(SettingsScopeBox& box) {
     ImGui::PopClipRect();
     ImGui::PopTextWrapPos();
     ImGui::EndGroup();
-    ImGui::Unindent(kScopeBoxPadding);
-    ImGui::Dummy(ImVec2(0.0f, kScopeBoxPadding - ImGui::GetStyle().ItemSpacing.y));
+    ImGui::Unindent(Px(kScopeBoxPadding));
+    ImGui::Dummy(ImVec2(0.0f, Px(kScopeBoxPadding) - ImGui::GetStyle().ItemSpacing.y));
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     box.splitter.SetCurrentChannel(drawList, 0);
     const ImVec2 max(box.start.x + box.width, ImGui::GetCursorScreenPos().y - ImGui::GetStyle().ItemSpacing.y);
     constexpr float kRounding = 8.0f;
-    drawList->AddRectFilled(box.start, max, ImGui::GetColorU32(theme::kFieldBg), kRounding);
-    drawList->AddRect(box.start, max, ImGui::GetColorU32(theme::kPanelBorderStrong), kRounding);
+    drawList->AddRectFilled(box.start, max, ImGui::GetColorU32(theme::kFieldBg), Px(kRounding));
+    drawList->AddRect(box.start, max, ImGui::GetColorU32(theme::kPanelBorderStrong), Px(kRounding));
     if (box.scope == SettingsScope::Profile) {
-        drawList->AddRectFilled(box.start, ImVec2(box.start.x + 4.0f, max.y), theme::AccentU32(), kRounding,
+        drawList->AddRectFilled(box.start, ImVec2(box.start.x + Px(4.0f), max.y), theme::AccentU32(), Px(kRounding),
                                 ImDrawFlags_RoundCornersLeft);
     }
     box.splitter.Merge(drawList);
@@ -325,8 +325,8 @@ bool CreationTriggerRow(const char* id, const char* label, CreationTrigger& trig
     constexpr float kLabelColumn = 110.0f;
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
-    ImGui::SameLine(kLabelColumn);
-    ImGui::SetNextItemWidth(220.0f);
+    ImGui::SameLine(Px(kLabelColumn));
+    ImGui::SetNextItemWidth(Px(220.0f));
     bool changed = false;
     if (ImGui::BeginCombo(Labeled("", id), preview)) {
         // Same reason as every other popup in this panel - see
@@ -363,7 +363,7 @@ void TreeBranch(float& trunkY, const ImVec2& rowPos, float indent) {
     const ImU32 color = ImGui::GetColorU32(theme::kGraphite400);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     drawList->AddLine(ImVec2(x, trunkY), ImVec2(x, centerY), color, 1.0f);
-    drawList->AddLine(ImVec2(x, centerY), ImVec2(rowPos.x - 3.0f, centerY), color, 1.0f);
+    drawList->AddLine(ImVec2(x, centerY), ImVec2(rowPos.x - Px(3.0f), centerY), color, 1.0f);
     trunkY = centerY;
 }
 
@@ -382,13 +382,13 @@ float TrunkFrom(const ImVec2& rowPos) { return rowPos.y + ImGui::GetFrameHeight(
 // sidebar next door has the same shape for the same reason.
 bool SettingsSectionButton(const char* id, const char* text, bool active) {
     const char* label = Labeled(text, id);
-    const ImVec2 size(-1.0f, 32.0f);
+    const ImVec2 size(-1.0f, Px(32.0f));
     active = active || PressLandsThisFrame(label, size);
     ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::AccentHover() : theme::kHoverWash);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::AccentHover());
     ImGui::PushStyleColor(ImGuiCol_Text, active ? theme::AccentInk() : theme::kGraphite200);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme::kRadiusSm);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Px(theme::kRadiusSm));
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
     const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleVar(2);
@@ -545,7 +545,7 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     const bool showCanvasesBody = pickerItemId_.has_value() || overviewTab_ == OverviewTab::Canvases;
 
     OverviewActions actions;
-    ImGui::BeginChild("##overview_body", ImVec2(0.0f, -40.0f), ImGuiChildFlags_None);
+    ImGui::BeginChild("##overview_body", ImVec2(0.0f, -Px(40.0f)), ImGuiChildFlags_None);
     // A new page starts at its beginning. All three tabs and both About
     // pages share this one scrolling child, so without this, opening the
     // licenses from halfway down the About text drops you halfway down the
@@ -782,17 +782,18 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
         const float rowWidth = ImGui::GetContentRegionAvail().x;
         // Room for the buttons is always reserved: the last folder is
         // deletable like any other.
-        const float buttonsWidth = marked ? kPillButtonSize * 2.0f + kDeletedButtonGap : kPillButtonSize;
-        const float selectWidth = rowWidth - buttonsWidth - 6.0f;
-        const ImVec2 rowMax(rowMin.x + rowWidth, rowMin.y + kFolderRowHeight);
+        const float buttonsWidth = marked ? Px(kPillButtonSize) * 2.0f + Px(kDeletedButtonGap) : Px(kPillButtonSize);
+        const float selectWidth = rowWidth - buttonsWidth - Px(6.0f);
+        const ImVec2 rowMax(rowMin.x + rowWidth, rowMin.y + Px(kFolderRowHeight));
         ImDrawList* sidebarDrawList = ImGui::GetWindowDrawList();
         // Through GetColorU32, which a dimmed row's alpha applies to.
         if (isCurrentFolder) {
             const ImVec4 fill = marked ? ImVec4(theme::kDanger.x, theme::kDanger.y, theme::kDanger.z, 0.32f)
                                        : ImVec4(theme::Accent().x, theme::Accent().y, theme::Accent().z, 0.2f);
-            sidebarDrawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(fill), theme::kRadiusSm);
+            sidebarDrawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(fill), Px(theme::kRadiusSm));
         } else if (marked) {
-            sidebarDrawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(theme::kDangerSoft), theme::kRadiusSm);
+            sidebarDrawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(theme::kDangerSoft),
+                                           Px(theme::kRadiusSm));
         }
 
         if (isRenamingThis) {
@@ -801,9 +802,9 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             // (per the "overlapping widgets resolve first-submitted-wins"
             // gotcha - see docs/ARCHITECTURE.md) would win every click,
             // leaving the input field unclickable.
-            ImGui::Dummy(ImVec2(selectWidth, kFolderRowHeight));
+            ImGui::Dummy(ImVec2(selectWidth, Px(kFolderRowHeight)));
         } else {
-            if (ImGui::InvisibleButton("##folderrow", ImVec2(selectWidth, kFolderRowHeight))) {
+            if (ImGui::InvisibleButton("##folderrow", ImVec2(selectWidth, Px(kFolderRowHeight)))) {
                 // A deleted folder is looked into, not browsed - see
                 // deletedFolderShown_.
                 if (deleted) {
@@ -822,7 +823,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             }
             if (rowHovered && !isCurrentFolder) {
                 sidebarDrawList->AddRectFilled(rowMin, ImVec2(rowMin.x + selectWidth, rowMax.y),
-                                                ImGui::GetColorU32(theme::kHoverWash), theme::kRadiusSm);
+                                                ImGui::GetColorU32(theme::kHoverWash), Px(theme::kRadiusSm));
             }
             if (rowHovered && marked) {
                 if (deleted && Cfg().purgeDeleted) {
@@ -860,8 +861,9 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
         }
 
         if (isRenamingThis) {
-            ImGui::SetCursorScreenPos(ImVec2(rowMin.x + 6.0f, rowMin.y + (kFolderRowHeight - ImGui::GetFrameHeight()) * 0.5f));
-            ImGui::SetNextItemWidth(selectWidth - 12.0f);
+            ImGui::SetCursorScreenPos(
+                ImVec2(rowMin.x + Px(6.0f), rowMin.y + (Px(kFolderRowHeight) - ImGui::GetFrameHeight()) * 0.5f));
+            ImGui::SetNextItemWidth(selectWidth - Px(12.0f));
             if (renameJustFocused_) {
                 ImGui::SetKeyboardFocusHere();
                 renameJustFocused_ = false;
@@ -879,15 +881,16 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             const ImVec4& ink = marked && !isCurrentFolder ? theme::kDeletedInk
                                 : isCurrentFolder         ? theme::kWhite
                                                           : theme::kGraphite200;
-            const ImVec2 textPos(rowMin.x + 10.0f, rowMin.y + (kFolderRowHeight - ImGui::GetTextLineHeight()) * 0.5f);
-            sidebarDrawList->PushClipRect(rowMin, ImVec2(rowMin.x + selectWidth - 4.0f, rowMax.y), true);
+            const ImVec2 textPos(rowMin.x + Px(10.0f),
+                                 rowMin.y + (Px(kFolderRowHeight) - ImGui::GetTextLineHeight()) * 0.5f);
+            sidebarDrawList->PushClipRect(rowMin, ImVec2(rowMin.x + selectWidth - Px(4.0f), rowMax.y), true);
             sidebarDrawList->AddText(textPos, ImGui::GetColorU32(ink), f.name.c_str());
             sidebarDrawList->PopClipRect();
         }
 
         if (!isRenamingThis) {
-            const float buttonY = rowMin.y + (kFolderRowHeight - kPillButtonSize) * 0.5f;
-            ImGui::SetCursorScreenPos(ImVec2(rowMin.x + selectWidth + 4.0f, buttonY));
+            const float buttonY = rowMin.y + (Px(kFolderRowHeight) - Px(kPillButtonSize)) * 0.5f;
+            ImGui::SetCursorScreenPos(ImVec2(rowMin.x + selectWidth + Px(4.0f), buttonY));
             if (marked) {
                 // Both act on what is deleted in the folder: all of it back,
                 // or all of it gone for good - the folder with it only if
@@ -926,7 +929,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
         if (overviewScrollToFolderId_ == f.id) {
             ImGui::SetScrollFromPosY(rowMin.y - ImGui::GetWindowPos().y, 0.5f);
         }
-        ImGui::SetCursorScreenPos(ImVec2(rowMin.x, rowMax.y + kFolderRowGap));
+        ImGui::SetCursorScreenPos(ImVec2(rowMin.x, rowMax.y + Px(kFolderRowGap)));
         if (dimmed) {
             ImGui::PopStyleVar();
         }
@@ -943,7 +946,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
 }
 
 void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewActions& actions) {
-    constexpr ImVec2 kTileSize(200.0f, 130.0f);
+    const ImVec2 tileSize = Px(200.0f, 130.0f);
     constexpr float kSpacing = 14.0f;
     const std::vector<Canvas>& canvases = Manager().Canvases();
     const CanvasId currentCanvasId = Manager().CurrentCanvasId();  // 0 when there is none
@@ -973,7 +976,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
     ImGui::BeginChild("##overview_scroll", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
 
     const float availW = ImGui::GetContentRegionAvail().x;
-    const int columns = std::max(1, static_cast<int>((availW + kSpacing) / (kTileSize.x + kSpacing)));
+    const int columns = std::max(1, static_cast<int>((availW + Px(kSpacing)) / (tileSize.x + Px(kSpacing))));
 
     // Built once for the whole grid rather than per tile.
     const PreviewTextureFn previewTexture = PreviewTextureLookup();
@@ -992,7 +995,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
     for (size_t idxInFolder = 0; idxInFolder < folderCanvasIndices.size(); ++idxInFolder) {
         const Canvas& c = canvases[folderCanvasIndices[idxInFolder]];
         if (idxInFolder % static_cast<size_t>(columns) != 0) {
-            ImGui::SameLine(0.0f, kSpacing);
+            ImGui::SameLine(0.0f, Px(kSpacing));
         }
         ImGui::PushID(static_cast<int>(c.id));
         // Only ever with Show deleted on: deleted on its own or with its
@@ -1005,26 +1008,27 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         ImGui::BeginGroup();
 
         const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
-        const ImVec2 thumbMax(thumbMin.x + kTileSize.x, thumbMin.y + kTileSize.y);
+        const ImVec2 thumbMax(thumbMin.x + tileSize.x, thumbMin.y + tileSize.y);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         DrawCanvasPreview(drawList, c, thumbMin, thumbMax, displayW, displayH, Cfg().strokeRenderMode,
                            Cfg().overviewShowsStrokes, previewTexture, PreviewMeshSlot(), PictureSampling());
         const bool isActive = c.id == currentCanvasId;
         if (deleted) {
-            drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDangerSoft), 4.0f);
-            drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDanger), 4.0f, ImDrawFlags_None, 2.0f);
+            drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDangerSoft), Px(4.0f));
+            drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDanger), Px(4.0f), ImDrawFlags_None,
+                              PxWhole(2.0f));
         } else {
             // The preview's own pictures are drawn at full strength whatever
             // the style's alpha, so a dimmed tile is dimmed by a veil.
             if (dimmed) {
-                drawList->AddRectFilled(thumbMin, thumbMax, IM_COL32(14, 16, 20, 150), 4.0f);
+                drawList->AddRectFilled(thumbMin, thumbMax, IM_COL32(14, 16, 20, 150), Px(4.0f));
             }
             drawList->AddRect(thumbMin, thumbMax,
                                ImGui::GetColorU32(isActive ? theme::Accent() : ImVec4(0.275f, 0.298f, 0.345f, 1.0f)),
-                               4.0f, ImDrawFlags_None, isActive ? 2.0f : 1.0f);
+                               Px(4.0f), ImDrawFlags_None, isActive ? PxWhole(2.0f) : 1.0f);
         }
 
-        if (ImGui::InvisibleButton("##tile", kTileSize) && !deleted) {
+        if (ImGui::InvisibleButton("##tile", tileSize) && !deleted) {
             actions.clickedCanvas = c.id;
         }
         if (deleted && ImGui::IsItemHovered()) {
@@ -1055,7 +1059,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
 
         const bool isRenamingThisCanvas = renamingCanvasId_ == c.id;
         if (isRenamingThisCanvas) {
-            ImGui::SetNextItemWidth(kTileSize.x);
+            ImGui::SetNextItemWidth(tileSize.x);
             if (renameJustFocused_) {
                 ImGui::SetKeyboardFocusHere();
                 renameJustFocused_ = false;
@@ -1084,7 +1088,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         // drawn reads as a bug. See CanvasManager's class comment for the
         // invariant behind it, now gone.
         if (deleted) {
-            ImGui::SameLine(kTileSize.x - kPillButtonSize * 2.0f - kDeletedButtonGap);
+            ImGui::SameLine(tileSize.x - Px(kPillButtonSize) * 2.0f - Px(kDeletedButtonGap));
             // Out of a deleted folder the folder comes back to hold it, and
             // the rest of what went with the folder stays deleted - see
             // CanvasManager::Restore.
@@ -1105,7 +1109,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
                     break;
             }
         } else if (!isRenamingThisCanvas) {
-            ImGui::SameLine(kTileSize.x - kPillButtonSize);
+            ImGui::SameLine(tileSize.x - Px(kPillButtonSize));
             if (DangerIconButton("##delcanvas", icons::kTrash)) {
                 confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name};
                 confirmDeletePopoverRequested_ = true;
@@ -1308,7 +1312,7 @@ void OverlayApp::RenderOverviewSettingsPanel() {
     };
 
     constexpr float kSectionListWidth = 150.0f;
-    ImGui::BeginChild("##settings_sections", ImVec2(kSectionListWidth, 0.0f), ImGuiChildFlags_None);
+    ImGui::BeginChild("##settings_sections", ImVec2(Px(kSectionListWidth), 0.0f), ImGuiChildFlags_None);
     for (const SectionRow& row : kSections) {
         if (SettingsSectionButton(row.id, row.label, settingsSection_ == row.section)) {
             settingsSection_ = row.section;
@@ -1403,7 +1407,7 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(strings::kAppearanceMonitorLabel);
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(300.0f);
+        ImGui::SetNextItemWidth(Px(300.0f));
         if (ImGui::BeginCombo("##overlaydisplay", preview.c_str())) {
             // Same reason as the Profiles dropdowns: a popup inside a window
             // that re-asserts itself to the front every frame has to as well.
@@ -1429,6 +1433,50 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
             // and left as it is - picking anything else is what forgets it.
             if (!chosenId.empty() && !chosenAttached) {
                 ImGui::Selectable(Labeled(missingText, "displaymissing"), true);
+            }
+            ImGui::EndCombo();
+        }
+    }
+
+    SettingsGroupBreak();
+
+    SettingsHeading("appearanceuiscaleheading", strings::kAppearanceUiScaleHeading, strings::kAppearanceUiScaleHelp);
+    {
+        // Windows' own steps up to 200%, and two past it for a large
+        // display seen from across the room. A value typed into the config
+        // file that is none of these still shows as itself.
+        constexpr int kPresets[] = {75, 100, 125, 150, 175, 200, 250, 300};
+        const int windowsPercent = window_ != nullptr ? window_->ScalePercent() : 100;
+        char autoText[64];
+        std::snprintf(autoText, sizeof(autoText), strings::kAppearanceUiScaleAuto, windowsPercent);
+        char preview[64];
+        if (Cfg().uiScalePercent == 0) {
+            std::snprintf(preview, sizeof(preview), "%s", autoText);
+        } else {
+            std::snprintf(preview, sizeof(preview), strings::kFormatPercent, Cfg().uiScalePercent);
+        }
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(strings::kAppearanceUiScaleLabel);
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(Px(200.0f));
+        // Applied from the next frame on, by OnFrame - the whole of one
+        // frame is drawn at one scale.
+        if (ImGui::BeginCombo("##uiscale", preview)) {
+            KeepPopoverInFront();
+            if (ImGui::Selectable(Labeled(autoText, "uiscaleauto"), Cfg().uiScalePercent == 0)) {
+                Cfg().uiScalePercent = 0;
+                anyChanged = true;
+            }
+            for (const int percent : kPresets) {
+                char text[16];
+                std::snprintf(text, sizeof(text), strings::kFormatPercent, percent);
+                char id[24];
+                std::snprintf(id, sizeof(id), "uiscale%d", percent);
+                if (ImGui::Selectable(Labeled(text, id), Cfg().uiScalePercent == percent)) {
+                    Cfg().uiScalePercent = percent;
+                    anyChanged = true;
+                }
             }
             ImGui::EndCombo();
         }
@@ -1539,13 +1587,13 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
         ImGui::SameLine();
         ImGui::TextUnformatted(strings::kAppearanceEditBorderColor);
     }
-    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SetNextItemWidth(Px(160.0f));
     int borderPct = static_cast<int>(std::round(Cfg().editModeBorderOpacity * 100.0f));
     if (ImGui::SliderInt(Labeled(strings::kAppearanceEditBorderOpacity, "editborderopacity"), &borderPct, 0, 100, strings::kFormatPercent)) {
         Cfg().editModeBorderOpacity = static_cast<float>(borderPct) / 100.0f;
     }
     anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-    ImGui::SetNextItemWidth(160.0f);
+    ImGui::SetNextItemWidth(Px(160.0f));
     ImGui::SliderFloat(Labeled(strings::kAppearanceEditBorderWidth, "editborderwidth"), &Cfg().editModeBorderWidthPx, kEditModeBorderWidthMin,
                         kEditModeBorderWidthMax, strings::kFormatPixels);
     anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
@@ -1655,7 +1703,7 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
         char tileId[32] = {};
         std::snprintf(tileId, sizeof(tileId), "##tile%.*s", static_cast<int>(key.size()), key.data());
         if (at == 0) {
-            ImGui::SameLine(kBarRowTilesX);
+            ImGui::SameLine(Px(kBarRowTilesX));
         } else {
             ImGui::SameLine();
         }
@@ -1783,7 +1831,7 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     anyChanged |= ImGui::Checkbox(Labeled(strings::kSettingsPurgeDeleted, "purgedeleted"), &Cfg().purgeDeleted);
     ImGui::SameLine();
     ImGui::BeginDisabled(!Cfg().purgeDeleted);
-    ImGui::SetNextItemWidth(110.0f);
+    ImGui::SetNextItemWidth(Px(110.0f));
     int days = Cfg().purgeDeletedAfterDays;
     if (ImGui::InputInt("##purgedeleteddays", &days, 1, 7)) {
         Cfg().purgeDeletedAfterDays = std::clamp(days, kPurgeDeletedAfterDaysMin, kPurgeDeletedAfterDaysMax);
@@ -1857,7 +1905,7 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
         strings::kInputDontStealFocusHelp);
     float focusTrunk = TrunkFrom(rowPos);
 
-    ImGui::Indent(kTreeIndent);
+    ImGui::Indent(Px(kTreeIndent));
     // First under the focus row because it is the exception to it, and
     // grayed out when that row is off for the same reason the others are:
     // with focus taken already there is nothing left for it to do.
@@ -1867,7 +1915,7 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
         {&ProfileableSettings::takeFocusOverElevated, &ProfileOverrides::takeFocusOverElevated},
         strings::kInputTakeFocusOverElevatedHelp,
         !edited.dontStealFocus);
-    TreeBranch(focusTrunk, rowPos, kTreeIndent);
+    TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
 
     rowPos = ImGui::GetCursorScreenPos();
     ProfileableCheckbox(
@@ -1875,7 +1923,7 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
         {&ProfileableSettings::dontForwardKeystrokes, &ProfileOverrides::dontForwardKeystrokes},
         strings::kInputDontForwardKeystrokesHelp,
         !keystrokesAvailable);
-    TreeBranch(focusTrunk, rowPos, kTreeIndent);
+    TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
 
     rowPos = ImGui::GetCursorScreenPos();
     ProfileableCheckbox(
@@ -1883,31 +1931,31 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
         {&ProfileableSettings::rawMouseInput, &ProfileOverrides::rawMouseInput},
         strings::kInputRawMouseHelp,
         !rawAvailable);
-    TreeBranch(focusTrunk, rowPos, kTreeIndent);
+    TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
     float rawTrunk = TrunkFrom(rowPos);
 
-    ImGui::Indent(kTreeIndent);
+    ImGui::Indent(Px(kTreeIndent));
     rowPos = ImGui::GetCursorScreenPos();
     ProfileableCheckbox(
         "counterrawmouse", strings::kInputCounterRawMouseLabel,
         {&ProfileableSettings::counterRawMouseInput, &ProfileOverrides::counterRawMouseInput},
         strings::kInputCounterRawMouseHelp,
         !counterAvailable);
-    TreeBranch(rawTrunk, rowPos, kTreeIndent);
+    TreeBranch(rawTrunk, rowPos, Px(kTreeIndent));
     float counterTrunk = TrunkFrom(rowPos);
 
     // Nested under countering, which it tunes, and grayed with it: a
     // threshold for corrections that are not being made does nothing.
-    ImGui::Indent(kTreeIndent);
+    ImGui::Indent(Px(kTreeIndent));
     rowPos = ImGui::GetCursorScreenPos();
     ProfileableInt("counterthreshold", strings::kInputCounterThresholdLabel, strings::kInputCounterThresholdUnit,
                    {&ProfileableSettings::counterThreshold, &ProfileOverrides::counterThreshold},
                    platform::EditModeInputOptions::kCounterThresholdMin,
                    platform::EditModeInputOptions::kCounterThresholdMax, 10, strings::kInputCounterThresholdHelp,
                    !counterAvailable || !edited.counterRawMouseInput);
-    TreeBranch(counterTrunk, rowPos, kTreeIndent);
+    TreeBranch(counterTrunk, rowPos, Px(kTreeIndent));
 
-    ImGui::Unindent(kTreeIndent * 3.0f);
+    ImGui::Unindent(Px(kTreeIndent) * 3.0f);
 
     // Out of the tree: nothing above it is needed for it and nothing below
     // needs it. The overlay keeps the pointer position from the mouse
@@ -1966,11 +2014,11 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
     // The icon the same action wears on the drawing bar, so a row is
     // recognized rather than read - see kGalleryTools/kCreateActions.
     const ImVec2 iconPos = ImGui::GetCursorScreenPos();
-    ImGui::Dummy(ImVec2(18.0f, ImGui::GetFrameHeight()));
+    ImGui::Dummy(ImVec2(Px(18.0f), ImGui::GetFrameHeight()));
     DrawIcon(ImGui::GetWindowDrawList(), icon,
-              ImVec2(iconPos.x, iconPos.y + (ImGui::GetFrameHeight() - 16.0f) * 0.5f), 16.0f,
+              ImVec2(iconPos.x, iconPos.y + (ImGui::GetFrameHeight() - Px(16.0f)) * 0.5f), Px(16.0f),
               ImGui::GetColorU32(theme::kGraphite100));
-    ImGui::SameLine(30.0f);
+    ImGui::SameLine(Px(30.0f));
     ImGui::AlignTextToFramePadding();
     if (overridden) {
         ImGui::TextColored(theme::Accent(), "%s", label);
@@ -1981,7 +2029,7 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
 
     if (ImGui::Button(capturing ? Labeled(strings::kHotkeysShortcutPrompt, "shortcut_btn")
                                  : (FormatKeyComboLabel(current) + "##shortcut_btn").c_str(),
-                       ImVec2(200.0f, 0.0f))) {
+                       ImVec2(Px(200.0f), 0.0f))) {
         shortcutCaptureAction_ = capturing ? std::nullopt : std::optional(action);
     }
     if (ImGui::IsItemHovered() && !capturing) {
@@ -2043,8 +2091,8 @@ void OverlayApp::RenderEditTargetPicker(ProfileGroup group) {
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kProfilesShowing);
-    ImGui::SameLine(90.0f);
-    ImGui::SetNextItemWidth(280.0f);
+    ImGui::SameLine(Px(90.0f));
+    ImGui::SetNextItemWidth(Px(280.0f));
     if (ImGui::BeginCombo("##edittarget", nameOf(editProfile_).c_str())) {
         // Same reason as the Profiles section's own dropdown: a popup
         // nested inside a window that re-asserts itself to the front every
@@ -2139,7 +2187,7 @@ void OverlayApp::ProfileableCheckbox(const char* id, const char* label, const Pr
         const float centerY = boxMin.y + box * 0.5f;
         ImGui::GetWindowDrawList()->AddLine(ImVec2(boxMin.x + inset, centerY),
                                              ImVec2(boxMin.x + box - inset, centerY),
-                                             ImGui::GetColorU32(ImGuiCol_CheckMark), 2.0f);
+                                             ImGui::GetColorU32(ImGuiCol_CheckMark), PxWhole(2.0f));
     }
     if (overridden) {
         ImGui::PopStyleColor();
@@ -2185,7 +2233,7 @@ void OverlayApp::ProfileableInt(const char* id, const char* label, const char* u
         ImGui::TextUnformatted(label);
     }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(110.0f);
+    ImGui::SetNextItemWidth(Px(110.0f));
     // Written on every edit, as the checkbox is on every click: a profile
     // that has been typed into states the value for itself.
     if (ImGui::InputInt("##value", &value, step, step * 5)) {
@@ -2272,11 +2320,11 @@ bool EditStringList(const char* label, const char* addLabel, const char* id, std
         // The first field shares the label's line; every one after it
         // starts its own, lined up under the first.
         if (entry == 0) {
-            ImGui::SameLine(kProfileFieldX);
+            ImGui::SameLine(Px(kProfileFieldX));
         } else {
-            ImGui::SetCursorPosX(kProfileFieldX);
+            ImGui::SetCursorPosX(Px(kProfileFieldX));
         }
-        ImGui::SetNextItemWidth(kProfileFieldWidth);
+        ImGui::SetNextItemWidth(Px(kProfileFieldWidth));
         if (ImGui::InputText("##entry", text, sizeof(text))) {
             list[entry] = text;
             changed = true;
@@ -2291,9 +2339,9 @@ bool EditStringList(const char* label, const char* addLabel, const char* id, std
         }
     }
     if (list.empty()) {
-        ImGui::SameLine(kProfileFieldX);
+        ImGui::SameLine(Px(kProfileFieldX));
     } else {
-        ImGui::SetCursorPosX(kProfileFieldX);
+        ImGui::SetCursorPosX(Px(kProfileFieldX));
     }
     if (ImGui::SmallButton(addLabel)) {
         list.emplace_back();
@@ -2461,8 +2509,8 @@ bool OverlayApp::RenderProfileRow(size_t index, Profile& profile, bool& remove) 
     std::snprintf(name, sizeof(name), "%s", profile.name.c_str());
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kProfilesName);
-    ImGui::SameLine(kProfileFieldX);
-    ImGui::SetNextItemWidth(kProfileFieldWidth);
+    ImGui::SameLine(Px(kProfileFieldX));
+    ImGui::SetNextItemWidth(Px(kProfileFieldWidth));
     // Never stored empty: while the field is cleared to type a new name the
     // profile keeps its old one, and a field left empty shows it again.
     if (ImGui::InputText("##name", name, sizeof(name)) && name[0] != '\0') {
@@ -2493,8 +2541,8 @@ float OverlayApp::KeyButtonColumn() const {
                               strings::kHotkeysSilentCapture}) {
         widest = std::max(widest, ImGui::CalcTextSize(label).x);
     }
-    const auto shortcutLabel = [&widest, kShortcutLabelX](const char* label) {
-        widest = std::max(widest, kShortcutLabelX + ImGui::CalcTextSize(label).x);
+    const auto shortcutLabel = [&widest](const char* label) {
+        widest = std::max(widest, Px(kShortcutLabelX) + ImGui::CalcTextSize(label).x);
     };
     for (const GalleryTool& tool : kGalleryTools) {
         shortcutLabel(tool.name);
@@ -2506,7 +2554,7 @@ float OverlayApp::KeyButtonColumn() const {
         shortcutLabel(info.name);
     }
     shortcutLabel(strings::kMenuCheatSheet);
-    return widest + kGap;
+    return widest + Px(kGap);
 }
 
 void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
@@ -2606,14 +2654,14 @@ void RenderMarkdownSubset(std::string_view document) {
             return;
         }
         if (paragraphIsBullet) {
-            ImGui::Indent(kBulletIndent);
+            ImGui::Indent(Px(kBulletIndent));
             ImGui::Bullet();
             // Bullet() already ends flush against whatever follows it, so
             // this gap is the whole separation between the dot and the
             // word - 4px read as the two touching.
-            ImGui::SameLine(0.0f, 10.0f);
+            ImGui::SameLine(0.0f, Px(10.0f));
             ImGui::TextUnformatted(paragraph.data(), paragraph.data() + paragraph.size());
-            ImGui::Unindent(kBulletIndent);
+            ImGui::Unindent(Px(kBulletIndent));
         } else {
             ImGui::TextUnformatted(paragraph.data(), paragraph.data() + paragraph.size());
         }
@@ -2714,14 +2762,14 @@ void OverlayApp::RenderOverviewAboutPanel() {
     // opens this tab to find, and the reason the tab is worth having at all
     // when a tester needs to say which binary they were using.
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kAboutVersion);
-    ImGui::SameLine(90.0f);
+    ImGui::SameLine(Px(90.0f));
     const std::string version = build::VersionLine();
     ImGui::TextUnformatted(version.c_str());
     // Whose it is, right under what it is. This one stays in plain sight
     // rather than behind the button below: it is the app saying who owns
     // it, which is a different job from reproducing other people''s terms.
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kAboutCopyrightLabel);
-    ImGui::SameLine(90.0f);
+    ImGui::SameLine(Px(90.0f));
     ImGui::TextUnformatted(strings::kAboutCopyright);
     ImGui::Spacing();
     ImGui::Separator();
@@ -2742,7 +2790,7 @@ void OverlayApp::RenderOverviewAboutPanel() {
     ImGui::Spacing();
     for (const BuiltWithRow& row : kBuiltWith) {
         ImGui::TextUnformatted(row.component);
-        ImGui::SameLine(260.0f);
+        ImGui::SameLine(Px(260.0f));
         ImGui::TextColored(theme::kGraphite300, "%s", row.license);
     }
 
@@ -2764,7 +2812,7 @@ void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlo
     const bool capturing = hotkeyCaptureSlot_ == slot;
     if (ImGui::Button(capturing ? Labeled(strings::kHotkeysComboPrompt, "combo_btn")
                                  : (FormatKeyComboLabel(current) + "##combo_btn").c_str(),
-                       ImVec2(200.0f, 0.0f))) {
+                       ImVec2(Px(200.0f), 0.0f))) {
         // Clicking the armed row's own button cancels capture instead of
         // re-arming it. Escape does too, but only as a side effect of
         // closing the whole Overview - RenderOverview's own Escape-to-close
@@ -2887,7 +2935,7 @@ void OverlayApp::RenderConfirmDeletePopover() {
     // A delete marks the thing, which can be restored, and says so; a delete
     // of something deleted already is for good, and says that.
     const bool forGood = target.forGood || deletedIn;
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + 220.0f);
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Px(220.0f));
     if (deletedIn) {
         ImGui::Text(strings::kDeleteConfirmPromptDeletedIn, target.name.c_str());
     } else {
@@ -2966,11 +3014,11 @@ void OverlayApp::RenderActionToast() {
     const ImVec2 textSize = ImGui::CalcTextSize(actionToastText_.c_str());
     constexpr float kPaddingX = 16.0f;
     constexpr float kPaddingY = 9.0f;
-    const ImVec2 boxSize(textSize.x + kPaddingX * 2.0f, textSize.y + kPaddingY * 2.0f);
-    const ImVec2 boxMin((ImGui::GetIO().DisplaySize.x - boxSize.x) * 0.5f, 22.0f);
+    const ImVec2 boxSize(textSize.x + Px(kPaddingX) * 2.0f, textSize.y + Px(kPaddingY) * 2.0f);
+    const ImVec2 boxMin((ImGui::GetIO().DisplaySize.x - boxSize.x) * 0.5f, Px(22.0f));
     const ImVec2 boxMax(boxMin.x + boxSize.x, boxMin.y + boxSize.y);
     drawList->AddRectFilled(boxMin, boxMax, IM_COL32(18, 20, 26, 235), 999.0f);
-    drawList->AddText(ImVec2(boxMin.x + kPaddingX, boxMin.y + kPaddingY), IM_COL32(240, 242, 245, 255),
+    drawList->AddText(ImVec2(boxMin.x + Px(kPaddingX), boxMin.y + Px(kPaddingY)), IM_COL32(240, 242, 245, 255),
                        actionToastText_.c_str());
 }
 
@@ -3011,11 +3059,11 @@ void OverlayApp::RenderPersistenceWarning() {
     constexpr float kPaddingX = 16.0f;
     constexpr float kPaddingY = 9.0f;
     const ImVec2 display = ImGui::GetIO().DisplaySize;
-    const ImVec2 boxSize(textSize.x + kPaddingX * 2.0f, textSize.y + kPaddingY * 2.0f);
-    const ImVec2 boxMin((display.x - boxSize.x) * 0.5f, display.y - boxSize.y - 64.0f);
+    const ImVec2 boxSize(textSize.x + Px(kPaddingX) * 2.0f, textSize.y + Px(kPaddingY) * 2.0f);
+    const ImVec2 boxMin((display.x - boxSize.x) * 0.5f, display.y - boxSize.y - Px(64.0f));
     const ImVec2 boxMax(boxMin.x + boxSize.x, boxMin.y + boxSize.y);
-    drawList->AddRectFilled(boxMin, boxMax, IM_COL32(92, 40, 20, 235), 8.0f);
-    drawList->AddText(ImVec2(boxMin.x + kPaddingX, boxMin.y + kPaddingY), IM_COL32(255, 232, 210, 255),
+    drawList->AddRectFilled(boxMin, boxMax, IM_COL32(92, 40, 20, 235), Px(8.0f));
+    drawList->AddText(ImVec2(boxMin.x + Px(kPaddingX), boxMin.y + Px(kPaddingY)), IM_COL32(255, 232, 210, 255),
                        warning.c_str());
 }
 

@@ -27,6 +27,7 @@
 
 #include "ui/icon_draw.h"
 #include "ui/overlay_app.h"
+#include "ui/ui_scale.h"
 #include "core/canvas/item.h"
 #include "core/drawing/stroke.h"
 #include "core/drawing/stroke_mesh_cache.h"

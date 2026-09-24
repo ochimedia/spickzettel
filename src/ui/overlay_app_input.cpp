@@ -459,10 +459,14 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
     // so none sits there mostly empty. The welcome is 10 lines at 18px;
     // the two warnings 8 lines at 22px, larger because they are the two
     // things a new user must not skip.
-    const ImVec2 welcomeSize(400.0f, 214.0f);
-    const ImVec2 warningSize(300.0f, 214.0f);
-    constexpr float kGap = 24.0f;
-    constexpr float kWarningTextPx = 22.0f;
+    //
+    // All of it at the interface scale, although notes are content and
+    // content is not scaled: these are the app talking, made while it
+    // starts, and someone who reads at 150% should not have to find the
+    // text-size slider to read the note that tells them where it is.
+    const ImVec2 welcomeSize = Px(400.0f, 214.0f);
+    const ImVec2 warningSize = Px(300.0f, 214.0f);
+    const float gap = Px(24.0f);
     // A light red: a warning, readable on the note's dark backing, and not
     // the danger red of a delete button.
     constexpr uint32_t kWarningTextRGBA = 0xFF8C80FFu;
@@ -470,16 +474,16 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
     // In a row, the welcome first, centered - or, on a screen too narrow
     // for that, in a column. On one too small for either they overlap
     // rather than going off screen, which ClampRectToViewport sees to.
-    const float rowW = welcomeSize.x + 2.0f * (warningSize.x + kGap);
+    const float rowW = welcomeSize.x + 2.0f * (warningSize.x + gap);
     const bool row = rowW <= displayW * 0.95f;
     const ImVec2 group = row ? ImVec2(rowW, welcomeSize.y)
-                             : ImVec2(welcomeSize.x, welcomeSize.y + 2.0f * (warningSize.y + kGap));
+                             : ImVec2(welcomeSize.x, welcomeSize.y + 2.0f * (warningSize.y + gap));
     ImVec2 at((displayW - group.x) * 0.5f, (displayH - group.y) * 0.5f);
 
     Canvas& canvas = EnsureCanvasForNewItem();
     const auto place = [&](ImVec2 size, const char* name) -> Item* {
         const Rect rect = ClampRectToViewport(Rect{at.x, at.y, size.x, size.y}, displayW, displayH);
-        (row ? at.x : at.y) += (row ? size.x : size.y) + kGap;
+        (row ? at.x : at.y) += (row ? size.x : size.y) + gap;
         if (Manager().CreateItem(/*hasBackground=*/false, rect, name) == 0) {
             return nullptr;
         }
@@ -519,7 +523,7 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
         std::snprintf(text, sizeof(text), strings::kWelcomeBodyNoCheatSheetKey, showKey.c_str());
     }
     item.noteText = text;
-    item.noteTextSizePx = 18.0f;
+    item.noteTextSizePx = std::min(Px(18.0f), kNoteTextSizeMax);
 
     // Finished with `item` before the next note is made: that can move
     // canvas.items, and the reference with it.
@@ -532,7 +536,7 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
                                      std::pair{strings::kWelcomeAntiCheatName, strings::kWelcomeAntiCheatBody}}) {
         if (Item* warning = place(warningSize, name)) {
             warning->noteText = body;
-            warning->noteTextSizePx = kWarningTextPx;
+            warning->noteTextSizePx = std::min(Px(22.0f), kNoteTextSizeMax);
             warning->noteTextColorRGBA = kWarningTextRGBA;
         }
     }

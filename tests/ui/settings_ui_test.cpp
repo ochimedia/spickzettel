@@ -121,6 +121,51 @@ TEST_F(UiTest, PickingAMonitorPutsTheOverlayOnIt) {
     EXPECT_EQ(host_.overlayWindow.onDisplay.id, "fake-left");
 }
 
+// The interface size is a dropdown like the monitor's, and what is picked
+// in it is what the next frame is drawn at - over what Windows says.
+TEST_F(UiTest, PickingAnInterfaceSizeDrawsAtIt) {
+    host_.overlayWindow.scalePercent = 125;
+    ShowEditMode();
+    StepFrame();
+    ASSERT_FLOAT_EQ(UiScale(), 1.25f);
+    OpenOverviewUi();
+    RunUi("pick an interface size", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionappearance");
+        ctx->SetRef(ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID);
+        ctx->ItemClick("##uiscale");
+        ctx->ItemClick("**/###uiscale200");
+    });
+    StepFrame();
+
+    EXPECT_EQ(AppSettings().Stored().uiScalePercent, 200);
+    EXPECT_FLOAT_EQ(UiScale(), 2.0f);
+}
+
+// Every section, and every tab, reached by clicking at a large scale - so
+// what is drawn bigger is also where the clicks land, which a size scaled in
+// one place and not the other would break.
+TEST_F(UiTest, TheSettingsSectionsAreAllReachableAtALargeScale) {
+    host_.overlayWindow.scalePercent = 200;
+    ShowEditMode();
+    StepFrame();
+    ASSERT_FLOAT_EQ(UiScale(), 2.0f);
+    OpenOverviewUi();
+    RunUi("settings sections at 200%", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior",
+                                     "sectionhotkeys", "sectionprofiles", "sectiondebug"}) {
+            const std::string path = std::string("**/###") + section;
+            ctx->ItemClick(path.c_str());
+            ctx->Yield();
+        }
+        ctx->ItemClick("**/###overviewtababout");
+        ctx->ItemClick("**/###overviewtabcanvases");
+    });
+}
+
 TEST_F(UiTest, TogglingAnInputSettingWhileAProfileIsActiveLandsInTheProfile) {
     AppConfig config = DefaultConfig();
     Profile profile;

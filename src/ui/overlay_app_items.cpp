@@ -88,13 +88,13 @@ std::array<HandleSpec, 8> HandleSpecs(const Rect& r) {
 }
 
 HitRect HandleDrawRect(ImVec2 center) {
-    constexpr float kHalf = kHandleSizePx * 0.5f;
-    return HitRect{ImVec2(center.x - kHalf, center.y - kHalf), ImVec2(center.x + kHalf, center.y + kHalf)};
+    const float half = std::round(Px(kHandleSizePx) * 0.5f);
+    return HitRect{ImVec2(center.x - half, center.y - half), ImVec2(center.x + half, center.y + half)};
 }
 
 HitRect HandleHitRect(ImVec2 center) {
-    constexpr float kHalf = kHandleSizePx * 0.5f + kHandleHitSlopPx;
-    return HitRect{ImVec2(center.x - kHalf, center.y - kHalf), ImVec2(center.x + kHalf, center.y + kHalf)};
+    const float half = std::round(Px(kHandleSizePx) * 0.5f) + std::round(Px(kHandleHitSlopPx));
+    return HitRect{ImVec2(center.x - half, center.y - half), ImVec2(center.x + half, center.y + half)};
 }
 
 // The compass name the debug overlay prints for a handle, and the pointer
@@ -130,7 +130,7 @@ constexpr float kBarHeight = kBarButtonSize + 2.0f * kBarPad;
 
 float BarWidth(size_t buttonCount) {
     const auto n = static_cast<float>(buttonCount);
-    return n * kBarButtonSize + (n - 1.0f) * kBarButtonGap + 2.0f * kBarPad;
+    return n * Px(kBarButtonSize) + (n - 1.0f) * Px(kBarButtonGap) + 2.0f * Px(kBarPad);
 }
 
 struct BarLayout {
@@ -142,16 +142,16 @@ BarLayout LayoutBar(const Rect& bounds, float displayW, float displayH, size_t b
     const float width = BarWidth(buttonCount);
     float x = std::round(bounds.x + bounds.w * 0.5f - width * 0.5f);
     x = std::clamp(x, 0.0f, std::max(0.0f, displayW - width));
-    const auto at = [&](float y) { return BarLayout{ImVec2(x, y), ImVec2(x + width, y + kBarHeight)}; };
-    const BarLayout above = at(std::round(bounds.y) - kBarGapPx - kBarHeight);
+    const auto at = [&](float y) { return BarLayout{ImVec2(x, y), ImVec2(x + width, y + Px(kBarHeight))}; };
+    const BarLayout above = at(std::round(bounds.y) - Px(kBarGapPx) - Px(kBarHeight));
     if (above.min.y >= 0.0f) {
         return above;
     }
-    const BarLayout below = at(std::round(bounds.y + bounds.h) + kBarGapPx);
+    const BarLayout below = at(std::round(bounds.y + bounds.h) + Px(kBarGapPx));
     if (below.max.y <= displayH) {
         return below;
     }
-    return at(std::max(0.0f, std::round(bounds.y) + kBarGapPx));
+    return at(std::max(0.0f, std::round(bounds.y) + Px(kBarGapPx)));
 }
 
 HitRect BarButtonRect(const BarLayout& bar, const std::vector<ChromeButton>& buttons, ChromeButton button) {
@@ -162,9 +162,9 @@ HitRect BarButtonRect(const BarLayout& bar, const std::vector<ChromeButton>& but
         }
         slot += 1.0f;
     }
-    const float x = bar.min.x + kBarPad + slot * (kBarButtonSize + kBarButtonGap);
-    const float y = bar.min.y + kBarPad;
-    return HitRect{ImVec2(x, y), ImVec2(x + kBarButtonSize, y + kBarButtonSize)};
+    const float x = bar.min.x + Px(kBarPad) + slot * (Px(kBarButtonSize) + Px(kBarButtonGap));
+    const float y = bar.min.y + Px(kBarPad);
+    return HitRect{ImVec2(x, y), ImVec2(x + Px(kBarButtonSize), y + Px(kBarButtonSize))};
 }
 }  // namespace
 
@@ -686,7 +686,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
         const ImVec2 pMin(box.x, box.y);
         const ImVec2 pMax(box.x + box.w, box.y + box.h);
         drawList->AddRectFilled(pMin, pMax, theme::AccentU32(40));
-        drawList->AddRect(pMin, pMax, theme::AccentU32(255), 0.0f, 2.0f, ImDrawFlags_None);
+        drawList->AddRect(pMin, pMax, theme::AccentU32(255), 0.0f, PxWhole(2.0f), ImDrawFlags_None);
     }
     // Faded back while a snippet is being made, so the screen it is made
     // from shows through what sits on it - faint rather than gone, so where
@@ -876,7 +876,7 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, const Can
     // only when the overlay is put away, so this is what says in edit mode
     // which snippets will stay behind.
     if (item.pinned || isFrontmost || Cfg().showItemBorders || highlighted) {
-        const float thickness = highlighted ? 3.0f : 2.0f;
+        const float thickness = PxWhole(highlighted ? 3.0f : 2.0f);
         const float half = thickness * 0.5f;
         const ImVec2 borderMin(pMin.x + half, pMin.y + half);
         const ImVec2 borderMax(pMax.x - half, pMax.y - half);
@@ -899,13 +899,13 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, const Can
 void OverlayApp::PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing) {
     const ImVec2 pMin(std::round(item.rect.x), std::round(item.rect.y));
     const ImVec2 pMax(std::round(item.rect.x + item.rect.w), std::round(item.rect.y + item.rect.h));
-    const float outline = drawing ? 3.0f : 2.0f;
+    const float outline = PxWhole(drawing ? 3.0f : 2.0f);
     drawList->AddRect(ImVec2(pMin.x + outline * 0.5f, pMin.y + outline * 0.5f),
                       ImVec2(pMax.x - outline * 0.5f, pMax.y - outline * 0.5f), theme::AccentU32(), 0.0f, outline);
     if (drawing) {
-        constexpr float kHaloGap = 4.0f;
-        drawList->AddRect(ImVec2(pMin.x - kHaloGap, pMin.y - kHaloGap), ImVec2(pMax.x + kHaloGap, pMax.y + kHaloGap),
-                          theme::AccentU32(120), 0.0f, 2.0f);
+        const float haloGap = PxWhole(4.0f);
+        drawList->AddRect(ImVec2(pMin.x - haloGap, pMin.y - haloGap), ImVec2(pMax.x + haloGap, pMax.y + haloGap),
+                          theme::AccentU32(120), 0.0f, PxWhole(2.0f));
     }
     if (item.isFullscreen) {
         return;
@@ -913,8 +913,9 @@ void OverlayApp::PaintSelectionOutline(ImDrawList* drawList, const Item& item, b
     for (const HandleSpec& h : HandleSpecs(item.rect)) {
         const HitRect rect = HandleDrawRect(h.center);
         drawList->AddRectFilled(rect.min, rect.max, ImGui::GetColorU32(theme::kWhite));
-        drawList->AddRect(ImVec2(rect.min.x + 1.0f, rect.min.y + 1.0f), ImVec2(rect.max.x - 1.0f, rect.max.y - 1.0f),
-                          theme::AccentU32(), 0.0f, 2.0f);
+        const float edge = PxWhole(2.0f);
+        drawList->AddRect(ImVec2(rect.min.x + edge * 0.5f, rect.min.y + edge * 0.5f),
+                          ImVec2(rect.max.x - edge * 0.5f, rect.max.y - edge * 0.5f), theme::AccentU32(), 0.0f, edge);
     }
 }
 
@@ -977,9 +978,9 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
             // The color itself, as a swatch, ringed in white so a dark
             // color reads on the pill.
             const ImVec2 center((rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f);
-            constexpr float kSwatchRadius = 7.0f;
-            drawList->AddCircleFilled(center, kSwatchRadius, ToImColor(drawColorRGBA_));
-            drawList->AddCircle(center, kSwatchRadius, ImGui::GetColorU32(theme::kWhite), 0, 1.5f);
+            const float swatchRadius = Px(7.0f);
+            drawList->AddCircleFilled(center, swatchRadius, ToImColor(drawColorRGBA_));
+            drawList->AddCircle(center, swatchRadius, ImGui::GetColorU32(theme::kWhite), 0, Px(1.5f));
             if (hovered) {
                 ImGui::SetTooltip("%s", strings::kBarColorTip);
             }
@@ -1039,9 +1040,9 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         if (icon == nullptr) {
             continue;
         }
-        constexpr float kIconSize = 13.0f;
-        const ImVec2 iconPos((rect.min.x + rect.max.x - kIconSize) * 0.5f, (rect.min.y + rect.max.y - kIconSize) * 0.5f);
-        DrawIcon(drawList, *icon, iconPos, kIconSize, ImGui::GetColorU32(active ? theme::AccentInk() : theme::kWhite));
+        const float iconSize = Px(13.0f);
+        const ImVec2 iconPos((rect.min.x + rect.max.x - iconSize) * 0.5f, (rect.min.y + rect.max.y - iconSize) * 0.5f);
+        DrawIcon(drawList, *icon, iconPos, iconSize, ImGui::GetColorU32(active ? theme::AccentInk() : theme::kWhite));
         if (hovered) {
             ImGui::SetTooltip("%s", tooltip);
         }
@@ -1111,7 +1112,7 @@ void OverlayApp::ActivateBarButton(ChromeButton button) {
             // sit near the screen's right edge.
             if (const std::optional<ImVec2> center = SelectionBarButtonCenter(ChromeButton::More)) {
                 itemPropertiesPopoverAnchor_ =
-                    ImVec2(center->x + kBarButtonSize * 0.5f, center->y + kBarButtonSize * 0.5f + 6.0f);
+                    ImVec2(center->x + Px(kBarButtonSize) * 0.5f, center->y + Px(kBarButtonSize) * 0.5f + Px(6.0f));
             }
             break;
         }
@@ -1210,10 +1211,11 @@ void OverlayApp::RenderNoteEditor(Item& item, ImVec2 pMin, ImVec2 pMax) {
     // typed matches what DrawItemContent will paint the instant editing
     // ends - same reason theme::kNoteTextPad is shared between the two.
     // PushFont(nullptr, size) keeps the current font and only changes its
-    // size; the value is a *base* size, which is what noteTextSizePx
-    // already is (no global font scaling is in play here - see ImGui's own
-    // warning against passing GetFontSize() back in).
-    ImGui::PushFont(nullptr, item.noteTextSizePx);
+    // size. The value is a *base* size, which ImGui multiplies by the
+    // interface scale - and a note's text is content, drawn at its own
+    // size whatever the interface scale (DrawItemContent passes it to
+    // AddText as it is), so the scale is divided back out here.
+    ImGui::PushFont(nullptr, item.noteTextSizePx / UiScale());
     ImGui::PushStyleColor(ImGuiCol_Text, ToImColor(item.noteTextColorRGBA));
     if (noteEditJustFocused_) {
         ImGui::SetKeyboardFocusHere();
@@ -1283,18 +1285,18 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         return;
     }
 
-    constexpr float kChipSize = 56.0f;
-    constexpr float kGap = 8.0f;
-    constexpr float kBottomMargin = 16.0f;
+    const float chipSize = Px(56.0f);
+    const float gap = Px(8.0f);
+    const float bottomMargin = Px(16.0f);
     const float totalW =
-        static_cast<float>(minimizedIds.size()) * kChipSize + static_cast<float>(minimizedIds.size() - 1) * kGap;
+        static_cast<float>(minimizedIds.size()) * chipSize + static_cast<float>(minimizedIds.size() - 1) * gap;
     // Above whatever is out on the bottom edge - the canvas bar, a strip
     // docked there - rather than under it.
-    const float chipsBottom = std::min(displayH - kBottomMargin, bottomPanelsTop_ - kGap);
-    const ImVec2 dockMin((displayW - totalW) * 0.5f, chipsBottom - kChipSize);
+    const float chipsBottom = std::min(displayH - bottomMargin, bottomPanelsTop_ - gap);
+    const ImVec2 dockMin((displayW - totalW) * 0.5f, chipsBottom - chipSize);
 
     ImGui::SetNextWindowPos(dockMin);
-    ImGui::SetNextWindowSize(ImVec2(totalW, kChipSize));
+    ImGui::SetNextWindowSize(ImVec2(totalW, chipSize));
     ImGui::Begin("##dock", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
@@ -1313,9 +1315,9 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         if (item == nullptr) {
             continue;
         }
-        const ImVec2 chipMin(dockMin.x + static_cast<float>(i) * (kChipSize + kGap), dockMin.y);
-        const ImVec2 chipMax(chipMin.x + kChipSize, chipMin.y + kChipSize);
-        dl->AddRectFilled(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBg), theme::kRadiusSm);
+        const ImVec2 chipMin(dockMin.x + static_cast<float>(i) * (chipSize + gap), dockMin.y);
+        const ImVec2 chipMax(chipMin.x + chipSize, chipMin.y + chipSize);
+        dl->AddRectFilled(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBg), Px(theme::kRadiusSm));
 
         // The item's own content, letterboxed/centered to preserve its
         // aspect ratio within the square tile (same fitting math as a
@@ -1324,7 +1326,7 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         // falls back to filling the whole tile for a not-yet-sized item
         // (nativeW/H still 0).
         const float aspect = (item->nativeW > 0.0f && item->nativeH > 0.0f) ? item->nativeW / item->nativeH : 1.0f;
-        const Rect fitted = FitAspectRatioIntoViewport(aspect, kChipSize, kChipSize);
+        const Rect fitted = FitAspectRatioIntoViewport(aspect, chipSize, chipSize);
         const ImVec2 contentMin(chipMin.x + fitted.x, chipMin.y + fitted.y);
         const ImVec2 contentMax(contentMin.x + fitted.w, contentMin.y + fitted.h);
         dl->PushClipRect(chipMin, chipMax, true);
@@ -1336,12 +1338,12 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
                          /*skipNoteText=*/false, CanvasMeshSlot(), PictureSampling());
         dl->PopClipRect();
 
-        dl->AddRect(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), theme::kRadiusSm);
+        dl->AddRect(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), Px(theme::kRadiusSm));
 
         char btnId[32];
         std::snprintf(btnId, sizeof(btnId), "##dockchip%llu", static_cast<unsigned long long>(item->id));
         ImGui::SetCursorScreenPos(chipMin);
-        if (ImGui::InvisibleButton(btnId, ImVec2(kChipSize, kChipSize))) {
+        if (ImGui::InvisibleButton(btnId, ImVec2(chipSize, chipSize))) {
             restoreId = item->id;
         }
         if (ImGui::IsItemHovered()) {

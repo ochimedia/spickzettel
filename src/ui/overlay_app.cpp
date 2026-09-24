@@ -127,10 +127,10 @@ void ApplyAccentToStyle(ImGuiStyle& style) {
 // Sets up ImGui's global style/colors for the app's dark "graphite +
 // accent orange" material look, in place of ImGui's own
 // built-in dark theme (flat opaque gray panels, square corners, no accent
-// color). Idempotent-by-caller-contract (OnFrame only calls this once,
-// guarded by styleApplied_) rather than idempotent itself - it just
-// stomps every color/style var each time, so calling it twice would be
-// harmless but wasteful, not wrong.
+// color), at the interface scale `scale` (see UiScale). OnFrame calls it
+// on the first frame and again whenever the scale changes: it starts from
+// a fresh style every time, because ImGuiStyle::ScaleAllSizes multiplies
+// what is there, and a style scaled twice would be scaled by the product.
 //
 // Deliberately NOT called from AttachTo: ImGui::GetStyle() dereferences
 // the current context, and that context isn't created until the platform
@@ -139,8 +139,13 @@ void ApplyAccentToStyle(ImGuiStyle& style) {
 // happens well after AttachTo, on first hotkey-toggle-open. OnFrame is
 // only ever invoked as an ImGui frame callback, so a context is always
 // live by the time it runs.
-void ApplySpickzettelStyle() {
+void ApplySpickzettelStyle(float scale) {
     ImGuiStyle& style = ImGui::GetStyle();
+    // The base font size is the font's, set when it was loaded, and not a
+    // matter of style - a fresh ImGuiStyle would forget it.
+    const float fontSizeBase = style.FontSizeBase;
+    style = ImGuiStyle();
+    style.FontSizeBase = fontSizeBase;
     style.WindowRounding = theme::kRadiusLg;
     style.PopupRounding = theme::kRadiusLg;
     style.FrameRounding = theme::kRadiusSm;
@@ -197,6 +202,11 @@ void ApplySpickzettelStyle() {
     colors[ImGuiCol_TitleBg] = theme::kPanelBg;
     colors[ImGuiCol_TitleBgActive] = theme::kPanelBg;
     ApplyAccentToStyle(style);
+
+    // Every size above, and the text. ScaleAllSizes rounds each one down to
+    // a whole pixel, so a 1px border stays 1px until the scale reaches 200%.
+    style.ScaleAllSizes(scale);
+    style.FontScaleDpi = scale;
 }
 
 // An icon-only square/circle button - the .tb-btn / .icon-btn equivalent
@@ -250,7 +260,7 @@ void DrawDebugOverlay(ImDrawList* drawList, const ImGuiIO& io, const CanvasManag
                    canvases.CurrentOrNull() ? canvases.CurrentOrNull()->name.c_str() : strings::kHotkeyNone,
                    canvases.CurrentOrNull() ? canvases.CurrentOrNull()->items.size() : size_t{0},
                    io.MousePos.x, io.MousePos.y);
-    drawList->AddText(ImVec2(16, 16), IM_COL32(0, 255, 255, 255), debugLine);
+    drawList->AddText(Px(16.0f, 16.0f), IM_COL32(0, 255, 255, 255), debugLine);
     // A live readout of exactly which resize handle (if any) the mouse is
     // over right now - see debugHoveredResizeHandle_'s own doc comment for
     // why this exists: a screenshot alone can't tell "covered by a handle
@@ -259,7 +269,8 @@ void DrawDebugOverlay(ImDrawList* drawList, const ImGuiIO& io, const CanvasManag
     char handleLine[96];
     std::snprintf(handleLine, sizeof(handleLine), "resize handle: %s",
                    hoveredResizeHandle.empty() ? "none" : hoveredResizeHandle.c_str());
-    drawList->AddText(ImVec2(16, 32), IM_COL32(0, 255, 255, 255), handleLine);
+    drawList->AddText(ImVec2(Px(16.0f), Px(16.0f) + ImGui::GetTextLineHeight()), IM_COL32(0, 255, 255, 255),
+                       handleLine);
 }
 
 }  // namespace
@@ -443,7 +454,7 @@ const char* Labeled(const char* text, const char* id) {
 // Item-pill-sized icon button (28x28, true circle, 13px icon), reused by
 // the Overview's per-tile delete button too.
 bool PillIconButton(const char* strId, const Icon& icon, bool active) {
-    return IconButton(strId, icon, active, 28.0f, 13.0f, theme::kRadiusPill);
+    return IconButton(strId, icon, active, Px(kPillButtonSize), Px(13.0f), theme::kRadiusPill);
 }
 
 // The color button where it has to say whether it is *on*: the pill
@@ -457,12 +468,12 @@ bool PillIconButton(const char* strId, const Icon& icon, bool active) {
 bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
     // The same three colors and the same Button underneath as IconButton,
     // so the two kinds of tile hover and press alike.
-    active = active || PressLandsThisFrame(strId, ImVec2(28.0f, 28.0f));
+    active = active || PressLandsThisFrame(strId, Px(kPillButtonSize, kPillButtonSize));
     ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::Accent() : theme::kHoverWash);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::AccentHover());
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme::kRadiusPill);
-    const bool pressed = ImGui::Button(strId, ImVec2(28.0f, 28.0f));
+    const bool pressed = ImGui::Button(strId, Px(kPillButtonSize, kPillButtonSize));
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     const ImVec2 minPt = ImGui::GetItemRectMin();
@@ -477,12 +488,14 @@ bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
     // it stayed fully bright while the pill behind it and every icon
     // beside it went dim - which left the one tile whose state could not
     // be read as the one tile that had to say it.
-    dl->AddCircleFilled(center, kSwatchRadius, ImGui::GetColorU32(ImGui::ColorConvertU32ToFloat4(ToImColor(colorRGBA))));
+    dl->AddCircleFilled(center, Px(kSwatchRadius),
+                        ImGui::GetColorU32(ImGui::ColorConvertU32ToFloat4(ToImColor(colorRGBA))));
     // Ringed in whichever ink the icons beside it are using, so a swatch
     // close to the color of the pill behind it still has an edge -
     // GetColorU32 so the ring dims with the tile when the row grays it
     // out, the same reasoning as IconButton's own icon color.
-    dl->AddCircle(center, kSwatchRadius, ImGui::GetColorU32(active ? theme::AccentInk() : theme::kWhite), 0, 1.5f);
+    dl->AddCircle(center, Px(kSwatchRadius), ImGui::GetColorU32(active ? theme::AccentInk() : theme::kWhite), 0,
+                  Px(1.5f));
     return pressed;
 }
 
@@ -495,8 +508,8 @@ bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
 // the color, so there is no separate "on" background the way an icon
 // button has.
 bool PillColorButton(const char* strId, uint32_t colorRGBA, bool highlighted) {
-    constexpr float kSize = 28.0f;
-    const bool pressed = ImGui::InvisibleButton(strId, ImVec2(kSize, kSize));
+    const float size = Px(kPillButtonSize);
+    const bool pressed = ImGui::InvisibleButton(strId, ImVec2(size, size));
     const ImVec2 minPt = ImGui::GetItemRectMin();
     const ImVec2 maxPt = ImGui::GetItemRectMax();
     const ImVec2 center((minPt.x + maxPt.x) * 0.5f, (minPt.y + maxPt.y) * 0.5f);
@@ -504,14 +517,14 @@ bool PillColorButton(const char* strId, uint32_t colorRGBA, bool highlighted) {
     const auto g = static_cast<int>((colorRGBA >> 16) & 0xFF);
     const auto b = static_cast<int>((colorRGBA >> 8) & 0xFF);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddCircleFilled(center, kSize * 0.5f - 3.0f, IM_COL32(r, g, b, 255));
+    dl->AddCircleFilled(center, size * 0.5f - Px(3.0f), IM_COL32(r, g, b, 255));
     // A permanent hairline rim, not just the hover/selected ring below.
     // Without it a dark swatch on a dark backing has no edge at all and
     // reads as a hole rather than as a color - which is what black looked
     // like the moment it was added to the palette.
-    dl->AddCircle(center, kSize * 0.5f - 3.0f, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0, 1.0f);
+    dl->AddCircle(center, size * 0.5f - Px(3.0f), ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0, 1.0f);
     if (highlighted || ImGui::IsItemHovered()) {
-        dl->AddCircle(center, kSize * 0.5f - 1.0f, ImGui::ColorConvertFloat4ToU32(theme::kWhite), 0, 1.5f);
+        dl->AddCircle(center, size * 0.5f - Px(1.0f), ImGui::ColorConvertFloat4ToU32(theme::kWhite), 0, Px(1.5f));
     }
     return pressed;
 }
@@ -524,13 +537,14 @@ bool DangerIconButton(const char* strId, const Icon& icon) {
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::kDanger);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::kDanger);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme::kRadiusPill);
-    const bool pressed = ImGui::Button(strId, ImVec2(28.0f, 28.0f));
+    const bool pressed = ImGui::Button(strId, Px(kPillButtonSize, kPillButtonSize));
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     const ImVec2 minPt = ImGui::GetItemRectMin();
     const ImVec2 maxPt = ImGui::GetItemRectMax();
-    const ImVec2 iconPos((minPt.x + maxPt.x - 13.0f) * 0.5f, (minPt.y + maxPt.y - 13.0f) * 0.5f);
-    DrawIcon(ImGui::GetWindowDrawList(), icon, iconPos, 13.0f, ImGui::GetColorU32(theme::kWhite));
+    const float iconSize = Px(13.0f);
+    const ImVec2 iconPos((minPt.x + maxPt.x - iconSize) * 0.5f, (minPt.y + maxPt.y - iconSize) * 0.5f);
+    DrawIcon(ImGui::GetWindowDrawList(), icon, iconPos, iconSize, ImGui::GetColorU32(theme::kWhite));
     return pressed;
 }
 
@@ -1099,8 +1113,20 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // own early return - closes the frame out.
     const MeshCacheFrame meshCacheFrame(strokeMeshCache_, previewMeshCache_);
 
+    // The interface scale, before anything is drawn, so a whole frame is
+    // drawn at one scale. The setting, or Windows' own for the display the
+    // overlay is on - asked every frame, so the overlay follows a change
+    // made in Windows while it is up.
+    {
+        const int percent = Cfg().uiScalePercent != 0 ? Cfg().uiScalePercent
+                                                        : (window_ != nullptr ? window_->ScalePercent() : 100);
+        if (!styleApplied_ || percent != appliedUiScalePercent_) {
+            SetUiScale(static_cast<float>(percent) / 100.0f);
+            ApplySpickzettelStyle(UiScale());
+            appliedUiScalePercent_ = percent;
+        }
+    }
     if (!styleApplied_) {
-        ApplySpickzettelStyle();
         // No imgui.ini. ImGui writes one next to the working directory to
         // remember window positions and sizes, and this app has nothing to
         // remember: every window it opens - the canvas layer, each item's
@@ -1705,31 +1731,31 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
     }
 
     // Number prefix, label, then the ON/OFF column clear of the longest label.
-    const float statusX = kOriginX + kPad + 26.0f + widest + 16.0f;
+    const float statusX = Px(kOriginX) + Px(kPad) + Px(26.0f) + widest + Px(16.0f);
     // Wide enough for the header line too - it carries the pointer
     // diagnostics and is easily longer than the rows.
-    const float panelW = std::max({statusX + 34.0f + kPad - kOriginX,
-                                    ImGui::CalcTextSize(fps).x + kPad * 2.0f,
-                                    ImGui::CalcTextSize(counter).x + kPad * 2.0f,
-                                    ImGui::CalcTextSize(foreground).x + kPad * 2.0f,
-                                    ImGui::CalcTextSize(lastKey).x + kPad * 2.0f});
+    const float panelW = std::max({statusX + Px(34.0f) + Px(kPad) - Px(kOriginX),
+                                    ImGui::CalcTextSize(fps).x + Px(kPad) * 2.0f,
+                                    ImGui::CalcTextSize(counter).x + Px(kPad) * 2.0f,
+                                    ImGui::CalcTextSize(foreground).x + Px(kPad) * 2.0f,
+                                    ImGui::CalcTextSize(lastKey).x + Px(kPad) * 2.0f});
     // One extra line for the frame rate: "the overlay feels slower with the
     // grab on" is a measurement, not an impression, and this is where it can
     // be read without leaving the situation that caused it. Then one for the
     // counter readout and one for the last key, on the frames there are any.
     const int extraLines = 1 + (counter[0] != '\0' ? 1 : 0) + (foreground[0] != '\0' ? 1 : 0) +
                           (lastKey[0] != '\0' ? 1 : 0);
-    const float panelH = kPad * 2.0f + kLineHeight * static_cast<float>(rowCount + extraLines);
+    const float panelH = Px(kPad) * 2.0f + Px(kLineHeight) * static_cast<float>(rowCount + extraLines);
 
-    drawList->AddRectFilled(ImVec2(kOriginX, kOriginY), ImVec2(kOriginX + panelW, kOriginY + panelH),
-                             IM_COL32(12, 15, 20, 205), 6.0f);
-    drawList->AddRect(ImVec2(kOriginX, kOriginY), ImVec2(kOriginX + panelW, kOriginY + panelH),
-                       IM_COL32(255, 255, 255, 40), 6.0f);
+    const ImVec2 panelMin = Px(kOriginX, kOriginY);
+    const ImVec2 panelMax(panelMin.x + panelW, panelMin.y + panelH);
+    drawList->AddRectFilled(panelMin, panelMax, IM_COL32(12, 15, 20, 205), Px(6.0f));
+    drawList->AddRect(panelMin, panelMax, IM_COL32(255, 255, 255, 40), Px(6.0f));
 
-    drawList->AddText(ImVec2(kOriginX + kPad, kOriginY + kPad), IM_COL32(150, 158, 172, 255), fps);
+    drawList->AddText(ImVec2(Px(kOriginX) + Px(kPad), Px(kOriginY) + Px(kPad)), IM_COL32(150, 158, 172, 255), fps);
 
     for (int i = 0; i < rowCount; ++i) {
-        const float y = kOriginY + kPad + kLineHeight * static_cast<float>(i + 1);
+        const float y = Px(kOriginY) + Px(kPad) + Px(kLineHeight) * static_cast<float>(i + 1);
         // A row whose prerequisite isn't met is dimmed and reads "--" rather
         // than ON/OFF: its stored value is still there and still what it will
         // do once the row above allows it, but saying ON about something that
@@ -1738,9 +1764,9 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
         const bool available = InputOptionAvailable(i);
         char key[8];
         std::snprintf(key, sizeof(key), "%d", i + 1);
-        drawList->AddText(ImVec2(kOriginX + kPad, y),
+        drawList->AddText(ImVec2(Px(kOriginX) + Px(kPad), y),
                            available ? IM_COL32(150, 158, 172, 255) : IM_COL32(96, 102, 114, 255), key);
-        drawList->AddText(ImVec2(kOriginX + kPad + 20.0f, y),
+        drawList->AddText(ImVec2(Px(kOriginX) + Px(kPad) + Px(20.0f), y),
                            available ? IM_COL32(226, 230, 238, 255) : IM_COL32(120, 126, 138, 255),
                            kInputOptionRows[i].label);
 
@@ -1755,7 +1781,7 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
 
     float footerLine = static_cast<float>(rowCount + 1);
     if (counter[0] != '\0') {
-        drawList->AddText(ImVec2(kOriginX + kPad, kOriginY + kPad + kLineHeight * footerLine),
+        drawList->AddText(ImVec2(Px(kOriginX) + Px(kPad), Px(kOriginY) + Px(kPad) + Px(kLineHeight) * footerLine),
                            IM_COL32(150, 158, 172, 255), counter);
         footerLine += 1.0f;
     }
@@ -1763,12 +1789,12 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
         // Brighter when it is the answer: above us, nothing else in this
         // panel can be trusted to mean anything.
         const bool above = settings_.UnderlyingApplication().integrity == platform::ForegroundIntegrity::Above;
-        drawList->AddText(ImVec2(kOriginX + kPad, kOriginY + kPad + kLineHeight * footerLine),
+        drawList->AddText(ImVec2(Px(kOriginX) + Px(kPad), Px(kOriginY) + Px(kPad) + Px(kLineHeight) * footerLine),
                            above ? IM_COL32(232, 100, 100, 255) : IM_COL32(150, 158, 172, 255), foreground);
         footerLine += 1.0f;
     }
     if (lastKey[0] != '\0') {
-        drawList->AddText(ImVec2(kOriginX + kPad, kOriginY + kPad + kLineHeight * footerLine),
+        drawList->AddText(ImVec2(Px(kOriginX) + Px(kPad), Px(kOriginY) + Px(kPad) + Px(kLineHeight) * footerLine),
                            IM_COL32(150, 158, 172, 255), lastKey);
     }
 }
@@ -1843,8 +1869,8 @@ void OverlayApp::DrawLibraryTreeHud(ImDrawList* drawList, float displayW, float 
     }
 
     // As many lines as the screen has room for; the rest is a count.
-    const float roomForLines = displayH - kMargin * 2.0f - kPad * 2.0f - kLineHeight;
-    const int maxLines = std::max(1, static_cast<int>(roomForLines / kLineHeight));
+    const float roomForLines = displayH - Px(kMargin) * 2.0f - Px(kPad) * 2.0f - Px(kLineHeight);
+    const int maxLines = std::max(1, static_cast<int>(roomForLines / Px(kLineHeight)));
     const int total = static_cast<int>(libraryTreeLines_.size());
     const bool overflow = total > maxLines;
     const int shown = overflow ? maxLines - 1 : total;
@@ -1857,32 +1883,34 @@ void OverlayApp::DrawLibraryTreeHud(ImDrawList* drawList, float displayW, float 
     float widest = ImGui::CalcTextSize(header).x;
     for (int i = 0; i < shown; ++i) {
         const LibraryTreeLine& line = libraryTreeLines_[static_cast<size_t>(i)];
-        widest = std::max(widest, kIndent * static_cast<float>(line.depth) + ImGui::CalcTextSize(line.name.c_str()).x +
+        widest = std::max(widest, Px(kIndent) * static_cast<float>(line.depth) +
+                                      ImGui::CalcTextSize(line.name.c_str()).x +
                                       (line.isDirectory ? ImGui::CalcTextSize("/").x : 0.0f));
     }
     widest = std::max(widest, ImGui::CalcTextSize(footer).x);
-    const float panelW = std::min(widest + kPad * 2.0f, displayW * 0.5f);
-    const float panelH = kPad * 2.0f + kLineHeight * static_cast<float>(1 + shown + (overflow ? 1 : 0));
-    const float originX = displayW - kMargin - panelW;
-    const float originY = kMargin;
+    const float panelW = std::min(widest + Px(kPad) * 2.0f, displayW * 0.5f);
+    const float panelH = Px(kPad) * 2.0f + Px(kLineHeight) * static_cast<float>(1 + shown + (overflow ? 1 : 0));
+    const float originX = displayW - Px(kMargin) - panelW;
+    const float originY = Px(kMargin);
 
     drawList->AddRectFilled(ImVec2(originX, originY), ImVec2(originX + panelW, originY + panelH),
-                             IM_COL32(12, 15, 20, 205), 6.0f);
+                             IM_COL32(12, 15, 20, 205), Px(6.0f));
     drawList->AddRect(ImVec2(originX, originY), ImVec2(originX + panelW, originY + panelH),
-                       IM_COL32(255, 255, 255, 40), 6.0f);
+                       IM_COL32(255, 255, 255, 40), Px(6.0f));
     // Long names are cut at the panel's edge rather than spilling over it.
     drawList->PushClipRect(ImVec2(originX, originY), ImVec2(originX + panelW, originY + panelH), true);
-    drawList->AddText(ImVec2(originX + kPad, originY + kPad), kMuted, header);
+    drawList->AddText(ImVec2(originX + Px(kPad), originY + Px(kPad)), kMuted, header);
     for (int i = 0; i < shown; ++i) {
         const LibraryTreeLine& line = libraryTreeLines_[static_cast<size_t>(i)];
-        const float y = originY + kPad + kLineHeight * static_cast<float>(i + 1);
-        const float x = originX + kPad + kIndent * static_cast<float>(line.depth);
+        const float y = originY + Px(kPad) + Px(kLineHeight) * static_cast<float>(i + 1);
+        const float x = originX + Px(kPad) + Px(kIndent) * static_cast<float>(line.depth);
         const std::string label = line.isDirectory ? line.name + "/" : line.name;
         drawList->AddText(ImVec2(x, y), line.isDirectory ? kDirectory : kFile, label.c_str());
     }
     if (overflow) {
-        drawList->AddText(ImVec2(originX + kPad, originY + kPad + kLineHeight * static_cast<float>(shown + 1)),
-                           kMuted, footer);
+        drawList->AddText(
+            ImVec2(originX + Px(kPad), originY + Px(kPad) + Px(kLineHeight) * static_cast<float>(shown + 1)), kMuted,
+            footer);
     }
     drawList->PopClipRect();
 }
@@ -2061,14 +2089,14 @@ void OverlayApp::RenderToolModifierBadge() {
     // Down and to the right of the hotspot, clear of the pen glyph and the
     // brush-size dot, on a disc of the panel color so it reads over any
     // snippet.
-    constexpr float kOffset = 18.0f;
-    constexpr float kSize = 22.0f;
-    constexpr float kInset = 4.0f;
-    const ImVec2 min(io.MousePos.x + kOffset, io.MousePos.y + kOffset);
+    const float offset = Px(18.0f);
+    const float size = Px(22.0f);
+    const float inset = Px(4.0f);
+    const ImVec2 min(io.MousePos.x + offset, io.MousePos.y + offset);
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    dl->AddRectFilled(min, ImVec2(min.x + kSize, min.y + kSize), ImGui::ColorConvertFloat4ToU32(theme::kPanelBg),
-                      theme::kRadiusSm);
-    DrawIcon(dl, *icon, ImVec2(min.x + kInset, min.y + kInset), kSize - kInset * 2.0f,
+    dl->AddRectFilled(min, ImVec2(min.x + size, min.y + size), ImGui::ColorConvertFloat4ToU32(theme::kPanelBg),
+                      Px(theme::kRadiusSm));
+    DrawIcon(dl, *icon, ImVec2(min.x + inset, min.y + inset), size - inset * 2.0f,
              ImGui::ColorConvertFloat4ToU32(theme::kWhite), 1.5f);
 }
 
@@ -2109,6 +2137,10 @@ void OverlayApp::DrawSoftwareCursor() const {
     constexpr ImU32 kFill = IM_COL32(255, 255, 255, 255);
     constexpr ImU32 kEdge = IM_COL32(20, 24, 32, 235);
     constexpr ImU32 kShadow = IM_COL32(0, 0, 0, 70);
+    // At Windows' scale for the display rather than the interface scale:
+    // this stands in for the system pointer, which Windows draws larger on
+    // a scaled display whatever this app's own setting says.
+    const float scale = window_ != nullptr ? static_cast<float>(window_->ScalePercent()) / 100.0f : 1.0f;
 
     const platform::CursorShape shape = WantedPointerShape();
 
@@ -2119,7 +2151,7 @@ void OverlayApp::DrawSoftwareCursor() const {
         // on. Same two-pass outline and fill as the arrow below, and the
         // same reason: it has to stay legible over a bright game and a
         // dark one alike.
-        const auto place = [&at](platform::Vec2 p) { return ImVec2(at.x + p.x, at.y + p.y); };
+        const auto place = [&at, scale](platform::Vec2 p) { return ImVec2(at.x + p.x * scale, at.y + p.y * scale); };
         ImVec2 nibShape[std::size(platform::pen_glyph::kNib)];
         ImVec2 body[std::size(platform::pen_glyph::kBody)];
         ImVec2 shadow[std::size(platform::pen_glyph::kBody)];
@@ -2128,15 +2160,15 @@ void OverlayApp::DrawSoftwareCursor() const {
         }
         for (size_t i = 0; i < std::size(body); ++i) {
             body[i] = place(platform::pen_glyph::kBody[i]);
-            shadow[i] = ImVec2(body[i].x + 1.5f, body[i].y + 1.5f);
+            shadow[i] = ImVec2(body[i].x + 1.5f * scale, body[i].y + 1.5f * scale);
         }
-        constexpr float kOutline = platform::pen_glyph::kOutlineWidth;
+        const float outline = platform::pen_glyph::kOutlineWidth * scale;
         drawList->AddConvexPolyFilled(shadow, static_cast<int>(std::size(shadow)), kShadow);
         drawList->AddConvexPolyFilled(body, static_cast<int>(std::size(body)), kFill);
         drawList->AddConvexPolyFilled(nibShape, static_cast<int>(std::size(nibShape)), kFill);
-        drawList->AddPolyline(body, static_cast<int>(std::size(body)), kEdge, ImDrawFlags_Closed, kOutline);
+        drawList->AddPolyline(body, static_cast<int>(std::size(body)), kEdge, ImDrawFlags_Closed, outline);
         drawList->AddPolyline(nibShape, static_cast<int>(std::size(nibShape)), kEdge, ImDrawFlags_Closed,
-                              kOutline);
+                              outline);
         return;
     }
 
@@ -2144,17 +2176,17 @@ void OverlayApp::DrawSoftwareCursor() const {
         // A crosshair for the tools where the exact point matters and an
         // arrow's body would sit on top of it. The gap in the middle leaves
         // the target pixel itself visible.
-        constexpr float kArm = 11.0f;
-        constexpr float kGap = 3.0f;
+        const float arm = 11.0f * scale;
+        const float gap = 3.0f * scale;
         const ImVec2 spans[4][2] = {
-            {ImVec2(at.x - kArm, at.y), ImVec2(at.x - kGap, at.y)},
-            {ImVec2(at.x + kGap, at.y), ImVec2(at.x + kArm, at.y)},
-            {ImVec2(at.x, at.y - kArm), ImVec2(at.x, at.y - kGap)},
-            {ImVec2(at.x, at.y + kGap), ImVec2(at.x, at.y + kArm)},
+            {ImVec2(at.x - arm, at.y), ImVec2(at.x - gap, at.y)},
+            {ImVec2(at.x + gap, at.y), ImVec2(at.x + arm, at.y)},
+            {ImVec2(at.x, at.y - arm), ImVec2(at.x, at.y - gap)},
+            {ImVec2(at.x, at.y + gap), ImVec2(at.x, at.y + arm)},
         };
         for (const auto& span : spans) {
-            drawList->AddLine(span[0], span[1], kEdge, 3.0f);
-            drawList->AddLine(span[0], span[1], kFill, 1.0f);
+            drawList->AddLine(span[0], span[1], kEdge, 3.0f * scale);
+            drawList->AddLine(span[0], span[1], kFill, scale);
         }
         return;
     }
@@ -2163,19 +2195,19 @@ void OverlayApp::DrawSoftwareCursor() const {
     // over rather than near it. Drawn white with a dark outline (and a
     // slight shadow) so it stays legible over a bright game and a dark one
     // alike - the same reason the OS cursor is shaped this way.
-    const ImVec2 arrow[7] = {
-        ImVec2(at.x + 0.0f, at.y + 0.0f),   ImVec2(at.x + 0.0f, at.y + 17.0f),
-        ImVec2(at.x + 4.2f, at.y + 12.8f),  ImVec2(at.x + 7.0f, at.y + 18.6f),
-        ImVec2(at.x + 10.0f, at.y + 17.2f), ImVec2(at.x + 7.2f, at.y + 11.6f),
-        ImVec2(at.x + 12.2f, at.y + 11.6f),
+    constexpr ImVec2 kArrow[7] = {
+        ImVec2(0.0f, 0.0f),   ImVec2(0.0f, 17.0f),  ImVec2(4.2f, 12.8f),  ImVec2(7.0f, 18.6f),
+        ImVec2(10.0f, 17.2f), ImVec2(7.2f, 11.6f),  ImVec2(12.2f, 11.6f),
     };
+    ImVec2 arrow[7];
     ImVec2 shadow[7];
     for (int i = 0; i < 7; ++i) {
-        shadow[i] = ImVec2(arrow[i].x + 1.5f, arrow[i].y + 1.5f);
+        arrow[i] = ImVec2(at.x + kArrow[i].x * scale, at.y + kArrow[i].y * scale);
+        shadow[i] = ImVec2(arrow[i].x + 1.5f * scale, arrow[i].y + 1.5f * scale);
     }
     drawList->AddConvexPolyFilled(shadow, 7, kShadow);
     drawList->AddConvexPolyFilled(arrow, 7, kFill);
-    drawList->AddPolyline(arrow, 7, kEdge, ImDrawFlags_Closed, 1.4f);
+    drawList->AddPolyline(arrow, 7, kEdge, ImDrawFlags_Closed, 1.4f * scale);
 }
 
 // ================= View-only mode =================
@@ -2358,12 +2390,13 @@ void OverlayApp::RenderBrushSizePreview() {
     constexpr float kLabelGap = 10.0f;
     // Clear of the dot at every size in both ranges (1..24 and 8..64), so
     // the two never overlap and the label doesn't jump sides.
-    const ImVec2 boxMin(center.x + radius + kLabelGap, center.y - textSize.y * 0.5f - kLabelPadY);
-    const ImVec2 boxMax(boxMin.x + textSize.x + kLabelPadX * 2.0f, boxMin.y + textSize.y + kLabelPadY * 2.0f);
+    const ImVec2 boxMin(center.x + radius + Px(kLabelGap), center.y - textSize.y * 0.5f - Px(kLabelPadY));
+    const ImVec2 boxMax(boxMin.x + textSize.x + Px(kLabelPadX) * 2.0f, boxMin.y + textSize.y + Px(kLabelPadY) * 2.0f);
     // Same pill as RenderActionToast - over arbitrary game content, plain
     // text has no guaranteed contrast to sit against.
     dl->AddRectFilled(boxMin, boxMax, fade(IM_COL32(18, 20, 26, 235)), theme::kRadiusPill);
-    dl->AddText(ImVec2(boxMin.x + kLabelPadX, boxMin.y + kLabelPadY), fade(IM_COL32(240, 242, 245, 255)), label);
+    dl->AddText(ImVec2(boxMin.x + Px(kLabelPadX), boxMin.y + Px(kLabelPadY)), fade(IM_COL32(240, 242, 245, 255)),
+                label);
 }
 
 // The demo build's permanent mark (see build::kDemoMode). Drawn in *both*
@@ -2428,24 +2461,24 @@ void OverlayApp::DrawDemoWatermark(ImDrawList* drawList, float displayW, float d
         // doesn't - so the block's own width is the wider of the two lines.
         float blockW = 0.0f;
         for (const char* line : lines) {
-            blockW = std::max(blockW, font->CalcTextSizeA(kTextSize, FLT_MAX, 0.0f, line).x);
+            blockW = std::max(blockW, font->CalcTextSizeA(Px(kTextSize), FLT_MAX, 0.0f, line).x);
         }
-        const float blockH = 2.0f * kTextSize + kLineGap;
+        const float blockH = 2.0f * Px(kTextSize) + Px(kLineGap);
 
         // The cell grid covers the positions the block's *top-left* may
         // take, so the whole mark stays inside the margin whichever cell it
         // lands in.
-        const float spanX = std::max(0.0f, displayW - 2.0f * kMargin - blockW);
-        const float spanY = std::max(0.0f, displayH - 2.0f * kMargin - blockH);
+        const float spanX = std::max(0.0f, displayW - 2.0f * Px(kMargin) - blockW);
+        const float spanY = std::max(0.0f, displayH - 2.0f * Px(kMargin) - blockH);
         const float cellW = spanX / kGrid;
         const float cellH = spanY / kGrid;
-        const float x = kMargin + static_cast<float>(demoWatermarkCell_ % kGrid) * cellW +
+        const float x = Px(kMargin) + static_cast<float>(demoWatermarkCell_ % kGrid) * cellW +
                         demoWatermarkJitter_.x * cellW;
-        float y = kMargin + static_cast<float>(demoWatermarkCell_ / kGrid) * cellH +
+        float y = Px(kMargin) + static_cast<float>(demoWatermarkCell_ / kGrid) * cellH +
                   demoWatermarkJitter_.y * cellH;
         for (const char* line : lines) {
-            drawList->AddText(font, kTextSize, ImVec2(x, y), color, line);
-            y += kTextSize + kLineGap;
+            drawList->AddText(font, Px(kTextSize), ImVec2(x, y), color, line);
+            y += Px(kTextSize) + Px(kLineGap);
         }
     }
 }

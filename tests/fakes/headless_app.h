@@ -30,6 +30,7 @@
 
 #include "app/tray_app.h"
 #include "fakes/fake_platform_host.h"
+#include "ui/ui_scale.h"
 
 namespace sz::test {
 
@@ -52,6 +53,9 @@ protected:
             ImGui::DestroyContext(context_);
             context_ = nullptr;
         }
+        // The interface scale is one value for the process (see UiScale),
+        // and a test that set it must not hand it to the next one.
+        SetUiScale(1.0f);
     }
 
     // Re-runs setup with a different config - for the tests that need a
