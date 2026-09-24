@@ -819,7 +819,10 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                                                 ImGui::GetColorU32(theme::kHoverWash), theme::kRadiusSm);
             }
             if (rowHovered && marked) {
-                if (deleted) {
+                if (deleted && Cfg().purgeDeleted) {
+                    ImGui::SetTooltip("%s\n%s", DeletedWhen(f.deletedAt, now).c_str(),
+                                      GoesOn(f.deletedAt, Cfg().purgeDeletedAfterDays).c_str());
+                } else if (deleted) {
                     ImGui::SetTooltip("%s", DeletedWhen(f.deletedAt, now).c_str());
                 } else {
                     const size_t count = Manager().MarkedCanvasesIn(f.id).size();
@@ -1022,7 +1025,12 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
             // Its own stamp, or its folder's when it went with the folder.
             const Folder* folder = Manager().FindFolder(c.folderId);
             const int64_t stamp = c.deletedAt != 0 ? c.deletedAt : folder != nullptr ? folder->deletedAt : 0;
-            ImGui::SetTooltip("%s\n%s", DeletedWhen(stamp, now).c_str(), strings::kDeletedRestoreToOpen);
+            if (Cfg().purgeDeleted) {
+                ImGui::SetTooltip("%s\n%s\n%s", DeletedWhen(stamp, now).c_str(),
+                                  GoesOn(stamp, Cfg().purgeDeletedAfterDays).c_str(), strings::kDeletedRestoreToOpen);
+            } else {
+                ImGui::SetTooltip("%s\n%s", DeletedWhen(stamp, now).c_str(), strings::kDeletedRestoreToOpen);
+            }
         }
         if (!deleted && ImGui::BeginDragDropSource()) {
             ImGui::SetDragDropPayload("HB_CANVAS_REORDER", &c.id, sizeof(CanvasId));
@@ -2865,7 +2873,15 @@ void OverlayApp::RenderConfirmDeletePopover() {
     if (isFolder) {
         ImGui::TextColored(theme::kDanger, "%s", strings::kDeleteConfirmAlsoCanvases);
     }
-    ImGui::TextColored(theme::kGraphite200, forGood ? strings::kDeleteConfirmCannotUndo : strings::kDeleteConfirmRestorable);
+    // With the retention period on, "can be restored" has an end, and says
+    // when: the dialog is where a person decides how much that matters.
+    if (forGood) {
+        ImGui::TextColored(theme::kGraphite200, "%s", strings::kDeleteConfirmCannotUndo);
+    } else if (Cfg().purgeDeleted) {
+        ImGui::TextColored(theme::kGraphite200, strings::kDeleteConfirmRestorableFor, Cfg().purgeDeletedAfterDays);
+    } else {
+        ImGui::TextColored(theme::kGraphite200, "%s", strings::kDeleteConfirmRestorable);
+    }
     ImGui::PopTextWrapPos();
     ImGui::Spacing();
 

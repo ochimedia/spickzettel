@@ -82,6 +82,15 @@ std::string DeletedWhen(int64_t deletedAt, std::time_t now) {
     return line;
 }
 
+std::string GoesOn(int64_t deletedAt, int days) {
+    const std::tm on = LocalTime(static_cast<std::time_t>(deletedAt + int64_t{days} * 24 * 60 * 60));
+    char date[32] = "";
+    std::strftime(date, sizeof(date), "%Y-%m-%d", &on);
+    char line[96];
+    std::snprintf(line, sizeof(line), strings::kDeletedGoesOn, date);
+    return line;
+}
+
 DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip) {
     DeletedButton pressed = DeletedButton::None;
     // Accent-filled rather than neutral: of the two, it is the one meant.

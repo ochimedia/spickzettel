@@ -61,7 +61,9 @@ menu with every way to make one, Paste, the Overview and Settings.
   the overlay is not "discarding" anything.
 - Deleting a folder or canvas hides it where it is. "Show deleted", in
   the Overview, shows it there again in red, to restore or delete for
-  good. A deleted snippet comes back with undo, until the app restarts.
+  good. After 14 days it is deleted permanently the next time the app
+  starts; Settings > Behavior changes the period or turns it off. A
+  deleted snippet comes back with undo, until the app restarts.
 - Screenshots are captured with the overlay hidden, so nothing the
   overlay draws - including the demo watermark - ends up in them.
 - Settings > Appearance > Picture scaling decides how a screenshot looks

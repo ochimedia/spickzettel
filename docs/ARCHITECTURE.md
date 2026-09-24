@@ -515,7 +515,11 @@ folder has none and goes when the folder does; one marked on its own
 before the folder went can go first, which leaves the folder as a
 Delete permanently by hand would. It runs at startup only: an instance
 left running for days keeps what is due until it is next started, which
-costs nothing but the wait.
+costs nothing but the wait. Being on by default, it says what it does: the
+delete confirmation says for how many days a thing can be restored, a
+deleted folder or canvas says from which day it goes, and what a start
+deleted for good is counted in a message the next time the overlay comes
+up, since the start itself happens while nobody is looking.
 
 Two designs preceded this. A reserved Trash folder inside the library
 grouped three structurally different things under one "dig through the

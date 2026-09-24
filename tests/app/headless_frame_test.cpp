@@ -3010,6 +3010,42 @@ TEST_F(HeadlessAppTest, SwitchingToViewOnlyCommitsTheNoteBeingTyped) {
         << "the keyboard is given back";
 }
 
+// The retention period runs at startup, while nobody is looking; what it
+// deleted for good is said the next time the overlay comes up.
+TEST_F(HeadlessAppTest, WhatTheRetentionPeriodDeletedIsSaidOnTheNextShow) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "spickzettel_headless_purge_said";
+    std::filesystem::remove_all(dir);
+    CanvasManagerSnapshot snapshot;
+    Folder folder;
+    folder.id = 1;
+    folder.name = "F";
+    snapshot.folders.push_back(folder);
+    Canvas live;
+    live.id = 2;
+    live.name = "Live";
+    live.folderId = 1;
+    snapshot.canvases.push_back(live);
+    Canvas old;
+    old.id = 3;
+    old.name = "Old";
+    old.folderId = 1;
+    old.deletedAt = static_cast<int64_t>(std::time(nullptr)) - 40 * 24 * 60 * 60;
+    snapshot.canvases.push_back(old);
+    snapshot.currentFolderId = 1;
+    snapshot.currentCanvasId = 2;
+    ASSERT_TRUE(persistence::LibraryStore(dir).Save(snapshot));
+    host_.dataDirectoryPath = dir;
+
+    StartWith(DefaultConfig());
+    EXPECT_EQ(Canvases().FindCanvas(3), nullptr);
+    ShowEditMode();
+    StepFrame();
+    EXPECT_NE(App().ActionToastText().find("deleted permanently"), std::string::npos) << App().ActionToastText();
+
+    Shutdown();
+    std::filesystem::remove_all(dir);
+}
+
 TEST_F(HeadlessAppTest, ExitingFromTheTrayCommitsTheNoteBeingTyped) {
     StartWith(WithTextOnT());
     ShowEditMode();

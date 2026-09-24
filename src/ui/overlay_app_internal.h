@@ -448,6 +448,10 @@ inline constexpr float kDimmedAlpha = 0.4f;
 // read - which is what "I deleted something half an hour ago" is looking
 // for. `now` is passed in, so a test can say when that is.
 std::string DeletedWhen(int64_t deletedAt, std::time_t now);
+// "Deleted permanently from <date> on": when the retention period, `days`
+// long, takes something deleted at `deletedAt` - the first start from that
+// day on (see TrayController::Initialize).
+std::string GoesOn(int64_t deletedAt, int days);
 
 // A deleted folder's or canvas's two buttons, side by side at the cursor:
 // Restore, and Delete permanently. Ids "##restore" and "##deleteforgood",

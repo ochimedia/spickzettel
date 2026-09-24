@@ -1391,10 +1391,30 @@ void OverlayApp::ApplyPointerShape() {
     window_->SetCursorShape(wanted);
 }
 
+void OverlayApp::SayDeletedForGoodAtStart(size_t count, int days) {
+    if (count == 0) {
+        return;
+    }
+    char text[160];
+    if (count == 1) {
+        std::snprintf(text, sizeof(text), strings::kToastPurgedOne, days);
+    } else {
+        std::snprintf(text, sizeof(text), strings::kToastPurgedMany, count, days);
+    }
+    messageForNextShow_ = text;
+}
+
 void OverlayApp::OnOverlayShown() {
     // Whose settings the panel shows by default: the ones in effect, which
     // the host resolved for what the overlay is coming up over.
     editProfile_ = settings_.ActiveProfile();
+    // Something the app did while nobody was looking - see
+    // SayDeletedForGoodAtStart - said now, and for long enough to be read.
+    if (!messageForNextShow_.empty() && ImGui::GetCurrentContext() != nullptr) {
+        actionToastText_ = std::move(messageForNextShow_);
+        messageForNextShow_.clear();
+        actionToastExpireAtSeconds_ = ImGui::GetTime() + 8.0;
+    }
     // Hiding is moving on too, and nothing ran while hidden to notice - see
     // untouchedDrawing_.
     SettleUntouchedDrawing();

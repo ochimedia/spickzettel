@@ -279,6 +279,10 @@ public:
     // frames do, so one set while hidden would otherwise still be waiting,
     // hours later, for whenever the overlay next comes up.
     void DismissActionToast() { actionToastText_.clear(); }
+    // At startup, when the retention period deleted `count` folders and
+    // canvases for good: said the next time the overlay comes up, rather
+    // than while nobody is looking at it - see OnOverlayShown.
+    void SayDeletedForGoodAtStart(size_t count, int days);
     // What that message currently says, empty for none - the readable half
     // of the pair above, and how a test asks whether something was said at
     // all rather than looking at pixels.
@@ -1925,6 +1929,8 @@ private:
     // nothing to draw (see RenderActionToast).
     std::string actionToastText_;
     double actionToastExpireAtSeconds_ = 0.0;
+    // See SayDeletedForGoodAtStart.
+    std::string messageForNextShow_;
     // The settings file the tray last failed to write, while it stays
     // unwritten - see SetConfigWriteFailed.
     std::optional<std::string> configWriteFailedPath_;

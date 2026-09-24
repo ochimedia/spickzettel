@@ -131,8 +131,9 @@ bool TrayController::Initialize() {
             // it has until it is next started, which is soon enough.
             if (settings_.Stored().purgeDeleted && !skipRetentionThisStart_) {
                 const int64_t day = 24 * 60 * 60;
-                session_.EraseDeletedBefore(static_cast<int64_t>(std::time(nullptr)) -
-                                            settings_.Stored().purgeDeletedAfterDays * day);
+                const size_t erased = session_.EraseDeletedBefore(static_cast<int64_t>(std::time(nullptr)) -
+                                                                  settings_.Stored().purgeDeletedAfterDays * day);
+                overlayApp_.SayDeletedForGoodAtStart(erased, settings_.Stored().purgeDeletedAfterDays);
             }
         } else {
             // Nothing on disk to load: a genuinely first run. Distinct from
