@@ -321,14 +321,14 @@ struct AppConfig {
     // Whether a deleted folder or canvas is deleted for good once it has
     // been deleted for longer than purgeDeletedAfterDays - checked when the
     // library is opened, which is at startup (see Session::
-    // EraseDeletedBefore for what counts, and how long, for what). Off by
-    // default: nothing is erased that the person did not ask to be, and
-    // the number of days is kept while it is off so switching it on again
-    // is one click. Deleted snippets are not a question here: they are
+    // EraseDeletedBefore for what counts, and how long, for what). On by
+    // default, after two weeks, so a library does not keep everything ever
+    // deleted; the number of days is kept while it is off so switching it
+    // on again is one click. Deleted snippets are not a question here: they are
     // erased on every open (see Session::ImportLibrary). Chosen in
     // Settings > Behavior.
-    bool purgeDeleted = false;
-    int purgeDeletedAfterDays = 30;
+    bool purgeDeleted = true;
+    int purgeDeletedAfterDays = 14;
 
     // Which display the overlay comes up on, remembered by the id and the
     // name it was listed under (see platform::DisplayInfo for what each is).

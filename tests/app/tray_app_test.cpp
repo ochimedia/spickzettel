@@ -541,7 +541,7 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsDeletedCanvasesHiddenAndEra
     deleted.id = 4;
     deleted.name = "Deleted";
     deleted.folderId = 1;
-    deleted.deletedAt = 200;
+    deleted.deletedAt = static_cast<int64_t>(std::time(nullptr));  // within the retention period
     snapshot.canvases.push_back(deleted);
     snapshot.currentFolderId = 1;
     snapshot.currentCanvasId = 4;

@@ -507,7 +507,7 @@ record the current canvas as loaded, and its pictures would stay
 placeholders until the canvas changed.
 
 Folders and canvases can be given a retention period
-(`AppConfig::purgeDeleted`, off by default, and `purgeDeletedAfterDays`):
+(`AppConfig::purgeDeleted`, on by default, and `purgeDeletedAfterDays`, 14):
 once the library is opened, `Session::EraseDeletedBefore` deletes for good
 whatever carries a mark older than the period, by the same erase and for
 the same reason. Only its own mark counts. A canvas that went with its
