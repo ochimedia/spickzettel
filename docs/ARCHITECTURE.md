@@ -916,7 +916,13 @@ snippet is held open, the removal waits with it.
 A restart meanwhile reads the moved thing from where it is, inside the
 deleted directory, and puts it where `moves` says; the next save moves
 its directory to match. It goes to the first folder or canvas instead
-if the one it belongs to is gone too. Only what `moves` names is
+if the one it belongs to is gone too. If there is no folder or canvas
+at all, it goes to a new one named "Recovered". That case is real: a
+folder is made, a canvas is moved into it, and the process stops before
+either is saved. The folder `moves` names never reached the disk. A
+rescue with nowhere to go used to leave the canvas unread, and the
+next save swept it away, snippets and all, with the folder it was
+still in. Only what `moves` names is
 rescued. The record is written, moves and all, before anything is
 removed, so anything else inside went with the deleted thing. The
 previous version wrote nothing for a removal that waited, so that a

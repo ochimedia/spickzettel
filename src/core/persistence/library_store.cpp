@@ -1455,9 +1455,34 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
     // says where it belongs (see RunPendingRemovals). It is read from where
     // it is and put there, and the next save moves its directory to match
     // - to the first folder or canvas there is, should the one it belongs
-    // to be gone too. Only what the record names: it is written, moves and
-    // all, before the removal starts, so anything else inside went with
+    // to be gone too, and to a new one named "Recovered" should there be
+    // none: a folder made, the canvas moved into it, and neither saved
+    // before a crash leaves exactly that, and a rescue with nowhere to go
+    // left the canvas unread for the next save to sweep away with the
+    // folder it was in. Only what the record names: it is written, moves
+    // and all, before the removal starts, so anything else inside went with
     // what was deleted.
+    const auto someFolder = [&]() -> FolderId {
+        if (out.folders.empty()) {
+            Folder folder;
+            folder.id = claimId(0);
+            folder.name = "Recovered";
+            folder.createdAt = static_cast<int64_t>(std::time(nullptr));
+            out.folders.push_back(std::move(folder));
+        }
+        return out.folders.front().id;
+    };
+    const auto someCanvas = [&]() -> Canvas& {
+        if (out.canvases.empty()) {
+            Canvas canvas;
+            canvas.id = claimId(0);
+            canvas.name = "Recovered";
+            canvas.folderId = someFolder();
+            canvas.createdAt = static_cast<int64_t>(std::time(nullptr));
+            out.canvases.push_back(std::move(canvas));
+        }
+        return out.canvases.front();
+    };
     const std::map<uint64_t, std::filesystem::path> erasedDirs = pendingRemovals_;
     for (const auto& [erasedUid, erasedDir] : erasedDirs) {
         (void)erasedUid;
@@ -1479,27 +1504,15 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             if (depth == 1) {
                 const auto folder = std::find_if(out.folders.begin(), out.folders.end(),
                                                  [target](const Folder& f) { return f.id == target; });
-                const FolderId folderId = folder != out.folders.end() ? folder->id
-                                          : out.folders.empty()      ? 0
-                                                                     : out.folders.front().id;
-                if (folderId == 0) {
-                    continue;
-                }
+                const FolderId folderId = folder != out.folders.end() ? folder->id : someFolder();
                 if (std::optional<Canvas> canvas = readCanvas(inside, folderId)) {
                     out.canvases.push_back(std::move(*canvas));
                 }
-            } else {
-                auto canvas = std::find_if(out.canvases.begin(), out.canvases.end(),
-                                           [target](const Canvas& c) { return c.id == target; });
-                if (canvas == out.canvases.end()) {
-                    canvas = out.canvases.begin();
-                }
-                if (canvas == out.canvases.end()) {
-                    continue;
-                }
-                if (std::optional<Item> item = readItem(inside)) {
-                    canvas->items.push_back(std::move(*item));  // in front, like anything unlisted
-                }
+            } else if (std::optional<Item> item = readItem(inside)) {
+                const auto canvas = std::find_if(out.canvases.begin(), out.canvases.end(),
+                                                 [target](const Canvas& c) { return c.id == target; });
+                Canvas& home = canvas != out.canvases.end() ? *canvas : someCanvas();
+                home.items.push_back(std::move(*item));  // in front, like anything unlisted
             }
         }
     }

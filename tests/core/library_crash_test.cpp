@@ -542,6 +542,58 @@ TEST(LibraryFaultTest, APendingRecordNamingWhatIsGoneIsBroughtInLine) {
     EXPECT_EQ(disk.Status(Root() / "pending.json"), FileSystem::Kind::None);
 }
 
+// A canvas moved into a folder that has never been saved, and every other
+// folder deleted for good while the canvas's picture is held open, so that
+// the move cannot land - and then the process stops. The folder the record
+// says the canvas belongs to never reached the disk, and no other is left:
+// the canvas is rescued into a new folder rather than left unread for the
+// next save to sweep away with the folder it is still in.
+TEST(LibraryFaultTest, ARescueWithNowhereToGoGetsAFolderOfItsOwn) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    FaultyFileSystem fs(disk);
+    fs.Hold(PictureOf(disk, kShot));
+    constexpr uint64_t kNewFolder = 3;
+    {
+        LibraryStore store(Root(), fs);
+        CanvasManagerSnapshot library = *store.Load();
+        Folder fresh;
+        fresh.id = kNewFolder;
+        fresh.name = "New";
+        library.folders.push_back(fresh);
+        FindCanvas(library, kCanvasA)->folderId = kNewFolder;
+        // The new folder's directory is never made - the process is gone
+        // before a save gets that far.
+        fs.FailWhen(FaultyFileSystem::Op::MakeDirectory,
+                    [](const std::filesystem::path& path) { return IsOf(path, kNewFolder); });
+        library.folders.erase(library.folders.begin(), library.folders.begin() + 2);
+        library.canvases.erase(library.canvases.begin() + 1);  // B
+        EXPECT_FALSE(store.Remove({kFolder, kOtherFolder, kCanvasB, kNote}, library));
+        EXPECT_FALSE(store.Save(library));
+    }
+    fs.ClearFailures();
+    fs.ReleaseAll();
+
+    LibraryStore restarted(Root(), fs);
+    std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->folders.size(), 1u);
+    EXPECT_EQ(loaded->folders[0].name, "Recovered");
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    EXPECT_EQ(loaded->canvases[0].id, kCanvasA);
+    EXPECT_EQ(loaded->canvases[0].folderId, loaded->folders[0].id);
+    EXPECT_EQ(loaded->canvases[0].items.size(), 2u) << "the capture and the drawing, with it";
+
+    EXPECT_TRUE(restarted.Save(*loaded));
+    ExpectNothingLeftOf(disk, {kFolder, kOtherFolder, kCanvasB, kNote}, 0);
+    LibraryStore again(Root(), disk);
+    const std::optional<CanvasManagerSnapshot> reloaded = again.Load();
+    ASSERT_TRUE(reloaded.has_value());
+    EXPECT_EQ(LayoutOf(*reloaded), LayoutOf(*loaded));
+    EXPECT_TRUE(again.LoadImage(kShot, reloaded->canvases[0].items[0].ImageLayer()->imageFile).has_value() ||
+                again.LoadImage(kShot, reloaded->canvases[0].items[1].ImageLayer()->imageFile).has_value());
+}
+
 // A pending.json that cannot be written deletes nothing: the removal is owed
 // in memory, and a restart finds everything as it was.
 TEST(LibraryFaultTest, ARemovalThatCannotBeRecordedRemovesNothing) {
