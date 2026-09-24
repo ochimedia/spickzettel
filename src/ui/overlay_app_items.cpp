@@ -434,9 +434,7 @@ void OverlayApp::DeleteSelection() {
     // A copy: deleting clears nothing itself, but the toast and the
     // session are free to look at the selection while this runs.
     const std::vector<ItemId> doomed = selection_;
-    for (const ItemId id : doomed) {
-        DeleteItemWithToast(id);
-    }
+    DeleteItemsWithToast(doomed);
     ClearSelection();
 }
 

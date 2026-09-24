@@ -1280,8 +1280,12 @@ the originals at the end: that changed the draw order, left the next
 undo of a stroke popping a different stroke than it was for, could not
 tell two equal strokes apart, and was quadratic in the drawing's size.
 The painted half of the same gesture rides in the same entry, so one
-drag is one undo whichever kinds of ink it touched. `ItemDeleted` and `ItemCreated` carry
-an id and toggle the mark. `NoteTextChanged` and the painted entries swap
+drag is one undo whichever kinds of ink it touched. `ItemCreated` carries
+an id and toggles the mark, and `ItemDeleted` does the same for every
+snippet one Delete took: one entry each made deleting a selection that
+many undos, and past the history's cap of 50 the earliest could not be
+undone at all - for a deleted snippet, which comes back only by undo,
+that was deleted for good. `NoteTextChanged` and the painted entries swap
 their contents with the item's, so the popped entry is already what the
 opposite stack needs. Undo is best-effort about staleness: an entry
 naming something gone does nothing and is dropped rather than moved to

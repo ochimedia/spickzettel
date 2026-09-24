@@ -208,6 +208,10 @@ public:
     // entry is what an undo restores. False if there is no such snippet
     // there, or it is deleted already.
     bool DeleteItem(ItemId itemId);
+    // The same for several, as one undo step; those not on the current
+    // canvas, or deleted already, are passed over. Returns how many were
+    // deleted.
+    size_t DeleteItems(const std::vector<ItemId>& itemIds);
 
     // Where a snippet is - see undo::Placement.
     using Placement = undo::Placement;

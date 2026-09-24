@@ -1017,7 +1017,7 @@ private:
     // Cancel/Delete confirmation for a canvas or folder Delete button
     // clicked in the Overview - see confirmDeleteTarget_'s own doc
     // comment for why canvas/folder deletion gets this extra step while
-    // item/stroke deletion (DeleteItemWithToast) stays instant + undoable.
+    // item/stroke deletion (DeleteItemsWithToast) stays instant + undoable.
     void RenderConfirmDeletePopover();
     void RenderActionToast();
     // See SetConfigWriteFailed.
@@ -1276,9 +1276,9 @@ private:
     void OpenPicker(ItemId itemId, bool isCopy);
     void CloseOverview();
     void ShowActionToast(std::string text);
-    // A snippet's Close button: an undoable delete (see
-    // Session::DeleteItem). No-op if `itemId` isn't on the current canvas.
-    void DeleteItemWithToast(ItemId itemId);
+    // Delete on the selection: one undoable delete of them all (see
+    // Session::DeleteItems). Those not on the current canvas are passed over.
+    void DeleteItemsWithToast(const std::vector<ItemId>& itemIds);
     // Removes every stroke and every painted pixel from the item (its
     // captured screenshot is untouched - this only ever clears ink drawn
     // on top) as one undoable step - see Session::ClearDrawing - and says

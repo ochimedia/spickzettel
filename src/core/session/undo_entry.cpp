@@ -24,8 +24,8 @@ size_t BytesOf(const Erased& e) {
     }
     return bytes;
 }
-// The snippet itself stays in the library, marked: an id is all it holds.
-size_t BytesOf(const ItemDeleted&) { return 0; }
+// The snippets themselves stay in the library, marked: ids are all it holds.
+size_t BytesOf(const ItemDeleted& e) { return e.itemIds.size() * sizeof(ItemId); }
 // Small for a note typed by hand, but a note is whatever a record says it is.
 size_t BytesOf(const NoteTextChanged& e) { return e.previousText.size(); }
 size_t BytesOf(const PaintedTilesChanged& e) { return e.painted.Bytes(); }
@@ -35,7 +35,10 @@ size_t BytesOf(const ItemsArrived& e) { return e.arrivals.size() * sizeof(Arriva
 
 bool ForgetIn(StrokeBaked& e, ItemId id) { return e.itemId == id; }
 bool ForgetIn(Erased& e, ItemId id) { return e.itemId == id; }
-bool ForgetIn(ItemDeleted& e, ItemId id) { return e.itemId == id; }
+bool ForgetIn(ItemDeleted& e, ItemId id) {
+    std::erase(e.itemIds, id);
+    return e.itemIds.empty();
+}
 bool ForgetIn(NoteTextChanged& e, ItemId id) { return e.itemId == id; }
 bool ForgetIn(PaintedTilesChanged& e, ItemId id) { return e.painted.itemId == id; }
 bool ForgetIn(ItemCreated& e, ItemId id) { return e.itemId == id; }

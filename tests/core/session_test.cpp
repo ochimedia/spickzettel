@@ -406,6 +406,30 @@ TEST(SessionTest, ADeletedSnippetIsRestoredOnUndo) {
     EXPECT_TRUE(session.Manager().IsItemDeleted(item));
 }
 
+// One Delete is one undo, however many snippets it took - more than the
+// history holds entries included, where one entry each left the earliest
+// beyond reach, and a deleted snippet only comes back by undo.
+TEST(SessionTest, DeletingManySnippetsAtOnceIsOneUndo) {
+    Session session;
+    std::vector<ItemId> items;
+    for (int i = 0; i < 60; ++i) {
+        items.push_back(session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A"));
+    }
+    EXPECT_EQ(session.DeleteItems(items), 60u);
+    EXPECT_EQ(session.DeleteItems(items), 0u) << "deleted already";
+
+    ASSERT_TRUE(session.Undo().has_value());
+    for (const ItemId item : items) {
+        EXPECT_FALSE(session.Manager().IsItemDeleted(item));
+    }
+    EXPECT_FALSE(session.Undo().has_value()) << "one step, not sixty";
+
+    ASSERT_TRUE(session.Redo().has_value());
+    for (const ItemId item : items) {
+        EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+    }
+}
+
 TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
     Session session;
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Note");

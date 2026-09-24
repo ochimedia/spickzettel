@@ -225,11 +225,15 @@ std::optional<Session::UndoWhat> Session::Apply(undo::Erased& entry, bool undo) 
 }
 
 std::optional<Session::UndoWhat> Session::Apply(undo::ItemDeleted& entry, bool undo) {
-    // The snippet is still where it was, marked: undo clears the mark, redo
-    // makes it again, and the pictures come and go with it (see Delete).
-    // False when there is nothing to change - the snippet deleted for good
-    // since, say - which is this kind's no-op.
-    if (!(undo ? Restore(entry.itemId) : Delete(entry.itemId))) {
+    // The snippets are still where they were, marked: undo clears the marks,
+    // redo makes them again, and the pictures come and go with them (see
+    // Delete). Nothing to change for any of them - all deleted for good
+    // since, say - is this kind's no-op.
+    bool changed = false;
+    for (const ItemId id : entry.itemIds) {
+        changed |= undo ? Restore(id) : Delete(id);
+    }
+    if (!changed) {
         return std::nullopt;
     }
     return UndoWhat::Delete;
@@ -435,18 +439,31 @@ void Session::CommitLiveStroke(ItemId itemId) {
     PushUndo(undo::StrokeBaked{itemId, itemIt->strokes.back()});
 }
 
-bool Session::DeleteItem(ItemId itemId) {
-    // Only a snippet on this canvas: the entry pushed afterwards is filed
-    // under it. Marked where it is (see Delete), and that entry is what an
-    // undo restores.
+bool Session::DeleteItem(ItemId itemId) { return DeleteItems({itemId}) == 1; }
+
+size_t Session::DeleteItems(const std::vector<ItemId>& itemIds) {
+    // Only snippets on this canvas: the entry pushed afterwards is filed
+    // under it. Marked where they are (see Delete), and one entry for all of
+    // them is what an undo restores - one per snippet made one Delete that
+    // many undos, and past the history's cap the earliest could not be
+    // undone at all, which for a deleted snippet is deleted for good.
     const Canvas* canvas = Manager().CurrentOrNull();
-    const bool onThisCanvas = canvas != nullptr && std::any_of(canvas->items.begin(), canvas->items.end(),
-                                                               [itemId](const Item& i) { return i.id == itemId; });
-    if (!onThisCanvas || !Delete(itemId)) {
-        return false;
+    if (canvas == nullptr) {
+        return 0;
     }
-    PushUndo(undo::ItemDeleted{itemId});
-    return true;
+    undo::ItemDeleted entry;
+    for (const ItemId id : itemIds) {
+        const bool onThisCanvas =
+            std::any_of(canvas->items.begin(), canvas->items.end(), [id](const Item& i) { return i.id == id; });
+        if (onThisCanvas && Delete(id)) {
+            entry.itemIds.push_back(id);
+        }
+    }
+    const size_t deleted = entry.itemIds.size();
+    if (deleted > 0) {
+        PushUndo(std::move(entry));
+    }
+    return deleted;
 }
 
 std::vector<Session::Placement> Session::PlacementsOf(const std::vector<ItemId>& ids) const {

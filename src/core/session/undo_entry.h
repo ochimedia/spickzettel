@@ -108,10 +108,10 @@ struct Erased {
     Painted painted;
 };
 
-// A snippet was deleted. It is still there, marked: undo clears the mark,
-// redo makes it again.
+// Snippets deleted in one go - one Delete, however many were selected. They
+// are still there, marked: undo clears the marks, redo makes them again.
 struct ItemDeleted {
-    ItemId itemId = 0;
+    std::vector<ItemId> itemIds;
 };
 
 // A text edit (see Session::BeginTextEdit) changed the note: one entry per

@@ -3039,7 +3039,7 @@ void OverlayApp::ShowActionToast(std::string text) {
     actionToastExpireAtSeconds_ = ImGui::GetTime() + 2.2;
 }
 
-void OverlayApp::DeleteItemWithToast(ItemId itemId) {
+void OverlayApp::DeleteItemsWithToast(const std::vector<ItemId>& itemIds) {
     // Safe to call directly from the selection bar's Close button, which
     // fires from the raw mouse pipeline (unlike an OpenPopup, which the
     // bar defers via a request flag - see colorChooserRequested_'s own
@@ -3048,18 +3048,8 @@ void OverlayApp::DeleteItemWithToast(ItemId itemId) {
     // (CanvasManager, undoStack_) and ImGui::GetTime() (a flat context
     // field read, not window-stack-dependent - see ShowActionToast's own
     // comment on why it's safe with no frame in progress).
-    Canvas* canvasPtr = Manager().CurrentOrNull();
-    if (!canvasPtr) {
-        return;
-    }
-    Canvas& canvas = *canvasPtr;
-    const auto it =
-        std::find_if(canvas.items.begin(), canvas.items.end(), [&](const Item& i) { return i.id == itemId; });
-    if (it == canvas.items.end()) {
-        return;
-    }
-    // Marked, and onto the history - see Session::DeleteItem.
-    if (!session_.DeleteItem(itemId)) {
+    // Marked, and onto the history as one step - see Session::DeleteItems.
+    if (session_.DeleteItems(itemIds) == 0) {
         return;
     }
     ShowActionToast(strings::kToastDeleted);
