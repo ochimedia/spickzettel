@@ -2445,7 +2445,9 @@ bool OverlayApp::RenderProfileRow(size_t index, Profile& profile, bool& remove) 
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kProfilesName);
     ImGui::SameLine(kProfileFieldX);
     ImGui::SetNextItemWidth(kProfileFieldWidth);
-    if (ImGui::InputText("##name", name, sizeof(name))) {
+    // Never stored empty: while the field is cleared to type a new name the
+    // profile keeps its old one, and a field left empty shows it again.
+    if (ImGui::InputText("##name", name, sizeof(name)) && name[0] != '\0') {
         profile.name = name;
         changed = true;
     }

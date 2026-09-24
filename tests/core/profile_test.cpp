@@ -207,6 +207,21 @@ TEST(ProfileTest, ProfilesRoundTripThroughTheConfigFile) {
     EXPECT_EQ(reparsed, config);
 }
 
+// A name cleared by hand costs the name, not the profile: its match and
+// overrides come back under the name a new profile would get.
+TEST(ProfileTest, AProfileWithoutANameIsKeptAndNamed) {
+    AppConfig config = DefaultConfig();
+    Profile nameless = GameProfile("", "game.exe");
+    nameless.overrides.freezeScreen = true;
+    config.profiles = {GameProfile("Profile", "other.exe"), nameless};
+
+    const AppConfig reparsed = ParseConfig(SerializeConfig(config));
+    ASSERT_EQ(reparsed.profiles.size(), 2u);
+    EXPECT_EQ(reparsed.profiles[1].name, "Profile 2");
+    EXPECT_EQ(reparsed.profiles[1].match, nameless.match);
+    EXPECT_EQ(reparsed.profiles[1].overrides, nameless.overrides);
+}
+
 TEST(ProfileTest, AnOverrideOfEveryKindSurvivesTheFile) {
     AppConfig config = DefaultConfig();
     Profile profile = GameProfile("Game", "game.exe");
@@ -236,16 +251,6 @@ TEST(ProfileTest, AProfileThatOverridesNothingWritesNoGroupsAndComesBackEmpty) {
     const AppConfig reparsed = ParseConfig(text);
     ASSERT_EQ(reparsed.profiles.size(), 1u);
     EXPECT_TRUE(reparsed.profiles[0].overrides.Empty());
-}
-
-TEST(ProfileTest, ANamelessProfileInTheFileIsDropped) {
-    // The name is what the UI lists; inventing one would look like the
-    // user's own.
-    const AppConfig config = ParseConfig(R"({"profiles": [
-        {"match": {"exe": ["game.exe"]}},
-        {"name": "Kept", "match": {"exe": ["other.exe"]}}]})");
-    ASSERT_EQ(config.profiles.size(), 1u);
-    EXPECT_EQ(config.profiles[0].name, "Kept");
 }
 
 TEST(ProfileTest, GarbageInTheProfilesArrayIsSkippedNotFatal) {

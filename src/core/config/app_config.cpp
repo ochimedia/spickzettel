@@ -649,11 +649,12 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
                 profile.name = name->get<std::string>();
             }
             if (profile.name.empty()) {
-                // Nameless is unusable: the name is what the UI lists and
-                // what the picker names, so a profile without one is
-                // dropped rather than given a made-up one that would then
-                // look like the user's own.
-                continue;
+                // Nameless is unusable - the name is what the UI lists and
+                // what the picker names - but dropping the profile took its
+                // match and every override with it, at the next start, for
+                // a name cleared by hand. It gets the name a new profile
+                // would (the UI's "profiles.namePrefix").
+                profile.name = UniqueProfileName(config.profiles, "Profile");
             }
             const json& match = Group(entry, "match");
             profile.match.executables = ReadStringList(match, "exe");

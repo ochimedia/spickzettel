@@ -1039,6 +1039,13 @@ is deliberately not re-run when the foreground changes while the overlay
 is showing: that would tear the input hooks down mid-session, and "which
 profile am I in" would stop having one answer while the panel is open.
 
+A profile always has a name, since the name is what the list and the
+picker show. The name field never stores an empty one: cleared to be
+retyped, the profile keeps its old name until something is typed. A file
+edited by hand can still hold a nameless profile, and it is read back
+under the name a new profile would get rather than dropped, which lost
+its match and every override at the next start.
+
 ### Which display
 
 `ChooseDisplay` turns the remembered display id and name into an
