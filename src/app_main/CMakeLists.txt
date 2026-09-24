@@ -15,6 +15,7 @@ if(WIN32)
     target_compile_features(spickzettel PRIVATE cxx_std_20)
     target_link_libraries(spickzettel PRIVATE sz_app sz_platform_win32)
     spickzettel_set_warnings(spickzettel)
+    spickzettel_use_utf8_code_page(spickzettel)
 
     # See SPICKZETTEL_DIST_NAME. A target of its own rather than a
     # POST_BUILD step, so that it runs on every build - a copy deleted or

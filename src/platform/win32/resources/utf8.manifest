@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- The process's ANSI code page is UTF-8, so the narrow side of every
+     std::filesystem::path conversion, and every -A API, speaks the same
+     UTF-8 as the rest of the app. See docs/ARCHITECTURE.md, "Text is UTF-8,
+     and so is the code page". -->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+</assembly>

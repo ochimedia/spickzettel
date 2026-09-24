@@ -60,6 +60,14 @@ function(spickzettel_set_warnings TARGET)
     endif()
 endfunction()
 
+# Every executable runs with UTF-8 as its ANSI code page - the tests too, so
+# they meet paths the way the app does. See utf8.manifest.
+function(spickzettel_use_utf8_code_page TARGET)
+    if(WIN32)
+        target_sources(${TARGET} PRIVATE "${CMAKE_SOURCE_DIR}/src/platform/win32/resources/utf8.manifest")
+    endif()
+endfunction()
+
 # Third-party code, all fetched and pinned - see docs/ARCHITECTURE.md.
 include(FetchImGui)
 if(SPICKZETTEL_UI_TESTS)

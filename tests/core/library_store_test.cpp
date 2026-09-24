@@ -1838,6 +1838,27 @@ TEST_F(LibraryStoreTest, AnImageFileThatNamesAPathIsDroppedOnLoad) {
 }
 
 #if defined(_WIN32)
+// A directory renamed by hand to words outside the ANSI code page, and a
+// file dropped in beside a record with one in its name, are read and
+// written past like any other: a name the code page cannot spell used to
+// throw out of every std::filesystem::path::string() that met it.
+TEST_F(LibraryStoreTest, NamesOutsideTheCodePageAreReadAndSavedPast) {
+    ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
+    std::ofstream(ShotItemDir() / L"\U0001F4F7 scan.png") << "not ours";
+    const std::filesystem::path folderDir = dir_ / "folders" / "folder-1-000001";
+    std::filesystem::rename(folderDir / "canvas-1-000002", folderDir / L"メモ-000002");
+
+    LibraryStore store(dir_);
+    std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    ASSERT_EQ(loaded->canvases[0].items.size(), 2u);
+
+    loaded->canvases[0].items[1].rect.x += 5;  // rewrites the shot's record, and sweeps its directory
+    EXPECT_TRUE(store.Save(*loaded));
+    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / L"\U0001F4F7 scan.png")) << "and leaves what is not ours";
+}
+
 // ===== Links are not part of the tree =====
 //
 // A junction is what "mklink /J" makes, needs no privilege, and looks like a

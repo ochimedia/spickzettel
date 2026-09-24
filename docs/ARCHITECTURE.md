@@ -1989,6 +1989,20 @@ hidden the event loop blocks in `GetMessage` and nothing is rendered,
 which is what delivers near-zero idle CPU. `Destroy` happens once, on
 exit.
 
+### Text is UTF-8, and so is the code page
+
+Every string in the app is UTF-8, but on Windows the narrow side of a
+`std::filesystem::path` is the process's ANSI code page, and MSVC's
+`path::string()` throws on a character that page cannot spell. A canvas
+directory renamed by hand to Japanese on an English Windows, or a file
+named with an emoji dropped beside a snippet, crashed every load or every
+save that listed it. Rather than convert at each of those places, every
+executable, the tests included, carries a manifest
+(`src/platform/win32/resources/utf8.manifest`) that makes UTF-8 the
+process's code page (Windows 10 1903 and later): `path::string()` and
+`path(std::string)` then round-trip exactly, and the `-A` Windows calls
+take the same UTF-8 the UI strings are in.
+
 ### In front of the taskbar
 
 `WS_EX_TOPMOST` puts the overlay in the topmost band but not at its front,

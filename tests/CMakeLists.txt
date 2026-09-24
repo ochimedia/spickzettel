@@ -48,6 +48,8 @@ set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIO
 set_source_files_properties(ui/ui_strings_file_test.cpp PROPERTIES COMPILE_DEFINITIONS
     "SPICKZETTEL_UI_STRINGS_JSON=\"${CMAKE_SOURCE_DIR}/assets/ui_strings.json\"")
 
+spickzettel_use_utf8_code_page(sz_core_tests)
+
 include(GoogleTest)
 gtest_discover_tests(sz_core_tests)
 
@@ -65,6 +67,7 @@ if(SPICKZETTEL_UI_TESTS)
     target_link_libraries(sz_ui_tests PRIVATE sz_app imgui_test_engine GTest::gtest_main)
     target_compile_features(sz_ui_tests PRIVATE cxx_std_20)
     spickzettel_set_warnings(sz_ui_tests)
+    spickzettel_use_utf8_code_page(sz_ui_tests)
     gtest_discover_tests(sz_ui_tests)
 endif()
 
@@ -83,6 +86,7 @@ if(WIN32)
     target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 GTest::gtest_main)
     target_compile_features(sz_win32_tests PRIVATE cxx_std_20)
     spickzettel_set_warnings(sz_win32_tests)
+    spickzettel_use_utf8_code_page(sz_win32_tests)
     # One at a time: these install desktop-wide hooks and register raw
     # input for the whole process, which two copies would fight over. The
     # timeout is there because a hook thread that never stops would
