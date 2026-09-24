@@ -616,6 +616,8 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
     ReadBool(overview, "showBitmaps", config.overviewShowsBitmaps);
 
     const json& deleted = Group(doc, "deleted");
+    ReadBool(deleted, "confirmDelete", config.confirmDelete);
+    ReadBool(deleted, "confirmDeleteForGood", config.confirmDeleteForGood);
     ReadBool(deleted, "deleteForGoodAutomatically", config.purgeDeleted);
     ReadInt(deleted, "afterDays", config.purgeDeletedAfterDays, kPurgeDeletedAfterDaysMin, kPurgeDeletedAfterDaysMax);
 
@@ -755,6 +757,8 @@ std::string SerializeConfig(const AppConfig& config) {
     };
 
     doc["deleted"] = {
+        {"confirmDelete", config.confirmDelete},
+        {"confirmDeleteForGood", config.confirmDeleteForGood},
         {"deleteForGoodAutomatically", config.purgeDeleted},
         {"afterDays", config.purgeDeletedAfterDays},
     };

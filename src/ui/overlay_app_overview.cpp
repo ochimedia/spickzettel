@@ -1770,6 +1770,10 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     // disabled while the switch is off but keep their value, so turning it
     // back on brings back the period chosen before.
     SettingsHeading("deletedheading", strings::kSettingsDeletedHeading, strings::kSettingsPurgeDeletedHelp);
+    anyChanged |= CheckboxWithHelp("confirmdelete", strings::kSettingsConfirmDelete, &Cfg().confirmDelete,
+                                   strings::kSettingsConfirmDeleteHelp);
+    anyChanged |= CheckboxWithHelp("confirmdeleteforgood", strings::kSettingsConfirmDeleteForGood,
+                                   &Cfg().confirmDeleteForGood, strings::kSettingsConfirmDeleteForGoodHelp);
     anyChanged |= ImGui::Checkbox(Labeled(strings::kSettingsPurgeDeleted, "purgedeleted"), &Cfg().purgeDeleted);
     ImGui::SameLine();
     ImGui::BeginDisabled(!Cfg().purgeDeleted);
@@ -2843,6 +2847,20 @@ void OverlayApp::RenderConfirmDeletePopover() {
     // Overview's own PushID nesting around the button that requested it.
     if (confirmDeletePopoverRequested_) {
         confirmDeletePopoverRequested_ = false;
+        // Not asked at all where Settings > Behavior says not to: done here
+        // rather than at each button, where the Overview is still being
+        // drawn from what the delete changes - the reason the request is
+        // deferred in the first place.
+        if (confirmDeleteTarget_.has_value()) {
+            const ConfirmDeleteTarget& target = *confirmDeleteTarget_;
+            const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
+            if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
+                const ConfirmDeleteTarget unasked = target;
+                confirmDeleteTarget_.reset();
+                PerformDelete(unasked);
+                return;
+            }
+        }
         ImGui::OpenPopup("##confirm_delete_popover");
     }
 
@@ -2901,30 +2919,36 @@ void OverlayApp::RenderConfirmDeletePopover() {
     ImGui::EndPopup();
 
     if (deletePressed) {
-        // Its textures go as it leaves the screen, either way - see
-        // Session::Delete and DeletePermanently - and its history only with
-        // the thing itself, for good.
-        if (forGood) {
-            switch (deletedIn ? session_.DeleteMarkedCanvasesPermanently(target.id)
-                              : session_.DeletePermanently(target.id)) {
-                case Session::Removal::Removed:
-                    ShowActionToast(strings::kToastDeletedForGood);
-                    break;
-                case Session::Removal::FilesRemain:
-                    // Gone from the library; its files are still on disk
-                    // because something else holds one open, and the
-                    // store keeps trying (see LibraryStore::Remove).
-                    ShowActionToast(strings::kToastDeletedForGoodFilesRemain);
-                    break;
-                case Session::Removal::NotFound:
-                    break;
-            }
-        } else if (session_.Delete(target.id)) {
-            ShowActionToast(strings::kToastDeleted);
-        }
+        PerformDelete(target);
     }
     if (cancelPressed || deletePressed) {
         confirmDeleteTarget_.reset();
+    }
+}
+
+void OverlayApp::PerformDelete(const ConfirmDeleteTarget& target) {
+    const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
+    const bool deletedIn = target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
+    // Its textures go as it leaves the screen, either way - see
+    // Session::Delete and DeletePermanently - and its history only with the
+    // thing itself, for good.
+    if (forGood) {
+        switch (deletedIn ? session_.DeleteMarkedCanvasesPermanently(target.id)
+                          : session_.DeletePermanently(target.id)) {
+            case Session::Removal::Removed:
+                ShowActionToast(strings::kToastDeletedForGood);
+                break;
+            case Session::Removal::FilesRemain:
+                // Gone from the library; its files are still on disk
+                // because something else holds one open, and the store
+                // keeps trying (see LibraryStore::Remove).
+                ShowActionToast(strings::kToastDeletedForGoodFilesRemain);
+                break;
+            case Session::Removal::NotFound:
+                break;
+        }
+    } else if (session_.Delete(target.id)) {
+        ShowActionToast(strings::kToastDeleted);
     }
 }
 

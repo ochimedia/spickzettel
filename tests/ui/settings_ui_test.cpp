@@ -220,8 +220,8 @@ TEST_F(UiTest, StrokeRenderingIsChosenInThePenGroup) {
 // switch is off, and once it is on they step a day at a time - both saved
 // as settings are.
 TEST_F(UiTest, TheRetentionPeriodIsSwitchedOnAndItsDaysSet) {
-    AppSettings().Mutable().purgeDeleted = false;  // on by default
-    AppSettings().Commit();
+    controller_->GetSettings().Mutable().purgeDeleted = false;  // on by default
+    controller_->GetSettings().Commit();
     ShowEditMode();
     StepFrame();
     const int days = AppSettings().Stored().purgeDeletedAfterDays;

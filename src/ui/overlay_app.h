@@ -1325,6 +1325,9 @@ private:
         // Deleted already, so this is Delete permanently rather than a mark.
         bool forGood = false;
     };
+    // What the popover's Delete does, and what a delete Settings > Behavior
+    // says not to ask about does on the press (see AppConfig::confirmDelete).
+    void PerformDelete(const ConfirmDeleteTarget& target);
     std::optional<ConfirmDeleteTarget> confirmDeleteTarget_;
     // See RenderConfirmDeletePopover's own request-flag reasoning (mirrors
     // itemPropertiesPopoverRequested_, even though nothing here is

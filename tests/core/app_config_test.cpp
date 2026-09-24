@@ -265,6 +265,8 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.overviewShowsBitmaps = false;
     config.purgeDeleted = false;
     config.purgeDeletedAfterDays = 21;
+    config.confirmDelete = false;
+    config.confirmDeleteForGood = false;
     config.showEditModeBorder = false;
     config.editModeBorderColorRGBA = 0x5AA9FFFFu;
     config.editModeBorderOpacity = 0.4f;
@@ -600,6 +602,16 @@ TEST(AppConfigTest, PurgingDeletedThingsDefaultsToTwoWeeksAndParsesItsDays) {
     EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "1e9")).purgeDeletedAfterDays, kPurgeDeletedAfterDaysMax);
     EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "2.6")).purgeDeletedAfterDays, 3);
     EXPECT_EQ(ParseConfig(One("deleted", "afterDays", R"("7")")).purgeDeletedAfterDays, 14);
+}
+
+// Deleting a folder or canvas asks first, both kinds, until told not to.
+TEST(AppConfigTest, DeletingAsksFirstByDefaultAndEachCanBeTurnedOff) {
+    EXPECT_TRUE(DefaultConfig().confirmDelete);
+    EXPECT_TRUE(DefaultConfig().confirmDeleteForGood);
+    const AppConfig notAsked = ParseConfig(One("deleted", "confirmDelete", "false"));
+    EXPECT_FALSE(notAsked.confirmDelete);
+    EXPECT_TRUE(notAsked.confirmDeleteForGood) << "separate settings";
+    EXPECT_FALSE(ParseConfig(One("deleted", "confirmDeleteForGood", "false")).confirmDeleteForGood);
 }
 
 TEST(AppConfigTest, EditModeBorderDefaultsToTranslucentWhiteTenPixelsAlwaysShown) {

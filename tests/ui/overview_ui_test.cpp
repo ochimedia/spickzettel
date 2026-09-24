@@ -202,6 +202,38 @@ TEST_F(UiTest, DeletingPermanentlyWithShowDeletedErasesIt) {
     EXPECT_EQ(Canvases().DeletedFolderAndCanvasCount(), 0u);
 }
 
+// With both confirmations switched off in Settings > Behavior, each press
+// does what it says at once: the delete marks it, and the second deletes it
+// for good.
+TEST_F(UiTest, WithoutConfirmationsEachDeleteHappensOnThePress) {
+    controller_->GetSettings().Mutable().confirmDelete = false;
+    controller_->GetSettings().Mutable().confirmDeleteForGood = false;
+    controller_->GetSettings().Commit();
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("new folder", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/##newfolder");
+    });
+    const CanvasId doomed = Canvases().CurrentOrNull()->id;
+
+    RunUi("delete the canvas", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/##delcanvas");
+    });
+    ASSERT_NE(Canvases().FindCanvas(doomed), nullptr);
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindCanvas(doomed))) << "no dialog in between";
+
+    const std::string deleteForGood = Under(doomed, "##deleteforgood");
+    RunUi("show deleted, and delete it for good", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###showdeleted");
+        ctx->ItemClick(deleteForGood.c_str());
+    });
+    EXPECT_EQ(Canvases().FindCanvas(doomed), nullptr);
+}
+
 // A new folder holding two canvases, the second current - what the tests
 // below delete bits of.
 struct TwoCanvasFolder {

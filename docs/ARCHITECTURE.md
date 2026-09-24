@@ -1327,7 +1327,13 @@ is not on - see `ForgetHistoryOfItem`.
 
 Deliberately narrow: reorders and renames are not tracked, and deleting
 a canvas or folder gets a confirmation and Show deleted instead of an
-undo entry. Moving a snippet to another canvas from its menu, or to a
+undo entry. Either confirmation - for a delete that can be restored, and
+for one that is for good - can be switched off in Settings > Behavior
+(`AppConfig::confirmDelete`, `confirmDeleteForGood`), for everything at
+once rather than per profile, since what a delete asks is about the
+library. The request is still deferred to where the popover is drawn,
+and done there without asking, since a button that deleted on the spot
+would change the Overview while it is still being drawn from it. Moving a snippet to another canvas from its menu, or to a
 new canvas with Ctrl+Shift+N, is not on the history either.
 
 Moves and resizes are, since one accidental drag of a snippet in a

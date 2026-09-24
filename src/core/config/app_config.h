@@ -329,6 +329,15 @@ struct AppConfig {
     // Settings > Behavior.
     bool purgeDeleted = true;
     int purgeDeletedAfterDays = 14;
+    // Whether deleting a folder or canvas asks first: one that can still be
+    // restored (confirmDelete), and one already deleted, which is for good
+    // (confirmDeleteForGood). Both on by default. Off, the delete happens
+    // on the press, the same as a snippet's always has. Chosen in
+    // Settings > Behavior, for everything at once rather than per
+    // application: what a delete asks is about the library, not about what
+    // the overlay is up over.
+    bool confirmDelete = true;
+    bool confirmDeleteForGood = true;
 
     // Which display the overlay comes up on, remembered by the id and the
     // name it was listed under (see platform::DisplayInfo for what each is).
