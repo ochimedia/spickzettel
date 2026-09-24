@@ -211,10 +211,9 @@ private:
     void Refresh();
     // Injects everything banked so far as one correction, putting the
     // game's camera back where it was. Called by the raw-input sink once the
-    // bank passes kCorrectionLeash on either axis, and by Refresh as
-    // countering ends - not once per frame, see kCorrectionLeash. Deferring
-    // is only invisible behind the frozen screen, where the camera's
-    // wandering is not seen. No-op when there is nothing banked.
+    // bank passes the threshold on either axis and by Refresh as countering
+    // ends - never once per frame, see EditModeInputOptions::counterThreshold.
+    // No-op when there is nothing banked.
     void FlushPendingCorrection();
     void EnsureRawInputSink();
     void DestroyRawInputSink();
@@ -474,6 +473,9 @@ private:
     // decides, per report, whether the position just computed is written to
     // the real cursor - see PublishVirtualCursor.
     std::atomic<bool> softwarePointerDrawn_{true};
+    // EditModeInputOptions::counterThreshold, mirrored likewise for the
+    // raw-input sink, which checks the bank against it on every report.
+    std::atomic<LONG> counterThreshold_{EditModeInputOptions{}.counterThreshold};
 
     // Written by the hook thread as buttons go down and up, read by the
     // render thread through HeldButtons - hence atomic.

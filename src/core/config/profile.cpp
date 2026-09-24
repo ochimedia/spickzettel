@@ -21,6 +21,11 @@ void Apply(const ProfileOverrides& overrides, ProfileableSettings& settings) {
             settings.*field.value = *(overrides.*field.override);
         }
     }
+    for (const ProfileableIntField& field : kProfileableIntFields) {
+        if ((overrides.*field.override).has_value()) {
+            settings.*field.value = *(overrides.*field.override);
+        }
+    }
     for (size_t i = 0; i < overrides.shortcuts.size(); ++i) {
         if (overrides.shortcuts[i].has_value()) {
             settings.shortcuts[i] = *overrides.shortcuts[i];
@@ -36,6 +41,7 @@ platform::EditModeInputOptions ProfileableSettings::InputOptions() const {
     options.useRawMouseInput = rawMouseInput;
     options.dontForwardKeystrokes = dontForwardKeystrokes;
     options.counterRawMouseInput = counterRawMouseInput;
+    options.counterThreshold = counterThreshold;
     return options;
 }
 
@@ -44,6 +50,7 @@ void ProfileableSettings::SetInputOptions(const platform::EditModeInputOptions& 
     rawMouseInput = options.useRawMouseInput;
     dontForwardKeystrokes = options.dontForwardKeystrokes;
     counterRawMouseInput = options.counterRawMouseInput;
+    counterThreshold = options.counterThreshold;
 }
 
 bool ProfileMatch::Matches(const platform::ForegroundApp& app) const {
@@ -68,7 +75,7 @@ bool ProfileMatch::Matches(const platform::ForegroundApp& app) const {
 
 bool ProfileOverrides::Empty() const {
     if (dontStealFocus || takeFocusOverElevated || softwarePointer || rawMouseInput ||
-        dontForwardKeystrokes || counterRawMouseInput || freezeScreen) {
+        dontForwardKeystrokes || counterRawMouseInput || freezeScreen || counterThreshold) {
         return false;
     }
     return std::none_of(shortcuts.begin(), shortcuts.end(),
@@ -92,6 +99,9 @@ size_t ProfileOverrides::OverriddenCount(ProfileGroup group) const {
     size_t count = 0;
     if (group == ProfileGroup::Behavior) {
         for (const ProfileableField& field : kProfileableFields) {
+            count += (this->*field.override).has_value() ? 1 : 0;
+        }
+        for (const ProfileableIntField& field : kProfileableIntFields) {
             count += (this->*field.override).has_value() ? 1 : 0;
         }
     } else {

@@ -170,6 +170,21 @@ TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
     EXPECT_TRUE(onlyMouse.counterRawMouseInput);
 }
 
+TEST(AppConfigTest, CounterThresholdIsReadClampedAndRoundTrips) {
+    using platform::EditModeInputOptions;
+    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "42")).editModeInput.counterThreshold, 42);
+    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "0")).editModeInput.counterThreshold,
+              EditModeInputOptions::kCounterThresholdMin);
+    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "1000000")).editModeInput.counterThreshold,
+              EditModeInputOptions::kCounterThresholdMax);
+    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "\"lots\"")).editModeInput.counterThreshold,
+              EditModeInputOptions{}.counterThreshold);
+
+    AppConfig config = DefaultConfig();
+    config.editModeInput.counterThreshold = 123;
+    EXPECT_EQ(ParseConfig(SerializeConfig(config)).editModeInput.counterThreshold, 123);
+}
+
 TEST(AppConfigTest, LibraryTreeHudDefaultsToOffAndRoundTrips) {
     EXPECT_FALSE(DefaultConfig().showLibraryTreeHud);
     EXPECT_TRUE(ParseConfig(One("diagnostics", "showLibraryTreeHud", "true")).showLibraryTreeHud);

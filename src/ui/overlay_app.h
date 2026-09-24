@@ -906,6 +906,10 @@ private:
     // stored value is not in effect.
     void ProfileableCheckbox(const char* id, const char* label, const ProfileableField& field, const char* help,
                               bool disabled = false);
+    // The same for a number: a step field between `min` and `max` with
+    // `unit` after it, marked and revertible the way the checkbox is.
+    void ProfileableInt(const char* id, const char* label, const char* unit, const ProfileableIntField& field,
+                        int min, int max, int step, const char* help, bool disabled = false);
     // The Settings calls, aimed at whichever of the defaults or a profile
     // the panel is showing (editProfile_) - which is not necessarily the
     // profile in effect. What the section being edited currently resolves
@@ -915,12 +919,17 @@ private:
     ProfileableSettings EditedSettings() const { return settings_.ResolvedFor(editProfile_); }
     // True when the target being edited states this field for itself.
     bool IsOverriddenHere(const ProfileableField& field) const { return settings_.IsOverridden(editProfile_, field); }
+    bool IsOverriddenHere(const ProfileableIntField& field) const { return settings_.IsOverridden(editProfile_, field); }
     // Writes one field into whatever is being edited, then re-derives the
     // live values and persists.
     void SetProfileableValue(const ProfileableField& field, bool value) {
         settings_.SetProfileable(editProfile_, field, value);
     }
     void ClearProfileableOverride(const ProfileableField& field) { settings_.ClearOverride(editProfile_, field); }
+    void SetProfileableValue(const ProfileableIntField& field, int value) {
+        settings_.SetProfileable(editProfile_, field, value);
+    }
+    void ClearProfileableOverride(const ProfileableIntField& field) { settings_.ClearOverride(editProfile_, field); }
     // The same two, for a shortcut binding.
     void SetEditedShortcut(ShortcutAction action, platform::KeyCombo combo) {
         settings_.SetShortcut(editProfile_, action, combo);

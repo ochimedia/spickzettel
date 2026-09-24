@@ -55,6 +55,26 @@ TEST(SettingsTest, AnEditGoesWhereItIsAimed) {
     EXPECT_FALSE(settings.IsOverridden(std::nullopt, freeze)) << "which override nothing";
 }
 
+TEST(SettingsTest, ANumberEditGoesWhereItIsAimed) {
+    Settings settings(ConfigWithOneProfile());
+    settings.SetUnderlyingApplication(Game());
+    const ProfileableIntField threshold{&ProfileableSettings::counterThreshold, &ProfileOverrides::counterThreshold};
+    const int defaultThreshold = DefaultConfig().editModeInput.counterThreshold;
+
+    settings.SetProfileable(0u, threshold, 40);
+    EXPECT_TRUE(settings.IsOverridden(0u, threshold));
+    EXPECT_EQ(settings.Stored().editModeInput.counterThreshold, defaultThreshold);
+    EXPECT_EQ(settings.Live().counterThreshold, 40);
+
+    settings.ClearOverride(0u, threshold);
+    EXPECT_FALSE(settings.IsOverridden(0u, threshold));
+    EXPECT_EQ(settings.Live().counterThreshold, defaultThreshold);
+
+    settings.SetProfileable(std::nullopt, threshold, 90);
+    EXPECT_EQ(settings.Stored().editModeInput.counterThreshold, 90);
+    EXPECT_EQ(settings.Live().counterThreshold, 90) << "a profile that says nothing inherits it";
+}
+
 TEST(SettingsTest, EveryEditCommitsAndACommitResolvesAgain) {
     Settings settings(ConfigWithOneProfile());
     int commits = 0;

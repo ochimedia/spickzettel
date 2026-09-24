@@ -2194,20 +2194,40 @@ Consequences that shape `Win32InputGrab`:
   `TranslateMessage` is skipped for the key-downs the grab posts or every
   letter arrives twice. IME composition genuinely needs a focused window
   and still borrows one.
-- **Counter raw mouse input** injects the exact negation of every
+- **Counter raw mouse input** banks the exact negation of every
   physical movement, against the raw device deltas read through an
   `RIDEV_INPUTSINK` registration: negating hook-derived screen
   coordinates removed ~27% of the motion, negating device deltas ~98%.
   Corrections are stamped in `dwExtraInfo` so the hook recognizes and
   swallows them (they still reach the game), since passing them through
-  corrupted the next movement's delta and jittered the pointer. It
-  measures far better than it feels: the correction reaches the camera a
-  frame after the movement, so the view shakes, and anything with
-  anti-cheat discards injected input outright. Kept, labeled
+  corrupted the next movement's delta and jittered the pointer. Anything
+  with anti-cheat discards injected input outright. Kept, labeled
   experimental, on by default because its common failure is doing
-  nothing. Four things were tried against the shake and are gone:
-  injecting per report instead of per frame (cut the window as intended,
-  changed nothing in a real game); a dedicated high-priority sink thread
+  nothing.
+- **The bank is settled in steps**: whenever it passes a threshold on
+  either axis, and once more as countering ends. The threshold is a
+  Behavior setting, per profile, in device counts (default 200), because
+  how many degrees a count turns the camera is up to each game's
+  sensitivity. Settled per frame, as it first was, the camera visibly
+  shook, and the pointer paid for it too. Windows 11 caps raw input to a
+  background listener at about 125 messages a second and merges the
+  rest; each correction reaches our own sink as one of those messages.
+  Measured with a steady 125 Hz source: 200 reports arrived as 200
+  messages alone, as ~120 once per-frame corrections were added - two
+  or three reports merged and up to 16 ms late, so the pointer stood
+  still and then jumped. A zero-length injection did the same, and so
+  did injecting from the sink's own thread: it is the message count. A
+  1000 Hz mouse is over the cap regardless and arrives as evenly spaced
+  merged messages, which is why it never showed there. Settling only at
+  the end was tried next and fails differently: a camera that reaches
+  its pitch limit drops part of the movement, and the correction then
+  overshoots by that part. A threshold bounds how far the camera can
+  wander from where the overlay found it. In between it does wander,
+  which the frozen screen hides.
+- **Against the shake of per-frame countering**, four things were tried
+  before settling in steps and are gone: injecting per report instead of
+  per frame (cut the window as intended, changed nothing in a real
+  game); a dedicated high-priority sink thread
   (measured 15 ms median lateness from the render loop, tried in a game,
   worse, reverted); an integral term aiming at the accumulated total (a
   feedback loop with dead time and no damping; oscillated wildly - do not

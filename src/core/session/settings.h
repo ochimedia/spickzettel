@@ -64,12 +64,15 @@ public:
     // Whether `profile` sets the field itself rather than inheriting it.
     // Always false for the defaults, which inherit from nothing.
     bool IsOverridden(std::optional<size_t> profile, const ProfileableField& field) const;
+    bool IsOverridden(std::optional<size_t> profile, const ProfileableIntField& field) const;
     bool IsShortcutOverridden(std::optional<size_t> profile, ShortcutAction action) const;
 
     // Each writes into the defaults for nullopt, into that profile
     // otherwise, and commits.
     void SetProfileable(std::optional<size_t> target, const ProfileableField& field, bool value);
     void ClearOverride(std::optional<size_t> profile, const ProfileableField& field);
+    void SetProfileable(std::optional<size_t> target, const ProfileableIntField& field, int value);
+    void ClearOverride(std::optional<size_t> profile, const ProfileableIntField& field);
     void SetShortcut(std::optional<size_t> target, ShortcutAction action, platform::KeyCombo combo);
     void ClearShortcutOverride(std::optional<size_t> profile, ShortcutAction action);
     // Replaces the whole list - adding, renaming, deleting, editing what a
@@ -84,6 +87,13 @@ public:
 private:
     bool IsProfile(std::optional<size_t> index) const { return index && *index < stored_.profiles.size(); }
     void Resolve();
+    // The bodies of the overloads above, one per kind of field.
+    template <typename Field>
+    bool IsOverriddenImpl(std::optional<size_t> profile, const Field& field) const;
+    template <typename Field, typename Value>
+    void SetProfileableImpl(std::optional<size_t> target, const Field& field, Value value);
+    template <typename Field>
+    void ClearOverrideImpl(std::optional<size_t> profile, const Field& field);
 
     AppConfig stored_;
     platform::ForegroundApp underlyingApp_;

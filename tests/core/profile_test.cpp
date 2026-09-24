@@ -155,6 +155,21 @@ TEST(ProfileTest, OverriddenCountIsPerGroup) {
     EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Behavior), 2u);
     EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Shortcuts), 1u);
     EXPECT_FALSE(profile.overrides.Empty());
+
+    profile.overrides.counterThreshold = 50;
+    EXPECT_EQ(profile.overrides.OverriddenCount(ProfileGroup::Behavior), 3u);
+}
+
+TEST(ProfileTest, ANumberOverrideCountsAndApplies) {
+    Profile profile = GameProfile("Game", "game.exe");
+    profile.overrides.counterThreshold = 50;
+    EXPECT_FALSE(profile.overrides.Empty());
+
+    const ProfileableSettings resolved = ResolveForApplication(Defaults(), {profile}, App("game.exe"));
+    EXPECT_EQ(resolved.counterThreshold, 50);
+    EXPECT_EQ(resolved.InputOptions().counterThreshold, 50);
+    EXPECT_EQ(ResolveForApplication(Defaults(), {profile}, App("other.exe")).counterThreshold,
+              Defaults().counterThreshold);
 }
 
 TEST(ProfileTest, InputOptionsRoundTripThroughTheFlatFields) {
@@ -202,6 +217,7 @@ TEST(ProfileTest, AnOverrideOfEveryKindSurvivesTheFile) {
     profile.overrides.dontForwardKeystrokes = false;
     profile.overrides.counterRawMouseInput = false;
     profile.overrides.freezeScreen = false;
+    profile.overrides.counterThreshold = 75;
     config.profiles = {profile};
 
     const AppConfig reparsed = ParseConfig(SerializeConfig(config));

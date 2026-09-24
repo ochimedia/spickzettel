@@ -109,14 +109,26 @@ struct EditModeInputOptions {
     // working because the grab recognizes and dispatches them itself; a
     // swallowing hook suppresses RegisterHotKey too.
     bool dontForwardKeystrokes = true;
-    // For every physical mouse movement, inject the exact opposite, so a
+    // Bank every physical mouse movement and inject the exact opposite, so a
     // camera integrating raw motion nets out to where it started. Needs the
-    // mouse taken first - see CounterRawMouseInputCanBeUsed. Removes ~98%
-    // of the motion, yet feels worse than that: the correction reaches the
-    // game a frame after the movement, so the view shakes rather than
-    // holding still, and anything with anti-cheat discards injected input
-    // outright. Experimental; on because "no effect" is its common failure.
+    // mouse taken first - see CounterRawMouseInputCanBeUsed. Settled in
+    // steps rather than per movement - see counterThreshold - so the camera
+    // wanders in between, which the frozen screen hides. Anything with
+    // anti-cheat discards injected input outright. Experimental; on because
+    // "no effect" is its common failure.
     bool counterRawMouseInput = true;
+    // How far, in device counts on either axis, the camera may wander before
+    // the banked correction is injected; it is injected once more on leaving
+    // edit mode. Settling only then puts a camera that ran into its pitch
+    // limit somewhere else entirely - the game clamped the movement and the
+    // correction undoes all of it - and settling per movement made the
+    // camera shake and, on a 125 Hz mouse, pushed our own raw-input sink
+    // past Windows' background rate cap. How many degrees a count is is up
+    // to the game's sensitivity, hence a setting: at common shooter
+    // sensitivities (0.02-0.07 degrees per count) the default is 4-14.
+    int counterThreshold = 200;
+    static constexpr int kCounterThresholdMin = 10;
+    static constexpr int kCounterThresholdMax = 5000;
 
     // Whether the overlay draws its own pointer - one question, asked in one
     // place, so the side that hides the OS cursor and the side that draws

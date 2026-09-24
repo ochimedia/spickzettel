@@ -1876,8 +1876,20 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
         strings::kInputCounterRawMouseHelp,
         !counterAvailable);
     TreeBranch(rawTrunk, rowPos, kTreeIndent);
+    float counterTrunk = TrunkFrom(rowPos);
 
-    ImGui::Unindent(kTreeIndent * 2.0f);
+    // Nested under countering, which it tunes, and grayed with it: a
+    // threshold for corrections that are not being made does nothing.
+    ImGui::Indent(kTreeIndent);
+    rowPos = ImGui::GetCursorScreenPos();
+    ProfileableInt("counterthreshold", strings::kInputCounterThresholdLabel, strings::kInputCounterThresholdUnit,
+                   {&ProfileableSettings::counterThreshold, &ProfileOverrides::counterThreshold},
+                   platform::EditModeInputOptions::kCounterThresholdMin,
+                   platform::EditModeInputOptions::kCounterThresholdMax, 10, strings::kInputCounterThresholdHelp,
+                   !counterAvailable || !edited.counterRawMouseInput);
+    TreeBranch(counterTrunk, rowPos, kTreeIndent);
+
+    ImGui::Unindent(kTreeIndent * 3.0f);
 
     // Out of the tree: nothing above it is needed for it and nothing below
     // needs it. The overlay keeps the pointer position from the mouse
@@ -2135,6 +2147,48 @@ void OverlayApp::ProfileableCheckbox(const char* id, const char* label, const Pr
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip(strings::kHotkeysComboSetHere,
                                (settings_.Base().*field.value) ? strings::kHotkeysOn : strings::kHotkeysOff);
+        }
+    }
+    ImGui::PopID();
+}
+
+void OverlayApp::ProfileableInt(const char* id, const char* label, const char* unit,
+                                 const ProfileableIntField& field, int min, int max, int step, const char* help,
+                                 bool disabled) {
+    const bool overridden = IsOverriddenHere(field);
+    int value = EditedSettings().*field.value;
+
+    ImGui::PushID(id);
+    ImGui::BeginDisabled(disabled);
+    ImGui::AlignTextToFramePadding();
+    if (overridden) {
+        ImGui::TextColored(theme::Accent(), "%s", label);
+    } else {
+        ImGui::TextUnformatted(label);
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(110.0f);
+    // Written on every edit, as the checkbox is on every click: a profile
+    // that has been typed into states the value for itself.
+    if (ImGui::InputInt("##value", &value, step, step * 5)) {
+        SetProfileableValue(field, std::clamp(value, min, max));
+    }
+    ImGui::SameLine();
+    ImGui::TextUnformatted(unit);
+    ImGui::EndDisabled();
+
+    if (help != nullptr) {
+        ImGui::SameLine();
+        HelpMarker(id, label, help);
+    }
+
+    if (overridden) {
+        ImGui::SameLine();
+        if (RevertButton("##revert")) {
+            ClearProfileableOverride(field);
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(strings::kHotkeysComboSetHere, std::to_string(settings_.Base().*field.value).c_str());
         }
     }
     ImGui::PopID();

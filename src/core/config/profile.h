@@ -60,6 +60,7 @@ struct ProfileOverrides {
     std::optional<bool> dontForwardKeystrokes;
     std::optional<bool> counterRawMouseInput;
     std::optional<bool> freezeScreen;
+    std::optional<int> counterThreshold;
     std::array<std::optional<platform::KeyCombo>, kShortcutActionCount> shortcuts;
 
     bool Empty() const;
@@ -94,9 +95,10 @@ struct ProfileableSettings {
     bool dontForwardKeystrokes = true;
     bool counterRawMouseInput = true;
     bool freezeScreen = true;
+    int counterThreshold = platform::EditModeInputOptions{}.counterThreshold;
     ShortcutBindings shortcuts = DefaultShortcuts();
 
-    // The four that travel together as one platform type - see
+    // The five that travel together as one platform type - see
     // platform::EditModeInputOptions, whose precondition helpers the
     // Settings panel and the input grab both ask.
     platform::EditModeInputOptions InputOptions() const;
@@ -126,6 +128,16 @@ inline constexpr ProfileableField kProfileableFields[] = {
     {&ProfileableSettings::dontForwardKeystrokes, &ProfileOverrides::dontForwardKeystrokes},
     {&ProfileableSettings::counterRawMouseInput, &ProfileOverrides::counterRawMouseInput},
     {&ProfileableSettings::freezeScreen, &ProfileOverrides::freezeScreen},
+};
+
+// The same pair for a number.
+struct ProfileableIntField {
+    int ProfileableSettings::*value;
+    std::optional<int> ProfileOverrides::*override;
+};
+
+inline constexpr ProfileableIntField kProfileableIntFields[] = {
+    {&ProfileableSettings::counterThreshold, &ProfileOverrides::counterThreshold},
 };
 
 struct Profile {

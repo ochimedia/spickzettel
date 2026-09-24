@@ -30,8 +30,17 @@ ProfileableSettings Settings::ResolvedFor(std::optional<size_t> profile) const {
     return IsProfile(profile) ? ResolveProfile(Base(), stored_.profiles, *profile) : Base();
 }
 
-bool Settings::IsOverridden(std::optional<size_t> profile, const ProfileableField& field) const {
+template <typename Field>
+bool Settings::IsOverriddenImpl(std::optional<size_t> profile, const Field& field) const {
     return IsProfile(profile) && (stored_.profiles[*profile].overrides.*field.override).has_value();
+}
+
+bool Settings::IsOverridden(std::optional<size_t> profile, const ProfileableField& field) const {
+    return IsOverriddenImpl(profile, field);
+}
+
+bool Settings::IsOverridden(std::optional<size_t> profile, const ProfileableIntField& field) const {
+    return IsOverriddenImpl(profile, field);
 }
 
 bool Settings::IsShortcutOverridden(std::optional<size_t> profile, ShortcutAction action) const {
@@ -39,7 +48,8 @@ bool Settings::IsShortcutOverridden(std::optional<size_t> profile, ShortcutActio
            stored_.profiles[*profile].overrides.shortcuts[ShortcutActionIndex(action)].has_value();
 }
 
-void Settings::SetProfileable(std::optional<size_t> target, const ProfileableField& field, bool value) {
+template <typename Field, typename Value>
+void Settings::SetProfileableImpl(std::optional<size_t> target, const Field& field, Value value) {
     if (IsProfile(target)) {
         stored_.profiles[*target].overrides.*field.override = value;
     } else {
@@ -50,12 +60,29 @@ void Settings::SetProfileable(std::optional<size_t> target, const ProfileableFie
     Commit();
 }
 
-void Settings::ClearOverride(std::optional<size_t> profile, const ProfileableField& field) {
+void Settings::SetProfileable(std::optional<size_t> target, const ProfileableField& field, bool value) {
+    SetProfileableImpl(target, field, value);
+}
+
+void Settings::SetProfileable(std::optional<size_t> target, const ProfileableIntField& field, int value) {
+    SetProfileableImpl(target, field, value);
+}
+
+template <typename Field>
+void Settings::ClearOverrideImpl(std::optional<size_t> profile, const Field& field) {
     if (!IsProfile(profile)) {
         return;  // the defaults have nothing to clear
     }
     (stored_.profiles[*profile].overrides.*field.override).reset();
     Commit();
+}
+
+void Settings::ClearOverride(std::optional<size_t> profile, const ProfileableField& field) {
+    ClearOverrideImpl(profile, field);
+}
+
+void Settings::ClearOverride(std::optional<size_t> profile, const ProfileableIntField& field) {
+    ClearOverrideImpl(profile, field);
 }
 
 void Settings::SetShortcut(std::optional<size_t> target, ShortcutAction action, platform::KeyCombo combo) {

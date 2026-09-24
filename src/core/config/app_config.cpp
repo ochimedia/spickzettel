@@ -404,6 +404,7 @@ struct InputKeys {
     static constexpr const char* kRawMouseInput = "rawMouseInput";
     static constexpr const char* kDontForwardKeystrokes = "dontForwardKeystrokes";
     static constexpr const char* kCounterRawMouseInput = "counterRawMouseInput";
+    static constexpr const char* kCounterThreshold = "counterThreshold";
     static constexpr const char* kFreezeScreen = "freezeScreen";
 };
 
@@ -417,6 +418,21 @@ void ReadOptionalBool(const json& j, const char* key, std::optional<bool>& out) 
 }
 
 void WriteOptionalBool(json& j, const char* key, const std::optional<bool>& value) {
+    if (value.has_value()) {
+        j[key] = *value;
+    }
+}
+
+// ReadOptionalBool for a number, clamped the way ReadInt clamps.
+void ReadOptionalInt(const json& j, const char* key, std::optional<int>& out, int min, int max) {
+    if (const auto it = j.find(key); it != j.end() && it->is_number()) {
+        int value = min;
+        ReadInt(j, key, value, min, max);
+        out = value;
+    }
+}
+
+void WriteOptionalInt(json& j, const char* key, const std::optional<int>& value) {
     if (value.has_value()) {
         j[key] = *value;
     }
@@ -610,6 +626,8 @@ AppConfig ParseConfig(std::string_view text) {
     ReadBool(input, InputKeys::kRawMouseInput, config.editModeInput.useRawMouseInput);
     ReadBool(input, InputKeys::kDontForwardKeystrokes, config.editModeInput.dontForwardKeystrokes);
     ReadBool(input, InputKeys::kCounterRawMouseInput, config.editModeInput.counterRawMouseInput);
+    ReadInt(input, InputKeys::kCounterThreshold, config.editModeInput.counterThreshold,
+            platform::EditModeInputOptions::kCounterThresholdMin, platform::EditModeInputOptions::kCounterThresholdMax);
     ReadBool(input, InputKeys::kFreezeScreen, config.freezeScreenInEditMode);
 
     ReadShortcuts(Group(doc, "shortcuts"), config.toolShortcuts);
@@ -649,6 +667,9 @@ AppConfig ParseConfig(std::string_view text) {
                               profile.overrides.dontForwardKeystrokes);
             ReadOptionalBool(profileInput, InputKeys::kCounterRawMouseInput,
                               profile.overrides.counterRawMouseInput);
+            ReadOptionalInt(profileInput, InputKeys::kCounterThreshold, profile.overrides.counterThreshold,
+                            platform::EditModeInputOptions::kCounterThresholdMin,
+                            platform::EditModeInputOptions::kCounterThresholdMax);
             ReadOptionalBool(profileInput, InputKeys::kFreezeScreen, profile.overrides.freezeScreen);
 
             const json& profileShortcuts = Group(entry, "shortcuts");
@@ -748,6 +769,7 @@ std::string SerializeConfig(const AppConfig& config) {
         {InputKeys::kRawMouseInput, config.editModeInput.useRawMouseInput},
         {InputKeys::kDontForwardKeystrokes, config.editModeInput.dontForwardKeystrokes},
         {InputKeys::kCounterRawMouseInput, config.editModeInput.counterRawMouseInput},
+        {InputKeys::kCounterThreshold, config.editModeInput.counterThreshold},
         {InputKeys::kFreezeScreen, config.freezeScreenInEditMode},
     };
 
@@ -781,6 +803,7 @@ std::string SerializeConfig(const AppConfig& config) {
         WriteOptionalBool(input, InputKeys::kRawMouseInput, profile.overrides.rawMouseInput);
         WriteOptionalBool(input, InputKeys::kDontForwardKeystrokes, profile.overrides.dontForwardKeystrokes);
         WriteOptionalBool(input, InputKeys::kCounterRawMouseInput, profile.overrides.counterRawMouseInput);
+        WriteOptionalInt(input, InputKeys::kCounterThreshold, profile.overrides.counterThreshold);
         WriteOptionalBool(input, InputKeys::kFreezeScreen, profile.overrides.freezeScreen);
         if (!input.empty()) {
             entry["behavior"] = std::move(input);
