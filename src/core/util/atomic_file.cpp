@@ -11,9 +11,14 @@ namespace {
 // Opens `path` for writing only if nothing is there - C11's "x", which
 // both CRTs honor - so that what is there is never opened, whatever it
 // is. Null when the name is taken.
+//
+// _wfopen_s rather than _wfopen, which MSVC deprecates (C4996). It also
+// opens the file unshared, which suits a temporary that nothing else has
+// any business reading before it is renamed into place.
 std::FILE* CreateFresh(const std::filesystem::path& path) {
 #if defined(_WIN32)
-    return _wfopen(path.c_str(), L"wbx");
+    std::FILE* file = nullptr;
+    return _wfopen_s(&file, path.c_str(), L"wbx") == 0 ? file : nullptr;
 #else
     return std::fopen(path.c_str(), "wbx");
 #endif
