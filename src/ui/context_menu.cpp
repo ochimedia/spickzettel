@@ -139,10 +139,11 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
         return std::nullopt;
     }
 
-    // Selectable paints its hover in the Header colors, which this app's
-    // style leaves at ImGui's own blue - borrowed from the frame colors
-    // here, which are themed, so the wash under a row matches every other
-    // hover in the app without this file naming a color.
+    // Selectable paints its hover in the Header colors, which the app's
+    // style gives a dropdown's chosen row the accent in - borrowed from the
+    // frame colors here instead, so a menu row is washed the way every other
+    // hover in the app is, and pressed without turning accent, without this
+    // file naming a color.
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, style.Colors[ImGuiCol_FrameBgHovered]);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, style.Colors[ImGuiCol_FrameBgActive]);

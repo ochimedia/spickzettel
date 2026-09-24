@@ -121,6 +121,10 @@ void ApplyAccentToStyle(ImGuiStyle& style) {
     colors[ImGuiCol_SeparatorActive] = theme::Accent();
     colors[ImGuiCol_TextSelectedBg] = ImVec4(theme::AccentHover().x, theme::AccentHover().y, theme::AccentHover().z, 0.35f);
     colors[ImGuiCol_DragDropTarget] = theme::Accent();
+    // The chosen row of a dropdown: the accent, softened so the text on it
+    // - drawn in the ordinary text color, whatever the accent - still reads.
+    colors[ImGuiCol_Header] = ImVec4(theme::Accent().x, theme::Accent().y, theme::Accent().z, 0.45f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(theme::Accent().x, theme::Accent().y, theme::Accent().z, 0.6f);
     colors[ImGuiCol_NavHighlight] = theme::Accent();
 }
 
@@ -194,6 +198,9 @@ void ApplySpickzettelStyle(float scale) {
     colors[ImGuiCol_CheckboxSelectedBg] = theme::kFieldBg;
     colors[ImGuiCol_Button] = theme::kFieldBg;
     colors[ImGuiCol_ButtonHovered] = theme::kHoverWash;
+    // Hovering a dropdown row, or a profile's row, is hovering like any
+    // button. Left unset, these three were ImGui's own blue.
+    colors[ImGuiCol_HeaderHovered] = theme::kHoverWash;
     colors[ImGuiCol_Separator] = theme::kPanelBorderStrong;
     colors[ImGuiCol_ScrollbarBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.0f);
     colors[ImGuiCol_ScrollbarGrab] = theme::kGraphite600;
