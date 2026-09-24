@@ -407,6 +407,37 @@ TEST(LibraryCrashTest, DeletingAFolderForGood) {
         {kFolder, kCanvasA, kCanvasB, kShot, kDrawing, kNote});
 }
 
+// A snippet moved to another canvas and the canvas it left deleted for
+// good, with its picture held open so that the move cannot land: the
+// removal waits for it, and a crash or a restart meanwhile finds the
+// snippet where it was moved to - never the deleted canvas back, and
+// never the snippet lost with it.
+TEST(LibraryCrashTest, DeletingForGoodACanvasASnippetWasJustMovedOutOfWhileItsPictureIsHeld) {
+    CheckEveryCrashPoint(
+        [](LibraryStore& store, CanvasManagerSnapshot& library) {
+            std::vector<Item>& onA = FindCanvas(library, kCanvasA)->items;
+            FindCanvas(library, kCanvasB)->items.push_back(onA[0]);
+            library.canvases.erase(library.canvases.begin());
+            store.Remove({kCanvasA, kDrawing}, library);
+            store.Save(library);  // the move, still held
+        },
+        {kCanvasA, kDrawing}, {kShot});
+}
+
+// The same a level up: a canvas moved to another folder and the folder
+// deleted for good, a picture in the canvas held open.
+TEST(LibraryCrashTest, DeletingForGoodAFolderACanvasWasJustMovedOutOfWhileAPictureInItIsHeld) {
+    CheckEveryCrashPoint(
+        [](LibraryStore& store, CanvasManagerSnapshot& library) {
+            FindCanvas(library, kCanvasA)->folderId = kOtherFolder;
+            library.folders.erase(library.folders.begin());
+            library.canvases.erase(library.canvases.begin() + 1);  // B, in the folder
+            store.Remove({kFolder, kCanvasB, kNote}, library);
+            store.Save(library);
+        },
+        {kFolder, kCanvasB, kNote}, {kShot});
+}
+
 // A canvas deleted for good while a picture in one of its snippets is held
 // open: the removal stops at the picture, having taken the snippet's record,
 // and a save retries while it is still held. Once let go, nothing is left -
@@ -443,12 +474,12 @@ TEST(LibraryFaultTest, ARemovalThatCouldNotListADirectoryIsNotDone) {
     MemoryFileSystem disk;
     SetUpLibrary(disk);
     FaultyFileSystem fs(disk);
-    fs.FailWhen(FaultyFileSystem::Op::List, [](const std::filesystem::path& path) {
-        return IsOf(path, kCanvasA) && !IsOf(path, kShot) && !IsOf(path, kDrawing);
-    });
     {
         LibraryStore store(Root(), fs);
         CanvasManagerSnapshot library = *store.Load();
+        fs.FailWhen(FaultyFileSystem::Op::List, [](const std::filesystem::path& path) {
+            return IsOf(path, kCanvasA) && !IsOf(path, kShot) && !IsOf(path, kDrawing);
+        });
         library.canvases.erase(library.canvases.begin());
         EXPECT_FALSE(store.Remove({kCanvasA, kShot, kDrawing}, library));
         EXPECT_TRUE(store.HasPendingRemoval(kCanvasA));

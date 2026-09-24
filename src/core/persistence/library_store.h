@@ -57,6 +57,8 @@ namespace sz::core::persistence {
 //                                       not wholly gone from the disk
 //                                       yet, by uid; nothing of it is
 //                                       read, and every save tries again.
+//                                       With it, where anything moved out
+//                                       of it and still inside belongs.
 //                                       See Remove.
 //
 // Every id inside a record is spelled the way the directory names spell
@@ -190,11 +192,12 @@ public:
     // anything under a directory has been moved out in the model and not
     // yet on disk - a snippet moved to another canvas, a canvas out of a
     // folder, before the save that moves its directory. Deleting the
-    // directory now would take that with it. The removal is then owed
-    // instead, with nothing touched and nothing recorded - a record would
-    // hide what was moved from a restart - and the next save, which places
-    // what was moved before it runs the removals owed, finishes it once
-    // nothing the library holds is left inside.
+    // directory now would take that with it. The removal then waits, with
+    // nothing inside touched, and is recorded with where each such thing
+    // belongs - so that a restart meanwhile reads it from where it is and
+    // puts it there, rather than losing it with what was deleted. The next
+    // save, which places what was moved before it runs the removals owed,
+    // finishes it once nothing the library holds is left inside.
     bool Remove(const std::vector<uint64_t>& uids, const LibraryView& remaining) const;
     bool Remove(uint64_t uid, const LibraryView& remaining) const {
         return Remove(std::vector<uint64_t>{uid}, remaining);
@@ -379,16 +382,27 @@ private:
     // - and so is owed and not to be read. Anything inside it deleted for
     // good too is noted with it.
     bool NotePendingRemoval(const std::filesystem::path& dir) const;
+    // What pending.json says: the uids deleted for good, and where each
+    // thing moved out of one of them belongs - a canvas's folder, a
+    // snippet's canvas - while its directory is still inside.
+    struct PendingRecord {
+        std::set<uint64_t> erased;
+        std::map<uint64_t, uint64_t> moves;
+        bool operator==(const PendingRecord&) const = default;
+    };
     // Reads pending.json into writtenPending_, or finds it unreadable.
     void ReadPendingFile() const;
-    // Puts pending.json on disk naming exactly `uids` - removed when there
-    // are none. True once it does.
-    bool WritePendingFile(const std::set<uint64_t>& uids) const;
-    // Another run at every removal owed whose directory holds nothing of
-    // `live` any more: recorded in pending.json first, then removed, then
-    // the file brought in line with what is left. False when the record
-    // could not be written, and nothing new was removed.
-    bool RunPendingRemovals(const std::unordered_set<uint64_t>& live) const;
+    // Puts pending.json on disk saying exactly `record` - removed when it
+    // says nothing. True once it does.
+    bool WritePendingFile(const PendingRecord& record) const;
+    // What pending.json should say for the removals owed, with `library`
+    // saying where what was moved out of them belongs.
+    PendingRecord PendingFor(const LibraryView& library) const;
+    // Another run at every removal owed: recorded in pending.json first,
+    // then each whose directory holds nothing of `library` any more is
+    // removed, then the file brought in line with what is left. False when
+    // the record could not be written, and nothing new was removed.
+    bool RunPendingRemovals(const LibraryView& library) const;
 
     // The tree walk behind Load: every folder, canvas and snippet under
     // `foldersRoot`, into `out`, indexing each directory and noting each
@@ -430,9 +444,9 @@ private:
     // nothing under it is placed, retired or read meanwhile: it was
     // deleted, not lost.
     mutable std::map<uint64_t, std::filesystem::path> pendingRemovals_;
-    // The uids pending.json names as it is on disk: what a removal may be
-    // run for, since only what is recorded survives a crash partway.
-    mutable std::set<uint64_t> writtenPending_;
+    // What pending.json says as it is on disk: what a removal may be run
+    // for, since only what is recorded survives a crash partway.
+    mutable PendingRecord writtenPending_;
     // False when pending.json is there and cannot be read. What it names
     // is then unknown - those directories load as they are - and it is not
     // written over this session, so that it keeps naming them.

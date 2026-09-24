@@ -849,12 +849,23 @@ json OrderFileJson(const char* key, const std::vector<std::string>& names) {
 // What library.json holds: the things with no other home. One function for
 // both directions, so that what Load compares against is exactly what Save
 // writes.
-json PendingJson(const std::set<uint64_t>& erased) {
+// {"erased": ["k3j9x2", ...], "moves": {"s7d2k1": "b4n6c3"}} - the uids
+// spelled the way the directory names spell them; "moves" only while
+// there are any.
+json PendingJson(const std::set<uint64_t>& erased, const std::map<uint64_t, uint64_t>& moves) {
     json list = json::array();
     for (const uint64_t uid : erased) {
         list.push_back(FormatUid(uid));
     }
-    return json{{"erased", std::move(list)}};
+    json doc{{"erased", std::move(list)}};
+    if (!moves.empty()) {
+        json to = json::object();
+        for (const auto& [uid, parent] : moves) {
+            to[FormatUid(uid)] = FormatUid(parent);
+        }
+        doc["moves"] = std::move(to);
+    }
+    return doc;
 }
 
 json LibraryJson(FolderId currentFolderId, CanvasId currentCanvasId) {
@@ -1050,53 +1061,68 @@ bool LibraryStore::Remove(const std::vector<uint64_t>& uids, const LibraryView& 
         return false;
     }
     ++writeGeneration_;
-    RunPendingRemovals(held);
+    RunPendingRemovals(remaining);
     return std::none_of(uids.begin(), uids.end(), [this](uint64_t uid) { return pendingRemovals_.count(uid) > 0; });
 }
 
-bool LibraryStore::RunPendingRemovals(const std::unordered_set<uint64_t>& live) const {
-    // Ready: nothing the library holds is inside any more. One that still
-    // holds something is not recorded - a record would hide what was moved
-    // out of it from a restart - and waits for the save that moves it.
-    std::set<uint64_t> ready;
-    for (const auto& [uid, dir] : pendingRemovals_) {
-        if (!HoldsAnyOf(dir, live)) {
-            ready.insert(uid);
+LibraryStore::PendingRecord LibraryStore::PendingFor(const LibraryView& library) const {
+    // Where the library has each canvas and snippet.
+    std::unordered_map<uint64_t, uint64_t> parentOf;
+    for (const Canvas& canvas : library.canvases) {
+        parentOf[canvas.id] = canvas.folderId;
+        for (const Item& item : canvas.items) {
+            parentOf[item.id] = canvas.id;
         }
     }
+    PendingRecord record;
+    for (const auto& [uid, dir] : pendingRemovals_) {
+        record.erased.insert(uid);
+        // Anything the library still holds directly inside - moved out in
+        // the model, not yet on disk - and where it belongs. What is inside
+        // that goes with it, so only the directory directly inside is named.
+        for (const auto* index : {&canvasDirs_, &itemDirs_}) {
+            for (const auto& [id, path] : *index) {
+                const auto parent = parentOf.find(id);
+                if (parent != parentOf.end() && path.parent_path() == dir) {
+                    record.moves[id] = parent->second;
+                }
+            }
+        }
+    }
+    return record;
+}
+
+bool LibraryStore::RunPendingRemovals(const LibraryView& library) const {
     // On disk before anything is touched: a removal that stops partway,
-    // for a crash or a held file, is then still known at the next start.
-    // Only what is recorded is removed, so a record that could not be
-    // written removes nothing new.
-    const bool recorded = WritePendingFile(ready);
-    std::set<uint64_t> erased = writtenPending_;
+    // for a crash or a held file, is then still known at the next start -
+    // and so is where whatever was moved out of it belongs, while it is
+    // still inside. Only what is recorded is removed, so a record that
+    // could not be written removes nothing new.
+    const bool recorded = WritePendingFile(PendingFor(library));
+    std::set<uint64_t> erased = writtenPending_.erased;
     for (const auto& [uid, dir] : pendingRemovals_) {
         erased.insert(uid);
     }
-    for (const uint64_t uid : ready) {
-        const auto it = pendingRemovals_.find(uid);
-        if (it == pendingRemovals_.end() || writtenPending_.count(uid) == 0) {
-            continue;
-        }
-        if (RemoveOwnDirectory(it->second, erased)) {
+    // Ready: nothing the library holds is inside any more. One that still
+    // holds something waits for the save that moves it out.
+    const std::unordered_set<uint64_t> live = IdsIn(library);
+    for (auto it = pendingRemovals_.begin(); it != pendingRemovals_.end();) {
+        const bool ready = writtenPending_.erased.count(it->first) > 0 && !HoldsAnyOf(it->second, live);
+        if (ready && RemoveOwnDirectory(it->second, erased)) {
             ForgetUnder(it->second);
-            pendingRemovals_.erase(it);
+            it = pendingRemovals_.erase(it);
+        } else {
+            ++it;
         }
     }
     // And the record brought in line with what is left. Best effort: one
     // still naming something gone costs the next load a look for it.
-    std::set<uint64_t> left;
-    for (const uint64_t uid : ready) {
-        if (pendingRemovals_.count(uid) > 0) {
-            left.insert(uid);
-        }
-    }
-    WritePendingFile(left);
+    WritePendingFile(PendingFor(library));
     return recorded;
 }
 
-bool LibraryStore::WritePendingFile(const std::set<uint64_t>& uids) const {
-    if (uids == writtenPending_) {
+bool LibraryStore::WritePendingFile(const PendingRecord& record) const {
+    if (record == writtenPending_) {
         return true;
     }
     if (!pendingFileReadable_) {
@@ -1106,16 +1132,17 @@ bool LibraryStore::WritePendingFile(const std::set<uint64_t>& uids) const {
     if (!IsOurs(file)) {
         return false;
     }
-    const bool written =
-        uids.empty() ? fs_->Remove(file) : WriteFileAtomically(*fs_, file, PendingJson(uids).dump(2));
+    const bool written = record.erased.empty()
+                             ? fs_->Remove(file)
+                             : WriteFileAtomically(*fs_, file, PendingJson(record.erased, record.moves).dump(2));
     if (written) {
-        writtenPending_ = uids;
+        writtenPending_ = record;
     }
     return written;
 }
 
 void LibraryStore::ReadPendingFile() const {
-    writtenPending_.clear();
+    writtenPending_ = {};
     pendingFileReadable_ = true;
     const std::filesystem::path file = rootDir_ / kPendingFile;
     if (fs_->LinkStatus(file) == FileSystem::Kind::None) {
@@ -1132,7 +1159,17 @@ void LibraryStore::ReadPendingFile() const {
                 continue;
             }
             if (const std::optional<uint64_t> uid = ParseUid(entry.get<std::string>())) {
-                writtenPending_.insert(*uid);
+                writtenPending_.erased.insert(*uid);
+            }
+        }
+    }
+    if (const auto it = doc->find("moves"); it != doc->end() && it->is_object()) {
+        for (const auto& [key, value] : it->items()) {
+            const std::optional<uint64_t> uid = ParseUid(key);
+            const std::optional<uint64_t> parent =
+                value.is_string() ? ParseUid(value.get<std::string>()) : std::nullopt;
+            if (uid && parent) {
+                writtenPending_.moves[*uid] = *parent;
             }
         }
     }
@@ -1140,7 +1177,7 @@ void LibraryStore::ReadPendingFile() const {
 
 bool LibraryStore::NotePendingRemoval(const std::filesystem::path& dir) const {
     const std::optional<uint64_t> uid = UidFromDirectoryName(dir.filename().string());
-    if (!uid || writtenPending_.count(*uid) == 0) {
+    if (!uid || writtenPending_.erased.count(*uid) == 0) {
         if (!fs_->Exists(dir / kRemovedMarker)) {
             return false;
         }
@@ -1151,8 +1188,15 @@ bool LibraryStore::NotePendingRemoval(const std::filesystem::path& dir) const {
             return true;
         }
         // Recorded on disk as much as pending.json would record it; the
-        // next save writes it there too.
-        writtenPending_.insert(*uid);
+        // next save writes it there too. An older build marked a directory
+        // only once nothing moved out of it was left inside, so whatever
+        // is inside went with it.
+        writtenPending_.erased.insert(*uid);
+        for (const std::filesystem::path& inside : SortedSubdirectories(*fs_, dir)) {
+            if (const std::optional<uint64_t> insideUid = UidFromDirectoryName(inside.filename().string())) {
+                writtenPending_.erased.insert(*insideUid);
+            }
+        }
     }
     // Owed under the uid its name ends in - what Remove keyed it by, since
     // the record inside may already be gone.
@@ -1161,7 +1205,7 @@ bool LibraryStore::NotePendingRemoval(const std::filesystem::path& dir) const {
     // may have lost its own record to an earlier run at it.
     for (const std::filesystem::path& inside : SortedSubdirectories(*fs_, dir)) {
         const std::optional<uint64_t> insideUid = UidFromDirectoryName(inside.filename().string());
-        if (insideUid && writtenPending_.count(*insideUid) > 0) {
+        if (insideUid && writtenPending_.erased.count(*insideUid) > 0) {
             NotePendingRemoval(inside);
         }
     }
@@ -1268,6 +1312,86 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
     ApplyOrder(foundFolders, folderOrderFile.names);
     noteOrderFile("order:root", folderOrderFile, "folders", namesOf(foundFolders));
 
+    // A snippet's directory, read, indexed, and noted if it came back
+    // exactly as a save would write it.
+    const auto readItem = [&](const std::filesystem::path& itemDir) -> std::optional<Item> {
+        const std::optional<json> itemDoc = ReadJsonFile(*fs_, itemDir / kItemFile);
+        if (!itemDoc) {
+            return std::nullopt;
+        }
+        Item item;
+        bool repaired = false;
+        if (!ReadItemRecord(*itemDoc, item, repaired)) {
+            return std::nullopt;
+        }
+        const uint64_t recordedItemId = item.id;
+        item.id = claimId(item.id);
+        // Every file beside the record belongs to it, whatever the record
+        // calls them - which is what lets a snippet be moved by moving one
+        // directory. Knowing where the directory is is therefore the whole
+        // of image resolution (see FindImage); nothing inside it needs
+        // listing.
+        itemDirs_[item.id] = itemDir;
+        // The hash of what was read, not a comparison of the text: the
+        // record is where the bulk is, and serializing it to compare would
+        // cost the load half a save. A key the record lacks reads as its
+        // default and reads back the same next time, so it is no reason to
+        // write; a value the read had to repair is (see FiniteOr) - left
+        // unnoted so the next save writes it as it now is.
+        if (item.id == recordedItemId && !repaired) {
+            writtenItemHashes_[item.id] = HashItem(item);
+        }
+        return item;
+    };
+    // A canvas's directory, and the snippets in it, the same way - in
+    // `folderId`, wherever the directory is.
+    const auto readCanvas = [&](const std::filesystem::path& canvasDir, FolderId folderId) -> std::optional<Canvas> {
+        const std::optional<json> canvasDoc = ReadJsonFile(*fs_, canvasDir / kCanvasFile);
+        if (!canvasDoc) {
+            return std::nullopt;
+        }
+        Canvas canvas;
+        if (!ReadRecord(*canvasDoc, canvas)) {
+            return std::nullopt;
+        }
+        const uint64_t recordedCanvasId = canvas.id;
+        canvas.id = claimId(canvas.id);
+        // Where it *is* beats what it says it belongs to. That is the whole
+        // point of the tree: drag a canvas directory into another folder
+        // while the app is closed and it is in that folder, with no record
+        // anywhere left saying otherwise.
+        canvas.folderId = folderId;
+        canvasDirs_[canvas.id] = canvasDir;
+        // A record that is not exactly what a save writes - a key it does
+        // not write, say - is not noted here, and is rewritten.
+        if (canvas.id == recordedCanvasId && ToJson(canvas) == *canvasDoc) {
+            writtenFileText_["canvas:" + std::to_string(canvas.id)] = ToJson(canvas).dump(2);
+        }
+
+        // ...and the same, one level down, for the snippets inside it.
+        std::vector<std::pair<std::string, Item>> foundItems;
+        for (const std::filesystem::path& itemDir : SortedSubdirectories(*fs_, canvasDir)) {
+            if (NotePendingRemoval(itemDir)) {
+                continue;
+            }
+            if (std::optional<Item> item = readItem(itemDir)) {
+                foundItems.emplace_back(itemDir.filename().string(), std::move(*item));
+            }
+        }
+        // Item order is z-order, back to front - so a snippet dropped in by
+        // hand, which the order file cannot know about, arrives in front
+        // rather than buried.
+        const OrderFile itemOrderFile = ReadOrderFile(*fs_, canvasDir / kOrderFile, "items");
+        ApplyOrder(foundItems, itemOrderFile.names);
+        noteOrderFile("order:canvas:" + std::to_string(canvas.id), itemOrderFile, "items", namesOf(foundItems));
+        canvas.items.clear();
+        canvas.items.reserve(foundItems.size());
+        for (auto& [itemDirName, item] : foundItems) {
+            canvas.items.push_back(std::move(item));
+        }
+        return canvas;
+    };
+
     for (auto& [folderDirName, folder] : foundFolders) {
         const std::filesystem::path folderDir = foldersRoot / folderDirName;
         std::vector<std::pair<std::string, Canvas>> foundCanvases;
@@ -1275,76 +1399,9 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             if (NotePendingRemoval(canvasDir)) {
                 continue;
             }
-            const std::optional<json> canvasDoc = ReadJsonFile(*fs_, canvasDir / kCanvasFile);
-            if (!canvasDoc) {
-                continue;
+            if (std::optional<Canvas> canvas = readCanvas(canvasDir, folder.id)) {
+                foundCanvases.emplace_back(canvasDir.filename().string(), std::move(*canvas));
             }
-            Canvas canvas;
-            if (!ReadRecord(*canvasDoc, canvas)) {
-                continue;
-            }
-            const uint64_t recordedCanvasId = canvas.id;
-            canvas.id = claimId(canvas.id);
-            // Where it *is* beats what it says it belongs to. That is the
-            // whole point of the tree: drag a canvas directory into another
-            // folder while the app is closed and it is in that folder, with
-            // no record anywhere left saying otherwise.
-            canvas.folderId = folder.id;
-            canvasDirs_[canvas.id] = canvasDir;
-            // A record that is not exactly what a save writes - a key it
-            // does not write, say - is not noted here, and is rewritten.
-            if (canvas.id == recordedCanvasId && ToJson(canvas) == *canvasDoc) {
-                writtenFileText_["canvas:" + std::to_string(canvas.id)] = ToJson(canvas).dump(2);
-            }
-
-            // ...and the same, one level down, for the snippets inside it.
-            std::vector<std::pair<std::string, Item>> foundItems;
-            for (const std::filesystem::path& itemDir : SortedSubdirectories(*fs_, canvasDir)) {
-                if (NotePendingRemoval(itemDir)) {
-                    continue;
-                }
-                const std::optional<json> itemDoc = ReadJsonFile(*fs_, itemDir / kItemFile);
-                if (!itemDoc) {
-                    continue;
-                }
-                Item item;
-                bool repaired = false;
-                if (!ReadItemRecord(*itemDoc, item, repaired)) {
-                    continue;
-                }
-                const uint64_t recordedItemId = item.id;
-                item.id = claimId(item.id);
-                // Every file beside the record belongs to it, whatever the
-                // record calls them - which is what lets a snippet be moved
-                // by moving one directory. Knowing where the directory is
-                // is therefore the whole of image resolution (see
-                // FindImage); nothing inside it needs listing.
-                itemDirs_[item.id] = itemDir;
-                // The hash of what was read, not a comparison of the text:
-                // the record is where the bulk is, and serializing it to
-                // compare would cost the load half a save. A key the record
-                // lacks reads as its default and reads back the same next
-                // time, so it is no reason to write; a value the read had
-                // to repair is (see FiniteOr) - left unnoted so the next
-                // save writes it as it now is.
-                if (item.id == recordedItemId && !repaired) {
-                    writtenItemHashes_[item.id] = HashItem(item);
-                }
-                foundItems.emplace_back(itemDir.filename().string(), std::move(item));
-            }
-            // Item order is z-order, back to front - so a snippet dropped in
-            // by hand, which the order file cannot know about, arrives in
-            // front rather than buried.
-            const OrderFile itemOrderFile = ReadOrderFile(*fs_, canvasDir / kOrderFile, "items");
-            ApplyOrder(foundItems, itemOrderFile.names);
-            noteOrderFile("order:canvas:" + std::to_string(canvas.id), itemOrderFile, "items", namesOf(foundItems));
-            canvas.items.clear();
-            canvas.items.reserve(foundItems.size());
-            for (auto& [itemDirName, item] : foundItems) {
-                canvas.items.push_back(std::move(item));
-            }
-
-            foundCanvases.emplace_back(canvasDir.filename().string(), std::move(canvas));
         }
         const OrderFile canvasOrderFile = ReadOrderFile(*fs_, folderDir / kOrderFile, "canvases");
         ApplyOrder(foundCanvases, canvasOrderFile.names);
@@ -1354,6 +1411,63 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             out.canvases.push_back(std::move(canvas));
         }
         out.folders.push_back(std::move(folder));
+    }
+
+    // ===== What was moved out of something deleted for good =====
+    //
+    // A canvas moved out of a folder, or a snippet out of a canvas, and the
+    // folder or canvas then deleted for good before the save that moves the
+    // directory: it is still inside the one being removed, and pending.json
+    // says where it belongs (see RunPendingRemovals). It is read from where
+    // it is and put there, and the next save moves its directory to match
+    // - to the first folder or canvas there is, should the one it belongs
+    // to be gone too. Only what the record names: it is written, moves and
+    // all, before the removal starts, so anything else inside went with
+    // what was deleted.
+    const std::map<uint64_t, std::filesystem::path> erasedDirs = pendingRemovals_;
+    for (const auto& [erasedUid, erasedDir] : erasedDirs) {
+        (void)erasedUid;
+        const std::filesystem::path relative = erasedDir.lexically_relative(foldersRoot);
+        const auto depth = std::distance(relative.begin(), relative.end());
+        if (depth != 1 && depth != 2) {
+            continue;  // a snippet's directory holds no others
+        }
+        for (const std::filesystem::path& inside : SortedSubdirectories(*fs_, erasedDir)) {
+            const std::optional<uint64_t> uid = UidFromDirectoryName(inside.filename().string());
+            if (!uid || writtenPending_.erased.count(*uid) > 0) {
+                continue;
+            }
+            const auto move = writtenPending_.moves.find(*uid);
+            if (move == writtenPending_.moves.end()) {
+                continue;
+            }
+            const uint64_t target = move->second;
+            if (depth == 1) {
+                const auto folder = std::find_if(out.folders.begin(), out.folders.end(),
+                                                 [target](const Folder& f) { return f.id == target; });
+                const FolderId folderId = folder != out.folders.end() ? folder->id
+                                          : out.folders.empty()      ? 0
+                                                                     : out.folders.front().id;
+                if (folderId == 0) {
+                    continue;
+                }
+                if (std::optional<Canvas> canvas = readCanvas(inside, folderId)) {
+                    out.canvases.push_back(std::move(*canvas));
+                }
+            } else {
+                auto canvas = std::find_if(out.canvases.begin(), out.canvases.end(),
+                                           [target](const Canvas& c) { return c.id == target; });
+                if (canvas == out.canvases.end()) {
+                    canvas = out.canvases.begin();
+                }
+                if (canvas == out.canvases.end()) {
+                    continue;
+                }
+                if (std::optional<Item> item = readItem(inside)) {
+                    canvas->items.push_back(std::move(*item));  // in front, like anything unlisted
+                }
+            }
+        }
     }
 }
 
@@ -1841,10 +1955,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
         // was deleted, not lost. The paths are kept current through every
         // rename and retirement of a parent (see Rehome), so "gone" there
         // means gone, not moved.
-        std::unordered_set<uint64_t> live = liveFolderIds;
-        live.insert(liveCanvasIds.begin(), liveCanvasIds.end());
-        live.insert(liveItemIds.begin(), liveItemIds.end());
-        wroteEverything &= RunPendingRemovals(live);
+        wroteEverything &= RunPendingRemovals(view);
 
         const std::filesystem::path retiredRoot = rootDir_ / kRetiredDir;
         const auto retire = [&](const std::map<uint64_t, std::filesystem::path>& index,

@@ -634,7 +634,8 @@ library/
                            currentCanvasId. Nothing else: the tree is
                            the rest.
   pending.json          - what was deleted for good and is not wholly
-                           gone from the disk yet, by uid. Only there
+                           gone from the disk yet, by uid, and where
+                           anything moved out of it belongs. Only there
                            while something is.
   folders/order.json    - the folders' uids, in order
   folders/<folder>/
@@ -883,14 +884,26 @@ inside its old parent on disk until then - and deleting that parent for
 good in between took the moved snippet's pictures with it, while the
 model kept the snippet and the next save wrote its record afresh,
 without them. `Remove` is therefore handed the library as it stands
-without the thing, and when anything that library still holds is
-indexed inside the directory, nothing is deleted yet: the removal is
-owed, with nothing recorded - a restart must still find what was
-moved - and a save, which places everything before it runs the owed
-removals,
-finishes it once nothing held is left inside. The session makes that
-save at once, so the ordinary case completes as the delete is asked
-for; if the move cannot land, the removal waits with it.
+without the thing. When anything that library still holds is indexed
+inside the directory, nothing inside is deleted yet. The removal is
+recorded all the same, and so is where each such thing belongs, under
+`moves` in `pending.json`: a snippet's canvas, or a canvas's folder. A
+save places everything before it runs the owed removals, so it
+finishes the removal once nothing held is left inside. The session
+makes that save at once, so the ordinary case completes as the delete
+is asked for. If the move cannot land, because a picture in the moved
+snippet is held open, the removal waits with it.
+
+A restart meanwhile reads the moved thing from where it is, inside the
+deleted directory, and puts it where `moves` says; the next save moves
+its directory to match. It goes to the first folder or canvas instead
+if the one it belongs to is gone too. Only what `moves` names is
+rescued. The record is written, moves and all, before anything is
+removed, so anything else inside went with the deleted thing. The
+previous version wrote nothing for a removal that waited, so that a
+restart would still find what was moved. It found it in the old place,
+with the deleted canvas loaded back around it. Retention later erased
+that canvas again, and took the snippet with it.
 
 A snippet's directory is swept for pictures its layers no longer name
 only after the record that stopped naming them is on disk. Until then
@@ -1036,7 +1049,9 @@ what was left and checks the rules a crash must never break:
 Edits, moves of snippets and canvases, renames, captures, rewritten
 pictures and deleting for good all pass at every point. A delete also
 passes with a picture held open, and with a snippet just moved into
-the deleted canvas. For a delete, one more rule applies: once the
+the deleted canvas. It also passes with a snippet or a canvas just
+moved out of what is deleted, while a picture in it is held open so
+the move cannot land. For a delete, one more rule applies: once the
 restart has saved, nothing of what was deleted is left anywhere in the
 library, `retired/` included.
 

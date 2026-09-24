@@ -1094,8 +1094,20 @@ TEST_F(LibraryStoreTest, ARemovalWaitsForAMoveOutOfItThatCannotLandYet) {
         EXPECT_FALSE(store.Save(snapshot)) << "the move did not land";
         EXPECT_TRUE(store.HasPendingRemoval(2));
         EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
-        EXPECT_EQ(FileText(dir_ / "pending.json").find("000002"), std::string::npos)
-            << "not recorded: a restart must still find what was moved out of it";
+        const std::string pending = FileText(dir_ / "pending.json");
+        EXPECT_NE(pending.find("\"000002\""), std::string::npos) << "recorded";
+        EXPECT_NE(pending.find("\"000004\": \"000008\""), std::string::npos)
+            << "with where what was moved out of it belongs:\n" << pending;
+
+        // A restart meanwhile finds the snippet where it was moved to, and
+        // not the canvas it was moved out of.
+        LibraryStore restarted(dir_);
+        const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+        ASSERT_TRUE(loaded.has_value());
+        ASSERT_EQ(loaded->canvases.size(), 1u);
+        EXPECT_EQ(loaded->canvases[0].id, 8u);
+        ASSERT_EQ(loaded->canvases[0].items.size(), 1u);
+        EXPECT_EQ(loaded->canvases[0].items[0].id, 4u);
     }
     EXPECT_TRUE(store.Save(snapshot));
     EXPECT_FALSE(store.HasPendingRemoval(2));
