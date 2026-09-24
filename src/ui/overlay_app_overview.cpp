@@ -1178,7 +1178,12 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
         // it, the canvas it makes is switched to.
         Manager().SwitchToCanvas(CreateCanvasInCurrentFolder());
     }
-    ImGui::SameLine(OverviewSidebarWidth() + ImGui::GetStyle().ItemSpacing.x);
+    // Lined up with the canvas grid above it, which starts past the
+    // window's padding, the sidebar and the gap after it. SameLine counts
+    // from the window's edge rather than from inside its padding, so the
+    // padding is added here - without it the button sat that far left of
+    // the tiles.
+    ImGui::SameLine(ImGui::GetStyle().WindowPadding.x + OverviewSidebarWidth() + ImGui::GetStyle().ItemSpacing.x);
     // Not into a deleted folder, which is the one on show: a new canvas goes
     // to the folder being browsed, and that would be somewhere else.
     const bool showsDeletedFolder = ShowingDeleted() && deletedFolderShown_.has_value();
