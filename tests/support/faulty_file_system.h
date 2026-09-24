@@ -51,6 +51,9 @@ public:
     // writing.
     void CrashAfter(size_t changes) { crashAt_ = changesAttempted_ + changes; }
     bool Crashed() const { return crashAt_ && changesAttempted_ > *crashAt_; }
+    // The process that crashed is gone; a new one gets a disk that changes
+    // again. What another program holds stays held.
+    void ClearCrash() { crashAt_.reset(); }
     // The changes attempted so far - what a test counts a scenario's crash
     // points by.
     size_t ChangesAttempted() const { return changesAttempted_; }

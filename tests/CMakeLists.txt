@@ -17,6 +17,7 @@ add_executable(sz_core_tests
     core/image_codec_test.cpp
     core/item_geometry_test.cpp
     core/library_crash_test.cpp
+    core/library_random_test.cpp
     core/library_store_test.cpp
     core/painted_image_test.cpp
     core/profile_test.cpp
@@ -48,6 +49,7 @@ spickzettel_set_warnings(sz_core_tests)
 # The benchmark reads its scenario from the environment; MSVC deprecates
 # getenv for a shared-state reason that does not apply to a test.
 set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
+set_source_files_properties(core/library_random_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 
 # The string catalog as it is in the source tree, for the test that parses
 # it strictly - see ui/ui_strings_file_test.cpp.

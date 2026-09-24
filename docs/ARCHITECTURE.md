@@ -844,7 +844,8 @@ record never landed: a canvas's snippets and order file with no canvas
 record above them, or a snippet's picture moved in from staging and
 not its record. Load does not read such a directory, so nothing names
 it when its parent is deleted. Asked only about the record, the
-removal left it standing, and it kept the parent standing too.
+removal left it standing, and it kept the parent standing too. The
+randomized test found both cases.
 
 A directory is removed only once it is empty. One that cannot be
 listed counts as not emptied: calling it done dropped the removal and
@@ -1090,6 +1091,50 @@ moved out of what is deleted, while a picture in it is held open so
 the move cannot land. For a delete, one more rule applies: once the
 restart has saved, nothing of what was deleted is left anywhere in the
 library, `retired/` included.
+
+The crash points cover the scenarios someone thought of. A randomized
+test (`library_random_test.cpp`) covers the combinations nobody
+thinks of. Each seed drives a `Session` through a few hundred steps of
+what a person does:
+
+- make folders, canvases and snippets, some with pictures;
+- edit, rename and move them;
+- delete, restore and delete for good;
+- save.
+
+Meanwhile files are held open, single operations fail, and the process
+crashes and starts again. Every restart is checked:
+
+- nothing loads twice;
+- every picture a record names loads;
+- nothing deleted for good loads again;
+- nothing the library held at its last successful save is lost.
+
+At the end, everything is let go of and saved twice. Then nothing may
+be owed, nothing deleted for good may be left on disk, and the disk
+must load as the library.
+
+A failure prints its seed and its steps. Uids are drawn from a
+generator the test seeds (`SeedUidsForTesting`), so a seed runs the
+same way again, alone, with `SPICKZETTEL_RANDOM_SEED`. ctest runs 25
+seeds of 150 steps. `SPICKZETTEL_RANDOM_SEEDS` and
+`SPICKZETTEL_RANDOM_STEPS` raise that for a long run. Its first runs
+found five things the scenarios had not:
+
+- a canvas whose record never landed was left standing inside a folder
+  deleted for good;
+- so was a snippet directory holding only its picture (see the
+  permanent delete's recursion rule above);
+- a `pending.json` naming only what was gone was never rewritten;
+- a rescue with nowhere to go lost a saved canvas (see "Recovered"
+  above);
+- a saved snippet moved into a new canvas whose record did not land was
+  lost to a restart (see "A save is a plan").
+
+What the randomized test does not judge: a removal whose `pending.json`
+cannot be written is owed in memory only. A crash then brings the thing
+back, still marked deleted. That is the documented cost, not a bug the
+test should find.
 
 ### Images: QOI
 

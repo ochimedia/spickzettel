@@ -47,4 +47,8 @@ std::optional<uint64_t> ParseUid(std::string_view text);
 uint64_t MakeUid(const std::function<bool(uint64_t)>& isTaken,
                   const std::function<uint64_t()>& randomBits = {});
 
+// Makes the default draws on this thread repeat from `seed` - for a test
+// that runs at random and has to be able to run the same way again.
+void SeedUidsForTesting(uint64_t seed);
+
 }  // namespace sz::core

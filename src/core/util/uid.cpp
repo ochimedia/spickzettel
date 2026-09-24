@@ -23,7 +23,7 @@ int ValueOfDigit(char ch) {
     return -1;
 }
 
-uint64_t DefaultRandomBits() {
+std::mt19937_64& Generator() {
     // Seeded once per thread. random_device is used only for the seed: on
     // some standard libraries it is deterministic, which would be a
     // catastrophe for a per-draw source and is merely uninteresting for a
@@ -35,10 +35,16 @@ uint64_t DefaultRandomBits() {
             std::chrono::steady_clock::now().time_since_epoch().count());
         return entropy ^ now;
     }());
-    static thread_local std::uniform_int_distribution<uint64_t> spread(1, kUidSpace - 1);
-    return spread(rng);
+    return rng;
+}
+
+uint64_t DefaultRandomBits() {
+    std::uniform_int_distribution<uint64_t> spread(1, kUidSpace - 1);
+    return spread(Generator());
 }
 }  // namespace
+
+void SeedUidsForTesting(uint64_t seed) { Generator().seed(seed); }
 
 std::string FormatUid(uint64_t id) {
     std::string out(kUidLength, '0');
