@@ -1989,6 +1989,21 @@ hidden the event loop blocks in `GetMessage` and nothing is rendered,
 which is what delivers near-zero idle CPU. `Destroy` happens once, on
 exit.
 
+### In front of the taskbar
+
+`WS_EX_TOPMOST` puts the overlay in the topmost band but not at its front,
+and with the taskbar as the foreground window as the overlay comes up,
+the taskbar lands in front of it anyway. Measured: the first frame is
+clear, the taskbar is in front from the second (8-16 ms after the show),
+and without a correction it stays there. Claiming the front in `Show` is
+too early to help, so each frame checks whether a topmost window is
+above the overlay and covering it, and only then moves it back. Once put
+back, the taskbar stayed back in every run, so this checks every frame
+only for the first half second after a show, four times a second after
+that. Checking at that rate from the start left the taskbar in front for
+up to 250 ms, long enough to see the canvas bar's first peek pop out
+from under it; checking every frame leaves it there for one frame.
+
 ### Translucency
 
 The overlay window is *not* `WS_EX_LAYERED`. It is an ordinary topmost

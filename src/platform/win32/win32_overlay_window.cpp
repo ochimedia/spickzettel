@@ -287,6 +287,7 @@ void Win32OverlayWindow::ShowInternal(bool activate) {
     // recheck in RenderFrame.
     SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     visible_ = true;
+    shownSeconds_ = 0.0f;
     RefreshEditModeInput();
     QueryPerformanceCounter(&lastFrameTime_);  // avoid a large delta-time spike on the first frame
 }
@@ -1016,11 +1017,17 @@ void Win32OverlayWindow::RenderFrame() {
     // single SetWindowPos in Show is not enough, because whatever put the
     // taskbar in front is still happening after we have shown ourselves.
     //
-    // Checked rather than asserted blindly, and throttled, so this is a few
-    // GetWindow calls four times a second rather than a SetWindowPos every
-    // frame fighting the shell for the front.
+    // Checked rather than asserted blindly, so this is a few GetWindow
+    // calls rather than a SetWindowPos every frame fighting the shell for
+    // the front. Every frame for the first half second after a show, four
+    // times a second after that. Measured in that repro: the taskbar comes
+    // in front on the second frame, 8-16 ms after the show, and once put
+    // back it stays back - so checking every frame leaves it in front for
+    // one frame, where the throttle alone left it there for 250 ms, long
+    // enough to see the canvas bar's first peek pop out from under it.
     topmostCheckSeconds_ += deltaSeconds;
-    if (topmostCheckSeconds_ >= 0.25f) {
+    shownSeconds_ += deltaSeconds;
+    if (shownSeconds_ < 0.5f || topmostCheckSeconds_ >= 0.25f) {
         topmostCheckSeconds_ = 0.0f;
         if (CoveredByAnotherTopmostWindow()) {
             SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);

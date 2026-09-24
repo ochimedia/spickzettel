@@ -130,6 +130,8 @@ private:
     bool focusBorrowed_ = false;
     // Seconds since the last z-order check - see RenderFrame.
     float topmostCheckSeconds_ = 0.0f;
+    // Seconds since the last show, for the same check - see RenderFrame.
+    float shownSeconds_ = 0.0f;
     // See SetFramePacing.
     FramePacing framePacing_ = FramePacing::EveryFrame;
     FrameCallback frameCallback_;
