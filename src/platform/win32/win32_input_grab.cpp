@@ -23,36 +23,6 @@ constexpr ULONG_PTR kOwnInjectionMarker = 0x5A4B5053;  // 'SPKZ'
 // options. Only that thread may own them - see StartHookThread.
 constexpr UINT kReconcileHooksMessage = WM_USER + 1;
 
-// Windows' pointer-speed slider (1..20, 10 default) as the multipliers it
-// stands for WITH "enhance pointer precision" OFF. This is the documented
-// table, and measured: 6 -> 0.5, 10 -> 1.0, 14 -> 2.0, 20 -> 3.5.
-//
-// With the acceleration curve ON - the default, and the common case - the
-// OS does not use this table at all. Measured across sliders 6..20 at three
-// speeds: the ratio to the middle notch is slider/10, linear, every time
-// (6 -> 0.59, 12 -> 1.18, 14 -> 1.35, 20 -> 2.0). Applying this table in
-// that mode was this code's second attempt and its worst bug: at a slider
-// of 15 it ran the pointer at x2.25 where the OS runs x1.5, which lifted
-// the slow-speed gain past one pixel per count and made single mouse
-// reports step two pixels. The first attempt, slider/10, had been right
-// for the curve-on case all along. See SliderMultiplier.
-constexpr float kSliderMultiplierCurveOff[21] = {1.0f,   0.03125f, 0.0625f, 0.125f, 0.25f, 0.375f, 0.5f,
-                                                  0.625f, 0.75f,    0.875f,  1.0f,   1.25f, 1.5f,   1.75f,
-                                                  2.0f,   2.25f,    2.5f,    2.75f,  3.0f,  3.25f,  3.5f};
-
-float SliderMultiplier(int slider, bool curveOn) {
-    slider = std::clamp(slider, 1, 20);
-    return curveOn ? static_cast<float>(slider) / 10.0f : kSliderMultiplierCurveOff[slider];
-}
-
-// Ties the SmoothMouseCurve's units to ours. The curve's shape comes from
-// the registry, but the absolute scale in the documented algorithm depends
-// on screen DPI and refresh in ways not worth reproducing from memory, so
-// this one number is calibrated by measurement instead: it is chosen so that
-// a given hand movement travels the same distance under the grab as the
-// desktop pointer does without it. See docs/ARCHITECTURE.md.
-constexpr float kBallisticScale = 0.2278f;
-
 // The performance counter, for the one thing here that is timed in
 // fractions of a millisecond - see InputGrabDiagnostics::correctionLagMsLast.
 int64_t NowTicks() {
@@ -274,8 +244,7 @@ void Win32InputGrab::BeginVirtualCursor() {
         frameSteps_[i].store(0);
     }
     lastFramePoint_ = POINT{virtualCursorX_.load(), virtualCursorY_.load()};
-    QueryPerformanceFrequency(&reportFrequency_);
-    lastReportTime_.QuadPart = 0;
+    hookMovesSinceReport_.store(0, std::memory_order_relaxed);
     lastGain_ = 0.0f;
     LoadPointerBallistics();
 }
@@ -670,7 +639,7 @@ void Win32InputGrab::LoadPointerBallistics() {
         SystemParametersInfoA(SPI_GETMOUSE, 0, mouseParams, 0) != FALSE && mouseParams[2] != 0;
     // Which multiplier the slider means depends on whether the curve is on -
     // see SliderMultiplier - so it can only be resolved once that is known.
-    pointerScale_ = SliderMultiplier(slider, ballisticsEnabled_);
+    pointerScale_ = pointer_ballistics::SliderMultiplier(slider, ballisticsEnabled_);
     curveValid_ = false;
     if (!ballisticsEnabled_) {
         return;
@@ -699,26 +668,9 @@ void Win32InputGrab::LoadPointerBallistics() {
         }
         return true;
     };
-    curveValid_ = readCurve("SmoothMouseXCurve", curveSpeed_) && readCurve("SmoothMouseYCurve", curveOutput_);
-}
-
-// The acceleration curve's gain at a given speed: how many pixels a mickey
-// is worth when the hand is moving this fast. Below the first point the
-// curve is flat, which is what keeps slow movement gentle; the segments
-// above it rise, which is what makes a fast flick cross the screen.
-float Win32InputGrab::BallisticGain(float mickeysPerMs) const {
-    if (!curveValid_ || mickeysPerMs <= 0.0f) {
-        return 1.0f;
-    }
-    for (int i = 1; i < 5; ++i) {
-        if (mickeysPerMs <= curveSpeed_[i]) {
-            const float span = curveSpeed_[i] - curveSpeed_[i - 1];
-            const float t = span > 0.0f ? (mickeysPerMs - curveSpeed_[i - 1]) / span : 0.0f;
-            const float output = curveOutput_[i - 1] + t * (curveOutput_[i] - curveOutput_[i - 1]);
-            return output / mickeysPerMs;
-        }
-    }
-    return curveOutput_[4] / curveSpeed_[4] > 0.0f ? curveOutput_[4] / mickeysPerMs : 1.0f;
+    pointer_ballistics::Curve curve;
+    curveValid_ = readCurve("SmoothMouseXCurve", curve.in) && readCurve("SmoothMouseYCurve", curve.out);
+    curve_ = curveValid_ ? curve : pointer_ballistics::Curve{};
 }
 
 // Raw device counts in, whole pixels out, with the fraction kept for next
@@ -731,35 +683,24 @@ float Win32InputGrab::BallisticGain(float mickeysPerMs) const {
 // EditModeInputOptions::CounterRawMouseInputCanBeUsed).
 //
 // The scale is Windows' own pointer-speed slider, plus its "enhance pointer
-// precision" curve when that is on, so the pointer travels roughly the
-// distance the desktop one would from the same hand movement.
-void Win32InputGrab::MoveVirtualCursorRaw(LONG rawDx, LONG rawDy) {
-    IntegrateRawMovement(rawDx, rawDy);
+// precision" curve when that is on, so the pointer travels the distance the
+// desktop one would from the same hand movement - see pointer_ballistics.
+void Win32InputGrab::MoveVirtualCursorRaw(LONG rawDx, LONG rawDy, int reports) {
+    IntegrateRawMovement(rawDx, rawDy, reports);
     PublishVirtualCursor();
 }
 
-void Win32InputGrab::IntegrateRawMovement(LONG rawDx, LONG rawDy) {
+void Win32InputGrab::IntegrateRawMovement(LONG rawDx, LONG rawDy, int reports) {
     std::lock_guard<std::mutex> lock(pointerMutex_);
     float gain = pointerScale_;
     if (ballisticsEnabled_ && curveValid_) {
-        // Speed needs the interval between reports, which is why this keeps
-        // its own clock: a mickey means nothing without knowing how long it
-        // took. Clamped because the first report after a pause would
-        // otherwise read as infinitely slow, and a stalled queue as
-        // infinitely fast.
-        LARGE_INTEGER now{};
-        QueryPerformanceCounter(&now);
-        float deltaMs = 8.0f;
-        if (reportFrequency_.QuadPart > 0 && lastReportTime_.QuadPart != 0) {
-            deltaMs = static_cast<float>(now.QuadPart - lastReportTime_.QuadPart) * 1000.0f /
-                      static_cast<float>(reportFrequency_.QuadPart);
-        }
-        lastReportTime_ = now;
-        deltaMs = std::clamp(deltaMs, 0.5f, 100.0f);
-
-        const float magnitude =
-            std::sqrt(static_cast<float>(rawDx) * rawDx + static_cast<float>(rawDy) * rawDy);
-        gain *= kBallisticScale * BallisticGain(magnitude / deltaMs);
+        // The curve is Windows', applied the way Windows applies it: to the
+        // size of each report. A message standing for several reports -
+        // see OnRawMouse - is read as that many reports of its average size.
+        const float perReport = 1.0f / static_cast<float>(std::max(reports, 1));
+        gain *= pointer_ballistics::CurveGain(
+            curve_, pointer_ballistics::ReportMagnitude(static_cast<float>(rawDx) * perReport,
+                                                        static_cast<float>(rawDy) * perReport));
     }
 
     lastGain_ = gain;
@@ -928,6 +869,11 @@ LRESULT CALLBACK Win32InputGrab::MouseProc(int code, WPARAM wParam, LPARAM lPara
     if (event.dwExtraInfo == kOwnInjectionMarker) {
         return 1;
     }
+    // One call per report, on time, however the raw stream is merged - see
+    // hookMovesSinceReport_.
+    if (wParam == WM_MOUSEMOVE) {
+        self.hookMovesSinceReport_.fetch_add(1, std::memory_order_relaxed);
+    }
     const LRESULT result = self.OnMouse(wParam, event);
     if (result != 0) {
         return result;
@@ -998,7 +944,12 @@ void Win32InputGrab::OnRawMouse(const RAWMOUSE& mouse) {
         // outcome rather than a guess - and a game doing relative mouse-look
         // is not one you drive with a tablet anyway.
     } else if (mouse.lLastX != 0 || mouse.lLastY != 0) {
-        MoveVirtualCursorRaw(mouse.lLastX, mouse.lLastY);
+        // How many reports this message stands for. At least one: a report
+        // whose raw message overtook its hook call is counted with the next
+        // message instead, which reads that one as a report smaller - a
+        // slip of one report in the curve, not in the distance.
+        const int reports = std::max(hookMovesSinceReport_.exchange(0, std::memory_order_relaxed), 1);
+        MoveVirtualCursorRaw(mouse.lLastX, mouse.lLastY, reports);
         if (countering_.load(std::memory_order_relaxed)) {
             // The negation has to be of the raw *device* delta, not of
             // anything derived from cursor positions: those are

@@ -2081,12 +2081,28 @@ Consequences that shape `Win32InputGrab`:
   multiplier table, with it on a linear `slider/10`. Applying the table
   in curve mode ran the pointer at 2.25x where the OS runs 1.5x, which
   lifted slow-speed gain past a pixel per count and made single reports
-  step two pixels. One constant ties the curve's units to ours,
-  calibrated by measurement: identical input travels 51px with the grab
-  and 51px without at low speed; at brisk speed the grab is about 25%
-  short, left alone rather than fitted to a coarse measurement.
-  Fractional pointer drawing was tried twice to hide the two-pixel steps
-  and retired once the real cause was fixed.
+  step two pixels. Fractional pointer drawing was tried twice to hide the
+  two-pixel steps and retired once the real cause was fixed.
+- **The curve is applied per mouse report, as Windows applies it.** The
+  first version read it at hand speed - counts per millisecond, timed on
+  arrival - with one constant calibrated on a 1000 Hz mouse, and a
+  125 Hz mouse then felt slow. Measured against the real cursor
+  (`pointer_ballistics.h`): the same counts travel the same distance in
+  1-count reports at 1000, 125 or 50 Hz, and further in larger reports;
+  time plays no part, and neither does the monitor's refresh rate (60 and
+  120 Hz identical, contrary to what older reverse-engineering reports).
+  A report's size is its larger axis plus half the smaller, the curve is
+  read at size / 3.5 and its output scaled by 0.8 - fitted to 26 report
+  sizes, RMS error 0.0003 px per count - and the slider multiplies that.
+  Windows' background rate cap merges a fast mouse's reports into one
+  raw message, so the size of each is not in the message; the low-level
+  hook, called once per report regardless, counts them between messages
+  (exact in every message logged: 16 counts over 8 reports) and the
+  curve is read at the average. The grab now travels what the desktop
+  pointer does to within a pixel or two at 125 and 1000 Hz, slider 6 to
+  14, curve on and off. The cap has one visible cost left: the last
+  reports of a movement reach the sink about 55 ms after the mouse
+  stops, so a fast mouse's pointer settles a few pixels late.
 - **The overlay draws its own pointer** because a game holding the mouse
   for mouse-look typically sets the cursor back to screen center every
   frame, and `SetCursorPos` is not an input event: 120 such calls

@@ -26,6 +26,7 @@ add_executable(sz_core_tests
     core/stroke_smoothing_test.cpp
     core/uid_test.cpp
     platform/pen_glyph_test.cpp
+    platform/pointer_ballistics_test.cpp
     ui/icon_draw_test.cpp
     ui/cheat_sheet_test.cpp
     ui/shortcut_targets_test.cpp

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "platform/platform_types.h"
+#include "platform/pointer_ballistics.h"
 
 namespace sz::platform::win32 {
 
@@ -328,11 +329,12 @@ private:
     // "enhance pointer precision" acceleration curve out of the registry -
     // so the overlay's pointer moves the way the one it replaces does.
     void LoadPointerBallistics();
-    float BallisticGain(float mickeysPerMs) const;
-    void MoveVirtualCursorRaw(LONG rawDx, LONG rawDy);
+    // `reports` is how many mouse reports the movement stands for - see
+    // hookMovesSinceReport_.
+    void MoveVirtualCursorRaw(LONG rawDx, LONG rawDy, int reports);
     // The integration itself, under pointerMutex_ - what MoveVirtualCursorRaw
     // does before it publishes the result, which it does unlocked.
-    void IntegrateRawMovement(LONG rawDx, LONG rawDy);
+    void IntegrateRawMovement(LONG rawDx, LONG rawDy, int reports);
     // Puts the position the grab keeps where the user can see it, when it
     // is not being drawn: SetCursorPos to the whole-pixel position, once
     // per report. Generates no raw input, so the game's camera never learns
@@ -441,20 +443,25 @@ private:
     float preciseX_ = 0.0f;
     float preciseY_ = 0.0f;
     float pointerScale_ = 1.0f;
-    // The acceleration curve and the clock its speeds are measured against -
-    // see LoadPointerBallistics.
+    // The acceleration curve - see LoadPointerBallistics.
     bool ballisticsEnabled_ = false;
     bool curveValid_ = false;
-    float curveSpeed_[5]{};
-    float curveOutput_[5]{};
-    LARGE_INTEGER reportFrequency_{};
+    pointer_ballistics::Curve curve_;
     // Debug scaffolding - see InputGrabDiagnostics. The last of what
     // pointerMutex_ guards.
     float lastGain_ = 0.0f;
     std::atomic<int> stepCounts_[4]{};
     std::atomic<int> frameSteps_[4]{};
     POINT lastFramePoint_{};
-    LARGE_INTEGER lastReportTime_{};
+    // Mouse moves the hook has seen since the raw-input sink last read one.
+    // Windows caps raw input to a background listener at about 125
+    // messages a second and merges the rest into one, so a message can
+    // stand for several reports - always, from a 1000 Hz mouse - and the
+    // curve has to be read per report. The hook is called once for every
+    // report regardless, so between two messages it counts them. Written by
+    // the hook, read and reset by the sink, both on the hook thread; atomic
+    // because BeginVirtualCursor resets it from the app thread.
+    std::atomic<int> hookMovesSinceReport_{0};
     // Movement taken from the game since the last correction, banked by the
     // raw-input sink on the hook thread and injected back once it strays too
     // far or countering ends - see FlushPendingCorrection.
