@@ -1453,9 +1453,10 @@ text-size slider to read the note that says where it is. Drag thresholds
 stay in pixels too: they are about how far a hand moves, not about how
 large anything looks.
 
-The software pointer follows Windows' scale rather than the setting,
-because it stands in for the system pointer, which Windows draws larger
-on a scaled display whatever this app says.
+The pointers follow Windows' scale rather than the setting, because they
+stand in for the system pointer, which Windows draws larger on a scaled
+display whatever this app says: the software pointer scales its
+outlines, and the OS pen cursor is rasterized once per scale.
 
 ### Icons: vector shapes, not an icon font
 

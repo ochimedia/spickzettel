@@ -510,8 +510,9 @@ namespace {
 // art. The art it replaces was a 45-degree stick with uneven ends, and next
 // to the drawn pen it read as a different, crooked tool.
 //
-// 24 rows of 24, which is the size Windows scales its own cursors at on a
-// 100% display, with the nib at the lower left so the pen points at the
+// 24 rows of 24 at 100%, which is the size Windows draws its own cursors
+// at on a 100% display, and larger in step with the display's scale, as
+// Windows' own are; the nib at the lower left so the pen points at the
 // pixel it will mark rather than near it.
 constexpr int kPenCursorSize = 24;
 constexpr int kPenCursorHotspotX = 2;
@@ -523,11 +524,18 @@ constexpr int kPenCursorSubsamples = 4;
 
 }  // namespace
 
-HCURSOR Win32OverlayWindow::PenCursor() {
-    if (penCursorBuilt_) {
-        return penCursor_;
+HCURSOR Win32OverlayWindow::PenCursor(int scalePercent) {
+    if (const auto built = penCursors_.find(scalePercent); built != penCursors_.end()) {
+        return built->second;
     }
-    penCursorBuilt_ = true;
+    HCURSOR& cursor = penCursors_[scalePercent];
+    // The glyph is drawn at `scale` times its own size: every pixel below
+    // samples it at its own position divided by the scale, the outline
+    // included, so the whole pen grows and none of it thins.
+    const float scale = static_cast<float>(scalePercent) / 100.0f;
+    const int size = static_cast<int>(std::lround(kPenCursorSize * scale));
+    const int hotspotX = static_cast<int>(std::lround(kPenCursorHotspotX * scale));
+    const int hotspotY = static_cast<int>(std::lround(kPenCursorHotspotY * scale));
 
     // A 32-bit top-down DIB, so the alpha channel is the mask and no
     // separate AND bitmap has to be built by hand - CreateIconIndirect
@@ -535,8 +543,8 @@ HCURSOR Win32OverlayWindow::PenCursor() {
     // charge.
     BITMAPV5HEADER header{};
     header.bV5Size = sizeof(header);
-    header.bV5Width = kPenCursorSize;
-    header.bV5Height = -kPenCursorSize;  // negative: rows top-down, like the art above
+    header.bV5Width = size;
+    header.bV5Height = -size;  // negative: rows top-down, like the art above
     header.bV5Planes = 1;
     header.bV5BitCount = 32;
     header.bV5Compression = BI_BITFIELDS;
@@ -555,8 +563,8 @@ HCURSOR Win32OverlayWindow::PenCursor() {
     }
 
     auto* argb = static_cast<uint32_t*>(pixels);
-    for (int y = 0; y < kPenCursorSize; ++y) {
-        for (int x = 0; x < kPenCursorSize; ++x) {
+    for (int y = 0; y < size; ++y) {
+        for (int x = 0; x < size; ++x) {
             // The glyph's origin is its nib, and the hotspot is the pixel
             // the nib has to land on - so the origin sits at that pixel's
             // center, half a pixel in from its corner.
@@ -564,11 +572,11 @@ HCURSOR Win32OverlayWindow::PenCursor() {
             int fillSamples = 0;
             for (int sy = 0; sy < kPenCursorSubsamples; ++sy) {
                 for (int sx = 0; sx < kPenCursorSubsamples; ++sx) {
-                    const float px = static_cast<float>(x - kPenCursorHotspotX) +
+                    const float px = static_cast<float>(x - hotspotX) +
                                      (static_cast<float>(sx) + 0.5f) / kPenCursorSubsamples - 0.5f;
-                    const float py = static_cast<float>(y - kPenCursorHotspotY) +
+                    const float py = static_cast<float>(y - hotspotY) +
                                      (static_cast<float>(sy) + 0.5f) / kPenCursorSubsamples - 0.5f;
-                    switch (pen_glyph::InkAt(px, py)) {
+                    switch (pen_glyph::InkAt(px / scale, py / scale)) {
                         case pen_glyph::Ink::Edge:
                             ++edgeSamples;
                             break;
@@ -583,7 +591,7 @@ HCURSOR Win32OverlayWindow::PenCursor() {
             constexpr int kSamplesPerPixel = kPenCursorSubsamples * kPenCursorSubsamples;
             const int covered = edgeSamples + fillSamples;
             if (covered == 0) {
-                argb[static_cast<size_t>(y) * kPenCursorSize + x] = 0x00000000;
+                argb[static_cast<size_t>(y) * size + x] = 0x00000000;
                 continue;
             }
             // The same near-black the software pointer outlines with, and
@@ -602,7 +610,7 @@ HCURSOR Win32OverlayWindow::PenCursor() {
             const auto channel = [alpha](float value) {
                 return static_cast<uint32_t>(std::lround(std::clamp(value * alpha, 0.0f, 255.0f)));
             };
-            argb[static_cast<size_t>(y) * kPenCursorSize + x] =
+            argb[static_cast<size_t>(y) * size + x] =
                 (static_cast<uint32_t>(std::lround(alpha * 255.0f)) << 24) | (channel(r) << 16) |
                 (channel(g) << 8) | channel(b);
         }
@@ -610,20 +618,20 @@ HCURSOR Win32OverlayWindow::PenCursor() {
 
     // Empty mask: with a 32-bit color bitmap the alpha channel decides, and
     // this only has to exist.
-    const HBITMAP mask = CreateBitmap(kPenCursorSize, kPenCursorSize, 1, 1, nullptr);
+    const HBITMAP mask = CreateBitmap(size, size, 1, 1, nullptr);
     ICONINFO info{};
     info.fIcon = FALSE;  // a cursor, so the hotspot fields below are read
-    info.xHotspot = kPenCursorHotspotX;
-    info.yHotspot = kPenCursorHotspotY;
+    info.xHotspot = static_cast<DWORD>(hotspotX);
+    info.yHotspot = static_cast<DWORD>(hotspotY);
     info.hbmMask = mask;
     info.hbmColor = color;
-    penCursor_ = static_cast<HCURSOR>(CreateIconIndirect(&info));
+    cursor = static_cast<HCURSOR>(CreateIconIndirect(&info));
     DeleteObject(color);
     DeleteObject(mask);
-    return penCursor_;
+    return cursor;
 }
 
-HCURSOR Win32OverlayWindow::CursorFor(CursorShape shape) {
+HCURSOR Win32OverlayWindow::CursorFor(CursorShape shape, int scalePercent) {
     switch (shape) {
         case CursorShape::Crosshair:
             return LoadCursorA(nullptr, IDC_CROSS);
@@ -631,7 +639,7 @@ HCURSOR Win32OverlayWindow::CursorFor(CursorShape shape) {
             // Falls back to the crosshair if the glyph couldn't be built -
             // "the exact point matters here" is the half of the pen's
             // meaning that survives, and it is the more useful half.
-            if (HCURSOR pen = PenCursor()) {
+            if (HCURSOR pen = PenCursor(scalePercent)) {
                 return pen;
             }
             return LoadCursorA(nullptr, IDC_CROSS);
@@ -674,7 +682,7 @@ void Win32OverlayWindow::SetCursorShape(CursorShape shape) {
     // Same call the message handler starts with, and for the same reason:
     // with the overlay drawing its own pointer the OS one has to stay
     // hidden, and installing a shape here would put it back on screen.
-    SetCursor(Win32InputGrab::Instance().SoftwarePointerWanted() ? nullptr : CursorFor(shape));
+    SetCursor(Win32InputGrab::Instance().SoftwarePointerWanted() ? nullptr : CursorFor(shape, ScalePercent()));
 }
 
 void Win32OverlayWindow::SetEditModeNoActivate(bool enabled) {
@@ -1146,7 +1154,7 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
             return TRUE;
         }
         if (cursorShape_ != CursorShape::Default) {
-            SetCursor(CursorFor(cursorShape_));
+            SetCursor(CursorFor(cursorShape_, ScalePercent()));
             return TRUE;
         }
         // Default deliberately falls through to ImGui's own handler below,

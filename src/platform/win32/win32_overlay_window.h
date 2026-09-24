@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <cstdint>
+#include <map>
 #include <memory>
 
 #include "platform/i_overlay_window.h"
@@ -110,16 +111,18 @@ private:
     EditModeInputOptions editModeInput_;
     // See SetCursorShape / the WM_SETCURSOR handling in HandleMessage.
     CursorShape cursorShape_ = CursorShape::Default;
-    // The stock cursor for a shape, or the pen this app draws itself.
-    static HCURSOR CursorFor(CursorShape shape);
-    // Built once, on first use, from the glyph in the .cpp - Windows has no
-    // stock pen. Null if it couldn't be created, which CursorFor treats as
-    // "use the crosshair instead" rather than as a failure worth reporting.
-    // `built` rather than a null check alone so a failure isn't retried on
-    // every mouse move.
-    static HCURSOR PenCursor();
-    static inline HCURSOR penCursor_ = nullptr;
-    static inline bool penCursorBuilt_ = false;
+    // The stock cursor for a shape, or the pen this app draws itself, at
+    // the display scale `scalePercent` (see ScalePercent).
+    static HCURSOR CursorFor(CursorShape shape, int scalePercent);
+    // Built on first use at each scale, from the glyph in the .cpp -
+    // Windows has no stock pen, and scales its own cursors with the
+    // display, which a bitmap of one size would not. Null if it couldn't be
+    // created, which CursorFor treats as "use the crosshair instead" rather
+    // than as a failure worth reporting. Kept per scale, null included, so
+    // a failure isn't retried on every mouse move; there are only ever as
+    // many as there are scales among the displays.
+    static HCURSOR PenCursor(int scalePercent);
+    static inline std::map<int, HCURSOR> penCursors_;
     // See SetEditModeNoActivate's doc comment. Consulted at EnsureCreated()
     // time (baked into the window's creation style - SetEditModeNoActivate
     // also live-restyles hwnd_ directly if it already exists by then) and
