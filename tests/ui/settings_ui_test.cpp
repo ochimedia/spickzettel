@@ -38,7 +38,7 @@ TEST_F(UiTest, TheSettingsSectionsAreAllReachable) {
         // in overlay_app_overview.cpp, and assets/ui_strings.json for where
         // the words live now. A test that reached for "Appearance" broke the
         // moment anyone reworded it, which is the coupling this removed.
-        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior",
+        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior", "sectiondefaults",
                                      "sectionhotkeys", "sectionprofiles", "sectiondebug"}) {
             const std::string path = std::string("**/###") + section;
             ctx->ItemClick(path.c_str());
@@ -155,7 +155,7 @@ TEST_F(UiTest, TheSettingsSectionsAreAllReachableAtALargeScale) {
     RunUi("settings sections at 200%", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
-        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior",
+        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior", "sectiondefaults",
                                      "sectionhotkeys", "sectionprofiles", "sectiondebug"}) {
             const std::string path = std::string("**/###") + section;
             ctx->ItemClick(path.c_str());

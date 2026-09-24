@@ -21,12 +21,24 @@ namespace sz::core {
 // empty canvas is the box that selects.
 enum class CreationTrigger { Plain, Ctrl, Alt, Off };
 
+// What a new snippet of one kind starts with - see AppConfig::
+// screenshotDefaults. Each is the snippet property of the same name, which
+// the snippet's own popover changes from then on: Item::keepAspect,
+// Item::foregroundOpacity, and the picture layer's opacity.
+struct SnippetDefaults {
+    bool keepAspect = true;
+    float foregroundOpacity = 1.0f;  // 0.1..1, as the popover's slider
+    float backgroundOpacity = 1.0f;  // 0..1
+
+    bool operator==(const SnippetDefaults&) const = default;
+};
+
 // User-editable settings, persisted as config.json (see ParseConfig/
 // SerializeConfig below). No dependency on any OS API — file I/O and path
 // resolution happen outside this type.
 //
 // The fields here are flat; the file groups them (`hotkeys`, `drawing`,
-// `appearance`, `bars`, `overview`, `deleted`, `behavior`, `shortcuts`,
+// `appearance`, `bars`, `defaults`, `overview`, `deleted`, `behavior`, `shortcuts`,
 // `diagnostics`) and the mapping lives in one place, the serializer. The
 // grouping is not cosmetic: `behavior` and `shortcuts` are exactly the settings a
 // per-application profile may override - the ones that are about the
@@ -346,6 +358,31 @@ struct AppConfig {
     bool confirmDelete = true;
     bool confirmDeleteForGood = true;
 
+    // What a new snippet starts with (Settings > Defaults), by how it was
+    // made. Only ever a starting point: each is a property of the snippet
+    // from then on, changed in its own popover, and changing a default
+    // leaves every snippet already made as it is.
+    //
+    // A screenshot is its capture, opaque; a drawing is ink on nothing. Both
+    // keep their shape when resized - a caption typed into one included,
+    // which used to free it, so that the same handle stopped doing the same
+    // thing the moment there was text.
+    SnippetDefaults screenshotDefaults{true, 1.0f, 1.0f};
+    SnippetDefaults drawingDefaults{true, 1.0f, 0.0f};
+    // A drawing's background, shown once its opacity is above zero. White,
+    // what it has always been; a screenshot's background is its capture,
+    // which a color would only tint.
+    uint32_t drawingBackgroundColorRGBA = 0xFFFFFFFFu;
+    // A new snippet's text, when some is typed into it. The size is 0 until
+    // the first frame, which sets it to kDefaultNoteTextSizePx at Windows'
+    // scale for the display then - once, so that someone who reads at 150%
+    // gets text that size from the start, and so that it is a number in
+    // the settings from then on rather than something that changes when
+    // the overlay moves to another display. The color's alpha is its
+    // opacity, as Item::noteTextColorRGBA's is.
+    float noteTextSizePx = 0.0f;
+    uint32_t noteTextColorRGBA = 0xFFFFFFFFu;
+
     // Which display the overlay comes up on, remembered by the id and the
     // name it was listed under (see platform::DisplayInfo for what each is).
     // Empty: the primary display, whichever that is at the time. A chosen
@@ -364,6 +401,11 @@ struct AppConfig {
 // mostly usable.
 inline constexpr float kEditModeBorderWidthMin = 1.0f;
 inline constexpr float kEditModeBorderWidthMax = 48.0f;
+
+// A new snippet's text size at 100%, before the first frame decides the
+// setting (see AppConfig::noteTextSizePx) - a little larger than the
+// interface's own 17, since a note is read from further away than a menu.
+inline constexpr float kDefaultNoteTextSizePx = 20.0f;
 
 // The band uiScalePercent is held to, when it is not 0 ("follow Windows").
 // Windows itself offers 100 to 500; past 300 the Overview no longer fits on

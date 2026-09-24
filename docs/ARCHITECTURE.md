@@ -500,6 +500,23 @@ to say so. A property says it, and can be set either way on purpose. A
 record from before the field reads back as the old rule had it (no text:
 kept), so nothing already made starts behaving differently.
 
+### What a new snippet starts with
+
+Settings > Defaults holds the starting values for a new snippet, by kind:
+its shape, its two opacities, and a drawing's background color - plus
+the style of text typed into it later. They are applied in
+`OverlayApp::ApplyCreationDefaults`, which every way of making a snippet
+passes through, and they are only ever a starting point: each is the
+snippet's own property from then on, and changing a default touches no
+snippet already made. There is no background color for a screenshot,
+where it would only tint the capture.
+
+The text size is written into the settings on the first frame the app
+ever draws: 20px at Windows' scale for that display. A number rather
+than "20 at whatever the scale is", so it does not change when the
+overlay moves to a display with another scale, and so the slider shows
+what a new note will actually get.
+
 ### Z-order steps past what actually overlaps
 
 Bring forward and send backward move an item past the nearest item that
@@ -1766,7 +1783,8 @@ had nothing left to do. Color and size are per item, since a caption
 over a dark screenshot and one over a pale drawing want different
 answers. Size is in screen pixels at the item's current size, not scaled
 with the item like strokes: a caption that shrinks to illegibility is
-worse than one that wraps sooner. Text is never erased by either eraser.
+worse than one that wraps sooner. A new snippet takes its text style from
+Settings > Defaults. Text is never erased by either eraser.
 
 Editing is a second, genuinely interactive window over the content rect,
 not a flag on the items layer, which is unconditionally `NoInputs`. The

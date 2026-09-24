@@ -38,8 +38,9 @@ struct Layer {
     LayerKind kind = LayerKind::Image;
 
     // 0..1, this layer's own alpha, independent of every other layer's and
-    // of the item's strokes. A captured item starts fully opaque, a drawing
-    // fully transparent; a slider from then on.
+    // of the item's strokes. A new item's picture starts at the opacity
+    // Settings > Defaults gives its kind - a capture opaque and a drawing
+    // see-through, unless changed there; a slider from then on.
     float opacity = 0.0f;
 
     // 0xRRGGBBAA; the alpha byte is unused, `opacity` is the alpha drawn.

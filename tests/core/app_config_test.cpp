@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include "core/canvas/item.h"  // kNoteTextSizeMax
+
 namespace sz::core {
 namespace {
 
@@ -522,6 +524,40 @@ TEST(AppConfigTest, AUiScaleIsHeldToItsBandAndAnythingElseIsAuto) {
     EXPECT_EQ(scale("10"), kUiScalePercentMin);
     EXPECT_EQ(scale(R"("large")"), 0);
     EXPECT_EQ(scale("true"), 0);
+}
+
+// What a new snippet starts with: a screenshot opaque and a drawing
+// see-through, both keeping their shape, and the text size not decided
+// until the app first runs (see AppConfig::noteTextSizePx) - so not written
+// until then either.
+TEST(AppConfigTest, SnippetDefaultsStartAsSnippetsAlwaysHaveAndRoundTrip) {
+    AppConfig config = DefaultConfig();
+    EXPECT_TRUE(config.screenshotDefaults.keepAspect);
+    EXPECT_FLOAT_EQ(config.screenshotDefaults.backgroundOpacity, 1.0f);
+    EXPECT_TRUE(config.drawingDefaults.keepAspect);
+    EXPECT_FLOAT_EQ(config.drawingDefaults.backgroundOpacity, 0.0f);
+    EXPECT_FLOAT_EQ(config.noteTextSizePx, 0.0f);
+    EXPECT_EQ(SerializeConfig(config).find(R"("size")"), std::string::npos);
+    EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
+
+    config.screenshotDefaults = SnippetDefaults{false, 0.5f, 0.75f};
+    config.drawingDefaults = SnippetDefaults{false, 0.25f, 0.6f};
+    config.drawingBackgroundColorRGBA = 0x112233FFu;
+    config.noteTextSizePx = 30.0f;
+    config.noteTextColorRGBA = 0xFF000080u;
+    EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
+}
+
+// Held to the popover's own ranges: a foreground never fully gone, a text
+// size the band a snippet's is held to.
+TEST(AppConfigTest, SnippetDefaultsAreHeldToThePopoversRanges) {
+    const AppConfig config = ParseConfig(R"({"defaults": {
+        "screenshot": {"foregroundOpacity": 0, "backgroundOpacity": 7},
+        "text": {"size": 5000}
+    }})");
+    EXPECT_FLOAT_EQ(config.screenshotDefaults.foregroundOpacity, 0.1f);
+    EXPECT_FLOAT_EQ(config.screenshotDefaults.backgroundOpacity, 1.0f);
+    EXPECT_FLOAT_EQ(config.noteTextSizePx, kNoteTextSizeMax);
 }
 
 TEST(AppConfigTest, SnippetColorsHaveDefaultsThatTellFrontFromBack) {

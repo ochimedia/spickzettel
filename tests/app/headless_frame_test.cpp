@@ -267,6 +267,58 @@ TEST_F(HeadlessAppTest, AClickOnEmptyCanvasMakesNothing) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u);
 }
 
+// A new snippet starts with what Settings > Defaults says for its kind -
+// its shape, its opacities, a drawing's background color - and with the
+// text style set there, for when text is typed into it.
+TEST_F(HeadlessAppTest, ANewSnippetStartsWithTheDefaultsForItsKind) {
+    AppConfig config = DefaultConfig();
+    config.screenshotDefaults = SnippetDefaults{false, 0.5f, 0.75f};
+    config.drawingDefaults = SnippetDefaults{false, 0.25f, 0.6f};
+    config.drawingBackgroundColorRGBA = 0x112233FFu;
+    config.noteTextSizePx = 30.0f;
+    config.noteTextColorRGBA = 0xFF000080u;
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+
+    DoubleClick(640.0f, 400.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    {
+        const Item& shot = Canvases().CurrentOrNull()->items[0];
+        ASSERT_TRUE(shot.hasBackground);
+        EXPECT_FALSE(shot.keepAspect);
+        EXPECT_FLOAT_EQ(shot.foregroundOpacity, 0.5f);
+        EXPECT_FLOAT_EQ(shot.ImageLayer()->opacity, 0.75f);
+        EXPECT_EQ(shot.ImageLayer()->tintColorRGBA, 0xFFFFFFFFu) << "a capture is not tinted by the drawing's color";
+        EXPECT_FLOAT_EQ(shot.noteTextSizePx, 30.0f);
+        EXPECT_EQ(shot.noteTextColorRGBA, 0xFF000080u);
+    }
+
+    PressKey(ImGuiKey_D);
+    Drag(200.0f, 200.0f, 800.0f, 600.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    const Item& drawing = Canvases().CurrentOrNull()->items[1];
+    ASSERT_FALSE(drawing.hasBackground);
+    EXPECT_FALSE(drawing.keepAspect);
+    EXPECT_FLOAT_EQ(drawing.foregroundOpacity, 0.25f);
+    EXPECT_FLOAT_EQ(drawing.ImageLayer()->opacity, 0.6f);
+    EXPECT_EQ(drawing.ImageLayer()->tintColorRGBA, 0x112233FFu);
+    EXPECT_FLOAT_EQ(drawing.noteTextSizePx, 30.0f);
+}
+
+// The default text size is decided on the first frame, at Windows' scale
+// then, and saved - not decided again when the scale changes later.
+TEST_F(HeadlessAppTest, TheDefaultTextSizeIsDecidedOnceAtTheScaleFirstSeen) {
+    host_.overlayWindow.scalePercent = 150;
+    ShowEditMode();
+    StepFrame();
+    EXPECT_FLOAT_EQ(AppSettings().Stored().noteTextSizePx, kDefaultNoteTextSizePx * 1.5f);
+
+    host_.overlayWindow.scalePercent = 100;
+    StepFrame();
+    EXPECT_FLOAT_EQ(AppSettings().Stored().noteTextSizePx, kDefaultNoteTextSizePx * 1.5f);
+}
+
 TEST_F(HeadlessAppTest, ADoubleClickOnEmptyCanvasMakesAFullscreenScreenshot) {
     ShowEditMode();
     StepFrame();
@@ -3183,6 +3235,16 @@ TEST_F(TextBoxResizeTest, TextLeavesASnippetKeepingItsShape) {
     const auto [before, after] = MakeATextBoxAndWidenIt(WithTextOnT());
     EXPECT_NEAR(after.w, before.w + 50.0f, 1.0f);
     EXPECT_NEAR(after.h, before.h * after.w / before.w, 1.0f) << "the height followed the width";
+}
+
+// A drawing made not to keep its shape - Settings > Defaults, or its own
+// popover - resizes freely: a box whose text wraps to its width.
+TEST_F(TextBoxResizeTest, ASnippetSetNotToKeepItsShapeResizesFreely) {
+    AppConfig config = WithTextOnT();
+    config.drawingDefaults.keepAspect = false;
+    const auto [before, after] = MakeATextBoxAndWidenIt(std::move(config));
+    EXPECT_NEAR(after.w, before.w + 50.0f, 1.0f);
+    EXPECT_FLOAT_EQ(after.h, before.h) << "only the width changed";
 }
 
 // ===== What a save that could not finish does next =====

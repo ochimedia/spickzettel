@@ -426,6 +426,12 @@ protected:
                         ".json");
         std::filesystem::remove(configFile_);
         host_.configFilePath = configFile_;
+        // With the new-text size already decided, as it is after any first
+        // run: deciding it is a settings change of its own, saved on the
+        // first frame, and this is about the one the picker makes.
+        AppConfig config = DefaultConfig();
+        config.noteTextSizePx = kDefaultNoteTextSizePx;
+        StartWith(config);
     }
 
     void TearDown() override {

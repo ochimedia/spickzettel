@@ -13,6 +13,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "core/canvas/item.h"
 #include "core/util/atomic_file.h"
 
 namespace sz::core {
@@ -620,6 +621,21 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
                kEditModeBorderWidthMax);
     ReadBool(border, "onlyWhenEmpty", config.editModeBorderOnlyWhenEmpty);
 
+    const json& defaults = Group(doc, "defaults");
+    for (auto [key, out] : {std::pair{"screenshot", &config.screenshotDefaults},
+                            std::pair{"drawing", &config.drawingDefaults}}) {
+        const json& kind = Group(defaults, key);
+        ReadBool(kind, "keepAspect", out->keepAspect);
+        ReadFloat(kind, "foregroundOpacity", out->foregroundOpacity, 0.1f, 1.0f);
+        ReadFloat(kind, "backgroundOpacity", out->backgroundOpacity, 0.0f, 1.0f);
+    }
+    ReadColor(Group(defaults, "drawing"), "backgroundColor", config.drawingBackgroundColorRGBA);
+    const json& noteText = Group(defaults, "text");
+    // Zero, or anything that is not a size, is "not decided yet" - see
+    // AppConfig::noteTextSizePx.
+    ReadPositiveClampedFloat(noteText, "size", config.noteTextSizePx, kNoteTextSizeMin, kNoteTextSizeMax);
+    ReadColor(noteText, "color", config.noteTextColorRGBA);
+
     const json& overview = Group(doc, "overview");
     ReadBool(overview, "showStrokes", config.overviewShowsStrokes);
     ReadBool(overview, "showBitmaps", config.overviewShowsBitmaps);
@@ -764,6 +780,25 @@ std::string SerializeConfig(const AppConfig& config) {
     doc["overview"] = {
         {"showStrokes", config.overviewShowsStrokes},
         {"showBitmaps", config.overviewShowsBitmaps},
+    };
+
+    const auto kindJson = [](const SnippetDefaults& kind) {
+        return json{
+            {"keepAspect", kind.keepAspect},
+            {"foregroundOpacity", Num(kind.foregroundOpacity)},
+            {"backgroundOpacity", Num(kind.backgroundOpacity)},
+        };
+    };
+    json drawing = kindJson(config.drawingDefaults);
+    drawing["backgroundColor"] = FormatHexColor(config.drawingBackgroundColorRGBA);
+    json noteText{{"color", FormatHexColor(config.noteTextColorRGBA)}};
+    if (config.noteTextSizePx > 0.0f) {
+        noteText["size"] = Num(config.noteTextSizePx);
+    }
+    doc["defaults"] = {
+        {"screenshot", kindJson(config.screenshotDefaults)},
+        {"drawing", std::move(drawing)},
+        {"text", std::move(noteText)},
     };
 
     doc["deleted"] = {

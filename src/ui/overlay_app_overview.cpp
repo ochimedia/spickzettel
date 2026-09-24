@@ -1311,6 +1311,7 @@ void OverlayApp::RenderOverviewSettingsPanel() {
         {SettingsSection::Appearance, "sectionappearance", strings::kSettingsTabAppearance},
         {SettingsSection::Interaction, "sectioninteraction", strings::kSettingsTabInteraction},
         {SettingsSection::Behavior, "sectionbehavior", strings::kSettingsTabBehavior},
+        {SettingsSection::Defaults, "sectiondefaults", strings::kSettingsTabDefaults},
         {SettingsSection::Hotkeys, "sectionhotkeys", strings::kSettingsTabHotkeys},
         {SettingsSection::Profiles, "sectionprofiles", strings::kSettingsTabProfiles},
         {SettingsSection::Debug, "sectiondebug", strings::kSettingsTabDebug},
@@ -1356,6 +1357,9 @@ void OverlayApp::RenderOverviewSettingsPanel() {
             break;
         case SettingsSection::Behavior:
             RenderSettingsBehavior(anyChanged);
+            break;
+        case SettingsSection::Defaults:
+            RenderSettingsDefaults(anyChanged);
             break;
         case SettingsSection::Hotkeys:
             RenderSettingsHotkeys(anyChanged);
@@ -1822,6 +1826,74 @@ void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
 // itself, every one a ProfileableCheckbox, which writes and persists
 // through the profile path on its own (see TrayController::
 // OnSettingsChanged, which deliberately copies no behavior setting).
+void OverlayApp::RenderSettingsDefaults(bool& anyChanged) {
+    // One kind's rows: its shape, and its two opacities as the popover
+    // shows them - the same words and the same ranges, so a default reads
+    // as the setting it is a default for.
+    const auto kindRows = [&anyChanged](const char* id, SnippetDefaults& kind) {
+        ImGui::PushID(id);
+        anyChanged |= CheckboxWithHelp("keepaspect", strings::kDefaultsKeepAspect, &kind.keepAspect,
+                                       strings::kDefaultsKeepAspectHelp);
+        int foregroundPct = static_cast<int>(std::round(kind.foregroundOpacity * 100.0f));
+        ImGui::SetNextItemWidth(Px(160.0f));
+        if (ImGui::SliderInt(Labeled(strings::kDefaultsForeground, "foreground"), &foregroundPct, 10, 100,
+                             strings::kFormatPercent)) {
+            kind.foregroundOpacity = static_cast<float>(foregroundPct) / 100.0f;
+        }
+        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
+        int backgroundPct = static_cast<int>(std::round(kind.backgroundOpacity * 100.0f));
+        ImGui::SetNextItemWidth(Px(160.0f));
+        if (ImGui::SliderInt(Labeled(strings::kDefaultsBackground, "background"), &backgroundPct, 0, 100,
+                             strings::kFormatPercent)) {
+            kind.backgroundOpacity = static_cast<float>(backgroundPct) / 100.0f;
+        }
+        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::PopID();
+    };
+
+    SettingsHeading("defaultsscreenshotheading", strings::kDefaultsScreenshotHeading,
+                    strings::kDefaultsScreenshotHelp);
+    kindRows("screenshot", Cfg().screenshotDefaults);
+
+    SettingsGroupBreak();
+
+    SettingsHeading("defaultsdrawingheading", strings::kDefaultsDrawingHeading, strings::kDefaultsDrawingHelp);
+    kindRows("drawing", Cfg().drawingDefaults);
+    {
+        float rgb[3];
+        ColorRGBAToFloats(Cfg().drawingBackgroundColorRGBA, rgb);
+        if (ImGui::ColorEdit3("##drawingbackgroundcolor", rgb, ImGuiColorEditFlags_NoInputs)) {
+            Cfg().drawingBackgroundColorRGBA = FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF));
+        }
+        // On the edit finishing, not per frame of the drag - see ColorRow.
+        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SameLine();
+        ImGui::TextUnformatted(strings::kDefaultsBackgroundColor);
+    }
+
+    SettingsGroupBreak();
+
+    SettingsHeading("defaultstextheading", strings::kDefaultsTextHeading, strings::kDefaultsTextHelp);
+    {
+        // Decided on the first frame (see AppConfig::noteTextSizePx), so
+        // never still 0 by the time a panel can show it.
+        ImGui::SetNextItemWidth(Px(160.0f));
+        ImGui::SliderFloat(Labeled(strings::kDefaultsTextSize, "defaulttextsize"), &Cfg().noteTextSizePx,
+                           kNoteTextSizeMin, kNoteTextSizeMax, strings::kFormatPixels);
+        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
+        float rgba[4];
+        ColorRGBAToFloats4(Cfg().noteTextColorRGBA, rgba);
+        if (ImGui::ColorEdit4("##defaulttextcolor", rgba,
+                              ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar |
+                                  ImGuiColorEditFlags_AlphaPreview)) {
+            Cfg().noteTextColorRGBA = FloatsToColorRGBA4(rgba);
+        }
+        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::SameLine();
+        ImGui::TextUnformatted(strings::kDefaultsTextColor);
+    }
+}
+
 void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     SettingsScopeBox globalBox;
     BeginSettingsScope(globalBox, SettingsScope::Global);

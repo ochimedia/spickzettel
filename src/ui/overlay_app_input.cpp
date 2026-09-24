@@ -583,6 +583,22 @@ ItemId OverlayApp::FinishRegionCapture(const CreationGesture& gesture) {
 }
 
 void OverlayApp::ApplyCreationDefaults(ItemCreationKind kind, ItemId id, Item& item) {
+    // Settings > Defaults, before anything below looks at the item.
+    const SnippetDefaults& defaults =
+        kind == ItemCreationKind::Screenshot ? Cfg().screenshotDefaults : Cfg().drawingDefaults;
+    item.keepAspect = defaults.keepAspect;
+    item.foregroundOpacity = defaults.foregroundOpacity;
+    if (Layer* picture = item.ImageLayer()) {
+        picture->opacity = defaults.backgroundOpacity;
+        if (kind == ItemCreationKind::Drawing) {
+            picture->tintColorRGBA = Cfg().drawingBackgroundColorRGBA;
+        }
+    }
+    if (Cfg().noteTextSizePx > 0.0f) {
+        item.noteTextSizePx = Cfg().noteTextSizePx;
+    }
+    item.noteTextColorRGBA = Cfg().noteTextColorRGBA;
+
     switch (kind) {
         case ItemCreationKind::Screenshot:
             session_.CaptureShotItem(item);

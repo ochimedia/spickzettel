@@ -1126,6 +1126,16 @@ void OverlayApp::OnFrame(float deltaSeconds) {
             appliedUiScalePercent_ = percent;
         }
     }
+    // A new note's text size, decided once: the default at Windows' scale
+    // for the display the overlay first came up on - see
+    // AppConfig::noteTextSizePx. Windows' rather than the interface's,
+    // which is the same thing unless someone has already set the other.
+    if (Cfg().noteTextSizePx <= 0.0f && window_ != nullptr) {
+        const float scale = static_cast<float>(window_->ScalePercent()) / 100.0f;
+        Cfg().noteTextSizePx =
+            std::clamp(std::round(kDefaultNoteTextSizePx * scale), kNoteTextSizeMin, kNoteTextSizeMax);
+        settings_.Commit();
+    }
     if (!styleApplied_) {
         // No imgui.ini. ImGui writes one next to the working directory to
         // remember window positions and sizes, and this app has nothing to
