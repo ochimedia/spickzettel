@@ -62,10 +62,10 @@ AccentColors DeriveAccent(uint32_t rgba) {
     return colors;
 }
 
-// Derived once per change rather than per draw call; the design's orange
+// Derived once per change rather than per draw call; the default accent
 // until OnFrame applies the setting.
 AccentColors& CurrentAccent() {
-    static AccentColors colors = DeriveAccent(0xFF6A3DFFu);
+    static AccentColors colors = DeriveAccent(0x2C6C7CFFu);
     return colors;
 }
 }  // namespace

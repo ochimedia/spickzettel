@@ -113,7 +113,7 @@ struct EditModeInputOptions {
     // camera integrating raw motion nets out to where it started. Needs the
     // mouse taken first - see CounterRawMouseInputCanBeUsed. Settled in
     // steps rather than per movement - see counterThreshold - so the camera
-    // wanders in between, which the frozen screen hides. Anything with
+    // wanders in between, which a frozen screen hides. Anything with
     // anti-cheat discards injected input outright. Experimental; on because
     // "no effect" is its common failure.
     bool counterRawMouseInput = true;
@@ -125,8 +125,9 @@ struct EditModeInputOptions {
     // camera shake and, on a 125 Hz mouse, pushed our own raw-input sink
     // past Windows' background rate cap. How many degrees a count is is up
     // to the game's sensitivity, hence a setting: at common shooter
-    // sensitivities (0.02-0.07 degrees per count) the default is 4-14.
-    int counterThreshold = 200;
+    // sensitivities (0.02-0.07 degrees per count) the default is 2-7 -
+    // small enough to pass for a twitch when the screen isn't frozen.
+    int counterThreshold = 100;
     static constexpr int kCounterThresholdMin = 10;
     static constexpr int kCounterThresholdMax = 5000;
 

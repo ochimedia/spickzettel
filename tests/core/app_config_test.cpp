@@ -262,7 +262,7 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.screenshotTrigger = CreationTrigger::Alt;
     config.drawingTrigger = CreationTrigger::Off;
     config.overviewShowsStrokes = false;
-    config.overviewShowsBitmaps = true;
+    config.overviewShowsBitmaps = false;
     config.purgeDeleted = true;
     config.purgeDeletedAfterDays = 14;
     config.showEditModeBorder = false;
@@ -270,7 +270,7 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.editModeBorderOpacity = 0.4f;
     config.editModeBorderWidthPx = 16.0f;
     config.editModeBorderOnlyWhenEmpty = true;
-    config.freezeScreenInEditMode = false;
+    config.freezeScreenInEditMode = true;
     config.showInputOptionsHud = true;
     config.editModeInput.useSoftwarePointer = false;
     config.editModeInput.useRawMouseInput = true;
@@ -492,9 +492,9 @@ TEST(AppConfigTest, SilentCaptureHasItsOwnDefaultHotkeyAndSaysSoByDefault) {
     EXPECT_TRUE(config.showToastsWhileHidden);
 }
 
-TEST(AppConfigTest, TheAccentIsTheDesignsOrangeUntilChangedAndRoundTrips) {
+TEST(AppConfigTest, TheAccentIsTealUntilChangedAndRoundTrips) {
     AppConfig config = DefaultConfig();
-    EXPECT_EQ(config.accentColorRGBA, 0xFF6A3DFFu);
+    EXPECT_EQ(config.accentColorRGBA, 0x2C6C7CFFu);
     config.accentColorRGBA = 0x3D7AFFFFu;
     const std::string text = SerializeConfig(config);
     EXPECT_NE(text.find("\"#3D7AFF\""), std::string::npos);
@@ -583,9 +583,9 @@ TEST(AppConfigTest, CreationTriggersDefaultParseAndNeverCoincide) {
 
 TEST(AppConfigTest, OverviewPreviewTogglesRoundTrip) {
     EXPECT_TRUE(DefaultConfig().overviewShowsStrokes);
-    EXPECT_FALSE(DefaultConfig().overviewShowsBitmaps);
+    EXPECT_TRUE(DefaultConfig().overviewShowsBitmaps);
     EXPECT_FALSE(ParseConfig(One("overview", "showStrokes", "false")).overviewShowsStrokes);
-    EXPECT_TRUE(ParseConfig(One("overview", "showBitmaps", "true")).overviewShowsBitmaps);
+    EXPECT_FALSE(ParseConfig(One("overview", "showBitmaps", "false")).overviewShowsBitmaps);
 }
 
 // Off by default - nothing is erased unasked - with a period ready for when
@@ -627,11 +627,10 @@ TEST(AppConfigTest, ParsesEditModeBorderSettings) {
     EXPECT_TRUE(config.editModeBorderOnlyWhenEmpty);
 }
 
-// On by default. It does turn the overlay from a sheet of glass into an
-// opaque page, but for annotating over a game that is the point: a screen
-// that holds still is worth more than watching the one underneath move.
-TEST(AppConfigTest, FreezeScreenInEditModeDefaultsToOn) {
-    EXPECT_TRUE(DefaultConfig().freezeScreenInEditMode);
+// Off by default: it turns the overlay from a sheet of glass into an opaque
+// page, which is for games and best switched on in their profiles.
+TEST(AppConfigTest, FreezeScreenInEditModeDefaultsToOff) {
+    EXPECT_FALSE(DefaultConfig().freezeScreenInEditMode);
 }
 
 TEST(AppConfigTest, ParsesAndSerializesFreezeScreenInEditMode) {
@@ -639,8 +638,8 @@ TEST(AppConfigTest, ParsesAndSerializesFreezeScreenInEditMode) {
     EXPECT_FALSE(ParseConfig(One("behavior", "freezeScreen", "false")).freezeScreenInEditMode);
 
     AppConfig config = DefaultConfig();
-    config.freezeScreenInEditMode = false;
-    EXPECT_FALSE(ParseConfig(SerializeConfig(config)).freezeScreenInEditMode);
+    config.freezeScreenInEditMode = true;
+    EXPECT_TRUE(ParseConfig(SerializeConfig(config)).freezeScreenInEditMode);
 }
 
 // Both are pulled into range rather than reverted to the default - see

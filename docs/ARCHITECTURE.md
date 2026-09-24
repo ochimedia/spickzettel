@@ -1349,7 +1349,7 @@ to exist while nothing is shown.
 
 ## Visual theme
 
-The look is a graphite and accent-orange scale, translucent panel
+The look is a graphite scale with a teal accent, translucent panel
 backgrounds with a thin border in place of real backdrop blur (ImGui has
 no blur, and a multi-pass blur target does not compose with a single
 full-viewport swapchain), pill-shaped containers, the accent for every
@@ -2222,7 +2222,7 @@ Consequences that shape `Win32InputGrab`:
   nothing.
 - **The bank is settled in steps**: whenever it passes a threshold on
   either axis, and once more as countering ends. The threshold is a
-  Behavior setting, per profile, in device counts (default 200), because
+  Behavior setting, per profile, in device counts (default 100), because
   how many degrees a count turns the camera is up to each game's
   sensitivity. Settled per frame, as it first was, the camera visibly
   shook, and the pointer paid for it too. Windows 11 caps raw input to a
@@ -2239,7 +2239,7 @@ Consequences that shape `Win32InputGrab`:
   its pitch limit drops part of the movement, and the correction then
   overshoots by that part. A threshold bounds how far the camera can
   wander from where the overlay found it. In between it does wander,
-  which the frozen screen hides.
+  which a frozen screen hides.
 - **The last correction goes out while the game is still covered.**
   Sent as the window went away, it reached the game in time but showed a
   frame or two later, so hiding the overlay revealed the wandered camera

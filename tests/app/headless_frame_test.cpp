@@ -66,23 +66,23 @@ TEST_F(HeadlessAppTest, ViewOnlyModeAsksForFramesOnlyWhileSomethingMoves) {
 
 // The accent is a setting: whatever it is set to is what the theme and the
 // ImGui style draw with from the next frame, and what is drawn on it turns
-// light when the accent is dark.
+// light when the accent is dark and dark when it is bright.
 TEST_F(HeadlessAppTest, TheAccentColorRecolorsTheThemeAndTheStyle) {
     namespace theme = overlay_detail::theme;
     ShowEditMode();
     StepFrame();
-    EXPECT_FLOAT_EQ(theme::Accent().y, 0x6A / 255.0f) << "the design's orange by default";
-    EXPECT_LT(theme::AccentInk().x, 0.5f) << "dark ink on the bright default";
+    EXPECT_FLOAT_EQ(theme::Accent().y, 0x6C / 255.0f) << "teal by default";
+    EXPECT_GT(theme::AccentInk().x, 0.5f) << "light ink on the dark default";
 
-    controller_->GetSettings().Mutable().accentColorRGBA = 0x3D7AFFFFu;
+    controller_->GetSettings().Mutable().accentColorRGBA = 0xFF6A3DFFu;
     StepFrame();
 
-    EXPECT_FLOAT_EQ(theme::Accent().x, 0x3D / 255.0f);
-    EXPECT_FLOAT_EQ(theme::Accent().z, 1.0f);
-    EXPECT_FLOAT_EQ(ImGui::GetStyle().Colors[ImGuiCol_CheckMark].x, 0x3D / 255.0f);
-    EXPECT_FLOAT_EQ(ImGui::GetStyle().Colors[ImGuiCol_SliderGrab].z, 1.0f);
-    EXPECT_EQ(theme::AccentU32(), IM_COL32(0x3D, 0x7A, 0xFF, 0xFF));
-    EXPECT_GT(theme::AccentInk().x, 0.5f) << "light ink on a darker accent";
+    EXPECT_FLOAT_EQ(theme::Accent().x, 1.0f);
+    EXPECT_FLOAT_EQ(theme::Accent().z, 0x3D / 255.0f);
+    EXPECT_FLOAT_EQ(ImGui::GetStyle().Colors[ImGuiCol_CheckMark].z, 0x3D / 255.0f);
+    EXPECT_FLOAT_EQ(ImGui::GetStyle().Colors[ImGuiCol_SliderGrab].x, 1.0f);
+    EXPECT_EQ(theme::AccentU32(), IM_COL32(0xFF, 0x6A, 0x3D, 0xFF));
+    EXPECT_LT(theme::AccentInk().x, 0.5f) << "dark ink on a bright accent";
 }
 
 TEST_F(HeadlessAppTest, RendersWithNoCanvasAtAll) {
@@ -418,6 +418,7 @@ std::optional<platform::ImageFilter> FilterDrawnWith(uint64_t texture) {
 TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
     AppConfig config = DefaultConfig();
     config.imageFilter = platform::ImageFilter::Lanczos;
+    config.freezeScreenInEditMode = true;  // the drag crops the frozen screen
     StartWith(config);
     host_.overlayWindow.captureReturnsHandle = 7;
     host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);

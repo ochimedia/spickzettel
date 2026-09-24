@@ -55,7 +55,7 @@ inline constexpr ImVec4 kGraphite200(0.702f, 0.733f, 0.780f, 1.00f);  // #b3bbc7
 inline constexpr ImVec4 kGraphite100(0.867f, 0.882f, 0.906f, 1.00f);  // #dde1e7
 inline constexpr ImVec4 kWhite(0.961f, 0.969f, 0.976f, 1.00f);        // #f5f7f9
 
-// The accent - AppConfig::accentColorRGBA, #ff6a3d unless changed - and the
+// The accent - AppConfig::accentColorRGBA, #2c6c7c unless changed - and the
 // two colors derived from it: a lighter one for hover and press, and the
 // ink for text and icons drawn on top of it, dark or light by how bright
 // the accent is. Functions rather than constants like the rest of the

@@ -191,7 +191,7 @@ struct AppConfig {
     // with the alpha unused. Text drawn on it goes dark or light to stay
     // readable. The pinned-snippet border is a color of its own
     // (itemBorderColorPinnedRGBA).
-    uint32_t accentColorRGBA = 0xFF6A3DFFu;
+    uint32_t accentColorRGBA = 0x2C6C7CFFu;  // teal
     // What tells the snippet in front from the ones behind it: its border
     // is drawn in its own color, both settable (packed 0xRRGGBBAA - the
     // alpha is part of the color here, since a more transparent border is
@@ -263,10 +263,12 @@ struct AppConfig {
     // to draw at tile size and are on by default, as they always were.
     // Bitmaps - screenshots and painted layers - are not: showing one means
     // reading and decoding its file, for canvases that aren't current and
-    // whose pixels are therefore deliberately not in memory. Off by
-    // default, so the expensive one is asked for rather than assumed.
+    // whose pixels are therefore deliberately not in memory. On by default
+    // all the same: a canvas that is mostly screenshots is unrecognizable
+    // without them, and they are read a few a frame and let go when the
+    // panel closes.
     bool overviewShowsStrokes = true;
-    bool overviewShowsBitmaps = false;
+    bool overviewShowsBitmaps = true;
     // The canvas bar along the bottom edge: the canvases of the folder being
     // worked in, to switch between them or start a new one. It hides against
     // the edge and slides out when the pointer reaches it, and for a moment
@@ -307,15 +309,14 @@ struct AppConfig {
     // the view roughly where you found it rather than holding it still on
     // screen.
     //
-    // On by default. It does change what the overlay fundamentally is, from
-    // a sheet of glass into an opaque page - but for the case this whole
-    // group of options exists for, an opaque page is what you want, and a
-    // screen that holds still while you annotate it is worth more than
-    // seeing the game move underneath. A region capture taken while the
+    // Off by default: it changes what the overlay fundamentally is, from a
+    // sheet of glass into an opaque page, and most of what the overlay is
+    // up over is not a game that turns under the mouse. Worth switching on
+    // in a game's profile. A region capture taken while the
     // screen is frozen crops the frozen image rather than re-capturing the
     // live screen, so a snippet matches what you were looking at when you
     // dragged it out - see Session::CaptureShotItem.
-    bool freezeScreenInEditMode = true;
+    bool freezeScreenInEditMode = false;
 
     // Whether a deleted folder or canvas is deleted for good once it has
     // been deleted for longer than purgeDeletedAfterDays - checked when the
