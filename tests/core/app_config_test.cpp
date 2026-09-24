@@ -76,12 +76,12 @@ TEST(AppConfigTest, ParsesTakeFocusOverElevated) {
     EXPECT_TRUE(ParseConfig(One("behavior", "takeFocusOverElevated", R"("no")")).takeFocusOverElevated);
 }
 
-TEST(AppConfigTest, EveryEditModeInputOptionDefaultsToOn) {
+TEST(AppConfigTest, EveryEditModeInputOptionButCounteringDefaultsToOn) {
     const platform::EditModeInputOptions options = DefaultConfig().editModeInput;
     EXPECT_TRUE(options.useSoftwarePointer);
     EXPECT_TRUE(options.useRawMouseInput);
     EXPECT_TRUE(options.dontForwardKeystrokes);
-    EXPECT_TRUE(options.counterRawMouseInput);
+    EXPECT_FALSE(options.counterRawMouseInput);
 }
 
 // Switching the pointer off switches the pointer off, whatever else is on:
@@ -157,8 +157,8 @@ TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
     EXPECT_FALSE(ParseConfig(One("behavior", "rawMouseInput", "false")).editModeInput.useRawMouseInput);
     EXPECT_FALSE(
         ParseConfig(One("behavior", "dontForwardKeystrokes", "false")).editModeInput.dontForwardKeystrokes);
-    EXPECT_FALSE(
-        ParseConfig(One("behavior", "counterRawMouseInput", "false")).editModeInput.counterRawMouseInput);
+    EXPECT_TRUE(
+        ParseConfig(One("behavior", "counterRawMouseInput", "true")).editModeInput.counterRawMouseInput);
 
     // Disabling one leaves the others alone - they're separate experiments,
     // not one setting with four names.
@@ -167,7 +167,7 @@ TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
     EXPECT_FALSE(onlyMouse.useRawMouseInput);
     EXPECT_TRUE(onlyMouse.useSoftwarePointer);
     EXPECT_TRUE(onlyMouse.dontForwardKeystrokes);
-    EXPECT_TRUE(onlyMouse.counterRawMouseInput);
+    EXPECT_FALSE(onlyMouse.counterRawMouseInput);
 }
 
 TEST(AppConfigTest, CounterThresholdIsReadClampedAndRoundTrips) {
@@ -275,7 +275,7 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.editModeInput.useSoftwarePointer = false;
     config.editModeInput.useRawMouseInput = true;
     config.editModeInput.dontForwardKeystrokes = false;
-    config.editModeInput.counterRawMouseInput = true;
+    config.editModeInput.counterRawMouseInput = true;  // off by default
 
     const std::string text = SerializeConfig(config);
     const AppConfig parsed = ParseConfig(text);

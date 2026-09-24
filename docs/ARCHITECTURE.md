@@ -2218,8 +2218,8 @@ Consequences that shape `Win32InputGrab`:
   swallows them (they still reach the game), since passing them through
   corrupted the next movement's delta and jittered the pointer. Anything
   with anti-cheat discards injected input outright. Kept, labeled
-  experimental, on by default because its common failure is doing
-  nothing.
+  experimental, and off by default: it injects input into whatever is
+  underneath, which is for a game's profile to ask for.
 - **The bank is settled in steps**: whenever it passes a threshold on
   either axis, and once more as countering ends. The threshold is a
   Behavior setting, per profile, in device counts (default 100), because

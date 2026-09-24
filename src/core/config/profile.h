@@ -93,8 +93,8 @@ struct ProfileableSettings {
     bool softwarePointer = true;
     bool rawMouseInput = true;
     bool dontForwardKeystrokes = true;
-    bool counterRawMouseInput = true;
-    bool freezeScreen = true;
+    bool counterRawMouseInput = false;
+    bool freezeScreen = false;
     int counterThreshold = platform::EditModeInputOptions{}.counterThreshold;
     ShortcutBindings shortcuts = DefaultShortcuts();
 

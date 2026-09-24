@@ -114,9 +114,10 @@ struct EditModeInputOptions {
     // mouse taken first - see CounterRawMouseInputCanBeUsed. Settled in
     // steps rather than per movement - see counterThreshold - so the camera
     // wanders in between, which a frozen screen hides. Anything with
-    // anti-cheat discards injected input outright. Experimental; on because
-    // "no effect" is its common failure.
-    bool counterRawMouseInput = true;
+    // anti-cheat discards injected input outright. Experimental, and off by
+    // default: it injects input into whatever is underneath, which is asked
+    // for per game rather than assumed.
+    bool counterRawMouseInput = false;
     // How far, in device counts on either axis, the camera may wander before
     // the banked correction is injected; it is injected once more on leaving
     // edit mode. Settling only then puts a camera that ran into its pitch
