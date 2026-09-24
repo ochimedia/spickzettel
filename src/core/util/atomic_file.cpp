@@ -4,6 +4,12 @@
 #include <string>
 #include <system_error>
 
+#if defined(_WIN32)
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+
 namespace sz::core {
 
 namespace {
@@ -21,6 +27,17 @@ std::FILE* CreateFresh(const std::filesystem::path& path) {
     return _wfopen_s(&file, path.c_str(), L"wbx") == 0 ? file : nullptr;
 #else
     return std::fopen(path.c_str(), "wbx");
+#endif
+}
+
+// Asks the OS to put what was written on the disk itself, not only in its
+// cache - see WriteFileAtomically for why before the rename. fflush first:
+// this only reaches what the CRT has already handed down.
+bool CommitToDisk(std::FILE* file) {
+#if defined(_WIN32)
+    return _commit(_fileno(file)) == 0;  // FlushFileBuffers on the handle
+#else
+    return fsync(fileno(file)) == 0;
 #endif
 }
 
@@ -74,6 +91,11 @@ bool WriteFileAtomically(const std::filesystem::path& path, const void* data, si
 
     bool ok = size == 0 || std::fwrite(data, 1, size, out) == size;
     ok = (std::fflush(out) == 0) && ok;
+    // On the disk before it is renamed over the old one. The rename is
+    // journaled and the data is not, so without this a power cut could
+    // keep the rename and lose the data: the file came back at its new
+    // length, full of zeros, with the good version it replaced gone.
+    ok = ok && CommitToDisk(out);
     ok = (std::fclose(out) == 0) && ok;
     if (!ok) {
         std::filesystem::remove(tmp, ec);  // nothing half-written left beside the real file

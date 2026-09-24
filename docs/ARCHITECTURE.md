@@ -836,13 +836,17 @@ the rename, which is the opposite of what the rename is for. Hard links
 are not links in the reparse sense, so the path check for junctions
 (`IsOurs`) does not see them; exclusive creation is the only answer.
 
-**What is and is not promised.** Atomicity per file, not durability and
-not a transaction across files. The rename means no reader - this
-process after a crash included - sees half a record or half a picture.
-It does not mean the bytes are on the platter: the stream is flushed to
-the OS and not `fsync`ed, so a power loss inside the OS's write-back
-window can lose the last save, and even a synced rename on NTFS is not
-a durability guarantee for the file's contents. Nor is there a
+**What is and is not promised.** Atomicity per file, not a transaction
+across files. The rename means no reader - this process after a crash
+included - sees half a record or half a picture. The temporary's
+contents are committed to the disk (`_commit`, which is
+`FlushFileBuffers`) before it is renamed into place. Without that, a
+power cut inside the OS's write-back window could keep the rename,
+which NTFS journals, and lose the data, which it does not: the file came
+back at its new length full of zeros, and the good version it replaced
+was already gone - a whole snippet with weeks of strokes, not a few
+seconds of ink. The rename itself is not flushed, so a power cut can
+still lose the last save, falling back to the file before it. Nor is there a
 transaction spanning a record and the pictures it names: a crash between
 the two leaves a picture with no record (kept in staging, then in
 `retired/images/`) or a record naming a picture that was never written
@@ -852,10 +856,10 @@ inconsistency a hand edit leaves and are reconciled the same way. What
 capture returns; the *record* naming them is written by the save that
 follows - at once when the overlay is hidden, within the debounce
 otherwise - and the session holds the pixels until both have landed.
-Journaling and per-file `fsync` were considered and not done: the
-library is a working surface autosaved every few seconds, not a
-document with a save button, and a few seconds of ink is the most a
-power loss can take.
+A journal was considered and not done: the library is a working surface
+autosaved every few seconds, not a document with a save button, and with
+each file's data on the disk before its rename, the last few seconds of
+ink are the most a power loss can take.
 
 ### Images: QOI
 
