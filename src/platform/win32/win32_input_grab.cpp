@@ -86,6 +86,9 @@ void Win32InputGrab::SetActive(bool active) {
         }
         active_ = active;
     }
+    if (active) {
+        Heartbeat();  // a grab starts alive, not stalled since the last one
+    }
     if (!active) {
         // Whatever button was held when the grab ended stays "held" forever
         // otherwise: the mouse-up that would have cleared it is exactly the
@@ -871,6 +874,9 @@ LRESULT CALLBACK Win32InputGrab::MouseProc(int code, WPARAM wParam, LPARAM lPara
     if (event.dwExtraInfo == kOwnInjectionMarker) {
         return 1;
     }
+    if (self.AppThreadStalled()) {
+        return CallNextHookEx(self.mouseHook_, code, wParam, lParam);
+    }
     // One call per report, on time, however the raw stream is merged - see
     // hookMovesSinceReport_.
     if (wParam == WM_MOUSEMOVE) {
@@ -926,6 +932,21 @@ uint8_t ButtonBit(WPARAM message, DWORD mouseData) {
     }
 }
 }  // namespace
+
+void Win32InputGrab::Heartbeat() { lastHeartbeatMs_.store(GetTickCount64(), std::memory_order_relaxed); }
+
+// The hooks swallow every mouse event and, with keystroke forwarding off,
+// every key on the machine, whatever the app thread is doing - and the only
+// way out, the hotkey, is posted to that same thread. Hung or blocked there
+// (a deadlock, a loop, a write to a disk that stopped answering), it left
+// the whole machine with no mouse and no keyboard short of Ctrl+Alt+Del,
+// and for a standard user Task Manager's input was swallowed too. So once
+// the app thread has missed a couple of seconds of frames, both hooks let
+// everything through until it is back: the overlay stops working, which it
+// has already, and the machine does not.
+bool Win32InputGrab::AppThreadStalled() const {
+    return IsStalled(GetTickCount64(), lastHeartbeatMs_.load(std::memory_order_relaxed));
+}
 
 LRESULT Win32InputGrab::OnMouse(WPARAM message, const MSLLHOOKSTRUCT& event) {
     // Every mouse event is swallowed, nothing here is interpreted - with the
@@ -1068,6 +1089,9 @@ LRESULT CALLBACK Win32InputGrab::KeyboardProc(int code, WPARAM wParam, LPARAM lP
     // "the overlay has the keyboard" should mean it regardless of where a
     // keystroke came from.
     const auto& event = *reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+    if (self.AppThreadStalled()) {
+        return CallNextHookEx(self.keyboardHook_, code, wParam, lParam);  // see AppThreadStalled
+    }
     const LRESULT result = self.OnKeyboard(wParam, event);
     if (result != 0) {
         return result;

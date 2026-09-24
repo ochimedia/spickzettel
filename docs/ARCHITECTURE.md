@@ -2265,6 +2265,16 @@ Consequences that shape `Win32InputGrab`:
   its button comes up. Measured with injected input against the build
   before these: left Alt stayed down after AltGr+O, a repeated key stayed
   down, and the held hotkey left the overlay closed.
+- **The hooks stand down when the app thread stops.** They swallow the
+  machine's mouse and, with forwarding off, its keyboard, whatever the app
+  thread is doing, and the way out - the hotkey - is posted to that same
+  thread. Hung there, the machine had no input short of Ctrl+Alt+Del. The
+  window stamps a heartbeat every frame it renders (at least four a
+  second while it is up), and with none for two seconds both hooks pass
+  everything through until one comes. Checked by suspending the app
+  thread with the overlay up: input stayed with the overlay for half a
+  second, reached Windows after three, and was taken back once the thread
+  resumed.
 - **Typing needs the keyboard, not focus.** ImGui implements text editing
   from key events; what it cannot do is turn a virtual key into a
   character, which is the layout's job and arrives as `WM_CHAR` only for

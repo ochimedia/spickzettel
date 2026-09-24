@@ -175,6 +175,15 @@ TEST(Win32InputGrabTest, HeldModifiersAreHandedBackAsTheVeryKeysThatWereHeld) {
     }
 }
 
+// The machine's input is only held while the app thread is there to give it
+// back: a couple of seconds without a frame and the hooks let everything by.
+TEST(Win32InputGrabTest, TheHooksStandDownWhenTheAppThreadStopsBeating) {
+    const uint64_t beat = 1'000'000;
+    EXPECT_FALSE(Win32InputGrab::IsStalled(beat + 250, beat)) << "an idle frame's gap";
+    EXPECT_FALSE(Win32InputGrab::IsStalled(beat + Win32InputGrab::kStalledAfterMs, beat));
+    EXPECT_TRUE(Win32InputGrab::IsStalled(beat + Win32InputGrab::kStalledAfterMs + 1, beat));
+}
+
 // A modifier held since before the grab reached Windows itself, and has
 // nothing to be handed back.
 TEST(Win32InputGrabTest, NothingSwallowedIsNothingHandedBack) {

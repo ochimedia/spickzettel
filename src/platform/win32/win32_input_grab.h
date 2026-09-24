@@ -3,6 +3,7 @@
 #include <windows.h>
 
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <vector>
 
@@ -168,6 +169,16 @@ public:
 
     // Called once at shutdown; also safe to call when nothing is installed.
     void Shutdown();
+
+    // Called by the window every frame it renders: the app thread is alive.
+    // See AppThreadStalled for what happens when this stops.
+    void Heartbeat();
+    // How long the app thread may go without a heartbeat before the hooks
+    // stop swallowing - see AppThreadStalled. Frames come at least four times
+    // a second while the overlay is up, so this is several missed in a row.
+    static constexpr uint64_t kStalledAfterMs = 2000;
+    // Whether a heartbeat at `lastBeatMs` is too old at `nowMs`.
+    static bool IsStalled(uint64_t nowMs, uint64_t lastBeatMs) { return nowMs - lastBeatMs > kStalledAfterMs; }
 
     // The key-downs to hand Windows as a grab of the keyboard ends: one per
     // side of Ctrl, Shift and Alt whose down `swallowed` (indexed by
@@ -473,6 +484,11 @@ private:
     // hook was there reaches Windows. See OnMouse. Cleared as the hook goes
     // in; written on the hook thread only.
     std::atomic<uint8_t> swallowedButtons_{0};
+    // GetTickCount64 at the last Heartbeat, or at the grab starting.
+    std::atomic<uint64_t> lastHeartbeatMs_{0};
+    // Whether the app thread has gone quiet while the hooks are swallowing
+    // everything - see its definition.
+    bool AppThreadStalled() const;
     // Movement taken from the game since the last correction, banked by the
     // raw-input sink on the hook thread and injected back once it strays too
     // far or countering ends - see FlushPendingCorrection.

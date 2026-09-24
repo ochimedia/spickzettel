@@ -1053,6 +1053,7 @@ void Win32OverlayWindow::RenderFrame() {
     renderer_->SetModifierOverride(asyncDown(VK_CONTROL) || grabCtrl, asyncDown(VK_SHIFT) || grabShift,
                                    asyncDown(VK_MENU) || grabAlt);
     grab.SampleFrameStep();
+    grab.Heartbeat();
     renderer_->SetSoftwarePointerActive(grab.SoftwarePointerWanted());
 
     // While the grab owns the mouse, ImGui must navigate by the overlay's
