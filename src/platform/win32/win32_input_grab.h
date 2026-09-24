@@ -209,14 +209,12 @@ private:
     // the way. Idempotent; every public setter just updates state and calls
     // this.
     void Refresh();
-    // Injects everything banked while countering was on as one correction,
-    // putting the game's camera back where it was when the overlay came up.
-    // Called by Refresh as countering ends rather than once per frame: a
-    // camera countered frame by frame visibly shakes, and each correction
-    // is a raw-input message of our own, which on a 125 Hz mouse pushes the
-    // sink past Windows' background rate cap and makes the pointer jump.
-    // Deferring is only invisible behind the frozen screen, where the
-    // camera's wandering is not seen. No-op when there is nothing banked.
+    // Injects everything banked so far as one correction, putting the
+    // game's camera back where it was. Called by the raw-input sink once the
+    // bank passes kCorrectionLeash on either axis, and by Refresh as
+    // countering ends - not once per frame, see kCorrectionLeash. Deferring
+    // is only invisible behind the frozen screen, where the camera's
+    // wandering is not seen. No-op when there is nothing banked.
     void FlushPendingCorrection();
     void EnsureRawInputSink();
     void DestroyRawInputSink();
@@ -451,9 +449,9 @@ private:
     std::atomic<int> frameSteps_[4]{};
     POINT lastFramePoint_{};
     LARGE_INTEGER lastReportTime_{};
-    // Movement taken from the game since countering began, banked by the
-    // raw-input sink on the hook thread and injected back when countering
-    // ends - see FlushPendingCorrection.
+    // Movement taken from the game since the last correction, banked by the
+    // raw-input sink on the hook thread and injected back once it strays too
+    // far or countering ends - see FlushPendingCorrection.
     std::atomic<LONG> pendingCorrectionX_{0};
     std::atomic<LONG> pendingCorrectionY_{0};
     // QPC ticks at the moment the oldest still-uncountered report was

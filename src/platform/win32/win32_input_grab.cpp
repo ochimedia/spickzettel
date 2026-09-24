@@ -53,6 +53,19 @@ float SliderMultiplier(int slider, bool curveOn) {
 // desktop pointer does without it. See docs/ARCHITECTURE.md.
 constexpr float kBallisticScale = 0.2278f;
 
+// How far, in device counts on either axis, the game's camera may be let
+// wander before the banked correction is injected early rather than when
+// countering ends. Settling only at the end puts a camera that ran into its
+// pitch limit somewhere else entirely: the game clamped the movement and the
+// correction undoes all of it. Settling every frame is what made the camera
+// shake, and each correction is a raw-input message of ours, which pushes a
+// 125 Hz mouse past Windows' background rate cap and makes the pointer jump.
+// A guess, not a measurement: at common shooter sensitivities (0.02-0.07
+// degrees per count) 300 counts is roughly 6-20 degrees, far from any pitch
+// limit, and at default pointer speed a stroke across the screen costs only
+// a few corrections.
+constexpr LONG kCorrectionLeash = 300;
+
 // The performance counter, for the one thing here that is timed in
 // fractions of a millisecond - see InputGrabDiagnostics::correctionLagMsLast.
 int64_t NowTicks() {
@@ -1001,14 +1014,19 @@ void Win32InputGrab::OnRawMouse(const RAWMOUSE& mouse) {
             // post-acceleration and clamped at the screen edges, and
             // canceling one with the other leaves most of the motion behind
             // (measured: ~27% removed, versus ~98% this way).
-            pendingCorrectionX_.fetch_add(mouse.lLastX);
-            pendingCorrectionY_.fetch_add(mouse.lLastY);
+            const LONG bankedX = pendingCorrectionX_.fetch_add(mouse.lLastX) + mouse.lLastX;
+            const LONG bankedY = pendingCorrectionY_.fetch_add(mouse.lLastY) + mouse.lLastY;
             // The clock starts on the oldest report still uncountered, and
             // only on that one: what the game gets to integrate is measured
             // from when the *first* uncorrected movement reached it.
             int64_t none = 0;
             pendingCorrectionSince_.compare_exchange_strong(none, NowTicks(), std::memory_order_relaxed);
 
+            // Settled early once the camera has strayed far enough on either
+            // axis - see kCorrectionLeash.
+            if (std::labs(bankedX) > kCorrectionLeash || std::labs(bankedY) > kCorrectionLeash) {
+                FlushPendingCorrection();
+            }
         }
 
         // Movement is deliberately not posted anywhere. The render thread
