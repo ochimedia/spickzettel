@@ -40,13 +40,13 @@ namespace sz::core::persistence {
 //   folders/<folder>/<canvas>/<snippet>/<uid>.qoi
 //                                     - its captured pixels, and beside it
 //                                       <uid>.thumb.qoi for the Overview
-//   images/                            - staging only; see kStagingDir
+//   staging/                           - see kStagingDir
 //   retired/<folder>/<canvas>/<snippet>/
 //                                     - what a save found the library no
 //                                       longer holding, set aside whole at
 //                                       the path it had under folders/
 //                                       rather than deleted; see Save
-//   retired/images/                    - pictures found in staging that no
+//   retired/staging/                   - pictures found in staging that no
 //                                       snippet named, set aside for the
 //                                       same reason; see Save's last pass
 //   .../<any directory>/.removed        - the directory was deleted for good
@@ -77,7 +77,7 @@ namespace sz::core::persistence {
 //     left alone rather than deleted or complained about
 //   - a symlink or junction is not ours either, whatever is behind it: not
 //     read, not written to, not retired, not deleted - wherever it sits,
-//     folders/ or images/ or retired/ themselves included (see IsOurs)
+//     folders/ or staging/ or retired/ themselves included (see IsOurs)
 //   - an order file naming something that is gone simply skips it; anything
 //     present that it doesn't name goes to the end
 //   - a directory whose readable half was renamed by hand keeps its place,
@@ -330,7 +330,7 @@ private:
     // under the root, and with no link or junction anywhere on the way
     // down from the root to it. The one check every write, move and
     // delete goes through - the top-level directories included (folders/,
-    // images/, retired/), which a user can replace with a junction as
+    // staging/, retired/), which a user can replace with a junction as
     // easily as any other. The library root itself is not checked: a root
     // that is a junction is how a library is moved to another drive, and
     // is supported. A path that does not exist yet passes if its existing

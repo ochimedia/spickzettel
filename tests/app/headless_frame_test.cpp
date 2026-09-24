@@ -3310,7 +3310,7 @@ TEST_F(HeadlessSaveTest, APictureThatCouldNotBeWrittenKeepsTheSaveUnacknowledged
     controller_->GetSession().ImportLibrary(std::move(snapshot));
     // A file where the staging directory wants to be: no picture can be
     // written, while every record can.
-    std::ofstream(root_ / "images") << "in the way";
+    std::ofstream(root_ / "staging") << "in the way";
     AttachStore();
 
     StepFrames(3);
@@ -3321,7 +3321,7 @@ TEST_F(HeadlessSaveTest, APictureThatCouldNotBeWrittenKeepsTheSaveUnacknowledged
 
     // Out of the way again. Nothing else changes; the retry alone has to
     // bring the picture to disk.
-    std::filesystem::remove(root_ / "images");
+    std::filesystem::remove(root_ / "staging");
     StepFrames(150);
     EXPECT_FALSE(paintedLayer().paintedDirty) << "the failed picture was never retried";
     EXPECT_TRUE(store_->LoadImage(itemId, FormatUid(itemId) + "_p1.qoi").has_value());

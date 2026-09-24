@@ -973,7 +973,7 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
         std::filesystem::temp_directory_path() / "spickzettel_session_test_pending_capture";
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
-    std::ofstream(dir / "images") << "a file where the staging directory wants to be";
+    std::ofstream(dir / "staging") << "a file where the staging directory wants to be";
     persistence::LibraryStore store(dir);
     test::FakeOverlayWindow window;
     window.captureReturnsHandle = 7;
@@ -1092,7 +1092,7 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
         std::filesystem::temp_directory_path() / "spickzettel_session_test_copy_of_pending";
     std::filesystem::remove_all(dir);
     std::filesystem::create_directories(dir);
-    std::ofstream(dir / "images") << "a file where the staging directory wants to be";
+    std::ofstream(dir / "staging") << "a file where the staging directory wants to be";
     persistence::LibraryStore store(dir);
     test::FakeOverlayWindow window;
     window.captureReturnsHandle = 7;

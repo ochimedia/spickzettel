@@ -571,12 +571,12 @@ library/
         item.json       - rect, strokes, layers, anchor, note text...
         <uid>.qoi       - its captured pixels, if it has any
         <uid>.thumb.qoi - a 256px copy for the Overview's thumbnails
-  images/               - staging: where a capture waits between being
-                           taken and the next save moving it into the
+  staging/              - where a capture waits between being taken
+                           and the next save moving it into the
                            snippet that names it
   retired/<folder>/...  - what a save found the library no longer
                            holding, set aside whole rather than deleted
-  retired/images/       - staged pictures no snippet named, set aside
+  retired/staging/      - staged pictures no snippet named, set aside
                            for the same reason
 ```
 
@@ -694,7 +694,7 @@ put in its place between two saves fails that record's write rather
 than being written through. The check costs a filesystem call per path
 component, and only what is written pays it; a no-op save pays nothing.
 That covers the top-level directories too: a junction at
-`folders/` fails every save outright, one at `images/` refuses the
+`folders/` fails every save outright, one at `staging/` refuses the
 capture's write (the session keeps the pixels and the save keeps
 failing, visibly), and one at `retired/` leaves what would have been
 retired where it is. The first version checked only the directory a
@@ -853,7 +853,7 @@ seconds of ink. The rename itself is not flushed, so a power cut can
 still lose the last save, falling back to the file before it. Nor is there a
 transaction spanning a record and the pictures it names: a crash between
 the two leaves a picture with no record (kept in staging, then in
-`retired/images/`) or a record naming a picture that was never written
+`retired/staging/`) or a record naming a picture that was never written
 (the layer draws as its placeholder). Both are the same shape of
 inconsistency a hand edit leaves and are reconciled the same way. What
 "captured" means, precisely: the pixels are encoded to disk before the
@@ -890,7 +890,7 @@ A capture's pixels are written synchronously at capture time, not with
 the debounced record write: a screenshot lost to a crash can never be
 recaptured, where a few seconds of strokes can be redrawn. For the same
 reason a picture found in staging that no record names is set aside
-into `retired/images/` rather than deleted: from the store's side it is
+into `retired/staging/` rather than deleted: from the store's side it is
 either the capture of a snippet deleted for good before it was saved,
 which nobody wants, or the capture a crash left without its record,
 which is exactly what writing it early was for, and the two cannot be

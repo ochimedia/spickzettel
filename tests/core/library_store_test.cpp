@@ -417,7 +417,7 @@ TEST_F(LibraryStoreTest, SaveKeepsImagesReferencedByAnyLayer) {
     // which is what makes a snippet one thing to move.
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000007.qoi"));
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000008.qoi"));
-    EXPECT_FALSE(std::filesystem::exists(dir_ / "images" / "000007.qoi")) << "staging is drained";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "staging" / "000007.qoi")) << "staging is drained";
 }
 
 TEST_F(LibraryStoreTest, LoadDefaultsAMissingItemAnchorToNotYetAnchored) {
@@ -1095,16 +1095,16 @@ TEST_F(LibraryStoreTest, AStagedPictureNeverReplacesANewerOneAtHome) {
     CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
     snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
     {
-        std::ifstream held(dir_ / "images" / "000004.qoi");  // no delete sharing
+        std::ifstream held(dir_ / "staging" / "000004.qoi");  // no delete sharing
         ASSERT_TRUE(held.is_open());
         ASSERT_TRUE(store.Save(snapshot));
-        ASSERT_TRUE(std::filesystem::exists(dir_ / "images" / "000004.qoi")) << "the move was refused";
+        ASSERT_TRUE(std::filesystem::exists(dir_ / "staging" / "000004.qoi")) << "the move was refused";
         ASSERT_TRUE(store.SaveImage(4, newer.data(), 64, 64).has_value());
         ASSERT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi")) << "written at home";
     }
     ASSERT_TRUE(store.Save(snapshot));
-    EXPECT_FALSE(std::filesystem::exists(dir_ / "images" / "000004.qoi"));
-    EXPECT_TRUE(std::filesystem::exists(dir_ / "retired" / "images" / "000004.qoi")) << "set aside, not deleted";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "staging" / "000004.qoi"));
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "retired" / "staging" / "000004.qoi")) << "set aside, not deleted";
 
     LibraryStore reopened(dir_);
     ASSERT_TRUE(reopened.Load().has_value());
@@ -1978,7 +1978,7 @@ TEST_F(LibraryStoreTest, NothingIsWrittenOrReadThroughAJunctionAtFolders) {
 
 TEST_F(LibraryStoreTest, APictureIsNotWrittenThroughAJunctionAtStaging) {
     const std::filesystem::path outside =
-        MakeJunctionTo(dir_ / "images", dir_.parent_path() / (dir_.filename().string() + "_outside"));
+        MakeJunctionTo(dir_ / "staging", dir_.parent_path() / (dir_.filename().string() + "_outside"));
     LibraryStore store(dir_);
     const std::vector<uint8_t> pixels = Checkerboard(8, 8);
     EXPECT_FALSE(store.SaveImage(4, pixels.data(), 8, 8).has_value()) << "refused, so the session keeps the pixels";
@@ -2001,9 +2001,9 @@ TEST_F(LibraryStoreTest, NothingIsSetAsideThroughAJunctionAtRetired) {
     ASSERT_TRUE(store.Save(snapshot)) << "setting aside is best-effort; the records landed";
     EXPECT_TRUE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" / "canvas.json"))
         << "left where it is rather than moved out of the library";
-    EXPECT_TRUE(std::filesystem::exists(dir_ / "images" / "00002r.qoi")) << "the orphan stays in staging, readably";
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "staging" / "00002r.qoi")) << "the orphan stays in staging, readably";
     EXPECT_FALSE(std::filesystem::exists(outside / "folder-1-000001"));
-    EXPECT_FALSE(std::filesystem::exists(outside / "images"));
+    EXPECT_FALSE(std::filesystem::exists(outside / "staging"));
     std::filesystem::remove_all(outside);
 }
 
@@ -2088,9 +2088,9 @@ TEST_F(LibraryStoreTest, SaveSetsAsideAStagedPictureNothingNames) {
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000007.qoi"));
     // Nothing names image 8, so it leaves staging - but for retired/, not
     // for nowhere: it may be the capture a crash left without a record.
-    EXPECT_FALSE(std::filesystem::exists(dir_ / "images" / "000008.qoi"));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "staging" / "000008.qoi"));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000008.qoi"));
-    EXPECT_TRUE(std::filesystem::exists(dir_ / "retired" / "images" / "000008.qoi"));
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "retired" / "staging" / "000008.qoi"));
 }
 
 // ===== Sidecar thumbnails =====
@@ -2105,7 +2105,7 @@ TEST_F(LibraryStoreTest, SaveImageWritesAThumbnailBesideIt) {
     ASSERT_TRUE(filename.has_value());
 
     EXPECT_EQ(LibraryStore::ThumbnailFilename(*filename), "000007.thumb.qoi");
-    EXPECT_TRUE(std::filesystem::exists(dir_ / "images" / "000007.thumb.qoi"));
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "staging" / "000007.thumb.qoi"));
 
     const std::optional<DecodedImage> thumb = store.LoadThumbnail(7, *filename);
     ASSERT_TRUE(thumb.has_value());
@@ -2115,8 +2115,8 @@ TEST_F(LibraryStoreTest, SaveImageWritesAThumbnailBesideIt) {
     EXPECT_EQ(thumb->height, thumb->width / 2);
     // And it is smaller on disk than the image it stands in for, which is
     // the entire reason it exists.
-    EXPECT_LT(std::filesystem::file_size(dir_ / "images" / "000007.thumb.qoi"),
-               std::filesystem::file_size(dir_ / "images" / "000007.qoi"));
+    EXPECT_LT(std::filesystem::file_size(dir_ / "staging" / "000007.thumb.qoi"),
+               std::filesystem::file_size(dir_ / "staging" / "000007.qoi"));
 }
 
 TEST_F(LibraryStoreTest, AnImageThatIsAlreadySmallKeepsItsSize) {
@@ -2137,7 +2137,7 @@ TEST_F(LibraryStoreTest, LoadThumbnailReturnsNulloptForAPictureWithoutOne) {
     // The image is there, the sidecar isn't, and that is not an error.
     const std::vector<uint8_t> pixels = {1, 2, 3, 255};
     ASSERT_TRUE(store.SaveImage(7, pixels.data(), 1, 1).has_value());
-    std::filesystem::remove(dir_ / "images" / "000007.thumb.qoi");
+    std::filesystem::remove(dir_ / "staging" / "000007.thumb.qoi");
 
     EXPECT_FALSE(store.LoadThumbnail(7, "000007.qoi").has_value());
     EXPECT_FALSE(store.LoadThumbnail(7, "").has_value());
@@ -2165,8 +2165,8 @@ TEST_F(LibraryStoreTest, SaveKeepsALiveImagesThumbnailAndCollectsADeadOnes) {
     // Overview visit would rebuild it.
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000007.thumb.qoi"))
         << "a thumbnail travels with the image it belongs to";
-    EXPECT_FALSE(std::filesystem::exists(dir_ / "images" / "000008.qoi"));
-    EXPECT_FALSE(std::filesystem::exists(dir_ / "images" / "000008.thumb.qoi"));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "staging" / "000008.qoi"));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "staging" / "000008.thumb.qoi"));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000008.qoi"));
 }
 

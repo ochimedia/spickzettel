@@ -504,7 +504,7 @@ constexpr const char* kOrderFile = "order.json";
 // deliberate (see SaveImage) and can happen before the item it belongs to
 // has ever been saved - so it goes here, and the next Save moves it into
 // the item's own directory. Nothing is meant to accumulate here.
-constexpr const char* kStagingDir = "images";
+constexpr const char* kStagingDir = "staging";
 // Where a save sets aside a directory the library no longer holds and
 // nobody deleted for good (see Save's retirement pass) - whole, record and
 // pictures together, at the same path it had under folders/. Nothing reads
@@ -596,7 +596,7 @@ std::optional<json> ReadJsonFile(const std::filesystem::path& path) {
 // through one check, LibraryStore::IsOurs, which walks the whole path from
 // the root down for a link (see CrossesLink) - at the moment of the
 // operation, whether the path was just made or has been indexed since the
-// load. That includes the top-level directories - folders/, images/,
+// load. That includes the top-level directories - folders/, staging/,
 // retired/ - which the first version of this took on trust and a junction
 // at any of which had a save writing a whole tree outside the library; and
 // it includes an indexed directory replaced by a junction between two
@@ -1878,7 +1878,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
     // Whatever a snippet in the library names is moved in with it - every
     // one has a directory by now, a deleted one included, since a delete
     // leaves it where it is. Whatever nothing names is set aside into
-    // retired/images/ rather than deleted: it is the capture of a snippet
+    // retired/staging/ rather than deleted: it is the capture of a snippet
     // deleted for good before it was ever saved, which nobody wants back -
     // or the remains of a crash between writing a picture and saving the
     // record that names it, which is exactly the screenshot that cannot be
