@@ -41,6 +41,12 @@ public:
     // can choose again. The window never moves itself.
     virtual void SetDisplaysChangedCallback(std::function<void()> callback) = 0;
 
+    // The scale the system gives the display the window is on, in percent:
+    // 150 where Windows is set to 150%. Asked every frame, so the answer
+    // follows the window to another display and a scale changed while it is
+    // up. 100 before EnsureCreated.
+    virtual int ScalePercent() const = 0;
+
     // Releases everything (window, device, swapchain). Called once, on exit.
     virtual void Destroy() = 0;
 

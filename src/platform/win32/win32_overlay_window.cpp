@@ -373,6 +373,14 @@ void Win32OverlayWindow::Hide() {
 
 bool Win32OverlayWindow::IsVisible() const { return visible_; }
 
+int Win32OverlayWindow::ScalePercent() const {
+    // The window's DPI is its display's, since the process is per-monitor
+    // aware (see WinMain), and Windows updates it when the window moves or
+    // the display's scale is changed. 0 for no window.
+    const UINT dpi = hwnd_ != nullptr ? GetDpiForWindow(hwnd_) : 0;
+    return dpi > 0 ? MulDiv(static_cast<int>(dpi), 100, USER_DEFAULT_SCREEN_DPI) : 100;
+}
+
 ForegroundApp Win32OverlayWindow::UnderlyingApplication() const {
     // Whoever holds the foreground, unless that is this window - which it
     // is only in the configuration where edit mode takes focus, and where

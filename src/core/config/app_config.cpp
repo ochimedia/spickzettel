@@ -591,6 +591,15 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
     ReadBool(appearance, "showItemBorders", config.showItemBorders);
     ReadBool(appearance, "showToastsWhileHidden", config.showToastsWhileHidden);
     ReadColor(appearance, "accentColor", config.accentColorRGBA);
+    // "auto", or a percentage. Anything else keeps the default, which is
+    // "auto" - a scale nobody chose is Windows' one.
+    if (const auto it = appearance.find("uiScale"); it != appearance.end()) {
+        if (it->is_string() && it->get<std::string>() == "auto") {
+            config.uiScalePercent = 0;
+        } else {
+            ReadInt(appearance, "uiScale", config.uiScalePercent, kUiScalePercentMin, kUiScalePercentMax);
+        }
+    }
     if (const auto it = appearance.find("imageFilter"); it != appearance.end() && it->is_string()) {
         if (const auto filter = ParseImageFilter(it->get<std::string>())) {
             config.imageFilter = *filter;
@@ -726,6 +735,7 @@ std::string SerializeConfig(const AppConfig& config) {
         {"showToastsWhileHidden", config.showToastsWhileHidden},
         {"imageFilter", ImageFilterName(config.imageFilter)},
         {"accentColor", FormatHexColor(config.accentColorRGBA)},
+        {"uiScale", config.uiScalePercent == 0 ? json("auto") : json(config.uiScalePercent)},
         {"snippetColors",
          {
              {"borderFront", FormatHexColor(config.itemBorderColorFrontRGBA)},

@@ -40,6 +40,7 @@ public:
     void ShowWithoutActivating() override;
     void Hide() override;
     bool IsVisible() const override;
+    int ScalePercent() const override;
     ForegroundApp UnderlyingApplication() const override;
     void SetInputPassthrough(bool enabled) override;
     void SetEditModeInput(const EditModeInputOptions& options) override;

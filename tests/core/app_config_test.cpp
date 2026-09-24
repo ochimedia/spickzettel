@@ -503,6 +503,27 @@ TEST(AppConfigTest, TheAccentIsTealUntilChangedAndRoundTrips) {
     EXPECT_EQ(ParseConfig(text), config);
 }
 
+TEST(AppConfigTest, TheUiScaleFollowsWindowsUntilSetAndRoundTrips) {
+    AppConfig config = DefaultConfig();
+    EXPECT_EQ(config.uiScalePercent, 0);
+    EXPECT_NE(SerializeConfig(config).find(R"("uiScale": "auto")"), std::string::npos);
+    EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
+    config.uiScalePercent = 150;
+    EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
+}
+
+TEST(AppConfigTest, AUiScaleIsHeldToItsBandAndAnythingElseIsAuto) {
+    const auto scale = [](const char* value) {
+        return ParseConfig(std::string(R"({"appearance":{"uiScale":)") + value + "}}").uiScalePercent;
+    };
+    EXPECT_EQ(scale(R"("auto")"), 0);
+    EXPECT_EQ(scale("125"), 125);
+    EXPECT_EQ(scale("1000"), kUiScalePercentMax);
+    EXPECT_EQ(scale("10"), kUiScalePercentMin);
+    EXPECT_EQ(scale(R"("large")"), 0);
+    EXPECT_EQ(scale("true"), 0);
+}
+
 TEST(AppConfigTest, SnippetColorsHaveDefaultsThatTellFrontFromBack) {
     const AppConfig config = DefaultConfig();
     EXPECT_NE(config.itemBorderColorFrontRGBA, config.itemBorderColorOtherRGBA);

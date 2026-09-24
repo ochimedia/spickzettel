@@ -192,6 +192,13 @@ struct AppConfig {
     // readable. The pinned-snippet border is a color of its own
     // (itemBorderColorPinnedRGBA).
     uint32_t accentColorRGBA = 0x2C6C7CFFu;  // teal
+    // How large the overlay's own interface is drawn - text, buttons,
+    // panels, bars - in percent. 0 follows Windows' scale for the display
+    // the overlay is on, which is where someone who reads at 150% has
+    // already said so. Snippets, strokes and note text are what is on the
+    // screen rather than the interface to it, and keep their pixel sizes.
+    // Held to kUiScalePercentMin..Max.
+    int uiScalePercent = 0;
     // What tells the snippet in front from the ones behind it: its border
     // is drawn in its own color, both settable (packed 0xRRGGBBAA - the
     // alpha is part of the color here, since a more transparent border is
@@ -357,6 +364,12 @@ struct AppConfig {
 // mostly usable.
 inline constexpr float kEditModeBorderWidthMin = 1.0f;
 inline constexpr float kEditModeBorderWidthMax = 48.0f;
+
+// The band uiScalePercent is held to, when it is not 0 ("follow Windows").
+// Windows itself offers 100 to 500; past 300 the Overview no longer fits on
+// a 1080p display, and below 75 its text stops being readable.
+inline constexpr int kUiScalePercentMin = 75;
+inline constexpr int kUiScalePercentMax = 300;
 
 // The band purgeDeletedAfterDays is held to: at least a day, since "delete
 // for good at the next start" is what Delete permanently is for, and at

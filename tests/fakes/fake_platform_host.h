@@ -65,6 +65,7 @@ public:
     bool forgetUnderlyingAppOnHide = false;
 
     bool IsVisible() const override { return visible; }
+    int ScalePercent() const override { return scalePercent; }
 
     // Settable, so a test can say what the overlay is up over - see
     // ForegroundApp.
@@ -134,6 +135,8 @@ public:
 
     bool created = false;
     bool visible = false;
+    // What the system's display scale is, for a test of the UI scale.
+    int scalePercent = 100;
     bool inputPassthrough = false;
     bool editModeNoActivate = false;
     int setEditModeNoActivateCallCount = 0;
