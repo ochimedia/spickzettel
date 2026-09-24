@@ -236,6 +236,12 @@ private:
     // edit mode inherits, and scoping this to edit mode would leave the
     // overlay deaf in exactly the case it exists to fix.
     bool MustTakeFocusFrom(const platform::ForegroundApp& app) const;
+    // Whether edit mode is shown without taking focus: the setting, unless
+    // the application underneath is one MustTakeFocusFrom. One expression
+    // for the way up and for a settings change alike - the second compared
+    // the setting alone, so any setting saved while the overlay was up over
+    // an elevated application gave that application its focus back.
+    bool WantedEditModeNoActivate() const;
     // Hides the overlay and immediately shows it again in the same mode,
     // for settings that are only read on the way in - see
     // OverlayApp::SetRestartOverlayCallback. No-op while hidden.

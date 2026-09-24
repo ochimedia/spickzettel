@@ -1532,6 +1532,24 @@ TEST_F(HeadlessAppTest, TheHudDrawsOverAnApplicationAboveUs) {
     EXPECT_FALSE(host_.overlayWindow.editModeNoActivate) << "and focus was taken from it";
 }
 
+// A setting saved while the overlay is up over an elevated application
+// leaves the focus taken from it: the settings change re-derives the same
+// answer the way up did, rather than going back to the setting alone.
+TEST_F(HeadlessAppTest, SavingASettingOverAnElevatedApplicationKeepsItsFocusTaken) {
+    platform::ForegroundApp elevated;
+    elevated.executable = "taskmgr.exe";
+    elevated.integrity = platform::ForegroundIntegrity::Above;
+    host_.overlayWindow.underlyingApp = elevated;
+    ShowEditMode();
+    StepFrame();
+    ASSERT_FALSE(host_.overlayWindow.editModeNoActivate);
+
+    controller_->GetSettings().Mutable().showItemBorders = !AppSettings().Stored().showItemBorders;
+    controller_->GetSettings().Commit();
+
+    EXPECT_FALSE(host_.overlayWindow.editModeNoActivate);
+}
+
 // The HUD's number keys write into the profile that is running, and the two
 // rows that need edit mode re-entered then restart the overlay. A restart
 // that re-asked what was underneath - in the middle of hiding itself, when

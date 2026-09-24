@@ -553,6 +553,10 @@ bool TrayController::MustTakeFocusFrom(const platform::ForegroundApp& app) const
            app.integrity == platform::ForegroundIntegrity::Above;
 }
 
+bool TrayController::WantedEditModeNoActivate() const {
+    return settings_.Live().dontStealFocus && !(sessionApp_.has_value() && MustTakeFocusFrom(*sessionApp_));
+}
+
 void TrayController::ApplyProfileForCurrentApplication(bool keepPrevious) {
     platform::IOverlayWindow& window = host_.GetOverlayWindow();
     // Asked before Show, which is what makes it the *underlying*
@@ -568,7 +572,7 @@ void TrayController::ApplyProfileForCurrentApplication(bool keepPrevious) {
     // Both have a real runtime effect beyond what OverlayApp renders, and
     // both are set before the window is shown: no-activate decides how it
     // is shown at all, and the input options decide what gets hooked.
-    liveEditModeNoActivate_ = settings_.Live().dontStealFocus && !MustTakeFocusFrom(*sessionApp_);
+    liveEditModeNoActivate_ = WantedEditModeNoActivate();
     liveEditModeInput_ = settings_.Live().InputOptions();
     window.SetEditModeNoActivate(liveEditModeNoActivate_);
     window.SetEditModeInput(liveEditModeInput_);
@@ -598,8 +602,8 @@ void TrayController::OnSettingsChanged() {
     // *live* rather than against what is stored, which is not the live
     // value whenever a profile is overriding it.
     platform::IOverlayWindow& window = host_.GetOverlayWindow();
-    if (settings_.Live().dontStealFocus != liveEditModeNoActivate_) {
-        liveEditModeNoActivate_ = settings_.Live().dontStealFocus;
+    if (WantedEditModeNoActivate() != liveEditModeNoActivate_) {
+        liveEditModeNoActivate_ = WantedEditModeNoActivate();
         window.SetEditModeNoActivate(liveEditModeNoActivate_);
     }
     if (settings_.Live().InputOptions() != liveEditModeInput_) {
