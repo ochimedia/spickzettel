@@ -927,6 +927,12 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
         // And whatever else the hand was in the middle of, kept where it
         // got to - see EndGesture.
         EndGesture();
+        // A note being typed is committed as it stands: its editor is not
+        // drawn in view-only mode, so it would never hear that it closed,
+        // and would be left holding the text and the keyboard.
+        if (editingNoteItemId_.has_value()) {
+            EndEditingNote(noteEditBuffer_);
+        }
         // Normally cleared at the top of every RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle

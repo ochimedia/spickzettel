@@ -2986,6 +2986,30 @@ TEST_F(HeadlessAppTest, HidingByHotkeyCommitsTheNoteBeingTyped) {
     EXPECT_EQ(Canvases().CurrentOrNull()->items[0].noteText, "ab");
 }
 
+// Switching to view-only in place: the editor is not drawn there, so it
+// could never be told it was closed - the text stayed uncommitted, and
+// back in edit mode a press on empty canvas made nothing.
+TEST_F(HeadlessAppTest, SwitchingToViewOnlyCommitsTheNoteBeingTyped) {
+    StartWith(WithTextOnT());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 620.0f, 440.0f);
+    Drag(350.0f, 320.0f, 500.0f, 340.0f);  // a stroke first: a drawing with nothing in it settles its note anyway
+    PressKey(ImGuiKey_T);
+    RawClick(400.0f, 400.0f);
+    ASSERT_TRUE(App().EditingNote().has_value());
+    ImGui::GetIO().AddInputCharacter('a');
+    StepFrames(2);
+
+    ShowViewMode();
+    StepFrames(2);
+    EXPECT_TRUE(App().IsViewOnly());
+    EXPECT_FALSE(App().EditingNote().has_value());
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].noteText, "a");
+    EXPECT_EQ(host_.overlayWindow.releaseTextInputCallCount, host_.overlayWindow.requestTextInputCallCount)
+        << "the keyboard is given back";
+}
+
 TEST_F(HeadlessAppTest, ExitingFromTheTrayCommitsTheNoteBeingTyped) {
     StartWith(WithTextOnT());
     ShowEditMode();
