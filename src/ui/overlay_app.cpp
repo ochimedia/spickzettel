@@ -183,6 +183,10 @@ void ApplySpickzettelStyle() {
     colors[ImGuiCol_FrameBg] = theme::kFieldBg;
     colors[ImGuiCol_FrameBgHovered] = theme::kHoverWash;
     colors[ImGuiCol_FrameBgActive] = theme::kPanelBorderStrong;
+    // A checked box keeps the unchecked box's gray, so the accent check
+    // mark is what says it is on. Left unset, ImGui tints it toward its own
+    // blue theme, which the accent then had to stand out against.
+    colors[ImGuiCol_CheckboxSelectedBg] = theme::kFieldBg;
     colors[ImGuiCol_Button] = theme::kFieldBg;
     colors[ImGuiCol_ButtonHovered] = theme::kHoverWash;
     colors[ImGuiCol_Separator] = theme::kPanelBorderStrong;
