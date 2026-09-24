@@ -681,30 +681,50 @@ protected:
     std::filesystem::path dir_;
 };
 
-TEST_F(WriteConfigFileTest, ReadConfigFileReadsBackWhatWasWritten) {
+TEST_F(WriteConfigFileTest, LoadingReadsBackWhatWasWritten) {
     AppConfig config = DefaultConfig();
     config.strokeWidth = 9.0f;
     ASSERT_TRUE(WriteConfigFile(dir_ / "config.json", config));
-    const std::optional<AppConfig> read = ReadConfigFile(dir_ / "config.json");
-    ASSERT_TRUE(read.has_value());
-    EXPECT_FLOAT_EQ(read->strokeWidth, 9.0f);
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
+    EXPECT_EQ(loaded.source, ConfigSource::Read);
+    EXPECT_FLOAT_EQ(loaded.config.strokeWidth, 9.0f);
 }
 
-TEST_F(WriteConfigFileTest, ReadConfigFileIsNulloptWithoutAFile) {
-    EXPECT_FALSE(ReadConfigFile(dir_ / "config.json").has_value()) << "a first run, not a broken file";
+TEST_F(WriteConfigFileTest, WithoutAFileLoadingIsAFirstRunAndWritesTheDefaults) {
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
+    EXPECT_EQ(loaded.source, ConfigSource::Created);
+    EXPECT_EQ(loaded.config, DefaultConfig());
+    EXPECT_EQ(ParseConfig(ReadFile(dir_ / "config.json")), DefaultConfig());
+}
+
+// A hand edit that left a trailing comma is not settings, and not a first
+// run either: the file is renamed out of the way, never written over, and
+// what was in it is still there to be found.
+TEST_F(WriteConfigFileTest, AFileThatIsNotSettingsIsSetAsideNotWrittenOver) {
+    std::filesystem::create_directories(dir_);
+    const std::string broken = R"({"drawing": {"strokeWidth": 9,}})";
+    std::ofstream(dir_ / "config.json", std::ios::binary) << broken;
+
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "2026-09-24-15-00-00");
+    EXPECT_EQ(loaded.source, ConfigSource::SetAside);
+    EXPECT_EQ(loaded.config, DefaultConfig());
+    EXPECT_EQ(loaded.setAsideAs, dir_ / "config-unreadable-2026-09-24-15-00-00.json");
+    EXPECT_EQ(ReadFile(loaded.setAsideAs), broken);
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "config.json")) << "nothing written in its place yet";
 }
 
 // A settings file is a few kilobytes. Whatever a file of megabytes at that
-// path is, it is read as one that said nothing rather than allocated for.
-TEST_F(WriteConfigFileTest, AFileTooBigToBeASettingsFileReadsAsDefaults) {
+// path is, it is not settings, and is set aside rather than allocated for.
+TEST_F(WriteConfigFileTest, AFileTooBigToBeASettingsFileIsSetAside) {
     std::filesystem::create_directories(dir_);
     {
         std::ofstream out(dir_ / "config.json", std::ios::binary);
         out << R"({"drawing": {"strokeWidth": 9}, "padding": ")" << std::string(kMaxConfigFileBytes, 'x') << R"("})";
     }
-    const std::optional<AppConfig> read = ReadConfigFile(dir_ / "config.json");
-    ASSERT_TRUE(read.has_value()) << "there is a file";
-    EXPECT_FLOAT_EQ(read->strokeWidth, DefaultConfig().strokeWidth) << "and it said nothing";
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
+    EXPECT_EQ(loaded.source, ConfigSource::SetAside);
+    EXPECT_FLOAT_EQ(loaded.config.strokeWidth, DefaultConfig().strokeWidth);
+    EXPECT_TRUE(std::filesystem::exists(dir_ / "config-unreadable-stamp.json"));
 }
 
 TEST_F(WriteConfigFileTest, WritesTextThatParsesBackToTheSameConfig) {

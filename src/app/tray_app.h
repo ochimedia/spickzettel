@@ -79,6 +79,18 @@ public:
     // which the person has to be told apart from a hotkey held elsewhere.
     bool RefusedANewerLibrary() const { return refusedANewerLibrary_; }
 
+    // Before Initialize, when the config this was given is the defaults
+    // standing in for a config.json that could not be read (see
+    // LoadOrCreateConfig). The retention period is not applied at this
+    // start: whether the person had it on, and for how long, is exactly
+    // what could not be read. And with keepFile, nothing is written over
+    // that file for as long as this runs - it is still where it was, and
+    // may be the only copy of their settings.
+    void StartOnStandInSettings(bool keepFile) {
+        skipRetentionThisStart_ = true;
+        configFileKept_ = keepFile;
+    }
+
     const OverlayApp& Overlay() const { return overlayApp_; }
     // Non-const for the tests that have to *arrange* a world before driving
     // it - an empty library, a canvas full of items. Deliberately not for
@@ -272,6 +284,9 @@ private:
     // Whether the settings as held differ from the file because a write
     // failed - see PersistConfig. Retried from the background timer.
     bool configWriteOwed_ = false;
+    // See StartOnStandInSettings.
+    bool skipRetentionThisStart_ = false;
+    bool configFileKept_ = false;
     // Constructed up front (from host.GetDataDirectoryPath(), possibly
     // empty) but only ever used - Load()'d from, attached to overlayApp_ -
     // when that path is non-empty; see Initialize().

@@ -376,6 +376,9 @@ AppConfig DefaultConfig();
 // hand-edited or truncated file should be treated as absent, not crash the
 // app on startup. Running out of memory can, as it can anywhere.
 AppConfig ParseConfig(std::string_view text);
+// The same, but nullopt for text that is not a JSON object at all - which
+// a settings file that is only missing some keys never is.
+std::optional<AppConfig> TryParseConfig(std::string_view text);
 
 // The most a settings file is read past. A config.json is a few kilobytes;
 // one of megabytes is not a settings file, whatever it is, and is read as
@@ -384,12 +387,29 @@ AppConfig ParseConfig(std::string_view text);
 // persistence::kMaxRecordBytes).
 constexpr size_t kMaxConfigFileBytes = size_t{1} << 20;
 
-// Reads and parses the settings file at `path`: nullopt when there is no
-// file there (or it cannot be opened), which is the first-run case the
-// caller answers by writing the defaults; otherwise ParseConfig of its
-// text, with a file past kMaxConfigFileBytes reading as one that said
-// nothing.
-std::optional<AppConfig> ReadConfigFile(const std::filesystem::path& path);
+// What LoadOrCreateConfig found at the settings file's path, and did.
+enum class ConfigSource {
+    Read,        // a settings file, read
+    Created,     // no file: a first run, answered by writing the defaults
+    SetAside,    // not a settings file - not JSON, or past kMaxConfigFileBytes -
+                 // renamed out of the way (to setAsideAs, if that worked)
+    Unreadable,  // a file that could not be read, left where it is
+};
+struct LoadedConfig {
+    AppConfig config;
+    ConfigSource source = ConfigSource::Read;
+    std::filesystem::path setAsideAs;
+};
+
+// The settings the app starts with. Only a missing file is a first run,
+// answered by writing the defaults out for the user to edit. A file that is
+// there but is not settings - a hand edit that left a trailing comma - used
+// to read as defaults, and the next settings change then saved those over
+// it, taking every hotkey and profile with it. It is renamed out of the
+// way instead, to config-unreadable-<stamp>.json beside it, and one that
+// cannot be read at all is left alone; either way the app starts on the
+// defaults, and the caller says so. See main_win32.cpp.
+LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_view stamp);
 
 // The widest stroke a settings file can ask for, in pixels: past this a
 // stroke is a fill, and the tessellator's work per point grows with the

@@ -129,7 +129,7 @@ bool TrayController::Initialize() {
             // The retention period: only here, at startup, rather than on a
             // clock as well - an instance left running for days keeps what
             // it has until it is next started, which is soon enough.
-            if (settings_.Stored().purgeDeleted) {
+            if (settings_.Stored().purgeDeleted && !skipRetentionThisStart_) {
                 const int64_t day = 24 * 60 * 60;
                 session_.EraseDeletedBefore(static_cast<int64_t>(std::time(nullptr)) -
                                             settings_.Stored().purgeDeletedAfterDays * day);
@@ -617,8 +617,8 @@ void TrayController::OnSettingsChanged() {
 
 void TrayController::PersistConfig() {
     const std::filesystem::path path = host_.GetConfigFilePath();
-    if (path.empty()) {
-        return;  // nowhere to persist to - see FakePlatformHost
+    if (path.empty() || configFileKept_) {
+        return;  // nowhere to persist to - see FakePlatformHost - or not to be touched
     }
     // Said on screen while it stays true: a setting that appears applied
     // and is back to its old value at the next start is the kind of thing

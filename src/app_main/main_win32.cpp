@@ -9,22 +9,36 @@
 #include "app/tray_app.h"
 #include "core/build_info/build_info.h"
 #include "core/config/app_config.h"
+#include "core/util/timestamp_name.h"
 #include "generated/ui_strings.h"
 #include "platform/i_platform_host.h"
 #include "platform/win32/win32_crash_dump.h"
 
 namespace {
 
-// Reads the config file if present; otherwise writes out the defaults so
-// the user has something to edit, and returns them.
-sz::core::AppConfig LoadOrCreateConfig(const std::filesystem::path& path) {
-    if (const std::optional<sz::core::AppConfig> config = sz::core::ReadConfigFile(path)) {
-        return *config;
+// The settings to start on - see sz::core::LoadOrCreateConfig - and, when
+// they are defaults standing in for a file that could not be read, a word
+// about it before anything else comes up: settings that silently went back
+// to the defaults are the kind of thing nobody connects to a stray comma.
+sz::core::LoadedConfig LoadConfig(const std::filesystem::path& path) {
+    std::string stamp = sz::core::TimestampName();
+    for (char& c : stamp) {
+        if (c == ' ' || c == ':') {
+            c = '-';
+        }
     }
-
-    const sz::core::AppConfig config = sz::core::DefaultConfig();
-    sz::core::WriteConfigFile(path, config);
-    return config;
+    sz::core::LoadedConfig loaded = sz::core::LoadOrCreateConfig(path, stamp);
+    if (loaded.source == sz::core::ConfigSource::SetAside || loaded.source == sz::core::ConfigSource::Unreadable) {
+        char body[1024];
+        if (!loaded.setAsideAs.empty()) {
+            std::snprintf(body, sizeof(body), sz::strings::kStartupConfigSetAside, path.string().c_str(),
+                          loaded.setAsideAs.filename().string().c_str());
+        } else {
+            std::snprintf(body, sizeof(body), sz::strings::kStartupConfigUnreadable, path.string().c_str());
+        }
+        MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
+    }
+    return loaded;
 }
 
 // A prerelease build's notice, at every start and before anything else
@@ -60,13 +74,16 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         return 1;
     }
 
-    const sz::core::AppConfig config = LoadOrCreateConfig(host->GetConfigFilePath());
+    const sz::core::LoadedConfig config = LoadConfig(host->GetConfigFilePath());
 
     if constexpr (sz::core::build::kPrereleaseNotice) {
         ShowPrereleaseNotice();
     }
 
-    sz::app::TrayController trayController(*host, config);
+    sz::app::TrayController trayController(*host, config.config);
+    if (config.source == sz::core::ConfigSource::SetAside || config.source == sz::core::ConfigSource::Unreadable) {
+        trayController.StartOnStandInSettings(/*keepFile=*/config.setAsideAs.empty());
+    }
     if (!trayController.Initialize()) {
         // A message box because there is no tray icon yet to hang a
         // notice on, and a tray app that starts and silently isn't there

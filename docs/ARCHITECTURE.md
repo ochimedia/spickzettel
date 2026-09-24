@@ -935,12 +935,18 @@ Three things about the file are deliberate:
   settings by spelling, and `0.22f` promoted to double writes as
   `0.2199999988079071`.
 
-Malformed input is never an error: a value of the wrong type, out of
-range, or a file that is not JSON at all leaves every setting at its
-default, the same contract the library has. A hand-edited config is
-treated as absent, not as a reason to crash on startup. The file is
-written through temp-then-rename, since truncating it in place leaves a
-window in which every setting is a half-written file.
+Malformed input is never an error: a value of the wrong type or out of
+range leaves that setting at its default, the same contract the library
+has. A file that is not settings at all - not JSON, or too big to be -
+is not a first run either. Read as defaults, it was written over by the
+next settings change, and a stray comma cost every hotkey and profile.
+`LoadOrCreateConfig` renames it to `config-unreadable-<stamp>.json`
+instead, and one that cannot be opened is left where it is and not
+written over for that run. Either way the app starts on the defaults,
+says so in a message box, and skips the retention period for that start,
+since whether it was on is what could not be read. The file is written
+through temp-then-rename, since truncating it in place leaves a window
+in which every setting is a half-written file.
 
 `KeyCombo` represents a hotkey as modifiers plus one logical key rather
 than an OS virtual-key code, and no modifier is required: a bare

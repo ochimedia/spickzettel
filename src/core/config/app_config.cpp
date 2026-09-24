@@ -534,14 +534,16 @@ void ApplyProfileable(const ProfileableSettings& settings, AppConfig& config) {
 
 AppConfig DefaultConfig() { return AppConfig{}; }
 
-AppConfig ParseConfig(std::string_view text) {
+AppConfig ParseConfig(std::string_view text) { return TryParseConfig(text).value_or(DefaultConfig()); }
+
+std::optional<AppConfig> TryParseConfig(std::string_view text) {
     AppConfig config = DefaultConfig();
 
     // No exceptions, no callback: a hand-edited or truncated file is a
-    // discarded value here, and every setting below then keeps its default.
+    // discarded value here.
     const json doc = json::parse(text, nullptr, /*allow_exceptions=*/false);
     if (!doc.is_object()) {
-        return config;
+        return std::nullopt;
     }
 
     const json& hotkeys = Group(doc, "hotkeys");
@@ -833,23 +835,45 @@ std::string SerializeConfig(const AppConfig& config) {
     return doc.dump(2) + "\n";
 }
 
-std::optional<AppConfig> ReadConfigFile(const std::filesystem::path& path) {
+LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_view stamp) {
+    LoadedConfig loaded;
     std::error_code ec;
-    const auto size = std::filesystem::file_size(path, ec);
+    const bool exists = std::filesystem::exists(path, ec);
+    if (!ec && !exists) {
+        loaded.source = ConfigSource::Created;
+        WriteConfigFile(path, loaded.config);
+        return loaded;
+    }
+    const auto size = ec ? 0 : std::filesystem::file_size(path, ec);
     if (ec) {
-        return std::nullopt;  // no file: a first run
+        loaded.source = ConfigSource::Unreadable;
+        return loaded;
     }
-    if (size > kMaxConfigFileBytes) {
-        return ParseConfig("");  // not a settings file; read as one that said nothing
+    if (size <= kMaxConfigFileBytes) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) {
+            loaded.source = ConfigSource::Unreadable;
+            return loaded;
+        }
+        std::string text(static_cast<size_t>(size), '\0');
+        in.read(text.data(), static_cast<std::streamsize>(text.size()));
+        text.resize(static_cast<size_t>(in.gcount()));
+        if (std::optional<AppConfig> config = TryParseConfig(text)) {
+            loaded.config = std::move(*config);
+            loaded.source = ConfigSource::Read;
+            return loaded;
+        }
     }
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        return std::nullopt;
+    // Not settings - not JSON, or too big to be - and set aside rather than
+    // written over, so that whatever the user had in it can still be found.
+    loaded.source = ConfigSource::SetAside;
+    std::filesystem::path aside = path;
+    aside.replace_filename(path.stem().string() + "-unreadable-" + std::string(stamp) + path.extension().string());
+    std::filesystem::rename(path, aside, ec);
+    if (!ec) {
+        loaded.setAsideAs = aside;
     }
-    std::string text(static_cast<size_t>(size), '\0');
-    in.read(text.data(), static_cast<std::streamsize>(text.size()));
-    text.resize(static_cast<size_t>(in.gcount()));
-    return ParseConfig(text);
+    return loaded;
 }
 
 bool WriteConfigFile(const std::filesystem::path& path, const AppConfig& config) {

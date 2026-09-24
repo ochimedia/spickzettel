@@ -603,6 +603,46 @@ TEST_F(TrayControllerPersistenceTest, InitializeErasesWhatWasDeletedLongerAgoTha
     }
 }
 
+// Settings standing in for a config.json that could not be read: nothing is
+// erased by a retention period nobody could read, and with the file kept
+// where it was, nothing is written over it.
+TEST_F(TrayControllerPersistenceTest, StandInSettingsEraseNothingAndLeaveTheFileAlone) {
+    CanvasManagerSnapshot snapshot;
+    Folder folder;
+    folder.id = 1;
+    folder.name = "F";
+    snapshot.folders.push_back(folder);
+    Canvas live;
+    live.id = 2;
+    live.name = "Live";
+    live.folderId = 1;
+    snapshot.canvases.push_back(live);
+    Canvas old;
+    old.id = 3;
+    old.name = "Old";
+    old.folderId = 1;
+    old.deletedAt = static_cast<int64_t>(std::time(nullptr)) - 400 * 24 * 60 * 60;
+    snapshot.canvases.push_back(old);
+    snapshot.currentFolderId = 1;
+    snapshot.currentCanvasId = 2;
+    ASSERT_TRUE(persistence::LibraryStore(dir_ / "library").Save(snapshot));
+    std::ofstream(dir_ / "config.json") << "not settings";
+
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_ / "library";
+    host.configFilePath = dir_ / "config.json";
+    AppConfig config = DefaultConfig();
+    ASSERT_TRUE(config.purgeDeleted);
+    TrayController controller(host, config);
+    controller.StartOnStandInSettings(/*keepFile=*/true);
+    ASSERT_TRUE(controller.Initialize());
+    EXPECT_NE(controller.GetSession().Manager().FindCanvas(3), nullptr);
+
+    controller.GetSettings().Mutable().strokeWidth = 12.0f;
+    controller.GetSettings().Commit();
+    EXPECT_EQ(ReadFile(dir_ / "config.json"), "not settings");
+}
+
 // A library a newer build wrote refuses the start, before the tray icon,
 // and says so apart from any other failure; the library is left as it was.
 TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryWrittenByANewerVersion) {
