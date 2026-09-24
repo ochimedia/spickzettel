@@ -214,8 +214,11 @@ public:
     bool HasPendingRemoval(uint64_t uid) const { return pendingRemovals_.count(uid) > 0; }
     // Whether any removal is still owed - what keeps a session's "unsaved
     // changes" true until the disk agrees with the library about what is
-    // gone, so that the retry is asked for rather than waited on.
-    bool HasPendingRemovals() const { return !pendingRemovals_.empty(); }
+    // gone, so that the retry is asked for rather than waited on. A
+    // pending.json still naming something is one: a crash between the last
+    // removal and the rewrite of the file leaves it naming what is gone,
+    // and only a save brings it in line.
+    bool HasPendingRemovals() const { return !pendingRemovals_.empty() || !writtenPending_.erased.empty(); }
 
     // Loads the on-disk library, or returns nullopt only if `rootDir` has
     // none at all - no library.json *and* no folders/ tree - which is a

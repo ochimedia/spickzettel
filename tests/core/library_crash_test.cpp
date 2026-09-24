@@ -494,6 +494,54 @@ TEST(LibraryFaultTest, ARemovalThatCouldNotListADirectoryIsNotDone) {
     ExpectNothingLeftOf(disk, {kCanvasA, kShot, kDrawing}, 0);
 }
 
+// What a save that stopped partway leaves of a canvas whose own record
+// never landed - its record's temporary, torn by a crash; or its order file
+// and snippets, with no canvas record above them, one of them no more than
+// a picture moved in from staging - is not loaded, and so
+// not named when its folder is deleted for good. It goes with the folder
+// all the same, rather than keeping the folder's directory standing.
+TEST(LibraryFaultTest, WhatASaveLeftOfADirectoryWithoutItsRecordGoesWithWhatItIsIn) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    std::filesystem::path folderDir;
+    for (const auto& [path, text] : disk.FilesUnder(Root() / "folders")) {
+        (void)text;
+        if (path.filename() == "folder.json" && IsOf(path, kFolder)) {
+            folderDir = path.parent_path();
+        }
+    }
+    ASSERT_FALSE(folderDir.empty());
+    ASSERT_TRUE(disk.Put(folderDir / "torn-00000x" / "canvas.json.tmp", "{\"id\": \"00"));
+    ASSERT_TRUE(disk.Put(folderDir / "unrecorded-00000y" / "order.json", "{\"items\": []}"));
+    ASSERT_TRUE(disk.Put(folderDir / "unrecorded-00000y" / "snippet-00000z" / "item.json", "{\"id\": \"00000z\"}"));
+    ASSERT_TRUE(disk.Put(folderDir / "unrecorded-00000y" / "shot-00000w" / "00000w.qoi", "pixels"));
+
+    LibraryStore store(Root(), disk);
+    CanvasManagerSnapshot library = *store.Load();
+    library.folders.erase(library.folders.begin());
+    library.canvases.clear();
+    EXPECT_TRUE(store.Remove({kFolder, kCanvasA, kCanvasB, kShot, kDrawing, kNote}, library));
+    EXPECT_EQ(disk.Status(folderDir), FileSystem::Kind::None) << "left standing";
+}
+
+// A crash between a removal's last step and the rewrite of pending.json
+// leaves the file naming what is gone. That is owed too, until a save has
+// brought the file in line - or nothing would ever rewrite it.
+TEST(LibraryFaultTest, APendingRecordNamingWhatIsGoneIsBroughtInLine) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    ASSERT_TRUE(disk.Put(Root() / "pending.json", "{\"erased\": [\"zzzzzz\"]}"));
+
+    LibraryStore store(Root(), disk);
+    const std::optional<CanvasManagerSnapshot> library = store.Load();
+    ASSERT_TRUE(library.has_value());
+    EXPECT_EQ(LayoutOf(*library).size(), 7u) << "nothing it names is here to skip";
+    EXPECT_TRUE(store.HasPendingRemovals());
+    EXPECT_TRUE(store.Save(*library));
+    EXPECT_FALSE(store.HasPendingRemovals());
+    EXPECT_EQ(disk.Status(Root() / "pending.json"), FileSystem::Kind::None);
+}
+
 // A pending.json that cannot be written deletes nothing: the removal is owed
 // in memory, and a restart finds everything as it was.
 TEST(LibraryFaultTest, ARemovalThatCannotBeRecordedRemovesNothing) {

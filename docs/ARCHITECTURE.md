@@ -810,18 +810,34 @@ emptied a library.
 
 A permanent delete takes what the store writes and nothing else: the
 records and order files, the pictures and thumbnails, an older build's
-`.removed` mark, and a temporary a crash left one of those as. It
-recurses only into a directory that holds a record of ours, which is
-Load's rule for what is ours asked at delete time, or whose uid was
-deleted for good along with it, which may have lost its record to an
-earlier run already. It removes a directory only once it is empty. A
-directory that cannot be listed counts as not emptied: calling it done
-dropped the removal and left the record in it to load again. A note someone kept beside a record, or a directory of scans
-beside a canvas, stays, and the directory stands for it holding no
-record, which nothing reads back and, never having been indexed,
-nothing sets aside. The first version deleted the directory whole, with
-whatever anyone had put in it, while every other path in the store left
-foreign files alone.
+`.removed` mark, and a temporary a crash left one of those as. A note
+someone kept beside a record, or a directory of scans beside a canvas,
+stays. The directory stands for it, holding no record, which nothing
+reads back and, never having been indexed, nothing sets aside. The
+first version deleted the directory whole, with whatever anyone had
+put in it, while every other path in the store left foreign files
+alone.
+
+It recurses into a directory inside what it deletes when either of
+these holds:
+
+- the directory's uid was deleted for good along with it. It may have
+  lost its record to an earlier run already.
+- the directory holds something only the store writes: a record, an
+  order file, a picture named after the directory's own uid, a
+  temporary of one of those, or such a directory below it.
+
+The second rule is broader than Load's rule of "holds a record" on
+purpose. A save that stopped partway can leave a directory whose own
+record never landed: a canvas's snippets and order file with no canvas
+record above them, or a snippet's picture moved in from staging and
+not its record. Load does not read such a directory, so nothing names
+it when its parent is deleted. Asked only about the record, the
+removal left it standing, and it kept the parent standing too.
+
+A directory is removed only once it is empty. One that cannot be
+listed counts as not emptied: calling it done dropped the removal and
+left the record in it to load again.
 
 A permanent delete is recorded before anything is deleted. The store
 names the uids in `pending.json`, drops the directories from the index
@@ -838,7 +854,10 @@ the process starts again. It can stop for two reasons:
 removal. Every save takes another run at it. The store removes only
 what the file already records, so a `pending.json` that cannot be
 written deletes nothing new, and fails the save. The file is gone
-again once nothing is owed.
+again once nothing is owed. A `pending.json` that still names
+something counts as owed even when everything it names is gone. A
+crash between the last removal and the rewrite leaves it so, and
+otherwise no save would come along to rewrite it.
 
 The previous version wrote a `.removed` mark into the directory, but
 only once a removal had failed. A crash partway through one left no

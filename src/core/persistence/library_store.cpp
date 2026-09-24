@@ -657,16 +657,22 @@ bool RemoveTree(FileSystem& fs, const std::filesystem::path& path) {
 // afterwards holds no record, so Load does not read it and Save, which
 // never indexed it, does not set it aside.
 
-// Whether `name` is a file this store writes beside a record. "<file>.tmp"
-// and "<file>.tmp3" are the temporaries WriteFileAtomically makes.
-bool IsOwnFilename(const std::string& name) {
-    std::string_view base(name);
-    if (const size_t tmp = base.rfind(".tmp"); tmp != std::string_view::npos) {
-        const std::string_view suffix = base.substr(tmp + 4);
+// `name` without the ".tmp" or ".tmp3" a temporary of WriteFileAtomically's
+// ends in, or `name` itself if it has none.
+std::string_view WithoutTemporarySuffix(std::string_view name) {
+    if (const size_t tmp = name.rfind(".tmp"); tmp != std::string_view::npos) {
+        const std::string_view suffix = name.substr(tmp + 4);
         if (std::all_of(suffix.begin(), suffix.end(), [](char c) { return c >= '0' && c <= '9'; })) {
-            base = base.substr(0, tmp);
+            return name.substr(0, tmp);
         }
     }
+    return name;
+}
+
+// Whether `name` is a file this store writes beside a record, or a
+// temporary of one.
+bool IsOwnFilename(const std::string& name) {
+    const std::string_view base = WithoutTemporarySuffix(name);
     for (const char* own : {kFolderFile, kCanvasFile, kItemFile, kOrderFile, kRemovedMarker}) {
         if (base == own) {
             return true;
@@ -675,18 +681,46 @@ bool IsOwnFilename(const std::string& name) {
     return IsPictureFilename(std::string(base));
 }
 
-// Whether `dir` is a directory of the store's: it holds a record, or the
-// removed mark left in one whose record went before the rest could.
-bool HoldsOwnRecord(FileSystem& fs, const std::filesystem::path& dir) {
-    for (const char* record : {kFolderFile, kCanvasFile, kItemFile, kRemovedMarker}) {
-        if (fs.Exists(dir / record)) {
+std::optional<uint64_t> UidFromDirectoryName(const std::string& name);
+
+// Whether `dir` is a directory of the store's, asked when deleting for
+// good what it is inside of: it holds a record, the removed mark left in
+// one whose record went before the rest could, an order file, a picture
+// named after the directory's own uid, or a temporary of any of those - or
+// a directory of the store's below it. All but the first two are what a
+// save that stopped partway leaves of a directory whose own record never
+// landed: its snippets written and not the canvas record above them, or a
+// snippet's picture moved in from staging and not its record. Asked only
+// about the record, such a directory was left standing inside one deleted
+// for good, and kept it standing. Two levels down is as deep as the tree
+// goes.
+bool HoldsOwnRecord(FileSystem& fs, const std::filesystem::path& dir, int depth = 0) {
+    const std::optional<uint64_t> uid = UidFromDirectoryName(dir.filename().string());
+    const std::string pictureStem = uid ? FormatUid(*uid) : std::string();
+    for (const FileSystem::Entry& entry : Listing(fs, dir)) {
+        if (entry.kind == FileSystem::Kind::Directory) {
+            if (depth < 2 && HoldsOwnRecord(fs, dir / entry.name, depth + 1)) {
+                return true;
+            }
+            continue;
+        }
+        if (entry.kind != FileSystem::Kind::File) {
+            continue;
+        }
+        const std::string name = entry.name.string();
+        const std::string_view base = WithoutTemporarySuffix(name);
+        for (const char* own : {kFolderFile, kCanvasFile, kItemFile, kOrderFile, kRemovedMarker}) {
+            if (base == own) {
+                return true;
+            }
+        }
+        if (!pictureStem.empty() && base.substr(0, pictureStem.size()) == pictureStem &&
+            IsPictureFilename(std::string(base))) {
             return true;
         }
     }
     return false;
 }
-
-std::optional<uint64_t> UidFromDirectoryName(const std::string& name);
 
 // Takes everything of the store's out of `dir`, recursively, and `dir`
 // itself once that leaves it empty. True once nothing of the store's is
