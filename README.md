@@ -25,9 +25,9 @@ ctest --preset windows-msvc-release
 ```
 
 `Spickzettel.exe` lands in `build/windows-release/src/app_main/`, and is
-copied to `dist/release/` at the repo root; each Windows preset has its
-own folder there, and its PDB goes to `dist/symbols/`. Keep the PDB of
-any build you hand out - it is what reads a crash dump from it (see
+copied to `dist/` at the repo root, next to `Spickzettel Prerelease.exe`
+and `Spickzettel Demo.exe` from their presets; the PDBs go to
+`dist/symbols/`. Keep the PDB of any build you hand out - it is what reads a crash dump from it (see
 `docs/ARCHITECTURE.md`). All third-party code is fetched by CMake on the first
 configure; nothing has to be installed or vendored by hand.
 `windows-msvc-debug` also builds the UI tests; `windows-msvc-demo` is the

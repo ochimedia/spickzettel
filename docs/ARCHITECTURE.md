@@ -49,13 +49,23 @@ watermark compiled in; `windows-msvc-prerelease` is the release build
 with a not-for-redistribution notice at every start; `linux-tests`
 builds the portable core and its tests on a Linux host.
 
-Each Windows preset also copies the finished `Spickzettel.exe` to
-`dist/<name>/` at the repo root (`debug`, `release`, `demo`,
-`prerelease`; `SPICKZETTEL_DIST_NAME`), so a build is easy to find and
-hand on. The copy is a target of its own that runs on every build and
-copies only when the exe differs, so a copy deleted by hand comes back
-without a relink. A copy that is running cannot be overwritten, and
-fails the build just as a running build-tree exe fails the link.
+The presets whose build is handed out copy the finished exe straight
+into `dist/` at the repo root (`SPICKZETTEL_COPY_TO_DIST`), each under
+a name of its own (`SPICKZETTEL_EXE_NAME`): `Spickzettel.exe`,
+`Spickzettel Prerelease.exe`, `Spickzettel Demo.exe`. Side by side in
+one folder, and named for what they are, rather than each
+`Spickzettel.exe` in a folder of its own: the name goes wherever the
+file goes, into a download folder or an email, where the folder it came
+from does not, and Task Manager shows which kind is running. The name
+is the linker's output name, not a rename of the copy, so the PDB is
+named to match and is the name the exe records for it - what a debugger
+looks for when it reads a dump. Debug is not copied: it is built for
+its tests, and nobody is handed it.
+
+The copy is a target of its own that runs on every build and copies
+only when the exe differs, so a copy deleted by hand comes back without
+a relink. A copy that is running cannot be overwritten, and fails the
+build just as a running build-tree exe fails the link.
 
 The C++ runtime is linked statically (`CMAKE_MSVC_RUNTIME_LIBRARY`), so
 the exe needs nothing beyond what Windows itself ships: no Visual C++
@@ -89,8 +99,8 @@ builds make one: `/Z7` for everything, the fetched code included,
 `/DEBUG` with `/OPT:REF` and `/OPT:ICF` turned back on so the exe is
 what it was, and `/PDBALTPATH` so the exe names its PDB without the path
 of the machine that built it. The dist copy puts the PDB in
-`dist/symbols/<name>/`, apart from the exe, so the exe's folder can be
-handed on as it is. Keep the PDB of every build you hand out: a later
+`dist/symbols/`, apart from the exes, so `dist/` holds only what is
+handed out. Keep the PDB of every build you hand out: a later
 build's PDB does not match an earlier build's dump.
 
 ### Build-time configuration: version, flags, embedded text

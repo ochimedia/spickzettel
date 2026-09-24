@@ -10,20 +10,20 @@ if(WIN32)
     # Spickzettel.exe, not spickzettel.exe: a proper noun wherever a person
     # sees it (Explorer, the taskbar, Task Manager). OUTPUT_NAME rather than
     # renaming the target, so `spickzettel` stays the lowercase identifier
-    # everywhere in the build.
-    set_target_properties(spickzettel PROPERTIES OUTPUT_NAME Spickzettel)
+    # everywhere in the build. See SPICKZETTEL_EXE_NAME.
+    set_target_properties(spickzettel PROPERTIES OUTPUT_NAME "${SPICKZETTEL_EXE_NAME}")
     target_compile_features(spickzettel PRIVATE cxx_std_20)
     target_link_libraries(spickzettel PRIVATE sz_app sz_platform_win32)
     spickzettel_set_warnings(spickzettel)
     spickzettel_use_utf8_code_page(spickzettel)
 
-    # See SPICKZETTEL_DIST_NAME. A target of its own rather than a
+    # See SPICKZETTEL_COPY_TO_DIST. A target of its own rather than a
     # POST_BUILD step, so that it runs on every build - a copy deleted or
     # overwritten by hand comes back without a relink - and copies only
     # when the exe differs.
-    if(SPICKZETTEL_DIST_NAME)
-        set(_dist_dir "${CMAKE_SOURCE_DIR}/dist/${SPICKZETTEL_DIST_NAME}")
-        set(_dist_symbols_dir "${CMAKE_SOURCE_DIR}/dist/symbols/${SPICKZETTEL_DIST_NAME}")
+    if(SPICKZETTEL_COPY_TO_DIST)
+        set(_dist_dir "${CMAKE_SOURCE_DIR}/dist")
+        set(_dist_symbols_dir "${CMAKE_SOURCE_DIR}/dist/symbols")
         add_custom_target(spickzettel_dist ALL
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${_dist_dir}"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:spickzettel>" "${_dist_dir}/"
@@ -32,7 +32,7 @@ if(WIN32)
             # build, and nobody else needs them.
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${_dist_symbols_dir}"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_PDB_FILE:spickzettel>" "${_dist_symbols_dir}/"
-            COMMENT "Copying Spickzettel.exe to dist/${SPICKZETTEL_DIST_NAME}/ and its PDB to dist/symbols/"
+            COMMENT "Copying ${SPICKZETTEL_EXE_NAME}.exe to dist/ and its PDB to dist/symbols/"
             VERBATIM
         )
         add_dependencies(spickzettel_dist spickzettel)
