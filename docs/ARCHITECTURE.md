@@ -81,9 +81,9 @@ Redistributable to install, and no risk of loading an older copy of
 at startup. It costs about 300 KB. googletest is left to pick the static
 runtime itself (`gtest_force_shared_crt` off) so the tests link.
 
-Every third-party dependency is fetched with `FetchContent` and pinned to
-a tag or commit, so a checkout builds with nothing installed beyond a
-compiler, CMake and Ninja. Header-only libraries are marked `SYSTEM` so
+Every third-party dependency is fetched with `FetchContent`, as an
+archive of one pinned commit checked against its SHA-256 (see below), so a
+checkout builds with nothing installed beyond a compiler, CMake and Ninja. Header-only libraries are marked `SYSTEM` so
 their warnings do not count against the project's own warning level.
 
 ### Crash dumps and symbols
@@ -206,10 +206,26 @@ in a release binary, so they are not in the notices.
 Every dependency is fetched at a commit hash, with the tag it
 corresponds to in a comment beside it. A tag is a mutable reference -
 its owner can move it - so a build pinned to one is reproducible only
-for as long as nobody does; a hash is a build's exact input. Bumping a
-dependency is therefore: pick the tag, resolve it (`git ls-remote
-<repo> refs/tags/<tag>^{}`, or the un-peeled line for a lightweight
-tag), write the hash and the tag's name side by side.
+for as long as nobody does; a hash is a build's exact input.
+
+It is fetched as GitHub's archive of that commit
+(`<repo>/archive/<commit>.tar.gz`) with `URL_HASH SHA256=`, not cloned:
+a clone brings the repository's whole history, and nlohmann/json's alone
+was 300 MB of the 475 MB each preset downloaded - four times over in a
+clean build. The archives come to 5.5 MB. The SHA-256 is also the
+stronger pin: a clone checks out whatever the commit names on the
+server, an archive that differs by a byte is refused. json is the
+exception to the URL pattern, fetched as the `json.tar.xz` its releases
+publish for this use - the headers and the CMake files, nothing else.
+The archives were compared with the clones they replaced: the same
+files, apart from the line endings Git's `core.autocrlf` had converted
+and the ImPlot submodule the test engine's test suite pulls in, which
+nothing here builds.
+
+Bumping a dependency is therefore: pick the tag, resolve it (`git
+ls-remote <repo> refs/tags/<tag>^{}`, or the un-peeled line for a
+lightweight tag), download the archive of that commit and take its
+SHA-256, and write the commit, the hash and the tag's name side by side.
 
 ## The platform interface
 

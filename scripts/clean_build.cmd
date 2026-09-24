@@ -8,7 +8,8 @@ rem and copied nowhere.
 rem
 rem Needs Visual Studio with the C++ workload; finds it itself, so it runs
 rem from a plain command prompt or a double-click. The first configure of
-rem each preset fetches the third-party code again, so it needs a network.
+rem each preset fetches the third-party code again - a few MB of archives
+rem each - so it needs a network.
 setlocal
 cd /d "%~dp0.."
 rem Windows' own find, not whatever else is called find on PATH first - Git

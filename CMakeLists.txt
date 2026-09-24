@@ -74,6 +74,14 @@ function(spickzettel_use_utf8_code_page TARGET)
 endfunction()
 
 # Third-party code, all fetched and pinned - see docs/ARCHITECTURE.md.
+#
+# Each is an archive checked against its SHA-256. An extracted file gets
+# the time it was extracted, not the one stored in the archive, so that a
+# new archive for a dependency rebuilds what uses it; CMake 3.24 and later
+# warn until told which (CMP0135), and older ones only ever do this.
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
 include(FetchImGui)
 if(SPICKZETTEL_UI_TESTS)
     include(FetchImGuiTestEngine)

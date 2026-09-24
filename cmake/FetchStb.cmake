@@ -4,8 +4,8 @@ include(FetchContent)
 # tags, so the pin is a commit; bump deliberately.
 FetchContent_Declare(
     stb
-    GIT_REPOSITORY https://github.com/nothings/stb.git
-    GIT_TAG 5c205738c191bcb0abc65c4febfa9bd25ff35234
+    URL https://github.com/nothings/stb/archive/5c205738c191bcb0abc65c4febfa9bd25ff35234.tar.gz
+    URL_HASH SHA256=cfeab9f800961882d6d22ddf36e965523b33002f4f937de08321304c9ba72af3
 )
 FetchContent_MakeAvailable(stb)
 

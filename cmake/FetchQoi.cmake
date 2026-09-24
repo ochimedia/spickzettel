@@ -6,8 +6,8 @@ include(FetchContent)
 # tags stop at the format freeze, so the pin is a commit.
 FetchContent_Declare(
     qoi
-    GIT_REPOSITORY https://github.com/phoboslab/qoi.git
-    GIT_TAG 97bacc86a9c4abf5a2d452102dc26546c4c670b9
+    URL https://github.com/phoboslab/qoi/archive/97bacc86a9c4abf5a2d452102dc26546c4c670b9.tar.gz
+    URL_HASH SHA256=32704988b24321c91114418e884a3fb61a7d0d0004f3ed07a91e73058022bc3b
 )
 FetchContent_MakeAvailable(qoi)
 

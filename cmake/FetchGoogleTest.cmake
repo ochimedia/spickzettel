@@ -2,8 +2,9 @@ include(FetchContent)
 
 FetchContent_Declare(
     googletest
-    GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG b514bdc898e2951020cbdca1304b75f5950d1f59 # v1.15.2
+    # v1.15.2
+    URL https://github.com/google/googletest/archive/b514bdc898e2951020cbdca1304b75f5950d1f59.tar.gz
+    URL_HASH SHA256=9257316d65d6259f6596bc4fa5464092305ab3f3d9dc6d7e5780ab462d8baa64
 )
 # Match the project's runtime library on MSVC, or the test binaries fail to
 # link: the static one (see CMAKE_MSVC_RUNTIME_LIBRARY), which is what

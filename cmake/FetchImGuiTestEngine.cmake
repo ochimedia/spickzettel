@@ -11,8 +11,10 @@ include(FetchContent)
 
 FetchContent_Declare(
     imgui_test_engine
-    GIT_REPOSITORY https://github.com/ocornut/imgui_test_engine.git
-    GIT_TAG b6638c5d088febaa050a2745d7b838e637fa7381 # v1.92.1
+    # v1.92.1. The archive leaves out the test suite's ImPlot submodule,
+    # which a clone fetched along with it: nothing here builds the suite.
+    URL https://github.com/ocornut/imgui_test_engine/archive/b6638c5d088febaa050a2745d7b838e637fa7381.tar.gz
+    URL_HASH SHA256=8538d2bed19c27e5e2e539a0dc4acdba9c5a483de88abd0ba1b54df3c1907ad7
 )
 FetchContent_MakeAvailable(imgui_test_engine)
 
