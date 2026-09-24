@@ -211,6 +211,7 @@ void ApplySpickzettelStyle() {
 // TabButton) has its own bespoke styling instead of going through this.
 bool IconButton(const char* strId, const Icon& icon, bool active, float buttonSize, float iconSize,
                  float rounding) {
+    active = active || PressLandsThisFrame(strId, ImVec2(buttonSize, buttonSize));
     ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::Accent() : theme::kHoverWash);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::AccentHover());
@@ -264,6 +265,22 @@ void DrawDebugOverlay(ImDrawList* drawList, const ImGuiIO& io, const CanvasManag
 }  // namespace
 
 namespace overlay_detail {
+
+bool PressLandsThisFrame(const char* strId, const ImVec2& size) {
+    // ImGui's own rule for a press (ButtonBehavior's default): the mouse
+    // went down on the button, which made it the active item, and comes up
+    // over it. The rectangle is the one ImGui::Button is about to lay out,
+    // at the cursor, sized the way it sizes one.
+    if (!ImGui::IsMouseReleased(ImGuiMouseButton_Left) || ImGui::GetActiveID() != ImGui::GetID(strId)) {
+        return false;
+    }
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const ImVec2 labelSize = ImGui::CalcTextSize(strId, nullptr, true);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const ImVec2 sized = ImGui::CalcItemSize(size, labelSize.x + style.FramePadding.x * 2.0f,
+                                             labelSize.y + style.FramePadding.y * 2.0f);
+    return ImGui::IsMouseHoveringRect(min, ImVec2(min.x + sized.x, min.y + sized.y));
+}
 
 const GalleryTool kGalleryTools[6] = {
     {Tool::Draw, &icons::kPen, strings::kToolDraw, strings::kToolDrawTip},
@@ -440,6 +457,7 @@ bool PillIconButton(const char* strId, const Icon& icon, bool active) {
 bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
     // The same three colors and the same Button underneath as IconButton,
     // so the two kinds of tile hover and press alike.
+    active = active || PressLandsThisFrame(strId, ImVec2(28.0f, 28.0f));
     ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::Accent() : theme::kHoverWash);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::AccentHover());

@@ -236,6 +236,15 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
 // label, pass it straight to ImGui" use here is always. Nothing keeps one.
 const char* Labeled(const char* text, const char* id);
 
+// Whether the button about to be drawn as `strId`, at `size` (as passed to
+// ImGui::Button), is pressed this frame: held since an earlier frame and
+// released over it now. For a button that turns accent once it has been
+// pressed - a selected tab, a switched-on tile - to be drawn that way on
+// the release frame too. Its colors are pushed before ImGui::Button says
+// it was pressed, so without this the frame in between showed it neither
+// held nor selected: the plain hover color, between two accent ones.
+bool PressLandsThisFrame(const char* strId, const ImVec2& size);
+
 // Pill-sized icon button (28x28, true circle, 13px icon) - the size the
 // selection bar's buttons and the dock's chips are.
 bool PillIconButton(const char* strId, const Icon& icon, bool active);

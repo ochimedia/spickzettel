@@ -79,12 +79,15 @@ bool DangerButton(const char* strId, const Icon& icon, const char* text) {
 // it correctly with no extra layout math needed, unlike PrimaryButton/
 // DangerButton's bespoke icon+text placement above.
 bool TabButton(const char* id, const char* text, bool active) {
+    const char* label = Labeled(text, id);
+    const ImVec2 size(84.0f, 0.0f);
+    active = active || PressLandsThisFrame(label, size);
     ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::AccentHover() : theme::kHoverWash);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::AccentHover());
     ImGui::PushStyleColor(ImGuiCol_Text, active ? theme::AccentInk() : theme::kGraphite200);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme::kRadiusSm);
-    const bool pressed = ImGui::Button(Labeled(text, id), ImVec2(84.0f, 0.0f));
+    const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(4);
     return pressed;
@@ -378,13 +381,16 @@ float TrunkFrom(const ImVec2& rowPos) { return rowPos.y + ImGui::GetFrameHeight(
 // rather than as five buttons that happen to be stacked. The folder
 // sidebar next door has the same shape for the same reason.
 bool SettingsSectionButton(const char* id, const char* text, bool active) {
+    const char* label = Labeled(text, id);
+    const ImVec2 size(-1.0f, 32.0f);
+    active = active || PressLandsThisFrame(label, size);
     ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::AccentHover() : theme::kHoverWash);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::AccentHover());
     ImGui::PushStyleColor(ImGuiCol_Text, active ? theme::AccentInk() : theme::kGraphite200);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, theme::kRadiusSm);
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
-    const bool pressed = ImGui::Button(Labeled(text, id), ImVec2(-1.0f, 32.0f));
+    const bool pressed = ImGui::Button(label, size);
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(4);
     ImGui::Spacing();
