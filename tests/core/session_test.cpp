@@ -1382,6 +1382,42 @@ TEST(SessionTest, APermanentDeleteRightAfterAMoveKeepsWhatWasMoved) {
     std::filesystem::remove_all(dir);
 }
 
+// The other way round: a captured snippet moved into a canvas, and that
+// canvas deleted for good, before the autosave. The snippet's directory is
+// still under the canvas it came from, and goes with the one it went to -
+// deleted, not set aside in retired/ as something the library lost.
+TEST(SessionTest, APermanentDeleteRightAfterAMoveIntoTheCanvasTakesWhatWasMovedIn) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_delete_after_move_in";
+    std::filesystem::remove_all(dir);
+    const std::vector<uint8_t> pixels = {10, 20, 30, 255, 40, 50, 60, 255};
+    {
+        persistence::LibraryStore store(dir);
+        Session session;
+        session.SetLibraryStore(&store);
+        const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+        const std::optional<std::string> file = store.SaveImage(id, pixels.data(), 2, 1);
+        ASSERT_TRUE(file.has_value());
+        session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile = *file;
+        const CanvasId other = session.Manager().AddCanvas("Other");
+        ASSERT_TRUE(session.Flush());
+
+        ASSERT_NE(session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
+        ASSERT_TRUE(session.Delete(other));
+        EXPECT_EQ(session.DeletePermanently(other), Session::Removal::Removed);
+        EXPECT_TRUE(session.Flush());
+        session.SetLibraryStore(nullptr);
+    }
+    persistence::LibraryStore reopened(dir);
+    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    EXPECT_TRUE(loaded->canvases[0].items.empty());
+    EXPECT_FALSE(std::filesystem::exists(dir / "retired")) << "set aside rather than deleted";
+    EXPECT_FALSE(std::filesystem::exists(dir / "pending.json")) << "nothing is owed";
+    std::filesystem::remove_all(dir);
+}
+
 #if defined(_WIN32)
 // Windows refuses to delete a file another handle holds open without
 // delete sharing - which is what a picture viewer looking at a capture

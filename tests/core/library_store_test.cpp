@@ -1094,7 +1094,8 @@ TEST_F(LibraryStoreTest, ARemovalWaitsForAMoveOutOfItThatCannotLandYet) {
         EXPECT_FALSE(store.Save(snapshot)) << "the move did not land";
         EXPECT_TRUE(store.HasPendingRemoval(2));
         EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
-        EXPECT_FALSE(std::filesystem::exists(oldCanvasDir / ".removed")) << "a restart must still find it";
+        EXPECT_EQ(FileText(dir_ / "pending.json").find("000002"), std::string::npos)
+            << "not recorded: a restart must still find what was moved out of it";
     }
     EXPECT_TRUE(store.Save(snapshot));
     EXPECT_FALSE(store.HasPendingRemoval(2));
@@ -1378,7 +1379,7 @@ TEST_F(LibraryStoreTest, ARemoveThatCouldNotFinishIsRetriedByTheNextSaveNotSetAs
         EXPECT_FALSE(store.Remove(4, snapshot)) << "not gone, so not done";
         EXPECT_TRUE(store.HasPendingRemoval(4));
         EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
-        EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / ".removed")) << "the intent is on disk";
+        EXPECT_NE(FileText(dir_ / "pending.json").find("000004"), std::string::npos) << "the intent is on disk";
 
         // A save meanwhile neither sets the remains aside nor forgets them.
         ASSERT_TRUE(store.Save(snapshot));
@@ -1420,6 +1421,7 @@ TEST_F(LibraryStoreTest, ARemovalStillOwedFollowsItsParentsRename) {
     for (const auto& entry : std::filesystem::recursive_directory_iterator(dir_)) {
         EXPECT_NE(entry.path().filename(), ".removed") << entry.path();
     }
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "pending.json")) << "nothing owed, nothing recorded";
     EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
 }
 
@@ -1437,7 +1439,7 @@ TEST_F(LibraryStoreTest, ARemovalStillOwedSurvivesARestart) {
     std::ifstream held(ShotItemDir() / "000004.qoi");  // no delete sharing
     ASSERT_TRUE(held.is_open());
     EXPECT_FALSE(store.Remove(4, snapshot));
-    ASSERT_TRUE(std::filesystem::exists(ShotItemDir() / ".removed"));
+    ASSERT_NE(FileText(dir_ / "pending.json").find("000004"), std::string::npos);
 
     LibraryStore reopened(dir_);
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
@@ -1456,6 +1458,27 @@ TEST_F(LibraryStoreTest, ARemovalStillOwedSurvivesARestart) {
     EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
 }
 #endif
+
+// A library an older build left a removal owed in: the directory carries
+// the `.removed` mark instead of being named in pending.json. It is still
+// not read, and the next save finishes it, mark and all.
+TEST_F(LibraryStoreTest, AnOlderBuildsRemovedMarkIsStillAPendingRemoval) {
+    ASSERT_TRUE(LibraryStore(dir_).Save(MakeSampleSnapshot()));
+    std::ofstream(ShotItemDir() / ".removed") << "Deleted for good.";
+
+    LibraryStore store(dir_);
+    std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    EXPECT_EQ(loaded->canvases[0].items.size(), 1u) << "the marked snippet is not read";
+    EXPECT_TRUE(store.HasPendingRemoval(4));
+
+    ASSERT_TRUE(store.Save(*loaded));
+    EXPECT_FALSE(store.HasPendingRemoval(4));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir()));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "retired"));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "pending.json"));
+}
 
 TEST_F(LibraryStoreTest, RemoveOfAFolderTakesEverythingInIt) {
     LibraryStore store(dir_);
@@ -1491,6 +1514,7 @@ TEST_F(LibraryStoreTest, RemoveLeavesWhatIsNotTheLibrarysAndStillCountsAsDone) {
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000004.thumb.qoi"));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / ".removed"));
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "pending.json"));
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "notes.txt"));
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "scans" / "page.txt"));
 

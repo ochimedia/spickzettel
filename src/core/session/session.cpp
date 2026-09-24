@@ -429,19 +429,30 @@ Session::Removal Session::Erase(uint64_t id) {
     // What goes with it: the textures of every snippet under it, and the
     // history of every canvas - or, for a lone snippet, its own entries on
     // its canvas's history, and nothing else of that canvas's.
+    //
+    // And every id that goes, for the store: a snippet moved into a canvas
+    // since the last save still has its directory where it came from, and
+    // only the model knows it went with this one.
     const bool isFolder = manager.FindFolder(id) != nullptr;
     bool found = isFolder;
+    std::vector<uint64_t> erased = {id};
     for (Canvas& canvas : manager.CanvasesMutable()) {
         const bool wholeCanvas = canvas.id == id || (isFolder && canvas.folderId == id);
         if (wholeCanvas) {
             found = true;
             DropHistoryOfCanvas(canvas.id);
+            if (canvas.id != id) {
+                erased.push_back(canvas.id);
+            }
         }
         for (Item& item : canvas.items) {
             if (!wholeCanvas && item.id != id) {
                 continue;
             }
             found = true;
+            if (item.id != id) {
+                erased.push_back(item.id);
+            }
             if (!wholeCanvas) {
                 ForgetHistoryOfItem(canvas.id, item.id);
             }
@@ -469,11 +480,15 @@ Session::Removal Session::Erase(uint64_t id) {
     // deleting the directory would take the moved thing's pictures with it.
     // The save that moves it is then made now, and finishes the removal on
     // its way; only what is still owed after it is reported.
-    if (!Store() || Store()->Remove(id, manager.View()) || !Store()->HasPendingRemoval(id)) {
+    const auto filesRemain = [this, &erased] {
+        return std::any_of(erased.begin(), erased.end(),
+                           [this](uint64_t uid) { return Store()->HasPendingRemoval(uid); });
+    };
+    if (!Store() || Store()->Remove(erased, manager.View()) || !filesRemain()) {
         return Removal::Removed;
     }
     SaveLibraryNow(library_);
-    return Store()->HasPendingRemoval(id) ? Removal::FilesRemain : Removal::Removed;
+    return filesRemain() ? Removal::FilesRemain : Removal::Removed;
 }
 
 Session::Removal Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {

@@ -24,15 +24,17 @@ namespace sz::core::fakes {
 // the disk underneath, with none of them, as a restart after the other
 // program has let go would.
 //
+// `setUp` gets the disk underneath too, to look at without counting.
+//
 // Returns N, so that a test can make sure its scenario did something.
-inline size_t ForEachCrashPoint(const std::function<void(FaultyFileSystem&)>& setUp,
+inline size_t ForEachCrashPoint(const std::function<void(FaultyFileSystem&, MemoryFileSystem&)>& setUp,
                                 const std::function<void(FaultyFileSystem&)>& scenario,
                                 const std::function<void(MemoryFileSystem&, size_t crashedAfter, size_t changes)>& check) {
     size_t changes = 0;
     {
         MemoryFileSystem disk;
         FaultyFileSystem faulty(disk);
-        setUp(faulty);
+        setUp(faulty, disk);
         const size_t before = faulty.ChangesAttempted();
         scenario(faulty);
         changes = faulty.ChangesAttempted() - before;
@@ -40,7 +42,7 @@ inline size_t ForEachCrashPoint(const std::function<void(FaultyFileSystem&)>& se
     for (size_t crashAfter = 0; crashAfter <= changes; ++crashAfter) {
         MemoryFileSystem disk;
         FaultyFileSystem faulty(disk);
-        setUp(faulty);
+        setUp(faulty, disk);
         faulty.CrashAfter(crashAfter);
         scenario(faulty);
         check(disk, crashAfter, changes);

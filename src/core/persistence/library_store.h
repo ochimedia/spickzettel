@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "core/canvas/canvas_manager.h"
 #include "core/persistence/image_codec.h"
@@ -52,10 +53,11 @@ namespace sz::core::persistence {
 //   retired/staging/                   - pictures found in staging that no
 //                                       snippet named, set aside for the
 //                                       same reason; see Save's last pass
-//   .../<any directory>/.removed        - the directory was deleted for good
-//                                       and could not be wholly removed
-//                                       yet; nothing in it is read, and
-//                                       every save tries again. See Remove.
+//   pending.json                       - what was deleted for good and is
+//                                       not wholly gone from the disk
+//                                       yet, by uid; nothing of it is
+//                                       read, and every save tries again.
+//                                       See Remove.
 //
 // Every id inside a record is spelled the way the directory names spell
 // it - six base36 characters, see util/uid.h - so a record and the
@@ -155,40 +157,54 @@ public:
     // again without every caller having to say so.
     uint64_t WriteGeneration() const { return writeGeneration_; }
 
-    // Deletes the directory of the folder, canvas or snippet `uid` names,
-    // with everything of the library's inside it, for good and now - what
-    // "Delete permanently" is on disk, once the model no longer holds the
-    // thing. Now rather than at the next save, which would take a
+    // Deletes the directories of the folders, canvases and snippets `uids`
+    // name, with everything of the library's inside them, for good and now
+    // - what "Delete permanently" is on disk, once the model no longer
+    // holds them. Now rather than at the next save, which would take a
     // directory the model has lost for something gone missing, and set it
     // aside. Only what the store writes goes (see RemoveOwnDirectory):
     // anything someone else put beside a record stays, and the directory
     // stands for it, holding no record - which nothing reads back.
     //
-    // True only once the directory is gone. False if this store knows no
-    // directory for it - a thing never saved has none, and a capture of one
-    // still in staging is collected by the next save - or if something in
-    // it could not be removed: a picture held open by another program, on
-    // Windows. That directory is then marked on disk as removed (a
-    // `.removed` file in it), dropped from the index, and remembered as
-    // owed: every save from then on takes another run at removing it, and
-    // a Load that finds the mark reads nothing from the directory and owes
-    // the removal too, so a restart cannot bring back what was deleted for
-    // good. The caller can tell the two falses apart with
-    // HasPendingRemoval.
+    // `uids` is the thing and everything the model held under it: a
+    // snippet moved into a canvas since the last save still has its
+    // directory under the canvas it came from, and only the model knows it
+    // went with this one. Whatever the index has inside the directories
+    // named, and the library no longer holds, goes too, named or not.
     //
-    // `remaining` is the library without it, which is what says whether
-    // anything under the directory has been moved out in the model and not
+    // The removal is recorded in pending.json before anything is deleted.
+    // A removal that stops partway - a crash, or a picture held open by
+    // another program, on Windows - is still recorded when the process
+    // starts again: Load reads nothing of it, and every save takes another
+    // run at it, until nothing of the library's is left. A pending.json that
+    // cannot be written deletes nothing, and the removal is owed in memory
+    // until it can be.
+    //
+    // True only once every directory named is gone. False if this store
+    // knows no directory for any of them - a thing never saved has none,
+    // and a capture of one still in staging is collected by the next save
+    // - or if a removal is still owed. The caller can tell the two falses
+    // apart with HasPendingRemoval.
+    //
+    // `remaining` is the library without them, which is what says whether
+    // anything under a directory has been moved out in the model and not
     // yet on disk - a snippet moved to another canvas, a canvas out of a
     // folder, before the save that moves its directory. Deleting the
     // directory now would take that with it. The removal is then owed
-    // instead, with nothing touched and no mark written - the mark would
+    // instead, with nothing touched and nothing recorded - a record would
     // hide what was moved from a restart - and the next save, which places
     // what was moved before it runs the removals owed, finishes it once
     // nothing the library holds is left inside.
-    bool Remove(uint64_t uid, const LibraryView& remaining) const;
+    bool Remove(const std::vector<uint64_t>& uids, const LibraryView& remaining) const;
+    bool Remove(uint64_t uid, const LibraryView& remaining) const {
+        return Remove(std::vector<uint64_t>{uid}, remaining);
+    }
+    bool Remove(const std::vector<uint64_t>& uids, const CanvasManagerSnapshot& remaining) const {
+        return Remove(uids, LibraryView{remaining.folders, remaining.canvases, remaining.currentFolderId,
+                                        remaining.currentCanvasId});
+    }
     bool Remove(uint64_t uid, const CanvasManagerSnapshot& remaining) const {
-        return Remove(uid, LibraryView{remaining.folders, remaining.canvases, remaining.currentFolderId,
-                                       remaining.currentCanvasId});
+        return Remove(std::vector<uint64_t>{uid}, remaining);
     }
     // Whether a Remove of `uid` is still owed: it was asked for and the
     // directory is still there, whole or in part.
@@ -350,19 +366,29 @@ private:
     // Where the folder directories are: folders/ under the root.
     std::filesystem::path FoldersRoot() const;
     // The one way this store deletes a directory: what the store itself
-    // writes, recursively through the directories that hold its records,
-    // and only if it IsOurs, so that nothing outside the library is ever
+    // writes, recursively through the directories that hold its records or
+    // whose uid is in `erased` - one deleted for good along with it, which
+    // may have lost its record already to an earlier run at it - and only
+    // if it IsOurs, so that nothing outside the library is ever
     // emptied through something pointing at it. A directory goes once it
     // is empty; one that someone else's files keep stays for them. True
     // once nothing of the library's is left under `path`.
-    bool RemoveOwnDirectory(const std::filesystem::path& path) const;
-    // Puts the removed mark into `dir` - a directory RemoveOwnDirectory
-    // could not finish with - so that the intent outlives the process.
-    // True once the mark is there.
-    bool MarkRemoved(const std::filesystem::path& dir) const;
-    // Whether `dir` carries the removed mark; if so it is remembered as
-    // owed (by the uid its name ends in) and nothing in it is to be read.
+    bool RemoveOwnDirectory(const std::filesystem::path& path, const std::set<uint64_t>& erased) const;
+    // Whether `dir` was deleted for good - pending.json names the uid its
+    // name ends in, or it carries the `.removed` mark an older build left
+    // - and so is owed and not to be read. Anything inside it deleted for
+    // good too is noted with it.
     bool NotePendingRemoval(const std::filesystem::path& dir) const;
+    // Reads pending.json into writtenPending_, or finds it unreadable.
+    void ReadPendingFile() const;
+    // Puts pending.json on disk naming exactly `uids` - removed when there
+    // are none. True once it does.
+    bool WritePendingFile(const std::set<uint64_t>& uids) const;
+    // Another run at every removal owed whose directory holds nothing of
+    // `live` any more: recorded in pending.json first, then removed, then
+    // the file brought in line with what is left. False when the record
+    // could not be written, and nothing new was removed.
+    bool RunPendingRemovals(const std::unordered_set<uint64_t>& live) const;
 
     // The tree walk behind Load: every folder, canvas and snippet under
     // `foldersRoot`, into `out`, indexing each directory and noting each
@@ -404,6 +430,13 @@ private:
     // nothing under it is placed, retired or read meanwhile: it was
     // deleted, not lost.
     mutable std::map<uint64_t, std::filesystem::path> pendingRemovals_;
+    // The uids pending.json names as it is on disk: what a removal may be
+    // run for, since only what is recorded survives a crash partway.
+    mutable std::set<uint64_t> writtenPending_;
+    // False when pending.json is there and cannot be read. What it names
+    // is then unknown - those directories load as they are - and it is not
+    // written over this session, so that it keeps naming them.
+    mutable bool pendingFileReadable_ = true;
     // See OversizedRecords.
     mutable std::set<uint64_t> oversizedRecords_;
     // See WriteGeneration.

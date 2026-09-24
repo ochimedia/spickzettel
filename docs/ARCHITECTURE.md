@@ -633,6 +633,9 @@ library/
   library.json          - the format version, currentFolderId and
                            currentCanvasId. Nothing else: the tree is
                            the rest.
+  pending.json          - what was deleted for good and is not wholly
+                           gone from the disk yet, by uid. Only there
+                           while something is.
   folders/order.json    - the folders' uids, in order
   folders/<folder>/
     folder.json         - that folder's id and name
@@ -805,28 +808,56 @@ lacks something nobody deleted, the kind of disagreement that once
 emptied a library.
 
 A permanent delete takes what the store writes and nothing else: the
-records and order files, the pictures and thumbnails, its own mark, and
-a temporary a crash left one of those as. It recurses only into a
-directory that holds a record of ours, which is Load's rule for what is
-ours asked at delete time, and removes a directory only once it is
-empty. A note someone kept beside a record, or a directory of scans
+records and order files, the pictures and thumbnails, an older build's
+`.removed` mark, and a temporary a crash left one of those as. It
+recurses only into a directory that holds a record of ours, which is
+Load's rule for what is ours asked at delete time, or whose uid was
+deleted for good along with it, which may have lost its record to an
+earlier run already. It removes a directory only once it is empty. A
+directory that cannot be listed counts as not emptied: calling it done
+dropped the removal and left the record in it to load again. A note someone kept beside a record, or a directory of scans
 beside a canvas, stays, and the directory stands for it holding no
 record, which nothing reads back and, never having been indexed,
 nothing sets aside. The first version deleted the directory whole, with
 whatever anyone had put in it, while every other path in the store left
 foreign files alone.
 
-A permanent delete that cannot finish - Windows refuses to delete a
-file another program holds open without delete sharing, and a picture
-viewer looking at a capture is exactly that - reports so rather than
-success, and the intent outlives the process: the store writes a
-`.removed` mark into the directory, drops it from the index so that
-nothing under it is placed or set aside meanwhile, and remembers the
-removal as owed. Every save takes another run at it, and a save whose
-mark could not be written fails, since nothing on disk then records the
-delete. `Load` reads nothing from a marked directory and owes its
-removal too, so a restart while the file is still held does not bring
-back a snippet deleted for good. The session counts an owed removal as
+A permanent delete is recorded before anything is deleted. The store
+names the uids in `pending.json`, drops the directories from the index
+so that nothing under them is placed or set aside meanwhile, and only
+then removes. A removal that stops partway is then still known when
+the process starts again. It can stop for two reasons:
+
+- a crash;
+- a file that cannot be deleted. Windows refuses to delete a file
+  another program holds open without delete sharing, and a picture
+  viewer looking at a capture is exactly that.
+
+`Load` reads nothing of a directory the file names, and owes its
+removal. Every save takes another run at it. The store removes only
+what the file already records, so a `pending.json` that cannot be
+written deletes nothing new, and fails the save. The file is gone
+again once nothing is owed.
+
+The previous version wrote a `.removed` mark into the directory, but
+only once a removal had failed. A crash partway through one left no
+mark, and the next start reloaded what was left: a snippet deleted for
+good came back without its picture, which had gone first. Found by the
+crash tests (see "One way to the disk"). Marks an older build left are
+still read as owed removals.
+
+A permanent delete names everything that goes, not only the thing: the
+session passes the thing and every folder, canvas and snippet the model
+held under it. A snippet moved into a canvas since the last save still
+has its directory under the canvas it came from, and only the model
+knows it went with this one. Named only by the canvas, it was left
+indexed under its old parent, and the next save set it aside in
+`retired/` as something the library had lost. Were its picture held
+open, the set-aside failed and a restart loaded it back. The store also
+takes whatever its index has inside a named directory that the library
+no longer holds, named or not.
+
+The session counts an owed removal as
 an unsaved change: the flush that recorded it counts, but the autosave
 keeps asking - on a clock of its own, every ten seconds, the cadence the
 hidden retry timer has - and the hidden retry timer keeps running, until
@@ -854,8 +885,9 @@ model kept the snippet and the next save wrote its record afresh,
 without them. `Remove` is therefore handed the library as it stands
 without the thing, and when anything that library still holds is
 indexed inside the directory, nothing is deleted yet: the removal is
-owed, with no mark written - a restart must still find what was moved -
-and a save, which places everything before it runs the owed removals,
+owed, with nothing recorded - a restart must still find what was
+moved - and a save, which places everything before it runs the owed
+removals,
 finishes it once nothing held is left inside. The session makes that
 save at once, so the ordinary case completes as the delete is asked
 for; if the move cannot land, the removal waits with it.
@@ -933,10 +965,12 @@ inconsistency a hand edit leaves and are reconciled the same way. What
 capture returns; the *record* naming them is written by the save that
 follows - at once when the overlay is hidden, within the debounce
 otherwise - and the session holds the pixels until both have landed.
-A journal was considered and not done: the library is a working surface
-autosaved every few seconds, not a document with a save button, and with
-each file's data on the disk before its rename, the last few seconds of
-ink are the most a power loss can take.
+A journal of saves was considered and not done: the library is a
+working surface autosaved every few seconds, not a document with a save
+button, and with each file's data on the disk before its rename, the
+last few seconds of ink are the most a power loss can take. Deleting for
+good is different: it is recorded in `pending.json` before it starts
+(see "A save is a plan").
 
 ### One way to the disk
 
@@ -999,11 +1033,12 @@ what was left and checks the rules a crash must never break:
   whole, in one place or the other;
 - the restart saves, and loads back as itself.
 
-Edits, moves of snippets and canvases, renames, captures and
-rewritten pictures all pass at every point. Deleting for good does not
-yet. A crash partway through removing a snippet's directory reloads
-the snippet with its picture already gone. The removal writes its mark
-only when it fails, not before it starts.
+Edits, moves of snippets and canvases, renames, captures, rewritten
+pictures and deleting for good all pass at every point. A delete also
+passes with a picture held open, and with a snippet just moved into
+the deleted canvas. For a delete, one more rule applies: once the
+restart has saved, nothing of what was deleted is left anywhere in the
+library, `retired/` included.
 
 ### Images: QOI
 

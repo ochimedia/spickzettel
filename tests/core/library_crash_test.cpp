@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include "core/persistence/library_store.h"
+#include "core/util/uid.h"
 #include "support/crash_points.h"
 #include "support/faulty_file_system.h"
 #include "support/memory_file_system.h"
@@ -231,7 +232,8 @@ void ExpectBeforeOrAfter(const Layout& loaded, const Layout& before, const Layou
         const auto will = after.find(id);
         const auto is = loaded.find(id);
         if (is == loaded.end()) {
-            EXPECT_TRUE(was == before.end()) << id << " was there before and is lost:\n" << Describe(loaded);
+            EXPECT_TRUE(was == before.end() || will == after.end())
+                << id << " was there before and after, and is lost:\n" << Describe(loaded);
             continue;
         }
         const bool asBefore = was != before.end() && is->second == was->second;
@@ -241,8 +243,49 @@ void ExpectBeforeOrAfter(const Layout& loaded, const Layout& before, const Layou
     }
 }
 
-// The whole check for a scenario that changes the library by `change`.
-void CheckEveryCrashPoint(const std::function<void(LibraryStore&, CanvasManagerSnapshot&)>& change) {
+// Whether `path` is the directory of `uid`, or inside it: a directory name
+// ends in its uid.
+bool IsOf(const std::filesystem::path& path, uint64_t uid) {
+    const std::string suffix = "-" + FormatUid(uid);
+    for (const std::filesystem::path& part : path) {
+        const std::string name = part.string();
+        if (name.size() >= suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Nothing of what was deleted for good is anywhere in the library - not in
+// the tree, not set aside in retired/ - once a restart has saved.
+void ExpectNothingLeftOf(MemoryFileSystem& disk, const std::vector<uint64_t>& erased, size_t crashedAfter) {
+    for (const auto& [path, text] : disk.FilesUnder(Root())) {
+        (void)text;
+        for (const uint64_t uid : erased) {
+            EXPECT_FALSE(IsOf(path, uid)) << path << " is left of " << uid << ", deleted for good (crashed after "
+                                          << crashedAfter << ")";
+        }
+    }
+}
+
+// The file a snippet's picture is in, wherever its directory is.
+std::filesystem::path PictureOf(MemoryFileSystem& disk, uint64_t item) {
+    for (const auto& [path, text] : disk.FilesUnder(Root() / "folders")) {
+        (void)text;
+        if (path.filename() == FormatUid(item) + ".qoi") {
+            return path;
+        }
+    }
+    return {};
+}
+
+// The whole check for a scenario that changes the library by `change`,
+// deleting `erased` for good on the way (none by default). `holdPicturesOf`
+// are held open, as a picture viewer would, from before the change until
+// the restart.
+void CheckEveryCrashPoint(const std::function<void(LibraryStore&, CanvasManagerSnapshot&)>& change,
+                          const std::vector<uint64_t>& erased = {},
+                          const std::vector<uint64_t>& holdPicturesOf = {}) {
     CanvasManagerSnapshot before = MakeLibrary();
     // `before` as it is on disk after SetUpLibrary, picture named; `after`
     // is the same change applied to it.
@@ -264,10 +307,23 @@ void CheckEveryCrashPoint(const std::function<void(LibraryStore&, CanvasManagerS
     ASSERT_NE(beforeLayout, afterLayout) << "the scenario changes nothing";
 
     const size_t changes = ForEachCrashPoint(
-        [](FaultyFileSystem& fs) { SetUpLibrary(fs); }, [&](FaultyFileSystem& fs) { RunChange(fs, change); },
+        [&](FaultyFileSystem& fs, MemoryFileSystem& disk) {
+            SetUpLibrary(fs);
+            for (const uint64_t item : holdPicturesOf) {
+                const std::filesystem::path picture = PictureOf(disk, item);
+                ASSERT_FALSE(picture.empty());
+                fs.Hold(picture);
+            }
+        },
+        [&](FaultyFileSystem& fs) { RunChange(fs, change); },
         [&](MemoryFileSystem& disk, size_t crashedAfter, size_t of) {
             const Layout loaded = CheckRestart(disk, crashedAfter);
             ExpectBeforeOrAfter(loaded, beforeLayout, afterLayout, crashedAfter, of);
+            // Recorded - or it would have loaded, whole, above - and so
+            // finished by the restart's save.
+            if (!erased.empty() && loaded.count(erased.front()) == 0) {
+                ExpectNothingLeftOf(disk, erased, crashedAfter);
+            }
         });
     EXPECT_GT(changes, 0u);
 }
@@ -319,11 +375,123 @@ TEST(LibraryCrashTest, CapturingANewSnippet) {
     });
 }
 
+// Deleting for good, a snippet, a canvas and a folder. A crash before the
+// removal is recorded leaves it as it was, whole, to be deleted again; one
+// after never brings any of it back, and the restart finishes it.
+TEST(LibraryCrashTest, DeletingASnippetForGood) {
+    CheckEveryCrashPoint(
+        [](LibraryStore& store, CanvasManagerSnapshot& library) {
+            std::vector<Item>& onA = FindCanvas(library, kCanvasA)->items;
+            onA.erase(onA.begin());
+            store.Remove({kShot}, library);
+        },
+        {kShot});
+}
+
+TEST(LibraryCrashTest, DeletingACanvasForGood) {
+    CheckEveryCrashPoint(
+        [](LibraryStore& store, CanvasManagerSnapshot& library) {
+            library.canvases.erase(library.canvases.begin());
+            store.Remove({kCanvasA, kShot, kDrawing}, library);
+        },
+        {kCanvasA, kShot, kDrawing});
+}
+
+TEST(LibraryCrashTest, DeletingAFolderForGood) {
+    CheckEveryCrashPoint(
+        [](LibraryStore& store, CanvasManagerSnapshot& library) {
+            library.folders.erase(library.folders.begin());
+            library.canvases.clear();
+            store.Remove({kFolder, kCanvasA, kCanvasB, kShot, kDrawing, kNote}, library);
+        },
+        {kFolder, kCanvasA, kCanvasB, kShot, kDrawing, kNote});
+}
+
+// A canvas deleted for good while a picture in one of its snippets is held
+// open: the removal stops at the picture, having taken the snippet's record,
+// and a save retries while it is still held. Once let go, nothing is left -
+// the snippet's directory, with no record in it any more, is still known
+// for what it is by its uid.
+TEST(LibraryCrashTest, DeletingACanvasForGoodWhileOneOfItsPicturesIsHeld) {
+    CheckEveryCrashPoint(
+        [](LibraryStore& store, CanvasManagerSnapshot& library) {
+            library.canvases.erase(library.canvases.begin());
+            store.Remove({kCanvasA, kShot, kDrawing}, library);
+            store.Save(library);  // the retry, still held
+        },
+        {kCanvasA, kShot, kDrawing}, {kShot});
+}
+
+// A snippet moved into a canvas and the canvas deleted for good, before any
+// save: the snippet's directory is still under the canvas it came from, and
+// goes too - not set aside in retired/ as something gone missing.
+TEST(LibraryCrashTest, DeletingForGoodACanvasASnippetWasJustMovedInto) {
+    CheckEveryCrashPoint(
+        [](LibraryStore& store, CanvasManagerSnapshot& library) {
+            std::vector<Item>& onB = FindCanvas(library, kCanvasB)->items;
+            FindCanvas(library, kCanvasA)->items.push_back(onB[0]);
+            onB.clear();
+            library.canvases.erase(library.canvases.begin());
+            store.Remove({kCanvasA, kShot, kDrawing, kNote}, library);
+        },
+        {kCanvasA, kShot, kDrawing, kNote});
+}
+
+// A directory that cannot be listed cannot be said to be emptied: the
+// removal stays owed, and a restart does not read it back.
+TEST(LibraryFaultTest, ARemovalThatCouldNotListADirectoryIsNotDone) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    FaultyFileSystem fs(disk);
+    fs.FailWhen(FaultyFileSystem::Op::List, [](const std::filesystem::path& path) {
+        return IsOf(path, kCanvasA) && !IsOf(path, kShot) && !IsOf(path, kDrawing);
+    });
+    {
+        LibraryStore store(Root(), fs);
+        CanvasManagerSnapshot library = *store.Load();
+        library.canvases.erase(library.canvases.begin());
+        EXPECT_FALSE(store.Remove({kCanvasA, kShot, kDrawing}, library));
+        EXPECT_TRUE(store.HasPendingRemoval(kCanvasA));
+    }
+    fs.ClearFailures();
+    LibraryStore restarted(Root(), fs);
+    const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(LayoutOf(*loaded).count(kCanvasA), 0u) << "deleted for good, and back";
+    EXPECT_TRUE(restarted.Save(*loaded));
+    EXPECT_FALSE(restarted.HasPendingRemoval(kCanvasA));
+    ExpectNothingLeftOf(disk, {kCanvasA, kShot, kDrawing}, 0);
+}
+
+// A pending.json that cannot be written deletes nothing: the removal is owed
+// in memory, and a restart finds everything as it was.
+TEST(LibraryFaultTest, ARemovalThatCannotBeRecordedRemovesNothing) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    const std::map<std::filesystem::path, std::string> before = disk.FilesUnder(Root() / "folders");
+    FaultyFileSystem fs(disk);
+    fs.FailWhen(FaultyFileSystem::Op::WriteNewFile, [](const std::filesystem::path& path) {
+        return path.filename().string().rfind("pending.json", 0) == 0;
+    });
+    LibraryStore store(Root(), fs);
+    CanvasManagerSnapshot library = *store.Load();
+    library.canvases.erase(library.canvases.begin());
+    EXPECT_FALSE(store.Remove({kCanvasA, kShot, kDrawing}, library));
+    EXPECT_TRUE(store.HasPendingRemoval(kCanvasA));
+    EXPECT_EQ(disk.FilesUnder(Root() / "folders"), before);
+    EXPECT_FALSE(store.Save(library)) << "a removal that cannot be recorded fails the save";
+
+    fs.ClearFailures();
+    EXPECT_TRUE(store.Save(library));
+    EXPECT_FALSE(store.HasPendingRemoval(kCanvasA));
+    ExpectNothingLeftOf(disk, {kCanvasA, kShot, kDrawing}, 0);
+}
+
 // A picture written again over itself - a painted layer does, every save -
 // is the old picture or the new one after a crash, never half of either.
 TEST(LibraryCrashTest, RewritingAPictureLeavesTheOldOneOrTheNewOne) {
     size_t changes = ForEachCrashPoint(
-        [](FaultyFileSystem& fs) { SetUpLibrary(fs); },
+        [](FaultyFileSystem& fs, MemoryFileSystem&) { SetUpLibrary(fs); },
         [](FaultyFileSystem& fs) {
             LibraryStore store(Root(), fs);
             store.Load();
