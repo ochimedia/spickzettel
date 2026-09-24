@@ -70,14 +70,21 @@ public:
     // keeps the fresh default state CanvasManager already starts with).
     // Also attaches the library store so the Session's debounced autosave
     // (see Session::SetLibraryStore) and CaptureShotItem's synchronous image
-    // writes actually persist anything from here on. Returns false if any
-    // hotkey/tray registration fails (e.g. a hotkey combination is
-    // already taken), or if the library was written by a newer build.
+    // writes actually persist anything from here on. Returns false if the
+    // tray icon cannot be registered, another copy is running, or the
+    // library was written by a newer build. A hotkey another application
+    // owns is not one of those - see UnregisteredHotkeys.
     bool Initialize();
     // After a failed Initialize: whether it was the library that refused -
     // a newer build wrote it (see LibraryStore::WrittenByANewerVersion) -
     // which the person has to be told apart from a hotkey held elsewhere.
     bool RefusedANewerLibrary() const { return refusedANewerLibrary_; }
+    // After Initialize: the hotkeys set to a combination another application
+    // already owns, which were left unregistered rather than refusing the
+    // start - for the caller to name. Empty when every one registered.
+    const std::vector<std::pair<HotkeySlot, platform::KeyCombo>>& UnregisteredHotkeys() const {
+        return unregisteredHotkeys_;
+    }
 
     // Before Initialize, when the config this was given is the defaults
     // standing in for a config.json that could not be read (see
@@ -284,6 +291,8 @@ private:
     // Whether the settings as held differ from the file because a write
     // failed - see PersistConfig. Retried from the background timer.
     bool configWriteOwed_ = false;
+    // See UnregisteredHotkeys.
+    std::vector<std::pair<HotkeySlot, platform::KeyCombo>> unregisteredHotkeys_;
     // See StartOnStandInSettings.
     bool skipRetentionThisStart_ = false;
     bool configFileKept_ = false;

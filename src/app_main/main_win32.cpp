@@ -95,5 +95,22 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         return 1;
     }
 
+    // Started without some of its hotkeys: said once, naming each and the
+    // way round it, rather than a tray app whose hotkey silently does
+    // nothing.
+    if (!trayController.UnregisteredHotkeys().empty()) {
+        std::string list;
+        for (const auto& [slot, combo] : trayController.UnregisteredHotkeys()) {
+            const char* label = slot == sz::core::HotkeySlot::EditMode       ? sz::strings::kHotkeysEditMode
+                                : slot == sz::core::HotkeySlot::ViewMode     ? sz::strings::kHotkeysViewMode
+                                : slot == sz::core::HotkeySlot::QuickCapture ? sz::strings::kHotkeysQuickCapture
+                                                                             : sz::strings::kHotkeysSilentCapture;
+            list += std::string("\n    ") + label + ": " + sz::core::HotkeyText(combo);
+        }
+        char body[1024];
+        std::snprintf(body, sizeof(body), sz::strings::kStartupHotkeysTaken, list.c_str());
+        MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+    }
+
     return host->RunEventLoop();
 }

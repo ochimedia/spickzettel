@@ -92,12 +92,26 @@ TEST(TrayControllerTest, InitializeFailsWhenAnotherCopyIsRunning) {
     EXPECT_TRUE(host.registeredCombos.empty());
 }
 
-TEST(TrayControllerTest, InitializeFailsIfHotkeyRegistrationFails) {
+// A hotkey another application owns costs that hotkey, not the start: the
+// tray reaches the overlay without it, and each one is named for the caller
+// to say so.
+TEST(TrayControllerTest, HotkeysAnotherApplicationOwnsAreNamedNotFatal) {
     test::FakePlatformHost host;
     host.registerHotkeySucceeds = false;
-    TrayController controller(host, DefaultConfig());
+    AppConfig config = DefaultConfig();
+    config.hotkeySilentCapture = platform::KeyCombo{};  // unbound on purpose: not a failure
+    TrayController controller(host, config);
 
-    EXPECT_FALSE(controller.Initialize());
+    EXPECT_TRUE(controller.Initialize());
+    const auto& taken = controller.UnregisteredHotkeys();
+    ASSERT_EQ(taken.size(), 3u);
+    EXPECT_EQ(taken[0].first, HotkeySlot::EditMode);
+    EXPECT_EQ(taken[0].second, config.hotkeyEditMode);
+    EXPECT_EQ(taken[1].first, HotkeySlot::ViewMode);
+    EXPECT_EQ(taken[2].first, HotkeySlot::QuickCapture);
+
+    host.TriggerTrayCommand(platform::TrayCommand::ToggleOverlay);
+    EXPECT_TRUE(host.overlayWindow.IsVisible()) << "the tray still brings it up";
 }
 
 // Finds each hotkey's id by matching its registered combo against the

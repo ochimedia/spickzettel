@@ -536,6 +536,8 @@ AppConfig DefaultConfig() { return AppConfig{}; }
 
 AppConfig ParseConfig(std::string_view text) { return TryParseConfig(text).value_or(DefaultConfig()); }
 
+std::string HotkeyText(const platform::KeyCombo& combo) { return FormatHotkey(combo); }
+
 std::optional<AppConfig> TryParseConfig(std::string_view text) {
     AppConfig config = DefaultConfig();
 

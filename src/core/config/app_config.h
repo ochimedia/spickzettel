@@ -387,6 +387,10 @@ std::optional<AppConfig> TryParseConfig(std::string_view text);
 // persistence::kMaxRecordBytes).
 constexpr size_t kMaxConfigFileBytes = size_t{1} << 20;
 
+// A hotkey as config.json spells it - "Ctrl+Alt+O", "F9" - and as a message
+// names it; empty for an unbound one.
+std::string HotkeyText(const platform::KeyCombo& combo);
+
 // What LoadOrCreateConfig found at the settings file's path, and did.
 enum class ConfigSource {
     Read,        // a settings file, read

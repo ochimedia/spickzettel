@@ -930,10 +930,17 @@ Three things about the file are deliberate:
   leaves that other unbound, and an unbound hotkey read back as "said
   nothing" took its default again on the next start - which could now be
   the combination the other had taken, and one combination registered
-  twice refuses to start the app. The tray also unbinds a later
+  twice left the second hotkey dead. The tray also unbinds a later
   duplicate of an earlier hotkey at startup, for a file edited by hand.
   Every setting is written, defaults included, so the file documents
   what can be set.
+- **A hotkey another application owns does not stop the start.** It
+  used to: a screenshot tool on Ctrl+Alt+C was enough for the app to
+  refuse to start, with a message that named nothing, and a hand edit of
+  `config.json` as the only way back in. The hotkey is left unregistered
+  instead, and a message box names each one with its combination; the
+  tray menu reaches the overlay without any, and Settings > Hotkeys can
+  pick another.
 - **`ordered_json`, and floats rounded to six decimals**, because the
   file is meant to be opened and read: alphabetical keys interleave
   settings by spelling, and `0.22f` promoted to double writes as

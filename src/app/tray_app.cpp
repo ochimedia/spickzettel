@@ -80,30 +80,30 @@ bool TrayController::Initialize() {
     }
 
     // A set combination that cannot be registered - another application
-    // owns it - is fatal for the three that bring the overlay up: there is
-    // no point starting without them. An unset one registers as 0 too and
-    // is not a failure: a hotkey given another row's combination is left
-    // unbound (see ChangeHotkey), and the app has to come back up with it
-    // that way. The tray menu still reaches edit mode.
-    const auto registered = [](const platform::KeyCombo& combo, int id) { return id != 0 || !combo.IsValid(); };
+    // owns it - is left unregistered and noted (see UnregisteredHotkeys),
+    // not a reason to refuse the start. Refusing cost the whole app for one
+    // combination a screenshot tool happened to hold, with nothing saying
+    // which, and a hand edit of config.json as the only way back in; the
+    // tray menu reaches edit mode without any hotkey, and Settings > Hotkeys
+    // can pick another. An unset one registers as 0 too and is not noted: a
+    // hotkey given another row's combination is left unbound on purpose
+    // (see ChangeHotkey).
+    unregisteredHotkeys_.clear();
+    const auto note = [this](HotkeySlot slot, const platform::KeyCombo& combo, int id) {
+        if (id == 0 && combo.IsValid()) {
+            unregisteredHotkeys_.emplace_back(slot, combo);
+        }
+    };
     editHotkeyId_ = host_.RegisterGlobalHotkey(settings_.Stored().hotkeyEditMode, [this]() { OnEditHotkey(); });
-    if (!registered(settings_.Stored().hotkeyEditMode, editHotkeyId_)) {
-        return false;
-    }
+    note(HotkeySlot::EditMode, settings_.Stored().hotkeyEditMode, editHotkeyId_);
     viewHotkeyId_ = host_.RegisterGlobalHotkey(settings_.Stored().hotkeyViewMode, [this]() { OnViewHotkey(); });
-    if (!registered(settings_.Stored().hotkeyViewMode, viewHotkeyId_)) {
-        return false;
-    }
+    note(HotkeySlot::ViewMode, settings_.Stored().hotkeyViewMode, viewHotkeyId_);
     quickCaptureHotkeyId_ =
         host_.RegisterGlobalHotkey(settings_.Stored().hotkeyQuickCapture, [this]() { OnQuickCaptureHotkey(); });
-    if (!registered(settings_.Stored().hotkeyQuickCapture, quickCaptureHotkeyId_)) {
-        return false;
-    }
-    // Not checked at all - this one is an extra whose combination another
-    // application may already own. Leaving it unregistered costs that one
-    // hotkey; refusing to start costs the whole app.
+    note(HotkeySlot::QuickCapture, settings_.Stored().hotkeyQuickCapture, quickCaptureHotkeyId_);
     silentCaptureHotkeyId_ =
         host_.RegisterGlobalHotkey(settings_.Stored().hotkeySilentCapture, [this]() { OnSilentCaptureHotkey(); });
+    note(HotkeySlot::SilentCapture, settings_.Stored().hotkeySilentCapture, silentCaptureHotkeyId_);
 
     session_.AttachWindow(&host_.GetOverlayWindow());
     overlayApp_.AttachTo(host_.GetOverlayWindow());
