@@ -1,6 +1,7 @@
 #include "ui/context_menu.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cstddef>
 
 #include <imgui_internal.h>
@@ -97,11 +98,21 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
     // would otherwise run off the right edge or the bottom - the corner
     // the anchor *is* flips rather than the menu being nudged, so a menu
     // opened in a corner never covers the thing it was opened on.
+    //
+    // Then held on the screen, for a menu that fits neither way round: one
+    // opened halfway down, taller than either half - which a menu of a
+    // dozen rows is at a large interface scale. Flipped, it ran off the
+    // top instead of the bottom. And one taller than the whole screen is
+    // held to its height, and scrolls.
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     const float width = metrics.innerWidth + Px(kMenuPad) * 2.0f;
-    const ImVec2 pivot(anchor_.x + width > display.x ? 1.0f : 0.0f,
-                        anchor_.y + metrics.height > display.y ? 1.0f : 0.0f);
-    ImGui::SetNextWindowPos(anchor_, ImGuiCond_Always, pivot);
+    const float height = std::min(metrics.height, display.y);
+    const float x = anchor_.x + width > display.x ? anchor_.x - width : anchor_.x;
+    const float y = anchor_.y + height > display.y ? anchor_.y - height : anchor_.y;
+    ImGui::SetNextWindowPos(ImVec2(std::clamp(x, 0.0f, std::max(0.0f, display.x - width)),
+                                   std::clamp(y, 0.0f, std::max(0.0f, display.y - height))),
+                            ImGuiCond_Always);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, display.y));
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Px(kMenuPad), Px(kMenuPad)));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));

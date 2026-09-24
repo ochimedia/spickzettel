@@ -1720,6 +1720,13 @@ learn where a row is. While it is up ImGui claims the mouse, so the press
 that dismisses it does nothing else - which is what a context menu does
 everywhere, and is why a right-drag after a right-click resizes nothing.
 
+It opens at the point it was asked for, with the anchoring corner flipped
+where the menu would run off the right or the bottom, so a menu opened in
+a corner does not cover what it was opened on. Then it is held on the
+screen: at a large interface scale the snippet menu is taller than the
+room either side of a point halfway down, and flipping alone moved it
+off the top instead of the bottom.
+
 The menu is the one place a snippet's actions live. The Properties
 popover (the bar's More button) had a row of the same actions as icon
 buttons, and kept it for a while after the menu arrived; it went, and

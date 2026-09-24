@@ -40,6 +40,28 @@ protected:
     }
 };
 
+// A menu taller than the room above and below where it was opened - the
+// snippet menu at a large interface scale, opened halfway down - is held
+// on the screen rather than flipped off the top of it.
+TEST_F(ContextMenuUiTest, AMenuThatFitsNeitherWayRoundStaysOnTheScreen) {
+    host_.overlayWindow.scalePercent = 250;
+    MakeASnippet();
+    OpenTheMenu();
+    StepFrame();
+
+    const ImGuiContext& g = *ImGui::GetCurrentContext();
+    ASSERT_FALSE(g.OpenPopupStack.empty());
+    const ImGuiWindow* menu = g.OpenPopupStack.back().Window;
+    ASSERT_NE(menu, nullptr);
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    ASSERT_GT(menu->Size.y, display.y - 400.0f) << "too short to fit below where it was opened";
+    ASSERT_GT(menu->Size.y, 400.0f) << "too short to fit above it";
+    EXPECT_GE(menu->Pos.y, 0.0f);
+    EXPECT_LE(menu->Pos.y + menu->Size.y, display.y);
+    EXPECT_GE(menu->Pos.x, 0.0f);
+    EXPECT_LE(menu->Pos.x + menu->Size.x, display.x);
+}
+
 TEST_F(ContextMenuUiTest, DuplicateFromTheMenuMakesACopy) {
     MakeASnippet();
     OpenTheMenu();
