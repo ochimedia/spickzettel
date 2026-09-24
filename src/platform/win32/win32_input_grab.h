@@ -29,7 +29,7 @@ class Win32InputGrab {
 public:
     static Win32InputGrab& Instance();
 
-    // The window synthesised mouse input is posted to - the overlay
+    // The window synthesized mouse input is posted to - the overlay
     // itself. Everything below no-ops until this is set.
     void SetOverlayWindow(HWND hwnd);
 
@@ -87,7 +87,7 @@ public:
     // True while ImGui must navigate by the position below instead of by
     // the real cursor. Under a mouse grab the real cursor is left entirely
     // to the game - which may pin it, hide it, or set it back to the screen
-    // centre every frame - so it stops being something the overlay can
+    // center every frame - so it stops being something the overlay can
     // point with. Trying to share it with a game that does any of those is
     // a fight that cannot be won: a game's SetCursorPos is not an input
     // event and is invisible to any hook.
@@ -193,7 +193,7 @@ private:
     void OnRawMouse(const RAWMOUSE& mouse);
     LRESULT OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event);
     // Swallows a key and records the key-down, so its key-up can be
-    // recognised as ours later. See the rule at the top of OnKeyboard.
+    // recognized as ours later. See the rule at the top of OnKeyboard.
     LRESULT SwallowKey(UINT vk, bool isDown);
     // Updates the grab's own Ctrl/Shift/Alt record; true if vk was one.
     bool TrackModifier(UINT vk, bool isDown);

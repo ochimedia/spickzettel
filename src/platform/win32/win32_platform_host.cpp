@@ -9,7 +9,7 @@
 #include "platform/win32/win32_displays.h"
 #include "platform/win32/win32_input_grab.h"
 // The tray menu's two items are words the user reads, so they live in the
-// same catalogue as every other one - see cmake/UiStrings.cmake. A header
+// same catalog as every other one - see cmake/UiStrings.cmake. A header
 // of constants, so this costs the platform layer no dependency on core.
 #include "generated/ui_strings.h"
 
@@ -25,7 +25,7 @@ constexpr UINT kTrayIconId = 1;
 // Whether this message must not go through TranslateMessage.
 //
 // While the keyboard grab is delivering typing, it posts a synthetic
-// WM_KEYDOWN to the overlay *and* synthesises the matching WM_CHAR itself,
+// WM_KEYDOWN to the overlay *and* synthesizes the matching WM_CHAR itself,
 // from the modifier state that only it has (see
 // Win32InputGrab::PostCharactersToOverlay). TranslateMessage would then make
 // a second WM_CHAR out of that same posted key-down - measured: every letter
@@ -195,7 +195,7 @@ int Win32PlatformHost::RegisterGlobalHotkey(const KeyCombo& combo, HotkeyCallbac
     // grab matches the combo itself and posts the identical message back to
     // this same window, where the handler below can't tell the difference.
     // Done for every hotkey unconditionally: it costs nothing while no grab
-    // is running, and leaves no registration state to synchronise when one
+    // is running, and leaves no registration state to synchronize when one
     // starts.
     Win32InputGrab::Instance().AddHotkey(id, combo, hwnd_);
     return id;
@@ -239,7 +239,7 @@ std::filesystem::path AppDataBase() {
     } else {
         base = appData;
     }
-    // Capitalised because %APPDATA% is somewhere people actually browse,
+    // Capitalized because %APPDATA% is somewhere people actually browse,
     // and the name is a proper noun there.
     return base / "Spickzettel";
 }

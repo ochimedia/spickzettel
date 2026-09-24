@@ -1,7 +1,7 @@
 // The overlay driven through real frames, with no window and no GPU - see
 // tests/fakes/headless_app.h for what that costs (a context and a font
 // atlas) and why it is worth having (every render path becomes reachable
-// from a test, and behaviour can be asserted instead of screenshotted).
+// from a test, and behavior can be asserted instead of screenshotted).
 #include "fakes/headless_app.h"
 
 #include <algorithm>
@@ -67,7 +67,7 @@ TEST_F(HeadlessAppTest, ViewOnlyModeAsksForFramesOnlyWhileSomethingMoves) {
 // The accent is a setting: whatever it is set to is what the theme and the
 // ImGui style draw with from the next frame, and what is drawn on it turns
 // light when the accent is dark.
-TEST_F(HeadlessAppTest, TheAccentColourRecoloursTheThemeAndTheStyle) {
+TEST_F(HeadlessAppTest, TheAccentColorRecolorsTheThemeAndTheStyle) {
     namespace theme = overlay_detail::theme;
     ShowEditMode();
     StepFrame();
@@ -1183,8 +1183,8 @@ TEST_F(HeadlessAppTest, ADoubleClickOnASnippetEntersDrawingModeAndAClickElsewher
     EXPECT_TRUE(App().SelectionBarButtonCenter(ChromeButton::Close).has_value()) << "the item bar again";
 }
 
-// The drawing bar's buttons switch the tool and open the colour chooser.
-TEST_F(HeadlessAppTest, TheDrawingBarSwitchesTheToolAndOpensTheColour) {
+// The drawing bar's buttons switch the tool and open the color chooser.
+TEST_F(HeadlessAppTest, TheDrawingBarSwitchesTheToolAndOpensTheColor) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
@@ -1196,9 +1196,9 @@ TEST_F(HeadlessAppTest, TheDrawingBarSwitchesTheToolAndOpensTheColour) {
     EXPECT_EQ(App().ActiveTool(), Tool::Erase);
     EXPECT_TRUE(App().DrawingItem().has_value());
 
-    const std::optional<ImVec2> colour = App().SelectionBarButtonCenter(ChromeButton::Colour);
-    ASSERT_TRUE(colour.has_value());
-    RawClick(colour->x, colour->y);
+    const std::optional<ImVec2> color = App().SelectionBarButtonCenter(ChromeButton::Color);
+    ASSERT_TRUE(color.has_value());
+    RawClick(color->x, color->y);
     StepFrames(2);
     EXPECT_TRUE(App().IsColorChooserOpen());
 
@@ -1221,9 +1221,9 @@ TEST_F(HeadlessAppTest, ClickingTheActiveBarToolAgainCyclesItsShape) {
     ASSERT_EQ(App().PenShape(), DrawShape::Freehand);
 
     const auto clickBar = [this](ChromeButton button) {
-        const std::optional<ImVec2> centre = App().SelectionBarButtonCenter(button);
-        ASSERT_TRUE(centre.has_value());
-        RawClick(centre->x, centre->y);
+        const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
+        ASSERT_TRUE(center.has_value());
+        RawClick(center->x, center->y);
     };
 
     clickBar(ChromeButton::Pen);
@@ -1596,9 +1596,9 @@ TEST_F(HeadlessAppTest, AModifierHeldWhenTheOverlayWentAwayDoesNotOutliveIt) {
 // frame here is a sixtieth of one.
 constexpr int kFramesPastAToast = 200;
 
-// The colour is one setting, not a slot among favourites: the overlay comes
-// up with the hand at rest, and draws in whatever colour was last chosen.
-TEST_F(HeadlessAppTest, StartupHoldsTheConfiguredColour) {
+// The color is one setting, not a slot among favorites: the overlay comes
+// up with the hand at rest, and draws in whatever color was last chosen.
+TEST_F(HeadlessAppTest, StartupHoldsTheConfiguredColor) {
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
     EXPECT_EQ(App().DrawColorRGBA(), AppSettings().Stored().strokeColorRGBA);
 }
@@ -3471,7 +3471,7 @@ TEST_F(HeadlessAppTest, WithTheCheatSheetUnboundTheWelcomeNoteSendsYouToTheMenu)
 }
 
 // Beside the welcome, the two things a new user must not skip: set the
-// behaviour up per program, and beware of anti-cheat. Larger and in red,
+// behavior up per program, and beware of anti-cheat. Larger and in red,
 // side by side with the welcome rather than over it, and all on screen.
 TEST_F(HeadlessAppTest, AFirstRunOpensWithTheWelcomeAndTwoWarnings) {
     controller_->Overlay().RequestWelcomeNote();

@@ -12,7 +12,7 @@
 // Neither ImGui's cursor set nor Windows' stock cursors have a pen, so the
 // overlay draws its own - twice: ui::OverlayApp fills these polygons into
 // ImGui's draw list for the software pointer, and Win32OverlayWindow
-// rasterises them into the bitmap it hands the OS when the real cursor is
+// rasterizes them into the bitmap it hands the OS when the real cursor is
 // used. One definition, so the two pens are the same pen.
 namespace sz::platform::pen_glyph {
 
@@ -58,7 +58,7 @@ inline bool InsideConvex(const Vec2* points, size_t count, float px, float py) {
     return !(anyPositive && anyNegative);
 }
 
-// Outline first, so a stroke centred on an edge covers the body either
+// Outline first, so a stroke centered on an edge covers the body either
 // side of it exactly as the drawn pen's does (which fills, then strokes).
 inline Ink InkAt(float x, float y) {
     constexpr float half = kOutlineWidth * 0.5f;

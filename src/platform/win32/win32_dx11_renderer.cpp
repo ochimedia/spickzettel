@@ -38,7 +38,7 @@ float4 main(uint id : SV_VertexID) : SV_POSITION {
 // four it covers. Averaged premultiplied, which is the whole reason this is
 // not ID3D11DeviceContext::GenerateMips: the pictures are straight alpha,
 // and a painted layer is mostly (0,0,0,0) around its ink, so a plain
-// average darkens every edge towards black as the picture shrinks.
+// average darkens every edge toward black as the picture shrinks.
 constexpr const char* kMipPS = R"(
 Texture2D above : register(t0);
 float4 main(float4 pos : SV_POSITION) : SV_Target {
@@ -60,7 +60,7 @@ float4 main(float4 pos : SV_POSITION) : SV_Target {
 // Bicubic (Catmull-Rom) or Lanczos-3, by LANCZOS. Takes the place of
 // ImGui's pixel shader for one picture, so it reads ImGui's vertex output
 // and returns what that shader would: straight alpha, times the vertex
-// colour (the layer's tint and opacity).
+// color (the layer's tint and opacity).
 //
 // Enlarging, the kernel is the textbook one, 4x4 or 6x6 texels. Shrinking,
 // a kernel that size would alias just as bilinear does: it has to widen by

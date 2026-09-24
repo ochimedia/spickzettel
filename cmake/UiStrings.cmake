@@ -6,7 +6,7 @@
 #
 # Parsed by CMake itself (string(JSON ...), available since 3.19; this
 # project requires 3.21), deliberately: scripts/gen_icons.py is kept out of
-# the build precisely so that building needs no Python, and a catalogue that
+# the build precisely so that building needs no Python, and a catalog that
 # people edit often is the last thing that should reintroduce a toolchain
 # dependency.
 #

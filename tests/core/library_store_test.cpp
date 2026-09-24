@@ -1201,7 +1201,7 @@ TEST_F(LibraryStoreTest, ARenameWhoseDirectoryCannotBeRenamedStillCountsAsSaved)
     }
     EXPECT_TRUE(store.Save(snapshot));
     EXPECT_TRUE(std::filesystem::exists(dir_ / "folders" / "folder-1-000001" / "renamed-000002" / "canvas.json"))
-        << "relabelled once it could be";
+        << "relabeled once it could be";
 }
 #endif
 
@@ -1808,7 +1808,7 @@ TEST_F(LibraryStoreTest, AStoreThatNeverLoadedRetiresNothingItFoundOnDisk) {
 
 // ===== Nothing the store deletes or writes is outside the library =====
 //
-// Every path it mutates is built under its root from sanitised parts, with
+// Every path it mutates is built under its root from sanitized parts, with
 // one exception: Layer::imageFile reaches the filesystem from the record
 // verbatim, and records can be hand-edited.
 
@@ -2294,7 +2294,7 @@ TEST_F(IncrementalSaveTest, AnUntouchedCanvasCostsNothingWhenAnotherOneChanges) 
                             "folders/folder-1-000001/canvas-2-00000k/drawing-2-00000l/item.json"});
 }
 
-// Every field the serialiser writes has to move the hash, or an edit to it is
+// Every field the serializer writes has to move the hash, or an edit to it is
 // silently never saved. Driven through Save rather than at HashItem directly:
 // what matters is not that some hash changed but that the file was rewritten,
 // and that is also what keeps this honest if the mechanism is ever replaced.
@@ -2320,7 +2320,7 @@ TEST_F(IncrementalSaveTest, EveryPersistedItemFieldCausesARewrite) {
         {"strokes: a point moved", [](Item& i) { i.strokes[0].points[1].x += 1.0f; }},
         {"strokes: a point added", [](Item& i) { i.strokes[0].points.push_back(StrokePoint{9, 9}); }},
         {"strokes: a point removed", [](Item& i) { i.strokes[0].points.pop_back(); }},
-        {"strokes: colour", [](Item& i) { i.strokes[0].colorRGBA ^= 0xFFu; }},
+        {"strokes: color", [](Item& i) { i.strokes[0].colorRGBA ^= 0xFFu; }},
         {"strokes: width", [](Item& i) { i.strokes[0].width += 1.0f; }},
         {"strokes: one added", [](Item& i) { i.strokes.push_back(i.strokes[0]); }},
         {"strokes: all removed", [](Item& i) { i.strokes.clear(); }},
@@ -2360,7 +2360,7 @@ TEST_F(IncrementalSaveTest, EveryPersistedItemFieldCausesARewrite) {
 
 // Undo, from the store's point of view: a snippet goes away and comes back
 // exactly as it was. Anything remembered about it has to have been forgotten
-// when it went, or the save that brings it back sees a hash it recognises,
+// when it went, or the save that brings it back sees a hash it recognizes,
 // skips the write, and the snippet is gone from disk for good.
 TEST_F(IncrementalSaveTest, ASnippetDeletedAndBroughtBackIsWrittenAgain) {
     const LibraryStore store{dir_};

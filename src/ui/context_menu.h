@@ -8,7 +8,7 @@
 // its own rather than another Render... member of OverlayApp.
 //
 // Deliberately knows nothing about the app. It is handed rows, draws them,
-// and hands back the `action` of whichever was chosen; every colour comes
+// and hands back the `action` of whichever was chosen; every color comes
 // out of the current ImGui style rather than the overlay's own palette
 // (see overlay_app_internal.h's theme namespace, which is where that style
 // is set from). So this header depends on nothing but Dear ImGui and the
@@ -45,9 +45,9 @@ struct ContextMenuEntry {
     // "Ctrl+D", or empty for an action with no shortcut. A std::string
     // rather than a const char* because this is usually built per frame
     // from the live binding (see FormatKeyComboLabel) - the label, which
-    // comes straight out of the string catalogue, is not.
+    // comes straight out of the string catalog, is not.
     std::string shortcut;
-    // A row that is visible but cannot be chosen right now - greyed, and
+    // A row that is visible but cannot be chosen right now - grayed, and
     // it takes no click. Shown rather than dropped so the menu keeps the
     // same shape whatever it is opened over, which is what lets a hand
     // learn where a row is.

@@ -234,18 +234,18 @@ json ToJson(const Item& item) {
 // ===== Has this item changed since it was last written? =====
 //
 // Directly above ToJson(Item), and it has to stay there: these two are one
-// pair of eyes on the same list of fields. A field added to the serialiser
+// pair of eyes on the same list of fields. A field added to the serializer
 // and not to this is an edit that is silently never saved - the worst bug
 // this file could have - so they are kept adjacent, the order of the fields
 // is the same in both, and ItemContentHashTest asserts that every one of
 // them moves the hash.
 //
 // A hash rather than the text it would have written, because avoiding the
-// serialisation is the whole point: a stroke point becomes a JSON object,
+// serialization is the whole point: a stroke point becomes a JSON object,
 // and an ordinary canvas carries tens of thousands of them. This walks the
 // same data as raw bytes and costs about a thousandth of building that
 // document. (The exact text *is* what the small records are compared by -
-// see writtenFileText_ - because for those the serialisation is free and an
+// see writtenFileText_ - because for those the serialization is free and an
 // exact answer is worth more.)
 //
 // The hash is only ever asked whether two things differ, never for identity,
@@ -1244,7 +1244,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                 // FindImage); nothing inside it needs listing.
                 itemDirs_[item.id] = itemDir;
                 // The hash of what was read, not a comparison of the text:
-                // the record is where the bulk is, and serialising it to
+                // the record is where the bulk is, and serializing it to
                 // compare would cost the load half a save. A key the record
                 // lacks reads as its default and reads back the same next
                 // time, so it is no reason to write; a value the read had
@@ -1670,7 +1670,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
 
                 // The one place where skipping the work is worth real time,
                 // and the only one that answers "changed?" without
-                // serialising - see HashItem. Everything else in this
+                // serializing - see HashItem. Everything else in this
                 // function is a handful of scalars.
                 const uint64_t hash = HashItem(item);
                 const auto known = writtenItemHashes_.find(item.id);

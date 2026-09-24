@@ -10,14 +10,14 @@
 namespace sz::ui {
 namespace {
 
-// The catalogue is built by CMake's own JSON parser (see
+// The catalog is built by CMake's own JSON parser (see
 // cmake/UiStrings.cmake), which lets a raw line break inside a string
 // through - and by the time a value reaches the generator it looks the same
 // as an escaped one, so the build cannot tell. Every other tool that reads
 // the file can: a strict parser rejects it whole. This is the strict parse,
 // so that a help text typed with real line breaks fails here rather than in
 // whatever next reads the file.
-TEST(UiStringsFileTest, TheCatalogueIsStrictJson) {
+TEST(UiStringsFileTest, TheCatalogIsStrictJson) {
     std::ifstream in(SPICKZETTEL_UI_STRINGS_JSON, std::ios::binary);
     ASSERT_TRUE(in.is_open()) << SPICKZETTEL_UI_STRINGS_JSON;
     std::ostringstream text;

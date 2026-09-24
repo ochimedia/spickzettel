@@ -18,7 +18,7 @@ namespace sz::core {
 //
 // Centripetal Catmull-Rom, not uniform: it passes exactly through every
 // control point (so this never moves the ink away from where the hand was),
-// and unlike the uniform parameterisation it cannot loop or cusp when the
+// and unlike the uniform parameterization it cannot loop or cusp when the
 // spacing between control points is uneven - which it always is, because a
 // hand speeds up and slows down.
 //
@@ -30,9 +30,9 @@ namespace sz::core {
 
 // Appends the fitted curve from `p1` to `p2` to `out`, excluding `p1` (the
 // caller already has it) and including `p2`. `p0` and `p3` are the
-// neighbouring control points, which set the tangents at each end; at the
+// neighboring control points, which set the tangents at each end; at the
 // start or end of a stroke, pass the endpoint itself for the missing
-// neighbour and the curve simply relaxes to the segment's own direction.
+// neighbor and the curve simply relaxes to the segment's own direction.
 //
 // `flatnessPx` is how far the fitted curve may sit from the straight chord
 // before it is worth another sample - the sampling is adaptive, so a

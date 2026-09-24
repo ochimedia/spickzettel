@@ -44,7 +44,7 @@ struct ProfileMatch {
 
 // Exactly the settings a profile may override: the config file's `behavior`
 // and `shortcuts` groups, the ones that are about the machine in front of
-// you rather than about you. Colours and the rest are deliberately absent
+// you rather than about you. Colors and the rest are deliberately absent
 // - making them per-application would be a settings maze for no gain.
 //
 // std::optional throughout, because "this profile says nothing about it"

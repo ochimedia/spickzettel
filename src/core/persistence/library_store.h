@@ -62,7 +62,7 @@ namespace sz::core::persistence {
 // "<slug of its name>-<uid>"
 // (see MakeSlug). A tree rather than one file because one file is
 // rewritten whole on every save: 50 canvases of ordinary drawing is a 42 MB
-// document taking half a second to serialise, on the render thread, every
+// document taking half a second to serialize, on the render thread, every
 // couple of seconds of quiet. What a save does is bounded by what moved -
 // see the block on folderDirs_/writtenItemHashes_ below, and docs/PERF.md.
 //
@@ -286,7 +286,7 @@ public:
     static constexpr int kThumbnailMaxExtent = 256;
 
     // "<stem>.thumb.qoi" for an image named "<stem>.qoi". Public because Save()'s
-    // own GC has to recognise these, and because it is the one thing a test
+    // own GC has to recognize these, and because it is the one thing a test
     // needs to look at the file directly.
     static std::string ThumbnailFilename(const std::string& imageFilename);
 
@@ -377,7 +377,7 @@ private:
     // measured on a 12-canvas library that was a full second on the render
     // thread. It went three ways, in roughly these proportions: a third
     // re-reading and re-parsing every file on disk to find out which
-    // directory held which id, half re-serialising every record, and the
+    // directory held which id, half re-serializing every record, and the
     // rest actually writing them. All three are avoided below, and all three
     // had to be, since fixing any one alone leaves most of the second.
     //
@@ -413,8 +413,8 @@ private:
     // Items carry a content hash rather than their text: they are where all
     // the bulk is (a stroke point is a JSON object, and an ordinary canvas
     // has tens of thousands of them), so the whole point is to answer
-    // "changed?" *without* serialising. Everything else keeps the exact text
-    // it wrote, because those records are a handful of scalars - serialising
+    // "changed?" *without* serializing. Everything else keeps the exact text
+    // it wrote, because those records are a handful of scalars - serializing
     // one to compare it costs nothing, and an exact comparison has no
     // question of coverage hanging over it.
     //

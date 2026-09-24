@@ -34,7 +34,7 @@ namespace sz::platform::win32 {
 
 namespace {
 // Registered wide, and this matters rather than being a style choice: the
-// keyboard grab synthesises WM_CHAR for the overlay (see
+// keyboard grab synthesizes WM_CHAR for the overlay (see
 // Win32InputGrab::PostCharactersToOverlay), and a WM_CHAR delivered to an
 // ANSI window carries one code-page byte instead of a UTF-16 unit. ImGui's
 // backend branches on IsWindowUnicode for exactly that reason, taking
@@ -59,7 +59,7 @@ constexpr const wchar_t* kWindowClassName = L"SpickzettelOverlayWindowClass";
 // heard: it ignores a second button while one is down (see
 // OverlayApp::pressedButton_), which is what keeps the hold's work. This
 // stays because it is the documented request, costs nothing, and may be
-// honoured for a pen or on another Windows.
+// honored for a pen or on another Windows.
 constexpr DWORD_PTR kTabletGestureFlags =
     TABLET_DISABLE_PRESSANDHOLD | TABLET_DISABLE_PENTAPFEEDBACK | TABLET_DISABLE_PENBARRELFEEDBACK | TABLET_DISABLE_FLICKS;
 
@@ -212,7 +212,7 @@ bool Win32OverlayWindow::EnsureCreated(const DisplayInfo& display) {
 
     ImGui_ImplWin32_EnableAlphaCompositing(hwnd_);
 
-    // The grab posts synthesised mouse messages here once it starts
+    // The grab posts synthesized mouse messages here once it starts
     // swallowing the real ones - see Win32InputGrab. Handing it the window
     // now rather than at first use keeps the "is it allowed to run yet"
     // question in one place (RefreshEditModeInput).
@@ -474,7 +474,7 @@ namespace {
 
 // Windows has no stock pen the way it has a crosshair or a hand, so this
 // one is drawn - from the same outline the software pointer draws (see
-// platform::pen_glyph), rasterised here rather than hand-authored as pixel
+// platform::pen_glyph), rasterized here rather than hand-authored as pixel
 // art. The art it replaces was a 45-degree stick with uneven ends, and next
 // to the drawn pen it read as a different, crooked tool.
 //
@@ -527,7 +527,7 @@ HCURSOR Win32OverlayWindow::PenCursor() {
         for (int x = 0; x < kPenCursorSize; ++x) {
             // The glyph's origin is its nib, and the hotspot is the pixel
             // the nib has to land on - so the origin sits at that pixel's
-            // centre, half a pixel in from its corner.
+            // center, half a pixel in from its corner.
             int edgeSamples = 0;
             int fillSamples = 0;
             for (int sy = 0; sy < kPenCursorSubsamples; ++sy) {
@@ -565,8 +565,8 @@ HCURSOR Win32OverlayWindow::PenCursor() {
             const float b = (kEdgeB * edgeShare + 255.0f * fillShare) / static_cast<float>(covered);
             const float alpha = static_cast<float>(covered) / kSamplesPerPixel;
             // Premultiplied, which is what an alpha cursor is drawn with -
-            // so a half-covered edge pixel is half its colour *and* half
-            // its alpha rather than a full-strength colour showing through.
+            // so a half-covered edge pixel is half its color *and* half
+            // its alpha rather than a full-strength color showing through.
             const auto channel = [alpha](float value) {
                 return static_cast<uint32_t>(std::lround(std::clamp(value * alpha, 0.0f, 255.0f)));
             };
@@ -576,7 +576,7 @@ HCURSOR Win32OverlayWindow::PenCursor() {
         }
     }
 
-    // Empty mask: with a 32-bit colour bitmap the alpha channel decides, and
+    // Empty mask: with a 32-bit color bitmap the alpha channel decides, and
     // this only has to exist.
     const HBITMAP mask = CreateBitmap(kPenCursorSize, kPenCursorSize, 1, 1, nullptr);
     ICONINFO info{};
@@ -1028,7 +1028,7 @@ void Win32OverlayWindow::RenderFrame() {
 
     // While the grab owns the mouse, ImGui must navigate by the overlay's
     // own pointer: the real cursor belongs to the game for the duration and
-    // may be pinned, hidden or re-centred behind our back.
+    // may be pinned, hidden or re-centered behind our back.
     if (grab.VirtualCursorActive()) {
         // The whole-pixel position - the same one the grab stamps on the
         // button messages it posts, so what ImGui hovers, what a click

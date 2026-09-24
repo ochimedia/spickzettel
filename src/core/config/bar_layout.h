@@ -37,7 +37,7 @@ inline constexpr std::array<ChromeButton, 5> kSnippetBarButtons = {
     ChromeButton::Pin, ChromeButton::More, ChromeButton::Minimize, ChromeButton::Maximize, ChromeButton::Close,
 };
 inline constexpr std::array<ChromeButton, 4> kDrawingBarButtons = {
-    ChromeButton::Pen, ChromeButton::Eraser, ChromeButton::Text, ChromeButton::Colour,
+    ChromeButton::Pen, ChromeButton::Eraser, ChromeButton::Text, ChromeButton::Color,
 };
 
 // The name a button is written as in config.json - the compatibility

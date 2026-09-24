@@ -119,7 +119,7 @@ struct Item {
     // a dark screenshot and one over a pale drawing want different answers,
     // and both can sit on one canvas. 0xRRGGBBAA, and unlike a layer's tint
     // the alpha *is* used - text has no separate opacity, so fading a
-    // caption means fading its colour.
+    // caption means fading its color.
     uint32_t noteTextColorRGBA = 0xFFFFFFFFu;  // opaque white
     // Cap height in px at the item's *current* size - deliberately not
     // scaled with the item the way strokes are, because a caption that

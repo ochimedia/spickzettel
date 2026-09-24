@@ -11,7 +11,7 @@ constexpr float kPi = 3.14159265358979323846f;
 
 // How far a miter may stretch, as a multiple of the half width, before the
 // join is drawn round instead. 2 is the turn at which the outer corner has
-// travelled a full pen width past the centerline - about 120 degrees.
+// traveled a full pen width past the centerline - about 120 degrees.
 // Anything sharper looks better, and stays the width of the pen, as an arc.
 // (ImGui's own polyline clamps only at 100x the half width.)
 constexpr float kMiterLimit = 2.0f;
@@ -21,7 +21,7 @@ constexpr float kMiterLimit = 2.0f;
 constexpr float kMaxArcStepRadians = 0.25f;
 
 // Two points closer than this are the same point as far as the direction
-// between them is concerned - normalising that difference would amplify
+// between them is concerned - normalizing that difference would amplify
 // float noise into an arbitrary normal.
 constexpr float kCoincidentEpsilon = 1e-4f;
 
@@ -110,7 +110,7 @@ void AppendArcRibs(const V2& center, const V2& fromDir, float sweep, float radiu
     }
 }
 
-// The flat cross-section at `point`, square to a segment travelling `dir`.
+// The flat cross-section at `point`, square to a segment traveling `dir`.
 Rib SquareRib(const V2& point, const V2& dir, float radius) {
     const V2 normal = LeftNormal(dir);
     Rib rib;
@@ -143,7 +143,7 @@ void AppendCapRibs(const V2& center, const V2& outwardDir, float radius, std::ve
     }
 }
 
-// A dot: the pen set down and lifted without travelling. Built as ribs
+// A dot: the pen set down and lifted without traveling. Built as ribs
 // sweeping a half turn, so it goes through the same strip-and-fringe code as
 // everything else rather than needing a circle primitive of its own.
 std::vector<Rib> BuildDiscRibs(const V2& center, float radius) {
@@ -217,9 +217,9 @@ void AppendJointRibs(const V2& point, const V2& inDir, const V2& outDir, float h
     AppendArcRibs(point, fromDir, turn, halfWidth, innerPoint, innerDir, arcOnLeft, ribs);
 }
 
-// Strips the ribs into triangles: a filled quad between each neighbouring
+// Strips the ribs into triangles: a filled quad between each neighboring
 // pair, and a fringe quad along each outer edge fading to zero coverage.
-// Neighbouring quads share their vertices, which is the whole point - no
+// Neighboring quads share their vertices, which is the whole point - no
 // triangle is drawn over any other, so a translucent color lands exactly
 // once everywhere along the stroke.
 void RibsToMesh(const std::vector<Rib>& ribs, float fringePx, StrokeMesh& mesh) {

@@ -186,18 +186,18 @@ struct AppConfig {
     // being drawn anyway, over a window that is already there - so it is
     // always shown and this setting has no say.
     bool showToastsWhileHidden = true;
-    // The colour of whatever is selected, active or current - tabs, the tool
+    // The color of whatever is selected, active or current - tabs, the tool
     // in hand, checkboxes and sliders, the current canvas - packed 0xRRGGBBAA
     // with the alpha unused. Text drawn on it goes dark or light to stay
-    // readable. The pinned-snippet border is a colour of its own
+    // readable. The pinned-snippet border is a color of its own
     // (itemBorderColorPinnedRGBA).
     uint32_t accentColorRGBA = 0xFF6A3DFFu;
     // What tells the snippet in front from the ones behind it: its border
-    // is drawn in its own colour, both settable (packed 0xRRGGBBAA - the
-    // alpha is part of the colour here, since a more transparent border is
+    // is drawn in its own color, both settable (packed 0xRRGGBBAA - the
+    // alpha is part of the color here, since a more transparent border is
     // exactly how you make one recede). "Frontmost" is the last
     // non-minimized item in Canvas::items, the one painted over all the
-    // others. Depth is shown by colour and hover by a thicker border, so
+    // others. Depth is shown by color and hover by a thicker border, so
     // the two cues don't compete for one channel. A selected snippet's
     // outline and handles are drawn in the accent, over these.
     uint32_t itemBorderColorFrontRGBA = 0xF5F7F96E;   // white, ~43%
@@ -233,7 +233,7 @@ struct AppConfig {
     // Two tools ignore it. The eraser acts on whatever is under it, vector
     // and painted alike, because a snippet can hold both and "why won't
     // this erase" with no visible cause is the worst kind of bug. Text
-    // stays live in both modes: rasterising a caption would throw away the
+    // stays live in both modes: rasterizing a caption would throw away the
     // one thing that makes it worth having.
     bool paintPixelsInsteadOfStrokes = false;
     // Whether selecting a snippet - a click on it, or the press that starts

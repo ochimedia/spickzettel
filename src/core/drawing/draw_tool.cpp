@@ -13,12 +13,12 @@ namespace {
 //
 // Two things go wrong at once. A mouse reports far faster than a hand can
 // move, so consecutive samples of a slow line can be a fraction of a pixel
-// apart - and the *direction* between two points that close is quantisation
+// apart - and the *direction* between two points that close is quantization
 // noise, not the direction the hand is going. And a polyline through those
 // samples has a corner at every one of them, which at a wide pen is a corner
 // in the outline too.
 //
-// So: discard a sample that hasn't travelled far enough to mean anything,
+// So: discard a sample that hasn't traveled far enough to mean anything,
 // low-pass what is left, and fit a curve through the points that survive.
 // All three belong here rather than in CanvasState, which is a container of
 // what was drawn, not a judge of what the input meant - and the shape tools,

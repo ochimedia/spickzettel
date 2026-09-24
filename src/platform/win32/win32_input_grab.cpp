@@ -13,7 +13,7 @@ constexpr const char* kRawInputSinkClassName = "SpickzettelRawInputSink";
 
 // Stamped into dwExtraInfo on everything this process injects - the camera
 // corrections, and the modifiers handed back when the keyboard grab ends - so
-// the hooks can recognise their own work coming back around and let it past.
+// the hooks can recognize their own work coming back around and let it past.
 // Deliberately narrower than testing LLMHF_INJECTED: that would also wave
 // through synthetic input from anything else on the machine, which is
 // precisely what "the overlay has taken the input" should not do.
@@ -939,7 +939,7 @@ LRESULT CALLBACK Win32InputGrab::MouseProc(int code, WPARAM wParam, LPARAM lPara
 // Letting movement through so that Windows could keep the real cursor was
 // tried, for the mode where the hardware cursor is the pointer, and it
 // broke slow movement outright: the corrections go through the same pointer
-// ballistics on their way to the game, and cancelled the physical
+// ballistics on their way to the game, and canceled the physical
 // movement's sub-pixel fraction before the cursor could accumulate it (22px
 // of slow travel became 1px). The position is kept here now and written to
 // the real cursor instead - see PublishVirtualCursor.
@@ -964,7 +964,7 @@ void Win32InputGrab::OnRawMouse(const RAWMOUSE& mouse) {
     // anyone on such a device - and since the mouse events are swallowed all
     // the same, that left the overlay unusable rather than merely degraded.
     //
-    // The position is normalised to 0..65535 over the primary screen, or over
+    // The position is normalized to 0..65535 over the primary screen, or over
     // the whole virtual desktop when MOUSE_VIRTUAL_DESKTOP says so. No
     // ballistics: acceleration curves describe how far a *delta* should carry
     // the pointer, and there is no delta here - the device has already said
@@ -994,7 +994,7 @@ void Win32InputGrab::OnRawMouse(const RAWMOUSE& mouse) {
             // The negation has to be of the raw *device* delta, not of
             // anything derived from cursor positions: those are
             // post-acceleration and clamped at the screen edges, and
-            // cancelling one with the other leaves most of the motion behind
+            // canceling one with the other leaves most of the motion behind
             // (measured: ~27% removed, versus ~98% this way).
             pendingCorrectionX_.fetch_add(mouse.lLastX);
             pendingCorrectionY_.fetch_add(mouse.lLastY);
@@ -1149,7 +1149,7 @@ void Win32InputGrab::PostKeyToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event, boo
 // ImGui went on believing the digit was held, and the next press was not a
 // press at all. Posting the key-up first is what keeps the app's own idea of
 // the keyboard honest across a restart; clearing the record is what keeps a
-// stale entry from authorising the swallow of an up whose down the OS *did*
+// stale entry from authorizing the swallow of an up whose down the OS *did*
 // see, which is the whole point of the rule in OnKeyboard.
 //
 // The physical up that arrives afterwards is then passed through to the OS.
@@ -1160,7 +1160,7 @@ void Win32InputGrab::ReleaseSwallowedKeys() {
             continue;
         }
         if (overlay_) {
-            // Synthesised rather than forwarded - there is no real event
+            // Synthesized rather than forwarded - there is no real event
             // here - so the scan code is 0 and only the transition bits that
             // make it a release are set.
             PostMessageA(overlay_, WM_KEYUP, static_cast<WPARAM>(vk), (1LL << 30) | (1LL << 31) | 1);
@@ -1349,7 +1349,7 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // Modifier chords still don't reach the app: ImGui's Win32 backend
     // reads Ctrl/Shift/Alt with GetKeyState, and a key this hook swallowed
     // never reaches the state GetKeyState reports. Plain keys work, chords
-    // don't, and fixing that would mean synthesising modifier state rather
+    // don't, and fixing that would mean synthesizing modifier state rather
     // than reading it.
     PostKeyToOverlay(vk, event, isDown);
     // And the characters those keys stand for, which is what a text field is

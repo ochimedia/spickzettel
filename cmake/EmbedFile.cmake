@@ -23,7 +23,7 @@ endfunction()
 # A text file as a std::string_view over a byte array, in <namespace>:
 #   inline constexpr std::string_view <name>{...};
 #
-# Three things differ from the binary version. Line endings are normalised
+# Three things differ from the binary version. Line endings are normalized
 # to LF *before* the hex conversion (a CRLF checkout would otherwise show a
 # stray glyph per line, and "0d0a" can straddle a byte boundary in the hex
 # string, so replacing it there would corrupt content). The text goes

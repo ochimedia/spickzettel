@@ -114,7 +114,7 @@ version number.
 Feature flags are `constexpr bool`, not `#ifdef`. Both branches of an
 `if (build::kDemoMode)` are compiled and type-checked in every
 configuration, where an `#ifdef`-ed branch nobody builds for months has
-quietly stopped compiling; the optimiser removes the dead side either
+quietly stopped compiling; the optimizer removes the dead side either
 way. Demo mode is deliberately not a setting: a watermark that can be
 switched off in `config.json` is not a watermark.
 
@@ -124,7 +124,7 @@ and `VersionLine` names it a prerelease, so the About tab says so too.
 The box is native rather than drawn by the overlay: on most starts the
 overlay is not shown at all, and on a first run it comes up fullscreen,
 topmost and in edit mode. So `WinMain` shows it before the tray
-controller initialises - before the overlay exists to cover it or take
+controller initializes - before the overlay exists to cover it or take
 its input. A second copy started by mistake shows the notice before it
 finds the first one running and stops; that is the price of the
 ordering.
@@ -161,7 +161,7 @@ keeping for whoever adds it back:
   shape. Copying the three MinGW runtime DLLs next to the executable
   avoids it; an MSVC build needs no such step.
 
-### Licences: what ships, and where the notices are
+### Licenses: what ships, and where the notices are
 
 `LICENSE` covers Spickzettel itself, which is proprietary.
 `THIRD-PARTY-NOTICES.md` covers everything that ends up inside the
@@ -177,10 +177,10 @@ closed-source one:
 - **stb_image / stb_image_write**: dual MIT or public domain; the notices
   file takes the MIT branch and says so.
 - **Manrope**: SIL OFL 1.1, which permits bundling and selling a font
-  *with* software provided the licence travels with it, and forbids only
+  *with* software provided the license travels with it, and forbids only
   selling the font by itself.
 - **Icon designs**: ISC (Lucide) and MIT (Feather). The SVGs here are
-  drawn from this project's own path data, but both licences cover the
+  drawn from this project's own path data, but both licenses cover the
   designs.
 
 googletest and imgui_test_engine only build or test the app and are not
@@ -217,7 +217,7 @@ the Win32 cursor bitmap are built from, so the two pens are the same pen.
 
 ## Drawing model
 
-`Stroke` is a polyline with a colour and a width; `CanvasState` holds a
+`Stroke` is a polyline with a color and a width; `CanvasState` holds a
 list of finished strokes plus at most one in progress. Both are dumb on
 purpose: they record what they are given, so a shape tool can hand them
 exact corners and a test exact points.
@@ -229,8 +229,8 @@ visible defect can come from any of them.
 
 **Input hygiene, in `DrawTool`.** A mouse reports far faster than a hand
 moves, so consecutive samples of a slow line land a fraction of a pixel
-apart, and the direction between two points that close is quantisation
-noise. `DrawTool` discards a sample that has not travelled 2px from the
+apart, and the direction between two points that close is quantization
+noise. `DrawTool` discards a sample that has not traveled 2px from the
 last control point *kept* (so a slow hand still draws), low-passes what
 survives, and snaps a real line's end to the release point so it does not
 fall short of the mark. A press and release without travel stays a single
@@ -259,7 +259,7 @@ into. Both shapes share one walk (`ClipStrokeOutsideRegion`) and differ
 only in an inside test and a crossing finder, so they cannot disagree
 about what erasing means.
 
-Why not rasterise instead: a bitmap erase gives up resolution
+Why not rasterize instead: a bitmap erase gives up resolution
 independence and turns undo into pixel diffs, for a problem that a
 bounded piece of segment geometry solves while keeping every stroke a
 plain, inspectable polyline. (Painted layers, below, are the case where
@@ -293,9 +293,9 @@ clamped only at 100x the half width, so a near-reversal throws a spike
 most of a hundred widths out of a wide pen; it also has only flat caps
 and no round join.
 
-The mesh is one connected strip whose neighbouring quads share vertices,
+The mesh is one connected strip whose neighboring quads share vertices,
 so no triangle is drawn over another. That is what a *translucent*
-stroke needs: every overlap is a place the colour lands twice, which at
+stroke needs: every overlap is a place the color lands twice, which at
 less than full opacity is a visibly darker patch. `StrokeMeshTest`
 measures this as area, since a screenshot cannot tell a double-covered
 pixel from a slightly darker one. A one-pixel anti-aliasing fringe is
@@ -343,7 +343,7 @@ whole-image undo entry would be 8 MB a step.
 
 The rectangular eraser is the same session with a different coverage
 function (`ExtendRect`), so it shares the mask, the tiles and the undo
-entry. Erasing takes alpha and leaves colour, so a half-erased edge
+entry. Erasing takes alpha and leaves color, so a half-erased edge
 fades instead of shifting toward black.
 
 A layer's size is capped at 4096 on a side, and the cap is applied to
@@ -474,7 +474,7 @@ other.
 ### Z-order steps past what actually overlaps
 
 Bring forward and send backward move an item past the nearest item that
-*overlaps* it, not the immediate neighbour in the list. A canvas holds
+*overlaps* it, not the immediate neighbor in the list. A canvas holds
 snippets all over the screen, and a step over one that shares no pixels
 with this one changes the order without changing anything anybody can
 see, which reads as a button that does nothing.
@@ -621,7 +621,7 @@ a shorter cap; the name itself is in the record.
 
 A tree rather than one file because one file is rewritten whole on every
 save: 50 canvases of ordinary drawing is a 42 MB document taking half a
-second to serialise, on the render thread, every couple of seconds of
+second to serialize, on the render thread, every couple of seconds of
 quiet.
 
 **The tree is the index.** Nothing records which canvas is in which
@@ -795,12 +795,12 @@ beside a record is not the store's to delete.
 
 The store keeps what it last wrote - a content hash per snippet, the
 exact text for the small records - and where everything lives, so a save
-neither re-reads the tree nor re-serialises what it would write back
+neither re-reads the tree nor re-serializes what it would write back
 unchanged. A twelve-canvas library measured 858 ms per autosave when
 every file was rewritten, for one stroke on one snippet; bounded by what
 moved it is 1.8 ms when nothing did and 7.5 ms for that stroke. `Load`
 establishes the same record as it reads, so the first save of a session
-costs only what the load had to repair. The hash and the serialiser are
+costs only what the load had to repair. The hash and the serializer are
 kept adjacent in the source and a test asserts every field moves the
 hash, because a field added to one and not the other is an edit that is
 silently never saved.
@@ -812,7 +812,7 @@ to the manager's own vectors - rather than a snapshot, since the
 snapshot copied every stroke point in the library on every save and was
 the largest single cost of one that then wrote nothing. What remains is
 the fingerprint: `HashItem` walks every point of every snippet, about a
-thousandth of the cost of serialising it, and linear in the library's
+thousandth of the cost of serializing it, and linear in the library's
 size. Canvases are grouped by folder once rather than scanned per
 folder. If the fingerprint ever shows in a profile, the next step is a
 per-snippet revision counter bumped by every mutation path, so that only
@@ -1010,7 +1010,7 @@ reversible with a marker and a revert arrow per row.
 
 What is overridable is exactly the `behavior` and `shortcuts` groups: the
 settings about the machine in front of you rather than about you.
-Colours and the rest are deliberately not.
+Colors and the rest are deliberately not.
 
 **The summon hotkeys are not overridable, and the obstacle is the OS.**
 `RegisterHotKey` is exclusive and system-wide, so per-application
@@ -1075,7 +1075,7 @@ be absent: the session tests drive all of this with no window, no store
 and no ImGui.
 
 What stays in the UI is what a UI decides: which tool is in hand and its
-colour and width, where a gesture starts and what it is over, panel and
+color and width, where a gesture starts and what it is over, panel and
 popover state, toasts, and GPU caches that exist only for drawing.
 
 ### Autosave
@@ -1385,7 +1385,7 @@ seven affected icons were found.
 
 Icon choices are hand-picked per button rather than a one-to-one Lucide
 mapping; the set is styled after Lucide and Feather, drawn from this
-project's own path data, and both licences cover the designs.
+project's own path data, and both licenses cover the designs.
 
 ### Every word in one file
 
@@ -1446,7 +1446,7 @@ picks the kind: by default a plain press makes a screenshot and a Ctrl
 press a drawing. Which press makes which is a setting - plain, Ctrl, Alt,
 or none, for each kind - because which kind someone makes most is theirs
 to say. The two never share one: the file reader puts the defaults back
-if they do, and Settings swaps them rather than greying out the choice
+if they do, and Settings swaps them rather than graying out the choice
 wanted. Shift is not offered, being the selection box's. A modified press
 is otherwise never half of a double-click (Shift-clicking a snippet twice
 adds and removes it); the modifier a kind is set to is let through, both
@@ -1478,7 +1478,7 @@ where things are stays in view; not on a press that has not moved yet,
 which may still be a click and would only flicker. The capture never saw
 the overlay anyway (see Screen capture), so this is only about what the
 hand can see. It is done to the finished vertices of the snippets'
-layer, because a picture is drawn in its own colours and the style's
+layer, because a picture is drawn in its own colors and the style's
 alpha would not reach it.
 
 ### Tools, and what a modifier does
@@ -1494,7 +1494,7 @@ next press, anywhere, then hand over: a drawing to Draw, a screenshot to
 the tool that was in hand before.
 
 There were seven tools once - Pen, Rectangle, Line, Eraser, RectEraser,
-Text and Move - with three favourite slots of them on a right-click ring
+Text and Move - with three favorite slots of them on a right-click ring
 menu, so the tool wanted was usually not on a slot and the slots were
 rebound all the time. The ring and the flat tool strip that mirrored it
 went: with the selection bar carrying every action on a snippet and the
@@ -1505,7 +1505,7 @@ nothing to reach.
 
 At rest a snippet is an object that a click selects and a drag moves.
 Double-clicking it, or holding a press still on it, enters drawing mode:
-a stronger outline, the bar shows Pen, Eraser, Text and the colour, the
+a stronger outline, the bar shows Pen, Eraser, Text and the color, the
 pen is in hand, a press on it draws, a right-drag on it erases whatever
 tool is in hand, and a click anywhere else, a right click on the snippet
 or Escape leaves. The Pen and Eraser buttons pressed again cycle their
@@ -1552,7 +1552,7 @@ cannot hand the event to it. The engine is a start snapshot plus the
 delta, which drifts under event coalescing, and not ImGui's drag delta,
 which loses the grab offset against a screen edge.
 
-A press is a click until the pointer has travelled 4px. A resize started
+A press is a click until the pointer has traveled 4px. A resize started
 on one of several selected snippets scales all of them about the fixed
 corner; the smallest is the floor for the group. Shift-drag on open
 canvas draws a box that adds every snippet it touches to the selection.
@@ -1596,13 +1596,13 @@ current window and dereferences an empty id stack.
 
 A right click on a snippet opens its context menu. Right-drag already
 resized from the nearest edge, so the two are told apart by the one thing
-the gesture engine was already tracking: whether the press travelled its
+the gesture engine was already tracking: whether the press traveled its
 4px. On the snippet being drawn on the right button belongs to the
 eraser, and the click that gets past it is Alt's, which leaves drawing
 mode and opens nothing.
 
 The menu itself knows nothing about the app - rows in, the chosen row's
-action out, every colour read from the current ImGui style rather than
+action out, every color read from the current ImGui style rather than
 the palette - so the dock's canvases and empty canvas can have their
 own, and anything after them, without it growing a second personality. Each row carries
 the shortcut of the action it runs, read from the live binding, which
@@ -1612,7 +1612,7 @@ whose action has no binding shows nothing rather than the key editor's
 Copy, Cut, Duplicate and Move to new canvas - because the shortcut
 printed beside each is the selection's, and a row that names Ctrl+D has
 to do what Ctrl+D does. Paste is not among them: it has nothing to do
-with the snippet the menu is over, and is on empty canvas's menu. A row that cannot be chosen right now is greyed rather than
+with the snippet the menu is over, and is on empty canvas's menu. A row that cannot be chosen right now is grayed rather than
 dropped, so the menu is the same shape over every snippet and a hand can
 learn where a row is. While it is up ImGui claims the mouse, so the press
 that dismisses it does nothing else - which is what a context menu does
@@ -1622,11 +1622,11 @@ The menu is the one place a snippet's actions live. The Properties
 popover (the bar's More button) had a row of the same actions as icon
 buttons, and kept it for a while after the menu arrived; it went, and
 the popover is left with what describes a snippet rather than what is
-done to it - the two opacities, the background colour and the text's
-size and colour. Its colours are a picker each, with no preset swatches
+done to it - the two opacities, the background color and the text's
+size and color. Its colors are a picker each, with no preset swatches
 beside them: the picker does the whole job, and a row of presets was a
 second way to do part of it. The background keeps one swatch, white,
-because white is the one colour with a meaning there - the no-op tint
+because white is the one color with a meaning there - the no-op tint
 that gives a capture back as it was - and hitting it exactly in a picker
 takes aim.
 
@@ -1641,7 +1641,7 @@ silently isn't there.
 A caption is a plain string on any item, not a separate note kind - a
 dedicated text-only kind could not combine with a drawing or a
 screenshot, and once text stopped being exclusive the flag that gated it
-had nothing left to do. Colour and size are per item, since a caption
+had nothing left to do. Color and size are per item, since a caption
 over a dark screenshot and one over a pale drawing want different
 answers. Size is in screen pixels at the item's current size, not scaled
 with the item like strokes: a caption that shrinks to illegibility is
@@ -1699,7 +1699,7 @@ toast says the value reached.
 With Alt the wheel steps through the canvases of the folder the
 *current canvas* lives in (not the browsed folder), without wrapping,
 and ends any gesture in flight first by feeding the release the handler
-is waiting for. All of these honour how far the wheel actually turned,
+is waiting for. All of these honor how far the wheel actually turned,
 keeping a remainder across frames, so a fast spin is not truncated to
 one step and a precision touchpad's fractions are not rounded to
 nothing. For the brush, a transient size preview at the cursor is the
@@ -1708,7 +1708,7 @@ busy over a game.
 
 ### The Overview
 
-A translucent backdrop and a centred panel, drawn last so ordinary
+A translucent backdrop and a centered panel, drawn last so ordinary
 insertion order puts them above everything. Tabs: Canvases (a folder
 sidebar and a tile grid with live thumbnails, drag to reorder, drag a
 tile onto a folder to move it), Settings, About. What either pane asks
@@ -1741,7 +1741,7 @@ deleted-item retention. In both sections each half sits in its own box,
 badged Global or Per profile, and the per-profile box carries the accent
 down its edge. A heading alone read as one more group of the list,
 rather than as the line past which a profile changes things. Most rows bind ImGui widgets
-straight to the settings' fields and commit on a finished edit; colour
+straight to the settings' fields and commit on a finished edit; color
 swatches commit on deactivation rather than on every frame of a drag,
 which wrote the file sixty times a second.
 
@@ -1838,10 +1838,10 @@ the platform hides the whole overlay before grabbing pixels.
   label. The id of `"Play##1"` is a hash of the whole string.
 - Two visible widgets with one id is an ImGui error, detected only while
   they are hovered, so it never shows in a screenshot of an idle panel.
-- `CalcTextSize` measures the line box, not the ink; centring a glyph on
+- `CalcTextSize` measures the line box, not the ink; centering a glyph on
   it sits the glyph low. `FindGlyph` gives the ink's own corners.
 - `DC.CurrLineSize.y` is the row height something joining a row after
-  `SameLine` should centre on; `GetFrameHeight()` is only right if a
+  `SameLine` should center on; `GetFrameHeight()` is only right if a
   framed widget started the row.
 - `IsMouseHoveringRect(..., clip=true)` intersects with the *current*
   window's clip rect, which between windows is whatever the stack left.
@@ -2000,7 +2000,7 @@ untouched regions are see-through and strokes are opaque.
 
 Two layered-window approaches were rejected because layered windows tie
 hit-testing to pixel transparency, which is fatal for an overlay whose
-premise is that the whole screen is clickable while shown. Colour-keying
+premise is that the whole screen is clickable while shown. Color-keying
 (`LWA_COLORKEY`) composites correctly but `DefWindowProc` answers
 `WM_NCHITTEST` with `HTTRANSPARENT` over keyed pixels, so clicks on
 "empty" parts fell through, and answering `HTCLIENT` explicitly did not
@@ -2088,7 +2088,7 @@ Consequences that shape `Win32InputGrab`:
   Fractional pointer drawing was tried twice to hide the two-pixel steps
   and retired once the real cause was fixed.
 - **The overlay draws its own pointer** because a game holding the mouse
-  for mouse-look typically sets the cursor back to screen centre every
+  for mouse-look typically sets the cursor back to screen center every
   frame, and `SetCursorPos` is not an input event: 120 such calls
   produced zero hook invocations. Sharing one cursor with such a game is
   unwinnable. The grab accumulates its own virtual cursor and submits it
@@ -2151,7 +2151,7 @@ Consequences that shape `Win32InputGrab`:
 - **Movement is never posted.** Windows coalesces `WM_MOUSEMOVE` to about
   one per frame; re-posting every swallowed report made a 1000 Hz mouse a
   message flood. The render thread emits one Move per frame while a
-  button is held, if the pointer moved, which is the OS's own behaviour
+  button is held, if the pointer moved, which is the OS's own behavior
   by construction.
 - **Modifiers are fed to ImGui by hand**, from `GetAsyncKeyState` OR'd
   with the grab's own record, since the backend learns them from key
@@ -2198,12 +2198,12 @@ Consequences that shape `Win32InputGrab`:
   physical movement, against the raw device deltas read through an
   `RIDEV_INPUTSINK` registration: negating hook-derived screen
   coordinates removed ~27% of the motion, negating device deltas ~98%.
-  Corrections are stamped in `dwExtraInfo` so the hook recognises and
+  Corrections are stamped in `dwExtraInfo` so the hook recognizes and
   swallows them (they still reach the game), since passing them through
   corrupted the next movement's delta and jittered the pointer. It
   measures far better than it feels: the correction reaches the camera a
   frame after the movement, so the view shakes, and anything with
-  anti-cheat discards injected input outright. Kept, labelled
+  anti-cheat discards injected input outright. Kept, labeled
   experimental, on by default because its common failure is doing
   nothing. Four things were tried against the shake and are gone:
   injecting per report instead of per frame (cut the window as intended,
@@ -2345,7 +2345,7 @@ intermediate target per picture per frame.
 
 **The mips are built by hand.** `GenerateMips` averages what it is
 given, and the pictures are straight alpha: a painted layer is mostly
-(0,0,0,0) around its ink, so a plain average darkens every edge towards
+(0,0,0,0) around its ink, so a plain average darkens every edge toward
 black as the picture shrinks. `BuildMips` averages premultiplied instead,
 one full-target triangle per level, and the resampling shader sums
 premultiplied too, then clamps - both kernels have negative lobes that
@@ -2394,7 +2394,7 @@ live compositor, in four tiers:
 - **Core tests** (`tests/core/`, portable) cover the drawing model, the
   canvas model, persistence against a real temporary directory, the
   config, the session and the settings. They are where a test of new
-  behaviour belongs before any UI reaches it.
+  behavior belongs before any UI reaches it.
 - **Headless app tests** (`tests/app/`) run the whole app - a real
   `OverlayApp` driven through a real ImGui frame - over the in-memory fake
   platform, with nothing drawn anywhere. ImGui needs a context and a font
@@ -2403,7 +2403,7 @@ live compositor, in four tiers:
   real app: ImGui's own event queue, which widgets see, and the platform
   mouse callback, which the raw drawing pipeline runs on.
 - **UI tests** (`tests/ui/`, debug preset only) add Dear ImGui's test
-  engine, which drives widgets by name - "click the thing labelled
+  engine, which drives widgets by name - "click the thing labeled
   Settings" - and fails when a widget is present but unreachable, the
   shape of every z-order bug this UI has had. Text is never an identifier
   (see "Every word in one file"), so rewording a label breaks no test.
@@ -2421,7 +2421,7 @@ live compositor, in four tiers:
 Worth running now and then even when working on Windows: MSVC is the
 more forgiving reader, and core can drift for weeks into a shape only it
 accepts. Two examples that happened: a braced default argument for a
-nested aggregate (a hard error on GCC), and constructor initialisers out
+nested aggregate (a hard error on GCC), and constructor initializers out
 of declaration order (`-Wreorder`, which MSVC leaves off even at `/W4`).
 Configuring a scratch MSVC build with `/permissive- /W4 /w45038` catches
 most of this class without a Linux machine.
@@ -2432,7 +2432,7 @@ Things that were built, used and removed. Each is described where it
 matters above; this is the index, so nobody spends an afternoon proving
 one twice.
 
-- **A right-click ring menu with favourite tool slots**, and the flat
+- **A right-click ring menu with favorite tool slots**, and the flat
   tool strip that mirrored it. Seven tools on three slots meant the slot
   wanted was usually not there. Replaced by six tools, a selection bar
   and drawing mode.
@@ -2459,7 +2459,7 @@ one twice.
 - **`SetCursorPos` to drive the real cursor under a grab**, fractional
   pointer drawing, an integral term for counter-injection, a dedicated
   sink thread, `BlockInput`, and a null-device-handle fallback for
-  recognising injected input. All in the input grab section.
+  recognizing injected input. All in the input grab section.
 - **A Linux dev harness** (GLFW/OpenGL, an ordinary window showing the
   same UI) and a **MinGW cross-compile preset**. Useful once for
   iterating without a Windows machine; not carried into this repository.

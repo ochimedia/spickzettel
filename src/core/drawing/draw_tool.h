@@ -10,7 +10,7 @@
 namespace sz::core {
 
 // Translates raw mouse events into CanvasState stroke operations for the
-// freehand pen, in whatever colour and width are currently set. Only the
+// freehand pen, in whatever color and width are currently set. Only the
 // left mouse button draws.
 //
 // Also where freehand input is cleaned up before it becomes geometry -

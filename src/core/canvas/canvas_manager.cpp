@@ -141,7 +141,7 @@ void CanvasManager::DeleteCanvas(CanvasId id) {
     canvases_.erase(it);
     if (wasCurrent) {
         // Stay in the folder the deleted canvas lived in, on its
-        // neighbour: the one before it, or the folder's first if it was
+        // neighbor: the one before it, or the folder's first if it was
         // the first, or nothing at all if that folder is now empty - see
         // the header for why "nothing at all" rather than some other
         // folder's canvas, and who fills the gap.
@@ -992,7 +992,7 @@ void CanvasManager::SettleOffDeleted() {
         CanvasId next = 0;
         if (folder != nullptr && !IsDeleted(*folder)) {
             // The live canvas before it in its folder, or else the first
-            // after it - the neighbour DeleteCanvas falls back to - and the
+            // after it - the neighbor DeleteCanvas falls back to - and the
             // folder stays the browsed one even with nothing left in it.
             bool passed = false;
             for (const Canvas& canvas : canvases_) {

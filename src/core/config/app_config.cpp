@@ -127,7 +127,7 @@ std::string FormatHotkey(const platform::KeyCombo& combo) {
 
 // "#RRGGBB" (opaque) or "#RRGGBBAA" -> packed 0xRRGGBBAA. Returns
 // std::nullopt on malformed input. The eight-digit form exists for the
-// settings whose alpha is part of the colour rather than a separate
+// settings whose alpha is part of the color rather than a separate
 // opacity field beside it - see AppConfig::itemBorderColorFrontRGBA.
 std::optional<uint32_t> ParseHexColor(std::string_view text) {
     const bool withAlpha = text.size() == 9;
@@ -142,7 +142,7 @@ std::optional<uint32_t> ParseHexColor(std::string_view text) {
     return withAlpha ? packed : ((packed << 8) | 0xFFu);
 }
 
-// Eight digits only when there is an alpha worth writing, so every colour
+// Eight digits only when there is an alpha worth writing, so every color
 // that is simply opaque - which is all of them that were here before -
 // keeps the six-digit spelling it has always had on disk.
 std::string FormatHexColor(uint32_t colorRGBA) {

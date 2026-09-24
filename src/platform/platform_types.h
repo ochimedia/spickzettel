@@ -71,7 +71,7 @@ struct KeyCombo {
 // SetEditModeNoActivate leaves the application underneath focused - and
 // therefore receiving every mouse movement and keystroke as well.
 //
-// Every one of these is a measured behaviour; the numbers are in
+// Every one of these is a measured behavior; the numbers are in
 // docs/ARCHITECTURE.md under "Taking input back from the game". In short:
 // a low-level hook that swallows input takes away the cursor, the legacy
 // window messages, the clicks, GetAsyncKeyState and the whole raw
@@ -92,7 +92,7 @@ struct EditModeInputOptions {
     // keeps its position either way. On, it is drawn into the frame; off,
     // it is written to the real cursor with SetCursorPos, which moves at
     // report rate rather than frame rate. Off cannot work against a game
-    // that pins the cursor to the screen centre every frame - there is no
+    // that pins the cursor to the screen center every frame - there is no
     // arbitrating that from another process - which is a reason to choose
     // the drawn pointer, not to force it. With nothing grabbed it is purely
     // cosmetic.
@@ -106,7 +106,7 @@ struct EditModeInputOptions {
     bool useRawMouseInput = true;
     // Swallow physical keyboard input, so typing near the overlay does not
     // also walk the player forwards. The app's own global hotkeys keep
-    // working because the grab recognises and dispatches them itself; a
+    // working because the grab recognizes and dispatches them itself; a
     // swallowing hook suppresses RegisterHotKey too.
     bool dontForwardKeystrokes = true;
     // For every physical mouse movement, inject the exact opposite, so a

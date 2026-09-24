@@ -177,15 +177,15 @@ TEST_F(UiTest, ClickingAButtonInTheInteractionRowTakesItOffTheBar) {
     EXPECT_EQ(AppSettings().Stored().drawingBar, DefaultDrawingBar());
 }
 
-// The colour tile is a swatch rather than an icon, and was the one tile
+// The color tile is a swatch rather than an icon, and was the one tile
 // that could not say whether it was on - it wears the same pill as the
 // rest now (PillSwatchButton), and it switches like the rest.
-TEST_F(UiTest, TheColourTileSwitchesOffLikeEveryOtherButton) {
+TEST_F(UiTest, TheColorTileSwitchesOffLikeEveryOtherButton) {
     ShowEditMode();
     StepFrame();
 
     OpenOverviewUi();
-    RunUi("switch the colour off", [](ImGuiTestContext* ctx) {
+    RunUi("switch the color off", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
         ctx->ItemClick("**/###sectioninteraction");
@@ -193,10 +193,10 @@ TEST_F(UiTest, TheColourTileSwitchesOffLikeEveryOtherButton) {
     });
 
     const BarButtonList& bar = AppSettings().Stored().drawingBar;
-    const auto colour = std::find_if(bar.begin(), bar.end(),
-                                      [](const BarButtonSetting& entry) { return entry.button == ChromeButton::Colour; });
-    ASSERT_NE(colour, bar.end());
-    EXPECT_FALSE(colour->shown);
+    const auto color = std::find_if(bar.begin(), bar.end(),
+                                      [](const BarButtonSetting& entry) { return entry.button == ChromeButton::Color; });
+    ASSERT_NE(color, bar.end());
+    EXPECT_FALSE(color->shown);
     EXPECT_EQ(AppSettings().Stored().snippetBar, DefaultSnippetBar()) << "the other row is untouched";
 }
 
@@ -262,15 +262,15 @@ TEST_F(UiTest, MakingAProfileForWhatIsUnderneathTakesOneClick) {
     EXPECT_TRUE(AppSettings().ActiveProfile().has_value());
 }
 
-// The licences of everything compiled in have to be reachable from the
+// The licenses of everything compiled in have to be reachable from the
 // app, not only from the repo - that is what MIT, ISC and the OFL each ask
 // for. Behind one button rather than in a tab of its own, so this is the
 // test that the button is there and that the text actually arrives.
-TEST_F(UiTest, TheThirdPartyLicencesAreReachableFromAbout) {
+TEST_F(UiTest, TheThirdPartyLicensesAreReachableFromAbout) {
     ShowEditMode();
     StepFrame();
     OpenOverviewUi();
-    RunUi("third-party licences", [](ImGuiTestContext* ctx) {
+    RunUi("third-party licenses", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtababout");
         ctx->ItemClick("**/###noticesopen");
@@ -315,9 +315,9 @@ TEST_F(UiTest, AHelpMarkerOpensItsExplanationInFront) {
     EXPECT_TRUE(App().IsOverviewOpen());
 }
 
-// Switching a parent off greys its dependents without clearing them - the
-// state the tree draws as a dash rather than a tick, and the reason those
-// rows are greyed rather than hidden: they keep what they were set to.
+// Switching a parent off grays its dependents without clearing them - the
+// state the tree draws as a dash rather than a check mark, and the reason those
+// rows are grayed rather than hidden: they keep what they were set to.
 TEST_F(UiTest, TurningAParentOffLeavesItsDependentsSetButUnavailable) {
     ShowEditMode();
     StepFrame();
@@ -354,7 +354,7 @@ TEST_F(UiTest, TurningAParentOffLeavesItsDependentsSetButUnavailable) {
 
 // Which pointer is shown and whether the mouse is taken are separate
 // questions: the grab keeps the position either way, so switching the drawn
-// pointer off greys out nothing below it.
+// pointer off grays out nothing below it.
 TEST_F(UiTest, TheDrawnPointerIsNotAPreconditionOfTakingTheMouse) {
     ShowEditMode();
     StepFrame();

@@ -8,10 +8,10 @@ namespace sz::core {
 struct StrokePoint {
     float x = 0.0f;
     float y = 0.0f;
-    // Exact equality, not tolerance-based: the eraser's undo recognises an
+    // Exact equality, not tolerance-based: the eraser's undo recognizes an
     // untouched stroke, and a fragment it added, by byte-identical content
     // rather than by a per-stroke id. Two different strokes with identical
-    // points, colour and width are indistinguishable to this comparison and
+    // points, color and width are indistinguishable to this comparison and
     // to the eye, so undo picking the "wrong" one of such a pair is
     // harmless.
     bool operator==(const StrokePoint&) const = default;

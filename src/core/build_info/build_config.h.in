@@ -6,7 +6,7 @@
 // config.json - a demo watermark someone can switch off in a settings file
 // is not a watermark. constexpr rather than #define so both sides of every
 // `if (build::kDemoMode)` are compiled and type-checked in every
-// configuration; the optimiser folds the condition away regardless.
+// configuration; the optimizer folds the condition away regardless.
 //
 // Only stable values belong here, since this header is included wherever
 // the flags are read. The git description and the About text change

@@ -84,7 +84,7 @@ TEST(StrokeMeshCacheTest, AStrokeEditedInPlaceIsRebuilt) {
     Draw(cache, stroke, 1);
     cache.EndFrame();
 
-    stroke.points[4].y += 25.0f;  // same count, same colour, same width
+    stroke.points[4].y += 25.0f;  // same count, same color, same width
     cache.BeginFrame();
     Draw(cache, stroke, 2);
     cache.EndFrame();
@@ -119,7 +119,7 @@ TEST(StrokeMeshCacheTest, AStrokeEditedWithoutBumpingTheGenerationIsNotNoticed) 
     EXPECT_EQ(cache.RebuiltLastFrame(), 0u);
 }
 
-TEST(StrokeMeshCacheTest, ColourAndWidthAreBothPartOfTheFingerprint) {
+TEST(StrokeMeshCacheTest, ColorAndWidthAreBothPartOfTheFingerprint) {
     StrokeMeshCache cache;
     cache.BeginFrame();
     Draw(cache, MakeStroke(), 1);
@@ -128,7 +128,7 @@ TEST(StrokeMeshCacheTest, ColourAndWidthAreBothPartOfTheFingerprint) {
     cache.BeginFrame();
     Draw(cache, MakeStroke(0.0f, 0x00FF00FFu), 2);
     cache.EndFrame();
-    EXPECT_EQ(cache.RebuiltLastFrame(), 1u) << "a recoloured stroke";
+    EXPECT_EQ(cache.RebuiltLastFrame(), 1u) << "a recolored stroke";
 
     cache.BeginFrame();
     Draw(cache, MakeStroke(0.0f, 0x00FF00FFu, /*width=*/9.0f), 3);

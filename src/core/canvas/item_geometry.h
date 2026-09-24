@@ -132,7 +132,7 @@ NativePoint ScreenToNative(const Item& item, float screenX, float screenY);
 // (MinimumSizeForAspectRatio), applied to that scale rather than per axis
 // - a second clamp on a derived axis is exactly what would break the
 // ratio. An edge handle takes the scale from the single axis it drives
-// and grows or shrinks the other centred, since there is no opposite edge
+// and grows or shrinks the other centered, since there is no opposite edge
 // on that axis to anchor to; a corner handle projects the corner the
 // pointer asks for onto the item's own diagonal, which is continuous in
 // the pointer where choosing a driving axis is not (see the

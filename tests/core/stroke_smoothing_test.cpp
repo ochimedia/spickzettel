@@ -61,8 +61,8 @@ TEST(StrokeSmoothingTest, ACurvedSpanIsSubdividedUntilItIsFlatEnough) {
                      kFlatness, out);
 
     ASSERT_GT(out.size(), 2u);
-    // Every sample sits between its neighbours rather than doubling back -
-    // the failure mode a uniform parameterisation has on uneven spacing.
+    // Every sample sits between its neighbors rather than doubling back -
+    // the failure mode a uniform parameterization has on uneven spacing.
     StrokePoint previous{0, 0};
     for (const StrokePoint& p : out) {
         EXPECT_GE(p.x, previous.x - 1e-3f);
@@ -70,7 +70,7 @@ TEST(StrokeSmoothingTest, ACurvedSpanIsSubdividedUntilItIsFlatEnough) {
     }
 }
 
-// The curve has to bulge *toward* the neighbouring control points, which is
+// The curve has to bulge *toward* the neighboring control points, which is
 // what makes a hand-drawn arc look like an arc instead of a chain of chords.
 TEST(StrokeSmoothingTest, TheFittedCurveLeavesTheChord) {
     std::vector<StrokePoint> out;
@@ -100,9 +100,9 @@ TEST(StrokeSmoothingTest, CoincidentControlPointsProduceFinitePoints) {
     }
 }
 
-// Wildly uneven spacing is where the uniform parameterisation ties a loop.
+// Wildly uneven spacing is where the uniform parameterization ties a loop.
 // Centripetal doesn't, and this is the shape that shows it: the fitted span
-// must stay inside the neighbourhood of its own two endpoints.
+// must stay inside the neighborhood of its own two endpoints.
 TEST(StrokeSmoothingTest, UnevenSpacingDoesNotOvershoot) {
     std::vector<StrokePoint> out;
     const StrokePoint p1{0, 0};

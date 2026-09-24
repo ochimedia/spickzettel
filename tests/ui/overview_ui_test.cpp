@@ -24,7 +24,7 @@ int DisplayIndexOf(const ImGuiWindow* window) {
     return -1;
 }
 
-// What a colour picker's z-order looks like from inside a running frame -
+// What a color picker's z-order looks like from inside a running frame -
 // sampled there rather than after the test ends, since the engine tidies up
 // behind itself and an open popup does not survive that.
 struct PickerOrder {
@@ -44,17 +44,17 @@ PickerOrder SamplePickerOrder() {
     return order;
 }
 
-// A colour swatch in the Settings panel opens ImGui's own picker, which -
+// A color swatch in the Settings panel opens ImGui's own picker, which -
 // unlike every popover this app opens itself - has no Begin/End pair of
 // ours to hang a per-frame "stay in front" on. The panel reasserts itself
 // to the front every frame, so without help the picker is buried the frame
 // after it opens: visible for one frame, then gone, with the clicks that
 // follow landing on the panel. See OverlayApp::KeepChildPopupsInFront.
 void ExpectPickerInFrontOfThePanel(const PickerOrder& order) {
-    ASSERT_GT(order.popupsOpen, 0) << "the colour picker never opened";
+    ASSERT_GT(order.popupsOpen, 0) << "the color picker never opened";
     ASSERT_GE(order.pickerIndex, 0);
     ASSERT_GE(order.panelIndex, 0);
-    EXPECT_GT(order.pickerIndex, order.panelIndex) << "the colour picker is behind the panel that opened it";
+    EXPECT_GT(order.pickerIndex, order.panelIndex) << "the color picker is behind the panel that opened it";
 }
 
 // The canvases a folder shows - a deleted one stays in Canvases(), hidden.
@@ -299,9 +299,9 @@ TEST_F(ShowDeletedUiTest, AFoldersDeletePermanentlyErasesOnlyItsDeletedCanvases)
     EXPECT_NE(Canvases().FindCanvas(made.second), nullptr);
 }
 
-// The same delete with a neighbour to fall back on: no canvas is created,
+// The same delete with a neighbor to fall back on: no canvas is created,
 // and the one *before* it in the folder takes over.
-TEST_F(UiTest, DeletingTheCurrentCanvasFallsBackToItsNeighbourInTheFolder) {
+TEST_F(UiTest, DeletingTheCurrentCanvasFallsBackToItsNeighborInTheFolder) {
     ShowEditMode();
     StepFrame();
     OpenOverviewUi();
@@ -362,7 +362,7 @@ TEST_F(UiTest, TheSnippetColorPickersStayInFrontOfThePanel) {
     StepFrame();
     OpenOverviewUi();
     PickerOrder order;
-    RunUi("open a snippet colour picker", [&](ImGuiTestContext* ctx) {
+    RunUi("open a snippet color picker", [&](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
         ctx->ItemClick("**/###sectionappearance");
@@ -375,7 +375,7 @@ TEST_F(UiTest, TheSnippetColorPickersStayInFrontOfThePanel) {
     ExpectPickerInFrontOfThePanel(order);
 }
 
-// A colour swatch reports a change on every frame its picker is dragged, so
+// A color swatch reports a change on every frame its picker is dragged, so
 // committing on that return value wrote the whole of config.json to disk once
 // per frame for as long as the drag lasted - and not atomically, which is a
 // poor thing to be doing sixty times a second. It commits when the edit
@@ -383,14 +383,14 @@ TEST_F(UiTest, TheSnippetColorPickersStayInFrontOfThePanel) {
 //
 // The risk in that change is the opposite failure: a ColorEdit4 whose value
 // is changed from inside its own popup is not obviously "deactivated after
-// edit" at all, and if that never fires the colour would stop being saved.
+// edit" at all, and if that never fires the color would stop being saved.
 // So this drives the picker for real and then reads the file back.
-class ColourPickerPersistenceTest : public UiTest {
+class ColorPickerPersistenceTest : public UiTest {
 protected:
     void SetUp() override {
         UiTest::SetUp();
         configFile_ = std::filesystem::temp_directory_path() /
-                       ("sz_colour_picker_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+                       ("sz_color_picker_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
                         ".json");
         std::filesystem::remove(configFile_);
         host_.configFilePath = configFile_;
@@ -410,7 +410,7 @@ protected:
     std::filesystem::path configFile_;
 };
 
-TEST_F(ColourPickerPersistenceTest, ASnippetColourSurvivesToDiskWhenTheDragEnds) {
+TEST_F(ColorPickerPersistenceTest, ASnippetColorSurvivesToDiskWhenTheDragEnds) {
     ShowEditMode();
     StepFrame();
     OpenOverviewUi();
@@ -420,7 +420,7 @@ TEST_F(ColourPickerPersistenceTest, ASnippetColourSurvivesToDiskWhenTheDragEnds)
 
     uint32_t duringDrag = before;
     bool wroteDuringDrag = true;
-    RunUi("drag the frontmost-border colour", [&](ImGuiTestContext* ctx) {
+    RunUi("drag the frontmost-border color", [&](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
         ctx->ItemClick("**/###sectionappearance");
@@ -449,18 +449,18 @@ TEST_F(ColourPickerPersistenceTest, ASnippetColourSurvivesToDiskWhenTheDragEnds)
         ctx->Yield();
     });
 
-    EXPECT_NE(duringDrag, before) << "the drag did not change the colour, so this test proves nothing";
+    EXPECT_NE(duringDrag, before) << "the drag did not change the color, so this test proves nothing";
     EXPECT_FALSE(wroteDuringDrag) << "config.json was written while the picker was still being dragged";
 
     const uint32_t after = AppSettings().Stored().itemBorderColorFrontRGBA;
-    ASSERT_NE(after, before) << "the drag did not change the colour, so this test proves nothing";
+    ASSERT_NE(after, before) << "the drag did not change the color, so this test proves nothing";
     ASSERT_TRUE(std::filesystem::exists(configFile_))
         << "the finished edit never reached disk - IsItemDeactivatedAfterEdit does not fire for this widget";
 
     char expected[16];
     std::snprintf(expected, sizeof(expected), "#%08X", after);
     EXPECT_NE(ConfigFileContents().find(expected), std::string::npos)
-        << "config.json does not hold the colour that was picked";
+        << "config.json does not hold the color that was picked";
 }
 
 }  // namespace

@@ -467,7 +467,7 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
     // the danger red of a delete button.
     constexpr uint32_t kWarningTextRGBA = 0xFF8C80FFu;
 
-    // In a row, the welcome first, centred - or, on a screen too narrow
+    // In a row, the welcome first, centered - or, on a screen too narrow
     // for that, in a column. On one too small for either they overlap
     // rather than going off screen, which ClampRectToViewport sees to.
     const float rowW = welcomeSize.x + 2.0f * (warningSize.x + kGap);
@@ -798,7 +798,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             // take hold of - but only now that it *is* a drag, so a click
             // that merely selects it leaves it be. The snapshot is retaken
             // from the restored rect; the few pixels the pointer has
-            // travelled by then are not worth a jump.
+            // traveled by then are not worth a jump.
             for (ItemGesture::StartRect& start : gesture->startRects) {
                 Item* item = Manager().FindItemAnywhere(start.item);
                 if (item != nullptr && item->isFullscreen) {
@@ -1467,7 +1467,7 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
     }
     // A press anywhere but on the drawing a stray click made is the hand
     // moving on from it - see untouchedDrawing_. Not a press on a panel,
-    // which is as likely to be picking a colour to draw in it with.
+    // which is as likely to be picking a color to draw in it with.
     if (event.kind == platform::MouseEventKind::Down && untouchedDrawing_.has_value() &&
         !ImGui::GetIO().WantCaptureMouse && !PanelOpen()) {
         // A press on the selection bar is not moving on either: the bar is

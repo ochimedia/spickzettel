@@ -4,7 +4,7 @@
 // widget by *name*.
 //
 // The difference from the fixture it extends is the difference between
-// "put the mouse at 505,230 and hope" and "click the thing labelled
+// "put the mouse at 505,230 and hope" and "click the thing labeled
 // Settings". It also reaches the z-order bugs, which are the shape of most
 // of the ones this UI has had: the engine clicks where the widget is, so a
 // widget with something else in front of it takes no effect - a combo that

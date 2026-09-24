@@ -107,11 +107,11 @@ def _unfilter(raw, width, height, bpp=4):
 def downscale(width, height, rgba, size):
     """Box-filters RGBA down to size x size, averaging in premultiplied alpha.
 
-    Averaging the colour channels straight would pull the transparent pixels
+    Averaging the color channels straight would pull the transparent pixels
     just outside the note's outline - black with alpha 0 - into the edge and
     leave a dark fringe all the way round, most visible at 16 and 20 where the
-    outline is already only a pixel wide. Weighting each colour by its own
-    alpha, then dividing the total back out, is what keeps the edge the colour
+    outline is already only a pixel wide. Weighting each color by its own
+    alpha, then dividing the total back out, is what keeps the edge the color
     of the paper.
     """
     out = bytearray(size * size * 4)

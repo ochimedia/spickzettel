@@ -29,7 +29,7 @@ target_link_libraries(sz_platform_win32
         d3d11
         dxgi
         # imgui_impl_dx11.cpp pulls this in through a #pragma comment(lib)
-        # that only MSVC honours; listed so any toolchain links it.
+        # that only MSVC honors; listed so any toolchain links it.
         d3dcompiler
         dwmapi
         shcore   # GetDpiForMonitor

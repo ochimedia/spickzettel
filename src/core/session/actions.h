@@ -16,7 +16,7 @@ namespace sz::core {
 // rather than by a tool of its own:
 //
 // - Draw: freehand; Shift for a straight line, Ctrl for a rectangle (see
-//   DrawShapeFor). Draw's colour and width are the pen's, whichever shape.
+//   DrawShapeFor). Draw's color and width are the pen's, whichever shape.
 // - Erase: the circular eraser, its own width; Ctrl for a rectangle dragged
 //   out and erased at once. Ctrl means rectangle for both on purpose.
 // - Text: a press on the snippet being drawn on opens its note for typing.
@@ -85,13 +85,13 @@ enum class CreateAction { NewCanvas, NewCanvasWithSelection };
 // selected last. The other four are the *drawing* bar, which the pill
 // shows instead while a snippet is in drawing mode (see
 // OverlayApp::drawingItem_): the marking tool to draw with, and the
-// colour.
+// color.
 //
 // Which of them each bar carries, in which order, and which are shown at
 // all is a setting - see core/config/bar_layout.h, which is why this is
 // down here with the other words the settings have to be able to name
 // rather than in the UI header that draws them.
-enum class ChromeButton { Close, Maximize, Minimize, More, Pin, Pen, Eraser, Text, Colour };
+enum class ChromeButton { Close, Maximize, Minimize, More, Pin, Pen, Eraser, Text, Color };
 
 // What the clipboard does with the selected snippets. Copy and Cut put
 // the selection on it; Paste puts what is on it onto the canvas being

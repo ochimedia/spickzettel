@@ -147,7 +147,7 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
         ReleaseLayerPreviews();
     }
 
-    // ----- The canvas bar: centred on the bottom edge -----
+    // ----- The canvas bar: centered on the bottom edge -----
     canvasBarRect_.reset();
     float bottomTop = displayH;  // the top of whatever is out on the bottom edge
     if (cfg.showCanvasBar && canvasBarReveal_.amount > 0.0f && !PanelOpen()) {
@@ -392,7 +392,7 @@ void OverlayApp::BuildCanvasContextMenuRows(const Canvas& canvas, std::vector<Co
     // Deliberately short. The last canvas of a folder is deletable like
     // any other - see the Overview's own delete button for why there is no
     // "and this folder holds more than one" condition on it - so there is
-    // nothing here to grey out yet.
+    // nothing here to gray out yet.
     (void)canvas;
     rows.push_back(ContextMenuEntry{static_cast<int>(CanvasMenuAction::Delete), "##canvasmenu_delete", &icons::kTrash,
                                      strings::kMenuDeleteCanvas});

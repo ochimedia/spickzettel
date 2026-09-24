@@ -18,12 +18,12 @@ namespace {
 // bits it will not happen.
 //
 // The float bits are hashed rather than the values, so -0.0f reads as
-// different from 0.0f and a NaN as different from itself. Both err towards
+// different from 0.0f and a NaN as different from itself. Both err toward
 // rebuilding a mesh that didn't need it, which costs a frame's tessellation,
 // never a wrong picture.
 uint64_t Fingerprint(const Stroke& stroke) {
     static_assert(sizeof(StrokePoint) == 2 * sizeof(float),
-                  "a point is hashed eight bytes at a time; padding would leave uninitialised bytes in the hash");
+                  "a point is hashed eight bytes at a time; padding would leave uninitialized bytes in the hash");
 
     uint64_t hash = 1469598103934665603ull;  // FNV-1a offset basis
     const auto mix = [&hash](uint64_t value) {

@@ -58,7 +58,7 @@ std::string_view BarButtonKey(ChromeButton button) {
             return "eraser";
         case ChromeButton::Text:
             return "text";
-        case ChromeButton::Colour:
+        case ChromeButton::Color:
             return "color";
     }
     return "";

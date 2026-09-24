@@ -9,7 +9,7 @@ namespace sz::core {
 namespace {
 
 // Opens `path` for writing only if nothing is there - C11's "x", which
-// both CRTs honour - so that what is there is never opened, whatever it
+// both CRTs honor - so that what is there is never opened, whatever it
 // is. Null when the name is taken.
 std::FILE* CreateFresh(const std::filesystem::path& path) {
 #if defined(_WIN32)

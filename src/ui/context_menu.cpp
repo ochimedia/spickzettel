@@ -10,9 +10,9 @@ namespace sz::ui {
 namespace {
 
 // The row's shape, in the units the icons and the font are already in.
-// Nothing here is themed: a menu takes its colours from the style (see the
+// Nothing here is themed: a menu takes its colors from the style (see the
 // header) but its metrics are its own, so every menu in the app has rows
-// of the same height however it is coloured.
+// of the same height however it is colored.
 constexpr float kIconSize = 16.0f;
 constexpr float kIconGap = 10.0f;       // icon column to the label
 constexpr float kShortcutGap = 32.0f;   // the gap a shortcut is never closer than
@@ -125,10 +125,10 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
         return std::nullopt;
     }
 
-    // Selectable paints its hover in the Header colours, which this app's
-    // style leaves at ImGui's own blue - borrowed from the frame colours
+    // Selectable paints its hover in the Header colors, which this app's
+    // style leaves at ImGui's own blue - borrowed from the frame colors
     // here, which are themed, so the wash under a row matches every other
-    // hover in the app without this file naming a colour.
+    // hover in the app without this file naming a color.
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, style.Colors[ImGuiCol_FrameBgHovered]);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, style.Colors[ImGuiCol_FrameBgActive]);

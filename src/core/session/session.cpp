@@ -273,7 +273,7 @@ void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {
     instance.secondsSinceFirstUnsavedChange += deltaSeconds;
 
     // A failed save waits its turn rather than the content's. Fresh edits
-    // in the meantime keep counting towards the quiet period as usual, and
+    // in the meantime keep counting toward the quiet period as usual, and
     // are picked up by the retry when it comes.
     if (instance.saveRetryCountdownSeconds > 0.0f) {
         instance.saveRetryCountdownSeconds -= deltaSeconds;

@@ -149,7 +149,7 @@ any of it was fixed (`gallery`, 1040 ms):
 | | cost | share |
 | --- | --- | --- |
 | reading and parsing every file to find which directory held which id | ~335 ms | 32% |
-| JSON serialisation | ~560 ms | 54% |
+| JSON serialization | ~560 ms | 54% |
 | writing and renaming | ~144 ms | 14% |
 
 All three had to go, since fixing any one alone leaves most of the second.
@@ -176,6 +176,6 @@ nothing-changed cost.
 
 `empty` costs 0.005 ms per frame headless but 3-5% of a core in the real app.
 Almost nothing the app does per frame is what an idle overlay costs; it is
-presentation. That is worth remembering before optimising frame *content* to
+presentation. That is worth remembering before optimizing frame *content* to
 make an idle overlay cheaper - the lever there is not drawing the frame at
 all.

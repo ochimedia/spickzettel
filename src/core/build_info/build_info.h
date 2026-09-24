@@ -20,8 +20,8 @@ std::string_view GitDescribe();
 // on its own schedule.
 std::string_view AboutText();
 
-// THIRD-PARTY-NOTICES.md, compiled in: the licences of everything inside
-// the binary, in the binary because that is what those licences ask for.
+// THIRD-PARTY-NOTICES.md, compiled in: the licenses of everything inside
+// the binary, in the binary because that is what those licenses ask for.
 std::string_view NoticesText();
 
 // What to show a person: the version, plus the git description when it

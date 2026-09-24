@@ -11,8 +11,8 @@ using sz::platform::pen_glyph::Ink;
 using sz::platform::pen_glyph::InkAt;
 
 // The glyph as the cursor bitmap sees it: one character per pixel, sampled
-// at the pixel's own centre, with the nib on the pixel a cursor's hotspot
-// would name. The same grid Win32OverlayWindow::PenCursor rasterises (it
+// at the pixel's own center, with the nib on the pixel a cursor's hotspot
+// would name. The same grid Win32OverlayWindow::PenCursor rasterizes (it
 // supersamples for the edges; this samples once, which is enough to say
 // what is where).
 constexpr int kSize = 24;

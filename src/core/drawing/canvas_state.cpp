@@ -35,7 +35,7 @@ void CanvasState::EndStroke() {
         return;
     }
     // One point is a legal stroke: it is a dot, the mark a round pen makes
-    // when set down and lifted without travelling, rendered as a disc of
+    // when set down and lifted without traveling, rendered as a disc of
     // the stroke's own width. Empty is dropped: SetActiveStrokePoints can
     // leave a stroke with no points, and that is nothing rather than a mark.
     if (!active_->points.empty()) {

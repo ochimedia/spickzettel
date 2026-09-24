@@ -112,7 +112,7 @@ struct ItemGesture {
     // resize, which is `startRects.front()`'s own rect.
     bool group = false;
     Rect startBounds;
-    // Whether the pointer has travelled far enough since the press for
+    // Whether the pointer has traveled far enough since the press for
     // this to be a drag rather than a click: a click selects and moves
     // nothing, so nothing is written until then.
     bool moved = false;
@@ -130,7 +130,7 @@ struct ItemGesture {
 
 // A box drawn over the canvas to select by - Shift held, dragged from
 // open canvas (see OverlayApp::HandleBoxSelection). It holds the two
-// corners the drag has reached, and whether it has travelled far enough
+// corners the drag has reached, and whether it has traveled far enough
 // to be a drag at all: a Shift-press that never moves is a click on open
 // canvas, which with Shift held adds nothing and takes nothing away.
 struct BoxSelection {
@@ -305,7 +305,7 @@ public:
     // Added for the headless UI tests, which had no way to see any of it
     // and had to be run by hand against screenshots instead.
     Tool ActiveTool() const { return activeTool_; }
-    // The colour the next stroke would use. Public for the same reason
+    // The color the next stroke would use. Public for the same reason
     // ActiveTool is: it is what a test asks instead of reading pixels.
     uint32_t DrawColorRGBA() const { return drawColorRGBA_; }
     // What the next left press places, if anything: the creation gesture in
@@ -326,7 +326,7 @@ public:
     bool IsOverviewOpen() const { return overviewOpen_; }
     // Whether the cheat sheet is up - see RenderCheatSheet.
     bool IsCheatSheetOpen() const { return cheatSheetOpen_; }
-    // Whether the colour chooser is up - see RenderColorChooser.
+    // Whether the color chooser is up - see RenderColorChooser.
     bool IsColorChooserOpen() const { return colorChooserOpen_; }
     // Whether the snippet context menu is up, and over which snippet -
     // see RenderItemContextMenu.
@@ -593,7 +593,7 @@ private:
     bool PressPicksUp() const;
     // ----- Drawing mode -----
     // Puts `id` into drawing mode: selected alone, outlined for it, its bar
-    // showing Pen/Eraser/Text and the colour, and `tool` (the pen, if none
+    // showing Pen/Eraser/Text and the color, and `tool` (the pen, if none
     // is given) in hand, so a left press on it draws. See drawingItem_.
     void EnterDrawingMode(ItemId id, std::optional<Tool> tool = std::nullopt);
     // Back to the hand at rest: no snippet in drawing mode, Select in hand.
@@ -716,8 +716,8 @@ private:
     void RenderCanvasContextMenu();
     void BuildCanvasContextMenuRows(const Canvas& canvas, std::vector<ContextMenuEntry>& rows) const;
     void RunCanvasMenuAction(CanvasMenuAction action, CanvasId canvasId);
-    // The colour chooser: one picker, and what it is set to is the colour
-    // drawn with. Opened by the drawing bar's colour button, next to
+    // The color chooser: one picker, and what it is set to is the color
+    // drawn with. Opened by the drawing bar's color button, next to
     // `from`, the point it was pressed from; OpenColorChooser only asks,
     // since the bar's buttons fire from the raw mouse pipeline outside
     // any frame, and RenderColorChooser opens it on the next one. What
@@ -735,11 +735,11 @@ private:
     // "More" button opened it on.
     void RenderItemPropertiesPopover();
     // Its sections, top to bottom, for the item it is open on: the two
-    // opacities, the background colour, and the text's size and colour.
+    // opacities, the background color, and the text's size and color.
     // What is done *to* a snippet - fullscreen, copy, restack, move - is
     // the context menu's (see below), not the popover's.
     void RenderItemOpacity(Item& item);
-    void RenderItemBackgroundColour(Layer& picture);
+    void RenderItemBackgroundColor(Layer& picture);
     void RenderItemTextStyle(Item& item);
 
     // The context menu a right-click on a snippet opens - the popover's
@@ -900,9 +900,9 @@ private:
     // revert arrow when this target states it for itself, and nothing but
     // the value when it inherits. `help` is the row's explanation, reached
     // through the "?" beside it rather than printed underneath (see
-    // HelpMarker). `disabled` greys the control without touching the
+    // HelpMarker). `disabled` grays the control without touching the
     // override state, for the rows whose preconditions aren't met - such a
-    // row draws a dash instead of a tick when it is switched on, since its
+    // row draws a dash instead of a check mark when it is switched on, since its
     // stored value is not in effect.
     void ProfileableCheckbox(const char* id, const char* label, const ProfileableField& field, const char* help,
                               bool disabled = false);
@@ -1038,7 +1038,7 @@ private:
     // Shared by both item-creation paths so neither has to decide what an
     // empty library means on its own.
     Canvas& EnsureCanvasForNewItem();
-    // Places the first-run notes, centred as a group: the welcome, and the
+    // Places the first-run notes, centered as a group: the welcome, and the
     // two warnings beside it - see RequestWelcomeNote.
     // Ordinary items, deliberately: each can be moved, edited, or closed
     // like anything else, and they autosave, so they stay until the user is
@@ -1175,7 +1175,7 @@ private:
     struct StrokeRaster {
         PaintedImage pixels;
         uint64_t textureHandle = 0;
-        // What it was built from, kept so a stale raster is recognised by
+        // What it was built from, kept so a stale raster is recognized by
         // comparing rather than by guessing. A count is not enough and
         // never could be: undoing back to nothing and drawing something new
         // leaves the count exactly where it started, which is how the last
@@ -1630,7 +1630,7 @@ private:
         ItemCreationKind kind = ItemCreationKind::Screenshot;
         float downX = 0.0f;  // where it was pressed
         float downY = 0.0f;
-        // Where the pointer is now, once it has travelled far enough from
+        // Where the pointer is now, once it has traveled far enough from
         // the press to be a drag framing a region - nothing for a click.
         std::optional<ImVec2> dragTo;
         // Whether the press that started it was the second of a
@@ -1753,8 +1753,8 @@ private:
     // (ASan-caught) null-pointer segfault, not a hypothetical one. The
     // flag is consumed (and cleared) at the top of the popover's own
     // Render function on the very next frame, properly inside a frame.
-    // The colour chooser - see OpenColorChooser. Asked for by the bar's
-    // Colour button, opened on the next frame; and whether it was open on
+    // The color chooser - see OpenColorChooser. Asked for by the bar's
+    // Color button, opened on the next frame; and whether it was open on
     // the last one, which is how its closing is noticed.
     bool colorChooserRequested_ = false;
     bool colorChooserOpen_ = false;
@@ -1808,7 +1808,7 @@ private:
     // Which of the Overview's two tabs is showing - Canvases (the
     // original/default content: folder sidebar + canvas tile grid) or
     // Settings (RenderOverviewSettingsPanel, added once there were enough
-    // in-app-relevant AppConfig fields - showDebugOverlay, the colours,
+    // in-app-relevant AppConfig fields - showDebugOverlay, the colors,
     // etc. - to be worth a UI rather than only a hand-edited config.json
     // line). Not persisted - purely which tab is showing right now, reset
     // to Canvases every time OpenOverview runs (see its own doc comment)
@@ -1826,9 +1826,9 @@ private:
     // function cannot name a nested type declared after it, and
     // OverviewTab belongs with the state it describes.
     void SwitchOverviewTab(OverviewTab tab);
-    // Whether the About tab is showing the third-party licences instead of
+    // Whether the About tab is showing the third-party licenses instead of
     // its usual contents. A second page of the same tab rather than a tab
-    // of its own: the licences have to be *reachable*, not prominent, and a
+    // of its own: the licenses have to be *reachable*, not prominent, and a
     // permanent fourth entry in the tab row would charge every visit to
     // Canvases and Settings for something read once, if ever. Not persisted
     // - a fresh About always opens on About.
@@ -1924,7 +1924,7 @@ private:
     std::optional<platform::FramePacing> appliedFramePacing_;
     // The accent last applied to the theme and the ImGui style - see
     // OnFrame, which applies AppConfig::accentColorRGBA whenever it differs,
-    // so a colour being dragged in Settings recolours everything live.
+    // so a color being dragged in Settings recolors everything live.
     std::optional<uint32_t> appliedAccentRGBA_;
 
     // Transient "this is how big it is now" preview at the cursor, armed

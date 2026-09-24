@@ -130,7 +130,7 @@ public:
 private:
     // The shared half of every brush shape: walks the tiles `touched`
     // covers, asks `coverage` how much of each pixel the shape wants (0..1,
-    // at pixel centres for a capsule, by area for a rectangle), takes the
+    // at pixel centers for a capsule, by area for a rectangle), takes the
     // maximum into the stroke's mask, and recomposites. Everything that
     // makes a stroke one stroke - the before-image, the maximum, the undo
     // tiles - lives here, so a new shape is a coverage function and

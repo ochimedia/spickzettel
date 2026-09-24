@@ -27,8 +27,8 @@ using namespace overlay_detail;
 
 namespace overlay_detail {
 
-// An icon+text button in the given colours - the .btn equivalent (icon
-// and text sizes/gap match .btn svg / .btn's own gap). The two colourings
+// An icon+text button in the given colors - the .btn equivalent (icon
+// and text sizes/gap match .btn svg / .btn's own gap). The two colorings
 // below are the only ones in use.
 bool IconTextButton(const char* strId, const Icon& icon, const char* text, const ImVec4& fill,
                     const ImVec4& hover, const ImVec4& ink) {
@@ -54,7 +54,7 @@ bool IconTextButton(const char* strId, const Icon& icon, const char* text, const
     return pressed;
 }
 
-// Always accent-coloured: the primary action of a panel (New canvas, New
+// Always accent-colored: the primary action of a panel (New canvas, New
 // folder, Restore).
 bool PrimaryButton(const char* strId, const Icon& icon, const char* text) {
     return IconTextButton(strId, icon, text, theme::Accent(), theme::AccentHover(), theme::AccentInk());
@@ -92,7 +92,7 @@ bool TabButton(const char* id, const char* text, bool active) {
 
 // The revert arrow that marks a settings row as set here rather than
 // inherited. Small and quiet enough to sit inside a checkbox row without
-// making it taller, and accent-coloured because being marked is the point:
+// making it taller, and accent-colored because being marked is the point:
 // it is both the indicator and the button that undoes it.
 bool RevertButton(const char* strId) {
     constexpr float kSize = 16.0f;
@@ -127,11 +127,11 @@ void HelpMarker(const char* id, const char* title, const char* text) {
     std::snprintf(popupId, sizeof(popupId), "##helppop_%s", id);
 
     const float size = std::floor(ImGui::GetFontSize() + 2.0f);
-    // Centred on whatever else is already on this row, rather than on its
+    // Centered on whatever else is already on this row, rather than on its
     // top edge - this is always called after a SameLine, so the cursor is
     // at the top of a line something else set the height of. Which one it
     // is matters: a checkbox makes the row a frame tall, a plain heading
-    // only a line of text tall, and centring on the frame either way
+    // only a line of text tall, and centering on the frame either way
     // dropped every marker beside a heading visibly below its own words.
     // DC.CurrLineSize.y is the tallest thing on the row so far, which is
     // exactly the question; it is zero on a row with nothing on it yet,
@@ -139,7 +139,7 @@ void HelpMarker(const char* id, const char* title, const char* text) {
     //
     // Never negative, and the marker is deliberately two pixels taller
     // than a line of text, so beside a heading it sits on the row's top
-    // edge and overhangs below rather than being centred. Overhanging
+    // edge and overhangs below rather than being centered. Overhanging
     // downward is free; upward is not - the first row of a settings tab
     // starts at the top of a scrolling child, and a marker reaching a
     // pixel above that is a pixel outside the clip rect, which shaved the
@@ -157,10 +157,10 @@ void HelpMarker(const char* id, const char* title, const char* text) {
     const ImVec2 center(minPt.x + size * 0.5f, minPt.y + size * 0.5f);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     drawList->AddCircle(center, size * 0.5f, color, 0, 1.2f);
-    // Centred on the glyph's own ink, not on the line box CalcTextSize
+    // Centered on the glyph's own ink, not on the line box CalcTextSize
     // reports. A line box is the same height for every character in the
     // font - it has to leave room for accents above and descenders below -
-    // and "?" uses neither, so centring the box left the question mark
+    // and "?" uses neither, so centering the box left the question mark
     // sitting low enough in its circle for the dot to touch the ring.
     // ImFontGlyph's X0/Y0/X1/Y1 are the ink's own corners, in pixels,
     // relative to where AddText would put the glyph; putting the middle of
@@ -300,7 +300,7 @@ void EndSettingsScope(SettingsScopeBox& box) {
 // One row of what a left press on empty canvas makes: the kind, and which
 // press makes it. Choosing the press the other kind has swaps the two
 // rather than refusing - one press cannot make both, and a dropdown that
-// greys out the very choice wanted, with the reason in another row, is a
+// grays out the very choice wanted, with the reason in another row, is a
 // puzzle. See AppConfig::screenshotTrigger.
 bool CreationTriggerRow(const char* id, const char* label, CreationTrigger& trigger, CreationTrigger& other) {
     struct Choice {
@@ -368,11 +368,11 @@ void TreeBranch(float& trunkY, const ImVec2& rowPos, float indent) {
 // bottom edge of its checkbox, so the line comes down out of the box
 // rather than through it. (Through it is what starting at the middle did,
 // since the trunk of the next level down runs at half an indent - which
-// lands inside the parent's own box, and drew a bar over the tick or dash
+// lands inside the parent's own box, and drew a bar over the check mark or dash
 // in it.)
 float TrunkFrom(const ImVec2& rowPos) { return rowPos.y + ImGui::GetFrameHeight(); }
 
-// One row of the Settings tab's own section list. Same colours as
+// One row of the Settings tab's own section list. Same colors as
 // TabButton, laid out down the left edge instead of across the top: full
 // width of its column, text left-aligned, so a list of five reads as a list
 // rather than as five buttons that happen to be stacked. The folder
@@ -542,8 +542,8 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     ImGui::BeginChild("##overview_body", ImVec2(0.0f, -40.0f), ImGuiChildFlags_None);
     // A new page starts at its beginning. All three tabs and both About
     // pages share this one scrolling child, so without this, opening the
-    // licences from halfway down the About text drops you halfway down the
-    // licences - and the buttons that ask for the switch are in the footer,
+    // licenses from halfway down the About text drops you halfway down the
+    // licenses - and the buttons that ask for the switch are in the footer,
     // outside this child, where SetScrollY would move the wrong window.
     if (overviewBodyScrollToTop_) {
         ImGui::SetScrollY(0.0f);
@@ -565,7 +565,7 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
 
     ImGui::End();
     // Anything opened from inside this panel that has no Begin/End pair of
-    // ours to reassert itself - ImGui's own colour picker, opened by a
+    // ours to reassert itself - ImGui's own color picker, opened by a
     // ColorEdit swatch, is the whole list of them - goes back in front of
     // the panel here. The panel brings itself to the front on every frame
     // (see the BringToFront above), and BringWindowToDisplayFront is just
@@ -699,7 +699,7 @@ void OverlayApp::RenderOverviewHeader() {
     ImGui::SameLine();
     ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
                           std::max(0.0f, ImGui::GetContentRegionAvail().x - controlsWidth));
-    // Vertically centred against the tab buttons, which are taller
+    // Vertically centered against the tab buttons, which are taller
     // than a checkbox's own frame.
     const float rowCenterOffset = (ImGui::GetItemRectSize().y - ImGui::GetFrameHeight()) * 0.5f;
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(0.0f, rowCenterOffset));
@@ -714,7 +714,7 @@ void OverlayApp::RenderOverviewHeader() {
     ImGui::TextColored(theme::kGraphite300, "%s", strings::kOverviewPreviewsLabel);
     ImGui::SameLine();
     // "Vector", not "Strokes": in bitmap mode a stroke *is* pixels, so a
-    // box labelled Strokes that leaves them showing when it is unticked
+    // box labeled Strokes that leaves them showing when it is unchecked
     // reads as a bug rather than as the two halves of the drawing model.
     bool changed = ImGui::Checkbox(Labeled(strings::kOverviewPreviewsVector, "prevvector"), &Cfg().overviewShowsStrokes);
     if (ImGui::IsItemHovered()) {
@@ -1107,7 +1107,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         }
         // A just-created canvas is at the end of its folder, which may be
         // past the bottom of this list - scroll it into view once (see
-        // overviewScrollToCanvasId_). Centred rather than merely made
+        // overviewScrollToCanvasId_). Centered rather than merely made
         // visible: the tile that just appeared should be the one you are
         // looking at.
         if (overviewScrollToCanvasId_ == c.id) {
@@ -1125,7 +1125,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
 void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
     if (!showCanvasesBody && overviewTab_ == OverviewTab::About) {
         // In the footer rather than at the end of the text it belongs to:
-        // the licences run to a couple of hundred lines, and a way out
+        // the licenses run to a couple of hundred lines, and a way out
         // that has to be scrolled back to is a way out you stop using.
         // The footer is the panel's own row of verbs - the Canvases tab
         // keeps New folder / New canvas here - so this is where a reader
@@ -1376,7 +1376,7 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
                       primary != displays_.end() ? primary->name.c_str() : "");
         // Found the way the tray controller finds it, so the list says the
         // overlay is on a monitor exactly when it is - including one that
-        // came back on another port and is only recognised by its name.
+        // came back on another port and is only recognized by its name.
         const platform::DisplayInfo inUse = ChooseDisplay(displays_, chosenId, chosenName);
         const bool chosenAttached =
             !chosenId.empty() && (inUse.id == chosenId || (!chosenName.empty() && inUse.name == chosenName));
@@ -1428,8 +1428,8 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
         ColorRGBAToFloats(Cfg().accentColorRGBA, rgb);
         // Written into the setting as it is dragged, which OnFrame turns into
         // the theme on the next frame - so the panel this sits in, the tabs
-        // and this very swatch's own highlights all recolour live. Saved when
-        // the edit finishes, the same as every other colour here.
+        // and this very swatch's own highlights all recolor live. Saved when
+        // the edit finishes, the same as every other color here.
         if (ImGui::ColorEdit3("##accentcolor", rgb, ImGuiColorEditFlags_NoInputs)) {
             Cfg().accentColorRGBA = FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF));
         }
@@ -1474,12 +1474,12 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
 
     SettingsGroupBreak();
 
-    SettingsHeading("appearancesnippetcoloursheading", strings::kAppearanceSnippetColoursHeading,
-                     strings::kAppearanceSnippetColoursHelp);
+    SettingsHeading("appearancesnippetcolorsheading", strings::kAppearanceSnippetColorsHeading,
+                     strings::kAppearanceSnippetColorsHelp);
     {
         // ColorEdit4 rather than the ColorEdit3-plus-opacity-slider pair
         // the edit-mode border uses: here the alpha *is* the setting half
-        // the time, and two widgets per colour would make four rows into
+        // the time, and two widgets per color would make four rows into
         // eight.
         constexpr ImGuiColorEditFlags kSwatchFlags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar;
         // The swatch takes an id-only label and the caption is written
@@ -1494,9 +1494,9 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
                 colorRGBA = FloatsToColorRGBA4(rgba);
             }
             // Only when the edit finishes, not on every frame the value
-            // changes - a colour picker reports a change per frame while it
+            // changes - a color picker reports a change per frame while it
             // is being dragged, and `anyChanged` is what writes config.json.
-            // Same treatment as the sliders below; the live colour is
+            // Same treatment as the sliders below; the live color is
             // already correct the instant ImGui writes to it either way.
             anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
             ImGui::SameLine();
@@ -1555,8 +1555,8 @@ namespace {
 //
 // A fixed icon, unlike the bar's own, where the pen and the eraser show
 // the shape they are cycled to: this row is about which buttons are there,
-// not about what a drag would make right now. The colour button has no
-// icon on either - it is the colour itself - and is drawn as a swatch here
+// not about what a drag would make right now. The color button has no
+// icon on either - it is the color itself - and is drawn as a swatch here
 // too.
 const char* BarButtonName(ChromeButton button) {
     switch (button) {
@@ -1576,8 +1576,8 @@ const char* BarButtonName(ChromeButton button) {
             return strings::kBarButtonEraser;
         case ChromeButton::Text:
             return strings::kBarButtonText;
-        case ChromeButton::Colour:
-            return strings::kBarButtonColour;
+        case ChromeButton::Color:
+            return strings::kBarButtonColor;
     }
     return "";
 }
@@ -1600,7 +1600,7 @@ const Icon& BarButtonIcon(ChromeButton button) {
             return icons::kEraser;
         case ChromeButton::Text:
             return icons::kType;
-        case ChromeButton::Colour:
+        case ChromeButton::Color:
             break;  // a swatch, not an icon - see RenderBarButtonRow
     }
     return icons::kPen;
@@ -1620,7 +1620,7 @@ constexpr float kBarRowTilesX = 90.0f;
 // The row is the bar, in other words - which is why a hidden button keeps
 // its place in it instead of being moved off to a list of spares: the
 // question being asked of this row is "what does the bar look like", and
-// the answer reads better with the missing ones still in view, greyed.
+// the answer reads better with the missing ones still in view, grayed.
 bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButtonList& buttons) {
     bool changed = false;
     ImGui::PushID(id);
@@ -1650,10 +1650,10 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
         if (!entry.shown) {
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.4f);
         }
-        // Both kinds of tile wear the same pill, lit or not - the colour
+        // Both kinds of tile wear the same pill, lit or not - the color
         // one through PillSwatchButton rather than the chooser's own
         // PillColorButton, which has no pill to light.
-        const bool pressed = entry.button == ChromeButton::Colour
+        const bool pressed = entry.button == ChromeButton::Color
                                   ? PillSwatchButton(tileId, drawColorRGBA_, entry.shown)
                                   : PillIconButton(tileId, BarButtonIcon(entry.button), entry.shown);
         if (!entry.shown) {
@@ -1822,7 +1822,7 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     constexpr float kTreeIndent = 24.0f;
 
     // Each checkbox is disabled exactly when its own precondition fails, read
-    // from EditModeInputOptions rather than restated here - the HUD greys the
+    // from EditModeInputOptions rather than restated here - the HUD grays the
     // same rows on the same answers, and two copies of these rules would
     // eventually disagree.
     const ProfileableSettings edited = EditedSettings();
@@ -1841,7 +1841,7 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
 
     ImGui::Indent(kTreeIndent);
     // First under the focus row because it is the exception to it, and
-    // greyed out when that row is off for the same reason the others are:
+    // grayed out when that row is off for the same reason the others are:
     // with focus taken already there is nothing left for it to do.
     rowPos = ImGui::GetCursorScreenPos();
     ProfileableCheckbox(
@@ -1934,7 +1934,7 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
 
     ImGui::PushID(static_cast<int>(index));
     // The icon the same action wears on the drawing bar, so a row is
-    // recognised rather than read - see kGalleryTools/kCreateActions.
+    // recognized rather than read - see kGalleryTools/kCreateActions.
     const ImVec2 iconPos = ImGui::GetCursorScreenPos();
     ImGui::Dummy(ImVec2(18.0f, ImGui::GetFrameHeight()));
     DrawIcon(ImGui::GetWindowDrawList(), icon,
@@ -2088,15 +2088,15 @@ void OverlayApp::ProfileableCheckbox(const char* id, const char* label, const Pr
         ImGui::PushStyleColor(ImGuiCol_Text, theme::Accent());
     }
     // A switched-on row whose preconditions aren't met draws a dash rather
-    // than a tick. It keeps its stored value - that is the point of not
-    // clearing it - but a tick would claim the option is doing something,
+    // than a check mark. It keeps its stored value - that is the point of not
+    // clearing it - but a check mark would claim the option is doing something,
     // and "the stored value of an option that cannot take effect is not
     // evidence of anything" (see EditModeInputOptions).
     //
     // Drawn here rather than through ImGuiItemFlags_MixedValue, which
     // renders its third state as a filled inner rect - and with this
     // theme's frame rounding that comes out as a blob that reads as a
-    // heavier tick rather than as a lesser one.
+    // heavier check mark rather than as a lesser one.
     const bool storedButNotInEffect = disabled && value;
     bool shown = value && !storedButNotInEffect;
     if (ImGui::Checkbox(Labeled(label, id), &shown)) {
@@ -2185,7 +2185,7 @@ std::string ProfileSummary(const Profile& profile) {
     return summary;
 }
 
-// A labelled list of text fields, one per entry, each with a remove
+// A labeled list of text fields, one per entry, each with a remove
 // button, and an add button after the last. Returns whether the list
 // changed.
 bool EditStringList(const char* label, const char* addLabel, const char* id, std::vector<std::string>& list) {
@@ -2489,21 +2489,21 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
 }
 
 namespace {
-// What this tab shows: the component and the licence it is under, in the
+// What this tab shows: the component and the license it is under, in the
 // order they matter to someone glancing at it. The full texts are in
 // THIRD-PARTY-NOTICES.md, which is where they have to be complete - this
 // list is the summary, and is the reason most people never open the other.
 struct BuiltWithRow {
     const char* component;
-    const char* licence;
+    const char* license;
 };
 const BuiltWithRow kBuiltWith[] = {
-    {strings::kAboutComponentImgui, strings::kAboutLicenceMit},
-    {strings::kAboutComponentJson, strings::kAboutLicenceMit},
-    {strings::kAboutComponentStb, strings::kAboutLicenceMitOrPublicDomain},
-    {strings::kAboutComponentQoi, strings::kAboutLicenceMit},
-    {strings::kAboutComponentManrope, strings::kAboutLicenceOfl},
-    {strings::kAboutComponentIcons, strings::kAboutLicenceIscMit},
+    {strings::kAboutComponentImgui, strings::kAboutLicenseMit},
+    {strings::kAboutComponentJson, strings::kAboutLicenseMit},
+    {strings::kAboutComponentStb, strings::kAboutLicenseMitOrPublicDomain},
+    {strings::kAboutComponentQoi, strings::kAboutLicenseMit},
+    {strings::kAboutComponentManrope, strings::kAboutLicenseOfl},
+    {strings::kAboutComponentIcons, strings::kAboutLicenseIscMit},
 };
 
 // ABOUT.md and THIRD-PARTY-NOTICES.md, rendered with just enough Markdown
@@ -2611,7 +2611,7 @@ void OverlayApp::SwitchOverviewTab(OverviewTab tab) {
     }
     overviewTab_ = tab;
     overviewBodyScrollToTop_ = true;
-    // Leaving About also leaves its licence page: coming back to a tab
+    // Leaving About also leaves its license page: coming back to a tab
     // that is still showing somebody else's MIT text, several tabs later,
     // is not a place anyone meant to return to.
     aboutShowsNotices_ = false;
@@ -2626,7 +2626,7 @@ void OverlayApp::RenderOverviewAboutPanel() {
     ImGui::PushTextWrapPos(0.0f);
 
     if (aboutShowsNotices_) {
-        // The licences, in the same panel and the same scroll region as
+        // The licenses, in the same panel and the same scroll region as
         // the About text rather than in a popup: this is a page you read,
         // not a thing you act on, and the Overview has enough windows
         // stacked over it already (see KeepPopoverInFront). The way back
@@ -2657,7 +2657,7 @@ void OverlayApp::RenderOverviewAboutPanel() {
 
     // What is inside this binary that somebody else wrote. The list is
     // short enough to read at a glance and is the part most people want;
-    // the licences themselves are long enough that they would bury the
+    // the licenses themselves are long enough that they would bury the
     // rest of this tab, so they are one click away.
     ImGui::Spacing();
     ImGui::Separator();
@@ -2669,7 +2669,7 @@ void OverlayApp::RenderOverviewAboutPanel() {
     for (const BuiltWithRow& row : kBuiltWith) {
         ImGui::TextUnformatted(row.component);
         ImGui::SameLine(260.0f);
-        ImGui::TextColored(theme::kGraphite300, "%s", row.licence);
+        ImGui::TextColored(theme::kGraphite300, "%s", row.license);
     }
 
     ImGui::PopTextWrapPos();
@@ -2902,7 +2902,7 @@ void OverlayApp::RenderPersistenceWarning() {
         return;
     }
     // Along the bottom, out from under the canvas bar's own reveal zone and
-    // away from the toast at the top, in the toast's own colours but with a
+    // away from the toast at the top, in the toast's own colors but with a
     // warning tint behind the text: this one does not go away by itself.
     ImDrawList* drawList = ImGui::GetForegroundDrawList();
     const ImVec2 textSize = ImGui::CalcTextSize(warning.c_str());

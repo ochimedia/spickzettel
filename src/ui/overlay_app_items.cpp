@@ -48,7 +48,7 @@ struct HitRect {
     bool Contains(float x, float y) const { return x >= min.x && y >= min.y && x < max.x && y < max.y; }
 };
 
-// A handle is a small square centred *on* the border - a corner or the
+// A handle is a small square centered *on* the border - a corner or the
 // middle of an edge - the way a drawing program draws them. It covers a
 // few of the snippet's own pixels, which is fine: handles show only while
 // the selection is live, when nothing can be drawn anyway. Its hit rect
@@ -56,7 +56,7 @@ struct HitRect {
 constexpr float kHandleSizePx = 8.0f;
 constexpr float kHandleHitSlopPx = 3.0f;
 
-// One of the 8 handles: where its centre is, the pointer it wears, and its
+// One of the 8 handles: where its center is, the pointer it wears, and its
 // compass name as the debug overlay prints it.
 struct HandleSpec {
     ResizeHandle handle;
@@ -117,11 +117,11 @@ ImGuiMouseCursor ResizeHandleCursor(ResizeHandle handle) {
 }
 
 // The selection bar: [Pin][More][Minimize][Maximize/Restore][Close] - or,
-// in drawing mode, [Pen][Eraser][Text][Colour] - buttons of this size, this
+// in drawing mode, [Pen][Eraser][Text][Color] - buttons of this size, this
 // far apart, on a pill this much bigger than them, floating just above the
 // selection's bounding box - or below it when there is no room above, or
 // inside its top edge when there is no room either way (a fullscreen
-// snippet). Centred on the box and kept on screen.
+// snippet). Centered on the box and kept on screen.
 constexpr float kBarButtonSize = 28.0f;
 constexpr float kBarButtonGap = 2.0f;
 constexpr float kBarPad = 6.0f;
@@ -465,7 +465,7 @@ void OverlayApp::NudgeSelection(float dx, float dy) {
 // back to Select, the hand at rest (see the
 // Tool enum), then drawing mode ends, then a cut waiting to be pasted is
 // called off, then a selection clears. An open
-// popover - the colour chooser, a snippet's properties - closes first and
+// popover - the color chooser, a snippet's properties - closes first and
 // takes the press. Not while typing, where Escape is the field's, and not
 // while a panel is up - the Overview, the cheat sheet - which closes its
 // own. The same gates hold for
@@ -628,7 +628,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
 
     // The snippet in front: the last one that is actually on screen, since
     // canvas.items is painted in order and a minimized item is painted
-    // nowhere. Its border gets its own colour (see
+    // nowhere. Its border gets its own color (see
     // AppConfig::itemBorderColorFrontRGBA), which is the only thing that
     // says which of a stack of overlapping snippets is on top.
     std::optional<ItemId> frontmostId;
@@ -694,7 +694,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // from shows through what sits on it - faint rather than gone, so where
     // things are stays in view. Done to the finished vertices, which is the
     // one way to reach every part of a snippet alike: its pictures are
-    // drawn in their own colours, not the style's, and PushStyleVar(Alpha)
+    // drawn in their own colors, not the style's, and PushStyleVar(Alpha)
     // would only reach what asks the style. Only the look: the capture
     // itself never sees the overlay (see IOverlayWindow::
     // CaptureRegionAsTexture).
@@ -850,18 +850,18 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, const Can
     // naturally paints over it where they overlap. Zero rounding to exactly
     // match the item's own sharp-cornered content rect.
     //
-    // The colour says which snippet is in front (see
+    // The color says which snippet is in front (see
     // AppConfig::itemBorderColorFrontRGBA): the frontmost one gets its own,
-    // every other one the resting colour - and that one only while
+    // every other one the resting color - and that one only while
     // AppConfig::showItemBorders is set (on by default), which is what
     // makes a still-empty Drawing item, otherwise rendering nothing at all,
     // visible before it is touched.
     //
     // The *thickness* says where the pointer is: whichever item is
     // highlighted - hovered, or mid-drag/resize/drawing via the sticky
-    // override in RenderItems - gets a heavier line in whichever colour it
+    // override in RenderItems - gets a heavier line in whichever color it
     // was already wearing. Two cues in two channels, deliberately: a
-    // brighter colour for hover is the channel depth uses, and a hovered
+    // brighter color for hover is the channel depth uses, and a hovered
     // snippet at the back would look exactly like the one on top.
     // There's no separate tier for the item being drawn into: arming is
     // just "the cursor happens to be over this item while a tool is
@@ -873,7 +873,7 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, const Can
     // stroke is centered on the coordinates it's given, so drawing it at
     // pMin/pMax directly would bleed past them on the outside.
     //
-    // A pinned snippet wears a third colour instead, and always has a
+    // A pinned snippet wears a third color instead, and always has a
     // border (see AppConfig::itemBorderColorPinnedRGBA): pins are acted on
     // only when the overlay is put away, so this is what says in edit mode
     // which snippets will stay behind.
@@ -975,15 +975,15 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         }
         ImGui::RenderFrame(rect.min, rect.max, ImGui::GetColorU32(fill), true, theme::kRadiusPill);
 
-        if (button == ChromeButton::Colour) {
-            // The colour itself, as a swatch, ringed in white so a dark
-            // colour reads on the pill.
-            const ImVec2 centre((rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f);
+        if (button == ChromeButton::Color) {
+            // The color itself, as a swatch, ringed in white so a dark
+            // color reads on the pill.
+            const ImVec2 center((rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f);
             constexpr float kSwatchRadius = 7.0f;
-            drawList->AddCircleFilled(centre, kSwatchRadius, ToImColor(drawColorRGBA_));
-            drawList->AddCircle(centre, kSwatchRadius, ImGui::GetColorU32(theme::kWhite), 0, 1.5f);
+            drawList->AddCircleFilled(center, kSwatchRadius, ToImColor(drawColorRGBA_));
+            drawList->AddCircle(center, kSwatchRadius, ImGui::GetColorU32(theme::kWhite), 0, 1.5f);
             if (hovered) {
-                ImGui::SetTooltip("%s", strings::kBarColourTip);
+                ImGui::SetTooltip("%s", strings::kBarColorTip);
             }
             continue;
         }
@@ -1013,7 +1013,7 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
                 icon = &icons::kType;
                 tooltip = strings::kToolTextTip;
                 break;
-            case ChromeButton::Colour:
+            case ChromeButton::Color:
                 break;  // drawn above
             case ChromeButton::Close:
                 icon = &icons::kX;
@@ -1111,13 +1111,13 @@ void OverlayApp::ActivateBarButton(ChromeButton button) {
             // so the popover's right edge (not its left) tracks this point
             // regardless of how wide it ends up being, since the bar can
             // sit near the screen's right edge.
-            if (const std::optional<ImVec2> centre = SelectionBarButtonCenter(ChromeButton::More)) {
+            if (const std::optional<ImVec2> center = SelectionBarButtonCenter(ChromeButton::More)) {
                 itemPropertiesPopoverAnchor_ =
-                    ImVec2(centre->x + kBarButtonSize * 0.5f, centre->y + kBarButtonSize * 0.5f + 6.0f);
+                    ImVec2(center->x + kBarButtonSize * 0.5f, center->y + kBarButtonSize * 0.5f + 6.0f);
             }
             break;
         }
-        // The drawing bar: the tool to draw with, and the colour. The tool
+        // The drawing bar: the tool to draw with, and the color. The tool
         // already in hand is cycled through its shapes instead - pen, line,
         // rectangle; eraser, rectangle eraser - so a plain drag makes them,
         // for a hand with no modifier key to hold (see penShape_).
@@ -1140,11 +1140,11 @@ void OverlayApp::ActivateBarButton(ChromeButton button) {
         case ChromeButton::Text:
             PickTool(Tool::Text);
             break;
-        case ChromeButton::Colour:
+        case ChromeButton::Color:
             // The chooser opens next to the button - asked for here, opened
             // on the next frame (see OpenColorChooser).
-            if (const std::optional<ImVec2> centre = SelectionBarButtonCenter(ChromeButton::Colour)) {
-                OpenColorChooser(*centre);
+            if (const std::optional<ImVec2> center = SelectionBarButtonCenter(ChromeButton::Color)) {
+                OpenColorChooser(*center);
             }
             break;
     }

@@ -1,6 +1,6 @@
 // The popovers and overlays that sit over the canvas: the properties
-// popover a snippet's More button opens, the colour chooser the drawing
-// bar's colour button opens, and the two drag previews - the frame a
+// popover a snippet's More button opens, the color chooser the drawing
+// bar's color button opens, and the two drag previews - the frame a
 // region capture is dragging out, and the rectangle the rectangle eraser
 // is about to take away. All of them are ordinary ImGui windows, submitted
 // from OnFrame after the items so they sit above every snippet.
@@ -184,9 +184,9 @@ void OverlayApp::RenderItemPropertiesPopover() {
     // for the hypothetical one that does not, which shows its foreground
     // opacity and nothing else.
     if (Layer* picture = it->ImageLayer()) {
-        RenderItemBackgroundColour(*picture);
+        RenderItemBackgroundColor(*picture);
         RenderItemTextStyle(*it);
-        // After the background-colour ColorEdit3 swatch, not before - see
+        // After the background-color ColorEdit3 swatch, not before - see
         // KeepChildPopupsInFront.
         KeepChildPopupsInFront();
     }
@@ -232,9 +232,9 @@ void OverlayApp::RenderItemOpacity(Item& item) {
     }
 }
 
-void OverlayApp::RenderItemBackgroundColour(Layer& picture) {
+void OverlayApp::RenderItemBackgroundColor(Layer& picture) {
     // White, and the picker for everything else. White gets a swatch of
-    // its own because it is the one colour with a meaning here: a no-op
+    // its own because it is the one color with a meaning here: a no-op
     // multiply tint on a real capture (see Layer::tintColorRGBA), the way
     // back to the picture as it was - and hitting exact white in a picker
     // takes aim. Nothing else is preset: the picker does the whole job.
@@ -280,8 +280,8 @@ void OverlayApp::RenderItemTextStyle(Item& item) {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverTextSizeTip);
     }
-    // ColorEdit4, not the ColorEdit3 the background colour uses: unlike
-    // the background colour, Item::noteTextColorRGBA's own alpha byte is
+    // ColorEdit4, not the ColorEdit3 the background color uses: unlike
+    // the background color, Item::noteTextColorRGBA's own alpha byte is
     // live (text has no separate opacity field), so a caption can be faded
     // from here.
     float rgba[4];
@@ -338,7 +338,7 @@ void OverlayApp::RenderItemContextMenu() {
 void OverlayApp::BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEntry>& rows) {
     const ItemId itemId = item.id;
     // Same rule as the popover's Clear button: painted pixels count as
-    // something to clear, or the row is greyed out over a snippet that
+    // something to clear, or the row is grayed out over a snippet that
     // visibly has ink on it.
     const Layer* painted = Session::FindPaintedLayer(item);
     const bool nothingToClear = item.strokes.empty() && (painted == nullptr || !painted->HasPaintedPixels());
@@ -517,10 +517,10 @@ void OverlayApp::RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action) {
     }
 }
 
-// ================= The colour chooser =================
+// ================= The color chooser =================
 
 void OverlayApp::OpenColorChooser(ImVec2 from) {
-    // Only asked for here: the bar's colour button fires from the raw
+    // Only asked for here: the bar's color button fires from the raw
     // mouse callback between frames, where there is no window for
     // ImGui::OpenPopup to belong to.
     colorChooserRequested_ = true;
@@ -548,7 +548,7 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
     if (!open) {
         if (colorChooserOpen_) {
             // Closed since the last frame. What it was left on is the
-            // colour from now on, and the next time the app starts.
+            // color from now on, and the next time the app starts.
             colorChooserOpen_ = false;
             if (settings_.Stored().strokeColorRGBA != drawColorRGBA_) {
                 settings_.Mutable().strokeColorRGBA = drawColorRGBA_;

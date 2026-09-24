@@ -108,7 +108,7 @@ int TakeWheelSteps(float& remainder, float wheelDelta) {
     return static_cast<int>(whole);
 }
 
-// The style colours that are the accent, from whatever theme::Accent() is
+// The style colors that are the accent, from whatever theme::Accent() is
 // now. Separate from ApplySpickzettelStyle because the accent is a setting
 // and these are applied again whenever it changes - see OnFrame.
 void ApplyAccentToStyle(ImGuiStyle& style) {
@@ -126,7 +126,7 @@ void ApplyAccentToStyle(ImGuiStyle& style) {
 
 // Sets up ImGui's global style/colors for the app's dark "graphite +
 // accent orange" material look, in place of ImGui's own
-// built-in dark theme (flat opaque grey panels, square corners, no accent
+// built-in dark theme (flat opaque gray panels, square corners, no accent
 // color). Idempotent-by-caller-contract (OnFrame only calls this once,
 // guarded by styleApplied_) rather than idempotent itself - it just
 // stomps every color/style var each time, so calling it twice would be
@@ -224,8 +224,8 @@ bool IconButton(const char* strId, const Icon& icon, bool active, float buttonSi
     // DrawIcon draws straight to the drawlist rather than through any
     // ImGui-styled widget path, so without this the icon stayed fully
     // opaque while a disabled button's own *background* dimmed around
-    // it - the icon was the one part of a "greyed out" button that
-    // never actually looked greyed out.
+    // it - the icon was the one part of a "grayed out" button that
+    // never actually looked grayed out.
     const ImU32 iconColor = ImGui::GetColorU32(active ? theme::AccentInk() : theme::kWhite);
     DrawIcon(ImGui::GetWindowDrawList(), icon, iconPos, iconSize, iconColor);
     return pressed;
@@ -425,16 +425,16 @@ bool PillIconButton(const char* strId, const Icon& icon, bool active) {
     return IconButton(strId, icon, active, 28.0f, 13.0f, theme::kRadiusPill);
 }
 
-// The colour button where it has to say whether it is *on*: the pill
+// The color button where it has to say whether it is *on*: the pill
 // every icon tile beside it wears - accent while on, plain while off -
-// with the colour as a swatch where the icon would be. Used by the bar
+// with the color as a swatch where the icon would be. Used by the bar
 // rows in Settings > Interaction, where the row is read as "these buttons
 // are on the bar and these are not", and the swatch alone could not say
 // which it was: PillColorButton's ring is its hover/selected cue, and
 // against nine other tiles whose whole background answers the question, a
 // ring on one of them does not read as an answer at all.
 bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
-    // The same three colours and the same Button underneath as IconButton,
+    // The same three colors and the same Button underneath as IconButton,
     // so the two kinds of tile hover and press alike.
     ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::Accent() : theme::kHoverWash);
@@ -446,20 +446,20 @@ bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
     const ImVec2 minPt = ImGui::GetItemRectMin();
     const ImVec2 maxPt = ImGui::GetItemRectMax();
     const ImVec2 center((minPt.x + maxPt.x) * 0.5f, (minPt.y + maxPt.y) * 0.5f);
-    // The swatch the selection bar's own colour button draws, at its size.
+    // The swatch the selection bar's own color button draws, at its size.
     constexpr float kSwatchRadius = 7.0f;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     // Through GetColorU32, which multiplies by the style's own alpha, so
-    // the swatch fades with the tile when the row greys a switched-off
-    // button out. Drawn straight to the draw list with the packed colour,
+    // the swatch fades with the tile when the row grays a switched-off
+    // button out. Drawn straight to the draw list with the packed color,
     // it stayed fully bright while the pill behind it and every icon
     // beside it went dim - which left the one tile whose state could not
     // be read as the one tile that had to say it.
     dl->AddCircleFilled(center, kSwatchRadius, ImGui::GetColorU32(ImGui::ColorConvertU32ToFloat4(ToImColor(colorRGBA))));
     // Ringed in whichever ink the icons beside it are using, so a swatch
-    // close to the colour of the pill behind it still has an edge -
-    // GetColorU32 so the ring dims with the tile when the row greys it
-    // out, the same reasoning as IconButton's own icon colour.
+    // close to the color of the pill behind it still has an edge -
+    // GetColorU32 so the ring dims with the tile when the row grays it
+    // out, the same reasoning as IconButton's own icon color.
     dl->AddCircle(center, kSwatchRadius, ImGui::GetColorU32(active ? theme::AccentInk() : theme::kWhite), 0, 1.5f);
     return pressed;
 }
@@ -470,7 +470,7 @@ bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
 // `highlighted`
 // mirrors PillIconButton's `active`, but as a ring around the swatch
 // rather than a filled background: the swatch's own fill already carries
-// the colour, so there is no separate "on" background the way an icon
+// the color, so there is no separate "on" background the way an icon
 // button has.
 bool PillColorButton(const char* strId, uint32_t colorRGBA, bool highlighted) {
     constexpr float kSize = 28.0f;
@@ -677,7 +677,7 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
     // out below, rather than built at the position it will appear. That is
     // what lets a cached mesh survive its item being dragged: the offset is
     // the only thing a move changes, and it never reaches the tessellator.
-    // It also keeps the geometry maths at small coordinates, which is where
+    // It also keeps the geometry math at small coordinates, which is where
     // floats behave best.
     const StrokeMesh* mesh = nullptr;
     if (meshSlot.cache != nullptr) {
@@ -760,7 +760,7 @@ void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMa
         // Nothing. A painted layer with no pixels loaded has nothing to
         // stand in with: its tintColorRGBA is a tint for those pixels, not
         // a fill, and the flat-fill fallback below only means something for
-        // an Image layer that never had any (a Drawing item's coloured
+        // an Image layer that never had any (a Drawing item's colored
         // background). Falling through to it painted an opaque white block
         // - which is what every painted snippet looked like in the canvas
         // overview, where no textures are loaded at all.
@@ -1098,8 +1098,8 @@ void OverlayApp::OnFrame(float deltaSeconds) {
         MatureHeldPress();
     }
     // The accent, whenever the setting differs from what was last applied -
-    // on every frame while a colour is being dragged in Settings, so the
-    // whole overlay recolours as it moves. The theme's accessors and the
+    // on every frame while a color is being dragged in Settings, so the
+    // whole overlay recolors as it moves. The theme's accessors and the
     // ImGui style both carry it.
     if (appliedAccentRGBA_ != Cfg().accentColorRGBA) {
         theme::SetAccent(Cfg().accentColorRGBA);
@@ -1280,7 +1280,7 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     RenderCanvasLayer(displayW, displayH);
     RenderItems(displayW, displayH);
     // Over the items: the canvas bar, and the popovers - the properties
-    // popover a snippet's More button opens, and the colour chooser.
+    // popover a snippet's More button opens, and the color chooser.
     RenderCanvasBar(displayW, displayH);
     RenderItemPropertiesPopover();
     // And the menu a right-click on a snippet opens - beside the popover
@@ -1364,7 +1364,7 @@ void OverlayApp::ApplyPointerShape() {
     // one - hence two frames of history rather than one.
     //
     // A moved pointer re-asserts too. It costs nothing where it matters (an
-    // overlay nobody is touching is the case being optimised, and there the
+    // overlay nobody is touching is the case being optimized, and there the
     // pointer is still by definition), and it covers everything that can only
     // happen while the pointer moves - including SetCursorShape declining to
     // act because its own hit test said the cursor had left our window, which
@@ -1535,7 +1535,7 @@ bool OverlayApp::InputOptionValue(int index) const {
 }
 
 // Whether a row's option can currently do anything - the same preconditions
-// the Settings tab greys its checkboxes on, read from the one place that
+// the Settings tab grays its checkboxes on, read from the one place that
 // states them. An unavailable row is dimmed and its number key ignored:
 // storing a change that has no effect, with nothing on screen saying so, is
 // how you end up believing an option is broken.
@@ -1582,7 +1582,7 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
     }
 
     char fps[160];
-    // Availability, not just the stored value: with raw input greyed out
+    // Availability, not just the stored value: with raw input grayed out
     // there is no pointer of ours being driven, so its gain and step
     // histogram would be a readout of nothing.
     if (settings_.Live().InputOptions().useRawMouseInput && settings_.Live().InputOptions().RawMouseInputCanBeUsed(settings_.Live().dontStealFocus) &&
@@ -2011,7 +2011,7 @@ void OverlayApp::RenderToolModifierBadge() {
         return;
     }
     // Down and to the right of the hotspot, clear of the pen glyph and the
-    // brush-size dot, on a disc of the panel colour so it reads over any
+    // brush-size dot, on a disc of the panel color so it reads over any
     // snippet.
     constexpr float kOffset = 18.0f;
     constexpr float kSize = 22.0f;
@@ -2212,7 +2212,7 @@ void OverlayApp::SwitchCanvasByOffset(int delta) {
     // reads as "you're at the last one" rather than as the gesture having
     // stopped working - the same reasoning as the size preview arming at
     // its own clamp.
-    // Parenthesised rather than just spaced apart: canvases are named
+    // Parenthesized rather than just spaced apart: canvases are named
     // "Canvas N" by default, so "Canvas 1 5/5" puts two unrelated numbers
     // next to each other and reads like one of them is a typo.
     char toast[160];

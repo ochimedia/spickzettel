@@ -56,7 +56,7 @@ inline constexpr ImVec4 kGraphite100(0.867f, 0.882f, 0.906f, 1.00f);  // #dde1e7
 inline constexpr ImVec4 kWhite(0.961f, 0.969f, 0.976f, 1.00f);        // #f5f7f9
 
 // The accent - AppConfig::accentColorRGBA, #ff6a3d unless changed - and the
-// two colours derived from it: a lighter one for hover and press, and the
+// two colors derived from it: a lighter one for hover and press, and the
 // ink for text and icons drawn on top of it, dark or light by how bright
 // the accent is. Functions rather than constants like the rest of the
 // palette, because the accent is a setting: OverlayApp::OnFrame hands it to
@@ -64,7 +64,7 @@ inline constexpr ImVec4 kWhite(0.961f, 0.969f, 0.976f, 1.00f);        // #f5f7f9
 const ImVec4& Accent();
 const ImVec4& AccentHover();
 const ImVec4& AccentInk();
-// The accent as a draw-list colour at `alpha`, for the calls that take an
+// The accent as a draw-list color at `alpha`, for the calls that take an
 // ImU32 straight rather than going through the style.
 ImU32 AccentU32(uint8_t alpha = 255);
 void SetAccent(uint32_t rgba);
@@ -231,7 +231,7 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
 // in the code, so text can be edited freely and an id changes on purpose.
 //
 // The result lives in a small rotating set of buffers, so several can be
-// alive in one expression (a label and its neighbour, say); it is valid
+// alive in one expression (a label and its neighbor, say); it is valid
 // until this has been called a handful more times, which for the "build a
 // label, pass it straight to ImGui" use here is always. Nothing keeps one.
 const char* Labeled(const char* text, const char* id);
@@ -239,13 +239,13 @@ const char* Labeled(const char* text, const char* id);
 // Pill-sized icon button (28x28, true circle, 13px icon) - the size the
 // selection bar's buttons and the dock's chips are.
 bool PillIconButton(const char* strId, const Icon& icon, bool active);
-// The same, for a slot that holds a colour rather than an action - see its
+// The same, for a slot that holds a color rather than an action - see its
 // definition.
 bool PillColorButton(const char* strId, uint32_t colorRGBA, bool highlighted);
 
-// The colour button as a tile in a row of buttons: the same pill an icon
+// The color button as a tile in a row of buttons: the same pill an icon
 // tile wears - accent while it is on, plain while it is off - with the
-// colour as a swatch where the icon would be. See the definition for why
+// color as a swatch where the icon would be. See the definition for why
 // this is not PillColorButton with a flag.
 bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active);
 
@@ -328,7 +328,7 @@ ImU32 ToImColor(uint32_t colorRGBA, float opacity = 1.0f);
 // backgroundOpacity, AppConfig::editModeBorderOpacity).
 void ColorRGBAToFloats(uint32_t colorRGBA, float out[3]);
 uint32_t FloatsToColorRGBA(const float in[3], uint8_t alpha);
-// The same, for the colours whose alpha the user edits along with the hue
+// The same, for the colors whose alpha the user edits along with the hue
 // (ImGui::ColorEdit4) rather than through a separate opacity slider - see
 // AppConfig::itemBorderColorFrontRGBA.
 void ColorRGBAToFloats4(uint32_t colorRGBA, float out[4]);
@@ -396,7 +396,7 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
                      bool showStrokes,
                      const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
                      StrokeMeshSlot meshCache, ImageSampling sampling);
-// An icon+text button in the accent colour - the Overview's primary actions
+// An icon+text button in the accent color - the Overview's primary actions
 // (New folder, New canvas). Defined in overlay_app_overview.cpp.
 bool PrimaryButton(const char* strId, const Icon& icon, const char* text);
 

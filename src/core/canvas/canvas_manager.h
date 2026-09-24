@@ -201,7 +201,7 @@ public:
     // one snippet.
     //
     // Past the nearest *overlapping* one rather than swapping with the
-    // immediate neighbour, which may be nowhere near it: a canvas holds
+    // immediate neighbor, which may be nowhere near it: a canvas holds
     // snippets all over the screen, and stepping over one that shares no
     // pixels with this one changes the order without changing anything
     // anybody can see. "Forward" means "in front of the thing covering

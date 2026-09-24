@@ -144,7 +144,7 @@ protected:
 };
 
 // The reason the chain is built by hand: a straight-alpha picture averaged
-// as it is darkens its ink towards the (0,0,0,0) around it.
+// as it is darkens its ink toward the (0,0,0,0) around it.
 TEST_F(Win32Dx11RendererTest, AMipAveragesTheInkNotTheTransparencyAroundIt) {
     const std::array<uint8_t, 16> pixels{0, 0, 0, 0, 255, 255, 255, 255,  //
                                          0, 0, 0, 0, 255, 255, 255, 255};
@@ -168,8 +168,8 @@ TEST_F(Win32Dx11RendererTest, AMipAveragesTheInkNotTheTransparencyAroundIt) {
 // One-pixel stripes at a third of their size: bilinear lands on one stripe
 // per pixel and shows them at full contrast - the aliasing that breaks up
 // text - where the two filters that widen with the reduction come out an
-// even grey.
-TEST_F(Win32Dx11RendererTest, ShrunkStripesAliasBilinearButGoGreyBicubicAndLanczos) {
+// even gray.
+TEST_F(Win32Dx11RendererTest, ShrunkStripesAliasBilinearButGoGrayBicubicAndLanczos) {
     const std::vector<uint8_t> stripes = Stripes(48, 1);
     ID3D11ShaderResourceView* srv = renderer_.CreateTextureFromRGBA(stripes.data(), 48, 1);
     ASSERT_NE(srv, nullptr);

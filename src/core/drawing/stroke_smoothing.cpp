@@ -7,11 +7,11 @@ namespace sz::core {
 
 namespace {
 
-// Centripetal parameterisation: knot spacing is the square root of the
+// Centripetal parameterization: knot spacing is the square root of the
 // distance between control points (alpha = 0.5). Uniform spacing (alpha = 0)
 // is simpler and is what most quick implementations use, but it overshoots
 // and can tie a small loop wherever two control points sit much closer
-// together than their neighbours - which is exactly what a hand slowing into
+// together than their neighbors - which is exactly what a hand slowing into
 // a corner produces.
 constexpr float kAlpha = 0.5f;
 
@@ -31,9 +31,9 @@ StrokePoint Blend(const StrokePoint& a, const StrokePoint& b, float wa, float wb
 }
 
 // One evaluation of the Barry-Goldman pyramid: three linear blends between
-// neighbouring control points, then two between those, then one between
+// neighboring control points, then two between those, then one between
 // those - which is the Catmull-Rom spline written in a form that takes the
-// knot values directly, so a non-uniform parameterisation needs no special
+// knot values directly, so a non-uniform parameterization needs no special
 // casing. Every denominator is a knot difference, and coincident control
 // points make one of them zero, hence the guards.
 StrokePoint EvaluateSpline(const StrokePoint& p0, const StrokePoint& p1, const StrokePoint& p2,

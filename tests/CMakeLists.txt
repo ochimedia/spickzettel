@@ -42,7 +42,7 @@ spickzettel_set_warnings(sz_core_tests)
 # getenv for a shared-state reason that does not apply to a test.
 set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 
-# The string catalogue as it is in the source tree, for the test that parses
+# The string catalog as it is in the source tree, for the test that parses
 # it strictly - see ui/ui_strings_file_test.cpp.
 set_source_files_properties(ui/ui_strings_file_test.cpp PROPERTIES COMPILE_DEFINITIONS
     "SPICKZETTEL_UI_STRINGS_JSON=\"${CMAKE_SOURCE_DIR}/assets/ui_strings.json\"")

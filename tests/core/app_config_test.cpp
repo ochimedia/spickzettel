@@ -367,7 +367,7 @@ TEST(AppConfigTest, TheBarsKeepTheirOrderAndWhatIsSwitchedOff) {
                           {ChromeButton::More, true},
                           {ChromeButton::Minimize, false},
                           {ChromeButton::Maximize, true}};
-    config.drawingBar = {{ChromeButton::Colour, true},
+    config.drawingBar = {{ChromeButton::Color, true},
                           {ChromeButton::Pen, true},
                           {ChromeButton::Eraser, false},
                           {ChromeButton::Text, true}};
@@ -406,7 +406,7 @@ TEST(AppConfigTest, ABarReadFromTheFileEndsUpHoldingEachOfItsButtonsOnce) {
 // the rest of the file uses.
 TEST(AppConfigTest, TheColorButtonIsStoredAsColor) {
     AppConfig config = DefaultConfig();
-    config.drawingBar = {{ChromeButton::Colour, false}, {ChromeButton::Pen, true}, {ChromeButton::Eraser, true},
+    config.drawingBar = {{ChromeButton::Color, false}, {ChromeButton::Pen, true}, {ChromeButton::Eraser, true},
                          {ChromeButton::Text, true}};
     const std::string text = SerializeConfig(config);
     EXPECT_NE(text.find("\"color\""), std::string::npos) << text;
@@ -449,10 +449,10 @@ TEST(AppConfigTest, TheChosenDisplayRoundTripsAndIsThePrimaryUntilChosen) {
     EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
 }
 
-// The colours that say which snippet is in front. Their alpha is part of
-// the colour, so they are the first settings written as eight hex digits -
-// and the six-digit spelling every other colour uses still has to parse,
-// and still has to be what an opaque colour is written back as.
+// The colors that say which snippet is in front. Their alpha is part of
+// the color, so they are the first settings written as eight hex digits -
+// and the six-digit spelling every other color uses still has to parse,
+// and still has to be what an opaque color is written back as.
 TEST(AppConfigTest, SnippetColorsRoundTripWithTheirAlpha) {
     AppConfig config = DefaultConfig();
     config.itemBorderColorFrontRGBA = 0xFF6A3DFFu;  // opaque, so six digits on disk
@@ -460,7 +460,7 @@ TEST(AppConfigTest, SnippetColorsRoundTripWithTheirAlpha) {
     config.itemBorderColorPinnedRGBA = 0x20C0FF80u;
 
     const std::string text = SerializeConfig(config);
-    EXPECT_NE(text.find("\"#FF6A3D\""), std::string::npos) << "an opaque colour keeps the short spelling";
+    EXPECT_NE(text.find("\"#FF6A3D\""), std::string::npos) << "an opaque color keeps the short spelling";
     EXPECT_NE(text.find("\"#101820A0\""), std::string::npos);
     EXPECT_EQ(ParseConfig(text), config);
 }

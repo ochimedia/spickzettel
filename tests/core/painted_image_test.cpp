@@ -48,7 +48,7 @@ TEST(PaintedImageTest, RejectsAMismatchedPixelBuffer) {
 }
 
 // A dab - a zero-length segment - is a disc, which is how the pixel brush
-// makes a dot. The centre is fully covered and the outside is untouched.
+// makes a dot. The center is fully covered and the outside is untouched.
 TEST(PaintedImageTest, AZeroLengthSegmentPaintsADisc) {
     PaintedImage image(40, 40);
     PaintSegment(image, 20.0f, 20.0f, 20.0f, 20.0f, 6.0f);
@@ -276,7 +276,7 @@ TEST(PaintedImageTest, AStrokeOnlySavesTheTilesItTouched) {
 
 // A stroke spanning a tile boundary must be continuous across it - the
 // classic seam bug, where each tile composites without knowing its
-// neighbour.
+// neighbor.
 TEST(PaintedImageTest, AStrokeAcrossATileBoundaryHasNoSeam) {
     PaintedImage image(192, 64);
     PaintSegment(image, 10.0f, 32.0f, 180.0f, 32.0f, 6.0f);

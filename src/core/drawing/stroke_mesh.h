@@ -55,7 +55,7 @@ struct StrokeMesh {
 // `halfWidth` is half the pen width. `fringePx` is how wide the
 // anti-aliasing edge should be, in the same space - one pixel, normally.
 // A closed centerline (first point equal to last, as a rectangle tool's is)
-// is recognised and joined at the seam instead of capped.
+// is recognized and joined at the seam instead of capped.
 StrokeMesh BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx);
 
 // The same, into a mesh the caller already owns. `out` is cleared but keeps

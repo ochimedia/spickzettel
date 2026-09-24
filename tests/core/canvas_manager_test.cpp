@@ -1854,7 +1854,7 @@ TEST(CanvasManagerTest, ResetItemToNativeSizeExitsFullscreenFirst) {
     EXPECT_EQ(manager.CurrentOrNull()->items.front().rect.h, 200.0f);
 }
 
-TEST(CanvasManagerTest, ResetItemToNativeSizeCentresADisplaySizedItemOnTheDisplay) {
+TEST(CanvasManagerTest, ResetItemToNativeSizeCentersADisplaySizedItemOnTheDisplay) {
     // A fullscreen capture's native size is the display's, so centering it
     // back on its own center lands at 0,0, filling the display.
     CanvasManager manager;

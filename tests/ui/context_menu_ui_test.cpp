@@ -63,7 +63,7 @@ TEST_F(ContextMenuUiTest, MoveToNewCanvasFromTheMenuTakesTheSnippetThere) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "the snippet came along";
 }
 
-// A row that cannot be chosen right now is greyed rather than dropped, so
+// A row that cannot be chosen right now is grayed rather than dropped, so
 // the menu keeps the same shape over every snippet. Clear drawing is the
 // one that starts out unavailable on a fresh screenshot: there is no ink
 // on it yet.
@@ -84,12 +84,12 @@ TEST_F(ContextMenuUiTest, ARowWithNothingToDoIsThereButDisabled) {
 
 // The Properties popover keeps what describes a snippet and gives what is
 // done to it to this menu: none of the old row of action buttons, and a
-// picker for each colour with white the one swatch left beside the
+// picker for each color with white the one swatch left beside the
 // background's.
 TEST_F(UiTest, ThePropertiesPopoverHasPickersAndNoActionRow) {
     ShowEditMode();
     StepFrame();
-    Drag(300.0f, 300.0f, 700.0f, 550.0f);  // a screenshot, which has a background colour
+    Drag(300.0f, 300.0f, 700.0f, 550.0f);  // a screenshot, which has a background color
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     RawClick(500.0f, 420.0f);
     ASSERT_EQ(App().Selection().size(), 1u);
