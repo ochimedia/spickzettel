@@ -418,6 +418,7 @@ TEST_F(LibraryStoreTest, SaveKeepsImagesReferencedByAnyLayer) {
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000007.qoi"));
     EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000008.qoi"));
     EXPECT_FALSE(std::filesystem::exists(dir_ / "staging" / "000007.qoi")) << "staging is drained";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "staging")) << "and gone once empty";
 }
 
 TEST_F(LibraryStoreTest, LoadDefaultsAMissingItemAnchorToNotYetAnchored) {

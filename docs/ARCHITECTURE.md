@@ -896,6 +896,11 @@ which nobody wants, or the capture a crash left without its record,
 which is exactly what writing it early was for, and the two cannot be
 told apart. `retired/` is the user's to empty.
 
+`staging/` is removed by the save that drains it, so it exists only
+between a capture and the next save, or while a picture in it could not
+be moved. An empty folder left in the library was only something for a
+person looking in to wonder about.
+
 A picture waiting in staging whose snippet's directory already holds a
 file of the same name is set aside the same way, not moved in over it.
 A picture goes to staging only while its snippet has no directory and

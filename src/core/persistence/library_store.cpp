@@ -1920,6 +1920,12 @@ bool LibraryStore::Save(const LibraryView& view) const {
             std::filesystem::create_directories(setAside, ec);
             std::filesystem::rename(entry.path(), setAside / name, ec);
         }
+        // And gone once drained - a removal that only succeeds on an empty
+        // directory, so whatever stayed keeps it. Left standing, it was an
+        // empty folder in the library that a person looking in could only
+        // wonder about.
+        ec.clear();
+        std::filesystem::remove(stagingDir, ec);
     }
 
     ++writeGeneration_;  // whatever landed, or half-landed, the tree is not what it was
