@@ -412,6 +412,13 @@ bool Session::ArrivalsCanMove(const undo::ItemsArrived& entry, bool undo) const 
         if (!undo && Manager().IsItemDeleted(arrival.itemId)) {
             return false;
         }
+        // Brought again only from where the undo sent it. Moved on since,
+        // it is another canvas's now, with that canvas's history of it -
+        // which the redo would pull it out from under, off a canvas
+        // nobody is looking at.
+        if (!undo && holder != arrival.fromCanvas && holder != entry.canvasId) {
+            return false;
+        }
     }
     return true;
 }

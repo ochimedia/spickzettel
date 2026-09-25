@@ -897,6 +897,30 @@ TEST(SessionTest, ARedoOfAPasteWhoseSnippetWasDeletedSinceIsRefused) {
     EXPECT_FALSE(session.CanRedo()) << "and the step is gone";
 }
 
+// Sent back by an undo, then moved on to a third canvas: it is that
+// canvas's now, and the redo leaves it there.
+TEST(SessionTest, ARedoOfAPasteWhoseSnippetMovedOnSinceIsRefused) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    const CanvasId second = session.Manager().AddCanvas("Second");
+    const CanvasId third = session.Manager().AddCanvas("Third");
+    session.Manager().SwitchToCanvas(second);
+    session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+    ASSERT_TRUE(session.Undo().has_value());
+    ASSERT_EQ(session.Manager().CanvasHoldingItem(moved), std::optional<CanvasId>(first));
+    session.Manager().SwitchToCanvas(third);
+    session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+    session.Manager().SwitchToCanvas(second);
+
+    const std::optional<Session::UndoStep> refused = session.Redo();
+    ASSERT_TRUE(refused.has_value());
+    EXPECT_TRUE(refused->refused);
+    EXPECT_EQ(session.Manager().CanvasHoldingItem(moved), std::optional<CanvasId>(third)) << "left where it is";
+    session.Manager().SwitchToCanvas(third);
+    EXPECT_TRUE(session.CanUndo()) << "with the third canvas's history of it";
+}
+
 // Copies, pasted or duplicated, are undone into their deletion mark - as
 // a new snippet is - and redone out of it; the source is not touched.
 TEST(SessionTest, CopiesArriveAndGoWithOneUndo) {
