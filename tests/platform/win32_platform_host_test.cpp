@@ -47,6 +47,8 @@ TEST(Win32PlatformHostTest, ACloseFromOutsideExitsAsTheTrayMenuDoes) {
             ++exits;
         }
     });
+    int sessionEnds = 0;
+    host.SetSessionEndCallback([&sessionEnds] { ++sessionEnds; });
     const HWND hwnd = FindWindowA(nullptr, name.c_str());
     ASSERT_NE(hwnd, nullptr);
 
@@ -56,8 +58,10 @@ TEST(Win32PlatformHostTest, ACloseFromOutsideExitsAsTheTrayMenuDoes) {
 
     SendMessageA(hwnd, WM_ENDSESSION, TRUE, 0);
     EXPECT_EQ(exits, 1) << "a logoff ends the process itself";
+    EXPECT_EQ(sessionEnds, 1);
     SendMessageA(hwnd, WM_ENDSESSION, TRUE, ENDSESSION_CLOSEAPP);
     EXPECT_EQ(exits, 2) << "the Restart Manager waits for it to go";
+    EXPECT_EQ(sessionEnds, 1) << "the exit's own flush, not another before it";
 }
 
 // The same close sent to the overlay, which is the window taskkill finds

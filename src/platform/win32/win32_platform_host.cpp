@@ -411,14 +411,20 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
             }
             return TRUE;
         case WM_ENDSESSION:
-            if (wParam && sessionEndCallback_) {
-                sessionEndCallback_();
+            if (!wParam) {
+                return 0;  // called off after all
             }
             // The Restart Manager - an installer or updater making room -
             // closes an application with the same pair of messages, and
-            // then waits for it to go. A logoff ends the process itself.
-            if (wParam && (lParam & ENDSESSION_CLOSEAPP)) {
+            // then waits for it to go: an exit, whose own flush is the one
+            // this needs. Both ran, and with the query's that was three
+            // runs - three recovery copies of the whole library, against
+            // the Restart Manager's clock, when the library could not be
+            // written. A logoff ends the process itself.
+            if (lParam & ENDSESSION_CLOSEAPP) {
                 Exit();
+            } else if (sessionEndCallback_) {
+                sessionEndCallback_();
             }
             return 0;
         // A request to close - taskkill without /f, or anything else that

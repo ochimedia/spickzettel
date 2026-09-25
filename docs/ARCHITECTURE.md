@@ -1579,10 +1579,14 @@ without `/f` posts it - which `DefWindowProc` answered by destroying the
 window and nothing else: the process ran on with no tray icon and no
 hotkeys, still holding the single-instance mutex. A close from outside,
 and the Restart Manager's `ENDSESSION_CLOSEAPP`, now take the tray menu's
-Exit. So does a `WM_CLOSE` sent to the overlay, which is where `taskkill`
+Exit. A close-app runs no session-end flush before the exit's own: with
+the query's, that was three runs, and three recovery copies against the
+Restart Manager's clock when the library could not be written. So does
+a `WM_CLOSE` sent to the overlay take the Exit, which is where `taskkill`
 sends it while the overlay is up - it closes the windows it can see, and
 the host window is hidden. Alt+F4 over the overlay arrives as `SC_CLOSE`
-instead, and stays swallowed. Both settle the hand's work, try the
+instead, and stays swallowed. Exit and a session end both settle the
+hand's work, try the
 save twice - the first attempt may be what clears the way - and, if the
 library still cannot be written, write a **recovery copy** beside it:
 `library-recovery-<timestamp>/`, a fresh tree holding every record and
