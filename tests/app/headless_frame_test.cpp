@@ -3733,6 +3733,24 @@ TEST_F(HeadlessAppTest, CtrlHOpensTheCheatSheetAndTheCanvasWaitsUnderIt) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
+// Undo and redo wait under a panel too: what they changed would be on a
+// canvas nobody can see.
+TEST_F(HeadlessAppTest, UndoWaitsUnderAPanel) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 600.0f, 500.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+
+    PressCtrlKey(ImGuiKey_H);
+    ASSERT_TRUE(App().IsCheatSheetOpen());
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+
+    PressKey(ImGuiKey_Escape);
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "and takes it back once the canvas is in sight";
+}
+
 // The welcome note names the key that brings the overlay back and the
 // cheat sheet's, as they are bound, and no other hotkey: the sheet has
 // the rest.

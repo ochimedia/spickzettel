@@ -1310,15 +1310,19 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // core/session/undo_entry.h for exactly what that covers. Gated on
     // !WantTextInput so it doesn't fight an in-progress rename field's
     // own built-in text-edit undo (ImGui::InputText already handles
-    // Ctrl+Z there itself).
-    if (!io.WantTextInput && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
+    // Ctrl+Z there itself). And not under a panel, for the reason tool
+    // keys are not (see HandleToolShortcuts): the change would be to a
+    // canvas nobody can see - while a shortcut is being bound, or, in the
+    // move picker, to the very snippet being moved.
+    const bool historyKeysFree = !io.WantTextInput && !PanelOpen();
+    if (historyKeysFree && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
         Undo();
     }
     // Redo is keyboard-only, so both of the conventional chords are
     // bound rather than picking a side: Ctrl+Y (Windows) and Ctrl+Shift+Z
     // (the editor/Adobe lineage). Ctrl+Z above now excludes Shift so the
     // two can't both fire on the same press.
-    if (!io.WantTextInput && io.KeyCtrl &&
+    if (historyKeysFree && io.KeyCtrl &&
         (ImGui::IsKeyPressed(ImGuiKey_Y) || (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)))) {
         Redo();
     }
