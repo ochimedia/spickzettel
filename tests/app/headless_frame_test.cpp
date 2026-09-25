@@ -9,6 +9,7 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <random>
 #include <string>
 
 #include "core/canvas/item_geometry.h"  // kItemMinWidth/kItemMinHeight, for the group-resize floor
@@ -494,6 +495,23 @@ std::optional<platform::ImageFilter> FilterDrawnWith(uint64_t texture) {
     }
     ADD_FAILURE() << "texture " << texture << " was not drawn";
     return std::nullopt;
+}
+
+// Every texture the last frame drew with, the font atlas's aside - read from
+// the windows, as FilterDrawnWith is.
+std::vector<uint64_t> TexturesDrawn() {
+    std::vector<uint64_t> drawn;
+    for (const ImGuiWindow* window : GImGui->Windows) {
+        if (!window->Active) {
+            continue;
+        }
+        for (const ImDrawCmd& cmd : window->DrawList->CmdBuffer) {
+            if (cmd.UserCallback == nullptr && cmd.TexRef._TexData == nullptr && cmd.TexRef._TexID != 0) {
+                drawn.push_back(static_cast<uint64_t>(cmd.TexRef._TexID));
+            }
+        }
+    }
+    return drawn;
 }
 
 // The texture `item`'s picture has this frame, 0 for none.
@@ -3956,6 +3974,170 @@ TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn)
     EXPECT_TRUE(host_.overlayWindow.IsDrawable(session.FrozenScreenTexture())) << "from the pixels kept";
     EXPECT_TRUE(FilterDrawnWith(pictureAfter) == std::nullopt) << "drawn, with the new texture";
     EXPECT_EQ(host_.overlayWindow.badTextureUses, 0);
+}
+
+// Whatever happens - screenshots and drawings made, copied, sent, deleted,
+// undone and redone, canvases switched, deleted and erased, the stroke
+// renderer switched, the canvas bar's previews shown, the overlay put away,
+// the device replaced and uploads failing - no frame draws a texture that
+// is not live on the device there is, none is released twice or updated
+// once gone, and every texture the window holds is one the cache holds.
+// And at the end, on a canvas of nothing, nothing is held but the frozen
+// screen being shown.
+TEST_F(HeadlessSaveTest, EveryTextureDrawnIsLiveWhateverHappens) {
+    constexpr uint32_t kSeeds = 6;
+    constexpr int kSteps = 120;
+    AppConfig config = DefaultConfig();
+    config.freezeScreenInEditMode = true;
+    config.showCanvasBar = true;
+    config.overviewShowsBitmaps = true;
+    FakeOverlayWindow& window = host_.overlayWindow;
+    for (uint32_t seed = 1; seed <= kSeeds; ++seed) {
+        SCOPED_TRACE(::testing::Message() << "seed " << seed);
+        if (controller_) {
+            controller_->GetSession().SetLibraryStore(nullptr);
+        }
+        store_.reset();
+        std::filesystem::remove(Library());
+        window.visible = false;  // the last seed's overlay went with its app
+        window.uploadsSucceed = true;
+        window.captureReturnsWidth = 64;
+        window.captureReturnsHeight = 48;
+        window.captureReturnsPixelsRGBA.assign(64u * 48u * 4u, static_cast<uint8_t>(seed));
+        StartWith(config);
+        AttachStore();
+        ShowEditMode();
+        StepFrame();
+        Session& session = controller_->GetSession();
+        std::mt19937 rng(seed);
+        const auto pick = [&rng](size_t count) { return std::uniform_int_distribution<size_t>(0, count - 1)(rng); };
+        const auto rect = [&rng] {
+            std::uniform_real_distribution<float> at(0.0f, 60.0f);
+            std::uniform_real_distribution<float> size(20.0f, 300.0f);
+            return Rect{at(rng), at(rng), size(rng), size(rng)};
+        };
+        const auto itemsHere = [&session] {
+            std::vector<ItemId> ids;
+            if (const Canvas* canvas = session.Manager().CurrentOrNull()) {
+                for (const Item& item : canvas->items) {
+                    if (!session.Manager().IsDeleted(*canvas, item)) {
+                        ids.push_back(item.id);
+                    }
+                }
+            }
+            return ids;
+        };
+        const auto canvases = [&session](bool deleted) {
+            std::vector<CanvasId> ids;
+            for (const Canvas& canvas : session.Manager().Canvases()) {
+                if (canvas.id != session.Manager().CurrentCanvasId() && session.Manager().IsDeleted(canvas) == deleted) {
+                    ids.push_back(canvas.id);
+                }
+            }
+            return ids;
+        };
+
+        for (int step = 0; step < kSteps && !HasFailure(); ++step) {
+            const std::vector<ItemId> here = itemsHere();
+            switch (pick(18)) {
+                case 0:
+                case 1:
+                case 2:
+                    session.CreateItem(true, rect(), "Shot");
+                    break;
+                case 3: {
+                    const Rect box = rect();
+                    const ItemId drawing = session.CreateItem(false, box, "Drawing");
+                    if (drawing != 0) {
+                        session.LiveLayer().BeginStroke(StrokePoint{box.x + 2.0f, box.y + 2.0f}, 0xFF0000FFu, 3.0f);
+                        session.LiveLayer().ExtendStroke(StrokePoint{box.x + box.w * 0.5f, box.y + box.h * 0.5f});
+                        session.LiveLayer().EndStroke();
+                        session.CommitLiveStroke(drawing);
+                    }
+                    break;
+                }
+                case 4:
+                    if (const std::vector<CanvasId> live = canvases(false); !live.empty()) {
+                        session.SwitchToCanvas(live[pick(live.size())]);
+                    }
+                    break;
+                case 5:
+                    session.SwitchToCanvas(session.AddCanvas("Another"));
+                    break;
+                case 6:
+                    if (!here.empty()) {
+                        session.DeleteItem(here[pick(here.size())]);
+                    }
+                    break;
+                case 7:
+                    session.Undo();
+                    break;
+                case 8:
+                    session.Redo();
+                    break;
+                case 9:
+                    if (!here.empty()) {
+                        session.Duplicate({here[pick(here.size())]});
+                    }
+                    break;
+                case 10:
+                    if (const std::vector<CanvasId> live = canvases(false); !here.empty() && !live.empty()) {
+                        session.SendItemsTo({here[pick(here.size())]}, live[pick(live.size())], pick(2) == 0);
+                    }
+                    break;
+                case 11:
+                    if (const std::vector<CanvasId> live = canvases(false); !live.empty()) {
+                        session.Delete(live[pick(live.size())]);
+                    }
+                    break;
+                case 12:
+                    if (const std::vector<CanvasId> gone = canvases(true); !gone.empty()) {
+                        const CanvasId target = gone[pick(gone.size())];
+                        pick(2) == 0 ? session.Restore(target) : session.DeletePermanently(target);
+                    }
+                    break;
+                case 13:
+                    ++window.textureGeneration;  // the driver replaced the device
+                    break;
+                case 14:
+                    window.uploadsSucceed = !window.uploadsSucceed;
+                    break;
+                case 15:
+                    controller_->GetSettings().Mutable().strokeRenderMode =
+                        AppSettings().Stored().strokeRenderMode == StrokeRenderMode::Rasterized
+                            ? StrokeRenderMode::Tessellated
+                            : StrokeRenderMode::Rasterized;
+                    break;
+                case 16:
+                    // Out to the bottom edge, where the canvas bar and its
+                    // previews come out, or back up.
+                    MoveTo(kDisplayWidth * 0.5f, pick(2) == 0 ? kDisplayHeight - 2.0f : kDisplayHeight * 0.5f);
+                    break;
+                case 17:
+                    ShowEditMode();  // put away, frozen screen and all
+                    ShowEditMode();  // and up again, frozen afresh
+                    break;
+            }
+            const int frames = 1 + static_cast<int>(pick(3));
+            for (int frame = 0; frame < frames && !HasFailure(); ++frame) {
+                StepFrame();
+                for (const uint64_t texture : TexturesDrawn()) {
+                    ASSERT_TRUE(window.IsDrawable(texture)) << "step " << step << " drew texture " << texture;
+                }
+                ASSERT_EQ(window.badTextureUses, 0) << "step " << step;
+                ASSERT_EQ(window.liveTextures.size(), session.Textures().Held()) << "step " << step;
+            }
+        }
+
+        // The bar comes out for a while after a canvas switch, previews and
+        // all; switched off, it is gone at once.
+        window.uploadsSucceed = true;
+        session.SwitchToCanvas(session.AddCanvas("Nothing"));
+        controller_->GetSettings().Mutable().showCanvasBar = false;
+        StepFrames(3);
+        const bool frozen = session.FrozenScreenTexture() != 0;
+        EXPECT_EQ(window.liveTextures.size(), frozen ? 1u : 0u);
+    }
 }
 
 }  // namespace

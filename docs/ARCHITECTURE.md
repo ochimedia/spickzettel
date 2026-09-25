@@ -1206,6 +1206,14 @@ read from the library once the device is replaced. A freeze keeps its
 pixels the same way: shots are cut from what was frozen, and the frozen
 screen shows once the device is back.
 
+`HeadlessSaveTest.EveryTextureDrawnIsLiveWhateverHappens` holds all of
+this to account: random commands, undo and redo, canvases switched,
+deleted and erased, the renderer switched, the canvas bar's previews
+shown, the overlay put away, the device replaced and uploads failing -
+with every frame's draw lists checked against the textures the fake
+window has live on its current device, none released twice, and the
+window holding exactly the textures the cache does.
+
 A window nobody can see is skipped the same way. With the screen locked
 or the secure desktop up, `Present` returns `DXGI_STATUS_OCCLUDED` at
 once instead of waiting for vsync, and a frame loop drawing every frame
