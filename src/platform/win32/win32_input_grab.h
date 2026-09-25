@@ -573,6 +573,8 @@ private:
     std::atomic<bool> leftDown_{false};
     std::atomic<bool> rightDown_{false};
     std::atomic<bool> middleDown_{false};
+    std::atomic<bool> x1Down_{false};
+    std::atomic<bool> x2Down_{false};
 
     // Modifier state, tracked for the same reason as the buttons: the
     // modifier key-downs are swallowed too, so GetKeyState can't be asked.

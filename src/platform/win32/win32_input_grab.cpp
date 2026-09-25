@@ -95,7 +95,7 @@ void Win32InputGrab::SetActive(bool active) {
         // event that stopped being swallowed. The keyboard's equivalent is
         // not here - Refresh owns both ends of that, because activating is
         // only one of several ways the keyboard grab comes and goes.
-        leftDown_ = rightDown_ = middleDown_ = false;
+        leftDown_ = rightDown_ = middleDown_ = x1Down_ = x2Down_ = false;
 
         // A text field cannot be open when the overlay is not shown, and
         // neither claim on the keyboard may outlive the grab. Both are set by
@@ -834,6 +834,12 @@ UINT Win32InputGrab::ButtonFlags() const {
     if (middleDown_) {
         flags |= MK_MBUTTON;
     }
+    if (x1Down_) {
+        flags |= MK_XBUTTON1;
+    }
+    if (x2Down_) {
+        flags |= MK_XBUTTON2;
+    }
     return flags;
 }
 
@@ -1077,6 +1083,25 @@ void Win32InputGrab::OnRawMouse(const RAWMOUSE& mouse) {
         middleDown_ = false;
         PostToOverlay(WM_MBUTTONUP, ButtonFlags(), VirtualCursor());
     }
+    // The side buttons and the horizontal wheel as well: the hook swallows
+    // them with the rest, and without these they reached neither the game
+    // nor the overlay - a panel's sideways scroll included.
+    if (flags & RI_MOUSE_BUTTON_4_DOWN) {
+        x1Down_ = true;
+        PostToOverlay(WM_XBUTTONDOWN, MAKEWPARAM(ButtonFlags(), XBUTTON1), VirtualCursor());
+    }
+    if (flags & RI_MOUSE_BUTTON_4_UP) {
+        x1Down_ = false;
+        PostToOverlay(WM_XBUTTONUP, MAKEWPARAM(ButtonFlags(), XBUTTON1), VirtualCursor());
+    }
+    if (flags & RI_MOUSE_BUTTON_5_DOWN) {
+        x2Down_ = true;
+        PostToOverlay(WM_XBUTTONDOWN, MAKEWPARAM(ButtonFlags(), XBUTTON2), VirtualCursor());
+    }
+    if (flags & RI_MOUSE_BUTTON_5_UP) {
+        x2Down_ = false;
+        PostToOverlay(WM_XBUTTONUP, MAKEWPARAM(ButtonFlags(), XBUTTON2), VirtualCursor());
+    }
     if ((flags & RI_MOUSE_WHEEL) && overlay_ != nullptr) {
         // usButtonData carries the wheel delta as a signed value in an
         // unsigned field. WM_MOUSEWHEEL's lParam is in *screen* coordinates,
@@ -1086,6 +1111,11 @@ void Win32InputGrab::OnRawMouse(const RAWMOUSE& mouse) {
         const POINT at = VirtualCursor();
         PostMessageA(overlay_, WM_MOUSEWHEEL, MAKEWPARAM(ButtonFlags(), delta),
                       MAKELPARAM(at.x, at.y));
+    }
+    if ((flags & RI_MOUSE_HWHEEL) && overlay_ != nullptr) {
+        const auto delta = static_cast<SHORT>(mouse.usButtonData);
+        const POINT at = VirtualCursor();
+        PostMessageA(overlay_, WM_MOUSEHWHEEL, MAKEWPARAM(ButtonFlags(), delta), MAKELPARAM(at.x, at.y));
     }
 }
 
