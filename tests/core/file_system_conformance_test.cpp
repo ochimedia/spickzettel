@@ -252,6 +252,17 @@ TEST_P(FileSystemConformanceTest, ALinkIsSeenAsALinkAndFollowedByEverythingElse)
     EXPECT_EQ(Fs().Read(root_ / "elsewhere" / "file", 100), "behind the link") << "never followed by RemoveAll";
 }
 
+// A file does not replace a link to a directory, any more than it replaces
+// the directory: Windows refuses the rename.
+TEST_P(FileSystemConformanceTest, AFileDoesNotReplaceALinkToADirectory) {
+    Fs().MakeDirectory(root_ / "elsewhere");
+    disk_->MakeLink(root_ / "link", root_ / "elsewhere");
+    Put(root_ / "file", "a file");
+    EXPECT_FALSE(Fs().Rename(root_ / "file", root_ / "link"));
+    EXPECT_EQ(Fs().LinkStatus(root_ / "link"), Kind::Link);
+    EXPECT_EQ(Fs().Read(root_ / "file", 100), "a file");
+}
+
 INSTANTIATE_TEST_SUITE_P(Disks, FileSystemConformanceTest,
                          ::testing::Values(DiskKind{"Real", [] { return std::unique_ptr<Disk>(new RealDisk()); }},
                                            DiskKind{"Model", [] { return std::unique_ptr<Disk>(new ModelDisk()); }}),

@@ -181,9 +181,10 @@ bool MemoryFileSystem::Rename(const std::filesystem::path& from, const std::file
     if (fromDir == toDir && fromName == toName) {
         return true;
     }
-    // Windows replaces a file at the destination and nothing else.
+    // Windows replaces a file at the destination and nothing else - not a
+    // directory, and not a link to one, which is what every link here is.
     if (const auto there = toDir->children.find(toName); there != toDir->children.end()) {
-        if (there->second->kind == Kind::Directory || moving->second->kind == Kind::Directory) {
+        if (there->second->kind != Kind::File || moving->second->kind == Kind::Directory) {
             return false;
         }
     }

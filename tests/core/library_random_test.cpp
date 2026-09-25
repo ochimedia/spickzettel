@@ -618,8 +618,9 @@ private:
         const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
         // A run whose every save crashed or failed leaves nothing on disk,
         // and the restart before this one then began a fresh library - which
-        // has nothing to save until something is done in it.
-        if (!loaded && durable_.empty() && !session_->HasUnsavedChanges()) {
+        // has nothing to save until something is done in it. (The flushes
+        // above have left nothing unsaved either way.)
+        if (!loaded && durable_.empty()) {
             return;
         }
         ASSERT_TRUE(loaded.has_value());

@@ -48,8 +48,13 @@ public:
     // Lets `changes` more changes through, counted from now; every one after
     // that does nothing and reports failure. The first one refused, if it
     // writes a file, leaves the first half of it: a crash in the middle of
-    // writing.
-    void CrashAfter(size_t changes) { crashAt_ = changesAttempted_ + changes; }
+    // writing. A disk that has crashed stays crashed until ClearCrash - the
+    // process is gone, and asking for another crash does not bring it back.
+    void CrashAfter(size_t changes) {
+        if (!Crashed()) {
+            crashAt_ = changesAttempted_ + changes;
+        }
+    }
     bool Crashed() const { return crashAt_ && changesAttempted_ > *crashAt_; }
     // The process that crashed is gone; a new one gets a disk that changes
     // again. What another program holds stays held.
