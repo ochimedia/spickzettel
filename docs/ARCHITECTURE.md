@@ -1631,7 +1631,7 @@ go. Windows' press-and-hold on a touch screen injects a right press into
 a held finger's left press, and the app does not depend on the OS being
 asked not to.
 
-What the pointer is doing is one field, `OverlayApp::gesture_`: a
+What the pointer is doing is one field, `Hand::gesture`: a
 `std::variant` of the seven things a held button can be in the middle of -
 moving or resizing snippets, holding a bar button, dragging a selection
 box, framing a snippet, a stroke, a right-drag erase, a right click on
@@ -1644,17 +1644,7 @@ the first undo did nothing to be seen; an undo mid-drag restored a
 placement the drag then wrote over, losing that step; a stroke outlived
 the Escape that left its drawing mode; and a canvas switch settled the
 left button's gestures only, so a right-drag resize went on across it.
-There are two ways to end one early. `ReleaseGesture` is a release where
-the pointer is, through `OnMouse` - what a canvas switch, a capture
-hotkey and hiding the overlay do, so a region being framed is made and a
-held bar button fires. `EndGesture` keeps what is done and makes nothing
-new - what delete, undo, redo and leaving drawing mode do: a move is
-filed, a stroke kept, and a region not yet made is dropped. An undo
-pressed mid-drag or mid-stroke therefore takes back what the hand has
-done so far, the most recent thing done. Both also disarm a press held
-still, whose hold would otherwise enter drawing mode half a second after
-the press it came with had been ended. Either way the rest of the held
-button's drag finds nothing in flight and does nothing.
+How one is ended early is the next section's.
 
 The selection bar floats over the selection's bounding box, or below it
 when there is no room, or inside its top edge for a fullscreen snippet.
@@ -1712,6 +1702,61 @@ wrong is made sense of rather than obeyed: a name from the other bar is
 dropped, a duplicate kept once, and a button the file never mentioned is
 appended shown, since a new button arriving invisible is a feature that
 silently isn't there.
+
+### The hand
+
+Everything the pointer is in the middle of is one value,
+`OverlayApp::Hand`: the gesture, the press a hold or a double-click is
+judged on, and which buttons are down. Something else often wants to
+act while it is: a key, a global hotkey, a menu row, the overlay going
+away. There are two answers - end what the hand is doing and act, or
+leave the hand be and refuse the command - and the app takes the first,
+for everything but the pointer's own device.
+
+- Refusing depends on knowing a gesture is in flight, and that is the
+  one thing that goes stale: a release lost to a focus change or a hide
+  leaves a gesture that never ends. Refused for it, the hotkey that hides
+  the overlay would be refused for good. Settling instead cures a stale
+  gesture as a side effect of any command.
+- Some commands cannot be refused anyway - the session ending, the
+  window closing - so settling has to exist and be right regardless; a
+  second, refusing, policy would be a second set of cases.
+- A hotkey is deliberate. Pressed mid-stroke it usually means "the game,
+  now", and a press that does nothing is pressed again, and the second
+  one is the surprise.
+- Putting the command off until the release is worse than either: the
+  release may never come, and a queued command fires at a moment nobody
+  chose.
+
+So every command calls `SettleHand` first. It ends the gesture with
+`EndGesture` - what is done is kept and filed, a stroke committed as one
+undo step, a move or resize filed where it got to; nothing a release
+would newly do happens, so no snippet being framed is made, no held bar
+button fires, no right click opens a menu - commits a note being typed,
+and then replaces the whole `Hand` with a fresh one. The rest of the
+held button's drag finds nothing in flight and does nothing, and its
+release finds no button it knows to be down. An undo pressed mid-stroke
+therefore takes back the stroke so far, the most recent thing done.
+
+Replacing the value is the point. While these were separate fields,
+each way of interrupting reset its own list of them - view-only mode
+one list, a canvas switch another, the overlay coming up a third, undo
+and delete a fourth - and each list missed something: a stroke left in
+flight by a tool key, a button left held across a hide, a hold that
+matured after an undo, an ImGui button latched across a hide. A field
+added to `Hand` now needs no reset anywhere. There used to be a second
+way to end a gesture, a synthesized release through `OnMouse`, for canvas
+switches and hiding; it made a region being framed and fired a held bar
+button - things nobody asked for, over a canvas they had not clicked on.
+
+The pointer's own device is the exception: input from the mouse holding
+the gesture is ignored until it ends rather than ending it. A second
+button pressed on top is ignored until its own release (a touch screen's
+press-and-hold injects exactly that), and the wheel does nothing while a
+gesture is in flight - a notch mid-stroke would have switched the canvas
+under it, and one mid-drag would have been filed inside the drag. An
+arrow key is a command like any other: mid-drag it ends the drag where
+it is and nudges after it, two undo steps.
 
 ### Item text
 
@@ -1775,9 +1820,8 @@ mode, five percent a notch within the Properties sliders' ranges, and a
 toast says the value reached.
 
 With Alt the wheel steps through the canvases of the folder the
-*current canvas* lives in (not the browsed folder), without wrapping,
-and ends any gesture in flight first by feeding the release the handler
-is waiting for. All of these honor how far the wheel actually turned,
+*current canvas* lives in (not the browsed folder), without wrapping.
+None of it acts while a gesture is in flight - see "The hand". All of these honor how far the wheel actually turned,
 keeping a remainder across frames, so a fast spin is not truncated to
 one step and a precision touchpad's fractions are not rounded to
 nothing. For the brush, a transient size preview at the cursor is the

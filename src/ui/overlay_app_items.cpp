@@ -369,8 +369,8 @@ void OverlayApp::DeleteSelection() {
     // Delete pressed mid-drag: the drag stops where it is, rather than go
     // on moving a snippet nobody can see and file that move after the
     // delete - an undo that visibly did nothing, and a snippet restored
-    // wherever the hand happened to let go.
-    EndGesture();
+    // wherever the hand happened to let go. See SettleHand.
+    SettleHand();
     // A copy: deleting clears nothing itself, but the toast and the
     // session are free to look at the selection while this runs.
     const std::vector<ItemId> doomed = selection_;
@@ -379,6 +379,10 @@ void OverlayApp::DeleteSelection() {
 }
 
 void OverlayApp::NudgeSelection(float dx, float dy) {
+    // Mid-drag, the drag ends where it is and the nudge is a step after it
+    // (see SettleHand). Filed inside it, the nudge would be undone to a
+    // place the drag had since left.
+    SettleHand();
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     // A run of presses - or a key held down, repeating - is one undo, back
     // to where the run began.
@@ -415,11 +419,11 @@ void OverlayApp::HandleSelectionKeys() {
     }
     const bool keysFree = !io.WantTextInput && !PanelOpen() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) && keysFree) {
-        // Calls off a hold in progress too, which maturing would otherwise
-        // select again what Escape just let go of - see RunShortcutAction.
-        heldPress_.reset();
+        // A command, so the hand is settled first (see SettleHand) - which
+        // calls off a hold in progress too, which maturing would otherwise
+        // select again what Escape just let go of.
+        SettleHand();
         if (CreationKindFor(activeTool_).has_value()) {
-            ClearCreationGesture();
             PickTool(Tool::Select);
         } else if (drawingItem_.has_value()) {
             ExitDrawingMode();
@@ -439,11 +443,6 @@ void OverlayApp::HandleSelectionKeys() {
     if (ImGui::IsKeyPressed(ImGuiKey_Delete, /*repeat=*/false) ||
         ImGui::IsKeyPressed(ImGuiKey_Backspace, /*repeat=*/false)) {
         DeleteSelection();
-        return;
-    }
-    // Not mid-drag, for the reason the wheel does not scale then (see
-    // HandleMouseWheel).
-    if (std::holds_alternative<ItemGesture>(gesture_)) {
         return;
     }
     // A pixel a press, ten with Shift - the way every drawing program

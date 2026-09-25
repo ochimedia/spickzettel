@@ -56,11 +56,11 @@ constexpr const wchar_t* kWindowClassName = L"SpickzettelOverlayWindowClass";
 // stream and the window: Windows kept sending it anyway - a finger held
 // still arrived as a left press, then 650 ms later a right press and
 // release with the left still down, then the left release, and none of it
-// tagged as touch. So the app does not rely on this being
-// heard: it ignores a second button while one is down (see
-// OverlayApp::pressedButton_), which is what keeps the hold's work. This
-// stays because it is the documented request, costs nothing, and may be
-// honored for a pen or on another Windows.
+// tagged as touch. So the app does not rely on this being heard: it
+// ignores a second button while one is down (see
+// OverlayApp::Hand::pressedButton), which is what keeps the hold's work.
+// This stays because it is the documented request, costs nothing, and may
+// be honored for a pen or on another Windows.
 constexpr DWORD_PTR kTabletGestureFlags =
     TABLET_DISABLE_PRESSANDHOLD | TABLET_DISABLE_PENTAPFEEDBACK | TABLET_DISABLE_PENBARRELFEEDBACK | TABLET_DISABLE_FLICKS;
 

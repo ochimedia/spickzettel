@@ -3096,6 +3096,7 @@ void OverlayApp::RenderConfirmDeletePopover() {
 }
 
 void OverlayApp::PerformDelete(const ConfirmDeleteTarget& target) {
+    SettleHand();  // a command - see SettleHand
     const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
     const bool deletedIn = target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
     // Its textures go as it leaves the screen, either way (see

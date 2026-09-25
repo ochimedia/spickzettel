@@ -235,9 +235,10 @@ public:
     void SetViewOnly(bool viewOnly);
 
     // The overlay has just been put back on screen. Anything this class
-    // remembers about state the OS owns is stale at that moment - which today
-    // is only the installed pointer shape, since while the overlay was hidden
-    // the application underneath owned the cursor. Distinct from SetViewOnly,
+    // remembers about state the OS owns is stale at that moment - the
+    // installed pointer shape, since while the overlay was hidden the
+    // application underneath owned the cursor, and which buttons and keys
+    // are down (see SettleHand). Distinct from SetViewOnly,
     // which no-ops when the mode is unchanged and so never fires on a plain
     // hide-then-show.
     void OnOverlayShown();
@@ -388,24 +389,27 @@ public:
     // Overview that can be told apart at a glance. The user's own call.
     void QuickCapture(float displayW, float displayH);
 
-    // Brings everything the hand is in the middle of into the library -
-    // written, as every finished command is: the gesture under a held
-    // button ends where the pointer is (a stroke is committed, a drag
-    // lands), and a note being typed is committed to its item. What every
-    // canvas switch settles first (see SwitchToCanvasSettled), done for the
-    // moments no frame follows - hiding, restarting, exiting, the OS ending
-    // the session. A drawing nothing went into is discarded here too - see
-    // SettleUntouchedDrawing.
+    // SettleHand, for the moments no frame follows - hiding, restarting,
+    // exiting, the OS ending the session - where a drawing nothing went
+    // into is discarded too (see SettleUntouchedDrawing).
     void SettleForPersistence();
-    // The settling itself: the gesture in flight ends as a release where
-    // the pointer is would end it (see ReleaseGesture), and a note being
-    // typed is committed. Every canvas switch
-    // does this first - the hand's work belongs to the canvas it started
-    // on, and a gesture carried across a switch would go on editing a
-    // snippet nobody can see, then file its undo entry under the canvas
-    // that is current when it ends. Needs a live ImGui context to ask
-    // whether the button is down; with none there is nothing in flight.
+    // What every command that does not come from the pointer itself does
+    // first - a key, a hotkey, a menu row, the overlay going away: the
+    // gesture in flight ends where it stands, keeping what it did (see
+    // EndGesture), a note being typed is committed, and the hand starts
+    // over from nothing (see Hand). The command then acts on a library
+    // with nothing half done in it, and the rest of the drag does nothing.
+    // Settling rather than ignoring the command, because "is a gesture in
+    // flight" is exactly what goes stale when a release is lost - ignored
+    // for it, the hotkey that hides the overlay would be refused for good.
+    // See docs/ARCHITECTURE.md, "The hand".
     void SettleHand();
+    // Whether the hand has nothing in flight: no gesture, no hold, no
+    // button held. What a test asks after a command.
+    bool HandAtRest() const {
+        return !GestureInFlight() && !hand_.heldPress.has_value() && !hand_.pressedButton.has_value() &&
+               !hand_.ignoredButton.has_value();
+    }
 
     // Asks for the first-run notes to be placed on the current
     // canvas. Called by TrayController when there was no library on disk to
@@ -456,22 +460,14 @@ public:
 private:
     void OnFrame(float deltaSeconds);
     void OnMouse(const platform::MouseEvent& event);
-    // Ends the gesture in flight, whichever button holds it, exactly as
-    // releasing that button where the pointer is now would: a stroke is
-    // kept, a move filed, a region made, a bar button fired if the pointer
-    // is on it. For the moments the canvas changes under a gesture or the
-    // overlay goes away - see SettleHand.
-    void ReleaseGesture();
     // Ends the gesture in flight where it stands without anything a release
     // would newly make or fire: what it has already done is kept and filed
     // - a move or resize, a stroke, a right-drag erase - and a snippet not
-    // yet framed, a box not yet applied, a bar button not yet fired are
-    // dropped. For what the keyboard or a change of mode does in the middle
-    // of one: delete, undo, redo, leaving drawing mode. The rest of the
-    // drag then does nothing - see gesture_.
+    // yet framed, a box not yet applied, a bar button not yet fired, a menu
+    // not yet opened are dropped. What SettleHand ends it with, and what a
+    // press ends it with whose own release went missing. The rest of the
+    // drag then does nothing - see Hand::gesture.
     void EndGesture();
-    // Which button holds the gesture in flight, if one is.
-    std::optional<platform::MouseButton> GestureButton() const;
 
     void RenderCanvasLayer(float displayW, float displayH);  // live layer + armed-item overlay + debug text
     // The layers that sit over the canvas and under the Overview: the
@@ -1040,8 +1036,6 @@ private:
     // What the hand does with a snippet just made: a screenshot is
     // selected, a drawing entered with the pen.
     void HandOverNewItem(ItemCreationKind kind, ItemId id);
-    // Forgets the creation gesture in flight, if any.
-    void ClearCreationGesture();
     // Hands back the tool that was in hand before a creation tool, if one is
     // in hand now - after a screenshot is placed, and wherever nothing may
     // be made (view-only).
@@ -1098,7 +1092,7 @@ private:
     // Starts, continues, or ends the selection's one gesture (a press on a
     // snippet with Select in hand or Alt held, which selects it and moves
     // the selection; or on a selected snippet's handle, which resizes it -
-    // see gesture_'s own doc comment and the definition), and holds
+    // see Hand::gesture and the definition), and holds
     // and fires the selection bar's buttons. Returns true if this event
     // was consumed (caller returns immediately without its own normal
     // handling for that button); false lets it fall through to whatever it
@@ -1140,14 +1134,14 @@ private:
     // Remembers the press in progress as one a hold can stand in for a
     // double-click on: held still for kHoldSeconds it enters drawing mode
     // on `item`, or makes a fullscreen snippet of `creates` - see
-    // heldPress_. The second press of a double-click is never remembered:
-    // it does on release what the hold would do.
+    // Hand::heldPress. The second press of a double-click is never
+    // remembered: it does on release what the hold would do.
     void HoldPress(const platform::MouseEvent& event, std::optional<ItemId> item,
                    std::optional<ItemCreationKind> creates);
-    // Acts on heldPress_ once it has been held long enough - called every
-    // frame, since a pointer held still sends no events. Whatever the press
-    // started (a move, a creation) is dropped from under it unwritten, so
-    // its release then does nothing.
+    // Acts on Hand::heldPress once it has been held long enough - called
+    // every frame, since a pointer held still sends no events. Whatever the
+    // press started (a move, a creation) is dropped from under it
+    // unwritten, so its release then does nothing.
     void MatureHeldPress();
     // Whether a press at this point, with this button, is one on empty
     // canvas that should make a snippet - nothing under it, nothing open
@@ -1541,12 +1535,6 @@ private:
         float x = 0.0f;
         float y = 0.0f;
     };
-    std::optional<LastPress> lastPress_;
-    // Whether the press in progress was the second of a double-click - set
-    // by OnMouse on every Down for the handlers that care (HandleItemGesture
-    // enters drawing mode on it; HandleCreationGesture makes the snippet
-    // fullscreen on it).
-    bool pressIsDouble_ = false;
     // The press in progress, while a hold could still make of it what a
     // double-click would have (see HoldPress/MatureHeldPress): where and
     // when it was pressed, and what a hold does - drawing mode on `item`,
@@ -1561,18 +1549,6 @@ private:
         std::optional<ItemId> item;
         std::optional<ItemCreationKind> creates;
     };
-    std::optional<HeldPress> heldPress_;
-    // The button that is down, and the other one if it was pressed
-    // meanwhile: the first button to press owns the pointer until it lets
-    // go, and the other is ignored - its press, its moves and its release -
-    // until it lets go too (see OnMouse). No gesture here has ever meant
-    // anything by a second button, and one thing does send it: Windows'
-    // press-and-hold on a touch screen injects a right press and release
-    // while the finger's left press is still down, which would take back
-    // what the hold had just done (drawing mode entered, a fullscreen
-    // snippet made) even where the platform fails to switch it off.
-    std::optional<platform::MouseButton> pressedButton_;
-    std::optional<platform::MouseButton> ignoredButton_;
 
     // Set by AttachTo; what the overlay asks of the platform itself - the
     // frame pacing, the pointer, the keyboard. Never null once AttachTo has
@@ -1713,20 +1689,59 @@ private:
     // mode left - meant knowing every field it might be. A drag went on
     // moving a snippet a Delete had hidden, and a stroke outlived the
     // Escape that left its drawing mode, each for want of the one field
-    // that said so being cleared. Ended through ReleaseGesture or
-    // EndGesture, or by its own release; once it has ended, the rest of the
-    // held button's drag finds nothing to continue and does nothing.
+    // that said so being cleared. Ended by its own release, or by
+    // EndGesture; once it has ended, the rest of the held button's drag
+    // finds nothing to continue and does nothing.
     using Gesture = std::variant<std::monostate, ItemGesture, BarPress, BoxSelection, CreationGesture, StrokeInFlight,
                                  RightErase, EmptyCanvasRightPress>;
-    Gesture gesture_;
+
+    // Everything the pointer is in the middle of, from a press to its
+    // release: the gesture, the press a hold or a double-click is judged
+    // on, and which buttons are down. One value, because every way of
+    // interrupting the hand - a key, a hotkey, the overlay going away -
+    // has to end all of it, and SettleHand does that by ending the gesture
+    // and then putting a fresh Hand in place. While these were fields of
+    // their own, each interruption reset its own list of them, and each
+    // list missed one: a stroke left in flight by a tool key, a button left
+    // held across a hide, a hold that matured after an undo.
+    struct Hand {
+        Gesture gesture;
+        std::optional<LastPress> lastPress;
+        // Whether the press in progress was the second of a double-click -
+        // set by OnMouse on every Down for the handlers that care
+        // (HandleItemGesture enters drawing mode on it; HandleCreationGesture
+        // makes the snippet fullscreen on it).
+        bool pressIsDouble = false;
+        std::optional<HeldPress> heldPress;
+        // The button that is down, and the other one if it was pressed
+        // meanwhile: the first button to press owns the pointer until it
+        // lets go, and the other is ignored - its press, its moves and its
+        // release - until it lets go too (see OnMouse). No gesture here has
+        // ever meant anything by a second button, and one thing does send
+        // it: Windows' press-and-hold on a touch screen injects a right
+        // press and release while the finger's left press is still down,
+        // which would take back what the hold had just done (drawing mode
+        // entered, a fullscreen snippet made) even where the platform fails
+        // to switch it off.
+        std::optional<platform::MouseButton> pressedButton;
+        std::optional<platform::MouseButton> ignoredButton;
+        // Whether a note was open for typing when the press in progress
+        // began. Such a press is for closing it and makes nothing (see
+        // PressMakesASnippet) - even once settling an untouched snippet has
+        // closed the note itself.
+        bool noteOpenAtPress = false;
+    };
+    Hand hand_;
     template <class T>
     T* GestureIf() {
-        return std::get_if<T>(&gesture_);
+        return std::get_if<T>(&hand_.gesture);
     }
     template <class T>
     const T* GestureIf() const {
-        return std::get_if<T>(&gesture_);
+        return std::get_if<T>(&hand_.gesture);
     }
+    // Whether a gesture is in flight - a button held on the canvas.
+    bool GestureInFlight() const { return !std::holds_alternative<std::monostate>(hand_.gesture); }
 
     // Item properties popover (foreground/background opacity, background
     // color, fullscreen, order, copy, move): which item it's currently
@@ -1777,12 +1792,6 @@ private:
     // the tool's for as long as it is in hand, and no longer.
     DrawShape penShape_ = DrawShape::Freehand;
     DrawShape eraserShape_ = DrawShape::Freehand;  // Freehand or Rectangle
-    // Whether a note was open for typing when the press in progress began.
-    // Such a press is for closing it and makes nothing (see
-    // PressMakesASnippet) - even once settling an untouched snippet has
-    // closed the note itself.
-    bool noteOpenAtPress_ = false;
-
     // The canvas bar, docked against the bottom edge - see UpdateEdgePanels.
     // How far out it is, and where it was drawn this frame (none while it
     // is all the way in).

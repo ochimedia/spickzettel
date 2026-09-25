@@ -393,6 +393,7 @@ void OverlayApp::BuildCanvasContextMenuRows(const Canvas& canvas, std::vector<Co
 }
 
 void OverlayApp::RunCanvasMenuAction(CanvasMenuAction action, CanvasId canvasId) {
+    SettleHand();  // a command - see SettleHand
     switch (action) {
         case CanvasMenuAction::Delete: {
             const Canvas* canvas = Manager().FindCanvas(canvasId);

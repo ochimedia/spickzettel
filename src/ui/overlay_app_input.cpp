@@ -150,10 +150,12 @@ void OverlayApp::RunCreateAction(CreateAction action) {
 }
 
 void OverlayApp::RunShortcutAction(ShortcutAction action) {
-    // A key pressed during a hold says what the hand wants instead: the
-    // hold, maturing after it, entered drawing mode with the pen over the
-    // tool just picked.
-    heldPress_.reset();
+    // A command, so the hand is settled first (see SettleHand). A key
+    // pressed during a hold says what the hand wants instead: the hold,
+    // maturing after it, entered drawing mode with the pen over the tool
+    // just picked. And one pressed mid-stroke ends the stroke where it is:
+    // taken by the Text tool, a stroke stayed in flight for good.
+    SettleHand();
     const overlay_detail::ShortcutTarget& target = overlay_detail::TargetForShortcut(action);
     if (target.tool.has_value()) {
         // The key of the tool already in hand puts it down again - back to
@@ -281,12 +283,6 @@ void OverlayApp::EndEditingNote(const std::string& text) {
     }
 }
 
-void OverlayApp::ClearCreationGesture() {
-    if (GestureIf<CreationGesture>() != nullptr) {
-        gesture_ = std::monostate{};
-    }
-}
-
 // ================= Drawing mode =================
 
 void OverlayApp::EnterDrawingMode(ItemId id, std::optional<Tool> tool) {
@@ -369,39 +365,39 @@ bool OverlayApp::NoteDoubleClick(const platform::MouseEvent& event) {
     const std::optional<CreationTrigger> held = HeldCreationTrigger();
     if (!held.has_value() || (*held != CreationTrigger::Plain && *held != Cfg().screenshotTrigger &&
                               *held != Cfg().drawingTrigger)) {
-        lastPress_.reset();
+        hand_.lastPress.reset();
         return false;
     }
     bool isDouble = false;
-    if (lastPress_.has_value() && lastPress_->button == event.button && lastPress_->modifiers == *held &&
-        now - lastPress_->atSeconds <= kDoubleClickSeconds) {
-        const float dx = event.position.x - lastPress_->x;
-        const float dy = event.position.y - lastPress_->y;
+    if (hand_.lastPress.has_value() && hand_.lastPress->button == event.button && hand_.lastPress->modifiers == *held &&
+        now - hand_.lastPress->atSeconds <= kDoubleClickSeconds) {
+        const float dx = event.position.x - hand_.lastPress->x;
+        const float dy = event.position.y - hand_.lastPress->y;
         isDouble = std::sqrt(dx * dx + dy * dy) <= kDoubleClickPx;
     }
     if (isDouble) {
-        lastPress_.reset();  // the pair is spent: a third press starts over
+        hand_.lastPress.reset();  // the pair is spent: a third press starts over
     } else {
-        lastPress_ = LastPress{event.button, *held, now, event.position.x, event.position.y};
+        hand_.lastPress = LastPress{event.button, *held, now, event.position.x, event.position.y};
     }
     return isDouble;
 }
 void OverlayApp::HoldPress(const platform::MouseEvent& event, std::optional<ItemId> item,
                            std::optional<ItemCreationKind> creates) {
-    if (pressIsDouble_) {
+    if (hand_.pressIsDouble) {
         // Spent already: the second press of a double-click does on release
         // what the hold would do, and must not do it twice.
-        heldPress_.reset();
+        hand_.heldPress.reset();
         return;
     }
-    heldPress_ = HeldPress{event.button, event.position.x, event.position.y, ImGui::GetTime(), item, creates};
+    hand_.heldPress = HeldPress{event.button, event.position.x, event.position.y, ImGui::GetTime(), item, creates};
 }
 void OverlayApp::MatureHeldPress() {
-    if (!heldPress_.has_value() || ImGui::GetTime() - heldPress_->atSeconds < kHoldSeconds) {
+    if (!hand_.heldPress.has_value() || ImGui::GetTime() - hand_.heldPress->atSeconds < kHoldSeconds) {
         return;
     }
-    const HeldPress held = *heldPress_;
-    heldPress_.reset();
+    const HeldPress held = *hand_.heldPress;
+    hand_.heldPress.reset();
     if (held.item.has_value()) {
         if (const ItemGesture* move = GestureIf<ItemGesture>(); move != nullptr && move->button == held.button) {
             if (move->moved) {
@@ -409,7 +405,7 @@ void OverlayApp::MatureHeldPress() {
             }
             // The move the press started never moved, so nothing of it was
             // written; without it the release finds nothing to end.
-            gesture_ = std::monostate{};
+            hand_.gesture = std::monostate{};
         }
         EnterDrawingMode(*held.item);
         return;
@@ -422,7 +418,7 @@ void OverlayApp::MatureHeldPress() {
             }
             // Dropped from under the release, which then finds nothing to
             // place and places nothing.
-            gesture_ = std::monostate{};
+            hand_.gesture = std::monostate{};
         }
         const ImGuiIO& io = ImGui::GetIO();
         const ItemId made = CreateFullscreenItem(*held.creates, io.DisplaySize.x, io.DisplaySize.y);
@@ -611,58 +607,19 @@ void OverlayApp::HandOverNewItem(ItemCreationKind kind, ItemId id) {
 
 // ================= The gesture in flight =================
 
-std::optional<platform::MouseButton> OverlayApp::GestureButton() const {
-    if (const ItemGesture* item = GestureIf<ItemGesture>()) {
-        return item->button;
-    }
-    if (GestureIf<RightErase>() != nullptr || GestureIf<EmptyCanvasRightPress>() != nullptr) {
-        return platform::MouseButton::Right;
-    }
-    if (std::holds_alternative<std::monostate>(gesture_)) {
-        return std::nullopt;
-    }
-    return platform::MouseButton::Left;  // a bar press, a box, a creation, a stroke
-}
-
-// Feeds the raw pipeline the release it is waiting for, at the pointer's
-// current position, so the gesture ends the way it always does rather than
-// being abandoned halfway. Needed when the canvas changes under a gesture:
-// Alt+wheel is handled at frame time and can land mid-stroke, and a capture
-// hotkey at any time. Carried across the switch, a stroke went with the
-// live layer it sat on. Ended here, everything is filed under the canvas
-// it happened on - for either button: this once ended the left button's
-// gestures only, and a right-drag resize went on across the switch.
-//
-// Through OnMouse rather than a parallel set of end-handlers: every Up
-// handler already knows how to finish its own gesture, and the real
-// release arriving later finds nothing in flight, which each of them
-// treats as nothing to do. A press held still for a hold goes too: it
-// belongs to the canvas it was made on.
-void OverlayApp::ReleaseGesture() {
-    heldPress_.reset();
-    // Except a right click on empty canvas: its release opens a menu, and
-    // one opened by a canvas switch or a capture would be a menu nobody
-    // asked for, over a canvas they did not click on.
-    if (GestureIf<EmptyCanvasRightPress>() != nullptr) {
-        gesture_ = std::monostate{};
-        return;
-    }
-    const std::optional<platform::MouseButton> button = GestureButton();
-    if (!button.has_value() || ImGui::GetCurrentContext() == nullptr) {
-        return;
-    }
-    const ImVec2 mouse = ImGui::GetMousePos();
-    OnMouse(platform::MouseEvent{platform::Vec2{mouse.x, mouse.y}, *button, platform::MouseEventKind::Up});
-}
-
 // Not through OnMouse: this can run inside the handling of a press - a
 // press elsewhere leaves drawing mode - which a synthesized release would
 // end. Each kind is ended by hand instead, keeping what it has done.
+//
+// Nothing a release would newly do, because what ends a gesture this way
+// is not its release: a menu opened, a snippet made or a bar button fired
+// by a canvas switch or a capture would be one nobody asked for, over a
+// canvas they did not click on.
 void OverlayApp::EndGesture() {
     // A press held still is the gesture's too: left armed, it went on to
     // enter drawing mode on its snippet half a second after an undo or a
     // delete had ended the press it came with.
-    heldPress_.reset();
+    hand_.heldPress.reset();
     if (const StrokeInFlight* stroke = GestureIf<StrokeInFlight>(); stroke != nullptr) {
         // As its release would end it, where it last was: the stroke, the
         // shape or the erase kept and filed as one undo step - see
@@ -672,10 +629,10 @@ void OverlayApp::EndGesture() {
             HandleStrokeEvent(
                 platform::MouseEvent{stroke->last, platform::MouseButton::Left, platform::MouseEventKind::Up});
         }
-        gesture_ = std::monostate{};
+        hand_.gesture = std::monostate{};
         return;
     }
-    Gesture ended = std::exchange(gesture_, std::monostate{});
+    Gesture ended = std::exchange(hand_.gesture, std::monostate{});
     if (std::holds_alternative<ItemGesture>(ended)) {
         // Where it has got to, as one undo step - or none, if it never moved.
         session_.EndPlacement();
@@ -745,7 +702,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         }
         if (event.kind == platform::MouseEventKind::Up) {
             const ChromeButton pressed = press->button;
-            gesture_ = std::monostate{};
+            hand_.gesture = std::monostate{};
             const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
             if (target.kind == PointerTarget::Kind::Button && target.button == pressed) {
                 ActivateBarButton(pressed);
@@ -759,7 +716,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         // it half-finished).
         if (event.kind == platform::MouseEventKind::Up) {
             ItemGesture ended = std::move(*gesture);
-            gesture_ = std::monostate{};
+            hand_.gesture = std::monostate{};
             // The whole gesture, one entry - or none, for a press that
             // never moved anything.
             session_.EndPlacement();
@@ -841,12 +798,12 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         return true;
     }
     if (event.kind != platform::MouseEventKind::Down || ImGui::GetIO().WantCaptureMouse ||
-        !std::holds_alternative<std::monostate>(gesture_)) {
+        GestureInFlight()) {
         // Only a press starts one, and not a press that a panel of ImGui's
         // own is under: a popover, the canvas bar, the Overview all
         // sit above every item, and a click landing on one of them is
         // theirs alone. Nor while another gesture is in flight - one at a
-        // time, see gesture_.
+        // time, see Hand::gesture.
         return false;
     }
     const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
@@ -891,12 +848,12 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                            gesture.bottom);
         SnapshotResizeTargets(gesture, target.item);
         BeginPlacementRecord(gesture);
-        gesture_ = std::move(gesture);
+        hand_.gesture = std::move(gesture);
         return true;
     }
     switch (target.kind) {
         case PointerTarget::Kind::Button:
-            gesture_ = BarPress{target.button};
+            hand_.gesture = BarPress{target.button};
             return true;
         case PointerTarget::Kind::Handle: {
             const Item* item = Manager().FindItemAnywhere(target.item);
@@ -910,7 +867,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             SnapshotResizeTargets(gesture, target.item);
             gesture.moved = true;  // a handle is only ever pressed to drag it
             BeginPlacementRecord(gesture);
-            gesture_ = std::move(gesture);
+            hand_.gesture = std::move(gesture);
             KeepPlacedDrawings();
             return true;
         }
@@ -918,7 +875,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             if (!SelectionLive() || !PressPicksUp()) {
                 return false;  // a creation tool's press, or a stroke in drawing mode
             }
-            if (pressIsDouble_ && !ImGui::GetIO().KeyShift) {
+            if (hand_.pressIsDouble && !ImGui::GetIO().KeyShift) {
                 // The second press of a double-click on a snippet: drawing
                 // mode on it, rather than a move. The first press already
                 // selected it.
@@ -952,7 +909,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                 }
             }
             BeginPlacementRecord(gesture);
-            gesture_ = std::move(gesture);
+            hand_.gesture = std::move(gesture);
             // Held still instead of dragged, the press enters drawing mode
             // as a double-click would - see MatureHeldPress.
             HoldPress(event, target.item, std::nullopt);
@@ -971,7 +928,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                     // select by instead - consumed, so no snippet is
                     // framed under it, and the selection is left alone
                     // until the box says what it caught.
-                    gesture_ = BoxSelection{event.position.x, event.position.y, event.position.x, event.position.y,
+                    hand_.gesture = BoxSelection{event.position.x, event.position.y, event.position.x, event.position.y,
                                             /*moved=*/false};
                     return true;
                 }
@@ -1009,7 +966,7 @@ bool OverlayApp::HandleBoxSelection(const platform::MouseEvent& event) {
     }
     if (event.kind == platform::MouseEventKind::Up) {
         const BoxSelection ended = box;
-        gesture_ = std::monostate{};
+        hand_.gesture = std::monostate{};
         if (ended.moved) {
             AddTouchedToSelection(ended.Bounds());
         }
@@ -1255,7 +1212,7 @@ bool OverlayApp::PressMakesASnippet(const platform::MouseEvent& event) const {
     // something open - the Overview, a popover, a note being
     // typed into - which that click is for closing. Making a snippet as
     // well would turn every dismissal into a new drawing.
-    if (ImGui::GetIO().WantCaptureMouse || PanelOpen() || editingNoteItemId_.has_value() || noteOpenAtPress_ ||
+    if (ImGui::GetIO().WantCaptureMouse || PanelOpen() || editingNoteItemId_.has_value() || hand_.noteOpenAtPress ||
         ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) {
         return false;
     }
@@ -1285,24 +1242,24 @@ void OverlayApp::HandleEmptyCanvasRightPress(const platform::MouseEvent& event) 
             const float dx = event.position.x - press->x;
             const float dy = event.position.y - press->y;
             if (std::sqrt(dx * dx + dy * dy) >= kSelectionDragThreshold) {
-                gesture_ = std::monostate{};
+                hand_.gesture = std::monostate{};
             }
         } else if (event.kind == platform::MouseEventKind::Up) {
-            gesture_ = std::monostate{};
+            hand_.gesture = std::monostate{};
             OpenEmptyCanvasMenu(ImVec2(event.position.x, event.position.y));
         }
         return;
     }
     // Held to the same test as a press that makes a snippet: a right click
     // that closes a note or a popover is for closing it.
-    if (event.kind != platform::MouseEventKind::Down || !std::holds_alternative<std::monostate>(gesture_) ||
+    if (event.kind != platform::MouseEventKind::Down || GestureInFlight() ||
         !PressMakesASnippet(event)) {
         return;
     }
     // The hand moving on from a snippet it was drawing on, as a left press
     // here would be.
     ExitDrawingMode();
-    gesture_ = EmptyCanvasRightPress{event.position.x, event.position.y};
+    hand_.gesture = EmptyCanvasRightPress{event.position.x, event.position.y};
 }
 
 bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
@@ -1325,7 +1282,7 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
                 break;
             case platform::MouseEventKind::Up: {
                 const CreationGesture gesture = *creation;
-                gesture_ = std::monostate{};
+                hand_.gesture = std::monostate{};
                 ItemId made = 0;
                 if (gesture.dragTo.has_value()) {
                     made = FinishRegionCapture(gesture);
@@ -1362,7 +1319,7 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
         return true;
     }
     if (event.kind != platform::MouseEventKind::Down || event.button != platform::MouseButton::Left ||
-        !std::holds_alternative<std::monostate>(gesture_)) {
+        GestureInFlight()) {
         return false;
     }
     CreationGesture gesture;
@@ -1383,12 +1340,12 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
         ExitDrawingMode();
         gesture.kind = *kind;
         gesture.fromEmptyCanvas = true;
-        gesture.isDouble = pressIsDouble_;
+        gesture.isDouble = hand_.pressIsDouble;
         // Held still instead of dragged, the press makes the snippet
         // fullscreen as a double-click would - see MatureHeldPress.
         HoldPress(event, std::nullopt, gesture.kind);
     }
-    gesture_ = gesture;
+    hand_.gesture = gesture;
     return true;
 }
 
@@ -1431,13 +1388,13 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
     }
     // One button at a time: the first to press owns the pointer until it
     // lets go, and the other is ignored until it lets go too - see
-    // pressedButton_. Middle-button events, which nothing below reads, are
-    // not part of this, so a wheel click cannot lock a button out.
+    // Hand::pressedButton. Middle-button events, which nothing below reads,
+    // are not part of this, so a wheel click cannot lock a button out.
     if (event.button == platform::MouseButton::Left || event.button == platform::MouseButton::Right) {
-        if (ignoredButton_ == event.button) {
+        if (hand_.ignoredButton == event.button) {
             if (event.kind != platform::MouseEventKind::Down) {
                 if (event.kind == platform::MouseEventKind::Up) {
-                    ignoredButton_.reset();
+                    hand_.ignoredButton.reset();
                 }
                 return;
             }
@@ -1446,11 +1403,11 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
             // Taken as that release, rather than as one more event of the
             // press it ended - which swallowed this press, and its release
             // with it.
-            ignoredButton_.reset();
+            hand_.ignoredButton.reset();
         }
         if (event.kind == platform::MouseEventKind::Down) {
-            if (pressedButton_.has_value() && *pressedButton_ != event.button) {
-                ignoredButton_ = event.button;
+            if (hand_.pressedButton.has_value() && *hand_.pressedButton != event.button) {
+                hand_.ignoredButton = event.button;
                 return;
             }
             // Pressed again while it is still down, as far as this knows:
@@ -1459,12 +1416,12 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
             // to, as that release would have ended it. Left in flight, it
             // took this press as its own and carried on from where it was:
             // an item jumped, a stroke drew a line from its last point.
-            if (pressedButton_ == event.button) {
+            if (hand_.pressedButton == event.button) {
                 EndGesture();
             }
-            pressedButton_ = event.button;
-        } else if (event.kind == platform::MouseEventKind::Up && pressedButton_ == event.button) {
-            pressedButton_.reset();
+            hand_.pressedButton = event.button;
+        } else if (event.kind == platform::MouseEventKind::Up && hand_.pressedButton == event.button) {
+            hand_.pressedButton.reset();
         }
     }
     // A press while a note is open is for closing it, whatever happens to
@@ -1473,20 +1430,20 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
     // whether this press is the second of a double-click, for the handlers
     // below that care.
     if (event.kind == platform::MouseEventKind::Down) {
-        noteOpenAtPress_ = editingNoteItemId_.has_value();
-        pressIsDouble_ = NoteDoubleClick(event);
+        hand_.noteOpenAtPress = editingNoteItemId_.has_value();
+        hand_.pressIsDouble = NoteDoubleClick(event);
     }
     // A press held still is remembered until it moves or lets go - see
-    // heldPress_. Another button's press ends it too: a hold is one finger
-    // on one spot.
-    if (heldPress_.has_value()) {
+    // Hand::heldPress. Another button's press ends it too: a hold is one
+    // finger on one spot.
+    if (hand_.heldPress.has_value()) {
         if (event.kind != platform::MouseEventKind::Move) {
-            heldPress_.reset();
+            hand_.heldPress.reset();
         } else {
-            const float dx = event.position.x - heldPress_->x;
-            const float dy = event.position.y - heldPress_->y;
+            const float dx = event.position.x - hand_.heldPress->x;
+            const float dy = event.position.y - hand_.heldPress->y;
             if (std::sqrt(dx * dx + dy * dy) > kDoubleClickPx) {
-                heldPress_.reset();
+                hand_.heldPress.reset();
             }
         }
     }
@@ -1533,7 +1490,7 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
                 session_.ExtendErase(event.position.x, event.position.y, eraserWidth_);
             } else if (event.kind == platform::MouseEventKind::Up) {
                 const bool erased = erase->erasing;
-                gesture_ = std::monostate{};
+                hand_.gesture = std::monostate{};
                 if (erased) {
                     session_.EndErase();
                 } else {
@@ -1543,10 +1500,10 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
             return;
         }
         if (event.kind == platform::MouseEventKind::Down && drawingItem_.has_value() && !ImGui::GetIO().KeyAlt &&
-            !ImGui::GetIO().WantCaptureMouse && std::holds_alternative<std::monostate>(gesture_)) {
+            !ImGui::GetIO().WantCaptureMouse && !GestureInFlight()) {
             const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
             if (target.kind == PointerTarget::Kind::Body && target.item == *drawingItem_) {
-                gesture_ = RightErase{event.position.x, event.position.y, false};
+                hand_.gesture = RightErase{event.position.x, event.position.y, false};
                 return;
             }
         }
@@ -1646,7 +1603,7 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
     // stroke would otherwise take that stroke's moves and its release, and
     // it stayed in flight for good - no gesture could start after it, and a
     // paint or erase session was never closed.
-    if (activeTool_ == Tool::Text && std::holds_alternative<std::monostate>(gesture_)) {
+    if (activeTool_ == Tool::Text && !GestureInFlight()) {
         // Not stroke-based at all (see Tool::Text's own doc comment) - a
         // press opens the snippet's noteText for editing instead of
         // starting a drag, the same way clicking a real text field just
@@ -1671,8 +1628,8 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
     // rectangle for a hand with no keyboard.
     using Kind = StrokeInFlight::Kind;
     if (event.kind == platform::MouseEventKind::Down) {
-        if (!std::holds_alternative<std::monostate>(gesture_)) {
-            return;  // one gesture at a time - see gesture_
+        if (GestureInFlight()) {
+            return;  // one gesture at a time - see Hand::gesture
         }
         StrokeInFlight stroke;
         if (activeTool_ == Tool::Erase) {
@@ -1681,7 +1638,7 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
             stroke.shape = ShapeForPress();
             stroke.kind = stroke.shape != DrawShape::Freehand ? Kind::Shape : Kind::Freehand;
         }
-        gesture_ = stroke;
+        hand_.gesture = stroke;
     }
     StrokeInFlight* stroke = GestureIf<StrokeInFlight>();
     if (stroke == nullptr) {
@@ -1761,7 +1718,7 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
             break;
     }
     if (event.kind == platform::MouseEventKind::Up) {
-        gesture_ = std::monostate{};
+        hand_.gesture = std::monostate{};
     }
 }
 

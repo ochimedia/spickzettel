@@ -940,31 +940,21 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
         pinnedOnly_ = false;
     }
     if (viewOnly_) {
-        // Nothing should stay "in progress" while merely viewing - disarm
-        // any armed item (and its live layer), drop any pending creation
-        // tool, and close every transient edit-mode UI surface, so
-        // re-entering edit mode later starts clean rather than resuming
-        // whatever gesture/popover happened to be mid-flight.
-        ClearCreationGesture();
+        // Nothing should stay "in progress" while merely viewing: the hand
+        // is settled first, while drawing mode still says which snippet a
+        // stroke in flight belongs to - and a note being typed with it,
+        // whose editor is not drawn in view-only mode and so would never
+        // hear that it closed. Then the creation tool is put down and every
+        // transient edit-mode surface closed, so re-entering edit mode
+        // later starts clean rather than resuming whatever popover happened
+        // to be up.
+        SettleHand();
         PutDownCreationTool();
         ExitDrawingMode();
         SettleUntouchedDrawing();
         CloseOverview();
-        lastPress_.reset();
-        heldPress_.reset();
-        pressedButton_.reset();
-        ignoredButton_.reset();
         itemPropertiesPopoverItemId_.reset();
         confirmDeleteTarget_.reset();
-        // And whatever else the hand was in the middle of, kept where it
-        // got to - see EndGesture.
-        EndGesture();
-        // A note being typed is committed as it stands: its editor is not
-        // drawn in view-only mode, so it would never hear that it closed,
-        // and would be left holding the text and the keyboard.
-        if (editingNoteItemId_.has_value()) {
-            EndEditingNote(noteEditBuffer_);
-        }
         // Normally cleared at the top of every RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle
@@ -1001,15 +991,16 @@ void OverlayApp::SettleForPersistence() {
 }
 
 void OverlayApp::SettleHand() {
-    ReleaseGesture();
-    // Neither button is down from here, as far as this knows: a release
-    // that went missing - a press on a panel, then the overlay hidden - left
-    // the other button ignored until it was pressed again.
-    pressedButton_.reset();
-    ignoredButton_.reset();
+    EndGesture();
     if (editingNoteItemId_.has_value()) {
         EndEditingNote(noteEditBuffer_);
     }
+    // And the rest of the hand with it, whole - the press a hold or a
+    // double-click would be judged on, and which buttons are down: as far
+    // as this knows none is from here, and the release still to come finds
+    // nothing to end. Replaced rather than cleared field by field, so
+    // nothing added to Hand later can be missed.
+    hand_ = Hand{};
 }
 
 // ================= Frame =================
@@ -1057,8 +1048,15 @@ void OverlayApp::HandleMouseWheel() {
     // is what decides, not whether something happens to be selected: in
     // drawing mode something always is, and the wheel must not start
     // scaling the snippet under the pen.
+    //
+    // None of it while a gesture is in flight: the wheel is on the mouse
+    // that is holding the gesture, and input from the gesture's own device
+    // waits for it to end rather than settling it, as a second button's
+    // does (see Hand::ignoredButton) - a notch nudged in the middle of a
+    // stroke would switch the canvas under it, and one mid-drag would be
+    // filed inside the drag, undone to a size the drag then wrote over.
     const ImGuiIO& io = ImGui::GetIO();
-    if (io.MouseWheel == 0.0f || PanelOpen()) {
+    if (io.MouseWheel == 0.0f || PanelOpen() || GestureInFlight()) {
         return;
     }
     {
@@ -1076,10 +1074,6 @@ void OverlayApp::HandleMouseWheel() {
             }
         } else if (io.KeyCtrl) {
             // Both held: neither opacity is meant more than the other.
-        } else if (std::holds_alternative<ItemGesture>(gesture_)) {
-            // Mid-drag: the drag files where the snippets were at its
-            // press, and a scale filed inside it would be undone to a
-            // size the drag then wrote over.
         } else if (!drawingItem_.has_value()) {
             if (const int steps = TakeWheelSteps(selectionWheelRemainder_, io.MouseWheel); steps != 0) {
                 ScaleSelectionByWheel(steps);
@@ -1169,8 +1163,8 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         styleApplied_ = true;
     }
     // A press held still sends no events, so its hold matures here, on the
-    // clock - see heldPress_. Not in view-only mode, where no press reaches
-    // the app in the first place.
+    // clock - see Hand::heldPress. Not in view-only mode, where no press
+    // reaches the app in the first place.
     if (!viewOnly_) {
         MatureHeldPress();
     }
@@ -1481,10 +1475,10 @@ void OverlayApp::OnOverlayShown() {
     // Hiding is moving on too, and nothing ran while hidden to notice - see
     // untouchedDrawing_.
     SettleUntouchedDrawing();
-    // No button is down as the overlay comes up: what went down before it
-    // was hidden has come up since, wherever that release went.
-    pressedButton_.reset();
-    ignoredButton_.reset();
+    // Nothing is in the hand as the overlay comes up: what went down before
+    // it was hidden has come up since, wherever that release went. Settled
+    // already when it was put away, unless it went some other way.
+    SettleHand();
     // The panels docked against the edges come out for a moment, so they
     // are seen where they are - asked for here, done on the first frame.
     edgePanelsFlashPending_ = true;

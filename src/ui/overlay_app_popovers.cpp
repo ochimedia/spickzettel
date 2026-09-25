@@ -399,6 +399,7 @@ std::string OverlayApp::MenuShortcutLabel(ShortcutAction action) const {
 }
 
 void OverlayApp::RunItemMenuAction(ItemMenuAction action, ItemId itemId) {
+    SettleHand();  // a command - see SettleHand
     const ImGuiIO& io = ImGui::GetIO();
     switch (action) {
         case ItemMenuAction::ToggleFullscreen:
@@ -481,6 +482,7 @@ void OverlayApp::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) c
 }
 
 void OverlayApp::RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action) {
+    SettleHand();  // a command - see SettleHand
     const ImGuiIO& io = ImGui::GetIO();
     switch (action) {
         case EmptyCanvasMenuAction::NewScreenshot:

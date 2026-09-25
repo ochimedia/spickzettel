@@ -2949,9 +2949,10 @@ TEST_F(OverlappingItemsTest, ANudgeThatMovesNothingStartsNoRun) {
     EXPECT_FLOAT_EQ(BackItem().rect.x, edge) << "the nudge, not the drag with it";
 }
 
-// Mid-drag the arrow keys and the wheel leave the snippet to the drag:
-// what either filed would be undone to a place the drag had since left.
-TEST_F(OverlappingItemsTest, ArrowKeysAndTheWheelWaitForADragToEnd) {
+// Mid-drag the wheel leaves the snippet to the drag: it is on the mouse
+// holding the drag, and what it filed would be undone to a place the drag
+// had since left.
+TEST_F(OverlappingItemsTest, TheWheelWaitsForADragToEnd) {
     ShowEditMode();
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
@@ -2964,14 +2965,11 @@ TEST_F(OverlappingItemsTest, ArrowKeysAndTheWheelWaitForADragToEnd) {
     StepFrame();
     RawMouse(x + 20.0f, y, platform::MouseEventKind::Move);
     StepFrame();
-    PressKey(ImGuiKey_DownArrow);
-    ImGui::GetIO().AddMouseWheelEvent(0.0f, 1.0f);
-    StepFrame();
+    Wheel(1.0f);
     RawMouse(x + 40.0f, y, platform::MouseEventKind::Move);
     StepFrame();
     RawMouse(x + 40.0f, y, platform::MouseEventKind::Up);
     StepFrames(2);
-    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y);
     EXPECT_FLOAT_EQ(BackItem().rect.w, items.back.w);
     ASSERT_FLOAT_EQ(BackItem().rect.x, items.back.x + 40.0f);
 
@@ -2979,7 +2977,38 @@ TEST_F(OverlappingItemsTest, ArrowKeysAndTheWheelWaitForADragToEnd) {
     EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x) << "the drag, whole, in one step";
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x) << "and no step under it to a place mid-drag";
-    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y);
+}
+
+// An arrow key is a command, and a command ends the drag where it is (see
+// OverlayApp::SettleHand): the nudge is a step of its own after the drag,
+// and the rest of the drag moves nothing.
+TEST_F(OverlappingItemsTest, AnArrowKeyEndsADragAndNudgesAfterIt) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);
+
+    RawMouse(x, y, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(x + 20.0f, y, platform::MouseEventKind::Move);
+    StepFrame();
+    PressKey(ImGuiKey_DownArrow);
+    EXPECT_TRUE(App().HandAtRest());
+    RawMouse(x + 40.0f, y, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(x + 40.0f, y, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 20.0f) << "the drag ended where the key found it";
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 1.0f);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the nudge first";
+    EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 20.0f);
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x) << "then the drag";
 }
 
 // Escape works in stages: a selection clears before the tool goes down.
@@ -3375,10 +3404,12 @@ TEST_F(HeadlessAppTest, WithTextInHandAClickOnTheDrawingOpensItForTyping) {
     EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(note.id)) << "open for typing";
 }
 
-// The key for Text pressed halfway through a stroke: the stroke still gets
-// its moves and its release, and ends as any other does. Taken by Text
-// instead, it stayed in flight, and nothing could be pressed after it.
-TEST_F(HeadlessAppTest, TextPickedMidStrokeLetsTheStrokeFinish) {
+// The key for Text pressed halfway through a stroke: a command, so the
+// stroke ends where the key found it and is kept (see
+// OverlayApp::SettleHand), and the rest of the drag draws nothing. Taken
+// by Text instead, it stayed in flight, and nothing could be pressed after
+// it.
+TEST_F(HeadlessAppTest, TextPickedMidStrokeEndsTheStrokeWhereItIs) {
     StartWith(WithTextOnT());
     ShowEditMode();
     StepFrame();
@@ -3393,12 +3424,15 @@ TEST_F(HeadlessAppTest, TextPickedMidStrokeLetsTheStrokeFinish) {
     StepFrame();
     PressKey(ImGuiKey_T);
     ASSERT_EQ(App().ActiveTool(), Tool::Text);
+    ASSERT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u) << "kept as the key found it";
+    const size_t points = manager.FindItemAnywhere(drawing)->strokes[0].points.size();
+    EXPECT_FALSE(AppSession().LiveLayer().ActiveStroke().has_value());
     RawMouse(500.0f, 420.0f, platform::MouseEventKind::Move);
     RawMouse(500.0f, 420.0f, platform::MouseEventKind::Up);
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrame();
-    EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
-    EXPECT_FALSE(AppSession().LiveLayer().ActiveStroke().has_value());
+    ASSERT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
+    EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes[0].points.size(), points) << "the rest drew nothing";
 
     RawClick(400.0f, 400.0f);
     EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(drawing)) << "the next press is Text's";
