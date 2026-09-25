@@ -306,6 +306,7 @@ void Win32OverlayWindow::ShowInternal(bool activate) {
     SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     visible_ = true;
     shownSeconds_ = 0.0f;
+    seedPointerFromCursor_ = true;
     RefreshEditModeInput();
     QueryPerformanceCounter(&lastFrameTime_);  // avoid a large delta-time spike on the first frame
 }
@@ -1103,8 +1104,18 @@ void Win32OverlayWindow::RenderFrame() {
             }
         }
         lastEmittedMove_ = client;
+    } else if (POINT cursor{}; seedPointerFromCursor_ && GetCursorPos(&cursor) && ScreenToClient(hwnd_, &cursor)) {
+        // The first frame after a show. ImGui's pointer went with the rest
+        // of its input as the overlay came up (see
+        // OverlayApp::OnOverlayShown), which puts it nowhere, and a window
+        // without focus hears of the cursor only once it moves: a click
+        // before that hovered nothing, and fell through a panel to the
+        // canvas. Put where the cursor is, once; the backend has it after.
+        renderer_->SetMousePositionOverride(true, static_cast<float>(cursor.x), static_cast<float>(cursor.y));
+        seedPointerFromCursor_ = false;
     } else {
         renderer_->SetMousePositionOverride(false, 0.0f, 0.0f);
+        seedPointerFromCursor_ = false;
     }
 
     renderer_->NewFrame();

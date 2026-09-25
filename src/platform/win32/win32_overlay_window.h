@@ -142,6 +142,9 @@ private:
     float topmostCheckSeconds_ = 0.0f;
     // Seconds since the last show, for the same check - see RenderFrame.
     float shownSeconds_ = 0.0f;
+    // Whether the next frame puts ImGui's pointer where the cursor is - the
+    // first after a show; see RenderFrame.
+    bool seedPointerFromCursor_ = false;
     // See SetFramePacing.
     FramePacing framePacing_ = FramePacing::EveryFrame;
     FrameCallback frameCallback_;
