@@ -1638,7 +1638,11 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
         return;
     }
 
-    if (activeTool_ == Tool::Text) {
+    // Only with nothing in flight: a key for Text pressed halfway through a
+    // stroke would otherwise take that stroke's moves and its release, and
+    // it stayed in flight for good - no gesture could start after it, and a
+    // paint or erase session was never closed.
+    if (activeTool_ == Tool::Text && std::holds_alternative<std::monostate>(gesture_)) {
         // Not stroke-based at all (see Tool::Text's own doc comment) - a
         // press opens the snippet's noteText for editing instead of
         // starting a drag, the same way clicking a real text field just

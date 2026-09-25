@@ -3059,6 +3059,35 @@ TEST_F(HeadlessAppTest, WithTextInHandAClickOnTheDrawingOpensItForTyping) {
     EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(note.id)) << "open for typing";
 }
 
+// The key for Text pressed halfway through a stroke: the stroke still gets
+// its moves and its release, and ends as any other does. Taken by Text
+// instead, it stayed in flight, and nothing could be pressed after it.
+TEST_F(HeadlessAppTest, TextPickedMidStrokeLetsTheStrokeFinish) {
+    StartWith(WithTextOnT());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
+    CanvasManager& manager = controller_->GetSession().Manager();
+    const ItemId drawing = manager.CurrentOrNull()->items[0].id;
+
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(350.0f, 350.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    PressKey(ImGuiKey_T);
+    ASSERT_EQ(App().ActiveTool(), Tool::Text);
+    RawMouse(500.0f, 420.0f, platform::MouseEventKind::Move);
+    RawMouse(500.0f, 420.0f, platform::MouseEventKind::Up);
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrame();
+    EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
+    EXPECT_FALSE(manager.CurrentOrNull()->liveLayer.ActiveStroke().has_value());
+
+    RawClick(400.0f, 400.0f);
+    EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(drawing)) << "the next press is Text's";
+}
+
 TEST_F(HeadlessAppTest, ANoteNothingWasTypedIntoGoesWhenTheHandMovesOn) {
     StartWith(WithTextOnT());
     ShowEditMode();
