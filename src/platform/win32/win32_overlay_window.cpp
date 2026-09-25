@@ -323,6 +323,9 @@ namespace {
 // at 60 fps, two to three refreshes. A guess on the generous side - a
 // slower game shows its last few frames of wandering all the same.
 constexpr DWORD kCameraSettleMs = 80;
+
+// How long a frame with no device to draw with waits before the next try.
+constexpr DWORD kNoDeviceRetryMs = 100;
 }  // namespace
 
 // Settles the camera correction while this window still covers the game,
@@ -959,6 +962,10 @@ void Win32OverlayWindow::ReleaseTexture(uint64_t textureHandle) {
     renderer_->ReleaseTexture(reinterpret_cast<ID3D11ShaderResourceView*>(static_cast<uintptr_t>(textureHandle)));
 }
 
+uint64_t Win32OverlayWindow::TextureGeneration() const {
+    return pastTextureGenerations_ + (renderer_ ? renderer_->DeviceGeneration() : 0);
+}
+
 DrawCallback Win32OverlayWindow::ImageFilterCallback() const { return &Win32Dx11Renderer::ApplyImageFilter; }
 
 void Win32OverlayWindow::Destroy() {
@@ -966,6 +973,7 @@ void Win32OverlayWindow::Destroy() {
     // are global state that outliving this object would be a real problem.
     Win32InputGrab::Instance().Shutdown();
     if (renderer_) {
+        pastTextureGenerations_ += renderer_->DeviceGeneration() + 1;
         renderer_->Shutdown();
         renderer_.reset();
     }
@@ -1014,6 +1022,16 @@ bool Win32OverlayWindow::CoveredByAnotherTopmostWindow() const {
 
 void Win32OverlayWindow::RenderFrame() {
     if (!visible_ || !renderer_) {
+        return;
+    }
+    // Nothing to draw with: the device is gone and the driver not back yet.
+    // The frame is skipped, and a short wait stands in for the vsync
+    // Present would have waited for, so the loop does not spin. Skipped
+    // before the grab's heartbeat, too: an overlay that shows nothing
+    // should not keep the input, and the grab lets it through once this
+    // thread stops beating.
+    if (!renderer_->ReadyToRender()) {
+        MsgWaitForMultipleObjectsEx(0, nullptr, kNoDeviceRetryMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         return;
     }
 

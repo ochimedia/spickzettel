@@ -3707,5 +3707,40 @@ TEST_F(HeadlessAppTest, TheWelcomeIsMadeAtTheInterfaceScale) {
     EXPECT_FLOAT_EQ(canvas.items[1].noteTextSizePx, 22.0f * 1.5f);
 }
 
+// A device the driver replaced takes every texture with it. The next frame
+// lets go of each, and makes again the ones it draws: the frozen screen
+// from the pixels kept, and a snippet's picture from the library.
+TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn) {
+    AppConfig config = DefaultConfig();
+    config.freezeScreenInEditMode = true;  // the drag crops the frozen screen
+    StartWith(config);
+    AttachStore();
+    host_.overlayWindow.captureReturnsHandle = 7;
+    host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
+    host_.overlayWindow.captureReturnsHeight = static_cast<int>(kDisplayHeight);
+    host_.overlayWindow.captureReturnsPixelsRGBA.assign(static_cast<size_t>(kDisplayWidth * kDisplayHeight) * 4, 255);
+    host_.overlayWindow.createTextureFromPixelsReturnsHandle = 9;
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    StepFrame();
+    Session& session = controller_->GetSession();
+    ASSERT_TRUE(session.Flush());
+    const Layer* picture = Canvases().CurrentOrNull()->items[0].ImageLayer();
+    ASSERT_NE(picture, nullptr);
+    ASSERT_EQ(picture->textureHandle, 9u);
+    ASSERT_EQ(session.FrozenScreenTexture(), 7u);
+
+    const int releasedBefore = host_.overlayWindow.releaseTextureCallCount;
+    host_.overlayWindow.createTextureFromPixelsReturnsHandle = 11;
+    host_.overlayWindow.textureGeneration = 1;
+    StepFrame();
+    EXPECT_EQ(host_.overlayWindow.releaseTextureCallCount - releasedBefore, 2) << "the picture and the frozen screen";
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].ImageLayer()->textureHandle, 11u);
+    EXPECT_EQ(session.FrozenScreenTexture(), 11u);
+    EXPECT_TRUE(FilterDrawnWith(11) == std::nullopt) << "drawn, with the new texture";
+}
+
 }  // namespace
 }  // namespace sz::test

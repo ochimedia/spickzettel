@@ -250,6 +250,40 @@ void Session::EnsureTexturesForCurrentCanvas() {
     }
 }
 
+void Session::ReplaceLostTextures() {
+    if (!window_) {
+        return;
+    }
+    for (Canvas& canvas : Manager().CanvasesMutable()) {
+        for (Item& item : canvas.items) {
+            for (Layer& layer : item.layers) {
+                if (layer.textureHandle == 0) {
+                    continue;
+                }
+                window_->ReleaseTexture(layer.textureHandle);
+                layer.textureHandle = 0;
+                // No file yet and no pixels on the layer, so the sync has
+                // nothing to load it from: the pixels waiting to be written
+                // are what it showed.
+                const auto pending = pendingPictures_.find(item.id);
+                if (&layer == item.ImageLayer() && layer.imageFile.empty() && pending != pendingPictures_.end()) {
+                    layer.textureHandle = window_->CreateTextureFromPixels(
+                        pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
+                }
+            }
+        }
+    }
+    shotTextureCanvasId_.reset();
+    if (frozenScreenTexture_ != 0) {
+        window_->ReleaseTexture(frozenScreenTexture_);
+        frozenScreenTexture_ =
+            window_->CreateTextureFromPixels(frozenScreenPixels_.data(), frozenScreenWidth_, frozenScreenHeight_);
+        if (frozenScreenTexture_ == 0) {
+            ReleaseFrozenScreen();  // nothing frozen, as when the capture itself fails
+        }
+    }
+}
+
 void Session::Tick(float deltaSeconds) { UpdateAutosave(library_, deltaSeconds); }
 
 void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {

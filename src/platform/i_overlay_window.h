@@ -158,6 +158,13 @@ public:
     // Releases a texture from either call above. No-op for 0.
     virtual void ReleaseTexture(uint64_t textureHandle) = 0;
 
+    // Changes when every texture handed out before is lost: the GPU device
+    // was reset or replaced - a driver update, or a driver that stopped
+    // responding and was restarted. The handles from before draw nothing
+    // and must not be updated; each is still given back through
+    // ReleaseTexture, and what it showed uploaded again.
+    virtual uint64_t TextureGeneration() const = 0;
+
     // A draw callback that makes the pictures drawn after it resample with
     // the ImageFilter carried as its user data (the enum's value cast to a
     // pointer), until ImGui's DrawCallback_ResetRenderState puts the

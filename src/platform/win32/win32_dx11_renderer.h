@@ -26,6 +26,20 @@ public:
     // WM_DISPLAYCHANGE), without tearing down the device or ImGui context.
     void HandleResize();
 
+    // Whether a frame can be drawn, first making it so where it can be. A
+    // device the driver took away - a driver update, or one restarted after
+    // it stopped responding - is replaced, with the swapchain, the shaders
+    // and ImGui's own objects on it; a render target a resize could not
+    // make is tried again. False while neither works: there is nothing to
+    // draw with, and the frame is skipped rather than drawn into nothing.
+    bool ReadyToRender();
+    // How many times ReadyToRender has replaced the device. Every texture
+    // from before a change is lost - see IOverlayWindow::TextureGeneration.
+    uint64_t DeviceGeneration() const { return deviceGeneration_; }
+    // Treats the device as lost, as a removed one is, for the next
+    // ReadyToRender. For tests: nothing short of a driver can remove one.
+    void LoseDeviceForTesting() { deviceLost_ = true; }
+
     // Overrides the mouse position ImGui sees for subsequent frames, in
     // client coordinates - for when the overlay is navigating by its own
     // pointer rather than the OS one (see Win32InputGrab::
@@ -91,6 +105,10 @@ public:
     void RefreshMips();
 
 private:
+    bool CreateDeviceAndSwapChain();
+    // Everything made on the device, and the device, let go of - what a
+    // lost one leaves to replace.
+    void ReleaseDevice();
     bool CreateRenderTarget();
     void CleanupRenderTarget();
     // The shaders ImGui does not have: the mip builder and the two
@@ -111,6 +129,12 @@ private:
     Microsoft::WRL::ComPtr<IDXGISwapChain> swapChain_;
     Microsoft::WRL::ComPtr<ID3D11RenderTargetView> renderTargetView_;
     bool imguiInitialized_ = false;
+    // ImGui's DX11 backend, which is shut down with the device it was
+    // given and started again on the next one.
+    bool imguiBackendInitialized_ = false;
+    // See ReadyToRender.
+    bool deviceLost_ = false;
+    uint64_t deviceGeneration_ = 0;
     // See ReleaseTexture.
     bool inFrame_ = false;
     std::vector<ID3D11ShaderResourceView*> releaseAfterFrame_;

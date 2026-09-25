@@ -170,28 +170,7 @@ ComPtr<ID3DBlob> CompileShader(const char* source, const char* target, const D3D
 
 bool Win32Dx11Renderer::Initialize(HWND hwnd) {
     hwnd_ = hwnd;
-
-    DXGI_SWAP_CHAIN_DESC desc{};
-    desc.BufferCount = 2;
-    desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    desc.OutputWindow = hwnd_;
-    desc.SampleDesc.Count = 1;
-    desc.Windowed = TRUE;
-    desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-
-    UINT createFlags = 0;
-    D3D_FEATURE_LEVEL featureLevel;
-    const D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0};
-    const HRESULT hr = D3D11CreateDeviceAndSwapChain(
-        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createFlags, featureLevels,
-        static_cast<UINT>(std::size(featureLevels)), D3D11_SDK_VERSION, &desc, &swapChain_, &device_,
-        &featureLevel, &context_);
-    if (FAILED(hr)) {
-        return false;
-    }
-
-    if (!CreateRenderTarget()) {
+    if (!CreateDeviceAndSwapChain() || !CreateRenderTarget()) {
         return false;
     }
 
@@ -215,8 +194,29 @@ bool Win32Dx11Renderer::Initialize(HWND hwnd) {
         return false;
     }
     imguiInitialized_ = true;
+    imguiBackendInitialized_ = true;
     CreateFilterShaders();
     return true;
+}
+
+bool Win32Dx11Renderer::CreateDeviceAndSwapChain() {
+    DXGI_SWAP_CHAIN_DESC desc{};
+    desc.BufferCount = 2;
+    desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    desc.OutputWindow = hwnd_;
+    desc.SampleDesc.Count = 1;
+    desc.Windowed = TRUE;
+    desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+
+    UINT createFlags = 0;
+    D3D_FEATURE_LEVEL featureLevel;
+    const D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0};
+    const HRESULT hr = D3D11CreateDeviceAndSwapChain(
+        nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createFlags, featureLevels,
+        static_cast<UINT>(std::size(featureLevels)), D3D11_SDK_VERSION, &desc, &swapChain_, &device_,
+        &featureLevel, &context_);
+    return SUCCEEDED(hr);
 }
 
 bool Win32Dx11Renderer::CreateFilterShaders() {
@@ -237,12 +237,19 @@ bool Win32Dx11Renderer::CreateFilterShaders() {
 }
 
 void Win32Dx11Renderer::Shutdown() {
-    ReleaseDeferredTextures();
+    ReleaseDevice();
     if (imguiInitialized_) {
-        ImGui_ImplDX11_Shutdown();
         ImGui_ImplWin32_Shutdown();
         ImGui::DestroyContext();
         imguiInitialized_ = false;
+    }
+}
+
+void Win32Dx11Renderer::ReleaseDevice() {
+    ReleaseDeferredTextures();
+    if (imguiBackendInitialized_) {
+        ImGui_ImplDX11_Shutdown();
+        imguiBackendInitialized_ = false;
     }
     CleanupRenderTarget();
     staleMips_.clear();
@@ -255,7 +262,39 @@ void Win32Dx11Renderer::Shutdown() {
     device_.Reset();
 }
 
+bool Win32Dx11Renderer::ReadyToRender() {
+    if (!imguiInitialized_) {
+        return false;
+    }
+    if (device_ && !deviceLost_ && device_->GetDeviceRemovedReason() == S_OK) {
+        // A resize that could not make its target leaves none, and a frame
+        // drawn into none is an access violation inside d3d11.dll.
+        return renderTargetView_ || CreateRenderTarget();
+    }
+    // Replaced whole, in place: the ImGui context and the window stay, and
+    // with them everything the app has laid out. The textures the app holds
+    // were made on the old device and cannot be moved across; the new
+    // generation is what tells it to make them again.
+    if (device_) {
+        ReleaseDevice();
+        deviceLost_ = false;
+        ++deviceGeneration_;
+    }
+    if (!CreateDeviceAndSwapChain() || !CreateRenderTarget() ||
+        !ImGui_ImplDX11_Init(device_.Get(), context_.Get())) {
+        // The driver may still be on its way back. Tried again next frame.
+        ReleaseDevice();
+        return false;
+    }
+    imguiBackendInitialized_ = true;
+    CreateFilterShaders();
+    return true;
+}
+
 bool Win32Dx11Renderer::CreateRenderTarget() {
+    if (!swapChain_) {
+        return false;
+    }
     ComPtr<ID3D11Texture2D> backBuffer;
     if (FAILED(swapChain_->GetBuffer(0, IID_PPV_ARGS(&backBuffer)))) {
         return false;
@@ -270,8 +309,11 @@ void Win32Dx11Renderer::HandleResize() {
         return;
     }
     CleanupRenderTarget();
-    swapChain_->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
-    CreateRenderTarget();
+    // Either failing leaves no target, which ReadyToRender tries again, or
+    // a lost device, which it replaces.
+    if (SUCCEEDED(swapChain_->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0))) {
+        CreateRenderTarget();
+    }
 }
 
 void Win32Dx11Renderer::SetMousePositionOverride(bool active, float clientX, float clientY) {
@@ -400,6 +442,14 @@ ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t
 bool Win32Dx11Renderer::UpdateTextureRegionRGBA(ID3D11ShaderResourceView* srv, const uint8_t* pixelsRGBA,
                                                   int sourceWidth, int x, int y, int w, int h) {
     if (!context_ || !srv || !pixelsRGBA || sourceWidth <= 0 || w <= 0 || h <= 0 || x < 0 || y < 0) {
+        return false;
+    }
+    // One made on a device since replaced cannot be written with this
+    // one's context. The app lets go of those (see ReadyToRender), but a
+    // stray one is refused here rather than handed to D3D.
+    ComPtr<ID3D11Device> madeOn;
+    srv->GetDevice(&madeOn);
+    if (madeOn.Get() != device_.Get()) {
         return false;
     }
     Microsoft::WRL::ComPtr<ID3D11Resource> resource;
@@ -543,11 +593,23 @@ void Win32Dx11Renderer::ApplyImageFilter(const ImDrawList* parentList, const ImD
 
 void Win32Dx11Renderer::RenderAndPresent() {
     RenderTo(renderTargetView_.Get());
-    swapChain_->Present(1, 0);  // vsync-paced; avoids busy-spinning while visible
+    if (!renderTargetView_) {
+        return;
+    }
+    const HRESULT presented = swapChain_->Present(1, 0);  // vsync-paced; avoids busy-spinning while visible
+    if (presented == DXGI_ERROR_DEVICE_REMOVED || presented == DXGI_ERROR_DEVICE_RESET) {
+        deviceLost_ = true;
+    }
 }
 
 void Win32Dx11Renderer::RenderTo(ID3D11RenderTargetView* target) {
     ImGui::Render();
+    if (!target || !context_) {
+        // Nothing to draw into: the frame ends all the same, so ImGui is
+        // ready for the next one, and what waited for it is let go.
+        ReleaseDeferredTextures();
+        return;
+    }
 
     // Before the frame's own target is bound, since building mips binds
     // targets of its own.

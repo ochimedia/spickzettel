@@ -59,6 +59,7 @@ public:
     bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* pixelsRGBA, int sourceWidth, int x, int y,
                               int w, int h) override;
     void ReleaseTexture(uint64_t textureHandle) override;
+    uint64_t TextureGeneration() const override;
     DrawCallback ImageFilterCallback() const override;
     void Destroy() override;
 
@@ -141,6 +142,9 @@ private:
     FrameCallback frameCallback_;
     MouseCallback mouseCallback_;
     std::unique_ptr<Win32Dx11Renderer> renderer_;
+    // The texture generations of renderers since destroyed, which took
+    // every texture they made with them. See TextureGeneration.
+    uint64_t pastTextureGenerations_ = 0;
     LARGE_INTEGER lastFrameTime_{};
     LARGE_INTEGER perfFrequency_{};
 };

@@ -123,6 +123,8 @@ public:
 
     void ReleaseTexture(uint64_t /*textureHandle*/) override { ++releaseTextureCallCount; }
 
+    uint64_t TextureGeneration() const override { return textureGeneration; }
+
     // Never run - nothing renders the fake's draw lists - only looked for
     // among their commands.
     static void FakeImageFilterCallback(const ImDrawList* /*parentList*/, const ImDrawCmd* /*cmd*/) {}
@@ -178,6 +180,8 @@ public:
     // 0 by default, same as a capture: an upload that fails. A crop out of
     // a frozen screen is only kept when its upload succeeds.
     uint64_t createTextureFromPixelsReturnsHandle = 0;
+    // Moved on by a test to lose every texture, as a device reset does.
+    uint64_t textureGeneration = 0;
 };
 
 // In-memory IPlatformHost paired with FakeOverlayWindow. Exposes

@@ -159,6 +159,14 @@ public:
     // the load.
     void EnsureTexturesForCurrentCanvas();
 
+    // Every texture this handed out is lost - the GPU device was replaced
+    // (see IOverlayWindow::TextureGeneration). Each is let go of, and made
+    // again from what it showed: the current canvas's pictures on the next
+    // EnsureTexturesForCurrentCanvas, from memory or the library, a picture
+    // not written yet from the pixels kept for it, and the frozen screen
+    // from the pixels kept for cropping.
+    void ReplaceLostTextures();
+
     // ===== Undo =====
 
     // What a step of undo or redo took back or put back - for a UI to say

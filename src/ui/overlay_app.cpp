@@ -1213,6 +1213,17 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // between frames (the Overview, the canvas bar, startup); the one further
     // down covers a switch made during this frame - see
     // Session::EnsureTexturesForCurrentCanvas.
+    //
+    // First, every texture from before a device the driver replaced is
+    // let go of, before anything draws with one: the session's are made
+    // again at once, the Overview's previews and the stroke rasters as
+    // they are next wanted.
+    if (window_ != nullptr && window_->TextureGeneration() != textureGeneration_) {
+        textureGeneration_ = window_->TextureGeneration();
+        session_.ReplaceLostTextures();
+        ReleaseLayerPreviews();
+        ReleaseStrokeRasters();
+    }
     session_.EnsureTexturesForCurrentCanvas();
     // Runs regardless of view-only/edit mode, and before either mode's
     // own early-return below - content can change right up until the

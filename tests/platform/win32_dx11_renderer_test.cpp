@@ -223,5 +223,35 @@ TEST_F(Win32Dx11RendererTest, DuringAFrameTheReleaseWaitsForTheFrameToBeDrawn) {
     srv->Release();
 }
 
+TEST_F(Win32Dx11RendererTest, WithItsDeviceInPlaceTheRendererIsReadyAsItWas) {
+    EXPECT_TRUE(renderer_.ReadyToRender());
+    EXPECT_EQ(renderer_.DeviceGeneration(), 0u);
+}
+
+// A device the driver took away is replaced, and drawing goes on on the new
+// one - ImGui's own objects and the filter shaders with it. A texture from
+// before is refused an update, since the new context cannot write it, and
+// can still be released.
+TEST_F(Win32Dx11RendererTest, ALostDeviceIsReplacedAndDrawnWithAgain) {
+    const std::vector<uint8_t> stripes = Stripes(48, 1);
+    ID3D11ShaderResourceView* before = renderer_.CreateTextureFromRGBA(stripes.data(), 48, 1);
+    ASSERT_NE(before, nullptr);
+
+    renderer_.LoseDeviceForTesting();
+    ASSERT_TRUE(renderer_.ReadyToRender());
+    EXPECT_EQ(renderer_.DeviceGeneration(), 1u);
+    EXPECT_FALSE(renderer_.UpdateTextureRegionRGBA(before, stripes.data(), 48, 0, 0, 48, 1));
+    renderer_.ReleaseTexture(before);
+
+    ID3D11ShaderResourceView* after = renderer_.CreateTextureFromRGBA(stripes.data(), 48, 1);
+    ASSERT_NE(after, nullptr);
+    EXPECT_TRUE(renderer_.UpdateTextureRegionRGBA(after, stripes.data(), 48, 0, 0, 48, 1));
+    EXPECT_GT(Spread(DrawnRow(after, 16, ImageFilter::Bilinear)), 200);
+    const std::vector<int> row = DrawnRow(after, 16, ImageFilter::Lanczos);
+    ASSERT_EQ(row.size(), 16u);
+    EXPECT_LT(Spread(row), 24) << "the filter shaders are made again";
+    renderer_.ReleaseTexture(after);
+}
+
 }  // namespace
 }  // namespace sz::platform::win32

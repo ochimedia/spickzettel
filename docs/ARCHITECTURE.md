@@ -1316,6 +1316,28 @@ until the frame has been handed to D3D, which keeps what it uses alive
 from there. Doing it in the renderer covers every caller, rather than
 asking each of them to order its mutations before its drawing.
 
+**A lost device is replaced in place.** The driver can take the D3D11
+device away: an update, or a restart after it stopped responding, which
+a game underneath can cause. Before this was handled, every later frame
+failed silently, so the overlay was blank for the rest of the process
+while its input grab still took the input. And a resize that could not
+make its render target left none, which the next frame cleared: an
+access violation inside d3d11.dll. `ReadyToRender`, at the start of each
+frame, checks the device and replaces a lost one, with the swapchain,
+the filter shaders and ImGui's backend. The ImGui context stays, and
+ImGui makes its font atlas again by itself. While no device can be made,
+the frame is skipped: a short wait stands in for vsync, and the grab,
+no longer hearing from the frame loop, lets input through. What the app
+holds cannot be carried over: every texture was made on the old device.
+So the window's `TextureGeneration` moves on, and at the start of the
+next frame, before anything draws, the app lets go of each texture and
+makes it again. The session remakes the current canvas's pictures from
+memory or the library, a picture not written yet from its pending pixels,
+and the frozen screen from the pixels it keeps for cropping. The
+Overview's previews and the stroke rasters rebuild as they are next
+wanted. A stray old texture handed to `UpdateTextureRegionRGBA` is
+refused, not written with the new device's context.
+
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
 copy made from them (paste, duplicate, copy to another canvas) must
 share neither a file nor a texture with its source. `CanvasManager`

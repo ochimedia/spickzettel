@@ -1596,6 +1596,8 @@ private:
     // AttachTo has been called - a window that outlives this OverlayApp,
     // per the ownership already established by TrayController/main.
     platform::IOverlayWindow* window_ = nullptr;
+    // The window's TextureGeneration the textures held were made in.
+    uint64_t textureGeneration_ = 0;
 
     // See SetRestartOverlayCallback's own doc comment.
     std::function<void()> restartOverlayCallback_;
