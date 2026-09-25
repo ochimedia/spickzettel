@@ -1081,6 +1081,10 @@ void OverlayApp::HandleMouseWheel() {
             }
         } else if (io.KeyCtrl) {
             // Both held: neither opacity is meant more than the other.
+        } else if (std::holds_alternative<ItemGesture>(gesture_)) {
+            // Mid-drag: the drag files where the snippets were at its
+            // press, and a scale filed inside it would be undone to a
+            // size the drag then wrote over.
         } else if (!drawingItem_.has_value()) {
             if (const int steps = TakeWheelSteps(selectionWheelRemainder_, io.MouseWheel); steps != 0) {
                 ScaleSelectionByWheel(steps);

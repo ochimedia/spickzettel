@@ -501,6 +501,11 @@ void OverlayApp::HandleSelectionKeys() {
         DeleteSelection();
         return;
     }
+    // Not mid-drag, for the reason the wheel does not scale then (see
+    // HandleMouseWheel).
+    if (std::holds_alternative<ItemGesture>(gesture_)) {
+        return;
+    }
     // A pixel a press, ten with Shift - the way every drawing program
     // nudges - and repeating while held.
     const float step = io.KeyShift ? 10.0f : 1.0f;

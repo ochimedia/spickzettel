@@ -2778,6 +2778,39 @@ TEST_F(OverlappingItemsTest, ANudgeAfterAnUndoOrADragIsItsOwnStep) {
     EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 61.0f) << "the nudge after the drag, not the drag with it";
 }
 
+// Mid-drag the arrow keys and the wheel leave the snippet to the drag:
+// what either filed would be undone to a place the drag had since left.
+TEST_F(OverlappingItemsTest, ArrowKeysAndTheWheelWaitForADragToEnd) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+
+    RawMouse(x, y, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(x + 20.0f, y, platform::MouseEventKind::Move);
+    StepFrame();
+    PressKey(ImGuiKey_DownArrow);
+    ImGui::GetIO().AddMouseWheelEvent(0.0f, 1.0f);
+    StepFrame();
+    RawMouse(x + 40.0f, y, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(x + 40.0f, y, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y);
+    EXPECT_FLOAT_EQ(BackItem().rect.w, items.back.w);
+    ASSERT_FLOAT_EQ(BackItem().rect.x, items.back.x + 40.0f);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x) << "the drag, whole, in one step";
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x) << "and no step under it to a place mid-drag";
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y);
+}
+
 // Escape works in stages: a selection clears before the tool goes down.
 TEST_F(OverlappingItemsTest, EscapeClearsTheSelectionBeforePuttingTheToolDown) {
     ShowEditMode();
