@@ -295,6 +295,7 @@ void TrayController::ShowNotice() {
     // to - and swapping them would tear input hooks up and down for it.
     window.ShowWithoutActivating();
     window.SetInputPassthrough(true);
+    profileAppliedThisShowing_ = false;
 }
 
 void TrayController::HideNoticeIfDone() {
@@ -339,23 +340,27 @@ void TrayController::EnsureMode(bool viewOnly, bool keepProfileContext) {
     // moment after someone deliberately opened it. Cleared before Show
     // below, so the frames this mode draws are never notice frames.
     overlayApp_.SetNoticeOnly(false);
-    // The pinned view is the overlay put away, so leaving it for edit mode
-    // is coming up from hidden - with a profile, focus taken if it is to be,
-    // and everything else a real show does - rather than switching in place
-    // the way view-only does. View-only itself is the exception: the pinned
-    // view already is view-only and click-through, and has only to start
-    // drawing the rest of the canvas.
+    // The pinned view already is view-only and click-through, and has only
+    // to start drawing the rest of the canvas to be the view mode.
     if (overlayApp_.IsPinnedOnly()) {
         overlayApp_.SetPinnedOnly(false);
-        if (!viewOnly) {
-            window.Hide();
-        }
+    }
+    // Edit mode runs under the profile for what is underneath - its input
+    // options, its freeze, the focus decision over an elevated application
+    // - and those are settled as the window comes up from hidden. A window
+    // that came up without one - a notice, the pinned view, or the view
+    // mode either was switched to in place - is taken down and brought up
+    // again, as from hidden, rather than switched in place. Switched in
+    // place, edit mode ran on whatever the showing before had left.
+    if (!viewOnly && window.IsVisible() && !profileAppliedThisShowing_) {
+        window.Hide();
     }
     if (!window.IsVisible()) {
         if (!PrepareWindow()) {
             return;
         }
         ApplyProfileForCurrentApplication(keepProfileContext);
+        profileAppliedThisShowing_ = true;
         window.Show();
         // Only on the branch that actually brought it back from hidden - the
         // other one is already on screen and has lost nothing. See
@@ -492,6 +497,7 @@ bool TrayController::ShowPinnedView() {
     // order and the call a notice uses, for the reasons given there.
     window.ShowWithoutActivating();
     window.SetInputPassthrough(true);
+    profileAppliedThisShowing_ = false;
     return true;
 }
 

@@ -301,6 +301,10 @@ private:
     std::vector<std::pair<HotkeySlot, platform::KeyCombo>> unregisteredHotkeys_;
     // See StartOnStandInSettings.
     bool skipRetentionThisStart_ = false;
+    // Whether the window, while up, came up through EnsureMode and so with
+    // the profile for what is underneath - not as a notice or the pinned
+    // view, which apply none. See EnsureMode.
+    bool profileAppliedThisShowing_ = false;
     bool configFileKept_ = false;
     // Constructed up front (from host.GetDataDirectoryPath(), possibly
     // empty) but only ever used - Load()'d from, attached to overlayApp_ -

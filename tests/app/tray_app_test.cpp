@@ -1135,6 +1135,47 @@ TEST(TrayControllerProfileTest, TheMatchingProfilesSettingsAreWhatTheWindowIsGiv
     EXPECT_FALSE(host.overlayWindow.editModeInput.counterRawMouseInput);
 }
 
+// Edit mode from a notice switches no mode in place: the notice applied no
+// profile, and edit mode comes up as from hidden, with the game's.
+TEST(TrayControllerProfileTest, EditModeFromANoticeRunsTheMatchingProfile) {
+    test::FakePlatformHost host;
+    host.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "The Game"};
+    const AppConfig config = ConfigWithGameProfile();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
+    ASSERT_TRUE(host.overlayWindow.IsVisible()) << "the notice";
+    ASSERT_TRUE(host.overlayWindow.editModeInput.counterRawMouseInput) << "no profile for a notice";
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+
+    EXPECT_FALSE(controller.Overlay().IsViewOnly());
+    EXPECT_FALSE(host.overlayWindow.editModeInput.counterRawMouseInput);
+}
+
+// The same from the pinned view by way of view mode, which it switches to
+// in place.
+TEST(TrayControllerProfileTest, EditModeFromThePinnedViewByWayOfViewModeRunsTheMatchingProfile) {
+    test::FakePlatformHost host;
+    const AppConfig config = ConfigWithGameProfile();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    const int editId = FindHotkeyId(host, config.hotkeyEditMode);
+    host.TriggerHotkey(editId);
+    CanvasManager& manager = controller.GetSession().Manager();
+    manager.FindItemAnywhere(manager.CreateItem(false, Rect{100, 100, 300, 200}, "Pinned"))->pinned = true;
+    host.TriggerHotkey(editId);
+    ASSERT_TRUE(controller.Overlay().IsPinnedOnly());
+
+    host.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "The Game"};
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyViewMode));
+    ASSERT_FALSE(controller.Overlay().IsPinnedOnly());
+    host.TriggerHotkey(editId);
+
+    EXPECT_FALSE(controller.Overlay().IsViewOnly());
+    EXPECT_FALSE(host.overlayWindow.editModeInput.counterRawMouseInput);
+}
+
 TEST(TrayControllerProfileTest, NothingUnderneathMeansTheDefaultsRun) {
     test::FakePlatformHost host;
     host.overlayWindow.underlyingApp = platform::ForegroundApp{"notepad.exe", "Untitled"};
