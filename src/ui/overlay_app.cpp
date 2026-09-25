@@ -10,6 +10,8 @@
 #include <iterator>
 #include <limits>
 #include <string>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include "ui/icon_draw.h"
@@ -1864,23 +1866,34 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
 namespace {
 // One directory's worth of the library tree, and everything under it:
 // directories first, each half sorted by name, so the listing reads the
-// way a file manager shows it and the same way twice running.
+// way a file manager shows it and the same way twice running. Walked the
+// way the store walks it: an error partway through a directory ends that
+// directory rather than throwing, a name that cannot be spelled in this
+// code page is shown as such rather than throwing, and a link is listed
+// and not followed - the range-for this was threw out of the frame for
+// the first two, which the store had already been fixed for.
 void WalkLibraryTree(const std::filesystem::path& dir, int depth, std::vector<OverlayApp::LibraryTreeLine>& out) {
-    std::vector<OverlayApp::LibraryTreeLine> here;
+    std::vector<std::pair<OverlayApp::LibraryTreeLine, std::filesystem::path>> here;
     std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+    for (std::filesystem::directory_iterator it(dir, ec), end; !ec && it != end; it.increment(ec)) {
         std::error_code kindEc;
-        here.push_back({depth, entry.path().filename().string(), entry.is_directory(kindEc)});
+        const bool isDirectory = std::filesystem::is_directory(it->symlink_status(kindEc)) && !kindEc;
+        std::string name;
+        try {
+            name = it->path().filename().string();
+        } catch (const std::system_error&) {
+            name = "(a name that cannot be shown)";
+        }
+        here.push_back({{depth, std::move(name), isDirectory}, it->path()});
     }
-    std::sort(here.begin(), here.end(), [](const OverlayApp::LibraryTreeLine& a, const OverlayApp::LibraryTreeLine& b) {
-        return a.isDirectory != b.isDirectory ? a.isDirectory : a.name < b.name;
+    std::sort(here.begin(), here.end(), [](const auto& a, const auto& b) {
+        return a.first.isDirectory != b.first.isDirectory ? a.first.isDirectory : a.first.name < b.first.name;
     });
-    for (OverlayApp::LibraryTreeLine& line : here) {
+    for (auto& [line, path] : here) {
         const bool isDirectory = line.isDirectory;
-        const std::string name = line.name;
         out.push_back(std::move(line));
         if (isDirectory) {
-            WalkLibraryTree(dir / name, depth + 1, out);
+            WalkLibraryTree(path, depth + 1, out);
         }
     }
 }
