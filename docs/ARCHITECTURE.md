@@ -1338,6 +1338,13 @@ Overview's previews and the stroke rasters rebuild as they are next
 wanted. A stray old texture handed to `UpdateTextureRegionRGBA` is
 refused, not written with the new device's context.
 
+A window nobody can see is skipped the same way. With the screen locked
+or the secure desktop up, `Present` returns `DXGI_STATUS_OCCLUDED` at
+once instead of waiting for vsync, and a frame loop drawing every frame
+used a whole core until unlock. Once a present has said so, each frame
+first asks with `DXGI_PRESENT_TEST`, which draws nothing, and waits
+while the answer is still occluded.
+
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
 copy made from them (paste, duplicate, copy to another canvas) must
 share neither a file nor a texture with its source. `CanvasManager`

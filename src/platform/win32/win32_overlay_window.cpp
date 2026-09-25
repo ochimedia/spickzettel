@@ -324,7 +324,8 @@ namespace {
 // slower game shows its last few frames of wandering all the same.
 constexpr DWORD kCameraSettleMs = 80;
 
-// How long a frame with no device to draw with waits before the next try.
+// How long a frame with no device to draw with, or with the window
+// occluded, waits before the next try.
 constexpr DWORD kNoDeviceRetryMs = 100;
 }  // namespace
 
@@ -1024,12 +1025,12 @@ void Win32OverlayWindow::RenderFrame() {
     if (!visible_ || !renderer_) {
         return;
     }
-    // Nothing to draw with: the device is gone and the driver not back yet.
-    // The frame is skipped, and a short wait stands in for the vsync
-    // Present would have waited for, so the loop does not spin. Skipped
-    // before the grab's heartbeat, too: an overlay that shows nothing
-    // should not keep the input, and the grab lets it through once this
-    // thread stops beating.
+    // Nothing to draw with, or nowhere to be seen: the device is gone and
+    // the driver not back yet, or the screen is locked. The frame is
+    // skipped, and a short wait stands in for the vsync Present would have
+    // waited for, so the loop does not spin. Skipped before the grab's
+    // heartbeat, too: an overlay that shows nothing should not keep the
+    // input, and the grab lets it through once this thread stops beating.
     if (!renderer_->ReadyToRender()) {
         MsgWaitForMultipleObjectsEx(0, nullptr, kNoDeviceRetryMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
         return;

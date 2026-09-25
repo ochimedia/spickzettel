@@ -223,6 +223,14 @@ TEST_F(Win32Dx11RendererTest, DuringAFrameTheReleaseWaitsForTheFrameToBeDrawn) {
     srv->Release();
 }
 
+// Once a present has found the window occluded, the next frame asks again
+// before drawing - and this window, never hidden, is seen again at once.
+TEST_F(Win32Dx11RendererTest, AnOccludedWindowIsAskedAboutAgainBeforeDrawing) {
+    renderer_.OccludeForTesting();
+    EXPECT_TRUE(renderer_.ReadyToRender());
+    EXPECT_EQ(renderer_.DeviceGeneration(), 0u) << "the device was never in question";
+}
+
 TEST_F(Win32Dx11RendererTest, WithItsDeviceInPlaceTheRendererIsReadyAsItWas) {
     EXPECT_TRUE(renderer_.ReadyToRender());
     EXPECT_EQ(renderer_.DeviceGeneration(), 0u);

@@ -32,6 +32,10 @@ public:
     // and ImGui's own objects on it; a render target a resize could not
     // make is tried again. False while neither works: there is nothing to
     // draw with, and the frame is skipped rather than drawn into nothing.
+    // False as well while the window cannot be seen at all - the screen
+    // locked, the secure desktop up - which Present said last time and a
+    // test present says has not changed: Present returns at once then,
+    // without waiting for vsync, and drawing on would spin a core.
     bool ReadyToRender();
     // How many times ReadyToRender has replaced the device. Every texture
     // from before a change is lost - see IOverlayWindow::TextureGeneration.
@@ -39,6 +43,8 @@ public:
     // Treats the device as lost, as a removed one is, for the next
     // ReadyToRender. For tests: nothing short of a driver can remove one.
     void LoseDeviceForTesting() { deviceLost_ = true; }
+    // As if the last Present had found the window occluded.
+    void OccludeForTesting() { occluded_ = true; }
 
     // Overrides the mouse position ImGui sees for subsequent frames, in
     // client coordinates - for when the overlay is navigating by its own
@@ -135,6 +141,7 @@ private:
     // See ReadyToRender.
     bool deviceLost_ = false;
     uint64_t deviceGeneration_ = 0;
+    bool occluded_ = false;
     // See ReleaseTexture.
     bool inFrame_ = false;
     std::vector<ID3D11ShaderResourceView*> releaseAfterFrame_;

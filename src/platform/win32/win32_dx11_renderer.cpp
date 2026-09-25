@@ -267,6 +267,14 @@ bool Win32Dx11Renderer::ReadyToRender() {
         return false;
     }
     if (device_ && !deviceLost_ && device_->GetDeviceRemovedReason() == S_OK) {
+        // Asked without drawing anything, and only once a present has said
+        // so, so an ordinary frame pays nothing for it.
+        if (occluded_) {
+            if (swapChain_->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED) {
+                return false;
+            }
+            occluded_ = false;
+        }
         // A resize that could not make its target leaves none, and a frame
         // drawn into none is an access violation inside d3d11.dll.
         return renderTargetView_ || CreateRenderTarget();
@@ -599,6 +607,8 @@ void Win32Dx11Renderer::RenderAndPresent() {
     const HRESULT presented = swapChain_->Present(1, 0);  // vsync-paced; avoids busy-spinning while visible
     if (presented == DXGI_ERROR_DEVICE_REMOVED || presented == DXGI_ERROR_DEVICE_RESET) {
         deviceLost_ = true;
+    } else if (presented == DXGI_STATUS_OCCLUDED) {
+        occluded_ = true;
     }
 }
 
