@@ -222,6 +222,8 @@ bool Win32OverlayWindow::EnsureCreated(const DisplayInfo& display) {
     renderer_ = std::make_unique<Win32Dx11Renderer>();
     if (!renderer_->Initialize(hwnd_)) {
         renderer_.reset();
+        // Not left posting to a window about to be gone.
+        Win32InputGrab::Instance().SetOverlayWindow(nullptr);
         DestroyWindow(hwnd_);
         hwnd_ = nullptr;
         return false;

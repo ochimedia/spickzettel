@@ -186,11 +186,15 @@ bool Win32Dx11Renderer::Initialize(HWND hwnd) {
     // LoadSpickzettelFonts's own doc comment for why the ordering matters.
     LoadSpickzettelFonts(io);
 
+    // Failing past here, the context made above goes too: Shutdown only
+    // destroys one that got as far as imguiInitialized_.
     if (!ImGui_ImplWin32_Init(hwnd_)) {
+        ImGui::DestroyContext();
         return false;
     }
     if (!ImGui_ImplDX11_Init(device_.Get(), context_.Get())) {
         ImGui_ImplWin32_Shutdown();
+        ImGui::DestroyContext();
         return false;
     }
     imguiInitialized_ = true;
