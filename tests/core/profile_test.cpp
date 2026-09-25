@@ -103,6 +103,23 @@ TEST(ProfileTest, AProfileCanBindAndUnbindShortcuts) {
     EXPECT_EQ(resolved.shortcuts[ShortcutActionIndex(ShortcutAction::Erase)].key, 'E');
 }
 
+// A key a profile binds is the profile's, even when the defaults have
+// since given the same key to another action: that action goes without it
+// while the profile runs, rather than both waiting on one key.
+TEST(ProfileTest, AProfilesOwnKeyWinsOverTheSameKeyInherited) {
+    ProfileableSettings base = Defaults();
+    const platform::KeyCombo key{false, false, false, 'Q'};
+    base.shortcuts[ShortcutActionIndex(ShortcutAction::Erase)] = key;
+    std::vector<Profile> profiles = {GameProfile("Game", "game.exe")};
+    profiles[0].overrides.shortcuts[ShortcutActionIndex(ShortcutAction::Text)] = key;
+
+    const ProfileableSettings resolved = ResolveForApplication(base, profiles, App("game.exe"));
+    EXPECT_EQ(resolved.shortcuts[ShortcutActionIndex(ShortcutAction::Text)], key);
+    EXPECT_EQ(resolved.shortcuts[ShortcutActionIndex(ShortcutAction::Erase)].key, 0);
+    EXPECT_EQ(ResolveForApplication(base, profiles, App("other.exe")).shortcuts, base.shortcuts)
+        << "the defaults as they are, where the profile does not run";
+}
+
 // Two levels and no more: a profile states some settings, everything else
 // is the defaults, and one profile's overrides never reach another.
 TEST(ProfileTest, AProfileAppliesItsOwnOverridesAndNothingElses) {

@@ -31,6 +31,22 @@ void Apply(const ProfileOverrides& overrides, ProfileableSettings& settings) {
             settings.shortcuts[i] = *overrides.shortcuts[i];
         }
     }
+    // A key the profile binds is the profile's, over any action that
+    // inherits the same key from the defaults. Settings keeps one key to
+    // one action within what is being edited, but a key bound in the
+    // defaults later is not checked against every profile - and with two
+    // actions on one key, only the first in the list ever fired.
+    for (size_t i = 0; i < overrides.shortcuts.size(); ++i) {
+        if (!overrides.shortcuts[i].has_value() || overrides.shortcuts[i]->key == 0) {
+            continue;
+        }
+        for (size_t other = 0; other < settings.shortcuts.size(); ++other) {
+            if (other != i && !overrides.shortcuts[other].has_value() &&
+                settings.shortcuts[other] == *overrides.shortcuts[i]) {
+                settings.shortcuts[other] = platform::KeyCombo{};
+            }
+        }
+    }
 }
 
 }  // namespace
