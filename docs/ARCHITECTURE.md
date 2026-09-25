@@ -927,9 +927,15 @@ snippet is held open, the removal waits with it.
 
 A restart meanwhile reads the moved thing from where it is, inside the
 deleted directory, and puts it where `moves` says; the next save moves
-its directory to match. It goes to the first folder or canvas instead
-if the one it belongs to is gone too. If there is no folder or canvas
-at all, it goes to a new one named "Recovered". That case is real: a
+its directory to match. It goes to the first folder or canvas not in
+the trash instead if the one it belongs to is gone too. The first one
+of all could be in the trash; hidden there, the rescued thing was then
+erased with it by the retention pass that runs right after the load.
+Canvases are rescued before snippets, since a snippet can have been
+moved into a canvas that is itself being rescued. In the order of the
+uids, the snippet sometimes came first, did not find its canvas, and
+went elsewhere for good. If there is no live folder or canvas at all,
+it goes to a new one named "Recovered". That case is real: a
 folder is made, a canvas is moved into it, and the process stops before
 either is saved. The folder `moves` names never reached the disk. A
 rescue with nowhere to go used to leave the canvas unread, and the

@@ -705,6 +705,120 @@ TEST(LibraryFaultTest, ARemovalUnderADirectoryThatCouldNotBeListedIsNotForgotten
                                                                  DirectoryOf(kCanvasA));
 }
 
+// A canvas moved out of a folder, a snippet moved from another canvas of
+// that folder into it, and the folder deleted for good - the process gone
+// before the save that moves either. The rescue puts the canvas back first,
+// so that the snippet finds it: the other way round, which is how the uids
+// sort here, it went to whichever canvas came first.
+TEST(LibraryFaultTest, ASnippetIsRescuedIntoACanvasRescuedWithIt) {
+    constexpr uint64_t kLateFolder = 50;  // sorts after the canvases in it
+    MemoryFileSystem disk;
+    {
+        CanvasManagerSnapshot library = MakeLibrary();
+        library.folders[0].id = kLateFolder;
+        for (Canvas& canvas : library.canvases) {
+            canvas.folderId = kLateFolder;
+        }
+        library.currentFolderId = kLateFolder;
+        LibraryStore store(Root(), disk);
+        ASSERT_TRUE(store.Save(library));
+    }
+    {
+        LibraryStore store(Root(), disk);
+        CanvasManagerSnapshot library = *store.Load();
+        std::vector<Item>& onA = FindCanvas(library, kCanvasA)->items;
+        FindCanvas(library, kCanvasB)->items.push_back(onA[0]);
+        FindCanvas(library, kCanvasB)->folderId = kOtherFolder;
+        library.folders.erase(library.folders.begin());
+        library.canvases.erase(library.canvases.begin());  // A, with the folder
+        EXPECT_FALSE(store.Remove({kLateFolder, kCanvasA, kDrawing}, library));
+    }
+    LibraryStore restarted(Root(), disk);
+    const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const Layout layout = LayoutOf(*loaded);
+    ASSERT_EQ(layout.count(kShot), 1u);
+    EXPECT_EQ(layout.at(kShot).parent, kCanvasB);
+    ASSERT_EQ(layout.count(kCanvasB), 1u);
+    EXPECT_EQ(layout.at(kCanvasB).parent, kOtherFolder);
+    EXPECT_EQ(loaded->canvases.size(), 1u) << "no canvas made up to hold it";
+}
+
+// A rescue whose target never reached the disk goes to the first folder or
+// canvas that is not in the trash - not into one that is, hidden there,
+// and erased with it by the retention pass that follows the load.
+TEST(LibraryFaultTest, ARescueWithItsTargetGoneDoesNotGoIntoTheTrash) {
+    MemoryFileSystem disk;
+    {
+        CanvasManagerSnapshot library = MakeLibrary();
+        Canvas trashed;
+        trashed.id = 9;  // first in its folder
+        trashed.name = "Trashed";
+        trashed.folderId = kFolder;
+        trashed.deletedAt = 1700000000;
+        library.canvases.insert(library.canvases.begin(), trashed);
+        LibraryStore store(Root(), disk);
+        ASSERT_TRUE(store.Save(library));
+    }
+    constexpr uint64_t kNewCanvas = 12;
+    {
+        LibraryStore store(Root(), disk);
+        CanvasManagerSnapshot library = *store.Load();
+        // Into a canvas just made, which the process is gone before saving.
+        Canvas fresh;
+        fresh.id = kNewCanvas;
+        fresh.name = "New";
+        fresh.folderId = kOtherFolder;
+        std::vector<Item>& onA = FindCanvas(library, kCanvasA)->items;
+        fresh.items.push_back(onA[0]);
+        library.canvases.push_back(fresh);
+        library.canvases.erase(library.canvases.begin() + 1);  // A
+        EXPECT_FALSE(store.Remove({kCanvasA, kDrawing}, library));
+    }
+    LibraryStore restarted(Root(), disk);
+    const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const Layout layout = LayoutOf(*loaded);
+    ASSERT_EQ(layout.count(kShot), 1u);
+    EXPECT_EQ(layout.at(kShot).parent, kCanvasB);
+}
+
+// The same a level up: a canvas moved into a folder just made, and the
+// folder it left deleted for good, with the only other folder in the
+// trash. It gets a folder of its own rather than going into the trash.
+TEST(LibraryFaultTest, ARescuedCanvasWithItsFolderGoneDoesNotGoIntoTheTrash) {
+    MemoryFileSystem disk;
+    {
+        CanvasManagerSnapshot library = MakeLibrary();
+        library.folders[1].deletedAt = 1700000000;
+        LibraryStore store(Root(), disk);
+        ASSERT_TRUE(store.Save(library));
+    }
+    constexpr uint64_t kNewFolder = 3;
+    {
+        LibraryStore store(Root(), disk);
+        CanvasManagerSnapshot library = *store.Load();
+        Folder fresh;
+        fresh.id = kNewFolder;
+        fresh.name = "New";
+        library.folders.push_back(fresh);
+        FindCanvas(library, kCanvasA)->folderId = kNewFolder;
+        library.folders.erase(library.folders.begin());
+        library.canvases.erase(library.canvases.begin() + 1);  // B, with the folder
+        EXPECT_FALSE(store.Remove({kFolder, kCanvasB, kNote}, library));
+    }
+    LibraryStore restarted(Root(), disk);
+    const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_EQ(loaded->folders.size(), 2u);
+    ASSERT_EQ(loaded->canvases.size(), 1u);
+    const Folder& home = loaded->folders[0].id == loaded->canvases[0].folderId ? loaded->folders[0]
+                                                                                : loaded->folders[1];
+    EXPECT_EQ(home.id, loaded->canvases[0].folderId);
+    EXPECT_EQ(home.deletedAt, 0);
+    EXPECT_EQ(home.name, "Recovered");
+}
+
 // A saved snippet moved into a canvas just made, and the save that would
 // write both cannot write the canvas's record. The snippet is not moved
 // into a directory Load would not read - it waits where it was, and a

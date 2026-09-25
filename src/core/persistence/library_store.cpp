@@ -1615,14 +1615,20 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
     // directory: it is still inside the one being removed, and pending.json
     // says where it belongs (see RunPendingRemovals). It is read from where
     // it is and put there, and the next save moves its directory to match
-    // - to the first folder or canvas there is, should the one it belongs
-    // to be gone too, and to a new one named "Recovered" should there be
-    // none: a folder made, the canvas moved into it, and neither saved
-    // before a crash leaves exactly that, and a rescue with nowhere to go
-    // left the canvas unread for the next save to sweep away with the
-    // folder it was in. Only what the record names: it is written, moves
-    // and all, before the removal starts, so anything else inside went with
-    // what was deleted.
+    // - to the first folder or canvas not in the trash, should the one it
+    // belongs to be gone too, and to a new one named "Recovered" should
+    // there be none: a folder made, the canvas moved into it, and neither
+    // saved before a crash leaves exactly that, and a rescue with nowhere
+    // to go left the canvas unread for the next save to sweep away with the
+    // folder it was in. Not into one in the trash: hidden there, what was
+    // rescued was erased with it by the retention pass that follows the
+    // load. Only what the record names: it is written, moves and all,
+    // before the removal starts, so anything else inside went with what
+    // was deleted.
+    //
+    // Canvases first, then snippets: a snippet can have been moved into a
+    // canvas that is itself being rescued, and walked the other way round
+    // - in the order of the uids - it found the canvas not there yet.
     //
     // One whose record is there and cannot be read now stays where it is,
     // and the walk counts as one that did not see everything - so that the
@@ -1630,35 +1636,40 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
     // unobservedPending_). One with no record at all - a save stopped
     // before it landed - has nothing to rescue, and goes with what it is
     // in.
+    const auto liveFolder = [&out](FolderId id) {
+        return std::any_of(out.folders.begin(), out.folders.end(),
+                           [id](const Folder& f) { return f.id == id && f.deletedAt == 0; });
+    };
     const auto someFolder = [&]() -> FolderId {
-        if (out.folders.empty()) {
-            Folder folder;
-            folder.id = claimId(0);
-            folder.name = "Recovered";
-            folder.createdAt = static_cast<int64_t>(std::time(nullptr));
-            out.folders.push_back(std::move(folder));
+        const auto live =
+            std::find_if(out.folders.begin(), out.folders.end(), [](const Folder& f) { return f.deletedAt == 0; });
+        if (live != out.folders.end()) {
+            return live->id;
         }
-        return out.folders.front().id;
+        Folder folder;
+        folder.id = claimId(0);
+        folder.name = "Recovered";
+        folder.createdAt = static_cast<int64_t>(std::time(nullptr));
+        out.folders.push_back(std::move(folder));
+        return out.folders.back().id;
     };
     const auto someCanvas = [&]() -> Canvas& {
-        if (out.canvases.empty()) {
-            Canvas canvas;
-            canvas.id = claimId(0);
-            canvas.name = "Recovered";
-            canvas.folderId = someFolder();
-            canvas.createdAt = static_cast<int64_t>(std::time(nullptr));
-            out.canvases.push_back(std::move(canvas));
+        const auto live = std::find_if(out.canvases.begin(), out.canvases.end(), [&](const Canvas& c) {
+            return c.deletedAt == 0 && liveFolder(c.folderId);
+        });
+        if (live != out.canvases.end()) {
+            return *live;
         }
-        return out.canvases.front();
+        Canvas canvas;
+        canvas.id = claimId(0);
+        canvas.name = "Recovered";
+        canvas.folderId = someFolder();
+        canvas.createdAt = static_cast<int64_t>(std::time(nullptr));
+        out.canvases.push_back(std::move(canvas));
+        return out.canvases.back();
     };
-    const std::map<uint64_t, std::filesystem::path> erasedDirs = pendingRemovals_;
-    for (const auto& [erasedUid, erasedDir] : erasedDirs) {
-        (void)erasedUid;
-        const std::filesystem::path relative = erasedDir.lexically_relative(foldersRoot);
-        const auto depth = std::distance(relative.begin(), relative.end());
-        if (depth != 1 && depth != 2) {
-            continue;  // a snippet's directory holds no others
-        }
+    // What `erasedDir`, `depth` below folders/, has inside that `moves` names.
+    const auto rescueFrom = [&](const std::filesystem::path& erasedDir, std::ptrdiff_t depth) {
         for (const std::filesystem::path& inside : WalkInto(erasedDir)) {
             const std::optional<uint64_t> uid = UidFromDirectoryName(inside.filename().string());
             if (!uid || writtenPending_.erased.count(*uid) > 0) {
@@ -1670,10 +1681,10 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             }
             const uint64_t target = move->second;
             if (depth == 1) {
-                const auto folder = std::find_if(out.folders.begin(), out.folders.end(),
-                                                 [target](const Folder& f) { return f.id == target; });
-                const FolderId folderId = folder != out.folders.end() ? folder->id : someFolder();
-                if (std::optional<Canvas> canvas = readCanvas(inside, folderId)) {
+                if (std::optional<Canvas> canvas = readCanvas(inside, 0)) {
+                    const bool there = std::any_of(out.folders.begin(), out.folders.end(),
+                                                   [target](const Folder& f) { return f.id == target; });
+                    canvas->folderId = there ? target : someFolder();
                     out.canvases.push_back(std::move(*canvas));
                 } else if (fs_->LinkStatus(inside / kCanvasFile) != FileSystem::Kind::None) {
                     walkedEverything_ = false;
@@ -1685,6 +1696,16 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                 home.items.push_back(std::move(*item));  // in front, like anything unlisted
             } else if (fs_->LinkStatus(inside / kItemFile) != FileSystem::Kind::None) {
                 walkedEverything_ = false;
+            }
+        }
+    };
+    const std::map<uint64_t, std::filesystem::path> erasedDirs = pendingRemovals_;
+    for (const std::ptrdiff_t depth : {1, 2}) {  // a snippet's directory holds no others
+        for (const auto& [erasedUid, erasedDir] : erasedDirs) {
+            (void)erasedUid;
+            const std::filesystem::path relative = erasedDir.lexically_relative(foldersRoot);
+            if (std::distance(relative.begin(), relative.end()) == depth) {
+                rescueFrom(erasedDir, depth);
             }
         }
     }
