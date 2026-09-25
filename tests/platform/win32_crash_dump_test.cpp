@@ -44,6 +44,18 @@ TEST_F(Win32CrashDumpTest, WritesADumpOfTheProcessAsItStands) {
     EXPECT_GT(std::filesystem::file_size(file), 1024u);
 }
 
+// A crash before the app's own folder exists still has somewhere to put
+// its dump: every missing folder on the way is made.
+TEST_F(Win32CrashDumpTest, TheDumpFolderIsMadeWithEveryFolderAboveIt) {
+    std::wstring path = (dir_ / "Spickzettel" / "crashes").wstring();
+    std::vector<wchar_t> buffer(path.begin(), path.end());
+    buffer.push_back(L'\0');
+    EXPECT_TRUE(CreateDirectoryChain(buffer.data()));
+    EXPECT_TRUE(std::filesystem::is_directory(dir_ / "Spickzettel" / "crashes"));
+    EXPECT_EQ(std::wstring(buffer.data()), path) << "left as it was";
+    EXPECT_TRUE(CreateDirectoryChain(buffer.data())) << "and there already is fine";
+}
+
 TEST_F(Win32CrashDumpTest, ThePrefixIsAlwaysAFileName) {
     EXPECT_EQ(CrashDumpPrefix("0.1.0 (v0.1.0-3-gabc1234-dirty) - demo, prerelease"),
               L"Spickzettel-0.1.0_(v0.1.0-3-gabc1234-dirty)_-_demo__prerelease-");

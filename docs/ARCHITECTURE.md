@@ -98,8 +98,19 @@ handlers. The process then ends without Windows' own error dialog. The
 dump is written from a thread of its own: a thread cannot reliably walk
 its own stack into a dump, and one that overflowed has little left to
 do it with. Everything the crash needs - the folder, the name's prefix -
-is prepared at startup, so the crash itself allocates nothing. Each
-start keeps the newest ten dumps and deletes the rest.
+is prepared at startup, so the crash itself allocates nothing; the folder
+is created then, with any folder above it that is missing, one level at a
+time in the prepared name. Each start keeps the newest ten dumps and
+deletes the rest.
+
+What can go wrong while dying is bounded. The writer thread is waited for
+20 seconds, not for ever: a crashed thread holding the loader lock keeps
+a new thread from ever starting, and a process hung in its crash handler
+is worse than one with no dump. A second crash waits for the first to end
+the process, rather than ending it under the first dump half-written -
+unless it is the writer's own, which gives that dump up. And the main
+thread keeps 64 KB of stack for the handler (`SetThreadStackGuarantee`),
+which a stack overflow otherwise leaves it without.
 
 A dump is read with the PDB of the very build that wrote it, so release
 builds make one: `/Z7` for everything, the fetched code included,

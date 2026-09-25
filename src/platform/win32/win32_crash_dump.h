@@ -17,8 +17,9 @@ namespace sz::platform::win32 {
 // so a build that crashes every time it starts cannot fill the disk.
 inline constexpr size_t kCrashDumpsKept = 10;
 
-// From here on, a crash writes a dump into `directory` - created then, not
-// now, so that a machine that never crashes never has the folder - named
+// From here on, a crash writes a dump into `directory` - created then, with
+// any folder above it that is missing, not now, so that a machine that
+// never crashes never has the folder - named
 // after `versionLine` and the local time, and the process ends without
 // Windows' own error dialog. Covers what the process does not survive: an
 // unhandled SEH exception (an access violation, a stack overflow, an
@@ -40,5 +41,16 @@ std::wstring CrashDumpPrefix(std::string_view versionLine);
 
 // Deletes all but the `keep` newest .dmp files in `directory`.
 void PruneCrashDumps(const std::filesystem::path& directory, size_t keep);
+
+// Creates `path` and every folder above it that is missing, allocating
+// nothing - for a crash, where the heap may be what broke. `path` is
+// written to while it works and left as it was. True if it is there after.
+bool CreateDirectoryChain(wchar_t* path);
+
+// How long a crash waits for its dump to be written before ending the
+// process without one: long enough for a large dump, and short enough
+// that a writer which cannot start - the crashed thread holding the loader
+// lock that a new thread needs - does not leave a hung process behind.
+inline constexpr DWORD kDumpWriteTimeoutMs = 20000;
 
 }  // namespace sz::platform::win32

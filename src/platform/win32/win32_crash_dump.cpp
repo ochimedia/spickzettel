@@ -22,9 +22,11 @@ namespace {
 wchar_t g_directory[MAX_PATH];
 wchar_t g_pathPrefix[MAX_PATH];
 // Set by the first crash to reach a handler. A second one - another thread
-// crashing meanwhile, or the dump writer itself - ends the process at once
-// rather than writing over the first dump.
+// crashing meanwhile, or the dump writer itself - does not write over the
+// first dump; see DumpAndEnd.
 volatile LONG g_crashing = 0;
+// The thread writing the dump, while there is one.
+volatile DWORD g_writerThreadId = 0;
 
 // A custom exception code, raised only to have a context to dump from a
 // handler that is not given one (abort, the CRT's handlers). The top bits
@@ -64,20 +66,37 @@ DWORD WINAPI WriteDumpThread(LPVOID param) {
 
 bool WriteDump(const wchar_t* file, EXCEPTION_POINTERS* exception) {
     WriteRequest request{file, exception, GetCurrentThreadId(), false};
-    const HANDLE thread = CreateThread(nullptr, 0, &WriteDumpThread, &request, 0, nullptr);
+    DWORD writerId = 0;
+    const HANDLE thread = CreateThread(nullptr, 0, &WriteDumpThread, &request, 0, &writerId);
     if (thread == nullptr) {
         return false;
     }
-    WaitForSingleObject(thread, INFINITE);
+    g_writerThreadId = writerId;
+    // Not for ever: see kDumpWriteTimeoutMs. A writer still going then is
+    // ended with the process, and its half-written file is not a dump.
+    const bool finished = WaitForSingleObject(thread, kDumpWriteTimeoutMs) == WAIT_OBJECT_0;
+    g_writerThreadId = 0;
     CloseHandle(thread);
-    return request.written;
+    return finished && request.written;
 }
 
 // The dump of a crash: into the folder, under the prepared prefix and the
 // time. Then the process ends - there is nothing to go back to.
 [[noreturn]] void DumpAndEnd(EXCEPTION_POINTERS* exception) {
-    if (InterlockedExchange(&g_crashing, 1) == 0 && g_pathPrefix[0] != L'\0') {
-        CreateDirectoryW(g_directory, nullptr);
+    if (InterlockedExchange(&g_crashing, 1) != 0) {
+        // Not the first. The writer itself crashing gives up its dump,
+        // which the first crash is waiting on; any other thread waits for
+        // the first to finish and end the process. Ending it here, as this
+        // did, cut the first one's dump off halfway.
+        if (GetCurrentThreadId() == g_writerThreadId) {
+            ExitThread(1);
+        }
+        for (;;) {
+            Sleep(INFINITE);
+        }
+    }
+    if (g_pathPrefix[0] != L'\0') {
+        CreateDirectoryChain(g_directory);
         SYSTEMTIME now;
         GetLocalTime(&now);
         wchar_t file[MAX_PATH];
@@ -143,6 +162,24 @@ void PruneCrashDumps(const std::filesystem::path& directory, size_t keep) {
 
 bool WriteMiniDump(const std::wstring& file, EXCEPTION_POINTERS* exception) { return WriteDump(file.c_str(), exception); }
 
+bool CreateDirectoryChain(wchar_t* path) {
+    // Each separator in turn made the end of the string for a moment, so
+    // every folder on the way is created before the one inside it. The
+    // first after a drive letter or a UNC server is skipped by
+    // CreateDirectoryW failing harmlessly on what already exists.
+    for (wchar_t* at = path; *at != L'\0'; ++at) {
+        if ((*at == L'\\' || *at == L'/') && at != path && *(at - 1) != L':' && *(at - 1) != L'\\') {
+            const wchar_t separator = *at;
+            *at = L'\0';
+            CreateDirectoryW(path, nullptr);
+            *at = separator;
+        }
+    }
+    CreateDirectoryW(path, nullptr);
+    const DWORD attributes = GetFileAttributesW(path);
+    return attributes != INVALID_FILE_ATTRIBUTES && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
 void InstallCrashDumpWriter(const std::filesystem::path& directory, std::string_view versionLine) {
     const std::wstring dir = directory.wstring();
     const std::wstring prefix = (directory / CrashDumpPrefix(versionLine)).wstring();
@@ -155,6 +192,12 @@ void InstallCrashDumpWriter(const std::filesystem::path& directory, std::string_
     wcscpy_s(g_pathPrefix, prefix.c_str());
     PruneCrashDumps(directory, kCrashDumpsKept);
 
+    // Stack for the handler after a stack overflow, on the thread most
+    // likely to have one: the guard page is gone by then, and without this
+    // what runs next is at the very end of the stack, and faults again
+    // before a dump is begun.
+    ULONG guarantee = 64 * 1024;
+    SetThreadStackGuarantee(&guarantee);
     SetUnhandledExceptionFilter(&OnUnhandledException);
     std::signal(SIGABRT, &OnAbort);
     _set_invalid_parameter_handler(&OnInvalidParameter);
