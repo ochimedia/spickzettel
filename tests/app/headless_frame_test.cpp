@@ -1503,6 +1503,49 @@ TEST_F(HeadlessAppTest, AHoldOnASnippetEntersDrawingModeAndMovesNothing) {
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "a drag on it draws now";
 }
 
+// A key pressed during a hold is what the hand wants instead: Escape
+// leaves the snippet let go of, and a tool key's tool stays in hand.
+TEST_F(HeadlessAppTest, EscapePressedDuringAHoldCallsItOff) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 700.0f, 600.0f);  // a screenshot
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const ItemId shot = Canvases().CurrentOrNull()->items[0].id;
+    StepFrames(30);
+
+    MoveTo(400.0f, 400.0f);
+    StepFrame();
+    RawMouse(400.0f, 400.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    ASSERT_EQ(App().Selection(), std::vector<ItemId>{shot});
+    PressKey(ImGuiKey_Escape);
+    StepFrames(35);
+    EXPECT_FALSE(App().DrawingItem().has_value()) << "Escape, and not drawing mode after it";
+    EXPECT_TRUE(App().Selection().empty());
+    RawMouse(400.0f, 400.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+}
+
+TEST_F(HeadlessAppTest, AToolKeyPressedDuringAHoldKeepsItsTool) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 700.0f, 600.0f);  // a screenshot
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    StepFrames(30);
+
+    MoveTo(400.0f, 400.0f);
+    StepFrame();
+    RawMouse(400.0f, 400.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    ASSERT_FALSE(App().DrawingItem().has_value());
+    PressKey(ImGuiKey_E);
+    ASSERT_EQ(App().ActiveTool(), Tool::Erase);
+    StepFrames(35);
+    EXPECT_EQ(App().ActiveTool(), Tool::Erase) << "not the pen the hold would have picked";
+    RawMouse(400.0f, 400.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+}
+
 // A hold on another snippet moves drawing mode there, and one on empty
 // canvas makes a fullscreen screenshot - the press leaves the mode and the
 // hold then does what a double-click's second press would have.

@@ -478,6 +478,9 @@ void OverlayApp::HandleSelectionKeys() {
     }
     const bool keysFree = !io.WantTextInput && !PanelOpen() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
     if (ImGui::IsKeyPressed(ImGuiKey_Escape) && keysFree) {
+        // Calls off a hold in progress too, which maturing would otherwise
+        // select again what Escape just let go of - see RunShortcutAction.
+        heldPress_.reset();
         if (CreationKindFor(activeTool_).has_value()) {
             ClearCreationGesture();
             PickTool(Tool::Select);

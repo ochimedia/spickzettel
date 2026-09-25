@@ -150,6 +150,10 @@ void OverlayApp::RunCreateAction(CreateAction action) {
 }
 
 void OverlayApp::RunShortcutAction(ShortcutAction action) {
+    // A key pressed during a hold says what the hand wants instead: the
+    // hold, maturing after it, entered drawing mode with the pen over the
+    // tool just picked.
+    heldPress_.reset();
     const overlay_detail::ShortcutTarget& target = overlay_detail::TargetForShortcut(action);
     if (target.tool.has_value()) {
         // The key of the tool already in hand puts it down again - back to
