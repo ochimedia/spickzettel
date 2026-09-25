@@ -911,7 +911,11 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                         break;
                 }
             } else {
-                if (DangerIconButton("##delfolder", icons::kTrash)) {
+                // Not while picking: see SendPickedItemTo.
+                ImGui::BeginDisabled(pickerItemId_.has_value());
+                const bool deletePressed = DangerIconButton("##delfolder", icons::kTrash);
+                ImGui::EndDisabled();
+                if (deletePressed) {
                     confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Folder, f.id, f.name};
                     confirmDeletePopoverRequested_ = true;
                 }
@@ -1110,7 +1114,11 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
             }
         } else if (!isRenamingThisCanvas) {
             ImGui::SameLine(tileSize.x - Px(kPillButtonSize));
-            if (DangerIconButton("##delcanvas", icons::kTrash)) {
+            // Not while picking: see SendPickedItemTo.
+            ImGui::BeginDisabled(pickerItemId_.has_value());
+            const bool deletePressed = DangerIconButton("##delcanvas", icons::kTrash);
+            ImGui::EndDisabled();
+            if (deletePressed) {
                 confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name};
                 confirmDeletePopoverRequested_ = true;
             }
@@ -1163,7 +1171,12 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
         return;
     }
 
-    if (PrimaryButton("##newfolder", icons::kPlus, strings::kOverviewNewFolder)) {
+    // Not while picking, since it switches to the canvas it makes: see
+    // SendPickedItemTo. New canvas stays, as a destination to send to.
+    ImGui::BeginDisabled(pickerItemId_.has_value());
+    const bool newFolderPressed = PrimaryButton("##newfolder", icons::kPlus, strings::kOverviewNewFolder);
+    ImGui::EndDisabled();
+    if (newFolderPressed) {
         // Named for when it was made (see TimestampName), and at the end
         // of the sidebar - which is where the eye goes after pressing a
         // button at the bottom of it, and matches where a new canvas
@@ -1253,11 +1266,21 @@ void OverlayApp::SendPickedItemTo(CanvasId target) {
     const ItemId item = *pickerItemId_;
     const bool isCopy = pickerIsCopy_;
     const CanvasId source = Manager().CurrentCanvasId();
+    // The item is sent from the current canvas, so nothing in the picker
+    // may change which canvas that is: New folder and the delete buttons
+    // are off while it is open. And what happened is checked rather than
+    // assumed: a move that did nothing said "Moved to" all the same, and
+    // threw away the history of a snippet that had not gone anywhere.
     if (target != source) {
         const Canvas* targetCanvas = Manager().FindCanvas(target);
         const std::string targetName = targetCanvas ? targetCanvas->name : strings::kDeleteConfirmCanvasWord;
+        const ItemId newId = Manager().MoveOrCopyItemToCanvas(item, target, isCopy);
+        if (isCopy ? newId == 0 : Manager().CanvasHoldingItem(item) != target) {
+            pickerItemId_.reset();
+            return;
+        }
         bool pictureLost = false;
-        if (const ItemId newId = Manager().MoveOrCopyItemToCanvas(item, target, isCopy); isCopy && newId != 0) {
+        if (isCopy) {
             pictureLost = !session_.ClonePicturesForCopy(item, newId);
         }
         if (!isCopy) {

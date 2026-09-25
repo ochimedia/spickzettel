@@ -218,5 +218,32 @@ TEST_F(CanvasBarMenuUiTest, DeleteFromTheTileMenuAsksAndThenDeletes) {
     EXPECT_FALSE(App().IsCanvasContextMenuOpen());
 }
 
+// The picker sends the snippet from the current canvas, so nothing in it
+// may change which canvas that is: making a folder switches to a canvas in
+// it, and deleting the current canvas moves off it. Both are off while it
+// is open; picking a canvas still moves the snippet there.
+TEST_F(ContextMenuUiTest, ThePickerKeepsTheCanvasItSendsFrom) {
+    MakeASnippet();
+    const CanvasId other = controller_->GetSession().Manager().AddCanvas("Other");
+    StepFrame();
+    const ItemId snippet = Canvases().CurrentOrNull()->items[0].id;
+    OpenTheMenu();
+    ClickRow("##menu_move_to_canvas");
+    ASSERT_TRUE(App().IsOverviewOpen());
+
+    bool newFolderOff = false;
+    bool deleteOff = false;
+    RunUi("pick a canvas", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        newFolderOff = (ctx->ItemInfo("**/##newfolder").ItemFlags & ImGuiItemFlags_Disabled) != 0;
+        deleteOff = (ctx->ItemInfo("**/##delcanvas").ItemFlags & ImGuiItemFlags_Disabled) != 0;
+        const std::string tile = "**/$$" + std::to_string(other) + "/##tile";
+        ctx->ItemClick(tile.c_str());
+    });
+    EXPECT_TRUE(newFolderOff);
+    EXPECT_TRUE(deleteOff);
+    EXPECT_EQ(controller_->GetSession().Manager().CanvasHoldingItem(snippet), std::optional<CanvasId>(other));
+}
+
 }  // namespace
 }  // namespace sz::test
