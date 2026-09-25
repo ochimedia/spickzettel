@@ -739,13 +739,27 @@ std::optional<uint64_t> UidFromDirectoryName(const std::string& name);
 // about the record, such a directory was left standing inside one deleted
 // for good, and kept it standing. Two levels down is as deep as the tree
 // goes.
-bool HoldsOwnRecord(FileSystem& fs, const std::filesystem::path& dir, int depth = 0) {
+//
+// nullopt when that cannot be told - a directory that could not be listed,
+// with nothing of the store's found elsewhere - which the caller counts as
+// not emptied, as it does a listing of its own that fails. Read as "not
+// the store's", it was skipped, and its removal reported done around it.
+std::optional<bool> HoldsOwnRecord(FileSystem& fs, const std::filesystem::path& dir, int depth = 0) {
     const std::optional<uint64_t> uid = UidFromDirectoryName(dir.filename().string());
     const std::string pictureStem = uid ? FormatUid(*uid) : std::string();
-    for (const FileSystem::Entry& entry : Listing(fs, dir)) {
+    const std::optional<std::vector<FileSystem::Entry>> entries = ListNamed(fs, dir);
+    if (!entries) {
+        return std::nullopt;
+    }
+    bool known = true;
+    for (const FileSystem::Entry& entry : *entries) {
         if (entry.kind == FileSystem::Kind::Directory) {
-            if (depth < 2 && HoldsOwnRecord(fs, dir / entry.name, depth + 1)) {
-                return true;
+            if (depth < 2) {
+                const std::optional<bool> inside = HoldsOwnRecord(fs, dir / entry.name, depth + 1);
+                if (inside == true) {
+                    return true;
+                }
+                known = known && inside.has_value();
             }
             continue;
         }
@@ -764,7 +778,7 @@ bool HoldsOwnRecord(FileSystem& fs, const std::filesystem::path& dir, int depth 
             return true;
         }
     }
-    return false;
+    return known ? std::optional<bool>(false) : std::nullopt;
 }
 
 // Takes everything of the store's out of `dir`, recursively, and `dir`
@@ -785,7 +799,11 @@ bool RemoveOwnContents(FileSystem& fs, const std::filesystem::path& dir, const s
         }
         if (entry.kind == FileSystem::Kind::Directory) {
             const std::optional<uint64_t> uid = UidFromDirectoryName(entry.name.string());
-            if ((uid && erased.count(*uid) > 0) || HoldsOwnRecord(fs, path)) {
+            const std::optional<bool> own =
+                uid && erased.count(*uid) > 0 ? std::optional<bool>(true) : HoldsOwnRecord(fs, path);
+            if (!own.has_value()) {
+                clean = false;  // not looked at, so not emptied
+            } else if (*own) {
                 clean = RemoveOwnContents(fs, path, erased) && clean;
             }
             continue;

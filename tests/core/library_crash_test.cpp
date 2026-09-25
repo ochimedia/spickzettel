@@ -537,6 +537,36 @@ TEST(LibraryFaultTest, WhatASaveLeftOfADirectoryWithoutItsRecordGoesWithWhatItIs
     EXPECT_EQ(disk.Status(folderDir), FileSystem::Kind::None) << "left standing";
 }
 
+// A leftover of a save's inside something deleted for good that cannot be
+// listed cannot be said to be the store's or not: the removal stays owed
+// rather than being reported done around it, and finishes once it can be
+// looked at.
+TEST(LibraryFaultTest, ARemovalWithAnUnlistableLeftoverInsideIsNotDone) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    std::filesystem::path canvasDir;
+    for (const auto& [path, text] : disk.FilesUnder(Root() / "folders")) {
+        (void)text;
+        if (path.filename() == "canvas.json" && IsOf(path, kCanvasA)) {
+            canvasDir = path.parent_path();
+        }
+    }
+    ASSERT_FALSE(canvasDir.empty());
+    ASSERT_TRUE(disk.Put(canvasDir / "leftover-00000y" / "order.json", "{\"items\": []}"));
+    FaultyFileSystem fs(disk);
+    LibraryStore store(Root(), fs);
+    CanvasManagerSnapshot library = *store.Load();
+    fs.FailWhen(FaultyFileSystem::Op::List, DirectoryOf(*ParseUid("00000y")));
+    library.canvases.erase(library.canvases.begin());
+    EXPECT_FALSE(store.Remove({kCanvasA, kShot, kDrawing}, library));
+    EXPECT_TRUE(store.HasPendingRemoval(kCanvasA));
+
+    fs.ClearFailures();
+    EXPECT_TRUE(store.Save(library));
+    EXPECT_FALSE(store.HasPendingRemoval(kCanvasA));
+    ExpectNothingLeftOf(disk, {kCanvasA, kShot, kDrawing}, 0);
+}
+
 // A crash between a removal's last step and the rewrite of pending.json
 // leaves the file naming what is gone. That is owed too, until a save has
 // brought the file in line - or nothing would ever rewrite it.

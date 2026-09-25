@@ -869,7 +869,10 @@ randomized test found both cases.
 
 A directory is removed only once it is empty. One that cannot be
 listed counts as not emptied: calling it done dropped the removal and
-left the record in it to load again.
+left the record in it to load again. The same goes for a directory
+inside one, whose listing is where the store looks for a record of its
+own. Read as holding none, it was skipped as someone else's, and the
+removal reported done around a leftover of the store's.
 
 A permanent delete is recorded before anything is deleted. The store
 names the uids in `pending.json`, drops the directories from the index
