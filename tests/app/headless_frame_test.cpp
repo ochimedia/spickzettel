@@ -2870,6 +2870,28 @@ TEST_F(OverlappingItemsTest, ANudgeAfterAnUndoOrADragIsItsOwnStep) {
     EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 61.0f) << "the nudge after the drag, not the drag with it";
 }
 
+// A nudge against the screen's edge moves nothing and files nothing - and
+// starts no run: the nudge after it is a step of its own, not folded into
+// the drag before it.
+TEST_F(OverlappingItemsTest, ANudgeThatMovesNothingStartsNoRun) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+    Drag(x, y, x - 3000.0f, y);  // as far left as a snippet goes
+    const float edge = BackItem().rect.x;
+    PressKey(ImGuiKey_LeftArrow);
+    ASSERT_FLOAT_EQ(BackItem().rect.x, edge) << "nowhere to go";
+    PressKey(ImGuiKey_RightArrow);
+    ASSERT_FLOAT_EQ(BackItem().rect.x, edge + 1.0f);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.x, edge) << "the nudge, not the drag with it";
+}
+
 // Mid-drag the arrow keys and the wheel leave the snippet to the drag:
 // what either filed would be undone to a place the drag had since left.
 TEST_F(OverlappingItemsTest, ArrowKeysAndTheWheelWaitForADragToEnd) {

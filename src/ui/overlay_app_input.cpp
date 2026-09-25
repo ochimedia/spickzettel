@@ -1083,7 +1083,12 @@ void OverlayApp::RecordPlacementBurst(PlacementBurst kind, std::vector<Session::
     const double now = ImGui::GetTime();
     const bool continues = lastPlacementBurst_ == kind && now - lastPlacementBurstAtSeconds_ < kPlacementBurstSeconds &&
                            session_.HistoryRevision() == lastPlacementBurstRevision_;
-    session_.RecordPlacements(std::move(before), continues);
+    // One that files nothing - a nudge against the screen's edge - starts
+    // no run: armed, the next press within the second merged into whatever
+    // was filed last, a drag included, and one undo took back both.
+    if (!session_.RecordPlacements(std::move(before), continues)) {
+        return;
+    }
     lastPlacementBurst_ = kind;
     lastPlacementBurstAtSeconds_ = now;
     lastPlacementBurstRevision_ = session_.HistoryRevision();
