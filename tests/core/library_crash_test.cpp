@@ -688,5 +688,30 @@ TEST(LibraryCrashTest, RewritingAPictureLeavesTheOldOneOrTheNewOne) {
     EXPECT_GT(changes, 0u);
 }
 
+// A library.json that cannot be read is not taken for an older one's: a
+// moment's hold is waited out, and one that goes on is refused like a newer
+// library, since the first save would write it back at this build's
+// version, whatever it said.
+TEST(LibraryCrashTest, AnUnreadableLibraryFileIsNotTakenForAnOlderOne) {
+    MemoryFileSystem memory;
+    SetUpLibrary(memory);
+    FaultyFileSystem disk(memory);
+    const auto isPointerFile = [](const std::filesystem::path& path) { return path.filename() == "library.json"; };
+
+    disk.FailWhen(FaultyFileSystem::Op::Read, isPointerFile, 2);
+    {
+        LibraryStore store(Root(), disk);
+        EXPECT_FALSE(store.WrittenByANewerVersion()) << "a moment's hold, waited out";
+        EXPECT_TRUE(store.Load().has_value());
+    }
+
+    disk.FailWhen(FaultyFileSystem::Op::Read, isPointerFile);
+    LibraryStore store(Root(), disk);
+    EXPECT_TRUE(store.WrittenByANewerVersion());
+    EXPECT_TRUE(store.VersionUnreadable());
+    EXPECT_FALSE(store.Load().has_value());
+    EXPECT_FALSE(store.Save(MakeLibrary()));
+}
+
 }  // namespace
 }  // namespace sz::core::persistence

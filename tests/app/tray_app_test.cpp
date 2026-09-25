@@ -686,6 +686,19 @@ TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryWrittenByANewerVe
     EXPECT_EQ(ReadFile(dir_ / "library.json"), newer);
 }
 
+// A library.json that cannot be read - here a directory in its place, as
+// unreadable as a file another program holds - refuses the start as well,
+// and is told apart: trying again later may work.
+TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryFileItCannotRead) {
+    std::filesystem::create_directories(dir_ / "library.json");
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_;
+    TrayController controller(host, DefaultConfig());
+    EXPECT_FALSE(controller.Initialize());
+    EXPECT_TRUE(controller.RefusedAnUnreadableLibrary());
+    EXPECT_FALSE(host.trayIconShown);
+}
+
 TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {
     CanvasManagerSnapshot snapshot;
     Folder folder;
@@ -784,12 +797,11 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAF
 }
 
 TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromTheBackgroundTimer) {
-    // A library on disk, so the app starts hidden - and then a directory
-    // where library.json wants to be: the save fails late, at the rename,
-    // and keeps failing until it is gone. The tree beside it still loads.
+    // A library on disk, so the app starts hidden - and then, once it has
+    // started, a directory where library.json wants to be: the save fails
+    // late, at the rename, and keeps failing until it is gone. (Before the
+    // start, it would refuse it: see InitializeRefusesALibraryFileItCannotRead.)
     ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
-    std::filesystem::remove(dir_ / "library.json");
-    std::filesystem::create_directories(dir_ / "library.json");
     test::FakePlatformHost host;
     host.dataDirectoryPath = dir_;
     host.overlayWindow.captureReturnsHandle = 7;
@@ -800,6 +812,8 @@ TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromThe
     config.showToastsWhileHidden = false;
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
+    std::filesystem::remove(dir_ / "library.json");
+    std::filesystem::create_directories(dir_ / "library.json");
 
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
     EXPECT_TRUE(controller.GetSession().HasUnsavedChanges());

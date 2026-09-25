@@ -255,6 +255,7 @@
   "startup.configUnreadable": "Spickzettel could not read its settings file, %s, and started with the default settings.\n\nThe file was left as it is, and settings changed until the next start will not be saved. Nothing deleted was erased for good at this start.",
   "startup.hotkeysTaken": "Spickzettel started, but these hotkeys are already used by another application and do nothing:\n%s\n\nThe tray icon's menu opens the overlay without them, and Settings > Hotkeys can give them other keys.",
   "startup.newerLibrary": "Spickzettel could not start: your library was saved by a newer version of Spickzettel. This version would lose what the newer one saved, so it leaves the library alone. Please use the newer version.",
+  "startup.libraryUnreadable": "Spickzettel could not start: it could not read its library file, library.json. Another program may be holding it - a backup or sync tool, say. Please try again in a moment.",
   "_prerelease": "The notice a prerelease build shows at every start (see build::kPrereleaseNotice). %s is the version line.",
   "prerelease.title": "Spickzettel - Prerelease",
   "prerelease.body": "This is a prerelease build of Spickzettel, version %s.\n\nIt is for testing only. Please do not redistribute it or pass it on to anyone else.",

@@ -146,9 +146,16 @@ public:
     // there - so once this has been seen, by this or by Load, the store
     // writes nothing at all: Save, Remove, SaveImage and SaveThumbnail all
     // fail. TrayController::Initialize asks before loading, and refuses to
-    // start. A library.json that is missing, unreadable or has no version
-    // is not newer.
+    // start. A library.json that is missing, is not JSON or has no version
+    // is not newer. One that is there and cannot be read - held by another
+    // program - is asked again for a moment, and then counted as newer:
+    // what cannot be read cannot be said to be this build's, and the first
+    // save would have written it back at this build's version whatever it
+    // said. VersionUnreadable tells that case apart.
     bool WrittenByANewerVersion() const;
+    // Whether WrittenByANewerVersion said so because library.json could
+    // not be read, rather than because it named a newer version.
+    bool VersionUnreadable() const { return versionUnreadable_; }
 
     // Where the library lives - for a diagnostic that shows the tree as it
     // is on disk (see OverlayApp::DrawLibraryTreeHud).
@@ -463,6 +470,8 @@ private:
     // See WrittenByANewerVersion: set once a newer library has been seen,
     // and never cleared.
     mutable bool writtenByANewerVersion_ = false;
+    // See VersionUnreadable.
+    mutable bool versionUnreadable_ = false;
 
     // What was last written, so a save can tell what has actually changed.
     //

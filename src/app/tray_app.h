@@ -79,6 +79,9 @@ public:
     // a newer build wrote it (see LibraryStore::WrittenByANewerVersion) -
     // which the person has to be told apart from a hotkey held elsewhere.
     bool RefusedANewerLibrary() const { return refusedANewerLibrary_; }
+    // ...and, of those, whether it was only that library.json could not be
+    // read, which is told differently: trying again later may well work.
+    bool RefusedAnUnreadableLibrary() const { return refusedANewerLibrary_ && libraryStore_.VersionUnreadable(); }
     // After Initialize: the hotkeys set to a combination another application
     // already owns, which were left unregistered rather than refusing the
     // start - for the caller to name. Empty when every one registered.

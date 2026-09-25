@@ -98,8 +98,9 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         // notice on, and a tray app that starts and silently isn't there
         // is indistinguishable from one that never started.
         MessageBoxA(nullptr,
-                    trayController.RefusedANewerLibrary() ? sz::strings::kStartupNewerLibrary
-                                                          : sz::strings::kStartupFailed,
+                    trayController.RefusedAnUnreadableLibrary() ? sz::strings::kStartupLibraryUnreadable
+                    : trayController.RefusedANewerLibrary()     ? sz::strings::kStartupNewerLibrary
+                                                                : sz::strings::kStartupFailed,
                     "Spickzettel", MB_OK | MB_ICONWARNING);
         return 1;
     }

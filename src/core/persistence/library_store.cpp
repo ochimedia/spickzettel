@@ -1,6 +1,7 @@
 #include "core/persistence/library_store.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <map>
 #include <functional>
@@ -11,6 +12,7 @@
 #include <string_view>
 #include <type_traits>
 #include <system_error>
+#include <thread>
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
@@ -1064,9 +1066,21 @@ bool LibraryStore::HoldsAnyOf(const std::filesystem::path& dir, const std::unord
 
 bool LibraryStore::WrittenByANewerVersion() const {
     if (!writtenByANewerVersion_) {
-        const std::optional<std::string> text = ReadFileText(*fs_, rootDir_ / "library.json");
+        const std::filesystem::path path = rootDir_ / "library.json";
+        std::optional<std::string> text = ReadFileText(*fs_, path);
+        // There and not readable: another program holding it for a moment
+        // - a backup, a sync client, a virus scanner - is the likely reason,
+        // and the next attempts the likely cure.
+        for (int attempt = 0; !text && fs_->Status(path) != FileSystem::Kind::None && attempt < 5; ++attempt) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            text = ReadFileText(*fs_, path);
+        }
         if (!text) {
-            return false;
+            if (fs_->Status(path) != FileSystem::Kind::None) {
+                writtenByANewerVersion_ = true;
+                versionUnreadable_ = true;
+            }
+            return writtenByANewerVersion_;
         }
         const json doc = json::parse(*text, /*callback=*/nullptr, /*allow_exceptions=*/false);
         if (doc.is_object()) {
