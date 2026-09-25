@@ -930,7 +930,16 @@ uint8_t ButtonBit(WPARAM message, DWORD mouseData) {
 }
 }  // namespace
 
-void Win32InputGrab::Heartbeat() { lastHeartbeatMs_.store(GetTickCount64(), std::memory_order_relaxed); }
+void Win32InputGrab::Heartbeat() {
+    const uint64_t now = GetTickCount64();
+    // Stalled until this beat, and so letting the keyboard through: what
+    // happened to it meanwhile is the system's to say. Also true of a first
+    // frame after a long time hidden, where it costs a look at the keyboard.
+    if (IsStalled(now, lastHeartbeatMs_.load(std::memory_order_relaxed))) {
+        ResyncKeyboardAfterStall();
+    }
+    lastHeartbeatMs_.store(now, std::memory_order_relaxed);
+}
 
 // The hooks swallow every mouse event and, with keystroke forwarding off,
 // every key on the machine, whatever the app thread is doing - and the only
@@ -1188,6 +1197,23 @@ void Win32InputGrab::PostKeyToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event, boo
 //
 // The physical up that arrives afterwards is then passed through to the OS.
 // That leaves the OS an up for a key it never saw go down, which it ignores.
+void Win32InputGrab::ResyncKeyboardAfterStall() {
+    // The system saw every key of the stall, so what it says is held is
+    // held.
+    const auto asyncDown = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    modifiers_.Seed(asyncDown);
+    for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
+        if (asyncDown(static_cast<int>(vk)) || !swallowedDown_[vk].exchange(false, std::memory_order_relaxed)) {
+            continue;
+        }
+        // Let go of during the stall: the overlay had its down, and gets
+        // the up it missed, as a grab's end would send it.
+        if (overlay_) {
+            PostMessageA(overlay_, WM_KEYUP, static_cast<WPARAM>(vk), (1LL << 30) | (1LL << 31) | 1);
+        }
+    }
+}
+
 void Win32InputGrab::ReleaseSwallowedKeys() {
     for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
         if (!swallowedDown_[vk].exchange(false, std::memory_order_relaxed)) {
