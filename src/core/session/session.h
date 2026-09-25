@@ -195,6 +195,11 @@ public:
     // the whole dispatch just to decide a button's tint.
     bool CanUndo() const;
     bool CanRedo() const;
+    // Counts every change to the history - an entry filed, undone, redone
+    // or dropped - so that a caller can tell whether anything came between
+    // two of its own edits (see OverlayApp::ContinuesPlacementBurst). A
+    // merge into the top entry is that entry, and counts for nothing.
+    uint64_t HistoryRevision() const { return historyRevision_; }
     // Forgets every entry naming `itemId`, on `canvasId` only - for an item
     // moved to a different canvas, where its history would otherwise stay
     // filed under the canvas it left, and an undo there would edit an item
@@ -542,6 +547,8 @@ private:
     std::unordered_map<CanvasId, std::deque<undo::Entry>> undoStacks_;
     // What Undo has taken back, most recent last - same keying and caps.
     std::unordered_map<CanvasId, std::deque<undo::Entry>> redoStacks_;
+    // See HistoryRevision.
+    uint64_t historyRevision_ = 0;
     // A copy of the erased item's whole stroke list, taken as an eraser
     // gesture begins, and beside it where every stroke currently in the
     // list came from: eraseOrigins_ is parallel to the item's strokes and

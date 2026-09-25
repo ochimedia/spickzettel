@@ -456,7 +456,7 @@ void OverlayApp::NudgeSelection(float dx, float dy) {
         Manager().MarkChanged();
         Manager().CommitItemLayout(id);
     }
-    session_.RecordPlacements(std::move(before), ContinuesPlacementBurst(PlacementBurst::Nudge));
+    RecordPlacementBurst(PlacementBurst::Nudge, std::move(before));
 }
 
 // Escape puts the hand down, in stages: a creation tool in hand goes

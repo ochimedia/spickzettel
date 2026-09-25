@@ -667,11 +667,14 @@ private:
     // reset to the original size - as its own undo entry.
     void ToggleFullscreenUndoably(ItemId id, bool stretch);
     void ResetToNativeSizeUndoably(ItemId id);
-    // Whether a wheel notch or an arrow-key nudge continues the burst the
-    // last one began: the same kind of step, soon enough after it. What
-    // decides that a burst is one undo (see Session::RecordPlacements).
+    // Files a wheel notch or an arrow-key nudge, folded into the burst the
+    // last one began when it continues it: the same kind of step, soon
+    // enough after it, with nothing filed, undone or redone in between - a
+    // drag of the same snippets, or an undo that left an older entry of
+    // theirs on top, would otherwise be taken into the burst. What decides
+    // that a burst is one undo (see Session::RecordPlacements).
     enum class PlacementBurst { None, Wheel, Nudge };
-    bool ContinuesPlacementBurst(PlacementBurst kind);
+    void RecordPlacementBurst(PlacementBurst kind, std::vector<Session::Placement> before);
     // Ctrl or Shift with the wheel: the selection's background or
     // foreground opacity, kWheelOpacityStep per notch, within the ranges
     // the Properties popover's sliders have. Says the new value in a toast.
@@ -1981,9 +1984,10 @@ private:
     // modifier held for the whole spin.
     float selectionWheelRemainder_ = 0.0f;
 
-    // See ContinuesPlacementBurst.
+    // See RecordPlacementBurst.
     PlacementBurst lastPlacementBurst_ = PlacementBurst::None;
     double lastPlacementBurstAtSeconds_ = 0.0;
+    uint64_t lastPlacementBurstRevision_ = 0;
 
     // See RequestWelcomeNote/PlaceWelcomeNotes. Cleared the moment the notes
     // are placed, so they can never be placed twice.

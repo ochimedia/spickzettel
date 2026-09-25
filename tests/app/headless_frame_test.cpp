@@ -2748,6 +2748,36 @@ TEST_F(OverlappingItemsTest, TheArrowKeysNudgeTheSelection) {
     EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 10.0f);
 }
 
+// A burst of nudges is one undo, but only while nothing comes between
+// them: a nudge right after an undo, or after a drag of the same snippet,
+// is a step of its own - not folded into the older entry left on top.
+TEST_F(OverlappingItemsTest, ANudgeAfterAnUndoOrADragIsItsOwnStep) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+    Drag(x, y, x + 30.0f, y);
+    ASSERT_FLOAT_EQ(BackItem().rect.x, items.back.x + 30.0f);
+
+    PressKey(ImGuiKey_RightArrow);
+    PressCtrlKey(ImGuiKey_Z);
+    ASSERT_FLOAT_EQ(BackItem().rect.x, items.back.x + 30.0f);
+    PressKey(ImGuiKey_RightArrow);
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 30.0f) << "the nudge after the undo, not the drag with it";
+
+    PressKey(ImGuiKey_RightArrow);
+    StepFrames(30);  // still well inside a burst's second
+    Drag(x + 31.0f, y, x + 61.0f, y);
+    PressKey(ImGuiKey_RightArrow);
+    ASSERT_FLOAT_EQ(BackItem().rect.x, items.back.x + 62.0f);
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 61.0f) << "the nudge after the drag, not the drag with it";
+}
+
 // Escape works in stages: a selection clears before the tool goes down.
 TEST_F(OverlappingItemsTest, EscapeClearsTheSelectionBeforePuttingTheToolDown) {
     ShowEditMode();

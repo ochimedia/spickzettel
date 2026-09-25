@@ -1065,12 +1065,14 @@ void OverlayApp::ResetToNativeSizeUndoably(ItemId id) {
     session_.RecordPlacements(std::move(before));
 }
 
-bool OverlayApp::ContinuesPlacementBurst(PlacementBurst kind) {
+void OverlayApp::RecordPlacementBurst(PlacementBurst kind, std::vector<Session::Placement> before) {
     const double now = ImGui::GetTime();
-    const bool continues = lastPlacementBurst_ == kind && now - lastPlacementBurstAtSeconds_ < kPlacementBurstSeconds;
+    const bool continues = lastPlacementBurst_ == kind && now - lastPlacementBurstAtSeconds_ < kPlacementBurstSeconds &&
+                           session_.HistoryRevision() == lastPlacementBurstRevision_;
+    session_.RecordPlacements(std::move(before), continues);
     lastPlacementBurst_ = kind;
     lastPlacementBurstAtSeconds_ = now;
-    return continues;
+    lastPlacementBurstRevision_ = session_.HistoryRevision();
 }
 
 void OverlayApp::SnapshotResizeTargets(ItemGesture& gesture, ItemId itemId) {
@@ -1213,7 +1215,7 @@ void OverlayApp::ScaleSelectionByWheel(int steps) {
     }
     Manager().MarkChanged();
     // A spin of the wheel is one undo, back to the size it started at.
-    session_.RecordPlacements(std::move(before), ContinuesPlacementBurst(PlacementBurst::Wheel));
+    RecordPlacementBurst(PlacementBurst::Wheel, std::move(before));
     // A drawing placed and then scaled is one someone wants, as one moved
     // or resized by hand is.
     KeepPlacedDrawings();

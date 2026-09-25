@@ -140,6 +140,7 @@ void Session::PushUndo(undo::Entry entry) {
         // for an empty library and light an Undo button up over nothing.
         return;
     }
+    ++historyRevision_;
     PushCapped(undoStacks_[canvasId], std::move(entry));
     // A brand-new action makes this canvas's redo stack unreachable by any
     // sequence of undos - the usual "a fresh edit prunes redo" rule. Only
@@ -376,6 +377,7 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     if (const auto* arrived = std::get_if<undo::ItemsArrived>(&next); arrived && !ArrivalsCanMove(*arrived, undo)) {
         const UndoWhat what = arrived->duplicate ? UndoWhat::Duplicate : UndoWhat::Paste;
         stackIt->second.pop_back();
+        ++historyRevision_;
         return UndoStep{what, undo, /*refused=*/true};
     }
     // Not const - the swap kinds mutate it in place (see Apply) before it
@@ -383,6 +385,7 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     // entry.
     undo::Entry entry = std::move(stackIt->second.back());
     stackIt->second.pop_back();
+    ++historyRevision_;
     const std::optional<UndoWhat> what = std::visit([&](auto& e) { return Apply(e, undo); }, entry);
     if (!what) {
         return std::nullopt;
