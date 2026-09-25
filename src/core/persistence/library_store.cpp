@@ -2181,9 +2181,6 @@ bool LibraryStore::Save(const LibraryView& view) const {
 
 std::optional<std::string> LibraryStore::SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int width,
                                                      int height) const {
-    if (writtenByANewerVersion_) {
-        return std::nullopt;
-    }
     // The same base36 spelling the slugs use, so an id reads the same
     // wherever it appears rather than being decimal in a filename and
     // base36 in the directory beside it.
@@ -2201,6 +2198,11 @@ std::optional<std::string> LibraryStore::SaveLayerImage(uint64_t itemId, size_t 
 
 std::optional<std::string> LibraryStore::WritePicture(uint64_t itemId, const std::string& filename,
                                                        const uint8_t* pixelsRGBA, int width, int height) const {
+    // Nothing is written into a library a newer build wrote - a painted
+    // layer no more than a screenshot, which alone was refused.
+    if (writtenByANewerVersion_) {
+        return std::nullopt;
+    }
     const std::filesystem::path home = ImageHome(itemId);
     if (!IsOurs(home)) {
         return std::nullopt;  // staging, or the snippet's directory, is behind a link: not written

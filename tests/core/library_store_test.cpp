@@ -288,6 +288,7 @@ TEST_F(LibraryStoreTest, ALibraryWrittenByANewerVersionIsNeitherReadNorWritten) 
     EXPECT_FALSE(store.Remove(4, changed));
     const uint8_t pixels[4] = {1, 2, 3, 255};
     EXPECT_FALSE(store.SaveImage(4, pixels, 1, 1).has_value());
+    EXPECT_FALSE(store.SaveLayerImage(4, 1, pixels, 1, 1).has_value());
     EXPECT_EQ(store.WriteGeneration(), 0u);
 
     EXPECT_EQ(FileText(dir_ / "library.json"), pointerFile);
