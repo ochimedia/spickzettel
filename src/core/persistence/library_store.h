@@ -432,9 +432,11 @@ private:
     // in by Load, which walks the whole tree anyway, and maintained by Save
     // as it places, renames and collects directories.
     //
-    // `treeIndexed_` false means these are not to be trusted - a store that
-    // has never loaded (a first run), or one whose save failed partway - and
-    // the next Save rebuilds them from disk the slow way. Being wrong is
+    // `treeIndexed_` false means there are none yet - a store that has never
+    // loaded, a first run - and the next Save builds them from disk the slow
+    // way. A save that fails partway leaves them true: each entry changes
+    // with the rename that moves its directory, and only once that rename
+    // has happened (see placeDirectory in Save). Being wrong is
     // survivable rather than corrupting: a directory the index has lost is
     // written afresh under its proper name and the stale one is collected by
     // the same GC pass that handles a deleted snippet.
