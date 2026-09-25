@@ -1,5 +1,6 @@
 #include "core/session/session.h"
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <utility>
@@ -150,7 +151,11 @@ void Session::ScreenToPaintedPixels(const Item& item, const Layer& layer, float 
 }
 
 void Session::UploadPaintedRegion(Layer& layer, const PixelRect& region) {
-    if (region.Empty() || !layer.painted) {
+    UploadPaintedRegions(layer, std::vector<PixelRect>{region});
+}
+
+void Session::UploadPaintedRegions(Layer& layer, const std::vector<PixelRect>& regions) {
+    if (!layer.painted || std::all_of(regions.begin(), regions.end(), [](const PixelRect& r) { return r.Empty(); })) {
         return;
     }
     // The one place every path that changes painted pixels passes through,
@@ -164,8 +169,12 @@ void Session::UploadPaintedRegion(Layer& layer, const PixelRect& region) {
     if (!window_ || layer.textureHandle == 0) {
         return;
     }
-    window_->UpdateTextureRegion(layer.textureHandle, layer.painted->PixelsRGBA().data(), layer.painted->Width(),
-                                  region.x, region.y, region.w, region.h);
+    for (const PixelRect& region : regions) {
+        if (!region.Empty()) {
+            window_->UpdateTextureRegion(layer.textureHandle, layer.painted->PixelsRGBA().data(),
+                                          layer.painted->Width(), region.x, region.y, region.w, region.h);
+        }
+    }
 }
 
 void Session::BeginPaintStroke(Item& item, float screenX, float screenY, bool erase, uint32_t colorRGBA,
@@ -201,7 +210,7 @@ void Session::BeginPaintStroke(Item& item, float screenX, float screenY, bool er
     const PixelRect dirty = layer->painted->ExtendStroke(x, y, x, y);
     if (!dirty.Empty()) {
         paintStrokeTouched_ = true;
-        UploadPaintedRegion(*layer, dirty);
+        UploadPaintedRegions(*layer, layer->painted->LastChangedRegions());
     }
     // Kept in *screen* space, not layer pixels: a layer's own grid is one
     // conversion away and different per layer, and the gesture is defined
@@ -235,7 +244,9 @@ void Session::ExtendPaintStroke(float screenX, float screenY) {
         return;
     }
     paintStrokeTouched_ = true;
-    UploadPaintedRegion(layer, dirty);
+    // The tiles it changed, not its bounding box: a corner-to-corner line
+    // on a 4K layer uploaded 33 MB for the few it crossed.
+    UploadPaintedRegions(layer, layer.painted->LastChangedRegions());
 }
 
 Session::PaintedUndo Session::EndPaintStroke() {

@@ -168,6 +168,7 @@ bool PaintedImage::RecompositeTile(int index, const PixelRect& within) {
 
 template <typename TileFn, typename CoverageFn>
 PixelRect PaintedImage::AccumulateCoverage(const PixelRect& touchedIn, TileFn mayCover, CoverageFn coverage) {
+    lastChanged_.clear();
     PixelRect touched = touchedIn;
     touched.x = std::clamp(touched.x, 0, width_);
     touched.y = std::clamp(touched.y, 0, height_);
@@ -212,7 +213,19 @@ PixelRect PaintedImage::AccumulateCoverage(const PixelRect& touchedIn, TileFn ma
                     mask[local] = std::max(mask[local], ToByte(amount));
                 }
             }
-            changed = RecompositeTile(index, PixelRect{px0, py0, px1 - px0, py1 - py0}) || changed;
+            const PixelRect within{px0, py0, px1 - px0, py1 - py0};
+            if (RecompositeTile(index, within)) {
+                changed = true;
+                // Joined to the last if it is the tile before it in the
+                // same row and spans the same rows - tiles are walked row
+                // by row, so a horizontal run comes out as one rectangle.
+                PixelRect* last = lastChanged_.empty() ? nullptr : &lastChanged_.back();
+                if (last != nullptr && last->y == within.y && last->h == within.h && last->x + last->w == within.x) {
+                    last->w += within.w;
+                } else {
+                    lastChanged_.push_back(within);
+                }
+            }
         }
     }
     // Nothing to upload when nothing changed - and so, for the caller,

@@ -85,6 +85,34 @@ TEST(PaintedImageTest, TheEdgeOfABrushIsPartiallyCovered) {
 // A corner-to-corner line crosses a sliver of the tiles in its bounding
 // box, and only those are saved for undo - every one it paints, and none
 // of the rest. Saving the whole box was 8 MB of undo per line at 1080p.
+// And uploads only them: what changed is reported tile by tile, a sliver
+// of the bounding box, and every pixel that changed is inside it.
+TEST(PaintedImageTest, ALongDiagonalReportsOnlyTheTilesItChanged) {
+    PaintedImage image(1920, 1080);
+    image.BeginStroke(0xFF0000FFu, 3.0f, PaintedImage::BrushMode::Paint);
+    const PixelRect box = image.ExtendStroke(0.0f, 0.0f, 1919.0f, 1079.0f);
+    const std::vector<PixelRect>& regions = image.LastChangedRegions();
+    ASSERT_FALSE(regions.empty());
+    size_t area = 0;
+    for (const PixelRect& region : regions) {
+        area += static_cast<size_t>(region.w) * static_cast<size_t>(region.h);
+    }
+    EXPECT_LT(area * 8, static_cast<size_t>(box.w) * static_cast<size_t>(box.h));
+
+    const std::vector<uint8_t>& pixels = image.PixelsRGBA();
+    for (int y = 0; y < image.Height(); ++y) {
+        for (int x = 0; x < image.Width(); ++x) {
+            if (pixels[(static_cast<size_t>(y) * image.Width() + x) * 4 + 3] == 0) {
+                continue;
+            }
+            const bool inside = std::any_of(regions.begin(), regions.end(), [x, y](const PixelRect& r) {
+                return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+            });
+            ASSERT_TRUE(inside) << x << "," << y;
+        }
+    }
+}
+
 TEST(PaintedImageTest, ALongDiagonalSavesOnlyTheTilesItCrosses) {
     PaintedImage image(1920, 1080);
     image.BeginStroke(0xFF0000FFu, 3.0f, PaintedImage::BrushMode::Paint);

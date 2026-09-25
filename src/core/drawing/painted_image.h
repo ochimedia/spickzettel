@@ -112,6 +112,12 @@ public:
     // tiles. Coverage on the boundary is the pixel's own overlap with the
     // rectangle, so the edges are as clean as the brush's.
     PixelRect ExtendRect(float x0, float y0, float x1, float y1);
+    // What the last ExtendStroke or ExtendRect changed, more closely than
+    // the bounding rectangle it returned: the part of each tile it changed,
+    // neighbors in a row of tiles joined into one. What to upload - a long
+    // diagonal's bounding box is most of the image, and the tiles it
+    // crosses a sliver of it.
+    const std::vector<PixelRect>& LastChangedRegions() const { return lastChanged_; }
     // Ends the stroke and hands back the pixels every tile it changed held
     // *before* it started - the undo entry. A tile it reached and left as
     // it was is not in it, and nothing is when nothing changed.
@@ -165,6 +171,8 @@ private:
     // stroke's coverage over it so far (0-255, maximum-combined).
     std::unordered_map<int, std::vector<uint8_t>> strokeBefore_;
     std::unordered_map<int, std::vector<uint8_t>> strokeMask_;
+    // See LastChangedRegions.
+    std::vector<PixelRect> lastChanged_;
 };
 
 }  // namespace sz::core

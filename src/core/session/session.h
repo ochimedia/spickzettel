@@ -504,6 +504,9 @@ private:
     // Pushes the dirty rectangle a brush just wrote to the layer's texture,
     // and marks the layer's pixels as not yet on disk.
     void UploadPaintedRegion(Layer& layer, const PixelRect& region);
+    // The same for several - what a brush segment changed, tile by tile
+    // (see PaintedImage::LastChangedRegions).
+    void UploadPaintedRegions(Layer& layer, const std::vector<PixelRect>& regions);
     // The three halves of a brush gesture, for the pen and the eraser alike.
     // `erase` picks the blend and decides one more thing: a pen creates the
     // painted layer it needs, an eraser only acts on one that is already
