@@ -1001,7 +1001,14 @@ void OverlayApp::QuickCapture(float displayW, float displayH) {
     ShowActionToast(strings::kToastCapturedScreenshot);
 }
 
-void OverlayApp::SettleForPersistence() { SettleHand(); }
+void OverlayApp::SettleForPersistence() {
+    SettleHand();
+    // Going away is moving on too, as the next showing would say (see
+    // OnOverlayShown) - but exit has no next showing, and a restart loads
+    // the drawing as an ordinary snippet: a fullscreen empty one, over the
+    // canvas.
+    SettleUntouchedDrawing();
+}
 
 void OverlayApp::SettleHand() {
     ReleaseGesture();

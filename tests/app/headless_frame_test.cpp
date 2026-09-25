@@ -540,6 +540,19 @@ TEST_F(HeadlessAppTest, AnUntouchedDrawingGoesWhenTheHandMovesOn) {
         << "and the next press makes the next one";
 }
 
+// Exit is moving on too, with no next showing to notice: the drawing is
+// not saved, to come back after a restart as an ordinary empty snippet.
+TEST_F(HeadlessAppTest, AnUntouchedDrawingIsNotSavedOnTheWayOut) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 300.0f, 300.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+
+    host_.TriggerTrayCommand(platform::TrayCommand::Exit);
+
+    EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty());
+}
+
 TEST_F(HeadlessAppTest, ADrawingWithSomethingInItStays) {
     ShowEditMode();
     StepFrame();

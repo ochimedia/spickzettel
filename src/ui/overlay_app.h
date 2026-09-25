@@ -397,7 +397,8 @@ public:
     // saves that happen with no frame to follow - hiding, restarting,
     // exiting, the OS ending the session. A flush that ran without this
     // wrote the note as it was when the editor opened, and typing that had
-    // been visible for a minute was gone at the next start.
+    // been visible for a minute was gone at the next start. A drawing
+    // nothing went into is discarded here too - see SettleUntouchedDrawing.
     void SettleForPersistence();
     // The settling itself: the gesture in flight ends as a release where
     // the pointer is would end it (see ReleaseGesture), and a note being
