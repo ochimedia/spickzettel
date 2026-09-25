@@ -155,6 +155,13 @@ public:
         alt = modifiers_.Alt();
     }
 
+    // The side a sideless VK_CONTROL, VK_MENU or VK_SHIFT is, from the scan
+    // code and the extended flag the hook reports with it - any other key
+    // as it is. The hook reports sides itself; only injected input sends a
+    // sideless one, and taken for both sides, its down was undone by
+    // neither side's up alone.
+    static UINT SidedModifier(UINT vk, DWORD scanCode, bool extended);
+
     // Ctrl, Alt and Shift as the grab has seen them, each side on its own:
     // with both Shifts held, letting go of one leaves Shift held. One flag
     // per modifier, as it was, read as up the moment either side came up.

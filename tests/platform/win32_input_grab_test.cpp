@@ -196,6 +196,24 @@ TEST(Win32InputGrabTest, AModifierIsHeldWhileEitherSideIs) {
     EXPECT_FALSE(record.Ctrl()) << "seeded over what was tracked";
 }
 
+// A sideless modifier - which only injected input sends - is taken as the
+// side its scan code and extended flag say, so that side's up undoes it.
+TEST(Win32InputGrabTest, ASidelessModifierIsTakenAsTheSideItIs) {
+    EXPECT_EQ(Win32InputGrab::SidedModifier(VK_CONTROL, 0x1D, false), static_cast<UINT>(VK_LCONTROL));
+    EXPECT_EQ(Win32InputGrab::SidedModifier(VK_CONTROL, 0x1D, true), static_cast<UINT>(VK_RCONTROL));
+    EXPECT_EQ(Win32InputGrab::SidedModifier(VK_MENU, 0x38, false), static_cast<UINT>(VK_LMENU));
+    EXPECT_EQ(Win32InputGrab::SidedModifier(VK_MENU, 0x38, true), static_cast<UINT>(VK_RMENU));
+    EXPECT_EQ(Win32InputGrab::SidedModifier(VK_SHIFT, 0x2A, false), static_cast<UINT>(VK_LSHIFT));
+    EXPECT_EQ(Win32InputGrab::SidedModifier(VK_SHIFT, 0x36, false), static_cast<UINT>(VK_RSHIFT));
+    EXPECT_EQ(Win32InputGrab::SidedModifier(VK_RSHIFT, 0x36, false), static_cast<UINT>(VK_RSHIFT));
+    EXPECT_EQ(Win32InputGrab::SidedModifier('A', 0x1E, false), static_cast<UINT>('A'));
+
+    Win32InputGrab::ModifierRecord record;
+    record.Track(Win32InputGrab::SidedModifier(VK_SHIFT, 0x2A, false), true);
+    record.Track(VK_LSHIFT, false);
+    EXPECT_FALSE(record.Shift()) << "undone by its own side's up";
+}
+
 // The machine's input is only held while the app thread is there to give it
 // back: a couple of seconds without a frame and the hooks let everything by.
 TEST(Win32InputGrabTest, TheHooksStandDownWhenTheAppThreadStopsBeating) {

@@ -957,7 +957,8 @@ void Win32InputGrab::KeyPassedThroughWhileStalled(WPARAM message, const KBDLLHOO
     if (event.dwExtraInfo == kOwnInjectionMarker || vk >= kVirtualKeyCount) {
         return;
     }
-    TrackModifier(vk, message == WM_KEYDOWN || message == WM_SYSKEYDOWN);
+    TrackModifier(SidedModifier(vk, event.scanCode, (event.flags & LLKHF_EXTENDED) != 0),
+                  message == WM_KEYDOWN || message == WM_SYSKEYDOWN);
     if (swallowedDown_[vk].exchange(false, std::memory_order_relaxed) && overlay_) {
         PostMessageA(overlay_, WM_KEYUP, static_cast<WPARAM>(vk), (1LL << 30) | (1LL << 31) | 1);
     }
@@ -1325,6 +1326,20 @@ void Win32InputGrab::HandHeldModifiersToSystem(const bool (&swallowed)[256]) {
 // ImGui - a swallowed key updates nothing the OS can be asked about, so this
 // is the only place that knows. The hook reports the side (VK_LSHIFT, not
 // VK_SHIFT); a sideless key, which it does not send, would count for both.
+UINT Win32InputGrab::SidedModifier(UINT vk, DWORD scanCode, bool extended) {
+    constexpr DWORD kRightShiftScanCode = 0x36;
+    switch (vk) {
+        case VK_CONTROL:
+            return extended ? VK_RCONTROL : VK_LCONTROL;
+        case VK_MENU:
+            return extended ? VK_RMENU : VK_LMENU;
+        case VK_SHIFT:
+            return scanCode == kRightShiftScanCode ? VK_RSHIFT : VK_LSHIFT;
+        default:
+            return vk;
+    }
+}
+
 bool Win32InputGrab::ModifierRecord::Track(UINT vk, bool isDown) {
     const auto set = [&](int first, int second) {
         held_[first] = isDown;
@@ -1409,7 +1424,7 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // path with the record saying it is down, and nothing else would clear
     // it.
     if (!isDown && vk < kVirtualKeyCount && !swallowedDown_[vk].exchange(false, std::memory_order_relaxed)) {
-        TrackModifier(vk, false);
+        TrackModifier(SidedModifier(vk, event.scanCode, (event.flags & LLKHF_EXTENDED) != 0), false);
         return 0;
     }
 
@@ -1447,7 +1462,7 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
         return SwallowKey(vk, isDown);
     }
 
-    if (TrackModifier(vk, isDown)) {
+    if (TrackModifier(SidedModifier(vk, event.scanCode, (event.flags & LLKHF_EXTENDED) != 0), isDown)) {
         return SwallowKey(vk, isDown);
     }
 
