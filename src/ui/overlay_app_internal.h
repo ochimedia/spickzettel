@@ -437,7 +437,7 @@ inline constexpr float kWheelScaleStep = 1.1f;
 inline constexpr float kWheelOpacityStep = 0.05f;
 // How long after one wheel notch or arrow-key nudge the next still belongs
 // to the same burst, and is taken back with it by one undo.
-inline constexpr double kPlacementBurstSeconds = 1.0;
+inline constexpr double kBurstSeconds = 1.0;
 
 // How much of itself every snippet keeps while a new one is being made -
 // see OverlayApp::ItemsFadedForCreation. Enough to tell where things are,

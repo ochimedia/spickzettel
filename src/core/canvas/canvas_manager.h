@@ -272,10 +272,15 @@ public:
     // have been copied on a canvas nobody is looking at any more.
     //
     // Placed on top of the target's stack, or at `atIndex` in it for a
-    // move - where an undone paste puts a snippet back (see
-    // Session::RecordArrivals); past the end is the top.
+    // move (see MoveItem); past the end is the top.
     ItemId PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool copy,
                              std::optional<size_t> atIndex = std::nullopt);
+    // Moves `id` from whichever canvas holds it onto `targetCanvasId`, at
+    // `atIndex` in its stack (past the end is the top) or on top - even
+    // onto a deleted canvas, which is where an undone paste puts back what
+    // came from one: restoring the canvas finds it there. False, moving
+    // nothing, for no such snippet or canvas, or one already there.
+    bool MoveItem(ItemId id, CanvasId targetCanvasId, std::optional<size_t> atIndex);
     // Which canvas holds `id`, deleted or not - nullopt if nothing does.
     // What a paste asks about the snippet it is about to move, whose
     // history is filed under the canvas it is leaving.

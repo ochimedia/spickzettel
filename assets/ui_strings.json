@@ -115,8 +115,7 @@
   "toast.pasted": "Pasted",
   "toast.duplicated": "Duplicated",
   "toast.nothingToPaste": "Nothing left to paste",
-  "toast.pasteStays": "The paste stays - the canvas it came from is deleted",
-  "toast.pasteNotRedone": "Nothing to paste again - it was deleted since",
+  "toast.sentToDeletedCanvasPrefix": "Undid paste - back on its deleted canvas, found under Show deleted: ",
   "toast.copiedToPrefix": "Copied to ",
   "toast.movedToPrefix": "Moved to ",
 
@@ -129,6 +128,9 @@
   "undo.placement": "move",
   "undo.paste": "paste",
   "undo.duplicate": "duplicate",
+  "undo.style": "style change",
+  "undo.move": "move to another canvas",
+  "undo.copyTo": "copy to another canvas",
 
   "_itemNames": "The prefixes new snippets are named with, before their number.",
   "itemName.screenshotPrefix": "Screenshot ",

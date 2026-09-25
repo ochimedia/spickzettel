@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <deque>
 #include <memory>
 #include <optional>
 #include <string>
@@ -13,7 +12,7 @@
 #include "core/drawing/canvas_state.h"
 #include "core/drawing/stroke.h"
 #include "core/persistence/library_store.h"
-#include "core/session/undo_entry.h"
+#include "core/session/history.h"
 #include "platform/i_overlay_window.h"
 #include "platform/platform_types.h"
 
@@ -61,7 +60,8 @@ public:
     //
     // Where things are kept and how they are looked at, rather than what
     // they hold: none of these goes on the history, and none changes
-    // anything an entry on it reads.
+    // anything a step on it reads. Like every command, each first ends the
+    // gesture open, if any (see EndOpenGesture).
 
     // See CanvasManager::SwitchToCanvas / SwitchToFolder. A switch also
     // drops whatever stroke was being drawn (see LiveLayer).
@@ -94,13 +94,15 @@ public:
     // A delete is a mark made in place, hidden until it is restored or
     // deleted for good - see CanvasManager's class comment.
 
-    // Marks the folder, canvas or snippet `id` names deleted, now. What
-    // every delete is but a snippet's own, which is DeleteItem, undoably.
-    // False, doing nothing, if there is no such thing or it is already
+    // Marks the folder or canvas `id` names deleted, now. A snippet is
+    // deleted by DeleteItems, undoably, and is refused here: its mark is
+    // the history's to change (see history::DeletionChanged). False, doing
+    // nothing, if there is no such folder or canvas or it is already
     // marked.
     bool Delete(uint64_t id);
-    // Clears the mark on `id` and on whatever holds it - see
-    // CanvasManager::Restore. False if nothing was deleted.
+    // Clears the mark on the folder or canvas `id` and on whatever holds it
+    // - see CanvasManager::Restore. False if nothing was deleted, and for a
+    // snippet, as Delete.
     bool Restore(uint64_t id);
     // Erases `id` for good: out of the model, its textures released, its
     // history forgotten, and the library saved at once. False, doing
@@ -192,37 +194,31 @@ public:
 
     // What a step of undo or redo took back or put back - for a UI to say
     // so. `undone` is true for an undo, false for a redo.
-    enum class UndoWhat { Stroke, Erase, Delete, TextEdit, Create, Placement, Paste, Duplicate };
+    using UndoWhat = history::What;
     struct UndoStep {
         UndoWhat what = UndoWhat::Stroke;
         bool undone = true;
-        // The step could not be taken, and was dropped so that the next
-        // one can be: a paste whose snippets were moved here and have
-        // nowhere to go back to, or no longer anything to come back from
-        // - see RecordArrivals. Nothing changed, and a UI says why.
-        bool refused = false;
+        // A paste undone sends a moved snippet back to the canvas it came
+        // from, and when that canvas is deleted it goes there all the same,
+        // to be found when the canvas is restored: this is that canvas, for
+        // a UI to say where the snippet went. 0 otherwise.
+        CanvasId intoDeletedCanvas = 0;
     };
-    // Takes back the current canvas's most recent edit, or puts back the
-    // one most recently taken back. History is kept *per canvas* - see
-    // undoStacks_.
-    // Best-effort by design: an entry naming an item that has since gone is
-    // dropped rather than moved to the opposite stack, and nullopt says
-    // nothing happened.
+    // Takes back the current canvas's most recent step, or puts back the
+    // one most recently taken back. History is kept per canvas, and every
+    // step on it applies whenever it is reached - see history::History.
+    // Nullopt when there is nothing to take back or put back.
     std::optional<UndoStep> Undo();
     std::optional<UndoStep> Redo();
-    // Whether there is anything for Undo/Redo to do on the current canvas.
-    // Deliberately just the emptiness of each stack, not a deeper "would
-    // this entry still apply" test - predicting that would mean duplicating
-    // the whole dispatch just to decide a button's tint.
+    // Whether there is anything for Undo/Redo to do on the current canvas -
+    // and when there is, it is done: nothing on a stack is ever refused.
     bool CanUndo() const;
     bool CanRedo() const;
-    // Counts the changes to the history that move its top - an entry
-    // filed, undone or redone - so that a caller can tell whether anything
-    // came between two of its own edits (see
-    // OverlayApp::RecordPlacementBurst). A merge into the top entry is that
-    // entry, and counts for nothing; so does forgetting a snippet's or a
-    // canvas's entries, or the oldest falling off the end.
-    uint64_t HistoryRevision() const { return historyRevision_; }
+    // See history::History::Revision - what OverlayApp's bursts are told
+    // apart by.
+    uint64_t HistoryRevision() const { return history_.Revision(); }
+    // The history itself, to read - for the tests.
+    const history::History& History() const { return history_; }
 
     // ===== Edits that can be undone =====
     //
@@ -282,9 +278,9 @@ public:
     // EndStyleEdit, or with the next command of any other kind.
     void PreviewStyle(ItemId id, const ItemStyle& style);
     void EndStyleEdit();
-    // Styles for several snippets at once, as one change - the opacity
-    // wheel's step. `merge` as for EndPlacement.
-    void SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge = false);
+    // Styles for several snippets at once, as one step - the opacity
+    // wheel's. `merge` as for EndPlacement, and the same answer.
+    bool SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge = false);
 
     // ----- Making, copying and moving snippets -----
 
@@ -333,13 +329,19 @@ public:
     bool IsUntouched(ItemId itemId) const;
     // Every stroke on a snippet, cleared as one undoable step. False if there was nothing to clear.
     bool ClearDrawing(ItemId itemId);
-    // A text edit of a snippet's note: Begin remembers what the text was,
-    // End commits the new text and files one entry for the whole edit if it
-    // changed. End with nullopt abandons it. Beginning another ends the one
-    // open, uncommitted. While one is open, an undo that would change that
-    // item's text does nothing - its own commit would overwrite it anyway.
+    // A text edit of a snippet's note, as a gesture: Begin remembers what
+    // the text was, each Preview sets the note to what has been typed so
+    // far, and End - given the final text, or taking the note as it stands
+    // - files one step for the whole edit if it changed. Like every
+    // gesture, it is ended by the next command of any other kind, which is
+    // why the text is the note's as it is typed: whatever ended it keeps
+    // what was typed.
     void BeginTextEdit(ItemId itemId);
-    void EndTextEdit(std::optional<std::string> text);
+    void PreviewText(std::string text);
+    void EndTextEdit(std::optional<std::string> text = std::nullopt);
+    // The snippet whose note is being edited, while one is - for a UI to
+    // see that its editor was ended from elsewhere.
+    std::optional<ItemId> TextEditItem() const { return textEditItemId_; }
 
     // The eraser, as a gesture: clips the item's strokes under a circle
     // `widthScreenPx` across, and files the whole gesture as one entry when
@@ -398,35 +400,35 @@ private:
     // fails waits the same way). False when the source names a picture
     // that could not be read, so the copy lacks it.
     bool ClonePicturesForCopy(ItemId sourceId, ItemId copyId);
-    // Forgets every entry naming `itemId`, on `canvasId` only - for an item
-    // moved to a different canvas, where its history would otherwise stay
-    // filed under the canvas it left, and an undo there would edit an item
-    // that now lives somewhere else.
-    void ForgetHistoryOfItem(CanvasId canvasId, ItemId itemId);
-    // Where a snippet is - see undo::Placement.
-    using Placement = undo::Placement;
-    // The placements of these snippets as they are now. Ids that name
-    // nothing are left out.
-    std::vector<Placement> PlacementsOf(const std::vector<ItemId>& ids) const;
+    // Ends whatever gesture is open - a text edit (as it stands), a
+    // placement, a style edit, an erase or a shape - and files it, so that
+    // the command about to run comes after it on the history. Every command
+    // calls this first; a gesture's own calls continue it instead. One
+    // gesture at a time is what keeps a step from being filed in the middle
+    // of another's changes, where undoing it would undo part of those.
+    void EndOpenGesture();
+    // Files `step` on `canvas`'s history - folded into the step on top
+    // with `merge` (see history::History::MergeIntoTop). False for a step
+    // with nothing in it.
+    bool Record(CanvasId canvas, history::Step step, bool merge = false);
+    // Where each of these snippets is now. Ids that name nothing are left
+    // out.
+    using Placements = std::vector<std::pair<ItemId, history::Placement>>;
+    Placements PlacementsOf(const std::vector<ItemId>& ids) const;
     // Files the change from `before` to how those snippets are placed now
-    // as one entry - see EndPlacement.
-    bool RecordPlacements(std::vector<Placement> before, bool merge = false);
-    // A cut's paste of one snippet: moves `itemId` from the canvas holding
-    // it onto `target`, on top, and leaves its history behind (see
-    // ForgetHistoryOfItem). Nullopt, moving nothing, for no such snippet,
-    // one deleted, or one already there.
-    using Arrival = undo::Arrival;
-    std::optional<Arrival> MoveItemTo(ItemId itemId, CanvasId target);
-    // Files everything one paste or duplicate brought onto the current
-    // canvas as one entry - see Paste. When the canvas a moved snippet
-    // came from is gone or deleted, nothing moves: undone, the snippets
-    // would land somewhere nobody can see them, and with a canvas deleted
-    // for good nowhere at all - so they stay, and the step is refused (see
-    // UndoStep::refused). Nothing is filed for no arrivals.
-    void RecordArrivals(std::vector<Arrival> arrivals, bool duplicate);
+    // as one step - see EndPlacement.
+    bool RecordPlacements(const Placements& before, bool merge = false);
+    // A cut's paste or a send of one snippet: moves `itemId` from the
+    // canvas holding it onto `target`, on top, and its history with it (see
+    // history::History::Migrate). The change for the step that files it,
+    // or nullopt, moving nothing, for no such snippet, one deleted, or one
+    // already there.
+    std::optional<history::Change> MoveItemTo(ItemId itemId, CanvasId target);
     // Moves a copy just made off its source, far enough to see that there
     // are two, and re-anchors it there.
     void OffsetCopy(ItemId copyId);
+    // Applies the step on top of one of the current canvas's stacks.
+    std::optional<UndoStep> StepHistory(bool undo);
     // A library, as the session holds one: the records, where they are
     // written, and the debounced autosave between the two.
     struct LibraryInstance {
@@ -473,46 +475,6 @@ private:
     bool FlushIfDirty(LibraryInstance& instance);
     std::optional<platform::CaptureResult> CropFrozenScreen(const Rect& rect) const;
 
-    // ----- Undo -----
-
-    // Appends `entry` to the current canvas's history, evicting past the
-    // caps, and clears that canvas's redo stack: a new action makes whatever
-    // was on it unreachable by any sequence of undos.
-    void PushUndo(undo::Entry entry);
-    // The one push every stack goes through - PushUndo's, and the two
-    // hand-overs between undo and redo - so the caps live in one place: at
-    // most kUndoStackCap entries, and at most kUndoStackCapBytes of points
-    // and text between them. Evicts from the oldest end until both hold,
-    // always keeping the entry just pushed.
-    static void PushCapped(std::deque<undo::Entry>& stack, undo::Entry entry);
-    // Pops the current canvas's top entry off one stack, applies it, and -
-    // if it took effect - pushes it onto the other.
-    std::optional<UndoStep> StepHistory(bool undo);
-    // Applies an entry one way or the other and says what it was - nullopt
-    // when the item or canvas it names is already gone. One overload per
-    // kind of entry (see undo::Entry), so that a kind added without one
-    // does not compile.
-    std::optional<UndoWhat> Apply(undo::StrokeBaked& entry, bool undo);
-    std::optional<UndoWhat> Apply(undo::Erased& entry, bool undo);
-    std::optional<UndoWhat> Apply(undo::ItemDeleted& entry, bool undo);
-    std::optional<UndoWhat> Apply(undo::NoteTextChanged& entry, bool undo);
-    std::optional<UndoWhat> Apply(undo::ItemCreated& entry, bool undo);
-    std::optional<UndoWhat> Apply(undo::PlacementChanged& entry, bool undo);
-    std::optional<UndoWhat> Apply(undo::ItemsArrived& entry, bool undo);
-    // The vector half of an Erased entry, one function per direction - see
-    // undo::Erased. False, changing nothing, when the item's strokes are
-    // not the list the entry describes.
-    static bool RestoreStrokesBeforeErase(Item& item, const undo::Erased& entry);
-    static bool ReapplyErase(Item& item, const undo::Erased& entry);
-    // Whether every snippet an ItemsArrived entry moved can go the way
-    // `undo` says: back to a canvas that is still there and not deleted,
-    // or here again from one, itself not deleted. A copy always can.
-    bool ArrivalsCanMove(const undo::ItemsArrived& entry, bool undo) const;
-    // Forgets everything recorded for a canvas - called when the canvas is
-    // deleted for good, which is safe precisely because there is nothing
-    // left there that could ever want these. A canvas merely deleted keeps
-    // its history for when it is restored.
-    void DropHistoryOfCanvas(CanvasId canvasId);
     // DeletePermanently without the texture sync and the save that follow
     // it: the thing, its textures and its history. What ImportLibrary
     // erases with, before there is a device to sync against.
@@ -525,10 +487,10 @@ private:
     // is being followed: each stroke the call clipped is marked replaced,
     // and its fragments are noted as standing for the same original it did.
     void NoteEraseOutcome(const std::vector<size_t>& outcome);
-    // Pushes one Erased entry for the whole gesture, built from what was
-    // followed: every original marked replaced, with the fragments now
-    // standing for it. No-op if the gesture changed nothing.
-    void PushEraseGestureUndoEntry(ItemId itemId);
+    // Files one step for the whole gesture, built from what was followed:
+    // every original marked replaced, with the fragments now standing for
+    // it. No-op if the gesture changed nothing.
+    void RecordEraseGesture(ItemId itemId);
 
     platform::IOverlayWindow* window_ = nullptr;
     // A library as the session holds one - see LibraryInstance. The shape
@@ -543,20 +505,8 @@ private:
     // the sync.
     std::optional<CanvasId> shotTextureCanvasId_;
 
-    // Undo/redo history, kept *per canvas* rather than as one global stack.
-    // One global stack meant an undo could reach a canvas that isn't even
-    // on screen: draw on A, switch to B, press undo - and a stroke vanishes
-    // from A, which you aren't looking at. With the split, no undo can
-    // touch a canvas that isn't on screen: every entry resolves an item that
-    // was on the canvas the entry is filed under, and the one way an entry
-    // could outlive that - its item being moved to another canvas - is
-    // closed by ForgetHistoryOfItem. A canvas's entries are dropped outright
-    // when it is deleted for good (see DropHistoryOfCanvas).
-    std::unordered_map<CanvasId, std::deque<undo::Entry>> undoStacks_;
-    // What Undo has taken back, most recent last - same keying and caps.
-    std::unordered_map<CanvasId, std::deque<undo::Entry>> redoStacks_;
-    // See HistoryRevision.
-    uint64_t historyRevision_ = 0;
+    // The undo history, per canvas - see history::History.
+    history::History history_;
     // A copy of the erased item's whole stroke list, taken as an eraser
     // gesture begins, and beside it where every stroke currently in the
     // list came from: eraseOrigins_ is parallel to the item's strokes and
@@ -566,7 +516,7 @@ private:
     // end, exactly which fragments stand for which original - however many
     // times a fragment was clipped again by a later call in the same drag -
     // which is what one entry for the *whole* gesture needs, and what a
-    // before/after diff by value could not say (see undo::Erased).
+    // before/after diff by value could not say (see history::StrokesErased).
     std::vector<Stroke> eraseGestureStartSnapshot_;
     std::vector<size_t> eraseOrigins_;
     std::vector<bool> eraseReplaced_;
@@ -574,7 +524,7 @@ private:
     std::optional<ItemId> eraseItemId_;
     // The placement gesture in progress: where its snippets were when it
     // began - see BeginPlacement.
-    std::optional<std::vector<Placement>> placementBefore_;
+    std::optional<Placements> placementBefore_;
     // The style edit in progress: which snippet, and its style when the
     // edit began - see PreviewStyle.
     std::optional<std::pair<ItemId, ItemStyle>> styleEditBefore_;

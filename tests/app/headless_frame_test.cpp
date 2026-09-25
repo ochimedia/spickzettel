@@ -3400,9 +3400,9 @@ TEST_F(HeadlessAppTest, ANoteNothingWasTypedIntoGoesWhenTheHandMovesOn) {
     EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty()) << "erased, not kept deleted";
 }
 
-// Hiding and exiting both flush, and a note being typed lives in the
-// editor's buffer until it is committed - so both have to commit it first,
-// or the flush writes the note as it was when the editor opened.
+// Hiding and exiting both flush, and a note being typed is the note as it
+// is typed (see Session::PreviewText) - but its edit is one step only once
+// it is committed, which both do on the way out.
 TEST_F(HeadlessAppTest, HidingByHotkeyCommitsTheNoteBeingTyped) {
     StartWith(WithTextOnT());
     ShowEditMode();
@@ -3414,12 +3414,15 @@ TEST_F(HeadlessAppTest, HidingByHotkeyCommitsTheNoteBeingTyped) {
     ImGui::GetIO().AddInputCharacter('a');
     ImGui::GetIO().AddInputCharacter('b');
     StepFrames(2);
-    ASSERT_TRUE(Canvases().CurrentOrNull()->items[0].noteText.empty()) << "typed, not yet committed";
+    ASSERT_EQ(Canvases().CurrentOrNull()->items[0].noteText, "ab") << "the note is what has been typed";
+    ASSERT_TRUE(AppSession().TextEditItem().has_value()) << "and the edit is still open";
 
     ShowEditMode();  // the edit hotkey again: put away, with the editor still open
     EXPECT_FALSE(host_.overlayWindow.IsVisible());
     EXPECT_FALSE(App().EditingNote().has_value());
+    EXPECT_FALSE(AppSession().TextEditItem().has_value());
     EXPECT_EQ(Canvases().CurrentOrNull()->items[0].noteText, "ab");
+    EXPECT_TRUE(AppSession().CanUndo()) << "committed, as one step";
 }
 
 // Switching to view-only in place: the editor is not drawn there, so it

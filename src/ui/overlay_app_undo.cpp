@@ -46,10 +46,12 @@ void OverlayApp::ShowUndoStep(const std::optional<Session::UndoStep>& step) {
     if (!step.has_value()) {
         return;
     }
-    if (step->refused) {
-        // Nothing changed, and the step is gone from the history - see
-        // Session::UndoStep::refused. Only a paste is ever refused.
-        ShowActionToast(step->undone ? strings::kToastPasteStays : strings::kToastPasteNotRedone);
+    if (step->intoDeletedCanvas != 0) {
+        // Where it went is out of sight, and the toast says where to find
+        // it - see Session::UndoStep::intoDeletedCanvas.
+        const Canvas* canvas = Manager().FindCanvas(step->intoDeletedCanvas);
+        ShowActionToast(std::string(strings::kToastSentToDeletedCanvasPrefix) +
+                        (canvas != nullptr ? canvas->name : std::string()));
         return;
     }
     // What the toast calls it - chosen once per kind, so the two directions
@@ -79,6 +81,15 @@ void OverlayApp::ShowUndoStep(const std::optional<Session::UndoStep>& step) {
             break;
         case Session::UndoWhat::Duplicate:
             what = strings::kUndoDuplicate;
+            break;
+        case Session::UndoWhat::Style:
+            what = strings::kUndoStyle;
+            break;
+        case Session::UndoWhat::Move:
+            what = strings::kUndoMove;
+            break;
+        case Session::UndoWhat::CopyTo:
+            what = strings::kUndoCopyTo;
             break;
     }
     ShowActionToast(std::string(step->undone ? strings::kToastUndidPrefix : strings::kToastRedidPrefix) + what);

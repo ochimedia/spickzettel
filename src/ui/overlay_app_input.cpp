@@ -1041,19 +1041,30 @@ void OverlayApp::KeepDrawingsPlaced(const std::vector<ItemId>& ids) {
     }
 }
 
-void OverlayApp::RecordPlacementBurst(PlacementBurst kind, const std::vector<std::pair<ItemId, Rect>>& rects) {
-    const double now = ImGui::GetTime();
-    const bool continues = lastPlacementBurst_ == kind && now - lastPlacementBurstAtSeconds_ < kPlacementBurstSeconds &&
-                           session_.HistoryRevision() == lastPlacementBurstRevision_;
+bool OverlayApp::BurstContinues(Burst kind) const {
+    return lastBurst_ == kind && ImGui::GetTime() - lastBurstAtSeconds_ < kBurstSeconds &&
+           session_.HistoryRevision() == lastBurstRevision_;
+}
+
+void OverlayApp::NoteBurst(Burst kind) {
+    lastBurst_ = kind;
+    lastBurstAtSeconds_ = ImGui::GetTime();
+    lastBurstRevision_ = session_.HistoryRevision();
+}
+
+void OverlayApp::RecordPlacementBurst(Burst kind, const std::vector<std::pair<ItemId, Rect>>& rects) {
     // One that files nothing - a nudge against the screen's edge - starts
     // no run: armed, the next press within the second merged into whatever
     // was filed last, a drag included, and one undo took back both.
-    if (!session_.SetRects(rects, continues)) {
-        return;
+    if (session_.SetRects(rects, BurstContinues(kind))) {
+        NoteBurst(kind);
     }
-    lastPlacementBurst_ = kind;
-    lastPlacementBurstAtSeconds_ = now;
-    lastPlacementBurstRevision_ = session_.HistoryRevision();
+}
+
+void OverlayApp::RecordStyleBurst(Burst kind, const std::vector<std::pair<ItemId, ItemStyle>>& styles) {
+    if (session_.SetStyles(styles, BurstContinues(kind))) {
+        NoteBurst(kind);
+    }
 }
 
 void OverlayApp::SnapshotResizeTargets(ItemGesture& gesture, ItemId itemId) {
@@ -1190,7 +1201,7 @@ void OverlayApp::ScaleSelectionByWheel(int steps) {
     // or resized by hand is.
     KeepDrawingsPlaced(ids);
     // A spin of the wheel is one undo, back to the size it started at.
-    RecordPlacementBurst(PlacementBurst::Wheel, rects);
+    RecordPlacementBurst(Burst::Wheel, rects);
 }
 
 void OverlayApp::StepSelectionOpacity(int steps, bool background) {
@@ -1224,7 +1235,8 @@ void OverlayApp::StepSelectionOpacity(int steps, bool background) {
     if (!shown.has_value()) {
         return;
     }
-    session_.SetStyles(styles);
+    // A spin of the wheel is one undo, back to where it started.
+    RecordStyleBurst(Burst::Opacity, styles);
     // The value, since the change itself can be hard to judge by eye: the
     // last snippet's, which with several selected is the one selected last.
     char text[64];

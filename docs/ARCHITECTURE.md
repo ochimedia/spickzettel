@@ -1219,104 +1219,125 @@ copy that looks whole.
 
 ### Undo is per canvas
 
-History is a `deque` per canvas, capped at 50 entries *and* 128 MB of
-what they hold (a Clear drawing holds every stroke it took). A canvas is
-this app's document, and undo scoped to a document is what every editor
-does. One global
-stack reached across canvases and failed invisibly: draw on A, switch to
-B, draw, come back to A, press Ctrl+Z, and the stroke that vanished was
-B's, on a canvas you were not looking at.
+History is two stacks per canvas, undo and redo, each capped at 50 steps
+*and* 128 MB of what they hold (a Clear drawing holds every stroke it
+took). A canvas is this app's document, and undo scoped to a document is
+what every editor does. One global stack reached across canvases and
+failed invisibly: draw on A, switch to B, draw, come back to A, press
+Ctrl+Z, and the stroke that vanished was B's, on a canvas you were not
+looking at. `core/session/history.h` is the whole of it.
 
-Seven kinds of entry, and every one is either its own inverse or a mirror
-with the direction as the only difference, so undo and redo are one walk
-in opposite directions through one dispatch. Each kind is a struct of
-its own in one `std::variant` (`core/session/undo_entry.h`), holding
-only its own fields and saying itself what it weighs and which snippets
-it names; applying it is one `Session::Apply` overload per kind, so a
-kind added without all of that does not compile. It was one struct with
-every kind's fields side by side, most of them commented "X only", and
-adding a kind meant finding the four switches that had to agree about
-it. A `StrokeBaked` entry
-carries the stroke so redo can push it back, and undo takes off that
-stroke, found from the back, rather than whatever is last. An `Erased`
-entry is a list of *replacements*: for each original a gesture clipped,
-its index in the list as it was, the original itself, and the fragments
-now standing in its place. Undo rebuilds the before-list from the
-after-list and redo the reverse, both by position. The session follows
-the list through the gesture - the manager's erase reports what became
-of each stroke, index for index, and the session keeps a parallel
-"which original does this stand for" vector - so a fragment clipped
-again by a later call in the same drag still traces back to the stroke
-that was there before the drag. The first version diffed a snapshot
-against the result by value, removed fragments by value and appended
-the originals at the end: that changed the draw order, left the next
-undo of a stroke popping a different stroke than it was for, could not
-tell two equal strokes apart, and was quadratic in the drawing's size.
-`ItemCreated` carries
-an id and toggles the mark, and `ItemDeleted` does the same for every
-snippet one Delete took: one entry each made deleting a selection that
-many undos, and past the history's cap of 50 the earliest could not be
-undone at all - for a deleted snippet, which comes back only by undo,
-that was deleted for good. `NoteTextChanged` swaps its contents with
-the item's, so the popped entry is already what the
-opposite stack needs. Undo is best-effort about staleness: an entry
-naming something gone does nothing and is dropped rather than moved to
-the other stack.
+**A step is a list of changes, each about exactly one snippet.** Seven
+kinds, and each is its own inverse or a mirror, so undo and redo are one
+walk in opposite directions:
 
-A paste or a duplicate is one `ItemsArrived` entry for everything it
-brought, filed on the canvas it landed on: a copy is undone into its
-deletion mark as a new snippet is, and a snippet a cut moved here goes
-back to the canvas it came from, at the place in the stack it left -
-undone last first, since each place was taken after the snippets before
-it had gone, which is what puts several cut from one stack back in its
-order rather than swapped. With
-no entry of its own, an undo after a paste reached past it and took back
-whatever came before - usually out of sight, under the copy. Unlike the
-rest, this entry can find it has nowhere to go: the canvas a cut came
-from deleted, or deleted for good, before the undo. Sending the snippets
-there would hide them in the trash, or have nowhere to put them at all,
-so they stay, and the step is *refused*: dropped, with a toast saying
-why, so that the next undo reaches the step before it rather than
-finding the same refusal forever. A redo refuses the same way when the
-snippets it would bring have been deleted since. The move each way also
-leaves the history behind that it would otherwise carry to a canvas it
-is not on - see `ForgetHistoryOfItem`.
+- `StrokeAdded` carries the stroke, so redo can push it back; undo takes
+  it off the end, where it went.
+- `StrokesErased` is a list of *replacements*: for each original a
+  gesture clipped, its index in the list as it was, the original, and the
+  fragments now standing in its place. Undo rebuilds the before-list from
+  the after-list and redo the reverse, both by position. The session
+  follows the list through the gesture - the manager's erase reports what
+  became of each stroke, index for index - so a fragment clipped again
+  later in the same drag still traces back to the stroke that was there
+  before it. The first version diffed by value and appended the
+  originals at the end: that changed the draw order, left the next undo
+  of a stroke popping a different one, and could not tell equal strokes
+  apart. A gesture that loses track of its fragments - which only a bug
+  could make it do - is filed as one replacement of the whole list, exact
+  if coarse, rather than not at all.
+- `TextChanged`, `PlacementChanged`, `StyleChanged` and `DeletionChanged`
+  hold the other side's value and swap it with the snippet's. The
+  deletion mark is what a new snippet, a copy and a delete all are:
+  undone, a new snippet is marked deleted, where a screenshot taken by
+  mistake can still be found.
+- `Moved` is a snippet going from one canvas to another - a cut's paste,
+  a move from the picker, the selection taken to a new canvas - with the
+  place it stood in the stack at each end, taken as it leaves, so that an
+  undo and a redo put it back exactly where the other found it.
 
-Deliberately narrow: reorders and renames are not tracked, and deleting
-a canvas or folder gets a confirmation and Show deleted instead of an
-undo entry. Either confirmation - for a delete that can be restored, and
-for one that is for good - can be switched off in Settings > Behavior
+A step about several snippets - a Delete of a selection, a group drag, a
+paste - is one undo for all of them. One entry per snippet made deleting
+a selection that many undos, and past the cap of 50 the earliest could
+not be undone at all: for a deleted snippet, deleted for good.
+
+**Every step on a stack applies when it is reached**, whatever happened
+in the library in between; nothing is ever refused at Ctrl+Z time. The
+rules that keep it so are applied eagerly, the moment they become true:
+
+- *A snippet's undo changes are on the stack of the canvas holding it.*
+  When it moves - pasted, sent, or by an undo or redo of either - they
+  move with it, merged in by when each was done (`History::Migrate`); a
+  step about several snippets is split between their canvases, and a part
+  that meets its step again rejoins it. This is what makes a move
+  undoable at all: the paste is the newest change about the snippet, on
+  the canvas it is now on, and its older changes are beneath it there.
+  Before, a move forgot the snippet's history outright.
+- *A new change to a snippet drops its changes from every redo stack*,
+  besides the usual rule that a new step clears its own canvas's redo
+  stack: the future they were for is gone. A paste undone and the snippet
+  then drawn on where it went back to is not pasted again by a redo.
+- *An undo or redo that changes a snippet drops its changes from the redo
+  stacks of every other canvas*, which were for a state it has just left.
+- *A snippet deleted for good takes every change about it with it; a
+  canvas deleted for good takes its stacks, and every move from or to it
+  anywhere.* A paste whose source canvas is gone for good is no longer
+  undoable, and the snippet is its new canvas's for good; everything else
+  about it still is.
+
+With those, the one thing a step checks is that it is being applied to
+the state it was made against, and it asks that of every change before
+applying any (`history::CanApply`), so that a step is never applied
+halfway. A step that fails it is a bug in the rules: dropped, and an
+assert in a debug build. `HistoryTest.EveryStepAppliesWhateverHappensInBetween`
+drives a session through random commands - gestures left open, pastes
+and sends between canvases, canvases and folders deleted, restored and
+deleted for good, undos and redos - and checks after every one that each
+undo change is on its snippet's canvas, and every few that undoing
+everything on the current canvas and redoing it gives back exactly the
+library it started from. It ran clean over three thousand seeds before
+being cut to the hundred and twenty that run every time.
+
+A paste undone while the canvas it came from is deleted - not for good -
+sends the snippet back into it all the same, where restoring the canvas
+finds it, and the toast says so. The alternative, refusing, left a step
+on the stack that could not be taken, and had to be dropped by hand.
+
+What is not on the history is what is not in a snippet: pins and
+minimizing, the stacking order (raising a snippet on every press would
+file a step per click), renames, reorders and switches, and folders and
+canvases, which are deleted with a confirmation and restored from Show
+deleted. Either confirmation - for a delete that can be restored, and for
+one that is for good - can be switched off in Settings > Behavior
 (`AppConfig::confirmDelete`, `confirmDeleteForGood`), for everything at
 once rather than per profile, since what a delete asks is about the
 library. The request is still deferred to where the popover is drawn,
 and done there without asking, since a button that deleted on the spot
-would change the Overview while it is still being drawn from it. Moving a snippet to another canvas from its menu, or to a
-new canvas with Ctrl+Shift+N, is not on the history either.
+would change the Overview while it is still being drawn from it. None of
+these changes anything a step reads, so none can make one stale.
+`Session::Delete` and `Restore` refuse a snippet for the same reason: its
+mark is the history's.
 
-Moves and resizes are, since one accidental drag of a snippet in a
-carefully stacked overlay had no way back. A snippet's placement is
-changed in the model directly, event by event, and recorded afterwards
-as one `PlacementChanged` entry per gesture: the press takes the
-placements of everything the gesture may move, and the release files
-the difference, so a drag is one undo however many events it took and a
-multi-selection is one undo for all of it. A click that moved nothing
-files nothing. A placement is the whole of where a snippet is - its
-rect, its fullscreen state and the anchor its rect is recomputed from on
-a display change - because a drag takes a fullscreen snippet out of
-fullscreen, and an undo that brought back the rect but not the
-fullscreen would not be the snippet as it was. Like `NoteTextChanged`
-the entry is its own inverse, a swap each way. The one-shot changes -
-fullscreen from the bar or the menu, Original size - are an entry each.
-Steps that come in bursts, wheel notches and arrow-key nudges, fold
-into the entry the burst began, keeping its before, when they continue
-it within a second and nothing else was filed in between: a spin of the
-wheel is taken back in one step, to the size it started at, rather than
-a notch at a time. Minimizing is not a placement - the snippet does not
-move - and is not recorded.
+**One gesture at a time.** A drag, a slider, the color picker, a note
+being typed, the eraser and a shape are gestures: previewed in the model
+through the session, and filed as one step when they end. Every other
+command ends the one open first (`Session::EndOpenGesture`), so that no
+step is ever filed in the middle of another's changes, where undoing it
+would undo part of them. An undo pressed mid-gesture takes back the
+gesture. A note's text is the note's as it is typed (`PreviewText`), so
+whatever ends its edit keeps what was typed; the editor sees its edit
+ended from elsewhere and closes.
 
-Delete, undo and redo pressed with a drag still in flight end the drag
-where it stands first, filed as its release would file it; the rest of
-the drag moves nothing - see "One gesture engine on the raw pipeline".
+A placement is the whole of where a snippet is - its rect, its
+fullscreen state and the anchor its rect is recomputed from on a display
+change - because a drag takes a fullscreen snippet out of fullscreen,
+and an undo that brought back the rect but not the fullscreen would not
+be the snippet as it was. A style is everything the properties popover
+and the opacity wheel change. Steps that come in bursts - wheel notches,
+arrow-key nudges, opacity steps - fold into the step the burst began,
+keeping its before, when they continue it within a second and nothing
+else was filed in between: a spin of the wheel is taken back in one
+step, to where it started.
 
 ### Making a snippet is on the history, and an untouched one goes
 

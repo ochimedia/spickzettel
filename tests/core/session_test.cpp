@@ -146,7 +146,7 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
         session.SetLibraryStore(&store);
         shot = session.CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Shot");
         const ItemId gone = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
-        ASSERT_TRUE(session.Delete(gone));
+        ASSERT_TRUE(session.DeleteItem(gone));
         ASSERT_TRUE(session.Flush());
         session.SetLibraryStore(nullptr);
     }
@@ -271,27 +271,6 @@ TEST(SessionTest, AMergedBurstOfPlacementChangesIsOneUndo) {
     EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.x, 3.0f) << "a new entry, not merged past the one between";
 }
 
-// A snippet that leaves the canvas takes its part of a group's move with
-// it; the others' part stays to be taken back.
-TEST(SessionTest, ForgettingOneSnippetLeavesTheRestOfAGroupMove) {
-    Session session;
-    CanvasManager& manager = Model(session);
-    const CanvasId canvas = manager.CurrentCanvasId();
-    const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
-    const ItemId b = manager.CreateItem(false, Rect{200, 0, 100, 100}, "B");
-    const CanvasId elsewhere = session.AddCanvas("Elsewhere");
-    ASSERT_TRUE(session.SetRects({{a, Rect{0, 50, 100, 100}}, {b, Rect{200, 50, 100, 100}}}));
-
-    ASSERT_EQ(session.SendItemsTo({a}, elsewhere, /*copy=*/false).items.size(), 1u);
-    ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.y, 50.0f) << "forgotten";
-    EXPECT_FLOAT_EQ(manager.FindItemAnywhere(b)->rect.y, 0.0f);
-
-    ASSERT_EQ(session.SendItemsTo({b}, elsewhere, /*copy=*/false).items.size(), 1u);
-    EXPECT_FALSE(session.CanRedo()) << "an entry naming nothing is gone";
-    EXPECT_EQ(session.Manager().CurrentCanvasId(), canvas);
-}
-
 TEST(SessionTest, AStrokeIsUndoneAndRedone) {
     Session session;
     const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
@@ -354,27 +333,21 @@ TEST(SessionTest, DeletingManySnippetsAtOnceIsOneUndo) {
     }
 }
 
-TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
+// An undo with the note open closes it first - an edit that changed
+// nothing files nothing - and then takes back the edit before it.
+TEST(SessionTest, AnUndoWithTheNoteOpenClosesItFirst) {
     Session session;
     const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Note");
     session.BeginTextEdit(item);
     session.EndTextEdit(std::string("first"));
     EXPECT_EQ(ItemById(Model(session), item)->noteText, "first");
 
-    // Undone with the note open: nothing happens, and the entry is kept -
-    // unlike one that no longer applies, it still does, once the note is
-    // closed.
     session.BeginTextEdit(item);
-    EXPECT_FALSE(session.Undo().has_value()) << "the edit in progress would overwrite it anyway";
-    EXPECT_EQ(ItemById(Model(session), item)->noteText, "first");
-    EXPECT_TRUE(session.CanUndo()) << "kept for when the note is closed";
-    session.EndTextEdit(std::nullopt);  // abandoned: nothing filed
-
-    // Undone with the note closed, it goes back.
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::TextEdit);
     EXPECT_EQ(ItemById(Model(session), item)->noteText, "");
+    EXPECT_FALSE(session.TextEditItem().has_value());
     EXPECT_FALSE(session.CanUndo());
 }
 
@@ -542,34 +515,6 @@ TEST(SessionTest, ACanvasDeletedAndRestoredKeepsItsHistory) {
     EXPECT_TRUE(session.CanUndo());
 }
 
-TEST(SessionTest, AnItemMovedAwayTakesNoHistoryWithIt) {
-    Session session;
-    const CanvasId first = Model(session).CurrentCanvasId();
-    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
-    DrawStrokeInto(session, item);
-    const CanvasId second = session.AddCanvas("Second");
-    ASSERT_EQ(session.SendItemsTo({item}, second, /*copy=*/false).items.size(), 1u);
-    EXPECT_EQ(session.Manager().CurrentCanvasId(), first);
-    EXPECT_FALSE(session.CanUndo());
-}
-
-TEST(SessionTest, RestoringASnippetRestoresWhatHoldsIt) {
-    Session session;
-    const FolderId folder = Model(session).CurrentFolderId();
-    const CanvasId canvas = Model(session).CurrentCanvasId();
-    const ItemId kept = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
-    const ItemId back = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Back");
-    ASSERT_TRUE(session.Delete(kept));
-    ASSERT_TRUE(session.Delete(folder));
-    EXPECT_TRUE(Model(session).IsItemDeleted(back)) << "inside a deleted folder";
-
-    ASSERT_TRUE(session.Restore(back));
-    EXPECT_FALSE(Model(session).IsItemDeleted(back));
-    EXPECT_EQ(Model(session).FindCanvas(canvas)->deletedAt, 0);
-    EXPECT_EQ(Model(session).FindFolder(folder)->deletedAt, 0) << "the folder came back with it";
-    EXPECT_TRUE(Model(session).IsItemDeleted(kept)) << "deleted on its own before, and still";
-}
-
 TEST(SessionTest, CapturingWithoutAWindowLeavesAPlaceholder) {
     Session session;
     const ItemId id = session.CreateItem(/*hasBackground=*/true, Rect{0, 0, 100, 100}, "Shot");
@@ -699,7 +644,7 @@ TEST(SessionTest, DeletingASnippetPermanentlyLeavesItsCanvasHistoryAlone) {
     const ItemId kept = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
     DrawStrokeInto(session, kept);
     const ItemId gone = Model(session).CreateItem(false, Rect{200, 0, 100, 100}, "Gone");
-    ASSERT_TRUE(session.Delete(gone));
+    ASSERT_TRUE(session.DeleteItem(gone));
     ASSERT_TRUE(session.DeletePermanently(gone));
     EXPECT_EQ(ItemById(Model(session), gone), nullptr);
     EXPECT_TRUE(session.CanUndo());
@@ -734,7 +679,7 @@ TEST(SessionTest, ACutsPasteIsUndoneBackToWhereItStood) {
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::Paste);
-    EXPECT_FALSE(undone->refused);
+    EXPECT_EQ(undone->intoDeletedCanvas, 0u);
     EXPECT_EQ(StackIndex(session, second, moved), -1);
     EXPECT_EQ(StackIndex(session, first, moved), 1) << "between the two it stood between";
 
@@ -772,110 +717,6 @@ TEST(SessionTest, SeveralSnippetsCutFromOneStackGoBackInItsOrder) {
     }
 }
 
-// Sent back by an undo and edited where it landed, a snippet brought here
-// again by the redo takes none of that history with it: an undo there
-// would edit a snippet that is no longer on the canvas.
-TEST(SessionTest, ARedonePasteLeavesTheHistoryItGatheredMeanwhileBehind) {
-    Session session;
-    const CanvasId first = Model(session).CurrentCanvasId();
-    const ItemId stays = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Stays");
-    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
-    DrawStrokeInto(session, stays);
-    const CanvasId second = Model(session).AddCanvas("Second");
-    Model(session).SwitchToCanvas(second);
-    session.Paste({moved}, /*cut=*/true);
-    ASSERT_TRUE(session.Undo().has_value());
-
-    Model(session).SwitchToCanvas(first);
-    DrawStrokeInto(session, moved);
-    Model(session).SwitchToCanvas(second);
-    ASSERT_TRUE(session.Redo().has_value());
-    ASSERT_EQ(StackIndex(session, second, moved), 0);
-
-    Model(session).SwitchToCanvas(first);
-    const std::optional<Session::UndoStep> undone = session.Undo();
-    ASSERT_TRUE(undone.has_value());
-    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
-    EXPECT_TRUE(ItemById(Model(session), stays)->strokes.empty()) << "the stroke on what stayed";
-    EXPECT_EQ(ItemById(Model(session), moved)->strokes.size(), 1u) << "not the one on what left";
-}
-
-// The canvas a cut came from, deleted - marked, or for good - before the
-// paste is undone: the snippet stays where it was pasted rather than go
-// somewhere nobody can see it, or nowhere at all, and the step says so
-// and is dropped, so that the next undo reaches the step before it.
-TEST(SessionTest, APasteWhoseSourceCanvasIsDeletedIsNotUndoneAndSaysSo) {
-    for (const bool forGood : {false, true}) {
-        SCOPED_TRACE(forGood ? "deleted for good" : "deleted");
-        Session session;
-        const CanvasId first = Model(session).CurrentCanvasId();
-        const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
-        const CanvasId second = Model(session).AddCanvas("Second");
-        Model(session).SwitchToCanvas(second);
-        const ItemId made = session.CreateItem(false, Rect{0, 0, 100, 100}, "Made");
-        session.Paste({moved}, /*cut=*/true);
-        ASSERT_TRUE(session.Delete(first));
-        if (forGood) {
-            ASSERT_TRUE(session.DeletePermanently(first));
-        }
-
-        const std::optional<Session::UndoStep> refused = session.Undo();
-        ASSERT_TRUE(refused.has_value());
-        EXPECT_TRUE(refused->refused);
-        EXPECT_EQ(refused->what, Session::UndoWhat::Paste);
-        EXPECT_EQ(StackIndex(session, second, moved), 1) << "still where it was pasted, on top";
-        EXPECT_FALSE(Model(session).IsItemDeleted(moved));
-
-        const std::optional<Session::UndoStep> next = session.Undo();
-        ASSERT_TRUE(next.has_value());
-        EXPECT_EQ(next->what, Session::UndoWhat::Create);
-        EXPECT_TRUE(Model(session).IsItemDeleted(made));
-    }
-}
-
-// Sent back by an undo, then deleted there: nothing to bring again, and
-// the redo says so rather than moving a deleted snippet here.
-TEST(SessionTest, ARedoOfAPasteWhoseSnippetWasDeletedSinceIsRefused) {
-    Session session;
-    const CanvasId first = Model(session).CurrentCanvasId();
-    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
-    const CanvasId second = Model(session).AddCanvas("Second");
-    Model(session).SwitchToCanvas(second);
-    session.Paste({moved}, /*cut=*/true);
-    ASSERT_TRUE(session.Undo().has_value());
-    ASSERT_TRUE(session.Delete(moved));
-
-    const std::optional<Session::UndoStep> refused = session.Redo();
-    ASSERT_TRUE(refused.has_value());
-    EXPECT_TRUE(refused->refused);
-    EXPECT_EQ(StackIndex(session, first, moved), 0) << "left where it is";
-    EXPECT_FALSE(session.CanRedo()) << "and the step is gone";
-}
-
-// Sent back by an undo, then moved on to a third canvas: it is that
-// canvas's now, and the redo leaves it there.
-TEST(SessionTest, ARedoOfAPasteWhoseSnippetMovedOnSinceIsRefused) {
-    Session session;
-    const CanvasId first = Model(session).CurrentCanvasId();
-    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
-    const CanvasId second = Model(session).AddCanvas("Second");
-    const CanvasId third = Model(session).AddCanvas("Third");
-    Model(session).SwitchToCanvas(second);
-    session.Paste({moved}, /*cut=*/true);
-    ASSERT_TRUE(session.Undo().has_value());
-    ASSERT_EQ(Model(session).CanvasHoldingItem(moved), std::optional<CanvasId>(first));
-    Model(session).SwitchToCanvas(third);
-    session.Paste({moved}, /*cut=*/true);
-    Model(session).SwitchToCanvas(second);
-
-    const std::optional<Session::UndoStep> refused = session.Redo();
-    ASSERT_TRUE(refused.has_value());
-    EXPECT_TRUE(refused->refused);
-    EXPECT_EQ(Model(session).CanvasHoldingItem(moved), std::optional<CanvasId>(third)) << "left where it is";
-    Model(session).SwitchToCanvas(third);
-    EXPECT_TRUE(session.CanUndo()) << "with the third canvas's history of it";
-}
-
 // Copies, pasted or duplicated, are undone into their deletion mark - as
 // a new snippet is - and redone out of it; the source is not touched.
 TEST(SessionTest, CopiesArriveAndGoWithOneUndo) {
@@ -900,26 +741,6 @@ TEST(SessionTest, CopiesArriveAndGoWithOneUndo) {
         EXPECT_FALSE(Model(session).IsItemDeleted(copyA));
         EXPECT_FALSE(Model(session).IsItemDeleted(copyB));
     }
-}
-
-// A snippet of a paste moved on elsewhere since is taken out of the
-// paste's entry; the rest of the paste is still one undo.
-TEST(SessionTest, ForgettingOneSnippetLeavesTheRestOfAPaste) {
-    Session session;
-    const CanvasId first = Model(session).CurrentCanvasId();
-    const ItemId one = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "One");
-    const ItemId other = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Other");
-    const CanvasId second = Model(session).AddCanvas("Second");
-    Model(session).SwitchToCanvas(second);
-    session.Paste({one, other}, /*cut=*/true);
-    const CanvasId third = Model(session).AddCanvas("Third");
-    Model(session).SwitchToCanvas(third);
-    ASSERT_EQ(session.Paste({one}, /*cut=*/true).items.size(), 1u);
-    Model(session).SwitchToCanvas(second);
-
-    ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(StackIndex(session, first, other), 0) << "went back";
-    EXPECT_EQ(StackIndex(session, third, one), 0) << "was not the paste's any more";
 }
 
 // With the screen frozen, a shot is cut out of the frozen picture rather
@@ -1280,6 +1101,321 @@ TEST(SessionTest, APermanentDeleteRightAfterAMoveIntoTheCanvasTakesWhatWasMovedI
     ASSERT_EQ(loaded->canvases.size(), 1u);
     EXPECT_TRUE(loaded->canvases[0].items.empty());
     EXPECT_FALSE(reopened.HasImage(id));
+}
+
+// ===== History that follows its snippets =====
+//
+// See history::History for the rules these hold it to: a snippet's undo
+// changes are on the canvas holding it, a new change ends its redo future,
+// and nothing on a stack is ever refused.
+
+// Delete and Restore are for folders and canvases. A snippet's mark is the
+// history's to change - set outside it, the next undo of that snippet's
+// making or deleting would swap in a mark it did not expect.
+TEST(SessionTest, DeleteAndRestoreAreForFoldersAndCanvasesOnly) {
+    Session session;
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    EXPECT_FALSE(session.Delete(item));
+    EXPECT_FALSE(session.Manager().IsItemDeleted(item));
+    ASSERT_TRUE(session.DeleteItem(item));
+    EXPECT_FALSE(session.Restore(item));
+    EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+}
+
+// A snippet sent to another canvas takes its history there: nothing of it
+// is left to undo where it was, and there its send is the newest step and
+// its stroke under it.
+TEST(SessionTest, ASnippetSentAwayTakesItsHistoryWithIt) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawStrokeInto(session, item);
+    const CanvasId second = session.AddCanvas("Second");
+    ASSERT_EQ(session.SendItemsTo({item}, second, /*copy=*/false).items.size(), 1u);
+    EXPECT_EQ(session.Manager().CurrentCanvasId(), first);
+    EXPECT_FALSE(session.CanUndo()) << "nothing of it left here";
+
+    session.SwitchToCanvas(second);
+    const std::optional<Session::UndoStep> send = session.Undo();
+    ASSERT_TRUE(send.has_value());
+    EXPECT_EQ(send->what, Session::UndoWhat::Move);
+    EXPECT_EQ(session.Manager().CanvasHoldingItem(item), std::optional<CanvasId>(first)) << "sent back";
+    EXPECT_FALSE(session.CanUndo()) << "and its stroke with it";
+
+    session.SwitchToCanvas(first);
+    const std::optional<Session::UndoStep> stroke = session.Undo();
+    ASSERT_TRUE(stroke.has_value());
+    EXPECT_EQ(stroke->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+}
+
+// A group move whose snippets part ways is split between them: each part
+// is undone where its snippet is, and the part left behind still is.
+TEST(SessionTest, ASnippetSentAwayTakesItsPartOfAGroupMove) {
+    Session session;
+    const CanvasId canvas = session.Manager().CurrentCanvasId();
+    const ItemId a = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId b = Model(session).CreateItem(false, Rect{200, 0, 100, 100}, "B");
+    const CanvasId elsewhere = session.AddCanvas("Elsewhere");
+    ASSERT_TRUE(session.SetRects({{a, Rect{0, 50, 100, 100}}, {b, Rect{200, 50, 100, 100}}}));
+    ASSERT_EQ(session.SendItemsTo({a}, elsewhere, /*copy=*/false).items.size(), 1u);
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_FLOAT_EQ(ItemById(session.Manager(), b)->rect.y, 0.0f) << "the part left here";
+    EXPECT_FLOAT_EQ(ItemById(session.Manager(), a)->rect.y, 50.0f) << "went with its snippet";
+    EXPECT_FALSE(session.CanUndo());
+
+    session.SwitchToCanvas(elsewhere);
+    ASSERT_TRUE(session.Undo().has_value()) << "the send";
+    session.SwitchToCanvas(canvas);
+    ASSERT_TRUE(session.Undo().has_value()) << "back with it, the part came back too";
+    EXPECT_FLOAT_EQ(ItemById(session.Manager(), a)->rect.y, 0.0f);
+}
+
+// A paste undone sends what it moved back with its history, and redone
+// brings both again.
+TEST(SessionTest, AnUndonePasteTakesTheHistoryBackAndARedoBringsItAgain) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    DrawStrokeInto(session, moved);
+    const CanvasId second = session.AddCanvas("Second");
+    session.SwitchToCanvas(second);
+    ASSERT_EQ(session.Paste({moved}, /*cut=*/true).items.size(), 1u);
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_FALSE(session.CanUndo()) << "the stroke went back with it";
+    session.SwitchToCanvas(first);
+    EXPECT_TRUE(session.CanUndo());
+    session.SwitchToCanvas(second);
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_EQ(StackIndex(session, second, moved), 0);
+
+    ASSERT_TRUE(session.Undo().has_value()) << "the paste, again";
+    session.SwitchToCanvas(first);
+    const std::optional<Session::UndoStep> stroke = session.Undo();
+    ASSERT_TRUE(stroke.has_value());
+    EXPECT_EQ(stroke->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(ItemById(session.Manager(), moved)->strokes.empty());
+}
+
+// Sent back by an undo and changed where it landed, a snippet is not
+// pasted again: the change is newer than the paste's redo, and ends it -
+// as a new change ends any redo.
+TEST(SessionTest, ASnippetChangedAfterItsPasteWasUndoneIsNotPastedAgain) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId stays = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Stays");
+    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    DrawStrokeInto(session, stays);
+    const CanvasId second = session.AddCanvas("Second");
+    session.SwitchToCanvas(second);
+    session.Paste({moved}, /*cut=*/true);
+    ASSERT_TRUE(session.Undo().has_value());
+    ASSERT_TRUE(session.CanRedo());
+
+    session.SwitchToCanvas(first);
+    DrawStrokeInto(session, moved);
+    session.SwitchToCanvas(second);
+    EXPECT_FALSE(session.CanRedo());
+
+    session.SwitchToCanvas(first);
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_TRUE(ItemById(session.Manager(), moved)->strokes.empty()) << "the newest first";
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_TRUE(ItemById(session.Manager(), stays)->strokes.empty());
+}
+
+// The same when it is deleted, or moved on to a third canvas: whatever is
+// done to a snippet ends the redo of a paste of it.
+TEST(SessionTest, ASnippetDeletedOrMovedOnAfterItsPasteWasUndoneIsNotPastedAgain) {
+    for (const bool movedOn : {false, true}) {
+        SCOPED_TRACE(movedOn ? "moved on" : "deleted");
+        Session session;
+        const CanvasId first = session.Manager().CurrentCanvasId();
+        const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+        const CanvasId second = session.AddCanvas("Second");
+        const CanvasId third = session.AddCanvas("Third");
+        session.SwitchToCanvas(second);
+        session.Paste({moved}, /*cut=*/true);
+        ASSERT_TRUE(session.Undo().has_value());
+
+        if (movedOn) {
+            session.SwitchToCanvas(third);
+            ASSERT_EQ(session.Paste({moved}, /*cut=*/true).items.size(), 1u);
+        } else {
+            session.SwitchToCanvas(first);
+            ASSERT_TRUE(session.DeleteItem(moved));
+        }
+        session.SwitchToCanvas(second);
+        EXPECT_FALSE(session.CanRedo());
+        EXPECT_FALSE(session.Redo().has_value());
+    }
+}
+
+// Undone while the canvas it came from is deleted, a paste sends the
+// snippet back into that canvas all the same - where restoring the canvas
+// finds it - and says where it went. Redone, it comes out again.
+TEST(SessionTest, AnUndonePasteGoesBackIntoItsDeletedCanvas) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    const CanvasId second = session.AddCanvas("Second");
+    session.SwitchToCanvas(second);
+    session.Paste({moved}, /*cut=*/true);
+    ASSERT_TRUE(session.Delete(first));
+
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Paste);
+    EXPECT_EQ(undone->intoDeletedCanvas, first);
+    EXPECT_EQ(StackIndex(session, first, moved), 0);
+    EXPECT_TRUE(session.Manager().IsItemDeleted(moved)) << "with the canvas it is on";
+
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_EQ(StackIndex(session, second, moved), 0);
+    EXPECT_FALSE(session.Manager().IsItemDeleted(moved));
+}
+
+// The canvas a paste came from deleted for good: there is nowhere to send
+// the snippet back to, so the move is gone from the history at once - not
+// found out at the undo - and the snippet is this canvas's for good. The
+// undo reaches the step before.
+TEST(SessionTest, APasteFromACanvasDeletedForGoodIsNoLongerUndone) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    const CanvasId second = session.AddCanvas("Second");
+    session.SwitchToCanvas(second);
+    const ItemId made = session.CreateItem(false, Rect{0, 0, 100, 100}, "Made");
+    DrawStrokeInto(session, made);
+    session.Paste({moved}, /*cut=*/true);
+    ASSERT_TRUE(session.Delete(first));
+    ASSERT_TRUE(session.DeletePermanently(first));
+
+    const std::optional<Session::UndoStep> next = session.Undo();
+    ASSERT_TRUE(next.has_value());
+    EXPECT_EQ(next->what, Session::UndoWhat::Stroke);
+    EXPECT_EQ(StackIndex(session, second, moved), 1) << "still where it was pasted";
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_TRUE(session.Manager().IsItemDeleted(made));
+}
+
+// A snippet of a paste moved on elsewhere takes its part of the paste
+// with it; the rest of the paste is still one undo here.
+TEST(SessionTest, ASnippetMovedOnTakesItsPartOfAPaste) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId one = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "One");
+    const ItemId other = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Other");
+    const CanvasId second = session.AddCanvas("Second");
+    const CanvasId third = session.AddCanvas("Third");
+    session.SwitchToCanvas(second);
+    session.Paste({one, other}, /*cut=*/true);
+    session.SwitchToCanvas(third);
+    ASSERT_EQ(session.Paste({one}, /*cut=*/true).items.size(), 1u);
+    session.SwitchToCanvas(second);
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(StackIndex(session, first, other), 0) << "went back";
+    EXPECT_EQ(StackIndex(session, third, one), 0) << "its part is the third canvas's";
+    EXPECT_FALSE(session.CanUndo());
+
+    session.SwitchToCanvas(third);
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(StackIndex(session, second, one), 0);
+    session.SwitchToCanvas(second);
+    ASSERT_TRUE(session.Undo().has_value()) << "its part of the first paste came back with it";
+    EXPECT_EQ(StackIndex(session, first, one), 0);
+}
+
+// A text edit, a placement and a style edit are gestures, and the next
+// command of any other kind ends the one open - filed first, with what it
+// had come to - so that nothing is filed in the middle of one.
+TEST(SessionTest, TheNextCommandEndsTheGestureOpenAndFilesItFirst) {
+    Session session;
+    const ItemId note = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Note");
+    session.BeginTextEdit(note);
+    session.PreviewText("typed");
+    EXPECT_EQ(ItemById(session.Manager(), note)->noteText, "typed") << "the note is what has been typed";
+    DrawStrokeInto(session, note);
+    EXPECT_FALSE(session.TextEditItem().has_value()) << "ended by the stroke";
+
+    const std::optional<Session::UndoStep> stroke = session.Undo();
+    ASSERT_TRUE(stroke.has_value());
+    EXPECT_EQ(stroke->what, Session::UndoWhat::Stroke);
+    const std::optional<Session::UndoStep> text = session.Undo();
+    ASSERT_TRUE(text.has_value());
+    EXPECT_EQ(text->what, Session::UndoWhat::TextEdit);
+    EXPECT_EQ(ItemById(session.Manager(), note)->noteText, "");
+
+    session.BeginPlacement({note});
+    session.PreviewRect(note, Rect{40, 40, 100, 100});
+    ItemStyle style = ItemStyle::Of(*ItemById(session.Manager(), note));
+    style.foregroundOpacity = 0.5f;
+    session.PreviewStyle(note, style);
+    session.EndStyleEdit();
+    const std::optional<Session::UndoStep> styled = session.Undo();
+    ASSERT_TRUE(styled.has_value());
+    EXPECT_EQ(styled->what, Session::UndoWhat::Style);
+    const std::optional<Session::UndoStep> placed = session.Undo();
+    ASSERT_TRUE(placed.has_value());
+    EXPECT_EQ(placed->what, Session::UndoWhat::Placement) << "the drag, ended by the style edit";
+    EXPECT_EQ(ItemById(session.Manager(), note)->rect, (Rect{0, 0, 100, 100}));
+}
+
+// An undo ends the gesture open first, and then takes back what it was.
+TEST(SessionTest, AnUndoMidGestureTakesBackTheGesture) {
+    Session session;
+    const ItemId note = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Note");
+    session.BeginTextEdit(note);
+    session.PreviewText("typed");
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::TextEdit);
+    EXPECT_EQ(ItemById(session.Manager(), note)->noteText, "");
+    EXPECT_FALSE(session.TextEditItem().has_value());
+}
+
+// Style changes are on the history: a popover's edit is one step, and a
+// run of the opacity wheel merged into one goes back to where it began.
+TEST(SessionTest, StyleChangesAreUndone) {
+    Session session;
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemStyle start = ItemStyle::Of(*ItemById(session.Manager(), item));
+    for (const float opacity : {0.9f, 0.8f, 0.7f}) {
+        ItemStyle style = start;
+        style.foregroundOpacity = opacity;
+        ASSERT_TRUE(session.SetStyles({{item, style}}, /*merge=*/true));
+    }
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(ItemStyle::Of(*ItemById(session.Manager(), item)), start) << "the whole run";
+    EXPECT_FALSE(session.CanUndo());
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_FLOAT_EQ(ItemById(session.Manager(), item)->foregroundOpacity, 0.7f);
+}
+
+// An erase gesture that has lost track of which fragment stands for which
+// stroke still files what it did, as one replacement of the whole list:
+// the strokes never change behind the history's back.
+TEST(SessionTest, AnEraseThatLostTrackOfItsFragmentsIsStillUndoneExactly) {
+    Session session;
+    session.SyncItemsToDisplaySize(1000.0f, 1000.0f);
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawLineInto(session, item, 30.0f);
+    DrawLineInto(session, item, 60.0f);
+    const std::vector<Stroke> before = ItemById(session.Manager(), item)->strokes;
+    session.BeginErase(item, 50.0f, 30.0f, 10.0f);
+    // What only a bug could do mid-gesture: the strokes changed by
+    // something other than the eraser.
+    Model(session).FindItemAnywhere(item)->strokes.pop_back();
+    session.ExtendErase(50.0f, 30.0f, 10.0f);
+    session.EndErase();
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(ItemById(session.Manager(), item)->strokes, before);
+    ASSERT_TRUE(session.Undo().has_value()) << "and the strokes before it, as they were";
+    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f}));
 }
 
 }  // namespace

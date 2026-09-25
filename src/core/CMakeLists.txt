@@ -20,11 +20,11 @@ add_library(sz_core STATIC
     drawing/stroke_smoothing.cpp
     persistence/image_codec.cpp
     persistence/library_store.cpp
+    session/history.cpp
     session/session.cpp
     session/session_edits.cpp
     session/session_shapes.cpp
     session/settings.cpp
-    session/undo_entry.cpp
     util/atomic_file.cpp
     util/timestamp_name.cpp
     util/uid.cpp

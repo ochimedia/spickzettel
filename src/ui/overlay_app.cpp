@@ -1308,8 +1308,8 @@ void OverlayApp::OnFrame(float deltaSeconds) {
         }
     }
 
-    // Ctrl+Z: take back the last drawing change or delete - see
-    // core/session/undo_entry.h for exactly what that covers. Gated on
+    // Ctrl+Z: take back the last change - see core/session/history.h for
+    // exactly what that covers. Gated on
     // !WantTextInput so it doesn't fight an in-progress rename field's
     // own built-in text-edit undo (ImGui::InputText already handles
     // Ctrl+Z there itself). And not under a panel, for the reason tool

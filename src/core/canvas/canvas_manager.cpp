@@ -686,11 +686,32 @@ ItemId CanvasManager::PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool
     if (source->id == targetCanvasId) {
         return id;  // already there: a move onto its own canvas moves nothing
     }
-    const size_t to = std::min(atIndex.value_or(targetIt->items.size()), targetIt->items.size());
-    targetIt->items.insert(targetIt->items.begin() + static_cast<long>(to), std::move(source->items[at]));
-    source->items.erase(source->items.begin() + static_cast<long>(at));
-    MarkChanged();
+    MoveItem(id, targetCanvasId, atIndex);
     return id;
+}
+
+bool CanvasManager::MoveItem(ItemId id, CanvasId targetCanvasId, std::optional<size_t> atIndex) {
+    const auto targetIt = std::find_if(canvases_.begin(), canvases_.end(),
+                                       [targetCanvasId](const Canvas& c) { return c.id == targetCanvasId; });
+    if (targetIt == canvases_.end()) {
+        return false;
+    }
+    for (Canvas& source : canvases_) {
+        const std::optional<size_t> at = IndexOfItemOnCanvas(source, id);
+        if (!at.has_value()) {
+            continue;
+        }
+        if (source.id == targetCanvasId) {
+            return false;
+        }
+        Item moved = std::move(source.items[*at]);
+        source.items.erase(source.items.begin() + static_cast<long>(*at));
+        const size_t to = std::min(atIndex.value_or(targetIt->items.size()), targetIt->items.size());
+        targetIt->items.insert(targetIt->items.begin() + static_cast<long>(to), std::move(moved));
+        MarkChanged();
+        return true;
+    }
+    return false;
 }
 
 ItemId CanvasManager::MoveOrCopyItemToCanvas(ItemId id, CanvasId targetCanvasId, bool copy) {

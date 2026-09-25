@@ -391,7 +391,7 @@ void OverlayApp::NudgeSelection(float dx, float dy) {
                                                         item->rect.h},
                                                    display.x, display.y));
     }
-    RecordPlacementBurst(PlacementBurst::Nudge, rects);
+    RecordPlacementBurst(Burst::Nudge, rects);
 }
 
 // Escape puts the hand down, in stages: a creation tool in hand goes
@@ -491,6 +491,16 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // happened to be hovered last.
     debugHoveredResizeHandle_.clear();
 
+    // A note edit ended by a command from elsewhere - the session ends
+    // whatever gesture is open before any other (see
+    // Session::EndOpenGesture) - has its editor put away with it, rather
+    // than typing on into an edit that is over.
+    if (editingNoteItemId_.has_value() && session_.TextEditItem() != editingNoteItemId_) {
+        editingNoteItemId_.reset();
+        if (window_) {
+            window_->ReleaseTextInput();
+        }
+    }
     const Canvas* canvasPtr = Manager().CurrentOrNull();
     if (!canvasPtr) {
         return;  // no canvas, so no items to render
@@ -1174,8 +1184,14 @@ void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     // the resize callback - what ImGui's misc/cpp/imgui_stdlib does, done
     // here so the std::string is the buffer rather than a fixed array that
     // would cut a long note off at its end.
-    ImGui::InputTextMultiline("##notetext", noteEditBuffer_.data(), noteEditBuffer_.capacity() + 1, avail,
-                              ImGuiInputTextFlags_CallbackResize, &ResizeStringForInputText, &noteEditBuffer_);
+    const bool typed =
+        ImGui::InputTextMultiline("##notetext", noteEditBuffer_.data(), noteEditBuffer_.capacity() + 1, avail,
+                                  ImGuiInputTextFlags_CallbackResize, &ResizeStringForInputText, &noteEditBuffer_);
+    if (typed) {
+        // The note is what has been typed so far - see
+        // Session::PreviewText - so that whatever ends the edit keeps it.
+        session_.PreviewText(noteEditBuffer_);
+    }
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
     if (ImGui::IsItemDeactivated()) {

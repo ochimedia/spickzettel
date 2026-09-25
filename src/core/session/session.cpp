@@ -250,15 +250,20 @@ void Session::SwitchToCanvas(CanvasId id) {
     if (id == Model().CurrentCanvasId()) {
         return;
     }
+    EndOpenGesture();
     Model().SwitchToCanvas(id);
     if (Model().CurrentCanvasId() == id) {
         liveLayer_.Clear();
     }
 }
 
-void Session::SwitchToFolder(FolderId id) { Model().SwitchToFolder(id); }
+void Session::SwitchToFolder(FolderId id) {
+    EndOpenGesture();
+    Model().SwitchToFolder(id);
+}
 
 CanvasId Session::AddCanvas(std::string name) {
+    EndOpenGesture();
     const CanvasId before = Model().CurrentCanvasId();
     const CanvasId id = Model().AddCanvas(std::move(name));
     // The first canvas of an empty library is current as it is made.
@@ -268,21 +273,38 @@ CanvasId Session::AddCanvas(std::string name) {
     return id;
 }
 
-FolderId Session::AddFolder(std::string name) { return Model().AddFolder(std::move(name)); }
+FolderId Session::AddFolder(std::string name) {
+    EndOpenGesture();
+    return Model().AddFolder(std::move(name));
+}
 
-void Session::RenameFolder(FolderId id, std::string name) { Model().RenameFolder(id, std::move(name)); }
+void Session::RenameFolder(FolderId id, std::string name) {
+    EndOpenGesture();
+    Model().RenameFolder(id, std::move(name));
+}
 
-void Session::RenameCanvas(CanvasId id, std::string name) { Model().RenameCanvas(id, std::move(name)); }
+void Session::RenameCanvas(CanvasId id, std::string name) {
+    EndOpenGesture();
+    Model().RenameCanvas(id, std::move(name));
+}
 
-void Session::ReorderFolder(FolderId id, size_t newIndex) { Model().ReorderFolder(id, newIndex); }
+void Session::ReorderFolder(FolderId id, size_t newIndex) {
+    EndOpenGesture();
+    Model().ReorderFolder(id, newIndex);
+}
 
-void Session::ReorderCanvas(CanvasId id, size_t newIndex) { Model().ReorderCanvas(id, newIndex); }
+void Session::ReorderCanvas(CanvasId id, size_t newIndex) {
+    EndOpenGesture();
+    Model().ReorderCanvas(id, newIndex);
+}
 
 void Session::MoveCanvasToFolder(CanvasId canvasId, FolderId folderId) {
+    EndOpenGesture();
     Model().MoveCanvasToFolder(canvasId, folderId);
 }
 
 void Session::SetPinned(const std::vector<ItemId>& ids, bool pinned) {
+    EndOpenGesture();
     bool changed = false;
     for (const ItemId id : ids) {
         if (Item* item = Model().FindItemAnywhere(id); item != nullptr && item->pinned != pinned) {
@@ -296,6 +318,7 @@ void Session::SetPinned(const std::vector<ItemId>& ids, bool pinned) {
 }
 
 void Session::SetMinimized(const std::vector<ItemId>& ids, bool minimized) {
+    EndOpenGesture();
     bool changed = false;
     for (const ItemId id : ids) {
         if (Item* item = Model().FindItemAnywhere(id); item != nullptr && item->minimized != minimized) {
@@ -308,9 +331,15 @@ void Session::SetMinimized(const std::vector<ItemId>& ids, bool minimized) {
     }
 }
 
-void Session::BringItemsToFront(const std::vector<ItemId>& ids) { Model().BringItemsToFront(ids); }
+void Session::BringItemsToFront(const std::vector<ItemId>& ids) {
+    EndOpenGesture();
+    Model().BringItemsToFront(ids);
+}
 
-void Session::MoveItemLayer(ItemId id, int direction) { Model().MoveItemLayer(id, direction); }
+void Session::MoveItemLayer(ItemId id, int direction) {
+    EndOpenGesture();
+    Model().MoveItemLayer(id, direction);
+}
 
 void Session::SyncItemsToDisplaySize(float width, float height) { Model().SyncItemsToDisplaySize(width, height); }
 
@@ -329,7 +358,9 @@ void Session::ImportLibrary(CanvasManagerSnapshot snapshot) {
 }
 
 bool Session::Delete(uint64_t id) {
-    if (!Model().MarkDeleted(id, static_cast<int64_t>(std::time(nullptr)))) {
+    EndOpenGesture();
+    if ((Model().FindFolder(id) == nullptr && Model().FindCanvas(id) == nullptr) ||
+        !Model().MarkDeleted(id, static_cast<int64_t>(std::time(nullptr)))) {
         return false;
     }
     // Hidden now - and what leaves the screen gives its pictures back in the
@@ -340,7 +371,8 @@ bool Session::Delete(uint64_t id) {
 }
 
 bool Session::Restore(uint64_t id) {
-    if (!Model().Restore(id)) {
+    EndOpenGesture();
+    if ((Model().FindFolder(id) == nullptr && Model().FindCanvas(id) == nullptr) || !Model().Restore(id)) {
         return false;
     }
     SyncTexturesToCurrentCanvas();
@@ -348,6 +380,7 @@ bool Session::Restore(uint64_t id) {
 }
 
 bool Session::DeletePermanently(uint64_t id) {
+    EndOpenGesture();
     if (!Erase(id)) {
         return false;
     }
@@ -360,26 +393,25 @@ bool Session::DeletePermanently(uint64_t id) {
 
 bool Session::Erase(uint64_t id) {
     CanvasManager& manager = Model();
-    // What goes with it: the textures of every snippet under it, and the
-    // history of every canvas - or, for a lone snippet, its own entries on
-    // its canvas's history, and nothing else of that canvas's. The library
-    // loses it at the next save, which writes what the model holds.
+    // What goes with it: the textures of every snippet under it, and every
+    // change about any of them on any canvas's history, with the stacks of
+    // every canvas that goes and every move from or to one (see
+    // history::History::ForgetCanvas). The library loses it at the next
+    // save, which writes what the model holds.
     const bool isFolder = manager.FindFolder(id) != nullptr;
     bool found = isFolder;
     for (Canvas& canvas : manager.CanvasesMutable()) {
         const bool wholeCanvas = canvas.id == id || (isFolder && canvas.folderId == id);
         if (wholeCanvas) {
             found = true;
-            DropHistoryOfCanvas(canvas.id);
+            history_.ForgetCanvas(canvas.id);
         }
         for (Item& item : canvas.items) {
             if (!wholeCanvas && item.id != id) {
                 continue;
             }
             found = true;
-            if (!wholeCanvas) {
-                ForgetHistoryOfItem(canvas.id, item.id);
-            }
+            history_.ForgetItem(item.id);
             if (item.picture.textureHandle != 0 && window_) {
                 window_->ReleaseTexture(item.picture.textureHandle);
             }
@@ -390,6 +422,7 @@ bool Session::Erase(uint64_t id) {
 }
 
 bool Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
+    EndOpenGesture();
     bool any = false;
     for (const CanvasId id : Model().MarkedCanvasesIn(folderId)) {
         any = Erase(id) || any;
