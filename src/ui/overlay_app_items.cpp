@@ -366,11 +366,6 @@ void OverlayApp::AddTouchedToSelection(const Rect& box) {
 }
 
 void OverlayApp::DeleteSelection() {
-    // Delete pressed mid-drag: the drag stops where it is, rather than go
-    // on moving a snippet nobody can see and file that move after the
-    // delete - an undo that visibly did nothing, and a snippet restored
-    // wherever the hand happened to let go. See SettleHand.
-    SettleHand();
     // A copy: deleting clears nothing itself, but the toast and the
     // session are free to look at the selection while this runs.
     const std::vector<ItemId> doomed = selection_;
@@ -379,10 +374,6 @@ void OverlayApp::DeleteSelection() {
 }
 
 void OverlayApp::NudgeSelection(float dx, float dy) {
-    // Mid-drag, the drag ends where it is and the nudge is a step after it
-    // (see SettleHand). Filed inside it, the nudge would be undone to a
-    // place the drag had since left.
-    SettleHand();
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     // A run of presses - or a key held down, repeating - is one undo, back
     // to where the run began.
@@ -398,73 +389,6 @@ void OverlayApp::NudgeSelection(float dx, float dy) {
                                                    display.x, display.y));
     }
     RecordPlacementBurst(Burst::Nudge, rects);
-}
-
-// Escape puts the hand down, in stages: a creation tool in hand goes
-// back to Select, the hand at rest (see the
-// Tool enum), then drawing mode ends, then a cut waiting to be pasted is
-// called off, then a selection clears. An open
-// popover - the color chooser, a snippet's properties - closes first and
-// takes the press. Not while typing, where Escape is the field's, and not
-// while a panel is up - the Overview, the cheat sheet - which closes its
-// own. The same gates hold for
-// Delete and the
-// arrows: a note being typed into keeps its own Delete and Backspace - and
-// in drawing mode neither acts on the snippet, which is being worked in,
-// not on.
-void OverlayApp::HandleSelectionKeys() {
-    const ImGuiIO& io = ImGui::GetIO();
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !io.WantTextInput && !PanelOpen() && CloseTopmostPopover()) {
-        return;
-    }
-    const bool keysFree = !io.WantTextInput && !PanelOpen() && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && keysFree) {
-        // A command, so the hand is settled first (see SettleHand) - which
-        // calls off a hold in progress too, which maturing would otherwise
-        // select again what Escape just let go of.
-        SettleHand();
-        if (CreationKindFor(activeTool_).has_value()) {
-            PickTool(Tool::Select);
-        } else if (drawingItem_.has_value()) {
-            ExitDrawingMode();
-        } else if (clipboardIsCut_ && !clipboard_.empty()) {
-            // Never mind the cut: the snippets are still where they were,
-            // so this only has to stop them waiting to be moved - the
-            // selection they are part of is the next press of Escape's.
-            clipboard_.clear();
-            clipboardIsCut_ = false;
-        } else if (!selection_.empty()) {
-            ClearSelection();
-        }
-    }
-    if (!keysFree || selection_.empty() || drawingItem_.has_value()) {
-        return;
-    }
-    if (ImGui::IsKeyPressed(ImGuiKey_Delete, /*repeat=*/false) ||
-        ImGui::IsKeyPressed(ImGuiKey_Backspace, /*repeat=*/false)) {
-        DeleteSelection();
-        return;
-    }
-    // A pixel a press, ten with Shift - the way every drawing program
-    // nudges - and repeating while held.
-    const float step = io.KeyShift ? 10.0f : 1.0f;
-    float dx = 0.0f;
-    float dy = 0.0f;
-    if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
-        dx -= step;
-    }
-    if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
-        dx += step;
-    }
-    if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
-        dy -= step;
-    }
-    if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
-        dy += step;
-    }
-    if (dx != 0.0f || dy != 0.0f) {
-        NudgeSelection(dx, dy);
-    }
 }
 
 std::optional<ImVec2> OverlayApp::SelectionBarButtonCenter(ChromeButton button) const {
@@ -1005,91 +929,29 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
 }
 
 // What a selection bar button does, on the release that completes its
-// press (see HandleItemGesture). Runs from the raw mouse pipeline, between
-// frames, so nothing here has to be deferred past an item loop that is
-// iterating canvas.items by index.
+// press (see HandleItemGesture): its command, about the snippet selected
+// last. Runs from the raw mouse pipeline, between frames, so nothing here
+// has to be deferred past an item loop that is iterating canvas.items by
+// index.
 void OverlayApp::ActivateBarButton(ChromeButton button) {
     const std::optional<ItemId> primaryId = PrimarySelection();
     if (!primaryId.has_value()) {
         return;
     }
-    switch (button) {
-        case ChromeButton::Close:
-            DeleteSelection();
-            break;
-        case ChromeButton::Maximize:
-            ToggleFullscreenUndoably(*primaryId, /*stretch=*/false);
-            break;
-        case ChromeButton::Minimize:
-            session_.SetMinimized(selection_, true);
-            // Off the screen, so out of the selection - PruneSelection would
-            // do it next frame; doing it now keeps the bar from showing
-            // over nothing for a frame.
-            ClearSelection();
-            break;
-        case ChromeButton::Pin: {
-            // Nothing happens on screen until the overlay is put away - see
-            // TrayController::PutAway, which is where a pin is acted on.
-            // Not an undo step, the same as Minimize: it changes where the
-            // snippet is shown, not what it holds. One press pins the whole
-            // selection, or unpins it when every one of it is pinned.
-            bool allPinned = true;
-            for (const ItemId id : selection_) {
-                const Item* item = Manager().FindItemAnywhere(id);
-                allPinned = allPinned && item != nullptr && item->pinned;
-            }
-            session_.SetPinned(selection_, !allPinned);
-            break;
-        }
-        case ChromeButton::More: {
-            // A request flag rather than ImGui::OpenPopup directly - see
-            // colorChooserRequested_'s own doc comment: this runs outside
-            // any frame, with no current window for a popup to be scoped
-            // to.
-            itemPropertiesPopoverItemId_ = primaryId;
-            itemPropertiesPopoverRequested_ = true;
-            // The button's own bottom-right corner, a little below it -
+    Command command{CommandForBarButton(button), *primaryId};
+    if (const std::optional<ImVec2> center = SelectionBarButtonCenter(button)) {
+        if (button == ChromeButton::More) {
+            // The popover opens below the button's bottom-right corner,
             // paired with the pivot RenderItemPropertiesPopover opens with,
-            // so the popover's right edge (not its left) tracks this point
-            // regardless of how wide it ends up being, since the bar can
-            // sit near the screen's right edge.
-            if (const std::optional<ImVec2> center = SelectionBarButtonCenter(ChromeButton::More)) {
-                itemPropertiesPopoverAnchor_ =
-                    ImVec2(center->x + Px(kBarButtonSize) * 0.5f, center->y + Px(kBarButtonSize) * 0.5f + Px(6.0f));
-            }
-            break;
+            // so its right edge (not its left) tracks this point however
+            // wide it ends up - the bar can sit near the screen's right edge.
+            command.at = platform::Vec2{center->x + Px(kBarButtonSize) * 0.5f,
+                                        center->y + Px(kBarButtonSize) * 0.5f + Px(6.0f)};
+        } else {
+            command.at = platform::Vec2{center->x, center->y};
         }
-        // The drawing bar: the tool to draw with, and the color. The tool
-        // already in hand is cycled through its shapes instead - pen, line,
-        // rectangle; eraser, rectangle eraser - so a plain drag makes them,
-        // for a hand with no modifier key to hold (see penShape_).
-        case ChromeButton::Pen:
-            if (activeTool_ != Tool::Draw) {
-                PickTool(Tool::Draw);
-            } else {
-                penShape_ = penShape_ == DrawShape::Freehand ? DrawShape::Line
-                            : penShape_ == DrawShape::Line   ? DrawShape::Rectangle
-                                                             : DrawShape::Freehand;
-            }
-            break;
-        case ChromeButton::Eraser:
-            if (activeTool_ != Tool::Erase) {
-                PickTool(Tool::Erase);
-            } else {
-                eraserShape_ = eraserShape_ == DrawShape::Rectangle ? DrawShape::Freehand : DrawShape::Rectangle;
-            }
-            break;
-        case ChromeButton::Text:
-            PickTool(Tool::Text);
-            break;
-        case ChromeButton::Color:
-            // The chooser opens next to the button - asked for here, opened
-            // on the next frame (see OpenColorChooser).
-            if (const std::optional<ImVec2> center = SelectionBarButtonCenter(ChromeButton::Color)) {
-                OpenColorChooser(*center);
-            }
-            break;
     }
+    Dispatch(command);
 }
 
 // Which edges the handle moves - a corner two, an edge one.

@@ -104,15 +104,16 @@ bool TrayController::Initialize() {
             unregisteredHotkeys_.emplace_back(slot, combo);
         }
     };
-    editHotkeyId_ = host_.RegisterGlobalHotkey(settings_.Stored().hotkeyEditMode, [this]() { OnEditHotkey(); });
+    const auto hotkey = [this](HotkeySlot slot) { return [this, slot]() { OnHotkey(slot); }; };
+    editHotkeyId_ = host_.RegisterGlobalHotkey(settings_.Stored().hotkeyEditMode, hotkey(HotkeySlot::EditMode));
     note(HotkeySlot::EditMode, settings_.Stored().hotkeyEditMode, editHotkeyId_);
-    viewHotkeyId_ = host_.RegisterGlobalHotkey(settings_.Stored().hotkeyViewMode, [this]() { OnViewHotkey(); });
+    viewHotkeyId_ = host_.RegisterGlobalHotkey(settings_.Stored().hotkeyViewMode, hotkey(HotkeySlot::ViewMode));
     note(HotkeySlot::ViewMode, settings_.Stored().hotkeyViewMode, viewHotkeyId_);
     quickCaptureHotkeyId_ =
-        host_.RegisterGlobalHotkey(settings_.Stored().hotkeyQuickCapture, [this]() { OnQuickCaptureHotkey(); });
+        host_.RegisterGlobalHotkey(settings_.Stored().hotkeyQuickCapture, hotkey(HotkeySlot::QuickCapture));
     note(HotkeySlot::QuickCapture, settings_.Stored().hotkeyQuickCapture, quickCaptureHotkeyId_);
     silentCaptureHotkeyId_ =
-        host_.RegisterGlobalHotkey(settings_.Stored().hotkeySilentCapture, [this]() { OnSilentCaptureHotkey(); });
+        host_.RegisterGlobalHotkey(settings_.Stored().hotkeySilentCapture, hotkey(HotkeySlot::SilentCapture));
     note(HotkeySlot::SilentCapture, settings_.Stored().hotkeySilentCapture, silentCaptureHotkeyId_);
 
     session_.AttachWindow(&host_.GetOverlayWindow());
@@ -126,6 +127,7 @@ bool TrayController::Initialize() {
     overlayApp_.SetRestartOverlayCallback([this] { RestartOverlay(); });
     overlayApp_.SetDisplayListCallback([this] { return host_.ListDisplays(); });
     overlayApp_.SetNoticeFinishedCallback([this] { HideNoticeIfDone(); });
+    overlayApp_.SetAppCommandCallback([this](CommandId id) { RunAppCommand(id); });
 
     // Empty path means "this host has nowhere to persist to" (e.g. a
     // FakePlatformHost in a test that hasn't opted in) - leave the
@@ -191,24 +193,38 @@ bool TrayController::CompletesAHotkeyCapture(const platform::KeyCombo& combo) {
     return true;
 }
 
-void TrayController::OnEditHotkey() {
-    if (CompletesAHotkeyCapture(settings_.Stored().hotkeyEditMode)) {
+void TrayController::OnHotkey(HotkeySlot slot) {
+    if (CompletesAHotkeyCapture(HotkeyCombo(settings_.Stored(), slot))) {
         return;
     }
-    ToggleMode(/*viewOnly=*/false);
+    // A command like any other, and dispatched like one: the overlay ends
+    // what the hand is doing first, then hands it back here (see
+    // RunAppCommand).
+    if (const std::optional<CommandId> command = CommandForHotkey(slot)) {
+        overlayApp_.Dispatch(Command{*command});
+    }
 }
 
-void TrayController::OnViewHotkey() {
-    if (CompletesAHotkeyCapture(settings_.Stored().hotkeyViewMode)) {
-        return;
+void TrayController::RunAppCommand(CommandId id) {
+    switch (id) {
+        case CommandId::ToggleEditMode:
+            ToggleMode(/*viewOnly=*/false);
+            return;
+        case CommandId::ToggleViewMode:
+            ToggleMode(/*viewOnly=*/true);
+            return;
+        case CommandId::QuickCapture:
+            QuickCaptureAndShow();
+            return;
+        case CommandId::SilentCapture:
+            SilentCapture();
+            return;
+        default:
+            return;  // the overlay's own, which never come here
     }
-    ToggleMode(/*viewOnly=*/true);
 }
 
-void TrayController::OnQuickCaptureHotkey() {
-    if (CompletesAHotkeyCapture(settings_.Stored().hotkeyQuickCapture)) {
-        return;
-    }
+void TrayController::QuickCaptureAndShow() {
     // Idempotent and invisible if already created (see EnsureCreated's own
     // contract) - critically, this doesn't call Show() itself, so the
     // capture below happens against whatever was on screen before this
@@ -225,10 +241,7 @@ void TrayController::OnQuickCaptureHotkey() {
     EnsureMode(/*viewOnly=*/false);
 }
 
-void TrayController::OnSilentCaptureHotkey() {
-    if (CompletesAHotkeyCapture(settings_.Stored().hotkeySilentCapture)) {
-        return;
-    }
+void TrayController::SilentCapture() {
     platform::IOverlayWindow& window = host_.GetOverlayWindow();
     // Same first step as the loud capture: create the window if it has
     // never been created, without showing it, so the capture below is of
@@ -597,12 +610,14 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
         platform::HotkeyCallback callback;
     };
     const HotkeyRow rows[] = {
-        {HotkeySlot::EditMode, &editHotkeyId_, &settings_.Mutable().hotkeyEditMode, [this] { OnEditHotkey(); }},
-        {HotkeySlot::ViewMode, &viewHotkeyId_, &settings_.Mutable().hotkeyViewMode, [this] { OnViewHotkey(); }},
+        {HotkeySlot::EditMode, &editHotkeyId_, &settings_.Mutable().hotkeyEditMode,
+         [this] { OnHotkey(HotkeySlot::EditMode); }},
+        {HotkeySlot::ViewMode, &viewHotkeyId_, &settings_.Mutable().hotkeyViewMode,
+         [this] { OnHotkey(HotkeySlot::ViewMode); }},
         {HotkeySlot::QuickCapture, &quickCaptureHotkeyId_, &settings_.Mutable().hotkeyQuickCapture,
-         [this] { OnQuickCaptureHotkey(); }},
+         [this] { OnHotkey(HotkeySlot::QuickCapture); }},
         {HotkeySlot::SilentCapture, &silentCaptureHotkeyId_, &settings_.Mutable().hotkeySilentCapture,
-         [this] { OnSilentCaptureHotkey(); }},
+         [this] { OnHotkey(HotkeySlot::SilentCapture); }},
     };
 
     int* hotkeyId = nullptr;
@@ -669,9 +684,10 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
 void TrayController::OnTrayCommand(platform::TrayCommand command) {
     switch (command) {
         case platform::TrayCommand::ToggleOverlay:
-            // Not OnEditHotkey: a click in the tray menu is no key press, so
-            // it completes no hotkey capture.
-            ToggleMode(/*viewOnly=*/false);
+            // The edit hotkey's command, but not through OnHotkey: a click in
+            // the tray menu is no key press, so it completes no hotkey
+            // capture.
+            overlayApp_.Dispatch(Command{CommandId::ToggleEditMode});
             break;
         case platform::TrayCommand::Exit:
             SettleForExit();

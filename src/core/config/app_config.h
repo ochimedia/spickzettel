@@ -70,7 +70,7 @@ struct AppConfig {
     // capture itself happens first, while the window is still in
     // whatever state it was in, so the screenshot is never of the
     // overlay's own edit-mode UI. See OverlayApp::QuickCapture and
-    // TrayController::OnQuickCaptureHotkey.
+    // TrayController::QuickCaptureAndShow.
     platform::KeyCombo hotkeyQuickCapture{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'C'};
     // The same capture, onto the same kind of canvas of its own, without
     // the overlay coming up: press it, keep working, and the shot is
@@ -78,7 +78,7 @@ struct AppConfig {
     // does differently is show you the result.
     //
     // Not silent to the point of saying nothing, though - see
-    // showToastsWhileHidden, and TrayController::OnSilentCaptureHotkey for
+    // showToastsWhileHidden, and TrayController::SilentCapture for
     // how a message reaches the screen with no overlay behind it.
     //
     // The one hotkey whose registration is allowed to fail: the other

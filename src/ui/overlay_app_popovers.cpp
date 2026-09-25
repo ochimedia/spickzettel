@@ -326,7 +326,13 @@ void OverlayApp::RenderItemContextMenu() {
         }
     });
     if (chosen.has_value()) {
-        RunItemMenuAction(static_cast<ItemMenuAction>(*chosen), *itemContextMenuItemId_);
+        // Fullscreen with Shift held stretches to the screen rather than
+        // keeping the snippet's shape - the row's other half.
+        CommandId id = static_cast<CommandId>(*chosen);
+        if (id == CommandId::ToggleFullscreen && ImGui::GetIO().KeyShift) {
+            id = CommandId::ToggleFullscreenStretched;
+        }
+        Dispatch(Command{id, *itemContextMenuItemId_});
     }
     if (!itemContextMenu_.IsOpen()) {
         itemContextMenuItemId_.reset();
@@ -334,109 +340,41 @@ void OverlayApp::RenderItemContextMenu() {
 }
 
 void OverlayApp::BuildItemContextMenuRows(const Item& item, std::vector<ContextMenuEntry>& rows) {
-    const ItemId itemId = item.id;
-    const bool nothingToClear = item.strokes.empty();
-
-    // By value rather than by reference into `rows`: a push_back that
-    // reallocates would leave a reference handed back from an earlier one
-    // dangling, and a menu is exactly the kind of list that grows a row.
-    const auto add = [&rows](ItemMenuAction action, const char* id, const Icon& icon, const char* label,
-                              bool enabled = true, std::string shortcut = {}, bool separatorAbove = false) {
-        rows.push_back(ContextMenuEntry{static_cast<int>(action), id, &icon, label, std::move(shortcut), enabled,
-                                         separatorAbove});
+    const auto add = [&](CommandId id, const char* widgetId, const Icon& icon, const char* label,
+                         bool separatorAbove = false) {
+        rows.push_back(MenuRow(Command{id, item.id}, widgetId, &icon, label, separatorAbove));
     };
 
     // Size first, then what is on the snippet, then where it lives - the
     // order the popover's own row of buttons is in, which is the order a
     // hand has already learned.
-    add(ItemMenuAction::ToggleFullscreen, "##menu_fullscreen",
-        item.isFullscreen ? icons::kRestore : icons::kMaximize,
+    add(CommandId::ToggleFullscreen, "##menu_fullscreen", item.isFullscreen ? icons::kRestore : icons::kMaximize,
         item.isFullscreen ? strings::kMenuRestoreSize : strings::kMenuFullscreen);
-    add(ItemMenuAction::ResetSize, "##menu_reset_size", icons::kTarget, strings::kMenuOriginalSize);
-    add(ItemMenuAction::ClearDrawing, "##menu_clear_drawing", icons::kEraser, strings::kMenuClearDrawing,
-        /*enabled=*/!nothingToClear);
+    add(CommandId::ResetSize, "##menu_reset_size", icons::kTarget, strings::kMenuOriginalSize);
+    add(CommandId::ClearDrawing, "##menu_clear_drawing", icons::kEraser, strings::kMenuClearDrawing);
 
     // Copy, Cut and Duplicate are the selection's, not this one snippet's.
     // A right-click has already made this snippet part of the selection
     // (see HandleItemGesture), so the two agree whenever only it is
     // selected, and where they differ the shortcut shown beside the row is
     // the honest answer: Ctrl+D does the whole selection, so the row that
-    // names Ctrl+D has to as well. Paste is empty canvas's (see
-    // BuildEmptyCanvasMenuRows): what it does has nothing to do with the
-    // snippet it would be opened over.
-    add(ItemMenuAction::Copy, "##menu_copy", icons::kCopy, strings::kMenuCopy, /*enabled=*/true,
-        MenuShortcutLabel(ShortcutAction::Copy), /*separatorAbove=*/true);
-    add(ItemMenuAction::Cut, "##menu_cut", icons::kScissors, strings::kMenuCut, /*enabled=*/true,
-        MenuShortcutLabel(ShortcutAction::Cut));
-    add(ItemMenuAction::Duplicate, "##menu_duplicate", icons::kCopy, strings::kMenuDuplicate, /*enabled=*/true,
-        MenuShortcutLabel(ShortcutAction::Duplicate));
-    // Disabled when nothing *overlapping* this snippet is in that
-    // direction, rather than at the ends of the stack - see
+    // names Ctrl+D has to as well - and does, being the same command. Paste
+    // is empty canvas's (see BuildEmptyCanvasMenuRows): what it does has
+    // nothing to do with the snippet it would be opened over.
+    add(CommandId::Copy, "##menu_copy", icons::kCopy, strings::kMenuCopy, /*separatorAbove=*/true);
+    add(CommandId::Cut, "##menu_cut", icons::kScissors, strings::kMenuCut);
+    add(CommandId::Duplicate, "##menu_duplicate", icons::kCopy, strings::kMenuDuplicate);
+    // Grayed when nothing *overlapping* this snippet is in that direction,
+    // rather than at the ends of the stack - see
     // CanvasManager::MoveItemLayer for why that is the useful rule.
-    add(ItemMenuAction::SendBackward, "##menu_send_backward", icons::kLayerDown, strings::kMenuSendBackward,
-        Manager().CanMoveItemLayer(itemId, -1));
-    add(ItemMenuAction::BringForward, "##menu_bring_forward", icons::kLayerUp, strings::kMenuBringForward,
-        Manager().CanMoveItemLayer(itemId, 1));
+    add(CommandId::SendBackward, "##menu_send_backward", icons::kLayerDown, strings::kMenuSendBackward);
+    add(CommandId::BringForward, "##menu_bring_forward", icons::kLayerUp, strings::kMenuBringForward);
 
-    // Somewhere to move it to: a canvas the picker shows, which a deleted
-    // one is not - counted, they opened a picker with nothing in it.
-    const CanvasId here = Manager().CurrentCanvasId();
-    const bool elsewhere = std::any_of(Manager().Canvases().begin(), Manager().Canvases().end(),
-                                       [&](const Canvas& c) { return c.id != here && !Manager().IsDeleted(c); });
-    add(ItemMenuAction::MoveToCanvas, "##menu_move_to_canvas", icons::kMove, strings::kMenuMoveToCanvas, elsewhere,
-        /*shortcut=*/{}, /*separatorAbove=*/true);
+    add(CommandId::MoveToCanvas, "##menu_move_to_canvas", icons::kMove, strings::kMenuMoveToCanvas,
+        /*separatorAbove=*/true);
     // The selection again, and for the same reason as Duplicate: this is
     // the row for the Ctrl+Shift+N beside it.
-    add(ItemMenuAction::MoveToNewCanvas, "##menu_move_to_new_canvas", icons::kPlus, strings::kMenuMoveToNewCanvas,
-        /*enabled=*/true, MenuShortcutLabel(ShortcutAction::NewCanvasWithSelection));
-}
-
-std::string OverlayApp::MenuShortcutLabel(ShortcutAction action) const {
-    // Live(), not Stored(): what is bound right now, profile and all, is
-    // what the row has to promise.
-    const platform::KeyCombo& combo = settings_.Live().shortcuts[ShortcutActionIndex(action)];
-    return combo.key == 0 ? std::string() : FormatKeyComboLabel(combo);
-}
-
-void OverlayApp::RunItemMenuAction(ItemMenuAction action, ItemId itemId) {
-    SettleHand();  // a command - see SettleHand
-    const ImGuiIO& io = ImGui::GetIO();
-    switch (action) {
-        case ItemMenuAction::ToggleFullscreen:
-            ToggleFullscreenUndoably(itemId, io.KeyShift);
-            return;
-        case ItemMenuAction::ResetSize:
-            ResetToNativeSizeUndoably(itemId);
-            return;
-        case ItemMenuAction::ClearDrawing:
-            ClearItemDrawing(itemId);
-            return;
-        case ItemMenuAction::Copy:
-            RunClipboardAction(ClipboardAction::Copy);
-            return;
-        case ItemMenuAction::Cut:
-            RunClipboardAction(ClipboardAction::Cut);
-            return;
-        case ItemMenuAction::Duplicate:
-            DuplicateSelection();
-            return;
-        case ItemMenuAction::SendBackward:
-            session_.MoveItemLayer(itemId, -1);
-            return;
-        case ItemMenuAction::BringForward:
-            session_.MoveItemLayer(itemId, 1);
-            return;
-        case ItemMenuAction::MoveToCanvas:
-            // Opens the Overview in picker mode to choose a destination -
-            // the menu has already closed itself by the time this runs (a
-            // chosen row closes the popup), so there is nothing left here
-            // to dismiss.
-            OpenPicker(itemId, /*isCopy=*/false);
-            return;
-        case ItemMenuAction::MoveToNewCanvas:
-            MoveSelectionToNewCanvas();
-            return;
-    }
+    add(CommandId::NewCanvasWithSelection, "##menu_move_to_new_canvas", icons::kPlus, strings::kMenuMoveToNewCanvas);
 }
 
 // ================= Empty canvas's context menu =================
@@ -447,75 +385,33 @@ void OverlayApp::RenderEmptyCanvasMenu() {
     const std::optional<int> chosen = emptyCanvasMenu_.Render(
         [&](std::vector<ContextMenuEntry>& rows) { BuildEmptyCanvasMenuRows(rows); });
     if (chosen.has_value()) {
-        RunEmptyCanvasMenuAction(static_cast<EmptyCanvasMenuAction>(*chosen));
+        Dispatch(Command{static_cast<CommandId>(*chosen)});
     }
 }
 
 void OverlayApp::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) const {
-    const auto add = [&rows](EmptyCanvasMenuAction action, const char* id, const Icon* icon, const char* label,
-                              bool enabled = true, std::string shortcut = {}, bool separatorAbove = false) {
-        rows.push_back(ContextMenuEntry{static_cast<int>(action), id, icon, label, std::move(shortcut), enabled,
-                                         separatorAbove});
+    const auto add = [&](CommandId id, const char* widgetId, const Icon* icon, const char* label,
+                         bool separatorAbove = false) {
+        rows.push_back(MenuRow(Command{id}, widgetId, icon, label, separatorAbove));
     };
     // Every way to make a snippet, whatever the left button has been set
     // to make on its own (see AppConfig::screenshotTrigger): the menu is
     // where the kind a press does not make is still one click away. The
-    // two "New" rows pick up the creation tool, as its key does, so the
-    // next press frames or places it; the fullscreen ones make it at once.
-    add(EmptyCanvasMenuAction::NewScreenshot, "##emptymenu_new_screenshot", &icons::kCamera,
-        strings::kMenuNewScreenshot, true, MenuShortcutLabel(ShortcutAction::NewScreenshot));
-    add(EmptyCanvasMenuAction::FullscreenScreenshot, "##emptymenu_fullscreen_screenshot", &icons::kMaximize,
+    // two "New" rows are the creation tools' keys, so the next press
+    // frames or places it; the fullscreen ones make it at once.
+    add(CommandId::NewScreenshotTool, "##emptymenu_new_screenshot", &icons::kCamera, strings::kMenuNewScreenshot);
+    add(CommandId::FullscreenScreenshot, "##emptymenu_fullscreen_screenshot", &icons::kMaximize,
         strings::kMenuFullscreenScreenshot);
-    add(EmptyCanvasMenuAction::NewDrawing, "##emptymenu_new_drawing", &icons::kPen, strings::kMenuNewDrawing, true,
-        MenuShortcutLabel(ShortcutAction::NewDrawing));
-    add(EmptyCanvasMenuAction::FullscreenDrawing, "##emptymenu_fullscreen_drawing", &icons::kMaximize,
+    add(CommandId::NewDrawingTool, "##emptymenu_new_drawing", &icons::kPen, strings::kMenuNewDrawing);
+    add(CommandId::FullscreenDrawing, "##emptymenu_fullscreen_drawing", &icons::kMaximize,
         strings::kMenuFullscreenDrawing);
 
-    add(EmptyCanvasMenuAction::Paste, "##emptymenu_paste", &icons::kClipboard, strings::kMenuPaste,
-        /*enabled=*/!clipboard_.empty(), MenuShortcutLabel(ShortcutAction::Paste), /*separatorAbove=*/true);
+    add(CommandId::Paste, "##emptymenu_paste", &icons::kClipboard, strings::kMenuPaste, /*separatorAbove=*/true);
 
-    add(EmptyCanvasMenuAction::Overview, "##emptymenu_overview", &icons::kLayoutGrid, strings::kMenuOverview, true,
-        {}, /*separatorAbove=*/true);
-    add(EmptyCanvasMenuAction::Settings, "##emptymenu_settings", nullptr, strings::kMenuSettings);
-    add(EmptyCanvasMenuAction::CheatSheet, "##emptymenu_cheat_sheet", &icons::kKeyboard, strings::kMenuCheatSheet, true,
-        MenuShortcutLabel(ShortcutAction::CheatSheet));
-}
-
-void OverlayApp::RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action) {
-    SettleHand();  // a command - see SettleHand
-    const ImGuiIO& io = ImGui::GetIO();
-    switch (action) {
-        case EmptyCanvasMenuAction::NewScreenshot:
-            PickTool(Tool::NewScreenshot);
-            return;
-        case EmptyCanvasMenuAction::NewDrawing:
-            PickTool(Tool::NewDrawing);
-            return;
-        case EmptyCanvasMenuAction::FullscreenScreenshot:
-            // The menu is gone by now, and was never in the picture anyway:
-            // a capture leaves the overlay's own window out (see
-            // IOverlayWindow::CaptureRegion).
-            CreateFullscreenItem(ItemCreationKind::Screenshot, io.DisplaySize.x, io.DisplaySize.y);
-            return;
-        case EmptyCanvasMenuAction::FullscreenDrawing:
-            // Asked for, so not watched as a stray the way a double-click's
-            // is (see untouchedDrawing_) - as with a creation tool.
-            CreateFullscreenItem(ItemCreationKind::Drawing, io.DisplaySize.x, io.DisplaySize.y);
-            return;
-        case EmptyCanvasMenuAction::Paste:
-            PasteFromClipboard();
-            return;
-        case EmptyCanvasMenuAction::Overview:
-            OpenOverview();
-            return;
-        case EmptyCanvasMenuAction::Settings:
-            OpenOverview();
-            SwitchOverviewTab(OverviewTab::Settings);
-            return;
-        case EmptyCanvasMenuAction::CheatSheet:
-            cheatSheetOpen_ = true;
-            return;
-    }
+    add(CommandId::Overview, "##emptymenu_overview", &icons::kLayoutGrid, strings::kMenuOverview,
+        /*separatorAbove=*/true);
+    add(CommandId::Settings, "##emptymenu_settings", nullptr, strings::kMenuSettings);
+    add(CommandId::CheatSheet, "##emptymenu_cheat_sheet", &icons::kKeyboard, strings::kMenuCheatSheet);
 }
 
 // ================= The color chooser =================

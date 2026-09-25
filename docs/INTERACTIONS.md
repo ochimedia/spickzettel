@@ -250,7 +250,7 @@ Escape passing down the stack when the top has nothing to cancel gives
 today's staged Escape for free: a spent button passes; a popup closes;
 then drawing mode ends or the creation tool goes down; then the Canvas
 level calls off a cut, then clears the selection. Today that order is an
-`if` chain in `HandleSelectionKeys` plus `CloseTopmostPopover`.
+`if` chain in `PutDown` plus `CloseTopmostPopover`.
 
 ## 6. Recognizing a press
 
@@ -486,7 +486,7 @@ each.
 3. **The stack.** Levels, routing, Pending, Spent, the recognizer's rules,
    the interactions one kind at a time, cancel on the session side,
    `Editor` split out. This is where the changes marked **Change** land,
-   and where Escape starts cancelling. `Hand`, `HandleSelectionKeys`'s
+   and where Escape starts cancelling. `Hand`, `PutDown`'s
    chain, `CloseTopmostPopover`, `noteOpenAtPress`, the gates in 7 and the
    gesture half of `OnMouse` go.
 4. **Bursts.** The nudge and the wheel as interactions; `kBurstSeconds`,

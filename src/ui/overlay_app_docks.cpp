@@ -375,7 +375,9 @@ void OverlayApp::RenderCanvasContextMenu() {
         }
     });
     if (chosen.has_value()) {
-        RunCanvasMenuAction(static_cast<CanvasMenuAction>(*chosen), *canvasContextMenuCanvasId_);
+        Command command{static_cast<CommandId>(*chosen)};
+        command.canvas = *canvasContextMenuCanvasId_;
+        Dispatch(command);
     }
     if (!canvasContextMenu_.IsOpen()) {
         canvasContextMenuCanvasId_.reset();
@@ -385,30 +387,10 @@ void OverlayApp::RenderCanvasContextMenu() {
 void OverlayApp::BuildCanvasContextMenuRows(const Canvas& canvas, std::vector<ContextMenuEntry>& rows) const {
     // Deliberately short. The last canvas of a folder is deletable like
     // any other - see the Overview's own delete button for why there is no
-    // "and this folder holds more than one" condition on it - so there is
-    // nothing here to gray out yet.
-    (void)canvas;
-    rows.push_back(ContextMenuEntry{static_cast<int>(CanvasMenuAction::Delete), "##canvasmenu_delete", &icons::kTrash,
-                                     strings::kMenuDeleteCanvas});
-}
-
-void OverlayApp::RunCanvasMenuAction(CanvasMenuAction action, CanvasId canvasId) {
-    SettleHand();  // a command - see SettleHand
-    switch (action) {
-        case CanvasMenuAction::Delete: {
-            const Canvas* canvas = Manager().FindCanvas(canvasId);
-            if (canvas == nullptr) {
-                return;
-            }
-            // Through the same confirmation the Overview's own delete
-            // button asks for, rather than deleting outright: a canvas
-            // takes every snippet on it along, and unlike a snippet's own
-            // delete there is no undo entry to take it back with.
-            confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, canvasId, canvas->name};
-            confirmDeletePopoverRequested_ = true;
-            return;
-        }
-    }
+    // "and this folder holds more than one" condition on it.
+    Command deleteCanvas{CommandId::DeleteCanvas};
+    deleteCanvas.canvas = canvas.id;
+    rows.push_back(MenuRow(deleteCanvas, "##canvasmenu_delete", &icons::kTrash, strings::kMenuDeleteCanvas));
 }
 
 }  // namespace sz::ui

@@ -9,8 +9,13 @@
 
 namespace sz::app {
 
-// The controller speaks in the core's vocabulary and owns the one UI.
+// The controller speaks in the core's vocabulary and owns the one UI,
+// whose commands it gives and runs the global ones of.
 using namespace ::sz::core;
+using ::sz::ui::Command;
+using ::sz::ui::CommandForHotkey;
+using ::sz::ui::CommandId;
+using ::sz::ui::HotkeyCombo;
 using ::sz::ui::OverlayApp;
 
 // Top-level application logic: wires tray/hotkey events from IPlatformHost
@@ -148,15 +153,21 @@ private:
     // case the hotkey that just fired is the answer and does nothing else -
     // see OverlayApp::IsCapturingHotkey. Each hotkey handler asks first.
     bool CompletesAHotkeyCapture(const platform::KeyCombo& combo);
-    void OnEditHotkey();
-    void OnViewHotkey();
-    void OnQuickCaptureHotkey();
+    // A global hotkey: its command, dispatched through the overlay (see
+    // OverlayApp::Dispatch) - unless a Settings row is waiting for it.
+    void OnHotkey(HotkeySlot slot);
+    // Where the overlay hands the hotkeys' commands back to, once it has
+    // settled what they cover (see OverlayApp::SetAppCommandCallback).
+    void RunAppCommand(CommandId id);
+    // A fullscreen capture onto a canvas of its own, then edit mode, so
+    // the capture is noticed - AppConfig::hotkeyQuickCapture.
+    void QuickCaptureAndShow();
     // The same capture, without the overlay coming up for it - see
     // AppConfig::hotkeySilentCapture. Followed by a notice (ShowNotice)
     // when the overlay is hidden and messages are allowed there; when it
     // is already up, in either mode, the message simply appears in the
     // frames it is already drawing and nothing else happens.
-    void OnSilentCaptureHotkey();
+    void SilentCapture();
     // Puts the overlay up carrying nothing but the message a hotkey just
     // set, click-through and without taking focus, and takes it away again
     // when that message fades (OverlayApp::SetNoticeFinishedCallback). A

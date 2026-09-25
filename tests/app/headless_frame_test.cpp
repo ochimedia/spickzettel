@@ -1106,22 +1106,24 @@ TEST_F(HeadlessAppTest, AnIgnoredButtonPressedAgainIsNotIgnoredStill) {
 // Whatever the pointer is in the middle of - a stroke, a shape, an erase,
 // a move or a resize, a box, a snippet being framed, a hold, a right
 // click, with releases lost and the other button pressed on top - every
-// command that is not the pointer's own ends it first (see
-// OverlayApp::SettleHand): straight after, nothing is in flight in the
-// app or open on the session, and a stroke it interrupted is kept. In
-// between, nothing is left open on the session that the hand has let go
-// of. And once every button has been pressed and let go, the hand is at
-// rest whatever came before.
+// command in the table (see ui/interaction/command.h), by its key, its
+// hotkey, or dispatched as a menu row or a bar button would, ends it first
+// (see OverlayApp::SettleHand): straight after one that ran, nothing is in
+// flight in the app or open on the session, and a stroke it interrupted
+// is kept. In between, nothing is left open on the session that the hand
+// has let go of. Once every button has been pressed and let go, the hand
+// is at rest whatever came before. And every command ran somewhere.
 TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
     using platform::MouseButton;
     using platform::MouseEventKind;
     constexpr uint32_t kSeeds = 16;
     constexpr int kSteps = 200;
     const ImGuiKey kModifiers[] = {ImGuiMod_Ctrl, ImGuiMod_Shift, ImGuiMod_Alt};
-    const ImGuiKey kArrows[] = {ImGuiKey_LeftArrow, ImGuiKey_RightArrow, ImGuiKey_UpArrow, ImGuiKey_DownArrow};
     // How many strokes a command found in flight and was checked to keep -
-    // enough that the check is not one that never runs.
+    // enough that the check is not one that never runs - and which
+    // commands ran at all.
     size_t strokesInterrupted = 0;
+    std::vector<bool> ran(kCommandCount, false);
     for (uint32_t seed = 1; seed <= kSeeds; ++seed) {
         SCOPED_TRACE(::testing::Message() << "seed " << seed);
         host_.overlayWindow.visible = false;  // the last seed's overlay went with its app
@@ -1129,7 +1131,8 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
         ShowEditMode();
         StepFrame();
         Drag(100.0f, 100.0f, 500.0f, 400.0f);           // a screenshot
-        MakeADrawing(600.0f, 150.0f, 1100.0f, 600.0f);  // and a drawing, in drawing mode
+        Drag(700.0f, 650.0f, 400.0f, 300.0f);           // another over it
+        MakeADrawing(600.0f, 150.0f, 1100.0f, 600.0f);  // and a drawing over that, in drawing mode
         StepFrames(30);
         Session& session = controller_->GetSession();
         std::mt19937 rng(seed);
@@ -1149,6 +1152,27 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
         std::vector<ImGuiKey> modifiers;  // likewise
         const auto imguiButton = [](MouseButton button) {
             return button == MouseButton::Left ? ImGuiMouseButton_Left : ImGuiMouseButton_Right;
+        };
+        // A key as a hand presses it: its modifiers, the key, and all of it
+        // let go again.
+        const auto press = [&](const platform::KeyCombo& key) {
+            ImGuiIO& io = ImGui::GetIO();
+            const std::pair<bool, ImGuiKey> mods[] = {
+                {key.ctrl, ImGuiMod_Ctrl}, {key.alt, ImGuiMod_Alt}, {key.shift, ImGuiMod_Shift}};
+            for (const auto& [down, mod] : mods) {
+                if (down) {
+                    io.AddKeyEvent(mod, true);
+                }
+            }
+            io.AddKeyEvent(overlay_detail::ImGuiKeyForCombo(key), true);
+            StepFrame();
+            io.AddKeyEvent(overlay_detail::ImGuiKeyForCombo(key), false);
+            for (const auto& [down, mod] : mods) {
+                if (down) {
+                    io.AddKeyEvent(mod, false);
+                }
+            }
+            StepFrame();
         };
         // The stroke a command would find in flight, big enough to be kept
         // whatever its shape: the snippet it goes into, and how many
@@ -1181,6 +1205,11 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
             if (!host_.overlayWindow.visible || App().IsViewOnly()) {
                 ShowEditMode();
                 StepFrame();
+            }
+            // A panel a command opened is closed again, now and then, so
+            // the canvas is not out of reach for most of a seed.
+            if ((App().IsOverviewOpen() || App().IsCheatSheetOpen()) && pick(3) == 0) {
+                PressKey(ImGuiKey_Escape);
             }
             const size_t what = pick(19);
             if (what >= 16 && held.empty()) {
@@ -1251,111 +1280,56 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
             } else if (what == 9) {
                 StepFrames(35);  // long enough for a hold to mature
             } else if (what < 16) {
-                // A command. Keys want exactly their own modifiers, so the
-                // ones the hand holds are let go of first.
-                const size_t command = pick(19);
-                if (command < 15) {
+                // A command, by whatever reaches it: its key, its global
+                // hotkey, or - for one only a menu or the selection bar
+                // reaches - dispatched the way those do, about a snippet
+                // and a canvas picked at random.
+                const auto id = static_cast<CommandId>(pick(kCommandCount));
+                const CommandInfo& info = InfoFor(id);
+                const std::vector<platform::KeyCombo> keys =
+                    KeysFor(id, AppSettings().Stored(), AppSettings().Live().shortcuts);
+                if (!info.hotkey.has_value() && !keys.empty()) {
+                    // A key wants exactly its own modifiers, so the ones the
+                    // hand holds are let go of first.
                     for (const ImGuiKey modifier : modifiers) {
                         ImGui::GetIO().AddKeyEvent(modifier, false);
                     }
                     modifiers.clear();
                     StepFrame();
                 }
-                // Whether the key acts where it is pressed - a key that
-                // does nothing there is no command. Under a panel, a menu
-                // or a note being typed, the canvas's keys are not its.
-                const bool typing = App().EditingNote().has_value() || App().IsOverviewOpen();
-                const bool canvasKeys = !typing && !App().IsCheatSheetOpen();
-                const bool selectionKeys = canvasKeys && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
-                const bool onSelection = selectionKeys && !App().Selection().empty() && !App().DrawingItem();
                 const std::optional<std::pair<ItemId, size_t>> stroke = strokeToKeep();
-                bool acts = true;
-                switch (command) {
-                    case 0:
-                        PressCtrlKey(ImGuiKey_Z);
-                        acts = canvasKeys;
-                        break;
-                    case 1:
-                        PressCtrlKey(ImGuiKey_Y);
-                        acts = canvasKeys;
-                        break;
-                    case 2:
-                        PressKey(ImGuiKey_Escape);
-                        acts = selectionKeys;
-                        break;
-                    case 3:
-                        PressKey(ImGuiKey_Delete);
-                        acts = onSelection && !App().DrawingItem();
-                        break;
-                    case 4:
-                        PressKey(kArrows[pick(4)]);
-                        acts = onSelection && !App().DrawingItem();
-                        break;
-                    case 5:
-                        PressKey(ImGuiKey_P);
-                        acts = canvasKeys;
-                        break;
-                    case 6:
-                        PressKey(ImGuiKey_E);
-                        acts = canvasKeys;
-                        break;
-                    case 7:
-                        PressKey(ImGuiKey_S);
-                        acts = canvasKeys;
-                        break;
-                    case 8:
-                        PressKey(ImGuiKey_D);
-                        acts = canvasKeys;
-                        break;
-                    case 9:
-                        PressCtrlKey(ImGuiKey_C);
-                        acts = canvasKeys;
-                        break;
-                    case 10:
-                        PressCtrlKey(ImGuiKey_V);
-                        acts = canvasKeys;
-                        break;
-                    case 11:
-                        PressCtrlKey(ImGuiKey_X);
-                        acts = canvasKeys;
-                        break;
-                    case 12:
-                        PressCtrlKey(ImGuiKey_D);
-                        acts = canvasKeys;
-                        break;
-                    case 13:
-                        PressCtrlShiftKey(ImGuiKey_N);
-                        acts = canvasKeys;
-                        break;
-                    case 14:
-                        PressCtrlKey(ImGuiKey_H);
-                        acts = !typing;
-                        break;
-                    case 15:
-                        ShowEditMode();  // which puts it away
-                        break;
-                    case 16:
-                        ShowViewMode();
-                        break;
-                    case 17:
-                        TriggerHotkey(config_.hotkeyQuickCapture);
-                        break;
-                    default:
-                        TriggerHotkey(config_.hotkeySilentCapture);
-                        break;
+                const uint64_t before = App().CommandsRun();
+                if (info.hotkey.has_value()) {
+                    if (!keys.empty()) {
+                        TriggerHotkey(keys.front());
+                    }
+                } else if (!keys.empty()) {
+                    press(keys[pick(keys.size())]);
+                } else {
+                    Command command{id};
+                    const Canvas* canvas = Canvases().CurrentOrNull();
+                    if (canvas != nullptr && !canvas->items.empty()) {
+                        command.item = canvas->items[pick(canvas->items.size())].id;
+                    }
+                    command.canvas = Canvases().Canvases()[pick(Canvases().Canvases().size())].id;
+                    command.at = platform::Vec2{pointer.x, pointer.y};
+                    controller_->Overlay().Dispatch(command);
                 }
-                if (acts) {
-                    ASSERT_TRUE(App().HandAtRest()) << "step " << step << ", command " << command;
-                    ASSERT_FALSE(session.LiveLayer().ActiveStroke().has_value()) << "step " << step;
-                    ASSERT_FALSE(HandGestureOpen(session)) << "step " << step << ", command " << command;
-                    if (stroke.has_value()) {
+                if (App().CommandsRun() > before) {
+                    const CommandId last = *App().LastCommand();
+                    const std::string name(InfoFor(last).name);
+                    ran[static_cast<size_t>(last)] = true;
+                    ASSERT_TRUE(App().HandAtRest()) << "step " << step << ", " << name;
+                    ASSERT_FALSE(session.LiveLayer().ActiveStroke().has_value()) << "step " << step << ", " << name;
+                    ASSERT_FALSE(HandGestureOpen(session)) << "step " << step << ", " << name;
+                    // Kept - and an undo then takes it back, as the most
+                    // recent thing done; clearing the drawing takes it along.
+                    if (stroke.has_value() && last != CommandId::ClearDrawing) {
                         ++strokesInterrupted;
                         const Item* item = Canvases().FindItemAnywhere(stroke->first);
                         ASSERT_NE(item, nullptr) << "step " << step;
-                        // Kept - and an undo then takes it back, as the
-                        // most recent thing done.
-                        EXPECT_EQ(item->strokes.size(), stroke->second + (command == 0 ? 0u : 1u))
-                            << "step " << step << ", command " << command;
+                        EXPECT_EQ(item->strokes.size(), stroke->second + (last == CommandId::Undo ? 0u : 1u))
+                            << "step " << step << ", " << name;
                     }
                 }
             }
@@ -1384,7 +1358,10 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
         RightClick(20.0f, 20.0f);
         EXPECT_TRUE(App().HandAtRest());
     }
-    EXPECT_GE(strokesInterrupted, 20u);
+    EXPECT_GE(strokesInterrupted, 10u);
+    for (const CommandInfo& info : kCommands) {
+        EXPECT_TRUE(ran[static_cast<size_t>(info.id)]) << info.name << " never ran";
+    }
 }
 
 // ===== The panels docked against the screen's edges =====

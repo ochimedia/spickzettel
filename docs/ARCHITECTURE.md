@@ -882,9 +882,9 @@ about them can fail the way registering a global hotkey can, which is
 also why a bare letter is allowed here and questionable there.
 
 `ShortcutAction` is the flat list the config layer persists, by name.
-Config sits below the app and cannot see `Tool` or `ClipboardAction`;
-the table that ties an action to what it runs lives in the UI, and a
-test there stands in for the exhaustiveness check a switch would give.
+Config sits below the app and cannot see what a key does; the command
+table ties each action to its command (see "Commands" under the overlay
+UI), and a test checks that every action names exactly one.
 
 ### Per-application profiles
 
@@ -1768,11 +1768,71 @@ itself needs a well-founded reason, argued there first.
 `HeadlessAppTest.EveryCommandSettlesTheHandWhateverItInterrupts` holds
 this: random presses with either button, moves, releases (a quarter of
 them lost), modifiers, the wheel and holds, with drawing mode entered and
-strokes left in flight, interrupted by every key command and every
-hotkey. After each command that acts, nothing is in flight in the app or
-open on the session, and a stroke it interrupted is on its snippet (or,
-after an undo, taken back). It counts the strokes it checked that way, so
-the check cannot quietly stop running.
+strokes left in flight, interrupted by every command in the table (next
+section) - by its key, its hotkey, or dispatched as its menu row or bar
+button would. After each command that ran (`OverlayApp::CommandsRun`
+says which did), nothing is in flight in the app or open on the session,
+and a stroke it interrupted is on its snippet (or, after an undo, taken
+back). It counts the strokes it checked that way, and fails for a command
+that never ran, so neither check can quietly stop running.
+
+### Commands
+
+Everything the app can be told to do in one step is a `Command`, and all
+of them are in one table, `ui/interaction/command.h`: its id, its scope
+(what it ends first), and what reaches it - keys of its own that nobody
+rebinds (undo's `Ctrl+Z`, Escape, Delete, the arrows), the key a person
+chooses in Settings (by the `ShortcutAction` name config stores it
+under), or a global hotkey. The table is checked at compile time to hold
+one row per id, in order. No ImGui in it: what a command is and what
+reaches it are the app's words, not its widgets'.
+
+Every way in ends at `OverlayApp::Dispatch`: `HandleCommandKeys` for the
+keys, the three context menus (each row names its command), the selection
+bar (`CommandForBarButton`), and the tray, whose hotkeys and "Show" menu
+entry dispatch through the overlay and are handed back to it to run
+(`SetAppCommandCallback`) - the tray alone knows the window and the modes,
+but the hand is the overlay's to settle. `Dispatch` asks `Available`,
+settles the command's scope (`SettleHand`), and runs it. So settling
+first is no longer something each command has to remember: nothing runs
+a command any other way, and `Run` is one exhaustive switch.
+
+`Available` is the model's answer - Delete with nothing selected does
+nothing, Paste with nothing on the clipboard does nothing - and the same
+answer grays a menu row out, so a row and its key cannot disagree about
+whether something would happen. It is asked before settling, so it never
+depends on what settling would file: undo is always available, because a
+stroke in flight is on the history only once it has been settled. A
+command that is not available does nothing at all, including not
+settling: a key that does nothing is no command.
+
+Whether a key *reaches* its command from where it is pressed is a
+separate question: not while text is being typed, not through the
+Overview or the cheat sheet, and for Escape, Delete and the arrows not
+through a popup or drawing mode. For now that is `KeyReaches`, one
+exhaustive switch holding the rules that used to be spread over three
+key handlers; the stack of `docs/INTERACTIONS.md` answers it in phase 3.
+
+A key belongs to one command: the first row it is bound to, which puts
+the fixed keys ahead of chosen ones, and the table's order ahead of a
+profile that bound one key twice. A fixed key matches exactly the
+modifiers it names, except Escape, Delete and the arrows, which never
+cared (a nudge reads Shift itself, for ten pixels). The menus' key
+labels are read from the same table, so they show what is bound.
+
+Three behaviors changed with this, each toward one rule:
+
+- A menu row runs the same command as its key. Empty canvas's "New
+  screenshot" row picked the tool even when it was in hand already; it
+  now puts it down again, as its key does.
+- An unavailable command does not settle. `Ctrl+V` with nothing to paste
+  used to end a stroke in flight; now it does nothing.
+- Undo and redo match their keys exactly: `Ctrl+Alt+Z` no longer undoes.
+
+`KeyCombo` grew a range of named keys for the fixed bindings (Escape,
+Delete, Backspace, the arrows), outside what a global hotkey or a key
+editor accepts - Escape, Backspace and Delete are what unbind a row
+there.
 
 ### Item text
 

@@ -165,23 +165,10 @@ extern const GalleryTool kGalleryTools[6];
 extern const CreateActionInfo kCreateActions[2];
 extern const ClipboardActionInfo kClipboardActions[4];
 
-// What a ShortcutAction means in the app's own terms - exactly one of the
-// four is set. This is the single place the config layer's flat list of
-// bindable actions (which cannot see Tool or CreateAction, being below
-// them) is tied to the enums the app acts on, and it is one table rather
-// than a pair of switches so the two directions cannot drift: the
-// Shortcuts tab walks tools and asks which action each one is, the key
-// handler has an action and asks what to run.
-struct ShortcutTarget {
-    ShortcutAction action;
-    std::optional<Tool> tool;
-    std::optional<CreateAction> create;
-    std::optional<ClipboardAction> clipboard;
-    // Opens or closes the cheat sheet - see OverlayApp::cheatSheetOpen_.
-    bool cheatSheet = false;
-};
-extern const ShortcutTarget kShortcutTargets[kShortcutActionCount];
-const ShortcutTarget& TargetForShortcut(ShortcutAction action);
+// The key a Settings row binds, for a tool, a create action and a
+// clipboard action - the rows are listed by those, and bind the
+// ShortcutAction config stores the key under. What the key then runs is
+// the command table's (see CommandForShortcut).
 ShortcutAction ShortcutForTool(Tool tool);
 ShortcutAction ShortcutForCreateAction(CreateAction action);
 ShortcutAction ShortcutForClipboardAction(ClipboardAction action);

@@ -324,56 +324,46 @@ const ClipboardActionInfo kClipboardActions[4] = {
     {ClipboardAction::Duplicate, &icons::kCopy, strings::kClipboardDuplicate},
 };
 
-const ShortcutTarget kShortcutTargets[kShortcutActionCount] = {
-    {ShortcutAction::Draw, Tool::Draw, std::nullopt, std::nullopt},
-    {ShortcutAction::Erase, Tool::Erase, std::nullopt, std::nullopt},
-    {ShortcutAction::Text, Tool::Text, std::nullopt, std::nullopt},
-    {ShortcutAction::Select, Tool::Select, std::nullopt, std::nullopt},
-    {ShortcutAction::NewScreenshot, Tool::NewScreenshot, std::nullopt, std::nullopt},
-    {ShortcutAction::NewDrawing, Tool::NewDrawing, std::nullopt, std::nullopt},
-    {ShortcutAction::NewCanvas, std::nullopt, CreateAction::NewCanvas, std::nullopt},
-    {ShortcutAction::NewCanvasWithSelection, std::nullopt, CreateAction::NewCanvasWithSelection, std::nullopt},
-    {ShortcutAction::Copy, std::nullopt, std::nullopt, ClipboardAction::Copy},
-    {ShortcutAction::Cut, std::nullopt, std::nullopt, ClipboardAction::Cut},
-    {ShortcutAction::Paste, std::nullopt, std::nullopt, ClipboardAction::Paste},
-    {ShortcutAction::Duplicate, std::nullopt, std::nullopt, ClipboardAction::Duplicate},
-    {ShortcutAction::CheatSheet, std::nullopt, std::nullopt, std::nullopt, /*cheatSheet=*/true},
-};
-
-const ShortcutTarget& TargetForShortcut(ShortcutAction action) {
-    for (const ShortcutTarget& target : kShortcutTargets) {
-        if (target.action == action) {
-            return target;
-        }
-    }
-    return kShortcutTargets[0];  // unreachable - see ShortcutTargetsCoverEveryAction in the tests
-}
-
 ShortcutAction ShortcutForTool(Tool tool) {
-    for (const ShortcutTarget& target : kShortcutTargets) {
-        if (target.tool == tool) {
-            return target.action;
-        }
+    switch (tool) {
+        case Tool::Draw:
+            return ShortcutAction::Draw;
+        case Tool::Erase:
+            return ShortcutAction::Erase;
+        case Tool::Text:
+            return ShortcutAction::Text;
+        case Tool::Select:
+            return ShortcutAction::Select;
+        case Tool::NewScreenshot:
+            return ShortcutAction::NewScreenshot;
+        case Tool::NewDrawing:
+            return ShortcutAction::NewDrawing;
     }
-    return ShortcutAction::Draw;  // unreachable - every Tool value is in the table
+    return ShortcutAction::Draw;  // unreachable: the switch names every tool
 }
 
 ShortcutAction ShortcutForCreateAction(CreateAction action) {
-    for (const ShortcutTarget& target : kShortcutTargets) {
-        if (target.create == action) {
-            return target.action;
-        }
+    switch (action) {
+        case CreateAction::NewCanvas:
+            return ShortcutAction::NewCanvas;
+        case CreateAction::NewCanvasWithSelection:
+            return ShortcutAction::NewCanvasWithSelection;
     }
-    return ShortcutAction::NewCanvas;  // unreachable - every CreateAction value is in the table
+    return ShortcutAction::NewCanvas;  // unreachable: the switch names every action
 }
 
 ShortcutAction ShortcutForClipboardAction(ClipboardAction action) {
-    for (const ShortcutTarget& target : kShortcutTargets) {
-        if (target.clipboard == action) {
-            return target.action;
-        }
+    switch (action) {
+        case ClipboardAction::Copy:
+            return ShortcutAction::Copy;
+        case ClipboardAction::Cut:
+            return ShortcutAction::Cut;
+        case ClipboardAction::Paste:
+            return ShortcutAction::Paste;
+        case ClipboardAction::Duplicate:
+            return ShortcutAction::Duplicate;
     }
-    return ShortcutAction::Copy;  // unreachable - every ClipboardAction value is in the table
+    return ShortcutAction::Copy;  // unreachable: the switch names every action
 }
 
 std::optional<platform::KeyCombo> ComboForImGuiKey(ImGuiKey key, bool ctrl, bool alt, bool shift) {
@@ -1321,40 +1311,17 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         }
     }
 
-    // Ctrl+Z: take back the last change - see core/session/history.h for
-    // exactly what that covers. Gated on
-    // !WantTextInput so it doesn't fight an in-progress rename field's
-    // own built-in text-edit undo (ImGui::InputText already handles
-    // Ctrl+Z there itself). And not under a panel, for the reason tool
-    // keys are not (see HandleToolShortcuts): the change would be to a
-    // canvas nobody can see - while a shortcut is being bound, or, in the
-    // move picker, to the very snippet being moved.
-    const bool historyKeysFree = !io.WantTextInput && !PanelOpen();
-    if (historyKeysFree && io.KeyCtrl && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)) {
-        Undo();
-    }
-    // Redo is keyboard-only, so both of the conventional chords are
-    // bound rather than picking a side: Ctrl+Y (Windows) and Ctrl+Shift+Z
-    // (the editor/Adobe lineage). Ctrl+Z above now excludes Shift so the
-    // two can't both fire on the same press.
-    if (historyKeysFree && io.KeyCtrl &&
-        (ImGui::IsKeyPressed(ImGuiKey_Y) || (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z)))) {
-        Redo();
-    }
-    // A key that picks a tool or starts something new - see
-    // AppConfig::toolShortcuts and the Overview's Shortcuts tab. Up here
-    // with the other key handling, and above RefreshStrokeRasters below,
-    // because one of them ("New canvas") changes which canvas the rest of
-    // the frame draws.
-    HandleToolShortcuts();
-
     HandleMouseWheel();
 
     // Nothing acts on a snippet that has gone - see selection_.
     PruneSelection();
-    // Escape, Delete and the arrow keys - see the definition. Escape also
-    // puts the tool down, there.
-    HandleSelectionKeys();
+    // Every key that runs a command - see HandleCommandKeys and
+    // ui/interaction/command.h. Above RefreshStrokeRasters below, because
+    // one of them (New canvas) changes which canvas the rest of the frame
+    // draws; and the selection pruned again after it, since an undo or a
+    // delete can take a selected snippet off the screen.
+    HandleCommandKeys();
+    PruneSelection();
 
     // Over a snippet a plain drag would pick up - the selection live, and
     // not in drawing mode unless Alt is held - the four-way arrow says so.
@@ -1541,7 +1508,7 @@ void OverlayApp::OnOverlayShown() {
     // event queue keeps it until the next showing reads it as a fresh
     // press. Seen with Ctrl+Alt+S bound to edit mode: the overlay came back
     // with the screenshot tool in hand, because "S" alone is that tool's
-    // key. Only intermittently, since HandleToolShortcuts demands exactly
+    // key. Only intermittently, since HandleCommandKeys demands exactly
     // the modifiers a binding names and ImGui knows a modifier is held only
     // from a frame that recorded it - so the chord was harmless whenever a
     // frame had run between the modifiers going down and the letter.

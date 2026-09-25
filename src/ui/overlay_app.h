@@ -13,6 +13,7 @@
 
 #include "ui/context_menu.h"
 #include "ui/icon_draw.h"
+#include "ui/interaction/command.h"
 #include "core/build_info/build_info.h"
 #include "core/canvas/canvas_manager.h"
 #include "core/canvas/item.h"
@@ -144,45 +145,6 @@ struct BoxSelection {
         const float y0 = std::min(fromY, toY);
         return Rect{x0, y0, std::max(fromX, toX) - x0, std::max(fromY, toY) - y0};
     }
-};
-
-// What a row of the snippet context menu does - the value a chosen row
-// carries back out of ContextMenu::Render (see BuildItemContextMenuRows,
-// which names each one, and RunItemMenuAction, which runs it).
-//
-// The UI's own, unlike ChromeButton next door in core/session/actions.h:
-// nothing persists these and no setting names them, so they are free to
-// be reordered, renamed and added to as the menu grows.
-enum class ItemMenuAction {
-    ToggleFullscreen,
-    ResetSize,
-    ClearDrawing,
-    Copy,
-    Cut,
-    Duplicate,
-    SendBackward,
-    BringForward,
-    MoveToCanvas,
-    MoveToNewCanvas,
-};
-
-// The same, for the context menu on a canvas bar tile. One row so far;
-// see BuildCanvasContextMenuRows.
-enum class CanvasMenuAction {
-    Delete,
-};
-
-// The same, for the context menu a right click on empty canvas opens - see
-// BuildEmptyCanvasMenuRows.
-enum class EmptyCanvasMenuAction {
-    NewScreenshot,
-    NewDrawing,
-    FullscreenScreenshot,
-    FullscreenDrawing,
-    Paste,
-    Overview,
-    Settings,
-    CheatSheet,
 };
 
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
@@ -371,7 +333,7 @@ public:
     // Captures a fullscreen screenshot onto a canvas made for it (see the
     // definition, and the other declaration of this below).
     // Doesn't touch the overlay's visibility or mode itself - it's purely
-    // the capture step; TrayController::OnQuickCaptureHotkey switches to
+    // the capture step; TrayController::QuickCaptureAndShow switches to
     // edit mode afterward so the capture is noticed. Safe to call while
     // hidden: needs no active ImGui frame (it's plain CanvasManager/
     // IOverlayWindow calls), and `window`'s own CaptureRegion leaves the
@@ -380,8 +342,8 @@ public:
     // end of the folder the current canvas lives in, switched to, with the
     // shot on it and a message saying so. Both capture hotkeys come here -
     // the difference between them is only whether the overlay is shown
-    // afterwards (see TrayController::OnQuickCaptureHotkey and
-    // OnSilentCaptureHotkey).
+    // afterwards (see TrayController::QuickCaptureAndShow and
+    // SilentCapture).
     //
     // A canvas each rather than all of them piling onto whatever canvas
     // was current: every capture is the same size and shape, so stacked
@@ -404,6 +366,32 @@ public:
     // for it, the hotkey that hides the overlay would be refused for good.
     // See docs/ARCHITECTURE.md, "The hand".
     void SettleHand();
+
+    // ===== Commands =====
+    //
+    // Runs `command` if it can act now (see Available), after ending what
+    // its scope covers (see SettleHand, and Scope). Every key, context menu
+    // row, selection bar button and global hotkey reaches the app through
+    // here - see ui/interaction/command.h. True when it ran.
+    bool Dispatch(const Command& command);
+    // Whether `command` would do anything now: what grays a menu row out,
+    // and what a command is asked before it ends anything. Asked before
+    // settling, so it never depends on what settling would file - undo is
+    // always available, since a stroke in flight is on the history only
+    // once it has been settled.
+    bool Available(const Command& command) const;
+    // Where the global hotkeys' commands run: the tray, which alone knows
+    // the window and the modes. Left null - a test that drives the overlay
+    // alone - they do nothing.
+    void SetAppCommandCallback(std::function<void(CommandId)> callback) {
+        appCommandCallback_ = std::move(callback);
+    }
+    // How many commands have run, and which ran last - what a test asks
+    // to learn whether a key or a hotkey did anything, rather than reading
+    // its effects.
+    uint64_t CommandsRun() const { return commandsRun_; }
+    std::optional<CommandId> LastCommand() const { return lastCommand_; }
+
     // Whether the hand has nothing in flight: no gesture, no hold, no
     // button held. What a test asks after a command.
     bool HandAtRest() const {
@@ -553,8 +541,10 @@ private:
     // pointer is over and allowed to light up this frame, if any - see
     // RenderItems for what "allowed" means while something is held.
     void PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton);
-    // What a selection bar button does, on the release that completes a
-    // press on it (see HandleItemGesture).
+    // Runs a selection bar button's command, on the release that completes
+    // a press on it (see HandleItemGesture): the command it is (see
+    // CommandForBarButton), about the snippet selected last and from where
+    // the button sits.
     void ActivateBarButton(ChromeButton button);
     // Which edges a resize handle moves - a corner two, an edge one.
     static void ResizeHandleEdges(ResizeHandle handle, bool& left, bool& right, bool& top, bool& bottom);
@@ -663,9 +653,8 @@ private:
     // Moves every selected snippet by (dx, dy), clamped on screen - the
     // arrow keys.
     void NudgeSelection(float dx, float dy);
-    // Delete, Escape and the arrow keys, from OnFrame: what the keyboard
-    // does to the selection.
-    void HandleSelectionKeys();
+    // Escape: puts the hand down one stage - see the definition.
+    void PutDown();
     // The live text editor over an item whose note is being edited - the
     // one piece of an item that is a real ImGui widget, in a window of its
     // own above the items layer. See the definition.
@@ -704,7 +693,6 @@ private:
     void OpenCanvasContextMenu(CanvasId canvasId, ImVec2 at);
     void RenderCanvasContextMenu();
     void BuildCanvasContextMenuRows(const Canvas& canvas, std::vector<ContextMenuEntry>& rows) const;
-    void RunCanvasMenuAction(CanvasMenuAction action, CanvasId canvasId);
     // The color chooser: one picker, and what it is set to is the color
     // drawn with. Opened by the drawing bar's color button, next to
     // `from`, the point it was pressed from; OpenColorChooser only asks,
@@ -745,7 +733,6 @@ private:
     // from the canvas as it is now rather than as it was when the menu
     // opened.
     void BuildItemContextMenuRows(const Item& item, std::vector<ContextMenuEntry>& rows);
-    void RunItemMenuAction(ItemMenuAction action, ItemId itemId);
     // The context menu a right click on empty canvas opens: the ways to
     // make a snippet, Paste, and the way to the Overview and Settings -
     // what the canvas itself offers, with no snippet to act on. Asked for
@@ -753,12 +740,15 @@ private:
     void OpenEmptyCanvasMenu(ImVec2 at);
     void RenderEmptyCanvasMenu();
     void BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) const;
-    void RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action);
-    // "Ctrl+D" for a bound action, empty for an unbound one - what a menu
-    // row shows on its right. FormatKeyComboLabel's "(none)" is the right
-    // answer for a key editor and the wrong one here, where an action
-    // without a shortcut should simply show nothing.
-    std::string MenuShortcutLabel(ShortcutAction action) const;
+    // "Ctrl+D" for a command a key reaches, empty for one none does - what
+    // a menu row shows on its right. FormatKeyComboLabel's "(none)" is the
+    // right answer for a key editor and the wrong one here, where a row
+    // without a key should simply show nothing.
+    std::string MenuShortcutLabel(CommandId id) const;
+    // A context menu row for `command`: grayed out when it is not
+    // available (see Available), with its key beside it.
+    ContextMenuEntry MenuRow(const Command& command, const char* id, const Icon* icon, const char* label,
+                             bool separatorAbove = false) const;
 
     void RenderRegionCaptureOverlay();
     // RectEraser's own drag-preview overlay (see StrokeInFlight) -
@@ -1003,14 +993,21 @@ private:
     // themselves, and two rows claiming one key is a state where only one
     // of them can ever fire. Pass a default-constructed combo to unbind.
     void SetToolShortcut(ShortcutAction action, platform::KeyCombo combo);
-    // Fires whichever shortcut was pressed this frame, at most one. Runs
-    // only while the overlay is showing edit mode and nothing is typing.
-    void HandleToolShortcuts();
+    // Dispatches the command of every key pressed this frame, once per key
+    // (see KeysFor) - for those a key reaches from where it is pressed (see
+    // KeyReaches). Runs only while the overlay is showing edit mode.
+    void HandleCommandKeys();
+    // Whether a key for `id` gets through to it from here: not while text
+    // is being typed, and not through a panel, a popup or drawing mode
+    // where the command is not theirs. docs/INTERACTIONS.md, section 7,
+    // calls this reaching, and the stack of phase 3 answers it; until then
+    // it is these rules.
+    bool KeyReaches(CommandId id) const;
+    // What a command does, once Dispatch has settled what it covers.
+    void Run(const Command& command);
     // The wheel: with Alt it steps between the canvases of the current
     // canvas's folder, plain it sizes the tool in hand - see the definition.
     void HandleMouseWheel();
-    // What a bound key does: select a tool, or run a create action.
-    void RunShortcutAction(ShortcutAction action);
     // Cancel/Delete confirmation for a canvas or folder Delete button
     // clicked in the Overview - see confirmDeleteTarget_'s own doc
     // comment for why canvas/folder deletion gets this extra step while
@@ -1024,10 +1021,6 @@ private:
     // Sets the draw color (see drawColorRGBA_'s own doc comment) - the
     // single place that color actually changes.
     void SetDrawColor(uint32_t colorRGBA);
-    // Runs a create action - New canvas, which has nothing to place and so
-    // happens at once.
-    void RunCreateAction(CreateAction action);
-    void RunClipboardAction(ClipboardAction action);
     // A new snippet of `kind` as Settings > Defaults says it starts, at
     // `rect` - what the session makes it from (see Session::CreateItem).
     // Shared by the fullscreen and region-drag creation paths so the two
@@ -1575,6 +1568,11 @@ private:
     std::function<void()> noticeFinishedCallback_;
     // See SetHotkeyChangeCallback's own doc comment.
     std::function<bool(HotkeySlot, platform::KeyCombo)> hotkeyChangeCallback_;
+    // See SetAppCommandCallback.
+    std::function<void(CommandId)> appCommandCallback_;
+    // See CommandsRun.
+    uint64_t commandsRun_ = 0;
+    std::optional<CommandId> lastCommand_;
 
     // The tool in hand, Select to start with - see the Tool enum. A marking
     // tool is in hand exactly while a snippet is in drawing mode (see
@@ -1820,8 +1818,8 @@ private:
 
     // Overview (canvas switcher / manager / move-copy picker).
     bool overviewOpen_ = false;
-    // See RenderCheatSheet. Toggled by its shortcut (RunShortcutAction) and
-    // the empty canvas's menu.
+    // See RenderCheatSheet. Toggled by its command (CommandId::CheatSheet),
+    // from its key or the empty canvas's menu.
     bool cheatSheetOpen_ = false;
     // Which of the Overview's two tabs is showing - Canvases (the
     // original/default content: folder sidebar + canvas tile grid) or
