@@ -338,9 +338,17 @@ void CheckEveryCrashPoint(const std::function<void(LibraryStore&, CanvasManagerS
         [&](MemoryFileSystem& disk, size_t crashedAfter, size_t of) {
             const Layout loaded = CheckRestart(disk, crashedAfter);
             ExpectBeforeOrAfter(loaded, beforeLayout, afterLayout, crashedAfter, of);
+            // A delete for good is all or nothing: every id it named loads,
+            // or none does. Judged id by id, as above, a delete carried out
+            // in part passed at every crash point.
+            const size_t loadedErased = static_cast<size_t>(
+                std::count_if(erased.begin(), erased.end(), [&loaded](uint64_t id) { return loaded.count(id) > 0; }));
+            EXPECT_TRUE(loadedErased == 0 || loadedErased == erased.size())
+                << loadedErased << " of " << erased.size() << " deleted for good loaded (crashed after "
+                << crashedAfter << ")";
             // Recorded - or it would have loaded, whole, above - and so
             // finished by the restart's save.
-            if (!erased.empty() && loaded.count(erased.front()) == 0) {
+            if (!erased.empty() && loadedErased == 0) {
                 ExpectNothingLeftOf(disk, erased, crashedAfter);
             }
         });
