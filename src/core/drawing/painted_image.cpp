@@ -103,7 +103,7 @@ void PaintedImage::EnsureTileTracked(int index) {
     strokeMask_.emplace(index, std::vector<uint8_t>(static_cast<size_t>(bounds.w) * bounds.h, 0));
 }
 
-void PaintedImage::RecompositeTile(int index, const PixelRect& within) {
+bool PaintedImage::RecompositeTile(int index, const PixelRect& within) {
     const PixelRect bounds = TileBounds(index);
     const std::vector<uint8_t>& before = strokeBefore_[index];
     const std::vector<uint8_t>& mask = strokeMask_[index];
@@ -118,14 +118,22 @@ void PaintedImage::RecompositeTile(int index, const PixelRect& within) {
     const float inkB = static_cast<float>((strokeColorRGBA_ >> 8) & 0xFF);
     const float inkA = static_cast<float>(strokeColorRGBA_ & 0xFF) / 255.0f;
 
+    bool changed = false;
+    const auto put = [&](size_t dst, uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+        changed = changed || pixels_[dst + 0] != r || pixels_[dst + 1] != g || pixels_[dst + 2] != b ||
+                  pixels_[dst + 3] != a;
+        pixels_[dst + 0] = r;
+        pixels_[dst + 1] = g;
+        pixels_[dst + 2] = b;
+        pixels_[dst + 3] = a;
+    };
     for (int y = y0; y < y1; ++y) {
         for (int x = x0; x < x1; ++x) {
             const size_t local = static_cast<size_t>(y - bounds.y) * bounds.w + (x - bounds.x);
             const float coverage = static_cast<float>(mask[local]) / 255.0f;
             const size_t dst = (static_cast<size_t>(y) * width_ + x) * 4;
             if (coverage <= 0.0f) {
-                std::copy_n(before.begin() + static_cast<std::ptrdiff_t>(local * 4), 4,
-                            pixels_.begin() + static_cast<std::ptrdiff_t>(dst));
+                put(dst, before[local * 4 + 0], before[local * 4 + 1], before[local * 4 + 2], before[local * 4 + 3]);
                 continue;
             }
             const float dr = static_cast<float>(before[local * 4 + 0]);
@@ -138,10 +146,7 @@ void PaintedImage::RecompositeTile(int index, const PixelRect& within) {
                 // the same ink, just less of it, so a half-erased edge
                 // fades rather than shifting hue toward black.
                 const float outA = da * (1.0f - coverage);
-                pixels_[dst + 0] = static_cast<uint8_t>(dr);
-                pixels_[dst + 1] = static_cast<uint8_t>(dg);
-                pixels_[dst + 2] = static_cast<uint8_t>(db);
-                pixels_[dst + 3] = ToByte(outA);
+                put(dst, static_cast<uint8_t>(dr), static_cast<uint8_t>(dg), static_cast<uint8_t>(db), ToByte(outA));
                 continue;
             }
 
@@ -150,18 +155,15 @@ void PaintedImage::RecompositeTile(int index, const PixelRect& within) {
             const float srcA = inkA * coverage;
             const float outA = srcA + da * (1.0f - srcA);
             if (outA <= 0.0f) {
-                pixels_[dst + 0] = 0;
-                pixels_[dst + 1] = 0;
-                pixels_[dst + 2] = 0;
-                pixels_[dst + 3] = 0;
+                put(dst, 0, 0, 0, 0);
                 continue;
             }
-            pixels_[dst + 0] = static_cast<uint8_t>((inkR * srcA + dr * da * (1.0f - srcA)) / outA + 0.5f);
-            pixels_[dst + 1] = static_cast<uint8_t>((inkG * srcA + dg * da * (1.0f - srcA)) / outA + 0.5f);
-            pixels_[dst + 2] = static_cast<uint8_t>((inkB * srcA + db * da * (1.0f - srcA)) / outA + 0.5f);
-            pixels_[dst + 3] = ToByte(outA);
+            put(dst, static_cast<uint8_t>((inkR * srcA + dr * da * (1.0f - srcA)) / outA + 0.5f),
+                static_cast<uint8_t>((inkG * srcA + dg * da * (1.0f - srcA)) / outA + 0.5f),
+                static_cast<uint8_t>((inkB * srcA + db * da * (1.0f - srcA)) / outA + 0.5f), ToByte(outA));
         }
     }
+    return changed;
 }
 
 template <typename TileFn, typename CoverageFn>
@@ -177,6 +179,7 @@ PixelRect PaintedImage::AccumulateCoverage(const PixelRect& touchedIn, TileFn ma
         return PixelRect{};
     }
 
+    bool changed = false;
     const int firstTileX = touched.x / kTileSize;
     const int lastTileX = (right - 1) / kTileSize;
     const int firstTileY = touched.y / kTileSize;
@@ -209,10 +212,12 @@ PixelRect PaintedImage::AccumulateCoverage(const PixelRect& touchedIn, TileFn ma
                     mask[local] = std::max(mask[local], ToByte(amount));
                 }
             }
-            RecompositeTile(index, PixelRect{px0, py0, px1 - px0, py1 - py0});
+            changed = RecompositeTile(index, PixelRect{px0, py0, px1 - px0, py1 - py0}) || changed;
         }
     }
-    return touched;
+    // Nothing to upload when nothing changed - and so, for the caller,
+    // nothing touched: no undo entry, and no layer to write out again.
+    return changed ? touched : PixelRect{};
 }
 
 PixelRect PaintedImage::ExtendStroke(float x0, float y0, float x1, float y1) {
@@ -281,7 +286,19 @@ std::vector<PaintedTile> PaintedImage::EndStroke() {
     std::vector<PaintedTile> before;
     before.reserve(strokeBefore_.size());
     for (auto& [index, pixels] : strokeBefore_) {
-        before.push_back(PaintedTile{index, std::move(pixels)});
+        // A tile the stroke reached and left as it was - the eraser over
+        // its transparent part, say - is nothing to take back.
+        const PixelRect bounds = TileBounds(index);
+        bool same = true;
+        for (int row = 0; row < bounds.h && same; ++row) {
+            const size_t now = (static_cast<size_t>(bounds.y + row) * width_ + bounds.x) * 4;
+            same = std::equal(pixels.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(row) * bounds.w * 4),
+                              pixels.begin() + static_cast<std::ptrdiff_t>(static_cast<size_t>(row + 1) * bounds.w * 4),
+                              pixels_.begin() + static_cast<std::ptrdiff_t>(now));
+        }
+        if (!same) {
+            before.push_back(PaintedTile{index, std::move(pixels)});
+        }
     }
     // Sorted so an undo entry is deterministic - two identical strokes
     // produce identical entries, which is what makes them comparable in a

@@ -101,8 +101,10 @@ public:
     void BeginStroke(uint32_t colorRGBA, float radiusPx, BrushMode mode);
     // Extends the stroke from (x0, y0) to (x1, y1), both in image pixels,
     // and returns the region whose pixels changed - what a caller uploads
-    // to the GPU. A zero-length segment is a dab, which is how a dot is
-    // drawn (see the round-cap geometry).
+    // to the GPU. Empty when none did: an eraser over transparent pixels,
+    // or ink over ink of its own color, changes nothing to upload, save or
+    // undo. A zero-length segment is a dab, which is how a dot is drawn
+    // (see the round-cap geometry).
     PixelRect ExtendStroke(float x0, float y0, float x1, float y1);
     // Adds an axis-aligned rectangle to the stroke instead of a capsule -
     // the rectangular eraser, which is the same gesture with a different
@@ -110,8 +112,9 @@ public:
     // tiles. Coverage on the boundary is the pixel's own overlap with the
     // rectangle, so the edges are as clean as the brush's.
     PixelRect ExtendRect(float x0, float y0, float x1, float y1);
-    // Ends the stroke and hands back the pixels every touched tile held
-    // *before* it started - the undo entry. Empty if nothing was touched.
+    // Ends the stroke and hands back the pixels every tile it changed held
+    // *before* it started - the undo entry. A tile it reached and left as
+    // it was is not in it, and nothing is when nothing changed.
     std::vector<PaintedTile> EndStroke();
     bool StrokeInProgress() const { return strokeActive_; }
 
@@ -146,8 +149,9 @@ private:
     void EnsureTileTracked(int index);
     // Rebuilds one tile's pixels from what it held before the stroke plus
     // the stroke's coverage so far - never from what is on screen now,
-    // which is what stops an overlap being painted twice.
-    void RecompositeTile(int index, const PixelRect& within);
+    // which is what stops an overlap being painted twice. Whether any
+    // pixel came out different from what it was.
+    bool RecompositeTile(int index, const PixelRect& within);
 
     int width_ = 0;
     int height_ = 0;

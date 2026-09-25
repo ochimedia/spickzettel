@@ -504,6 +504,30 @@ TEST(SessionTest, AnEraseBegunOverAnOpenOneFilesThatOneFirst) {
     EXPECT_EQ(ItemById(session.Manager(), item)->strokes, drawn);
 }
 
+// An eraser dragged over nothing but transparent pixels changes nothing,
+// and files nothing: the next undo takes back what came before it.
+TEST(SessionTest, AnErasePassThatChangesNothingIsNoStep) {
+    test::FakeOverlayWindow window;
+    window.createTextureFromPixelsReturnsHandle = 9;
+    Session session;
+    session.AttachWindow(&window);
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    session.BeginPaint(item, 10.0f, 10.0f, 0xFF0000FFu, 6.0f);
+    session.EndPaint();
+    Layer& layer = *Session::FindPaintedLayer(*session.Manager().FindItemAnywhere(item));
+    layer.paintedDirty = false;  // as once saved
+
+    session.BeginErase(item, 80.0f, 80.0f, 10.0f);
+    session.ExtendErase(90.0f, 60.0f, 10.0f);
+    session.EndErase();
+    EXPECT_FALSE(layer.paintedDirty) << "nothing to write out again";
+
+    const std::optional<Session::UndoStep> undone = session.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_NE(undone->what, Session::UndoWhat::Erase) << "the paint, not an erase of nothing";
+    EXPECT_FALSE(session.CanUndo());
+}
+
 TEST(SessionTest, ClearingADrawingIsOneStep) {
     Session session;
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");

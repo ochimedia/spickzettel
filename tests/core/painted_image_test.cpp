@@ -111,6 +111,27 @@ TEST(PaintedImageTest, ALongDiagonalSavesOnlyTheTilesItCrosses) {
     }
 }
 
+// An eraser over transparent pixels changes nothing: nothing to upload,
+// and nothing to take back.
+TEST(PaintedImageTest, AStrokeThatChangesNothingReportsNothing) {
+    PaintedImage image(256, 256);
+    image.BeginStroke(0xFF0000FFu, 4.0f, PaintedImage::BrushMode::Paint);
+    ASSERT_FALSE(image.ExtendStroke(20.0f, 20.0f, 40.0f, 20.0f).Empty());
+    ASSERT_FALSE(image.EndStroke().empty());
+
+    image.BeginStroke(0xFFFFFFFFu, 4.0f, PaintedImage::BrushMode::Erase);
+    EXPECT_TRUE(image.ExtendStroke(150.0f, 150.0f, 200.0f, 200.0f).Empty()) << "nothing there to erase";
+    EXPECT_TRUE(image.ExtendRect(100.0f, 180.0f, 250.0f, 180.0f).Empty()) << "a rectangle of no height";
+    EXPECT_TRUE(image.EndStroke().empty());
+
+    // A stroke that changes some tiles keeps only those.
+    image.BeginStroke(0xFFFFFFFFu, 4.0f, PaintedImage::BrushMode::Erase);
+    EXPECT_FALSE(image.ExtendStroke(30.0f, 20.0f, 200.0f, 200.0f).Empty());
+    const std::vector<PaintedTile> saved = image.EndStroke();
+    ASSERT_EQ(saved.size(), 1u);
+    EXPECT_EQ(saved[0].index, image.TileIndex(0, 0));
+}
+
 TEST(PaintedImageTest, AStrokeThatOverlapsItselfIsNotPaintedTwice) {
     PaintedImage overlapping(60, 20);
     overlapping.BeginStroke(kHalfRed, 4.0f, PaintedImage::BrushMode::Paint);
