@@ -2135,7 +2135,11 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
     if (ImGui::Button(capturing ? Labeled(strings::kHotkeysShortcutPrompt, "shortcut_btn")
                                  : (FormatKeyComboLabel(current) + "##shortcut_btn").c_str(),
                        ImVec2(Px(200.0f), 0.0f))) {
-        shortcutCaptureAction_ = capturing ? std::nullopt : std::optional(action);
+        if (capturing) {
+            shortcutCaptureAction_.reset();
+        } else {
+            ArmShortcutCapture(action);
+        }
     }
     if (ImGui::IsItemHovered() && !capturing) {
         ImGui::SetTooltip("%s", strings::kHotkeysShortcutTooltip);
@@ -2929,7 +2933,11 @@ void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlo
         // dedicated Escape-cancels-just-the-capture check here would never
         // actually run (see CloseOverview, which resets hotkeyCaptureSlot_
         // for exactly this reason).
-        hotkeyCaptureSlot_ = capturing ? std::nullopt : std::optional(slot);
+        if (capturing) {
+            hotkeyCaptureSlot_.reset();
+        } else {
+            ArmHotkeyCapture(slot);
+        }
     }
     if (ImGui::IsItemHovered() && !capturing) {
         ImGui::SetTooltip("%s", strings::kHotkeysComboTooltip);
@@ -2954,7 +2962,15 @@ void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlo
     ImGui::PopID();
 }
 
-void OverlayApp::ArmHotkeyCapture(HotkeySlot slot) { hotkeyCaptureSlot_ = slot; }
+void OverlayApp::ArmHotkeyCapture(HotkeySlot slot) {
+    hotkeyCaptureSlot_ = slot;
+    shortcutCaptureAction_.reset();
+}
+
+void OverlayApp::ArmShortcutCapture(ShortcutAction action) {
+    shortcutCaptureAction_ = action;
+    hotkeyCaptureSlot_.reset();
+}
 
 void OverlayApp::CompleteHotkeyCapture(platform::KeyCombo combo) {
     if (!hotkeyCaptureSlot_.has_value()) {

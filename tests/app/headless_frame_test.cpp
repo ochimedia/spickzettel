@@ -1116,6 +1116,19 @@ TEST_F(HeadlessAppTest, PickingTheSameComboAgainRegistersAHotkeyThatFailedAtTheS
     EXPECT_TRUE(registered);
 }
 
+// A hotkey row and a shortcut row wait for the next key on the same page,
+// and one press bound it to both. Only the row armed last waits.
+TEST_F(HeadlessAppTest, ArmingAHotkeyOrAShortcutCaptureDisarmsTheOther) {
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::ViewMode);
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::CheatSheet);
+    EXPECT_FALSE(App().IsCapturingHotkey());
+    EXPECT_TRUE(App().IsCapturingShortcut());
+
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::ViewMode);
+    EXPECT_TRUE(App().IsCapturingHotkey());
+    EXPECT_FALSE(App().IsCapturingShortcut());
+}
+
 // ===== The hand at rest: Select =====
 
 // A marking tool is in hand only in drawing mode, so putting it down -

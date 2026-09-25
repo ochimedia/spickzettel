@@ -990,9 +990,13 @@ public:
     // Ends the capture with `combo` as the answer - the key the loop saw,
     // or the combo of the hotkey that fired. Nothing while none is armed.
     void CompleteHotkeyCapture(platform::KeyCombo combo);
-    // What clicking a hotkey row's button does - here so a test can arm
-    // one without driving the Settings panel.
+    // What clicking a hotkey row's button, or a shortcut row's, does - here
+    // so a test can arm one without driving the Settings panel. Arming
+    // either disarms the other: both rows are on one page, each waits for
+    // the next key, and one press bound it to both.
     void ArmHotkeyCapture(HotkeySlot slot);
+    void ArmShortcutCapture(ShortcutAction action);
+    bool IsCapturingShortcut() const { return shortcutCaptureAction_.has_value(); }
 
 private:
     // The Settings tab's Shortcuts section: every tool and create action,
