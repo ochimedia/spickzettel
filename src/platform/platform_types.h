@@ -44,8 +44,9 @@ struct MouseEvent {
 // A hotkey: modifiers plus one logical key. `key` is an uppercase letter or
 // digit - the same value as the character, which is also its virtual-key
 // code on every platform's native hotkey API - or a function key F1-F24 as
-// kFunctionKeyBase + n, since those share no such convenient encoding. One
-// int rather than two fields so there is no way to represent "both set".
+// kFunctionKeyBase + n, since those share no such convenient encoding; or
+// one of the named keys below. One int rather than several fields so
+// there is no way to represent "two set".
 // 0 means no key, i.e. unbound. No modifier is required: a bare function
 // key is a legitimate hotkey.
 struct KeyCombo {
@@ -56,9 +57,23 @@ struct KeyCombo {
 
     static constexpr int kFunctionKeyBase = 1000;  // F1 = 1001 ... F24 = 1024
 
+    // Keys with no character of their own. Only the app's fixed bindings
+    // use them (see ui/interaction/command.h): none is ever a global
+    // hotkey (see IsValid), and no key editor offers one - Escape,
+    // Backspace and Delete are what unbind a row there.
+    static constexpr int kNamedKeyBase = 2000;
+    static constexpr int kEscape = kNamedKeyBase + 1;
+    static constexpr int kDelete = kNamedKeyBase + 2;
+    static constexpr int kBackspace = kNamedKeyBase + 3;
+    static constexpr int kLeftArrow = kNamedKeyBase + 4;
+    static constexpr int kRightArrow = kNamedKeyBase + 5;
+    static constexpr int kUpArrow = kNamedKeyBase + 6;
+    static constexpr int kDownArrow = kNamedKeyBase + 7;
+
     bool IsFunctionKey() const { return key > kFunctionKeyBase && key <= kFunctionKeyBase + 24; }
     // Only meaningful when IsFunctionKey().
     int FunctionKeyNumber() const { return key - kFunctionKeyBase; }
+    bool IsNamedKey() const { return key > kNamedKeyBase && key <= kDownArrow; }
 
     bool IsValid() const {
         return (key >= 'A' && key <= 'Z') || (key >= '0' && key <= '9') || IsFunctionKey();

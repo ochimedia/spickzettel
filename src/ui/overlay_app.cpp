@@ -416,7 +416,24 @@ ImGuiKey ImGuiKeyForCombo(const platform::KeyCombo& combo) {
     if (combo.key >= 'A' && combo.key <= 'Z') {
         return static_cast<ImGuiKey>(ImGuiKey_A + (combo.key - 'A'));
     }
-    return ImGuiKey_None;
+    switch (combo.key) {
+        case platform::KeyCombo::kEscape:
+            return ImGuiKey_Escape;
+        case platform::KeyCombo::kDelete:
+            return ImGuiKey_Delete;
+        case platform::KeyCombo::kBackspace:
+            return ImGuiKey_Backspace;
+        case platform::KeyCombo::kLeftArrow:
+            return ImGuiKey_LeftArrow;
+        case platform::KeyCombo::kRightArrow:
+            return ImGuiKey_RightArrow;
+        case platform::KeyCombo::kUpArrow:
+            return ImGuiKey_UpArrow;
+        case platform::KeyCombo::kDownArrow:
+            return ImGuiKey_DownArrow;
+        default:
+            return ImGuiKey_None;
+    }
 }
 
 std::string FormatKeyComboLabel(const platform::KeyCombo& combo) {
@@ -435,6 +452,30 @@ std::string FormatKeyComboLabel(const platform::KeyCombo& combo) {
     } else if (combo.IsFunctionKey()) {
         result += "F";
         result += std::to_string(combo.FunctionKeyNumber());
+    } else if (combo.IsNamedKey()) {
+        switch (combo.key) {
+            case platform::KeyCombo::kEscape:
+                result += strings::kHotkeyEscape;
+                break;
+            case platform::KeyCombo::kDelete:
+                result += strings::kHotkeyDelete;
+                break;
+            case platform::KeyCombo::kBackspace:
+                result += strings::kHotkeyBackspace;
+                break;
+            case platform::KeyCombo::kLeftArrow:
+                result += strings::kHotkeyLeftArrow;
+                break;
+            case platform::KeyCombo::kRightArrow:
+                result += strings::kHotkeyRightArrow;
+                break;
+            case platform::KeyCombo::kUpArrow:
+                result += strings::kHotkeyUpArrow;
+                break;
+            default:
+                result += strings::kHotkeyDownArrow;
+                break;
+        }
     } else {
         result += static_cast<char>(combo.key);
     }

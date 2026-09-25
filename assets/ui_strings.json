@@ -144,6 +144,13 @@
   "hotkey.altPrefix": "Alt+",
   "hotkey.shiftPrefix": "Shift+",
   "hotkey.none": "(none)",
+  "hotkey.escape": "Esc",
+  "hotkey.delete": "Delete",
+  "hotkey.backspace": "Backspace",
+  "hotkey.leftArrow": "Left",
+  "hotkey.rightArrow": "Right",
+  "hotkey.upArrow": "Up",
+  "hotkey.downArrow": "Down",
 
   "_hud": "The input-options panel, whose rows the number keys toggle.",
   "hud.dontStealFocus": "Don't steal focus",
