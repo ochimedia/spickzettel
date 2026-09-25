@@ -2466,16 +2466,20 @@ void OverlayApp::RenderSettingsProfiles() {
     if (removeIndex.has_value()) {
         edited.erase(edited.begin() + static_cast<long>(*removeIndex));
         changed = true;
+        // The target is an index, so it follows its profile down the list
+        // when one above it goes, and is let go of when its own does.
+        // Checked only for running off the end, it stayed where it was and
+        // landed on the next profile, which every later edit then went to.
+        if (editProfile_ && *editProfile_ == *removeIndex) {
+            editProfile_.reset();
+        } else if (editProfile_ && *editProfile_ > *removeIndex) {
+            --*editProfile_;
+        }
     }
 
     if (changed) {
-        // A deleted profile may have been the one being edited - so the
-        // target is checked against the new list before anything reads it.
-        // Which profile matches may have changed too; the settings work
-        // that out as they commit.
-        if (editProfile_ && *editProfile_ >= edited.size()) {
-            editProfile_.reset();
-        }
+        // Which profile matches may have changed; the settings work that
+        // out as they commit.
         settings_.SetProfiles(std::move(edited));
     }
 }

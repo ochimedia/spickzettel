@@ -313,6 +313,61 @@ TEST_F(UiTest, AValueTypedIntoASliderIsHeldToItsRange) {
     EXPECT_FLOAT_EQ(AppSettings().Stored().noteTextSizePx, kNoteTextSizeMin);
 }
 
+// Settings edits one profile at a time, picked by where it is in the list.
+// Deleting one above it moves it up a place, and what is edited next still
+// goes to it; deleting it leaves nothing picked, not the one after it.
+TEST_F(UiTest, DeletingAProfileKeepsTheEditsOnTheProfilePicked) {
+    AppConfig config = DefaultConfig();
+    for (const char* name : {"A", "B", "C"}) {
+        Profile profile;
+        profile.name = name;
+        config.profiles.push_back(profile);
+    }
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+
+    const auto body = [](ImGuiTestContext* ctx) {
+        return ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID;
+    };
+    // Deletes the profile at `index` and then switches the freeze on or off
+    // for whatever is being edited.
+    const auto deleteThenToggle = [&](int index) {
+        RunUi("delete a profile, then change a setting", [&](ImGuiTestContext* ctx) {
+            ctx->SetRef("//##overview_panel");
+            ctx->ItemClick("**/###sectionprofiles");
+            const std::string row = "##delprofile" + std::to_string(index);
+            ctx->SetRef(body(ctx));
+            ctx->ItemClick(("**/" + row).c_str());
+            ctx->SetRef("//##overview_panel");
+            ctx->ItemClick("**/###sectionbehavior");
+            ctx->ItemClick("**/###freezescreen");
+        });
+    };
+
+    RunUi("edit B", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionbehavior");
+        ctx->SetRef(body(ctx));
+        ctx->ItemClick("##edittarget");
+        ctx->ItemClick("**/B");
+    });
+
+    deleteThenToggle(0);
+    ASSERT_EQ(AppSettings().Profiles().size(), 2u);
+    EXPECT_EQ(AppSettings().Profiles()[0].name, "B");
+    EXPECT_FALSE(AppSettings().Profiles()[0].overrides.Empty()) << "B was edited";
+    EXPECT_TRUE(AppSettings().Profiles()[1].overrides.Empty()) << "C was not";
+
+    const bool freezeBefore = AppSettings().Base().freezeScreen;
+    deleteThenToggle(0);
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u);
+    EXPECT_TRUE(AppSettings().Profiles()[0].overrides.Empty()) << "C was not edited";
+    EXPECT_NE(AppSettings().Base().freezeScreen, freezeBefore) << "the defaults were";
+}
+
 TEST_F(UiTest, MakingAProfileForWhatIsUnderneathTakesOneClick) {
     host_.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "Test Game"};
     ShowEditMode();
