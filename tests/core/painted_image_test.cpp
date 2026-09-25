@@ -1,6 +1,7 @@
 #include "core/drawing/painted_image.h"
 
 #include <algorithm>
+#include <set>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -81,6 +82,35 @@ TEST(PaintedImageTest, TheEdgeOfABrushIsPartiallyCovered) {
 // the ink lands once. A brush moving a pixel at a time overlaps almost
 // completely, so summing coverage would turn a translucent line opaque
 // within a few steps.
+// A corner-to-corner line crosses a sliver of the tiles in its bounding
+// box, and only those are saved for undo - every one it paints, and none
+// of the rest. Saving the whole box was 8 MB of undo per line at 1080p.
+TEST(PaintedImageTest, ALongDiagonalSavesOnlyTheTilesItCrosses) {
+    PaintedImage image(1920, 1080);
+    image.BeginStroke(0xFF0000FFu, 3.0f, PaintedImage::BrushMode::Paint);
+    image.ExtendStroke(0.0f, 0.0f, 1919.0f, 1079.0f);
+    const std::vector<PaintedTile> saved = image.EndStroke();
+
+    const int allTiles = image.TilesAcross() * image.TilesDown();
+    EXPECT_LT(saved.size(), static_cast<size_t>(3 * (image.TilesAcross() + image.TilesDown())));
+    EXPECT_LT(saved.size() * 4, static_cast<size_t>(allTiles));
+
+    // Every painted pixel is in a saved tile, so undo takes all of it back.
+    std::set<int> savedIndices;
+    for (const PaintedTile& tile : saved) {
+        savedIndices.insert(tile.index);
+    }
+    const std::vector<uint8_t>& pixels = image.PixelsRGBA();
+    for (int y = 0; y < image.Height(); ++y) {
+        for (int x = 0; x < image.Width(); ++x) {
+            if (pixels[(static_cast<size_t>(y) * image.Width() + x) * 4 + 3] != 0) {
+                const int index = image.TileIndex(x / PaintedImage::kTileSize, y / PaintedImage::kTileSize);
+                ASSERT_EQ(savedIndices.count(index), 1u) << x << "," << y;
+            }
+        }
+    }
+}
+
 TEST(PaintedImageTest, AStrokeThatOverlapsItselfIsNotPaintedTwice) {
     PaintedImage overlapping(60, 20);
     overlapping.BeginStroke(kHalfRed, 4.0f, PaintedImage::BrushMode::Paint);

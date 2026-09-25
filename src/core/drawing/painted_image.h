@@ -134,9 +134,13 @@ private:
     // maximum into the stroke's mask, and recomposites. Everything that
     // makes a stroke one stroke - the before-image, the maximum, the undo
     // tiles - lives here, so a new shape is a coverage function and
-    // nothing else. Defined in the .cpp; every instantiation is there.
-    template <typename CoverageFn>
-    PixelRect AccumulateCoverage(const PixelRect& touched, CoverageFn coverage);
+    // nothing else. `mayCover` is asked first for each tile's bounds, and a
+    // tile it rules out is neither saved for undo nor walked: a long
+    // diagonal crosses a sliver of the tiles in its bounding box. It may
+    // say yes wrongly, never no. Defined in the .cpp; every instantiation
+    // is there.
+    template <typename TileFn, typename CoverageFn>
+    PixelRect AccumulateCoverage(const PixelRect& touched, TileFn mayCover, CoverageFn coverage);
     // Saves a tile's current pixels into the stroke's own before-image, the
     // first time the stroke touches it, and gives it a zeroed mask.
     void EnsureTileTracked(int index);

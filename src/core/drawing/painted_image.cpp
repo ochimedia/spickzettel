@@ -164,8 +164,8 @@ void PaintedImage::RecompositeTile(int index, const PixelRect& within) {
     }
 }
 
-template <typename CoverageFn>
-PixelRect PaintedImage::AccumulateCoverage(const PixelRect& touchedIn, CoverageFn coverage) {
+template <typename TileFn, typename CoverageFn>
+PixelRect PaintedImage::AccumulateCoverage(const PixelRect& touchedIn, TileFn mayCover, CoverageFn coverage) {
     PixelRect touched = touchedIn;
     touched.x = std::clamp(touched.x, 0, width_);
     touched.y = std::clamp(touched.y, 0, height_);
@@ -185,8 +185,11 @@ PixelRect PaintedImage::AccumulateCoverage(const PixelRect& touchedIn, CoverageF
     for (int tileY = firstTileY; tileY <= lastTileY; ++tileY) {
         for (int tileX = firstTileX; tileX <= lastTileX; ++tileX) {
             const int index = TileIndex(tileX, tileY);
-            EnsureTileTracked(index);
             const PixelRect bounds = TileBounds(index);
+            if (!mayCover(bounds)) {
+                continue;
+            }
+            EnsureTileTracked(index);
             std::vector<uint8_t>& mask = strokeMask_[index];
 
             const int px0 = std::max(bounds.x, touched.x);
@@ -224,7 +227,19 @@ PixelRect PaintedImage::ExtendStroke(float x0, float y0, float x1, float y1) {
     const int bottom = static_cast<int>(std::ceil(std::max(y0, y1) + strokeRadius_ + 1.0f)) + 1;
 
     const float radius = strokeRadius_;
-    return AccumulateCoverage(PixelRect{left, top, right - left, bottom - top}, [&](int x, int y) {
+    // A tile is out of reach when even its center is farther from the
+    // segment than the brush reaches plus half the tile's diagonal. Asked
+    // once per tile, where a corner-to-corner line over a fullscreen layer
+    // used to save every tile of it for undo - 8 MB at 1080p, 33 MB at 4K -
+    // and evaluate every pixel.
+    const auto mayCover = [&](const PixelRect& tile) {
+        const float halfW = static_cast<float>(tile.w) * 0.5f;
+        const float halfH = static_cast<float>(tile.h) * 0.5f;
+        const float centerDistance = DistanceToSegment(static_cast<float>(tile.x) + halfW,
+                                                       static_cast<float>(tile.y) + halfH, x0, y0, x1, y1);
+        return centerDistance <= radius + 1.0f + std::sqrt(halfW * halfW + halfH * halfH);
+    };
+    return AccumulateCoverage(PixelRect{left, top, right - left, bottom - top}, mayCover, [&](int x, int y) {
         // Pixel centers, so a stroke down a pixel's middle is symmetric
         // rather than half a pixel off.
         const float distance =
@@ -250,7 +265,9 @@ PixelRect PaintedImage::ExtendRect(float x0, float y0, float x1, float y1) {
     const int right = static_cast<int>(std::ceil(maxX)) + 1;
     const int bottom = static_cast<int>(std::ceil(maxY)) + 1;
 
-    return AccumulateCoverage(PixelRect{left, top, right - left, bottom - top}, [&](int x, int y) {
+    // The rectangle covers all of its bounding box, so every tile in it.
+    const auto mayCover = [](const PixelRect&) { return true; };
+    return AccumulateCoverage(PixelRect{left, top, right - left, bottom - top}, mayCover, [&](int x, int y) {
         // How much of this pixel's own square the rectangle covers - 1
         // inside, a fraction on the boundary, so an edge that falls between
         // pixels doesn't come out jagged.
