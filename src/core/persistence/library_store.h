@@ -404,8 +404,18 @@ private:
         std::map<uint64_t, uint64_t> moves;
         bool operator==(const PendingRecord&) const = default;
     };
-    // Reads pending.json into writtenPending_, or finds it unreadable.
+    // Reads pending.json into writtenPending_, or finds it unreadable -
+    // held, since one whose content is not a record is set aside.
     void ReadPendingFile() const;
+    // Another try at a pending.json that could not be read, before each
+    // run at the removals: what the file names that this session loaded
+    // is kept, and the rest carried as it says (see the .cpp).
+    void RereadPendingFile() const;
+    // What pending.json's `text` says, or nullopt if it is not a record.
+    static std::optional<PendingRecord> ParsePendingRecord(const std::string& text);
+    // Moves a pending.json that is not a record out of the way, beside it
+    // as pending-unreadable-<time>.json. True once it is.
+    bool SetAsideUnreadablePendingFile() const;
     // Puts pending.json on disk saying exactly `record` - removed when it
     // says nothing. True once it does.
     bool WritePendingFile(const PendingRecord& record) const;
@@ -512,9 +522,10 @@ private:
     // picture in staging that nothing loaded names belongs to is then not
     // known, and it is not set aside (see Save).
     mutable bool readEverything_ = true;
-    // False when pending.json is there and cannot be read. What it names
-    // is then unknown - those directories load as they are - and it is not
-    // written over this session, so that it keeps naming them.
+    // False while pending.json is there and cannot be read - held by
+    // another program past the half second a read waits. What it names is
+    // then unknown - those directories load as they are - and it is not
+    // written over until it has been read (see RereadPendingFile).
     mutable bool pendingFileReadable_ = true;
     // See OversizedRecords.
     mutable std::set<uint64_t> oversizedRecords_;

@@ -1264,6 +1264,9 @@ void LibraryStore::NoteUnobservedPending(const std::unordered_set<uint64_t>& see
 }
 
 bool LibraryStore::RunPendingRemovals(const LibraryView& library) const {
+    if (!pendingFileReadable_) {
+        RereadPendingFile();
+    }
     // On disk before anything is touched: a removal that stops partway,
     // for a crash or a held file, is then still known at the next start -
     // and so is where whatever was moved out of it belongs, while it is
@@ -1313,36 +1316,122 @@ bool LibraryStore::WritePendingFile(const PendingRecord& record) const {
     return written;
 }
 
-void LibraryStore::ReadPendingFile() const {
-    writtenPending_ = {};
-    pendingFileReadable_ = true;
-    const std::filesystem::path file = rootDir_ / kPendingFile;
-    if (fs_->LinkStatus(file) == FileSystem::Kind::None) {
-        return;
+std::optional<LibraryStore::PendingRecord> LibraryStore::ParsePendingRecord(const std::string& text) {
+    const json doc = json::parse(text, /*callback=*/nullptr, /*allow_exceptions=*/false);
+    if (doc.is_discarded() || !doc.is_object()) {
+        return std::nullopt;
     }
-    const std::optional<json> doc = ReadJsonFile(*fs_, file);
-    if (!doc) {
-        pendingFileReadable_ = false;
-        return;
-    }
-    if (const auto it = doc->find("erased"); it != doc->end() && it->is_array()) {
+    PendingRecord record;
+    if (const auto it = doc.find("erased"); it != doc.end() && it->is_array()) {
         for (const json& entry : *it) {
             if (!entry.is_string()) {
                 continue;
             }
             if (const std::optional<uint64_t> uid = ParseUid(entry.get<std::string>())) {
-                writtenPending_.erased.insert(*uid);
+                record.erased.insert(*uid);
             }
         }
     }
-    if (const auto it = doc->find("moves"); it != doc->end() && it->is_object()) {
+    if (const auto it = doc.find("moves"); it != doc.end() && it->is_object()) {
         for (const auto& [key, value] : it->items()) {
             const std::optional<uint64_t> uid = ParseUid(key);
             const std::optional<uint64_t> parent =
                 value.is_string() ? ParseUid(value.get<std::string>()) : std::nullopt;
             if (uid && parent) {
-                writtenPending_.moves[*uid] = *parent;
+                record.moves[*uid] = *parent;
             }
+        }
+    }
+    return record;
+}
+
+bool LibraryStore::SetAsideUnreadablePendingFile() const {
+    // "pending-unreadable-2026-09-25-14-02-11.json", beside it - spelled
+    // the way a settings file that is not settings is set aside.
+    std::string stamp = TimestampName();
+    for (char& c : stamp) {
+        if (c == ' ' || c == ':') {
+            c = '-';
+        }
+    }
+    const std::filesystem::path file = rootDir_ / kPendingFile;
+    const std::filesystem::path aside = rootDir_ / ("pending-unreadable-" + stamp + ".json");
+    if (!IsOurs(file) || !IsOurs(aside) || fs_->Exists(aside) || !fs_->Rename(file, aside)) {
+        return false;
+    }
+    ++writeGeneration_;
+    return true;
+}
+
+void LibraryStore::ReadPendingFile() const {
+    writtenPending_ = {};
+    pendingFileReadable_ = true;
+    const std::filesystem::path file = rootDir_ / kPendingFile;
+    const FileSystem::Kind kind = fs_->LinkStatus(file);
+    if (kind == FileSystem::Kind::None) {
+        return;
+    }
+    // A link in its place is no more the store's to read than to write
+    // (see IsOurs): what it names stays unknown.
+    if (kind == FileSystem::Kind::Link) {
+        pendingFileReadable_ = false;
+        return;
+    }
+    const std::optional<std::string> text = ReadWaitingOutAHold(*fs_, file);
+    if (text) {
+        if (std::optional<PendingRecord> record = ParsePendingRecord(*text)) {
+            writtenPending_ = std::move(*record);
+            return;
+        }
+    }
+    // Read and not a record, or far too big to be one: reading it again
+    // tells nothing more, and a file never written over refused every save
+    // for good once anything was deleted for good. Set aside instead, so
+    // that it can still be looked at; what it named loads, as it does
+    // while the file cannot be read. Held - read again before each save,
+    // see RereadPendingFile.
+    const bool broken = text.has_value() || (kind == FileSystem::Kind::File && !CouldBeHeld(*fs_, file));
+    if (broken && SetAsideUnreadablePendingFile()) {
+        return;
+    }
+    pendingFileReadable_ = false;
+}
+
+void LibraryStore::RereadPendingFile() const {
+    const std::filesystem::path file = rootDir_ / kPendingFile;
+    const FileSystem::Kind kind = fs_->LinkStatus(file);
+    if (kind == FileSystem::Kind::Link) {
+        return;
+    }
+    std::optional<PendingRecord> record;
+    if (kind == FileSystem::Kind::None) {
+        record = PendingRecord{};  // gone since - by hand
+    } else if (const std::optional<std::string> text = ReadFileText(*fs_, file)) {
+        record = ParsePendingRecord(*text);
+        if (!record && SetAsideUnreadablePendingFile()) {
+            record = PendingRecord{};
+        }
+    }
+    if (!record) {
+        return;  // still held
+    }
+    pendingFileReadable_ = true;
+    writtenPending_ = *record;
+    // What it names that this session loaded - it could not skip it, not
+    // knowing - is the session's now: on screen, and perhaps added to
+    // since, which a removal at the next start would take with it. The
+    // rest is kept as it says, like anything a load did not see.
+    const auto indexed = [this](uint64_t uid) {
+        return folderDirs_.count(uid) > 0 || canvasDirs_.count(uid) > 0 || itemDirs_.count(uid) > 0;
+    };
+    for (const uint64_t uid : record->erased) {
+        if (!indexed(uid) && pendingRemovals_.count(uid) == 0) {
+            unobservedPending_.erased.insert(uid);
+        }
+    }
+    for (const auto& [uid, parent] : record->moves) {
+        if (!indexed(uid)) {
+            unobservedPending_.moves.emplace(uid, parent);
         }
     }
 }

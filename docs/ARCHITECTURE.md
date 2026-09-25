@@ -883,7 +883,21 @@ the process starts again. It can stop for two reasons:
 removal. Every save takes another run at it. The store removes only
 what the file already records, so a `pending.json` that cannot be
 written deletes nothing new, and fails the save. The file is gone
-again once nothing is owed. A `pending.json` that still names
+again once nothing is owed.
+
+A `pending.json` that cannot be read is not written over, since what it
+names would be lost. Held by another program, it is read again for half
+a second at the load, and once more before each save's run at the
+removals. What it names loads as it is while it cannot be read. Once it
+reads, what the session loaded of that is the session's: it is on
+screen, and may have been added to, which a removal at the next start
+would take with it. The rest is kept as the file says. The first
+version read it once, at the load. A moment's hold then refused every
+save of the session once anything was deleted for good, and every exit
+wrote a recovery copy of the whole library. A file whose content is not
+a record, or which is far too big to be one, will read no better later.
+It is set aside as `pending-unreadable-<time>.json`, as a settings file
+that is not settings is; kept, it refused every save for good. A `pending.json` that still names
 something counts as owed even when everything it names is gone. A
 crash between the last removal and the rewrite leaves it so, and
 otherwise no save would come along to rewrite it.

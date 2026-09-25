@@ -555,6 +555,91 @@ TEST(LibraryFaultTest, APendingRecordNamingWhatIsGoneIsBroughtInLine) {
     EXPECT_EQ(disk.Status(Root() / "pending.json"), FileSystem::Kind::None);
 }
 
+// A pending.json that is not a record - cut short - is set aside rather
+// than kept unwritten: kept, it refused every save of the session once
+// anything was deleted for good, and every session after it.
+TEST(LibraryFaultTest, APendingRecordThatIsNotOneIsSetAside) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    ASSERT_TRUE(disk.Put(Root() / "pending.json", "{\"erased\": [\"00000b\""));
+    LibraryStore store(Root(), disk);
+    std::optional<CanvasManagerSnapshot> library = store.Load();
+    ASSERT_TRUE(library.has_value());
+    library->canvases.erase(library->canvases.begin() + 1);  // B, for good
+    EXPECT_TRUE(store.Remove({kCanvasB, kNote}, *library));
+    EXPECT_TRUE(store.Save(*library));
+    EXPECT_FALSE(store.HasPendingRemovals());
+    ExpectNothingLeftOf(disk, {kCanvasB, kNote}, 0);
+    bool setAside = false;
+    for (const auto& [path, text] : disk.FilesUnder(Root())) {
+        setAside = setAside || (path.filename().string().starts_with("pending-unreadable-") &&
+                                text == "{\"erased\": [\"00000b\"");
+    }
+    EXPECT_TRUE(setAside);
+}
+
+// One held for a moment at the load is waited out, as library.json is.
+TEST(LibraryFaultTest, APendingRecordHeldForAMomentIsWaitedOut) {
+    MemoryFileSystem memory;
+    SetUpLibrary(memory);
+    FaultyFileSystem disk(memory);
+    {
+        LibraryStore store(Root(), disk);
+        CanvasManagerSnapshot library = *store.Load();
+        library.canvases.erase(library.canvases.begin() + 1);  // B, for good
+        disk.CrashAfter(2);  // pending.json's temporary and its rename, then nothing
+        store.Remove({kCanvasB, kNote}, library);
+    }
+    disk.ClearCrash();
+    disk.FailWhen(FaultyFileSystem::Op::Read,
+                  [](const std::filesystem::path& path) { return path.filename() == "pending.json"; }, 2);
+    LibraryStore store(Root(), disk);
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(LayoutOf(*loaded).count(kCanvasB), 0u) << "deleted for good, and back";
+    EXPECT_TRUE(store.Save(*loaded));
+    ExpectNothingLeftOf(memory, {kCanvasB, kNote}, 0);
+}
+
+// One held all through the load is read again before the next save's run
+// at the removals, rather than refusing every save for the rest of the
+// session. What it named that loaded meanwhile is the session's now - on
+// screen, perhaps added to - and is not removed at the next start.
+TEST(LibraryFaultTest, APendingRecordHeldThroughTheLoadIsReadBeforeTheNextSave) {
+    MemoryFileSystem memory;
+    SetUpLibrary(memory);
+    FaultyFileSystem disk(memory);
+    {
+        LibraryStore store(Root(), disk);
+        CanvasManagerSnapshot library = *store.Load();
+        library.canvases.erase(library.canvases.begin() + 1);  // B, for good
+        disk.CrashAfter(2);  // pending.json's temporary and its rename, then nothing
+        store.Remove({kCanvasB, kNote}, library);
+    }
+    disk.ClearCrash();
+    disk.FailWhen(FaultyFileSystem::Op::Read,
+                  [](const std::filesystem::path& path) { return path.filename() == "pending.json"; });
+    {
+        LibraryStore store(Root(), disk);
+        std::optional<CanvasManagerSnapshot> library = store.Load();
+        ASSERT_TRUE(library.has_value());
+        ASSERT_EQ(LayoutOf(*library).count(kCanvasB), 1u) << "what it names loads while it cannot be read";
+        disk.ClearFailures();
+        std::vector<Item>& onA = FindCanvas(*library, kCanvasA)->items;
+        onA.erase(onA.begin());  // the shot, for good
+        EXPECT_TRUE(store.Remove({kShot}, *library));
+        EXPECT_TRUE(store.Save(*library));
+        EXPECT_FALSE(store.HasPendingRemovals());
+    }
+    LibraryStore restarted(Root(), disk);
+    const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const Layout layout = LayoutOf(*loaded);
+    EXPECT_EQ(layout.count(kShot), 0u);
+    EXPECT_EQ(layout.count(kCanvasB), 1u) << "loaded, shown and kept by the session";
+    EXPECT_EQ(layout.count(kNote), 1u);
+}
+
 // A canvas moved into a folder that has never been saved, and every other
 // folder deleted for good while the canvas's picture is held open, so that
 // the move cannot land - and then the process stops. The folder the record

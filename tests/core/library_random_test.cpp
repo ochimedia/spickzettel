@@ -508,6 +508,15 @@ private:
             Note(std::string("while loading, ") + (op == FaultyFileSystem::Op::Read ? "unreadable: " : "unlistable: ") +
                  uid);
         }
+        // And pending.json, for a moment the load waits out. Held for
+        // longer, what it names loads as it is - the documented cost.
+        if (trouble && Chance(5)) {
+            const int times = 1 + static_cast<int>(Pick(3));
+            faulty_.FailWhen(FaultyFileSystem::Op::Read, [](const std::filesystem::path& path) {
+                return path.filename() == "pending.json";
+            }, times);
+            Note("while loading, pending.json held x" + std::to_string(times));
+        }
         Start();
         faulty_.ClearFailures();
     }
