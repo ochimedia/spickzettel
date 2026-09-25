@@ -1265,7 +1265,15 @@ every *top-level* window, and Windows leaves message-only
 the handling was first written, so no logoff could have reached it. It
 is now an ordinary hidden top-level window, and the test finds it with
 `FindWindow`, which likewise sees only top-level windows, and sends it
-the query. Both settle the hand's work, try the
+the query. Being top-level, it also receives `WM_CLOSE` - `taskkill`
+without `/f` posts it - which `DefWindowProc` answered by destroying the
+window and nothing else: the process ran on with no tray icon and no
+hotkeys, still holding the single-instance mutex. A close from outside,
+and the Restart Manager's `ENDSESSION_CLOSEAPP`, now take the tray menu's
+Exit. So does a `WM_CLOSE` sent to the overlay, which is where `taskkill`
+sends it while the overlay is up - it closes the windows it can see, and
+the host window is hidden. Alt+F4 over the overlay arrives as `SC_CLOSE`
+instead, and stays swallowed. Both settle the hand's work, try the
 save twice - the first attempt may be what clears the way - and, if the
 library still cannot be written, write a **recovery copy** beside it:
 `library-recovery-<timestamp>/`, a fresh tree holding every record and

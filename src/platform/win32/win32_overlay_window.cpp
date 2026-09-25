@@ -1296,7 +1296,15 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
             }
             return DefWindowProcW(hwnd, msg, wParam, lParam);
         }
+        // Not Alt+F4, which is the SC_CLOSE above and stays swallowed, but a
+        // close asked from outside: taskkill without /f sends it to the
+        // windows it can see, which while the overlay is up is this one and
+        // not the hidden host window. The window is still not destroyed;
+        // the app exits, as the tray menu's Exit does.
         case WM_CLOSE:
+            if (closeRequestedCallback_) {
+                closeRequestedCallback_();
+            }
             return 0;
         case WM_DISPLAYCHANGE: {
             // Which display the overlay belongs on is not this window's

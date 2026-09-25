@@ -94,6 +94,8 @@ bool Win32PlatformHost::Initialize(const std::string& appName) {
     }
 
     overlayWindow_.Initialize(instance);
+    // A close asked of the overlay is one asked of the app - see WM_CLOSE.
+    overlayWindow_.SetCloseRequestedCallback([this] { Exit(); });
     return true;
 }
 
@@ -298,6 +300,16 @@ void Win32PlatformHost::Quit(int exitCode) {
     running_ = false;
 }
 
+void Win32PlatformHost::Exit() {
+    // The tray menu's Exit, which flushes first; with nobody listening yet,
+    // there is nothing to flush.
+    if (trayCallback_) {
+        trayCallback_(TrayCommand::Exit);
+    } else {
+        Quit(0);
+    }
+}
+
 void Win32PlatformHost::SetSessionEndCallback(std::function<void()> callback) {
     sessionEndCallback_ = std::move(callback);
 }
@@ -398,6 +410,20 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
             if (wParam && sessionEndCallback_) {
                 sessionEndCallback_();
             }
+            // The Restart Manager - an installer or updater making room -
+            // closes an application with the same pair of messages, and
+            // then waits for it to go. A logoff ends the process itself.
+            if (wParam && (lParam & ENDSESSION_CLOSEAPP)) {
+                Exit();
+            }
+            return 0;
+        // A request to close - taskkill without /f, or anything else that
+        // asks politely - is a request to exit. Left to DefWindowProc it
+        // destroyed this window and nothing more: the process ran on
+        // without its tray icon or hotkeys, holding the single-instance
+        // mutex so that no new copy could start.
+        case WM_CLOSE:
+            Exit();
             return 0;
         default:
             return DefWindowProcA(hwnd, msg, wParam, lParam);

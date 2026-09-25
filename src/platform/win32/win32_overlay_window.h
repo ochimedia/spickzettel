@@ -37,6 +37,9 @@ public:
     bool EnsureCreated(const DisplayInfo& display) override;
     void MoveToDisplay(const DisplayInfo& display) override;
     void SetDisplaysChangedCallback(std::function<void()> callback) override;
+    // What a close asked of this window from outside does - see WM_CLOSE
+    // in HandleMessage. The host's own exit, which it sets.
+    void SetCloseRequestedCallback(std::function<void()> callback) { closeRequestedCallback_ = std::move(callback); }
     void Show() override;
     void ShowWithoutActivating() override;
     void Hide() override;
@@ -100,6 +103,7 @@ private:
     // go.
     RECT displayRect_{};
     std::function<void()> displaysChangedCallback_;
+    std::function<void()> closeRequestedCallback_;
     // Where the last per-frame Move was emitted for the software pointer,
     // so a frame in which it didn't move emits nothing - see RenderFrame.
     POINT lastEmittedMove_{LONG_MIN, LONG_MIN};

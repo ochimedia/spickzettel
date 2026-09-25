@@ -1,6 +1,7 @@
 #include "platform/win32/win32_platform_host.h"
 
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -31,6 +32,68 @@ TEST(Win32PlatformHostTest, TheHostWindowIsTopLevelAndAnswersASessionEnd) {
     EXPECT_EQ(sessionEnds, 2) << "and again when it is decided";
     SendMessageA(hwnd, WM_ENDSESSION, FALSE, 0);  // called off after all
     EXPECT_EQ(sessionEnds, 2);
+}
+
+// A close asked from outside - WM_CLOSE, as taskkill without /f sends, or
+// the Restart Manager's close-app - exits the way the tray menu does, and
+// leaves the window in place until then rather than destroying it.
+TEST(Win32PlatformHostTest, ACloseFromOutsideExitsAsTheTrayMenuDoes) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    int exits = 0;
+    host.SetTrayCommandCallback([&exits](TrayCommand command) {
+        if (command == TrayCommand::Exit) {
+            ++exits;
+        }
+    });
+    const HWND hwnd = FindWindowA(nullptr, name.c_str());
+    ASSERT_NE(hwnd, nullptr);
+
+    SendMessageA(hwnd, WM_CLOSE, 0, 0);
+    EXPECT_EQ(exits, 1);
+    EXPECT_TRUE(IsWindow(hwnd)) << "not destroyed with the tray icon and hotkeys still on it";
+
+    SendMessageA(hwnd, WM_ENDSESSION, TRUE, 0);
+    EXPECT_EQ(exits, 1) << "a logoff ends the process itself";
+    SendMessageA(hwnd, WM_ENDSESSION, TRUE, ENDSESSION_CLOSEAPP);
+    EXPECT_EQ(exits, 2) << "the Restart Manager waits for it to go";
+}
+
+// The same close sent to the overlay, which is the window taskkill finds
+// while the overlay is up: the app exits, and the overlay is not destroyed.
+TEST(Win32PlatformHostTest, ACloseSentToTheOverlayExitsToo) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    int exits = 0;
+    host.SetTrayCommandCallback([&exits](TrayCommand command) {
+        if (command == TrayCommand::Exit) {
+            ++exits;
+        }
+    });
+    const std::vector<DisplayInfo> displays = host.ListDisplays();
+    ASSERT_FALSE(displays.empty());
+    ASSERT_TRUE(host.GetOverlayWindow().EnsureCreated(displays[0]));
+    HWND overlay = nullptr;
+    EnumThreadWindows(
+        GetCurrentThreadId(),
+        [](HWND hwnd, LPARAM found) {
+            char title[64] = {};
+            GetWindowTextA(hwnd, title, sizeof(title));
+            if (std::string(title) == "Spickzettel Overlay") {
+                *reinterpret_cast<HWND*>(found) = hwnd;
+            }
+            return TRUE;
+        },
+        reinterpret_cast<LPARAM>(&overlay));
+    ASSERT_NE(overlay, nullptr);
+
+    SendMessageA(overlay, WM_CLOSE, 0, 0);
+    EXPECT_EQ(exits, 1);
+    EXPECT_TRUE(IsWindow(overlay));
+    SendMessageA(overlay, WM_SYSCOMMAND, SC_CLOSE, 0);
+    EXPECT_EQ(exits, 1) << "Alt+F4 over the overlay is not a way out";
 }
 
 }  // namespace

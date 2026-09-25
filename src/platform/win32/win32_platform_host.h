@@ -41,6 +41,8 @@ private:
     static LRESULT CALLBACK WndProcThunk(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     void ShowTrayContextMenu();
+    // Exits as the tray menu's Exit does, for a close asked from outside.
+    void Exit();
 
     std::string appName_;
     HWND hwnd_ = nullptr;
