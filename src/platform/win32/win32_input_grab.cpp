@@ -188,10 +188,7 @@ void Win32InputGrab::Shutdown() {
 // been swallowed yet in this grab, and OnKeyboard's key-up rule is what stops
 // it having gone stale in an earlier one.
 void Win32InputGrab::BeginGrabbedKeyboard() {
-    const auto asyncDown = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
-    ctrlDown_ = asyncDown(VK_CONTROL);
-    altDown_ = asyncDown(VK_MENU);
-    shiftDown_ = asyncDown(VK_SHIFT);
+    modifiers_.Seed([](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; });
 }
 
 // Gives the keyboard back, to both parties that were being lied to while it
@@ -205,7 +202,7 @@ void Win32InputGrab::EndGrabbedKeyboard() {
     for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
         swallowed[vk] = swallowedDown_[vk].load(std::memory_order_relaxed);
     }
-    ctrlDown_ = altDown_ = shiftDown_ = false;
+    modifiers_.Clear();
     ReleaseSwallowedKeys();
     HandHeldModifiersToSystem(swallowed);
 }
@@ -1128,13 +1125,15 @@ void Win32InputGrab::PostCharactersToOverlay(UINT vk, const KBDLLHOOKSTRUCT& eve
     // produce U+0001. AltGr arrives as Ctrl+Alt together and *is* text on
     // layouts that use it (the German @ and \ live there), so only the
     // Ctrl-alone case is excluded.
-    if (ctrlDown_ && !altDown_) {
+    const bool ctrl = modifiers_.Ctrl();
+    const bool alt = modifiers_.Alt();
+    if (ctrl && !alt) {
         return;
     }
 
-    keyboardState_[VK_SHIFT] = shiftDown_ ? 0x80 : 0;
-    keyboardState_[VK_CONTROL] = ctrlDown_ ? 0x80 : 0;
-    keyboardState_[VK_MENU] = altDown_ ? 0x80 : 0;
+    keyboardState_[VK_SHIFT] = modifiers_.Shift() ? 0x80 : 0;
+    keyboardState_[VK_CONTROL] = ctrl ? 0x80 : 0;
+    keyboardState_[VK_MENU] = alt ? 0x80 : 0;
     // Toggles, not held states: Caps Lock survives the hook untouched, so the
     // OS still has the truth about it.
     keyboardState_[VK_CAPITAL] = static_cast<BYTE>(GetKeyState(VK_CAPITAL) & 0x0001);
@@ -1264,23 +1263,40 @@ void Win32InputGrab::HandHeldModifiersToSystem(const bool (&swallowed)[256]) {
 // whether `vk` was one of them. This record is what the grab matches hotkeys
 // against and what the render thread ORs into the modifier state it hands
 // ImGui - a swallowed key updates nothing the OS can be asked about, so this
-// is the only place that knows.
-bool Win32InputGrab::TrackModifier(UINT vk, bool isDown) {
+// is the only place that knows. The hook reports the side (VK_LSHIFT, not
+// VK_SHIFT); a sideless key, which it does not send, would count for both.
+bool Win32InputGrab::ModifierRecord::Track(UINT vk, bool isDown) {
+    const auto set = [&](int first, int second) {
+        held_[first] = isDown;
+        held_[second] = isDown;
+    };
     switch (vk) {
-        case VK_CONTROL:
         case VK_LCONTROL:
+            held_[0] = isDown;
+            return true;
         case VK_RCONTROL:
-            ctrlDown_ = isDown;
+            held_[1] = isDown;
+            return true;
+        case VK_CONTROL:
+            set(0, 1);
+            return true;
+        case VK_LMENU:
+            held_[2] = isDown;
+            return true;
+        case VK_RMENU:
+            held_[3] = isDown;
             return true;
         case VK_MENU:
-        case VK_LMENU:
-        case VK_RMENU:
-            altDown_ = isDown;
+            set(2, 3);
+            return true;
+        case VK_LSHIFT:
+            held_[4] = isDown;
+            return true;
+        case VK_RSHIFT:
+            held_[5] = isDown;
             return true;
         case VK_SHIFT:
-        case VK_LSHIFT:
-        case VK_RSHIFT:
-            shiftDown_ = isDown;
+            set(4, 5);
             return true;
         default:
             return false;
@@ -1388,14 +1404,15 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
             hotkeys = hotkeys_;
         }
         for (const Hotkey& hotkey : hotkeys) {
-            if (hotkey.vk == vk && hotkey.ctrl == ctrlDown_ && hotkey.alt == altDown_ &&
-                hotkey.shift == shiftDown_) {
+            const bool ctrl = modifiers_.Ctrl();
+            const bool alt = modifiers_.Alt();
+            const bool shift = modifiers_.Shift();
+            if (hotkey.vk == vk && hotkey.ctrl == ctrl && hotkey.alt == alt && hotkey.shift == shift) {
                 // Exactly the message RegisterHotKey would have produced,
                 // delivered to exactly the window that registered it - so
                 // Win32PlatformHost's existing WM_HOTKEY handler dispatches
                 // it without knowing this didn't come from the OS.
-                const UINT modifiers = (ctrlDown_ ? MOD_CONTROL : 0u) | (altDown_ ? MOD_ALT : 0u) |
-                                       (shiftDown_ ? MOD_SHIFT : 0u);
+                const UINT modifiers = (ctrl ? MOD_CONTROL : 0u) | (alt ? MOD_ALT : 0u) | (shift ? MOD_SHIFT : 0u);
                 PostMessageA(hotkey.target, WM_HOTKEY, static_cast<WPARAM>(hotkey.id),
                              MAKELPARAM(modifiers, vk));
                 // Deliberately still falls through to the overlay below: a

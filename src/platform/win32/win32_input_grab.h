@@ -150,10 +150,46 @@ public:
     // Shift or Alt is down - the render thread ORs it into the modifier
     // state it hands ImGui each frame.
     void HeldModifiers(bool& ctrl, bool& shift, bool& alt) const {
-        ctrl = ctrlDown_;
-        shift = shiftDown_;
-        alt = altDown_;
+        ctrl = modifiers_.Ctrl();
+        shift = modifiers_.Shift();
+        alt = modifiers_.Alt();
     }
+
+    // Ctrl, Alt and Shift as the grab has seen them, each side on its own:
+    // with both Shifts held, letting go of one leaves Shift held. One flag
+    // per modifier, as it was, read as up the moment either side came up.
+    // Atomic: the hook thread writes it, the render thread reads it, and the
+    // app thread seeds it as a grab starts. Public to be tested without a
+    // hook.
+    class ModifierRecord {
+    public:
+        // Records `vk` going down or up if it is one of the six modifier
+        // keys - or the sideless VK_CONTROL, VK_MENU or VK_SHIFT, taken as
+        // both sides - and says whether it was.
+        bool Track(UINT vk, bool isDown);
+        // Sets every side to what `isDown(vk)` says of it - the keyboard as
+        // the system has it, when nothing of it has been swallowed.
+        template <typename IsDown>
+        void Seed(IsDown isDown) {
+            for (int side = 0; side < kSides; ++side) {
+                held_[side] = isDown(static_cast<int>(kSideKeys[side]));
+            }
+        }
+        void Clear() {
+            for (std::atomic<bool>& side : held_) {
+                side = false;
+            }
+        }
+        bool Ctrl() const { return held_[0] || held_[1]; }
+        bool Alt() const { return held_[2] || held_[3]; }
+        bool Shift() const { return held_[4] || held_[5]; }
+
+    private:
+        static constexpr int kSides = 6;
+        static constexpr UINT kSideKeys[kSides] = {VK_LCONTROL, VK_RCONTROL, VK_LMENU,
+                                                   VK_RMENU,    VK_LSHIFT,   VK_RSHIFT};
+        std::atomic<bool> held_[kSides] = {};
+    };
 
     // Injects the correction banked so far right now, rather than when
     // countering next ends - for the window to call before it stops hiding
@@ -217,7 +253,7 @@ private:
     // recognized as ours later. See the rule at the top of OnKeyboard.
     LRESULT SwallowKey(UINT vk, bool isDown);
     // Updates the grab's own Ctrl/Shift/Alt record; true if vk was one.
-    bool TrackModifier(UINT vk, bool isDown);
+    bool TrackModifier(UINT vk, bool isDown) { return modifiers_.Track(vk, isDown); }
     // Hands still-held modifiers back to Windows when the hook goes away - see
     // its definition for the hotkey that stops working without it.
     static void HandHeldModifiersToSystem(const bool (&swallowed)[256]);
@@ -531,10 +567,8 @@ private:
 
     // Modifier state, tracked for the same reason as the buttons: the
     // modifier key-downs are swallowed too, so GetKeyState can't be asked.
-    // Atomic because the render thread reads them through HeldModifiers.
-    std::atomic<bool> ctrlDown_{false};
-    std::atomic<bool> altDown_{false};
-    std::atomic<bool> shiftDown_{false};
+    // Read by the render thread through HeldModifiers.
+    ModifierRecord modifiers_;
 
     std::vector<Hotkey> hotkeys_;
 

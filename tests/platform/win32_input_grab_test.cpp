@@ -175,6 +175,27 @@ TEST(Win32InputGrabTest, HeldModifiersAreHandedBackAsTheVeryKeysThatWereHeld) {
     }
 }
 
+// Each side of a modifier is held on its own: with both Shifts down, one
+// let go leaves Shift held, and it is up only once both are.
+TEST(Win32InputGrabTest, AModifierIsHeldWhileEitherSideIs) {
+    Win32InputGrab::ModifierRecord record;
+    EXPECT_TRUE(record.Track(VK_LSHIFT, true));
+    EXPECT_TRUE(record.Track(VK_RSHIFT, true));
+    EXPECT_TRUE(record.Track(VK_LSHIFT, false));
+    EXPECT_TRUE(record.Shift()) << "the right Shift is still down";
+    record.Track(VK_RSHIFT, false);
+    EXPECT_FALSE(record.Shift());
+
+    record.Track(VK_RCONTROL, true);
+    EXPECT_TRUE(record.Ctrl());
+    EXPECT_FALSE(record.Alt());
+    EXPECT_FALSE(record.Track('A', true)) << "not a modifier";
+
+    record.Seed([](int vk) { return vk == VK_LMENU; });
+    EXPECT_TRUE(record.Alt());
+    EXPECT_FALSE(record.Ctrl()) << "seeded over what was tracked";
+}
+
 // The machine's input is only held while the app thread is there to give it
 // back: a couple of seconds without a frame and the hooks let everything by.
 TEST(Win32InputGrabTest, TheHooksStandDownWhenTheAppThreadStopsBeating) {
