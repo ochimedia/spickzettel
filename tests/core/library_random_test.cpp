@@ -533,6 +533,12 @@ private:
         const Layout want = LayoutOf(Manager().View().folders, Manager().View().canvases);
         LibraryStore reopened(Root(), disk_);
         const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
+        // A run whose every save crashed or failed leaves nothing on disk,
+        // and the restart before this one then began a fresh library - which
+        // has nothing to save until something is done in it.
+        if (!loaded && durable_.empty() && !session_->HasUnsavedChanges()) {
+            return;
+        }
         ASSERT_TRUE(loaded.has_value());
         const Layout got = LayoutOf(loaded->folders, loaded->canvases);
         EXPECT_EQ(got, want) << "the library:\n" << Describe(want) << "the disk:\n" << Describe(got);
