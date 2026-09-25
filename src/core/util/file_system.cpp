@@ -149,6 +149,8 @@ std::optional<std::vector<FileSystem::Entry>> RealFileSystem::List(const std::fi
 }
 
 std::optional<std::string> RealFileSystem::Read(const std::filesystem::path& path, uintmax_t maxBytes) {
+    // Refused unread when it says it is too big - or is no file at all: a
+    // directory opens as a stream on some systems, and reads as nothing.
     const std::optional<uintmax_t> size = FileSize(path);
     if (!size || *size > maxBytes) {
         return std::nullopt;
@@ -157,9 +159,25 @@ std::optional<std::string> RealFileSystem::Read(const std::filesystem::path& pat
     if (!in) {
         return std::nullopt;
     }
-    std::string bytes(static_cast<size_t>(*size), '\0');
-    in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    if (static_cast<uintmax_t>(in.gcount()) != *size) {
+    // Read from the open file to its end, the size above only a hint: the
+    // file a path names can be replaced between the two steps - an atomic
+    // save landing - and read to the size of the one before, the one after
+    // came back cut short, which is unreadable, or not at all.
+    std::string bytes;
+    bytes.reserve(static_cast<size_t>(*size));
+    char chunk[64 * 1024];
+    for (;;) {
+        in.read(chunk, sizeof(chunk));
+        const auto got = static_cast<size_t>(in.gcount());
+        if (bytes.size() + got > maxBytes) {
+            return std::nullopt;
+        }
+        bytes.append(chunk, got);
+        if (!in) {
+            break;
+        }
+    }
+    if (in.bad() || !in.eof()) {
         return std::nullopt;
     }
     return bytes;

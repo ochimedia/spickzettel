@@ -150,6 +150,20 @@ TEST_P(FileSystemConformanceTest, WritesReadsAndListsFiles) {
     EXPECT_FALSE(Fs().List(root_ / "a" / "record.json").has_value()) << "a file is not listed";
 }
 
+// Whole or not at all: a file within the limit reads whole, however many
+// reads that takes; one past it, or a directory, does not read.
+TEST_P(FileSystemConformanceTest, ReadsAFileWholeWithinItsLimitAndNothingElse) {
+    std::string big(200 * 1024, 'x');
+    big.back() = 'y';
+    Put(root_ / "big", big);
+    EXPECT_EQ(Fs().Read(root_ / "big", big.size()), big);
+    EXPECT_FALSE(Fs().Read(root_ / "big", big.size() - 1).has_value());
+    Put(root_ / "empty", "");
+    EXPECT_EQ(Fs().Read(root_ / "empty", 100), "");
+    Fs().MakeDirectory(root_ / "dir");
+    EXPECT_FALSE(Fs().Read(root_ / "dir", 100).has_value());
+}
+
 TEST_P(FileSystemConformanceTest, WritesANewFileOnlyWhereNothingIsAndItsDirectoryIs) {
     Put(root_ / "taken", "old");
     EXPECT_EQ(Fs().WriteNewFile(root_ / "taken", "new", 3), FileSystem::WriteResult::NameTaken);
