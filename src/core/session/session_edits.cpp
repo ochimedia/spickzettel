@@ -707,6 +707,10 @@ void Session::NoteEraseOutcome(const std::vector<size_t>& outcome) {
 }
 
 void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx) {
+    // A gesture still open is over, and filed whole - both halves in one
+    // entry. Without this its strokes' snapshot was taken over by this
+    // one's, and only its pixels were filed, on their own.
+    EndErase();
     // Snapshot the item's whole stroke list right as the gesture starts,
     // diffed against its final state when it ends to build one combined
     // undo entry for the whole gesture - see eraseGestureStartSnapshot_ for

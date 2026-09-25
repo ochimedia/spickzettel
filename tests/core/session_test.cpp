@@ -486,6 +486,24 @@ TEST(SessionTest, AnEraseUndoneWithoutItsPixelsLeavesThemOutOfItsRedo) {
     EXPECT_EQ(layer.painted->PixelsRGBA(), afterErase.PixelsRGBA()) << "not the pixels from before the erase";
 }
 
+// An erase begun while another is still open ends that one first, filed
+// whole: one undo puts back what each took.
+TEST(SessionTest, AnEraseBegunOverAnOpenOneFilesThatOneFirst) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawLineInto(session, item, 20.0f);
+    DrawLineInto(session, item, 80.0f);
+    const std::vector<Stroke> drawn = ItemById(session.Manager(), item)->strokes;
+
+    session.BeginErase(item, 50.0f, 20.0f, 10.0f);
+    session.BeginErase(item, 50.0f, 80.0f, 10.0f);
+    session.EndErase();
+
+    ASSERT_TRUE(session.Undo().has_value());
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(ItemById(session.Manager(), item)->strokes, drawn);
+}
+
 TEST(SessionTest, ClearingADrawingIsOneStep) {
     Session session;
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
