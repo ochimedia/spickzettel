@@ -870,7 +870,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             }
             ImGui::InputText("##renamefolder", renameBuffer_, sizeof(renameBuffer_));
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                Manager().RenameFolder(f.id, std::string(renameBuffer_));
+                session_.RenameFolder(f.id, std::string(renameBuffer_));
                 renamingFolderId_.reset();
                 window_->ReleaseTextInput();
             } else if (ImGui::IsItemDeactivated()) {
@@ -1070,7 +1070,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
             }
             ImGui::InputText("##renamecanvas", renameBuffer_, sizeof(renameBuffer_));
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                Manager().RenameCanvas(c.id, std::string(renameBuffer_));
+                session_.RenameCanvas(c.id, std::string(renameBuffer_));
                 renamingCanvasId_.reset();
                 window_->ReleaseTextInput();
             } else if (ImGui::IsItemDeactivated()) {
@@ -1181,7 +1181,7 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
         // of the sidebar - which is where the eye goes after pressing a
         // button at the bottom of it, and matches where a new canvas
         // lands in its own list.
-        overviewScrollToFolderId_ = Manager().AddFolder(TimestampName());
+        overviewScrollToFolderId_ = session_.AddFolder(TimestampName());
         deletedFolderShown_.reset();
         // With a canvas already in it. A folder is where canvases live, so
         // an empty one is a step rather than a result, and an empty folder
@@ -1189,7 +1189,7 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
         // onto. AddFolder has already made the new folder
         // current, so this lands inside it - and, like the button next to
         // it, the canvas it makes is switched to.
-        Manager().SwitchToCanvas(CreateCanvasInCurrentFolder());
+        session_.SwitchToCanvas(CreateCanvasInCurrentFolder());
     }
     // Lined up with the canvas grid above it, which starts past the
     // window's padding, the sidebar and the gap after it. SameLine counts
@@ -1204,12 +1204,11 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
     const bool newCanvasPressed = PrimaryButton("##newcanvas", icons::kPlus, strings::kOverviewNewCanvas);
     ImGui::EndDisabled();
     if (newCanvasPressed) {
-        const CanvasId id = Manager().AddCanvas(TimestampName());
+        const CanvasId id = CreateCanvasInCurrentFolder();
         // Made at the end of the folder, so the grid may have to scroll for
-        // it to be seen at all - see overviewScrollToCanvasId_. Set on both
-        // paths below (picker or not): either way the tile is what the
-        // click was about.
-        overviewScrollToCanvasId_ = id;
+        // it to be seen at all - see overviewScrollToCanvasId_, which is set
+        // on both paths below (picker or not): either way the tile is what
+        // the click was about.
         if (pickerItemId_.has_value()) {
             // The new canvas is a destination for the item being sent
             // away, and is not switched to: following it would take the
@@ -1223,23 +1222,23 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
             // up: a panel that vanishes the instant a button is pressed is
             // disorienting, and keeping it up leaves the grid there to
             // carry on with.
-            Manager().SwitchToCanvas(id);
+            session_.SwitchToCanvas(id);
         }
     }
 }
 
 void OverlayApp::ApplyOverviewActions(const OverviewActions& actions) {
     if (actions.folderReorder.has_value()) {
-        Manager().ReorderFolder(actions.folderReorder->first, actions.folderReorder->second);
+        session_.ReorderFolder(actions.folderReorder->first, actions.folderReorder->second);
     }
     if (actions.canvasToFolder.has_value()) {
-        Manager().MoveCanvasToFolder(actions.canvasToFolder->first, actions.canvasToFolder->second);
+        session_.MoveCanvasToFolder(actions.canvasToFolder->first, actions.canvasToFolder->second);
     }
     if (actions.canvasReorder.has_value()) {
-        Manager().ReorderCanvas(actions.canvasReorder->first, actions.canvasReorder->second);
+        session_.ReorderCanvas(actions.canvasReorder->first, actions.canvasReorder->second);
     }
     if (actions.switchToFolder.has_value()) {
-        Manager().SwitchToFolder(*actions.switchToFolder);
+        session_.SwitchToFolder(*actions.switchToFolder);
         deletedFolderShown_.reset();
     }
     if (actions.showDeletedFolder.has_value()) {
@@ -1253,7 +1252,7 @@ void OverlayApp::ApplyOverviewActions(const OverviewActions& actions) {
         if (pickerItemId_.has_value()) {
             SendPickedItemTo(*actions.clickedCanvas);
         } else {
-            Manager().SwitchToCanvas(*actions.clickedCanvas);
+            session_.SwitchToCanvas(*actions.clickedCanvas);
             CloseOverview();
         }
     }
@@ -1274,32 +1273,15 @@ void OverlayApp::SendPickedItemTo(CanvasId target) {
     if (target != source) {
         const Canvas* targetCanvas = Manager().FindCanvas(target);
         const std::string targetName = targetCanvas ? targetCanvas->name : strings::kDeleteConfirmCanvasWord;
-        const ItemId newId = Manager().MoveOrCopyItemToCanvas(item, target, isCopy);
-        if (isCopy ? newId == 0 : Manager().CanvasHoldingItem(item) != target) {
+        const Session::Placed sent = session_.SendItemsTo({item}, target, isCopy);
+        if (sent.items.empty()) {
             pickerItemId_.reset();
             return;
         }
-        bool pictureLost = false;
-        if (isCopy) {
-            pictureLost = !session_.ClonePicturesForCopy(item, newId);
-        }
-        if (!isCopy) {
-            // A move takes the item off this canvas, so its history here
-            // would now be aimed at something living somewhere else - see
-            // Session::ForgetHistoryOfItem. A copy leaves the original (and
-            // its history) exactly where it was.
-            session_.ForgetHistoryOfItem(source, item);
-        }
-        ShowActionToast(pictureLost ? std::string(strings::kToastCopiedWithoutPicture)
-                                    : std::string(isCopy ? strings::kToastCopiedToPrefix : strings::kToastMovedToPrefix) +
-                                          targetName);
-        // The item (or its fresh copy) now lives on a canvas that isn't
-        // current, so whatever texture it holds is no longer doing anything
-        // - hand it straight back rather than leaving it resident until the
-        // next canvas switch happens to notice. OnFrame's own sync can't
-        // catch this: it only fires when the *current* canvas changes, and
-        // this path deliberately stays put.
-        session_.SyncTexturesToCurrentCanvas();
+        ShowActionToast(sent.pictureLost ? std::string(strings::kToastCopiedWithoutPicture)
+                                         : std::string(isCopy ? strings::kToastCopiedToPrefix
+                                                              : strings::kToastMovedToPrefix) +
+                                               targetName);
     }
     // Out of picker mode (the move/copy is already done), with the Overview
     // itself left open - the user can click the target canvas to switch to

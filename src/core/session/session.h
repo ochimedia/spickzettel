@@ -6,9 +6,11 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "core/canvas/canvas_manager.h"
+#include "core/drawing/canvas_state.h"
 #include "core/drawing/stroke.h"
 #include "core/persistence/library_store.h"
 #include "core/session/undo_entry.h"
@@ -18,10 +20,11 @@
 namespace sz::core {
 
 // What the app is working on, independent of how it is shown: the library,
-// what is on disk and what is on the GPU. A UI is a view of this - it reads
-// the model, edits it, and asks the session for everything that has to be
-// kept in step with it: saving, loading pictures, deleting and restoring,
-// capturing the screen.
+// what is on disk and what is on the GPU. A UI is a view of this: it reads
+// the model, and changes it only by asking the session - every change is
+// one of the commands below, so that each one is kept in step with the
+// history, the disk and the GPU in one place, and none can be made past
+// them. The model is handed out read-only for that reason.
 //
 // No ImGui here, and nothing about gestures, popovers or panels. The window
 // it is attached to is the platform's, for the two things the session needs
@@ -50,10 +53,41 @@ public:
     // outlives the session it was made in, so nothing could reach it again.
     void ImportLibrary(CanvasManagerSnapshot snapshot);
 
-    // The library: what every gesture, the Overview and the texture sync act
-    // on.
-    CanvasManager& Manager() { return library_.manager; }
+    // The library, to read: what every gesture, the Overview and the
+    // texture sync look at. Changed only through the commands below.
     const CanvasManager& Manager() const { return library_.manager; }
+
+    // ===== Changes that are not undone =====
+    //
+    // Where things are kept and how they are looked at, rather than what
+    // they hold: none of these goes on the history, and none changes
+    // anything an entry on it reads.
+
+    // See CanvasManager::SwitchToCanvas / SwitchToFolder. A switch also
+    // drops whatever stroke was being drawn (see LiveLayer).
+    void SwitchToCanvas(CanvasId id);
+    void SwitchToFolder(FolderId id);
+    // See CanvasManager::AddCanvas / AddFolder.
+    CanvasId AddCanvas(std::string name);
+    FolderId AddFolder(std::string name);
+    // See CanvasManager's functions of the same names.
+    void RenameFolder(FolderId id, std::string name);
+    void RenameCanvas(CanvasId id, std::string name);
+    void ReorderFolder(FolderId id, size_t newIndex);
+    void ReorderCanvas(CanvasId id, size_t newIndex);
+    void MoveCanvasToFolder(CanvasId canvasId, FolderId folderId);
+    // Pins or unpins, minimizes or brings back, each snippet among `ids`
+    // that there is (see Item::pinned, Item::minimized).
+    void SetPinned(const std::vector<ItemId>& ids, bool pinned);
+    void SetMinimized(const std::vector<ItemId>& ids, bool minimized);
+    // The stacking order - see CanvasManager::BringItemsToFront and
+    // MoveItemLayer.
+    void BringItemsToFront(const std::vector<ItemId>& ids);
+    void MoveItemLayer(ItemId id, int direction);
+    // Keeps every snippet's rect right for the display - see
+    // CanvasManager::SyncItemsToDisplaySize. Not a change of anything: a
+    // rect it sets follows from the snippet's anchor.
+    void SyncItemsToDisplaySize(float width, float height);
 
     // ===== Deleting and restoring =====
     //
@@ -189,22 +223,21 @@ public:
     // entry, and counts for nothing; so does forgetting a snippet's or a
     // canvas's entries, or the oldest falling off the end.
     uint64_t HistoryRevision() const { return historyRevision_; }
-    // Forgets every entry naming `itemId`, on `canvasId` only - for an item
-    // moved to a different canvas, where its history would otherwise stay
-    // filed under the canvas it left, and an undo there would edit an item
-    // that now lives somewhere else.
-    void ForgetHistoryOfItem(CanvasId canvasId, ItemId itemId);
 
     // ===== Edits that can be undone =====
     //
-    // Everything that changes a snippet's ink or text goes through these,
-    // so that it goes on the history as it happens. A snippet's placement -
-    // moved, resized, fullscreen - is changed in the model directly and
-    // recorded afterwards, once per gesture (see RecordPlacements).
-    // Renames and reorders are not tracked.
+    // Everything that changes what a snippet holds, where it is or how it
+    // looks goes through these, and onto the history as it happens.
 
-    // Moves the stroke just finished on the current canvas's live layer
-    // into `itemId`, in the item's own native space, and files it.
+    // Where a stroke is drawn while it is being drawn, in screen space:
+    // scratch, not content, empty whenever no stroke is under way, and
+    // dropped on a canvas switch so that none can follow the switch. The
+    // UI draws into it; CommitLiveStroke, or a shape (see BeginShape),
+    // moves what is in it into a snippet.
+    CanvasState& LiveLayer() { return liveLayer_; }
+    const CanvasState& LiveLayer() const { return liveLayer_; }
+    // Moves the stroke just finished on the live layer into `itemId`, in
+    // the item's own native space, and files it.
     void CommitLiveStroke(ItemId itemId);
     // Deletes a snippet on the current canvas, undoably - marked, and the
     // entry is what an undo restores. False if there is no such snippet
@@ -215,44 +248,80 @@ public:
     // deleted.
     size_t DeleteItems(const std::vector<ItemId>& itemIds);
 
-    // Where a snippet is - see undo::Placement.
-    using Placement = undo::Placement;
-    // The placements of these snippets as they are now, for a later
-    // RecordPlacements. Ids that name nothing are left out.
-    std::vector<Placement> PlacementsOf(const std::vector<ItemId>& ids) const;
-    // Files the change from `before` (taken with PlacementsOf) to how those
-    // snippets are placed now as one entry - one undo for a whole drag,
-    // however many events it took, and for every snippet it moved. Nothing
-    // is filed when nothing changed: a click that selected and never moved.
+    // ----- Where snippets are -----
+
+    // A move or a resize by hand, as a gesture: Begin notes where the
+    // snippets `ids` are, each Preview moves one of them there and then
+    // (re-anchored, see CanvasManager::CommitItemLayout), and End files
+    // the whole gesture as one entry - one undo for a whole drag, however
+    // many events it took, and for every snippet it moved. Nothing is
+    // filed when nothing changed: a click that selected and never moved.
+    // Beginning another ends the one open.
+    void BeginPlacement(const std::vector<ItemId>& ids);
+    void PreviewRect(ItemId id, Rect rect);
+    // Takes a fullscreen snippet out of fullscreen as part of the gesture -
+    // what taking hold of one does. No-op for one that is not fullscreen.
+    void PreviewLeaveFullscreen(ItemId id);
     // With `merge`, a change that continues the last one - the same
     // snippets, and nothing else filed since - is folded into it instead,
     // keeping that entry's `before`: a burst of wheel notches or arrow-key
     // nudges is taken back in one step, to where it started. The caller
     // decides what counts as a burst. True if anything was filed or merged.
-    bool RecordPlacements(std::vector<Placement> before, bool merge = false);
-    // Makes a snippet on the current canvas, undoably - see
-    // CanvasManager::CreateItem for what it starts as. Undone it is marked
-    // deleted, where a capture taken by mistake can still be found, and
-    // redone it is restored. 0, having made nothing, without a canvas.
+    bool EndPlacement(bool merge = false);
+    // A placement gesture in one call: each snippet to its rect, re-anchored.
+    bool SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool merge = false);
+    // See CanvasManager::ToggleFullscreen / ResetItemToNativeSize; one
+    // entry each.
+    void ToggleFullscreen(ItemId id, bool stretch);
+    void ResetItemToNativeSize(ItemId id);
+
+    // ----- How snippets look -----
+
+    // A style change as it is being made - a slider dragged, a color
+    // picked: the snippet takes `style` at once, and the edit ends with
+    // EndStyleEdit, or with the next command of any other kind.
+    void PreviewStyle(ItemId id, const ItemStyle& style);
+    void EndStyleEdit();
+    // Styles for several snippets at once, as one change - the opacity
+    // wheel's step. `merge` as for EndPlacement.
+    void SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge = false);
+
+    // ----- Making, copying and moving snippets -----
+
+    // Makes a snippet on the current canvas as `prototype` says - see
+    // CanvasManager::CreateItem(Item) - and, for a screenshot, captures
+    // what is under it into its picture (see CaptureShotItem). Undone it
+    // is marked deleted, where a capture taken by mistake can still be
+    // found, and redone it is restored. Made with `undoable` false, it is
+    // not on the history at all: the app's own welcome notes. 0, having
+    // made nothing, without a canvas.
+    ItemId CreateItem(Item prototype, bool undoable = true);
     ItemId CreateItem(bool hasBackground, Rect rect, std::string name);
-    // What a paste or a duplicate brought onto the current canvas, one
-    // snippet each - see undo::Arrival.
-    using Arrival = undo::Arrival;
-    // A cut's paste of one snippet: moves `itemId` from the canvas holding
-    // it onto the current one, on top, and leaves its history behind (see
-    // ForgetHistoryOfItem). Nullopt, moving nothing, for no such snippet,
-    // one deleted, or one already here.
-    std::optional<Arrival> MoveItemHere(ItemId itemId);
-    // Files everything one paste or duplicate brought as one entry. Undone,
-    // the copies are marked deleted, as a new snippet undone is, and what
-    // was moved goes back to where it stood on the canvas it came from.
-    // When that canvas is gone or deleted, nothing moves: undone, the
-    // snippets would land somewhere nobody can see them, and with a canvas
-    // deleted for good nowhere at all - so they stay, and the step is
-    // refused (see UndoStep::refused). Redone, the copies are restored and
-    // what was moved comes back on top, or is refused the same way if it
-    // has been deleted since. Nothing is filed for no arrivals.
-    void RecordArrivals(std::vector<Arrival> arrivals, bool duplicate);
+
+    // What a paste, a duplicate or a send left where it went.
+    struct Placed {
+        // The snippets now there: the copies, or those moved.
+        std::vector<ItemId> items;
+        // A copy whose source's picture could not be read: the copy lacks
+        // it, and a UI says so rather than showing a copy that looks whole.
+        bool pictureLost = false;
+    };
+    // The clipboard's paste onto the current canvas: copies of `ids`, or,
+    // for a cut, the snippets themselves, moved here on top. One deleted
+    // since it was copied is passed over; a cut one already here stays
+    // where it is. A copy of a snippet on this canvas is offset from it,
+    // so that the two can be told apart; one from elsewhere keeps its
+    // place. One entry for the whole paste: undone, the copies are marked
+    // deleted, and what was moved goes back where it stood on the canvas
+    // it came from.
+    Placed Paste(const std::vector<ItemId>& ids, bool cut);
+    // A copy of each of `ids` on the current canvas, offset from it - Copy
+    // and Paste in one step, one entry.
+    Placed Duplicate(const std::vector<ItemId>& ids);
+    // Moves `ids` off the current canvas to `target`, or copies them there
+    // - the Overview's picker, and the new canvas the selection is taken
+    // to. None to the current canvas or a deleted one.
+    Placed SendItemsTo(const std::vector<ItemId>& ids, CanvasId target, bool copy);
     // Removes a snippet nothing has been put into - no strokes, no text, no
     // picture of its own - as if it had never been
     // made: erased rather than marked, and off the history. For a snippet a
@@ -309,6 +378,13 @@ public:
     // 0 while nothing is frozen - which is also how "the capture failed"
     // is represented.
     uint64_t FrozenScreenTexture() const { return frozenScreenTexture_; }
+private:
+    // What the tests reach the model through, to set up a library without
+    // going command by command - see tests/support/session_test_access.h.
+    friend struct SessionTestAccess;
+    CanvasManager& Model() { return library_.manager; }
+    const CanvasManager& Model() const { return library_.manager; }
+
     // Captures what is under `item` into its picture - cropped out of
     // the frozen screen while one is held, live otherwise - uploads it, and
     // writes it to disk at once rather than waiting for the autosave (see
@@ -320,11 +396,37 @@ public:
     // waiting to be written (see PendingPicture) and from disk otherwise,
     // and are written under the copy's own name at once (a write that
     // fails waits the same way). False when the source names a picture
-    // that could not be read, so the copy lacks it: a UI says so rather
-    // than showing a copy that looks whole.
+    // that could not be read, so the copy lacks it.
     bool ClonePicturesForCopy(ItemId sourceId, ItemId copyId);
-
-private:
+    // Forgets every entry naming `itemId`, on `canvasId` only - for an item
+    // moved to a different canvas, where its history would otherwise stay
+    // filed under the canvas it left, and an undo there would edit an item
+    // that now lives somewhere else.
+    void ForgetHistoryOfItem(CanvasId canvasId, ItemId itemId);
+    // Where a snippet is - see undo::Placement.
+    using Placement = undo::Placement;
+    // The placements of these snippets as they are now. Ids that name
+    // nothing are left out.
+    std::vector<Placement> PlacementsOf(const std::vector<ItemId>& ids) const;
+    // Files the change from `before` to how those snippets are placed now
+    // as one entry - see EndPlacement.
+    bool RecordPlacements(std::vector<Placement> before, bool merge = false);
+    // A cut's paste of one snippet: moves `itemId` from the canvas holding
+    // it onto `target`, on top, and leaves its history behind (see
+    // ForgetHistoryOfItem). Nullopt, moving nothing, for no such snippet,
+    // one deleted, or one already there.
+    using Arrival = undo::Arrival;
+    std::optional<Arrival> MoveItemTo(ItemId itemId, CanvasId target);
+    // Files everything one paste or duplicate brought onto the current
+    // canvas as one entry - see Paste. When the canvas a moved snippet
+    // came from is gone or deleted, nothing moves: undone, the snippets
+    // would land somewhere nobody can see them, and with a canvas deleted
+    // for good nowhere at all - so they stay, and the step is refused (see
+    // UndoStep::refused). Nothing is filed for no arrivals.
+    void RecordArrivals(std::vector<Arrival> arrivals, bool duplicate);
+    // Moves a copy just made off its source, far enough to see that there
+    // are two, and re-anchors it there.
+    void OffsetCopy(ItemId copyId);
     // A library, as the session holds one: the records, where they are
     // written, and the debounced autosave between the two.
     struct LibraryInstance {
@@ -470,6 +572,14 @@ private:
     std::vector<bool> eraseReplaced_;
     // The item the circular eraser gesture in progress is erasing, if any.
     std::optional<ItemId> eraseItemId_;
+    // The placement gesture in progress: where its snippets were when it
+    // began - see BeginPlacement.
+    std::optional<std::vector<Placement>> placementBefore_;
+    // The style edit in progress: which snippet, and its style when the
+    // edit began - see PreviewStyle.
+    std::optional<std::pair<ItemId, ItemStyle>> styleEditBefore_;
+    // See LiveLayer.
+    CanvasState liveLayer_;
     // The text edit in progress, and the note as it was when it began.
     std::optional<ItemId> textEditItemId_;
     std::string textEditOriginal_;

@@ -122,6 +122,33 @@ struct Item {
     bool operator==(const Item&) const = default;
 };
 
+// How a snippet is drawn, apart from where: the opacities, the colors and
+// the caption's size, and whether a resize keeps its shape - everything its
+// popover and the opacity wheel change, and nothing else.
+struct ItemStyle {
+    float foregroundOpacity = 1.0f;
+    float pictureOpacity = 1.0f;
+    uint32_t pictureTintRGBA = 0xFFFFFFFFu;
+    uint32_t noteTextColorRGBA = 0xFFFFFFFFu;
+    float noteTextSizePx = 17.0f;
+    bool keepAspect = true;
+
+    bool operator==(const ItemStyle&) const = default;
+
+    static ItemStyle Of(const Item& item) {
+        return ItemStyle{item.foregroundOpacity, item.picture.opacity,   item.picture.tintColorRGBA,
+                         item.noteTextColorRGBA, item.noteTextSizePx, item.keepAspect};
+    }
+    void ApplyTo(Item& item) const {
+        item.foregroundOpacity = foregroundOpacity;
+        item.picture.opacity = pictureOpacity;
+        item.picture.tintColorRGBA = pictureTintRGBA;
+        item.noteTextColorRGBA = noteTextColorRGBA;
+        item.noteTextSizePx = noteTextSizePx;
+        item.keepAspect = keepAspect;
+    }
+};
+
 // The band noteTextSizePx is held to: below 8 the UI font stops being
 // readable; above 96 a single line no longer fits across a typical item.
 inline constexpr float kNoteTextSizeMin = 8.0f;

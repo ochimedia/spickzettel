@@ -320,7 +320,7 @@ protected:
         if (canvas == nullptr) {
             return 0;
         }
-        size_t strokes = canvas->liveLayer.Strokes().size();
+        size_t strokes = AppSession().LiveLayer().Strokes().size();
         for (const Item& item : canvas->items) {
             strokes += item.strokes.size();
         }

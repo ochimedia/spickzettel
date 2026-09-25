@@ -989,7 +989,7 @@ void OverlayApp::QuickCapture(float displayW, float displayH) {
     // it: a screen full of captures piled on the canvas you were drawing
     // on is hard to tell apart later, where one capture per canvas is a
     // strip of tiles you can read at a glance in the Overview.
-    Manager().SwitchToCanvas(CreateCanvasBesideCurrent());
+    session_.SwitchToCanvas(CreateCanvasBesideCurrent());
     CreateFullscreenItem(ItemCreationKind::Screenshot, displayW, displayH);
     ShowActionToast(strings::kToastCapturedScreenshot);
 }
@@ -1250,7 +1250,7 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     // no-op comparison per item whenever the display hasn't changed since
     // last frame, which is every frame but the one right after an actual
     // change.
-    Manager().SyncItemsToDisplaySize(displayW, displayH);
+    session_.SyncItemsToDisplaySize(displayW, displayH);
 
     // First run, first frame that knows how big the screen is - see
     // RequestWelcomeNote for why this waits rather than happening at
@@ -2439,7 +2439,7 @@ void OverlayApp::DrawEditModeBorder(ImDrawList* drawList, float displayW, float 
         // otherwise completely blank.
         const Canvas* canvas = Manager().CurrentOrNull();
         const bool anythingShown =
-            canvas != nullptr && (!canvas->liveLayer.Strokes().empty() ||
+            canvas != nullptr && (!session_.LiveLayer().Strokes().empty() ||
                                   std::any_of(canvas->items.begin(), canvas->items.end(),
                                               [&](const Item& item) { return !Manager().IsDeleted(*canvas, item); }));
         if (anythingShown) {

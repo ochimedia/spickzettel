@@ -8,6 +8,8 @@
 #include <utility>
 #include <vector>
 
+#include "core/canvas/item_geometry.h"
+
 namespace sz::core {
 
 // ================= Undo =================
@@ -96,12 +98,12 @@ void Session::PushCapped(std::deque<undo::Entry>& stack, undo::Entry entry) {
 }
 
 bool Session::CanUndo() const {
-    const auto it = undoStacks_.find(Manager().CurrentCanvasId());
+    const auto it = undoStacks_.find(Model().CurrentCanvasId());
     return it != undoStacks_.end() && !it->second.empty();
 }
 
 bool Session::CanRedo() const {
-    const auto it = redoStacks_.find(Manager().CurrentCanvasId());
+    const auto it = redoStacks_.find(Model().CurrentCanvasId());
     return it != redoStacks_.end() && !it->second.empty();
 }
 
@@ -128,7 +130,7 @@ void Session::PushUndo(undo::Entry entry) {
     // Filed under whichever canvas is current, which is by definition the
     // one the action just happened on - every edit that pushes is made on
     // the visible canvas.
-    const CanvasId canvasId = Manager().CurrentCanvasId();
+    const CanvasId canvasId = Model().CurrentCanvasId();
     if (canvasId == 0) {
         // No canvas at all (see CanvasManager's class comment) - there's
         // no edit that can reach here in that state, but filing an entry
@@ -159,7 +161,7 @@ void Session::PushUndo(undo::Entry entry) {
 // rather than leaving a dead entry there.
 
 std::optional<Session::UndoWhat> Session::Apply(undo::StrokeBaked& entry, bool undo) {
-    Item* item = Manager().FindItemAnywhere(entry.itemId);
+    Item* item = Model().FindItemAnywhere(entry.itemId);
     if (!item) {
         return std::nullopt;
     }
@@ -180,7 +182,7 @@ std::optional<Session::UndoWhat> Session::Apply(undo::StrokeBaked& entry, bool u
 }
 
 std::optional<Session::UndoWhat> Session::Apply(undo::Erased& entry, bool undo) {
-    Item* item = Manager().FindItemAnywhere(entry.itemId);
+    Item* item = Model().FindItemAnywhere(entry.itemId);
     if (!item) {
         return std::nullopt;
     }
@@ -212,7 +214,7 @@ std::optional<Session::UndoWhat> Session::Apply(undo::ItemDeleted& entry, bool u
 std::optional<Session::UndoWhat> Session::Apply(undo::NoteTextChanged& entry, bool /*undo*/) {
     // Not while the note is open - see StepHistory, which keeps the entry
     // for later rather than letting it reach here.
-    Item* item = Manager().FindItemAnywhere(entry.itemId);
+    Item* item = Model().FindItemAnywhere(entry.itemId);
     if (!item) {
         return std::nullopt;
     }
@@ -238,8 +240,8 @@ std::optional<Session::UndoWhat> Session::Apply(undo::PlacementChanged& entry, b
     // skipped; if none is left the entry has nothing to do.
     bool changed = false;
     for (undo::Placement& held : entry.placements) {
-        Item* item = Manager().FindItemAnywhere(held.itemId);
-        if (item == nullptr || Manager().IsItemDeleted(held.itemId)) {
+        Item* item = Model().FindItemAnywhere(held.itemId);
+        if (item == nullptr || Model().IsItemDeleted(held.itemId)) {
             continue;
         }
         std::swap(item->rect, held.rect);
@@ -273,13 +275,13 @@ std::optional<Session::UndoWhat> Session::Apply(undo::ItemsArrived& entry, bool 
             changed = (undo ? Delete(arrival.itemId) : Restore(arrival.itemId)) || changed;
             continue;
         }
-        const std::optional<CanvasId> holder = Manager().CanvasHoldingItem(arrival.itemId);
+        const std::optional<CanvasId> holder = Model().CanvasHoldingItem(arrival.itemId);
         if (!holder.has_value()) {
             continue;
         }
         const CanvasId to = undo ? arrival.fromCanvas : entry.canvasId;
         if (*holder == to ||
-            Manager().PlaceItemOnCanvas(arrival.itemId, to, /*copy=*/false,
+            Model().PlaceItemOnCanvas(arrival.itemId, to, /*copy=*/false,
                                         undo ? std::optional<size_t>(arrival.fromIndex) : std::nullopt) == 0) {
             continue;
         }
@@ -307,7 +309,7 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     // This canvas's own history, never another's - see undoStacks_.
     auto& from = undo ? undoStacks_ : redoStacks_;
     auto& to = undo ? redoStacks_ : undoStacks_;
-    const CanvasId canvasId = Manager().CurrentCanvasId();
+    const CanvasId canvasId = Model().CurrentCanvasId();
     const auto stackIt = from.find(canvasId);
     if (stackIt == from.end() || stackIt->second.empty()) {
         return std::nullopt;
@@ -341,7 +343,7 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     if (!what) {
         return std::nullopt;
     }
-    Manager().MarkChanged();
+    Model().MarkChanged();
     // Onto the opposite stack only if it took effect. Straight onto it,
     // deliberately not via PushUndo: that would clear the redo stack, which
     // on a redo is the very stack this was just taken from, and break a run
@@ -357,13 +359,13 @@ bool Session::ArrivalsCanMove(const undo::ItemsArrived& entry, bool undo) const 
         }
         // Where it has to go (undo), or where it is now (redo): a canvas
         // that is there and not deleted - with its folder - either way.
-        const std::optional<CanvasId> holder = Manager().CanvasHoldingItem(arrival.itemId);
+        const std::optional<CanvasId> holder = Model().CanvasHoldingItem(arrival.itemId);
         const CanvasId canvasId = undo ? arrival.fromCanvas : holder.value_or(0);
-        const Canvas* canvas = Manager().FindCanvas(canvasId);
-        if (canvas == nullptr || Manager().IsDeleted(*canvas)) {
+        const Canvas* canvas = Model().FindCanvas(canvasId);
+        if (canvas == nullptr || Model().IsDeleted(*canvas)) {
             return false;
         }
-        if (!undo && Manager().IsItemDeleted(arrival.itemId)) {
+        if (!undo && Model().IsItemDeleted(arrival.itemId)) {
             return false;
         }
         // Brought again only from where the undo sent it. Moved on since,
@@ -384,26 +386,24 @@ std::optional<Session::UndoStep> Session::Redo() { return StepHistory(/*undo=*/f
 // ================= Edits that can be undone =================
 
 void Session::CommitLiveStroke(ItemId itemId) {
-    Canvas* canvasPtr = Manager().CurrentOrNull();
-    if (!canvasPtr) {
+    Canvas* canvasPtr = Model().CurrentOrNull();
+    if (!canvasPtr || liveLayer_.Strokes().empty()) {
+        liveLayer_.Clear();
         return;
     }
     Canvas& canvas = *canvasPtr;
-    if (canvas.liveLayer.Strokes().empty()) {
-        return;
-    }
     const auto itemIt = std::find_if(canvas.items.begin(), canvas.items.end(),
                                       [&](const Item& i) { return i.id == itemId; });
     if (itemIt == canvas.items.end()) {
-        canvas.liveLayer.Clear();
+        liveLayer_.Clear();
         return;
     }
-    const Stroke finished = canvas.liveLayer.Strokes().back();
+    const Stroke finished = liveLayer_.Strokes().back();
     itemIt->strokes.push_back(CanvasManager::BakeStrokeToNative(*itemIt, finished));
-    canvas.liveLayer.Clear();
+    liveLayer_.Clear();
     // Mutates itemIt->strokes directly rather than through one of
     // CanvasManager's own methods - see MarkChanged()'s own doc comment.
-    Manager().MarkChanged();
+    Model().MarkChanged();
 
     // The value, not only the id: redo pushes it back - see
     // undo::StrokeBaked.
@@ -418,7 +418,7 @@ size_t Session::DeleteItems(const std::vector<ItemId>& itemIds) {
     // them is what an undo restores - one per snippet made one Delete that
     // many undos, and past the history's cap the earliest could not be
     // undone at all, which for a deleted snippet is deleted for good.
-    const Canvas* canvas = Manager().CurrentOrNull();
+    const Canvas* canvas = Model().CurrentOrNull();
     if (canvas == nullptr) {
         return 0;
     }
@@ -440,7 +440,7 @@ size_t Session::DeleteItems(const std::vector<ItemId>& itemIds) {
 std::vector<Session::Placement> Session::PlacementsOf(const std::vector<ItemId>& ids) const {
     std::vector<Placement> placements;
     for (const ItemId id : ids) {
-        for (const Canvas& canvas : Manager().Canvases()) {
+        for (const Canvas& canvas : Model().Canvases()) {
             const auto item =
                 std::find_if(canvas.items.begin(), canvas.items.end(), [id](const Item& i) { return i.id == id; });
             if (item != canvas.items.end()) {
@@ -469,7 +469,7 @@ bool Session::RecordPlacements(std::vector<Placement> before, bool merge) {
     if (now.size() == before.size() && std::equal(now.begin(), now.end(), before.begin(), same)) {
         return false;
     }
-    const CanvasId canvasId = Manager().CurrentCanvasId();
+    const CanvasId canvasId = Model().CurrentCanvasId();
     if (merge) {
         const auto it = undoStacks_.find(canvasId);
         if (it != undoStacks_.end() && !it->second.empty()) {
@@ -490,13 +490,245 @@ bool Session::RecordPlacements(std::vector<Placement> before, bool merge) {
     return true;
 }
 
-ItemId Session::CreateItem(bool hasBackground, Rect rect, std::string name) {
-    const ItemId itemId = Manager().CreateItem(hasBackground, rect, std::move(name));
+ItemId Session::CreateItem(Item prototype, bool undoable) {
+    const ItemId itemId = Model().CreateItem(std::move(prototype));
     if (itemId == 0) {
         return 0;
     }
-    PushUndo(undo::ItemCreated{itemId});
+    if (Item* item = Model().FindItemAnywhere(itemId); item != nullptr && item->hasBackground) {
+        CaptureShotItem(*item);
+    }
+    if (undoable) {
+        PushUndo(undo::ItemCreated{itemId});
+    }
     return itemId;
+}
+
+ItemId Session::CreateItem(bool hasBackground, Rect rect, std::string name) {
+    Item prototype;
+    prototype.hasBackground = hasBackground;
+    prototype.picture.opacity = hasBackground ? 1.0f : 0.0f;
+    prototype.rect = rect;
+    prototype.name = std::move(name);
+    return CreateItem(std::move(prototype));
+}
+
+// ================= Where snippets are =================
+
+void Session::BeginPlacement(const std::vector<ItemId>& ids) {
+    EndPlacement();
+    placementBefore_ = PlacementsOf(ids);
+}
+
+namespace {
+bool Places(const std::vector<undo::Placement>& placements, ItemId id) {
+    return std::any_of(placements.begin(), placements.end(), [id](const undo::Placement& p) { return p.itemId == id; });
+}
+}  // namespace
+
+void Session::PreviewRect(ItemId id, Rect rect) {
+    Item* item = Model().FindItemAnywhere(id);
+    if (!placementBefore_.has_value() || !Places(*placementBefore_, id) || item == nullptr) {
+        return;
+    }
+    item->rect = rect;
+    Model().MarkChanged();
+    Model().CommitItemLayout(id);
+}
+
+void Session::PreviewLeaveFullscreen(ItemId id) {
+    const Item* item = Model().FindItemAnywhere(id);
+    if (!placementBefore_.has_value() || !Places(*placementBefore_, id) || item == nullptr || !item->isFullscreen) {
+        return;
+    }
+    Model().ToggleFullscreen(id, Model().DisplayWidth(), Model().DisplayHeight());
+}
+
+bool Session::EndPlacement(bool merge) {
+    if (!placementBefore_.has_value()) {
+        return false;
+    }
+    std::vector<Placement> before = std::move(*placementBefore_);
+    placementBefore_.reset();
+    return RecordPlacements(std::move(before), merge);
+}
+
+bool Session::SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool merge) {
+    std::vector<ItemId> ids;
+    for (const auto& [id, rect] : rects) {
+        ids.push_back(id);
+    }
+    BeginPlacement(ids);
+    for (const auto& [id, rect] : rects) {
+        PreviewRect(id, rect);
+    }
+    return EndPlacement(merge);
+}
+
+void Session::ToggleFullscreen(ItemId id, bool stretch) {
+    EndPlacement();
+    std::vector<Placement> before = PlacementsOf({id});
+    Model().ToggleFullscreen(id, Model().DisplayWidth(), Model().DisplayHeight(), stretch);
+    RecordPlacements(std::move(before));
+}
+
+void Session::ResetItemToNativeSize(ItemId id) {
+    EndPlacement();
+    std::vector<Placement> before = PlacementsOf({id});
+    Model().ResetItemToNativeSize(id);
+    RecordPlacements(std::move(before));
+}
+
+// ================= How snippets look =================
+
+void Session::PreviewStyle(ItemId id, const ItemStyle& style) {
+    if (styleEditBefore_.has_value() && styleEditBefore_->first != id) {
+        EndStyleEdit();
+    }
+    Item* item = Model().FindItemAnywhere(id);
+    if (item == nullptr) {
+        return;
+    }
+    if (!styleEditBefore_.has_value()) {
+        styleEditBefore_ = std::make_pair(id, ItemStyle::Of(*item));
+    }
+    style.ApplyTo(*item);
+    Model().MarkChanged();
+}
+
+void Session::EndStyleEdit() { styleEditBefore_.reset(); }
+
+void Session::SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool /*merge*/) {
+    EndStyleEdit();
+    for (const auto& [id, style] : styles) {
+        if (Item* item = Model().FindItemAnywhere(id)) {
+            style.ApplyTo(*item);
+        }
+    }
+    Model().MarkChanged();
+}
+
+// ================= Copying and moving snippets =================
+
+void Session::OffsetCopy(ItemId copyId) {
+    Item* item = Model().FindItemAnywhere(copyId);
+    if (!item) {
+        return;
+    }
+    constexpr float kCopyOffsetPx = 24.0f;
+    item->rect.x += kCopyOffsetPx;
+    item->rect.y += kCopyOffsetPx;
+    if (Model().DisplayWidth() > 0.0f && Model().DisplayHeight() > 0.0f) {
+        item->rect = ClampRectToViewport(item->rect, Model().DisplayWidth(), Model().DisplayHeight());
+    }
+    Model().CommitItemLayout(copyId);
+}
+
+Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
+    Placed placed;
+    if (Model().CurrentOrNull() == nullptr) {
+        return placed;
+    }
+    const CanvasId here = Model().CurrentCanvasId();
+    std::vector<Arrival> arrivals;
+    bool fromThisCanvas = false;
+    for (const ItemId id : ids) {
+        const std::optional<CanvasId> from = Model().CanvasHoldingItem(id);
+        if (!from.has_value() || Model().IsItemDeleted(id)) {
+            continue;  // deleted, or deleted for good, since it was copied
+        }
+        if (cut && *from == here) {
+            placed.items.push_back(id);  // already here: nothing moves, nothing to undo
+            continue;
+        }
+        if (cut) {
+            if (const std::optional<Arrival> moved = MoveItemTo(id, here)) {
+                arrivals.push_back(*moved);
+                placed.items.push_back(id);
+            }
+            continue;
+        }
+        const ItemId copy = Model().PlaceItemOnCanvas(id, here, /*copy=*/true);
+        if (copy == 0) {
+            continue;
+        }
+        placed.pictureLost = !ClonePicturesForCopy(id, copy) || placed.pictureLost;
+        fromThisCanvas = fromThisCanvas || *from == here;
+        arrivals.push_back(Arrival{copy});
+        placed.items.push_back(copy);
+    }
+    // A copy lands on top of its source when the source is on this canvas,
+    // so there it is offset; from another canvas it keeps its place
+    // exactly, which is where the eye expects it.
+    if (fromThisCanvas) {
+        for (const ItemId id : placed.items) {
+            OffsetCopy(id);
+        }
+    }
+    RecordArrivals(std::move(arrivals), /*duplicate=*/false);
+    // Whatever arrived needs a texture now: this is the current canvas.
+    SyncTexturesToCurrentCanvas();
+    return placed;
+}
+
+Session::Placed Session::Duplicate(const std::vector<ItemId>& ids) {
+    Placed placed;
+    std::vector<Arrival> arrivals;
+    for (const ItemId id : ids) {
+        if (Model().IsItemDeleted(id)) {
+            continue;
+        }
+        const ItemId copy = Model().DuplicateItem(id);
+        if (copy == 0) {
+            continue;
+        }
+        placed.pictureLost = !ClonePicturesForCopy(id, copy) || placed.pictureLost;
+        OffsetCopy(copy);
+        arrivals.push_back(Arrival{copy});
+        placed.items.push_back(copy);
+    }
+    if (placed.items.empty()) {
+        return placed;
+    }
+    RecordArrivals(std::move(arrivals), /*duplicate=*/true);
+    SyncTexturesToCurrentCanvas();
+    return placed;
+}
+
+Session::Placed Session::SendItemsTo(const std::vector<ItemId>& ids, CanvasId target, bool copy) {
+    Placed placed;
+    const CanvasId source = Model().CurrentCanvasId();
+    if (target == source) {
+        return placed;
+    }
+    for (const ItemId id : ids) {
+        if (Model().IsItemDeleted(id)) {
+            continue;  // deleted since it was selected
+        }
+        if (copy) {
+            const ItemId made = Model().MoveOrCopyItemToCanvas(id, target, /*copy=*/true);
+            if (made == 0) {
+                continue;
+            }
+            placed.pictureLost = !ClonePicturesForCopy(id, made) || placed.pictureLost;
+            placed.items.push_back(made);
+            continue;
+        }
+        Model().MoveOrCopyItemToCanvas(id, target, /*copy=*/false);
+        // A move reports nothing, so what happened is read from where the
+        // snippet is now.
+        if (Model().CanvasHoldingItem(id) != target) {
+            continue;
+        }
+        ForgetHistoryOfItem(source, id);
+        placed.items.push_back(id);
+    }
+    if (!placed.items.empty()) {
+        // What went is on a canvas nobody is looking at, and gives its
+        // textures back now rather than at the next switch.
+        SyncTexturesToCurrentCanvas();
+    }
+    return placed;
 }
 
 namespace {
@@ -507,19 +739,18 @@ bool ItemIsUntouched(const Item& item) {
 }
 }  // namespace
 
-std::optional<Session::Arrival> Session::MoveItemHere(ItemId itemId) {
-    const CanvasId here = Manager().CurrentCanvasId();
-    const std::optional<CanvasId> from = Manager().CanvasHoldingItem(itemId);
-    if (!from.has_value() || *from == here || Manager().IsItemDeleted(itemId)) {
+std::optional<Session::Arrival> Session::MoveItemTo(ItemId itemId, CanvasId here) {
+    const std::optional<CanvasId> from = Model().CanvasHoldingItem(itemId);
+    if (!from.has_value() || *from == here || Model().IsItemDeleted(itemId)) {
         return std::nullopt;
     }
     // Where it stands in its stack now - what an undo puts it back at.
-    const Canvas* source = Manager().FindCanvas(*from);
+    const Canvas* source = Model().FindCanvas(*from);
     size_t index = 0;
     while (index < source->items.size() && source->items[index].id != itemId) {
         ++index;
     }
-    if (Manager().PlaceItemOnCanvas(itemId, here, /*copy=*/false) == 0) {
+    if (Model().PlaceItemOnCanvas(itemId, here, /*copy=*/false) == 0) {
         return std::nullopt;
     }
     // Its history is filed under the canvas it has left, and an undo there
@@ -532,11 +763,11 @@ void Session::RecordArrivals(std::vector<Arrival> arrivals, bool duplicate) {
     if (arrivals.empty()) {
         return;
     }
-    PushUndo(undo::ItemsArrived{Manager().CurrentCanvasId(), std::move(arrivals), duplicate});
+    PushUndo(undo::ItemsArrived{Model().CurrentCanvasId(), std::move(arrivals), duplicate});
 }
 
 bool Session::IsUntouched(ItemId itemId) const {
-    for (const Canvas& canvas : Manager().Canvases()) {
+    for (const Canvas& canvas : Model().Canvases()) {
         for (const Item& candidate : canvas.items) {
             if (candidate.id == itemId) {
                 return ItemIsUntouched(candidate);
@@ -557,7 +788,7 @@ bool Session::DiscardIfUntouched(ItemId itemId) {
 }
 
 bool Session::ClearDrawing(ItemId itemId) {
-    Item* item = Manager().FindItemAnywhere(itemId);
+    Item* item = Model().FindItemAnywhere(itemId);
     if (!item) {
         return false;
     }
@@ -577,13 +808,13 @@ bool Session::ClearDrawing(ItemId itemId) {
     }
     PushUndo(std::move(entry));
     item->strokes.clear();
-    Manager().MarkChanged();
+    Model().MarkChanged();
     return true;
 }
 
 void Session::BeginTextEdit(ItemId itemId) {
     EndTextEdit(std::nullopt);
-    const Item* item = Manager().FindItemAnywhere(itemId);
+    const Item* item = Model().FindItemAnywhere(itemId);
     if (!item) {
         return;
     }
@@ -597,7 +828,7 @@ void Session::EndTextEdit(std::optional<std::string> text) {
     }
     const ItemId itemId = *textEditItemId_;
     textEditItemId_.reset();
-    Item* item = Manager().FindItemAnywhere(itemId);
+    Item* item = Model().FindItemAnywhere(itemId);
     // One entry per edit, not per keystroke - and none at all for an edit
     // that changed nothing, so clicking into a note and back out doesn't
     // spam the stack.
@@ -606,7 +837,7 @@ void Session::EndTextEdit(std::optional<std::string> text) {
     }
     PushUndo(undo::NoteTextChanged{itemId, textEditOriginal_});
     item->noteText = std::move(*text);
-    Manager().MarkChanged();
+    Model().MarkChanged();
 }
 
 // ================= Erasing =================
@@ -615,7 +846,7 @@ void Session::SnapshotStrokesForErase(ItemId itemId) {
     eraseGestureStartSnapshot_.clear();
     eraseOrigins_.clear();
     eraseReplaced_.clear();
-    if (const Item* item = Manager().FindItemAnywhere(itemId)) {
+    if (const Item* item = Model().FindItemAnywhere(itemId)) {
         eraseGestureStartSnapshot_ = item->strokes;
         eraseOrigins_.resize(item->strokes.size());
         std::iota(eraseOrigins_.begin(), eraseOrigins_.end(), size_t{0});
@@ -661,14 +892,14 @@ void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widt
     // own effect.
     SnapshotStrokesForErase(itemId);
     eraseItemId_ = itemId;
-    NoteEraseOutcome(Manager().EraseAt(itemId, screenX, screenY, widthScreenPx * 0.5f));
+    NoteEraseOutcome(Model().EraseAt(itemId, screenX, screenY, widthScreenPx * 0.5f));
 }
 
 void Session::ExtendErase(float screenX, float screenY, float widthScreenPx) {
     if (!eraseItemId_.has_value()) {
         return;
     }
-    NoteEraseOutcome(Manager().EraseAt(*eraseItemId_, screenX, screenY, widthScreenPx * 0.5f));
+    NoteEraseOutcome(Model().EraseAt(*eraseItemId_, screenX, screenY, widthScreenPx * 0.5f));
 }
 
 void Session::EndErase() {
@@ -690,13 +921,13 @@ void Session::EraseRect(ItemId itemId, float minX, float minY, float maxX, float
     // press that started the rectangle and the release that ends it, so the
     // snapshot taken here is the one the press would have taken.
     SnapshotStrokesForErase(itemId);
-    NoteEraseOutcome(Manager().EraseRectAt(itemId, minX, minY, maxX, maxY));
+    NoteEraseOutcome(Model().EraseRectAt(itemId, minX, minY, maxX, maxY));
     PushEraseGestureUndoEntry(itemId);
     eraseGestureStartSnapshot_.clear();
 }
 
 void Session::PushEraseGestureUndoEntry(ItemId itemId) {
-    Item* item = Manager().FindItemAnywhere(itemId);
+    Item* item = Model().FindItemAnywhere(itemId);
     if (!item) {
         return;
     }

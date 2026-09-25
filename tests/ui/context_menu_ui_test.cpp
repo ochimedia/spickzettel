@@ -8,6 +8,7 @@
 // - that a row is there, that it is available or not, and that choosing
 // it runs the action it promises.
 #include "fakes/ui_test.h"
+#include "support/session_test_access.h"
 
 #include <cstring>
 
@@ -152,7 +153,7 @@ protected:
     void MakeASecondCanvas() {
         ShowEditMode();
         StepFrame();
-        controller_->GetSession().Manager().AddCanvas("Second");
+        test::Model(controller_->GetSession()).AddCanvas("Second");
         StepFrame();
         ASSERT_EQ(Canvases().Canvases().size(), 2u);
     }
@@ -226,7 +227,7 @@ TEST_F(CanvasBarMenuUiTest, DeleteFromTheTileMenuAsksAndThenDeletes) {
 // is open; picking a canvas still moves the snippet there.
 TEST_F(ContextMenuUiTest, ThePickerKeepsTheCanvasItSendsFrom) {
     MakeASnippet();
-    const CanvasId other = controller_->GetSession().Manager().AddCanvas("Other");
+    const CanvasId other = test::Model(controller_->GetSession()).AddCanvas("Other");
     StepFrame();
     const ItemId snippet = Canvases().CurrentOrNull()->items[0].id;
     OpenTheMenu();
@@ -244,14 +245,14 @@ TEST_F(ContextMenuUiTest, ThePickerKeepsTheCanvasItSendsFrom) {
     });
     EXPECT_TRUE(newFolderOff);
     EXPECT_TRUE(deleteOff);
-    EXPECT_EQ(controller_->GetSession().Manager().CanvasHoldingItem(snippet), std::optional<CanvasId>(other));
+    EXPECT_EQ(test::Model(controller_->GetSession()).CanvasHoldingItem(snippet), std::optional<CanvasId>(other));
 }
 
 // "Move to canvas" is there when there is a canvas to move to - and a
 // deleted one is not that: the picker does not show it.
 TEST_F(ContextMenuUiTest, MoveToCanvasWantsACanvasThatIsNotDeleted) {
     MakeASnippet();
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const CanvasId other = manager.AddCanvas("Other");
     ASSERT_TRUE(manager.MarkDeleted(other, 100));
     StepFrame();
@@ -270,7 +271,7 @@ TEST_F(ContextMenuUiTest, MoveToCanvasWantsACanvasThatIsNotDeleted) {
 // which the body fell back to once there was nothing being picked.
 TEST_F(ContextMenuUiTest, ThePickersCancelDrawsNothingMoreOfThePanel) {
     MakeASnippet();
-    controller_->GetSession().Manager().AddCanvas("Other");
+    test::Model(controller_->GetSession()).AddCanvas("Other");
     StepFrame();
     OpenOverviewUi();
     RunUi("leave the overview on Settings", [](ImGuiTestContext* ctx) {

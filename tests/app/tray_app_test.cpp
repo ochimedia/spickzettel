@@ -14,6 +14,7 @@
 #include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
 #include "support/held_library.h"
+#include "support/session_test_access.h"
 
 namespace sz::test {
 
@@ -408,14 +409,14 @@ TEST(TrayControllerTest, QuickCaptureHotkeyAddsItemAndEntersEditMode) {
     ASSERT_TRUE(controller.Initialize());
     const int captureId = FindHotkeyId(host, config.hotkeyQuickCapture);
     ASSERT_NE(captureId, 0);
-    ASSERT_TRUE(controller.GetSession().Manager().CurrentOrNull()->items.empty());
+    ASSERT_TRUE(test::Model(controller.GetSession()).CurrentOrNull()->items.empty());
 
     host.TriggerHotkey(captureId);
 
     EXPECT_TRUE(host.overlayWindow.IsVisible());  // now shown, so the capture is noticed
     EXPECT_FALSE(controller.Overlay().IsViewOnly());
     EXPECT_EQ(host.overlayWindow.showCallCount, 1);
-    EXPECT_EQ(controller.GetSession().Manager().CurrentOrNull()->items.size(), 1u);
+    EXPECT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->items.size(), 1u);
 }
 
 TEST(TrayControllerTest, QuickCaptureHotkeyWorksWhileEditModeIsShowing) {
@@ -434,7 +435,7 @@ TEST(TrayControllerTest, QuickCaptureHotkeyWorksWhileEditModeIsShowing) {
     EXPECT_TRUE(host.overlayWindow.IsVisible());  // unchanged - still shown, still edit mode
     EXPECT_FALSE(controller.Overlay().IsViewOnly());
     EXPECT_EQ(host.overlayWindow.showCallCount, showCallsAfterEdit);  // no re-show, already visible
-    EXPECT_EQ(controller.GetSession().Manager().CurrentOrNull()->items.size(), 1u);
+    EXPECT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->items.size(), 1u);
 }
 
 TEST(TrayControllerTest, QuickCaptureHotkeySwitchesFromViewToEditModeInPlace) {
@@ -457,7 +458,7 @@ TEST(TrayControllerTest, QuickCaptureHotkeySwitchesFromViewToEditModeInPlace) {
     EXPECT_FALSE(host.overlayWindow.inputPassthrough);
     EXPECT_EQ(host.overlayWindow.showCallCount, showCallsAfterView);
     EXPECT_EQ(host.overlayWindow.hideCallCount, hideCallsAfterView);
-    EXPECT_EQ(controller.GetSession().Manager().CurrentOrNull()->items.size(), 1u);
+    EXPECT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->items.size(), 1u);
 }
 
 TEST(TrayControllerTest, TrayToggleCommandBehavesLikeEditHotkey) {
@@ -502,7 +503,7 @@ TEST(TrayControllerTest, WhenTheWindowCannotBeMadeNothingIsShownOrCaptured) {
 
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
     EXPECT_EQ(host.overlayWindow.captureCallCount, 0);
-    EXPECT_TRUE(controller.GetSession().Manager().CurrentOrNull()->items.empty());
+    EXPECT_TRUE(test::Model(controller.GetSession()).CurrentOrNull()->items.empty());
     EXPECT_FALSE(host.overlayWindow.IsVisible());
 
     EXPECT_EQ(host.overlayWindow.ensureCreatedCallCount, 3) << "asked again each time, not given up on";
@@ -570,7 +571,7 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsDeletedCanvasesHiddenAndEra
     TrayController controller(host, DefaultConfig());
     ASSERT_TRUE(controller.Initialize());
 
-    const CanvasManager& manager = controller.GetSession().Manager();
+    const CanvasManager& manager = test::Model(controller.GetSession());
     EXPECT_EQ(manager.CurrentCanvasId(), 2u) << "not the deleted canvas it was saved on";
     ASSERT_NE(manager.FindCanvas(2), nullptr);
     EXPECT_TRUE(manager.FindCanvas(2)->items.empty());
@@ -614,7 +615,7 @@ TEST_F(TrayControllerPersistenceTest, InitializeErasesWhatWasDeletedLongerAgoTha
         TrayController controller(host, config);
         ASSERT_TRUE(controller.Initialize());
 
-        const CanvasManager& manager = controller.GetSession().Manager();
+        const CanvasManager& manager = test::Model(controller.GetSession());
         EXPECT_NE(manager.FindCanvas(2), nullptr);
         EXPECT_EQ(manager.FindCanvas(3) == nullptr, purge) << (purge ? "past the period" : "retention is off");
         EXPECT_NE(manager.FindCanvas(4), nullptr) << "not deleted long enough ago";
@@ -654,7 +655,7 @@ TEST_F(TrayControllerPersistenceTest, StandInSettingsEraseNothingAndLeaveTheFile
     TrayController controller(host, config);
     controller.StartOnStandInSettings(/*keepFile=*/true);
     ASSERT_TRUE(controller.Initialize());
-    EXPECT_NE(controller.GetSession().Manager().FindCanvas(3), nullptr);
+    EXPECT_NE(test::Model(controller.GetSession()).FindCanvas(3), nullptr);
 
     controller.GetSettings().Mutable().strokeWidth = 12.0f;
     controller.GetSettings().Commit();
@@ -746,8 +747,8 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {
 
     ASSERT_TRUE(controller.Initialize());
 
-    ASSERT_EQ(controller.GetSession().Manager().Canvases().size(), 1u);
-    EXPECT_EQ(controller.GetSession().Manager().CurrentOrNull()->name, "Loaded Canvas");
+    ASSERT_EQ(test::Model(controller.GetSession()).Canvases().size(), 1u);
+    EXPECT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->name, "Loaded Canvas");
 }
 
 // A capture that comes back with pixels - which is what a real backend's
@@ -767,7 +768,7 @@ TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImag
 
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
 
-    const Canvas* canvas = controller.GetSession().Manager().CurrentOrNull();
+    const Canvas* canvas = test::Model(controller.GetSession()).CurrentOrNull();
     ASSERT_NE(canvas, nullptr);
     ASSERT_EQ(canvas->items.size(), 1u);
     const Item& shot = canvas->items.front();
@@ -995,7 +996,7 @@ TEST_F(TrayControllerPersistenceTest, AnEditIsSavedWhileFramesAreSkipped) {
         host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
     }
     ASSERT_TRUE(host.overlayWindow.IsVisible());
-    CanvasManager& manager = controller.GetSession().Manager();
+    CanvasManager& manager = test::Model(controller.GetSession());
     const ItemId id = manager.CreateItem(false, Rect{100, 100, 300, 200}, "Just before the lock");
     ASSERT_FALSE(host.overlayWindow.skippedFrameCallback == nullptr);
 
@@ -1069,8 +1070,8 @@ TEST_F(TrayControllerPersistenceTest, InitializeLeavesItemRectsUntouchedUntilThe
 
     ASSERT_TRUE(controller.Initialize());
 
-    ASSERT_EQ(controller.GetSession().Manager().CurrentOrNull()->items.size(), 1u);
-    EXPECT_EQ(controller.GetSession().Manager().CurrentOrNull()->items.front().rect, (Rect{200, 150, 300, 200}));
+    ASSERT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->items.size(), 1u);
+    EXPECT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->items.front().rect, (Rect{200, 150, 300, 200}));
 }
 
 TEST_F(TrayControllerPersistenceTest, InitializeLeavesDefaultStateWhenNothingSavedYet) {
@@ -1080,10 +1081,10 @@ TEST_F(TrayControllerPersistenceTest, InitializeLeavesDefaultStateWhenNothingSav
 
     ASSERT_TRUE(controller.Initialize());
 
-    ASSERT_EQ(controller.GetSession().Manager().Canvases().size(), 1u);
+    ASSERT_EQ(test::Model(controller.GetSession()).Canvases().size(), 1u);
     // Named for the moment it was made, like every canvas nobody has named
     // - "2026-09-07 22:36:14", the one shape a test can check.
-    const std::string& name = controller.GetSession().Manager().CurrentOrNull()->name;
+    const std::string& name = test::Model(controller.GetSession()).CurrentOrNull()->name;
     EXPECT_EQ(name.size(), 19u) << name;
     EXPECT_EQ(name[4], '-') << name;
     EXPECT_EQ(name[10], ' ') << name;
@@ -1104,7 +1105,7 @@ TEST_F(TrayControllerPersistenceTest, HidingTheOverlayFlushesAPendingChangeToDis
     // ImGui::GetCurrentContext() guard.
     const int captureId = FindHotkeyId(host, config.hotkeyQuickCapture);
     host.TriggerHotkey(captureId);
-    ASSERT_EQ(controller.GetSession().Manager().CurrentOrNull()->items.size(), 1u);
+    ASSERT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->items.size(), 1u);
 
     // QuickCapture itself already lands in edit mode (see its own test
     // above) - toggle the edit hotkey again to hide, which is one of the
@@ -1220,7 +1221,7 @@ TEST(TrayControllerProfileTest, EditModeFromThePinnedViewByWayOfViewModeRunsTheM
     ASSERT_TRUE(controller.Initialize());
     const int editId = FindHotkeyId(host, config.hotkeyEditMode);
     host.TriggerHotkey(editId);
-    CanvasManager& manager = controller.GetSession().Manager();
+    CanvasManager& manager = test::Model(controller.GetSession());
     manager.FindItemAnywhere(manager.CreateItem(false, Rect{100, 100, 300, 200}, "Pinned"))->pinned = true;
     host.TriggerHotkey(editId);
     ASSERT_TRUE(controller.Overlay().IsPinnedOnly());
@@ -1243,7 +1244,7 @@ TEST(TrayControllerProfileTest, EditModeFromThePinnedViewViewModeWasPutAwayIntoR
     const AppConfig config = ConfigWithGameProfile();
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
-    CanvasManager& manager = controller.GetSession().Manager();
+    CanvasManager& manager = test::Model(controller.GetSession());
     manager.FindItemAnywhere(manager.CreateItem(false, Rect{100, 100, 300, 200}, "Pinned"))->pinned = true;
     const int viewId = FindHotkeyId(host, config.hotkeyViewMode);
     host.TriggerHotkey(viewId);
@@ -1392,7 +1393,7 @@ TEST(TrayControllerProfileTest, TakingFocusDoesNotRewriteTheStoredSetting) {
 
 namespace {
 ItemId PinASnippet(TrayController& controller) {
-    CanvasManager& manager = controller.GetSession().Manager();
+    CanvasManager& manager = test::Model(controller.GetSession());
     const ItemId id = manager.CreateItem(false, Rect{100, 100, 300, 200}, "Pinned");
     manager.FindItemAnywhere(id)->pinned = true;
     return id;
@@ -1429,7 +1430,7 @@ TEST(TrayControllerPinnedTest, UnpinningIsHowThePinnedViewGoes) {
     ASSERT_TRUE(controller.Overlay().IsPinnedOnly());
 
     host.TriggerHotkey(editId);
-    controller.GetSession().Manager().FindItemAnywhere(id)->pinned = false;
+    test::Model(controller.GetSession()).FindItemAnywhere(id)->pinned = false;
     host.TriggerHotkey(editId);
 
     EXPECT_FALSE(host.overlayWindow.IsVisible());
@@ -1492,12 +1493,12 @@ TEST(TrayControllerPinnedTest, ASilentCaptureInThePinnedViewKeepsThePinnedCanvas
     PinASnippet(controller);
     host.TriggerHotkey(editId);
     ASSERT_TRUE(controller.Overlay().IsPinnedOnly());
-    const CanvasId pinnedCanvas = controller.GetSession().Manager().CurrentCanvasId();
+    const CanvasId pinnedCanvas = test::Model(controller.GetSession()).CurrentCanvasId();
 
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
 
-    EXPECT_EQ(controller.GetSession().Manager().Canvases().size(), 2u) << "the capture still has a canvas of its own";
-    EXPECT_EQ(controller.GetSession().Manager().CurrentCanvasId(), pinnedCanvas);
+    EXPECT_EQ(test::Model(controller.GetSession()).Canvases().size(), 2u) << "the capture still has a canvas of its own";
+    EXPECT_EQ(test::Model(controller.GetSession()).CurrentCanvasId(), pinnedCanvas);
     EXPECT_TRUE(host.overlayWindow.IsVisible());
     EXPECT_TRUE(controller.Overlay().IsPinnedOnly());
 }
@@ -1522,14 +1523,14 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureInThePinnedViewGivesItsTextu
     PinASnippet(controller);
     host.TriggerHotkey(editId);
     ASSERT_TRUE(controller.Overlay().IsPinnedOnly());
-    const CanvasId pinnedCanvas = controller.GetSession().Manager().CurrentCanvasId();
+    const CanvasId pinnedCanvas = test::Model(controller.GetSession()).CurrentCanvasId();
     const int releasedBefore = host.overlayWindow.releaseTextureCallCount;
 
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
 
-    ASSERT_EQ(controller.GetSession().Manager().CurrentCanvasId(), pinnedCanvas);
+    ASSERT_EQ(test::Model(controller.GetSession()).CurrentCanvasId(), pinnedCanvas);
     const Item* shot = nullptr;
-    for (const Canvas& canvas : controller.GetSession().Manager().Canvases()) {
+    for (const Canvas& canvas : test::Model(controller.GetSession()).Canvases()) {
         if (canvas.id == pinnedCanvas) {
             continue;
         }

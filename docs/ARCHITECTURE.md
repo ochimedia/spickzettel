@@ -1003,6 +1003,31 @@ What stays in the UI is what a UI decides: which tool is in hand and its
 color and width, where a gesture starts and what it is over, panel and
 popover state, toasts, and GPU caches that exist only for drawing.
 
+### Only the session changes the library
+
+The UI holds the model as `const CanvasManager&`. Every change it makes -
+a pin, a rename, a slider, a drag, a paste - is a session command, so a
+change reaches the history, the disk and the GPU in one place, and the
+compiler refuses one that tries to go around them. Before, the UI wrote
+fields through references in some forty places and then called
+`MarkChanged`, and each of those sites had to remember, separately, to
+file an undo entry, to forget history when a snippet left its canvas, or
+to sync textures - which is where the history's gaps came from.
+
+A gesture that changes something continuously is previewed through the
+session and ends as one command: a drag opens a placement
+(`BeginPlacement`, `PreviewRect`, `EndPlacement`), a popover slider or
+the color picker a style edit (`PreviewStyle`, ended when the hand lets
+go of the widget), the eraser and the shapes their own gestures. A new
+snippet is made whole, from a prototype the UI fills with Settings >
+Defaults, instead of being made and then adjusted field by field; a paste,
+a duplicate and a send to another canvas are one call each. The stroke
+being drawn lives on the session's live layer rather than on the canvas:
+scratch, not content, and dropped on a canvas switch.
+
+The tests set a library up directly through `SessionTestAccess`, which is
+a friend of the session; nothing in `src` can reach it.
+
 ### Autosave
 
 `Session::Tick` runs every frame and compares the model's generation

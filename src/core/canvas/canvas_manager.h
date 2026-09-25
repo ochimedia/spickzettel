@@ -182,6 +182,13 @@ public:
     // anchor starts out "not yet anchored" and gets adopted on the next
     // call). 0, making nothing, with no current canvas.
     ItemId CreateItem(bool hasBackground, Rect rect, std::string name);
+    // The same from a snippet as it should start: everything `prototype`
+    // says - its name, rect, fullscreen state, style and text - with an id
+    // of its own, its native size and anchor from its rect, and the
+    // placeholder a screenshot waits behind. Its picture's opacity is the
+    // prototype's; the form above starts a screenshot's opaque and a
+    // drawing's clear.
+    ItemId CreateItem(Item prototype);
     // Erases `id` for good from the current canvas - immediate, and not
     // what a delete is. Texture cleanup is the caller's job. No-op if `id`
     // isn't on the current canvas. The app's snippet delete is not this: it
@@ -310,6 +317,7 @@ public:
     // Finds an item by id across *every* canvas, unlike the item operations
     // above. Returns nullptr if `id` doesn't exist anywhere.
     Item* FindItemAnywhere(ItemId id);
+    const Item* FindItemAnywhere(ItemId id) const;
 
     // Transforms a stroke from screen space into `item`'s native coordinate
     // space, from how its current rect compares to its fixed native size.
@@ -366,6 +374,10 @@ public:
     // A non-positive size is a no-op. Otherwise also records the size for
     // CreateItem/CommitItemLayout/ResetItemToNativeSize.
     void SyncItemsToDisplaySize(float currentW, float currentH);
+    // The size last passed to SyncItemsToDisplaySize, 0 by 0 before it
+    // has run.
+    float DisplayWidth() const { return currentDisplayWidth_; }
+    float DisplayHeight() const { return currentDisplayHeight_; }
 
     // Re-anchors the item to wherever a move, resize or nudge just left
     // `rect`, against the current display size. Without this the next

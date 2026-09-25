@@ -15,6 +15,7 @@
 #include "core/persistence/library_store.h"
 #include "core/util/uid.h"
 #include "support/held_library.h"
+#include "support/session_test_access.h"
 #include "ui/overlay_app_internal.h"
 
 #include <imgui_internal.h>
@@ -712,7 +713,7 @@ TEST_F(HeadlessAppTest, ACutSnippetStaysUntilItIsPastedSomewhereElse) {
     StepFrame();
     Drag(100.0f, 100.0f, 400.0f, 300.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const ItemId cut = manager.CurrentOrNull()->items[0].id;
     const CanvasId first = manager.CurrentCanvasId();
 
@@ -794,7 +795,7 @@ TEST_F(HeadlessAppTest, UndoSendsACutsPasteBackWhereItCameFrom) {
     ShowEditMode();
     StepFrame();
     Drag(100.0f, 100.0f, 400.0f, 300.0f);
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const ItemId cut = manager.CurrentOrNull()->items[0].id;
     const CanvasId first = manager.CurrentCanvasId();
     PressCtrlKey(ImGuiKey_X);
@@ -936,7 +937,7 @@ TEST_F(HeadlessAppTest, ACanvasMadeFromTheCanvasGoesBesideTheCurrentOneNotTheBro
     ShowEditMode();
     StepFrame();
     Drag(100.0f, 100.0f, 400.0f, 300.0f);
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const FolderId workFolder = manager.CurrentOrNull()->folderId;
     const FolderId browsed = manager.AddFolder("Elsewhere");  // browsed, as the Overview would leave it
     ASSERT_EQ(manager.CurrentFolderId(), browsed);
@@ -977,7 +978,7 @@ TEST_F(HeadlessAppTest, AShortcutThatSwitchesCanvasEndsTheStrokeInFlightFirst) {
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 400.0f, 400.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const CanvasId before = manager.CurrentCanvasId();
     const ItemId drawing = manager.CurrentOrNull()->items[0].id;
 
@@ -988,7 +989,7 @@ TEST_F(HeadlessAppTest, AShortcutThatSwitchesCanvasEndsTheStrokeInFlightFirst) {
     StepFrame();
     RawMouse(300.0f, 300.0f, platform::MouseEventKind::Move);
     StepFrame();
-    ASSERT_TRUE(manager.FindCanvas(before)->liveLayer.ActiveStroke().has_value()) << "in flight";
+    ASSERT_TRUE(AppSession().LiveLayer().ActiveStroke().has_value()) << "in flight";
 
     PressCtrlShiftKey(ImGuiKey_N);
 
@@ -996,8 +997,8 @@ TEST_F(HeadlessAppTest, AShortcutThatSwitchesCanvasEndsTheStrokeInFlightFirst) {
     const Item* item = manager.FindItemAnywhere(drawing);
     ASSERT_NE(item, nullptr);
     EXPECT_EQ(item->strokes.size(), 1u) << "ended on the canvas it started on, before the switch";
-    EXPECT_FALSE(manager.FindCanvas(before)->liveLayer.ActiveStroke().has_value());
-    EXPECT_FALSE(manager.CurrentOrNull()->liveLayer.ActiveStroke().has_value());
+    EXPECT_FALSE(AppSession().LiveLayer().ActiveStroke().has_value());
+    EXPECT_FALSE(AppSession().LiveLayer().ActiveStroke().has_value());
 
     // The real release comes later and finds nothing in flight.
     RawMouse(300.0f, 300.0f, platform::MouseEventKind::Up);
@@ -1013,7 +1014,7 @@ TEST_F(HeadlessAppTest, APressAfterALostReleaseEndsWhatThatButtonWasDoing) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const ItemId drawing = manager.CurrentOrNull()->items[0].id;
 
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
@@ -1274,7 +1275,7 @@ TEST_F(HeadlessAppTest, TheContextMenuClosesWhenItsSnippetGoesAway) {
     RightClick(640.0f, 400.0f);
     ASSERT_TRUE(App().IsItemContextMenuOpen());
 
-    controller_->GetSession().Manager().DeleteItem(*App().ItemContextMenuItem());
+    test::Model(controller_->GetSession()).DeleteItem(*App().ItemContextMenuItem());
     StepFrames(2);
     EXPECT_FALSE(App().IsItemContextMenuOpen());
     EXPECT_FALSE(App().ItemContextMenuItem().has_value());
@@ -2400,7 +2401,7 @@ TEST_F(OverlappingItemsTest, DraggingAMultiSelectionRaisesItAsABlockInItsOwnOrde
     RawClickWith(ImGuiMod_Shift, items.front.x + items.front.w - 30.0f, items.front.y + items.front.h - 30.0f);
     ASSERT_EQ(App().Selection().size(), 2u);
     // Something else made since, on top of both.
-    const ItemId otherId = controller_->GetSession().Manager().CreateItem(false, Rect{1200.0f, 100.0f, 200.0f, 200.0f}, "Other");
+    const ItemId otherId = test::Model(controller_->GetSession()).CreateItem(false, Rect{1200.0f, 100.0f, 200.0f, 200.0f}, "Other");
     StepFrame();
     const auto order = [this] {
         std::vector<ItemId> ids;
@@ -2592,7 +2593,7 @@ TEST_F(OverlappingItemsTest, ACanvasSwitchEndsARightDragResizeWhereItIs) {
     ShowEditMode();
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const CanvasId home = manager.CurrentCanvasId();
     const ItemId back = backId_;
     const float x = items.back.x + items.back.w - 20.0f;
@@ -3167,18 +3168,18 @@ TEST_F(HeadlessAppTest, AnEmptyDrawingThatWasScaledStaysAndTheScalingIsUndoneAlo
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
     ASSERT_TRUE(App().DrawingItem().has_value());
     const ItemId id = *App().DrawingItem();
-    const Rect before = controller_->GetSession().Manager().FindItemAnywhere(id)->rect;
+    const Rect before = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
     PressKey(ImGuiKey_Escape);  // out of drawing mode, still selected
     ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
     MoveTo(500.0f, 400.0f);
     StepFrames(2);
     Wheel(2.0f);
-    ASSERT_GT(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w);
+    ASSERT_GT(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w);
 
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "the drawing and the screenshot, both";
-    ASSERT_NE(controller_->GetSession().Manager().FindItemAnywhere(id), nullptr);
-    EXPECT_NEAR(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w, 0.5f) << "the scaling taken back";
+    ASSERT_NE(test::Model(controller_->GetSession()).FindItemAnywhere(id), nullptr);
+    EXPECT_NEAR(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w, 0.5f) << "the scaling taken back";
 }
 
 TEST_F(HeadlessAppTest, AnEmptyDrawingThatWasOnlySelectedStillGoes) {
@@ -3234,12 +3235,12 @@ TEST_F(HeadlessAppTest, TheWheelScalesTheSelectionOutsideDrawingModeAndSizesTheP
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
     ASSERT_TRUE(App().DrawingItem().has_value());
     const ItemId id = *App().DrawingItem();
-    const Rect before = controller_->GetSession().Manager().FindItemAnywhere(id)->rect;
+    const Rect before = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
     const float widthBefore = AppSettings().Stored().strokeWidth;
 
     MoveTo(500.0f, 400.0f);
     Wheel(1.0f);
-    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w) << "drawing mode: the pen, not the snippet";
+    EXPECT_FLOAT_EQ(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w) << "drawing mode: the pen, not the snippet";
     StepFrames(400);
     EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, widthBefore + 1.0f);
 
@@ -3247,18 +3248,18 @@ TEST_F(HeadlessAppTest, TheWheelScalesTheSelectionOutsideDrawingModeAndSizesTheP
     ASSERT_FALSE(App().DrawingItem().has_value());
     ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
     Wheel(2.0f);
-    const Rect after = controller_->GetSession().Manager().FindItemAnywhere(id)->rect;
+    const Rect after = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
     EXPECT_NEAR(after.w, before.w * 1.21f, 0.5f);
     EXPECT_NEAR(after.h, before.h * 1.21f, 0.5f);
     EXPECT_NEAR(after.x + after.w * 0.5f, before.x + before.w * 0.5f, 0.5f) << "about its middle";
     EXPECT_NEAR(after.y + after.h * 0.5f, before.y + before.h * 0.5f, 0.5f);
     Wheel(-2.0f);
-    EXPECT_NEAR(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w, 0.5f) << "and back";
+    EXPECT_NEAR(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w, 0.5f) << "and back";
     EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, widthBefore + 1.0f) << "the pen untouched";
 
     PressKey(ImGuiKey_Escape);  // nothing selected: the wheel has nothing to do
     Wheel(1.0f);
-    EXPECT_NEAR(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w, 0.5f);
+    EXPECT_NEAR(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w, 0.5f);
 }
 
 // Ctrl with the wheel is the selection's background opacity, Shift its
@@ -3272,7 +3273,7 @@ TEST_F(HeadlessAppTest, CtrlAndShiftWithTheWheelSetTheSelectionsOpacities) {
     RawClick(500.0f, 400.0f);
     ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
     ASSERT_FALSE(App().DrawingItem().has_value());
-    const Rect before = controller_->GetSession().Manager().FindItemAnywhere(id)->rect;
+    const Rect before = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
 
     const auto wheelWith = [this](ImGuiKey modifier, float notches) {
         ImGui::GetIO().AddKeyEvent(modifier, true);
@@ -3282,15 +3283,15 @@ TEST_F(HeadlessAppTest, CtrlAndShiftWithTheWheelSetTheSelectionsOpacities) {
         StepFrame();
     };
     wheelWith(ImGuiMod_Ctrl, -2.0f);
-    const Item* item = controller_->GetSession().Manager().FindItemAnywhere(id);
+    const Item* item = test::Model(controller_->GetSession()).FindItemAnywhere(id);
     EXPECT_FLOAT_EQ(item->picture.opacity, 0.9f);
     EXPECT_FLOAT_EQ(item->foregroundOpacity, 1.0f);
 
     wheelWith(ImGuiMod_Shift, -40.0f);
-    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->foregroundOpacity, 0.1f) << "not below a tenth";
+    EXPECT_FLOAT_EQ(test::Model(controller_->GetSession()).FindItemAnywhere(id)->foregroundOpacity, 0.1f) << "not below a tenth";
     wheelWith(ImGuiMod_Ctrl, 5.0f);
-    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->picture.opacity, 1.0f) << "not above whole";
-    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w) << "a modified wheel does not scale";
+    EXPECT_FLOAT_EQ(test::Model(controller_->GetSession()).FindItemAnywhere(id)->picture.opacity, 1.0f) << "not above whole";
+    EXPECT_FLOAT_EQ(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w) << "a modified wheel does not scale";
 }
 
 // ===== Draw and Erase: the shape comes from the modifier =====
@@ -3358,7 +3359,7 @@ TEST_F(HeadlessAppTest, TextPickedMidStrokeLetsTheStrokeFinish) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const ItemId drawing = manager.CurrentOrNull()->items[0].id;
 
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
@@ -3373,7 +3374,7 @@ TEST_F(HeadlessAppTest, TextPickedMidStrokeLetsTheStrokeFinish) {
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrame();
     EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
-    EXPECT_FALSE(manager.CurrentOrNull()->liveLayer.ActiveStroke().has_value());
+    EXPECT_FALSE(AppSession().LiveLayer().ActiveStroke().has_value());
 
     RawClick(400.0f, 400.0f);
     EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(drawing)) << "the next press is Text's";
@@ -3506,7 +3507,7 @@ TEST_F(HeadlessAppTest, EditingALongNoteKeepsAllOfIt) {
     MakeADrawing(300.0f, 300.0f, 620.0f, 440.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     const std::string longNote(20000, 'a');
-    controller_->GetSession().Manager().CurrentOrNull()->items[0].noteText = longNote;
+    test::Model(controller_->GetSession()).CurrentOrNull()->items[0].noteText = longNote;
 
     PressKey(ImGuiKey_T);
     RawClick(400.0f, 400.0f);

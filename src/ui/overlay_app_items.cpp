@@ -295,66 +295,26 @@ bool OverlayApp::IsWaitingToBeCut(ItemId id) const {
 // tell apart: it stays exactly where it was.
 //
 // One undo takes the whole paste back: the copies go, and what a cut
-// moved here goes back where it came from - see Session::RecordArrivals.
+// moved here goes back where it came from - see Session::Paste.
 void OverlayApp::PasteFromClipboard() {
     if (clipboard_.empty() || Manager().CurrentOrNull() == nullptr) {
         return;
     }
-    const CanvasId here = Manager().CurrentCanvasId();
     const bool cut = clipboardIsCut_;
-    std::vector<ItemId> pasted;
-    std::vector<Session::Arrival> arrivals;
-    bool fromThisCanvas = false;
-    bool pictureLost = false;  // a copy whose source's picture could not be read
-    for (const ItemId id : clipboard_) {
-        const std::optional<CanvasId> from = Manager().CanvasHoldingItem(id);
-        if (!from.has_value() || Manager().IsItemDeleted(id)) {
-            continue;  // deleted, or deleted for good, since it was copied
-        }
-        if (cut && *from == here) {
-            pasted.push_back(id);  // already here: nothing moves, nothing to undo
-            continue;
-        }
-        if (cut) {
-            if (const std::optional<Session::Arrival> moved = session_.MoveItemHere(id)) {
-                arrivals.push_back(*moved);
-                pasted.push_back(id);
-            }
-            continue;
-        }
-        const ItemId placed = Manager().PlaceItemOnCanvas(id, here, /*copy=*/true);
-        if (placed == 0) {
-            continue;
-        }
-        // A copy must never share its source's picture file or its
-        // texture - see Session::ClonePicturesForCopy.
-        pictureLost = !session_.ClonePicturesForCopy(id, placed) || pictureLost;
-        fromThisCanvas = fromThisCanvas || *from == here;
-        arrivals.push_back(Session::Arrival{placed});
-        pasted.push_back(placed);
-    }
-    if (pasted.empty()) {
+    const Session::Placed pasted = session_.Paste(clipboard_, cut);
+    if (pasted.items.empty()) {
         ShowActionToast(strings::kToastNothingToPaste);
         return;
     }
-    if (fromThisCanvas) {
-        for (const ItemId id : pasted) {
-            OffsetCopiedItem(id);
-        }
-    }
-    session_.RecordArrivals(std::move(arrivals), /*duplicate=*/false);
-    // Whatever arrived needs a texture now: this is the current canvas,
-    // and the only other time the sync runs is a canvas switch.
-    session_.SyncTexturesToCurrentCanvas();
     // What was pasted is what is selected, so it can be moved straight
     // away - and, for a cut pasted onto another canvas, so that what
     // arrived is the thing the bar is over.
-    selection_ = pasted;
+    selection_ = pasted.items;
     if (cut) {
         clipboard_.clear();
         clipboardIsCut_ = false;
     }
-    ShowActionToast(pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastPasted);
+    ShowActionToast(pasted.pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastPasted);
 }
 
 // A copy of every selected snippet, on this canvas, offset the way a
@@ -373,34 +333,12 @@ void OverlayApp::DuplicateSelection() {
     if (selection_.empty() || Manager().CurrentOrNull() == nullptr) {
         return;
     }
-    std::vector<ItemId> made;
-    std::vector<Session::Arrival> arrivals;
-    bool pictureLost = false;  // a copy whose source's picture could not be read
-    for (const ItemId id : selection_) {
-        if (Manager().IsItemDeleted(id)) {
-            continue;  // deleted since it was selected
-        }
-        const ItemId copy = Manager().DuplicateItem(id);
-        if (copy == 0) {
-            continue;
-        }
-        // A copy must never share its source's picture file or its
-        // texture - see Session::ClonePicturesForCopy.
-        pictureLost = !session_.ClonePicturesForCopy(id, copy) || pictureLost;
-        OffsetCopiedItem(copy);
-        made.push_back(copy);
-        arrivals.push_back(Session::Arrival{copy});
-    }
-    if (made.empty()) {
+    const Session::Placed made = session_.Duplicate(selection_);
+    if (made.items.empty()) {
         return;
     }
-    session_.RecordArrivals(std::move(arrivals), /*duplicate=*/true);
-    // The copies are on the current canvas, so a picture of theirs still
-    // without a texture needs one now rather than at the next canvas
-    // switch, which is the only other time the sync runs.
-    session_.SyncTexturesToCurrentCanvas();
-    selection_ = made;
-    ShowActionToast(pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastDuplicated);
+    selection_ = made.items;
+    ShowActionToast(made.pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastDuplicated);
 }
 
 void OverlayApp::AddTouchedToSelection(const Rect& box) {
@@ -442,19 +380,18 @@ void OverlayApp::NudgeSelection(float dx, float dy) {
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     // A run of presses - or a key held down, repeating - is one undo, back
     // to where the run began.
-    std::vector<Session::Placement> before = session_.PlacementsOf(selection_);
+    std::vector<std::pair<ItemId, Rect>> rects;
     for (const ItemId id : selection_) {
-        Item* item = Manager().FindItemAnywhere(id);
+        const Item* item = Manager().FindItemAnywhere(id);
         if (item == nullptr || item->isFullscreen) {
             continue;  // a fullscreen snippet has nowhere to go
         }
         KeepDrawingsPlaced({id});
-        item->rect = ClampRectToViewport(Rect{item->rect.x + dx, item->rect.y + dy, item->rect.w, item->rect.h},
-                                         display.x, display.y);
-        Manager().MarkChanged();
-        Manager().CommitItemLayout(id);
+        rects.emplace_back(id, ClampRectToViewport(Rect{item->rect.x + dx, item->rect.y + dy, item->rect.w,
+                                                        item->rect.h},
+                                                   display.x, display.y));
     }
-    RecordPlacementBurst(PlacementBurst::Nudge, std::move(before));
+    RecordPlacementBurst(PlacementBurst::Nudge, rects);
 }
 
 // Escape puts the hand down, in stages: a creation tool in hand goes
@@ -554,11 +491,11 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // happened to be hovered last.
     debugHoveredResizeHandle_.clear();
 
-    Canvas* canvasPtr = Manager().CurrentOrNull();
+    const Canvas* canvasPtr = Manager().CurrentOrNull();
     if (!canvasPtr) {
         return;  // no canvas, so no items to render
     }
-    Canvas& canvas = *canvasPtr;
+    const Canvas& canvas = *canvasPtr;
     // While a creation tool is armed, items shouldn't
     // intercept clicks meant for that gesture/menu instead - direct
     // equivalent of the mockup's setInputMode('region') raising the canvas
@@ -652,17 +589,17 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     ImDrawList* drawList = BeginScreenLayer("##sz_items_layer", displayW, displayH);
     // The note editor is the one real widget on any item, and goes above
     // the whole layer rather than into it - see below the loop.
-    Item* editingItem = nullptr;
+    const Item* editingItem = nullptr;
     ImVec2 editingMin;
     ImVec2 editingMax;
-    for (Item& item : canvas.items) {
+    for (const Item& item : canvas.items) {
         if (item.minimized) {
             continue;  // shown in the dock instead - see RenderDock, called below
         }
         if (Manager().IsDeleted(canvas, item)) {
             continue;  // deleted: hidden until it is restored
         }
-        PaintItemBody(drawList, item, canvas, drawingItem_ == item.id, highlightId == item.id, frontmostId == item.id);
+        PaintItemBody(drawList, item, drawingItem_ == item.id, highlightId == item.id, frontmostId == item.id);
         if (itemsInteractive && editingNoteItemId_ == item.id) {
             editingItem = &item;
             editingMin = ImVec2(std::round(item.rect.x), std::round(item.rect.y));
@@ -806,7 +743,7 @@ PointerTarget OverlayApp::ResolvePointerTarget(float x, float y) const {
 
 // An item's content, the stroke being drawn into it, and its border, into
 // `drawList` at the item's own (unrounded) rect.
-void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, const Canvas& canvas, bool drawing,
+void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, bool drawing,
                                bool highlighted, bool isFrontmost) {
     const ImVec2 pMin(item.rect.x, item.rect.y);
     const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
@@ -828,11 +765,12 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, const Can
         // z-order - a Drawing item's fill-less background just
         // happened to let it show through regardless, which is what
         // made this easy to miss.
-        for (const Stroke& stroke : canvas.liveLayer.Strokes()) {
+        const CanvasState& live = session_.LiveLayer();
+        for (const Stroke& stroke : live.Strokes()) {
             DrawStroke(drawList, stroke, LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f);
         }
-        if (canvas.liveLayer.ActiveStroke().has_value()) {
-            DrawStroke(drawList, *canvas.liveLayer.ActiveStroke(), LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f);
+        if (live.ActiveStroke().has_value()) {
+            DrawStroke(drawList, *live.ActiveStroke(), LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f);
         }
     }
     // Cut, and waiting for the paste that will move it: faded where it
@@ -1072,14 +1010,7 @@ void OverlayApp::ActivateBarButton(ChromeButton button) {
             ToggleFullscreenUndoably(*primaryId, /*stretch=*/false);
             break;
         case ChromeButton::Minimize:
-            for (const ItemId id : selection_) {
-                Item* item = Manager().FindItemAnywhere(id);
-                if (item == nullptr) {
-                    continue;
-                }
-                item->minimized = true;
-                Manager().MarkChanged();
-            }
+            session_.SetMinimized(selection_, true);
             // Off the screen, so out of the selection - PruneSelection would
             // do it next frame; doing it now keeps the bar from showing
             // over nothing for a frame.
@@ -1096,12 +1027,7 @@ void OverlayApp::ActivateBarButton(ChromeButton button) {
                 const Item* item = Manager().FindItemAnywhere(id);
                 allPinned = allPinned && item != nullptr && item->pinned;
             }
-            for (const ItemId id : selection_) {
-                if (Item* item = Manager().FindItemAnywhere(id)) {
-                    item->pinned = !allPinned;
-                }
-            }
-            Manager().MarkChanged();
+            session_.SetPinned(selection_, !allPinned);
             break;
         }
         case ChromeButton::More: {
@@ -1188,7 +1114,7 @@ int ResizeStringForInputText(ImGuiInputTextCallbackData* data) {
 }
 }  // namespace
 
-void OverlayApp::RenderNoteEditor(Item& item, ImVec2 pMin, ImVec2 pMax) {
+void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     constexpr ImGuiWindowFlags kNoteWindowFlags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
@@ -1276,11 +1202,11 @@ void OverlayApp::RenderNoteEditor(Item& item, ImVec2 pMin, ImVec2 pMax) {
 // Click a tile to restore it (bring it back exactly where it was, and to
 // the front) - a no-op (renders nothing) if nothing's minimized.
 void OverlayApp::RenderDock(float displayW, float displayH) {
-    Canvas* canvasPtr = Manager().CurrentOrNull();
+    const Canvas* canvasPtr = Manager().CurrentOrNull();
     if (!canvasPtr) {
         return;  // nothing can be minimized when there's no canvas
     }
-    Canvas& canvas = *canvasPtr;
+    const Canvas& canvas = *canvasPtr;
     std::vector<ItemId> minimizedIds;
     for (const Item& item : canvas.items) {
         if (item.minimized && !Manager().IsDeleted(canvas, item)) {
@@ -1361,13 +1287,7 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
     BringToFront("##dock");
 
     if (restoreId.has_value()) {
-        for (Item& it : canvas.items) {
-            if (it.id == *restoreId) {
-                it.minimized = false;
-                Manager().MarkChanged();
-                break;
-            }
-        }
+        session_.SetMinimized({*restoreId}, false);
     }
 }
 

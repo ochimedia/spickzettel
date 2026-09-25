@@ -96,7 +96,7 @@ void OverlayApp::SwitchToCanvasSettled(CanvasId id) {
     // RenderItems only walks the current canvas, so an editor left open
     // across the switch would strand what was typed.
     SettleHand();
-    Manager().SwitchToCanvas(id);
+    session_.SwitchToCanvas(id);
 }
 
 void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
@@ -342,7 +342,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         OpenCanvasContextMenu(*rightClicked, io.MousePos);
     }
     if (reorder.has_value()) {
-        Manager().ReorderCanvas(reorder->first, reorder->second);
+        session_.ReorderCanvas(reorder->first, reorder->second);
     }
     if (clicked.has_value()) {
         SwitchToCanvasSettled(*clicked);

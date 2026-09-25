@@ -1,5 +1,6 @@
 // The canvas bar, driven by widget name - see RenderCanvasBar.
 #include "fakes/ui_test.h"
+#include "support/session_test_access.h"
 
 namespace sz::test {
 namespace {
@@ -38,7 +39,7 @@ TEST_F(UiTest, TheCanvasBarMakesACanvasAndSwitchesBetweenThem) {
 TEST_F(UiTest, DraggingATileOntoAnotherMovesItThere) {
     ShowEditMode();
     StepFrame();
-    CanvasManager& manager = controller_->GetSession().Manager();
+    CanvasManager& manager = test::Model(controller_->GetSession());
     const CanvasId a = manager.CurrentCanvasId();
     const CanvasId b = manager.AddCanvas("B");
     const CanvasId gone = manager.AddCanvas("Gone");

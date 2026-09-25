@@ -249,7 +249,7 @@ void OverlayApp::SetToolShortcut(ShortcutAction action, platform::KeyCombo combo
 }
 
 void OverlayApp::BeginEditingNote(ItemId id) {
-    Item* item = Manager().FindItemAnywhere(id);
+    const Item* item = Manager().FindItemAnywhere(id);
     if (!item) {
         return;
     }
@@ -300,7 +300,7 @@ void OverlayApp::EnterDrawingMode(ItemId id, std::optional<Tool> tool) {
     // while raising is on, as any selected snippet is.
     SelectOnly(id);
     if (Cfg().raiseSelectedSnippet) {
-        Manager().BringItemToFront(id);
+        session_.BringItemsToFront({id});
     }
     drawingItem_ = id;
     // The pen, unless a tool was asked for by name (a key): the
@@ -325,9 +325,7 @@ void OverlayApp::ExitDrawingMode() {
     if (GestureIf<StrokeInFlight>() != nullptr || GestureIf<RightErase>() != nullptr) {
         EndGesture();
     }
-    if (Canvas* canvas = Manager().CurrentOrNull()) {
-        canvas->liveLayer.Clear();
-    }
+    session_.LiveLayer().Clear();
     drawingItem_.reset();
     SetTool(Tool::Select);
 }
@@ -444,8 +442,8 @@ void OverlayApp::MatureHeldPress() {
 // self-healing: the first thing created gets out of it on its own, and
 // only an explicit "New canvas" is needed if what you want *is* an empty
 // canvas.
-Canvas& OverlayApp::EnsureCanvasForNewItem() {
-    if (Canvas* existing = Manager().CurrentOrNull()) {
+const Canvas& OverlayApp::EnsureCanvasForNewItem() {
+    if (const Canvas* existing = Manager().CurrentOrNull()) {
         return *existing;
     }
     CreateAndSwitchToNewCanvas();
@@ -481,30 +479,28 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
                              : ImVec2(welcomeSize.x, welcomeSize.y + 2.0f * (warningSize.y + gap));
     ImVec2 at((displayW - group.x) * 0.5f, (displayH - group.y) * 0.5f);
 
-    Canvas& canvas = EnsureCanvasForNewItem();
-    const auto place = [&](ImVec2 size, const char* name) -> Item* {
-        const Rect rect = ClampRectToViewport(Rect{at.x, at.y, size.x, size.y}, displayW, displayH);
+    EnsureCanvasForNewItem();
+    // Made as they are, text and all, and not on the history: nobody made
+    // them, so there is nothing for an undo to take back.
+    const auto place = [&](ImVec2 size, const char* name, std::string text, float textSizePx,
+                           uint32_t textColorRGBA) -> ItemId {
+        Item note;
+        note.name = name;
+        note.rect = ClampRectToViewport(Rect{at.x, at.y, size.x, size.y}, displayW, displayH);
         (row ? at.x : at.y) += (row ? size.x : size.y) + gap;
-        if (Manager().CreateItem(/*hasBackground=*/false, rect, name) == 0) {
-            return nullptr;
-        }
-        Item& item = canvas.items.back();
         // Boxes of text, whose shape is the point of resizing them: the text
         // wraps to the new width rather than scaling with it.
-        item.keepAspect = false;
+        note.keepAspect = false;
         // A Text Note's backing (see kNoteBackgroundColorRGBA), but darker:
         // these land on whatever the desktop happens to show, and half
         // transparent over a white window left the red text washed out.
-        item.picture.tintColorRGBA = kNoteBackgroundColorRGBA;
-        item.picture.opacity = 0.8f;
-        return &item;
+        note.picture.tintColorRGBA = kNoteBackgroundColorRGBA;
+        note.picture.opacity = 0.8f;
+        note.noteText = std::move(text);
+        note.noteTextSizePx = std::min(textSizePx, kNoteTextSizeMax);
+        note.noteTextColorRGBA = textColorRGBA;
+        return session_.CreateItem(std::move(note), /*undoable=*/false);
     };
-
-    Item* welcome = place(welcomeSize, strings::kWelcomeName);
-    if (welcome == nullptr) {
-        return;
-    }
-    Item& item = *welcome;
     // Deliberately short. This is the first thing anyone sees, and its job
     // is only to get them to the point where the app can explain itself:
     // one gesture, the right-click menus, the key that brings the overlay
@@ -524,40 +520,32 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
     } else {
         std::snprintf(text, sizeof(text), strings::kWelcomeBodyNoCheatSheetKey, showKey.c_str());
     }
-    item.noteText = text;
-    item.noteTextSizePx = std::min(Px(18.0f), kNoteTextSizeMax);
+    if (place(welcomeSize, strings::kWelcomeName, text, Px(18.0f), Item{}.noteTextColorRGBA) == 0) {
+        return;
+    }
 
-    // Finished with `item` before the next note is made: that can move
-    // canvas.items, and the reference with it.
-    //
     // Behavior and profiles, because the right input settings differ by
     // game and the defaults will be wrong for some; anti-cheat, because
     // hooking input and drawing over a game is what such a system looks
     // for, and a ban is not something to find out about afterwards.
     for (const auto& [name, body] : {std::pair{strings::kWelcomeBehaviorName, strings::kWelcomeBehaviorBody},
                                      std::pair{strings::kWelcomeAntiCheatName, strings::kWelcomeAntiCheatBody}}) {
-        if (Item* warning = place(warningSize, name)) {
-            warning->noteText = body;
-            warning->noteTextSizePx = std::min(Px(22.0f), kNoteTextSizeMax);
-            warning->noteTextColorRGBA = kWarningTextRGBA;
-        }
+        place(warningSize, name, body, Px(22.0f), kWarningTextRGBA);
     }
-    Manager().MarkChanged();
 }
 
 ItemId OverlayApp::CreateFullscreenItem(ItemCreationKind kind, float displayW, float displayH) {
-    Canvas& canvas = EnsureCanvasForNewItem();
-    const std::string name = ItemNameForKind(kind, canvas, /*fullscreen=*/true);
+    const Canvas& canvas = EnsureCanvasForNewItem();
+    Item prototype = PrototypeForKind(kind, Rect{0.0f, 0.0f, displayW, displayH},
+                                      ItemNameForKind(kind, canvas, /*fullscreen=*/true));
+    prototype.isFullscreen = true;
     // Through the session, so that making it is on the history - see
     // Session::CreateItem.
-    const ItemId id =
-        session_.CreateItem(kind == ItemCreationKind::Screenshot, Rect{0.0f, 0.0f, displayW, displayH}, name);
+    const ItemId id = session_.CreateItem(std::move(prototype));
     if (id == 0) {
         return 0;
     }
-    Item* item = &canvas.items.back();
-    item->isFullscreen = true;
-    ApplyCreationDefaults(kind, id, *item);
+    HandOverNewItem(kind, id);
     return id;
 }
 
@@ -573,20 +561,24 @@ ItemId OverlayApp::FinishRegionCapture(const CreationGesture& gesture) {
     if (rect.w < kRegionMinSize || rect.h < kRegionMinSize) {
         return 0;
     }
-    Canvas& canvas = EnsureCanvasForNewItem();
-    const std::string name = ItemNameForKind(kind, canvas, /*fullscreen=*/false);
-    const ItemId id = session_.CreateItem(kind == ItemCreationKind::Screenshot, rect, name);
+    const Canvas& canvas = EnsureCanvasForNewItem();
+    const ItemId id =
+        session_.CreateItem(PrototypeForKind(kind, rect, ItemNameForKind(kind, canvas, /*fullscreen=*/false)));
     if (id == 0) {
         return 0;
     }
-    ApplyCreationDefaults(kind, id, canvas.items.back());
+    HandOverNewItem(kind, id);
     return id;
 }
 
-void OverlayApp::ApplyCreationDefaults(ItemCreationKind kind, ItemId id, Item& item) {
-    // Settings > Defaults, before anything below looks at the item.
+Item OverlayApp::PrototypeForKind(ItemCreationKind kind, Rect rect, std::string name) {
+    // Settings > Defaults.
     const SnippetDefaults& defaults =
         kind == ItemCreationKind::Screenshot ? Cfg().screenshotDefaults : Cfg().drawingDefaults;
+    Item item;
+    item.hasBackground = kind == ItemCreationKind::Screenshot;
+    item.name = std::move(name);
+    item.rect = rect;
     item.keepAspect = defaults.keepAspect;
     item.foregroundOpacity = defaults.foregroundOpacity;
     item.picture.opacity = defaults.backgroundOpacity;
@@ -597,10 +589,12 @@ void OverlayApp::ApplyCreationDefaults(ItemCreationKind kind, ItemId id, Item& i
         item.noteTextSizePx = Cfg().noteTextSizePx;
     }
     item.noteTextColorRGBA = Cfg().noteTextColorRGBA;
+    return item;
+}
 
+void OverlayApp::HandOverNewItem(ItemCreationKind kind, ItemId id) {
     switch (kind) {
         case ItemCreationKind::Screenshot:
-            session_.CaptureShotItem(item);
             // Selected as made, so its bar is there to act on it at once -
             // as a drawing is, by entering drawing mode.
             SelectOnly(id);
@@ -612,21 +606,6 @@ void OverlayApp::ApplyCreationDefaults(ItemCreationKind kind, ItemId id, Item& i
             break;
     }
 }
-
-void OverlayApp::OffsetCopiedItem(ItemId itemId) {
-    Item* item = Manager().FindItemAnywhere(itemId);
-    if (!item) {
-        return;
-    }
-    constexpr float kCopyOffsetPx = 24.0f;
-    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-    item->rect = ClampRectToViewport(
-        Rect{item->rect.x + kCopyOffsetPx, item->rect.y + kCopyOffsetPx, item->rect.w, item->rect.h}, displaySize.x,
-        displaySize.y);
-    Manager().CommitItemLayout(itemId);
-}
-
-
 
 // ================= Raw mouse input: pen/eraser + creation placement =================
 
@@ -697,9 +676,9 @@ void OverlayApp::EndGesture() {
         return;
     }
     Gesture ended = std::exchange(gesture_, std::monostate{});
-    if (ItemGesture* item = std::get_if<ItemGesture>(&ended)) {
+    if (std::holds_alternative<ItemGesture>(ended)) {
         // Where it has got to, as one undo step - or none, if it never moved.
-        session_.RecordPlacements(std::move(item->placementsBefore));
+        session_.EndPlacement();
     } else if (const RightErase* erase = std::get_if<RightErase>(&ended); erase != nullptr && erase->erasing) {
         session_.EndErase();
     }
@@ -783,7 +762,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             gesture_ = std::monostate{};
             // The whole gesture, one entry - or none, for a press that
             // never moved anything.
-            session_.RecordPlacements(std::move(ended.placementsBefore));
+            session_.EndPlacement();
             if (ended.button == platform::MouseButton::Right && !ended.moved) {
                 // A right press on a snippet that never dragged is a right
                 // click - a drag resizes instead. On the snippet being
@@ -819,9 +798,9 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             // from the restored rect; the few pixels the pointer has
             // traveled by then are not worth a jump.
             for (ItemGesture::StartRect& start : gesture->startRects) {
-                Item* item = Manager().FindItemAnywhere(start.item);
+                const Item* item = Manager().FindItemAnywhere(start.item);
                 if (item != nullptr && item->isFullscreen) {
-                    Manager().ToggleFullscreen(start.item, ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+                    session_.PreviewLeaveFullscreen(start.item);
                     item = Manager().FindItemAnywhere(start.item);
                     if (item != nullptr) {
                         start.rect = item->rect;
@@ -840,7 +819,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         }
         const ImVec2 display = ImGui::GetIO().DisplaySize;
         for (const ItemGesture::StartRect& start : gesture->startRects) {
-            Item* item = Manager().FindItemAnywhere(start.item);
+            const Item* item = Manager().FindItemAnywhere(start.item);
             if (item == nullptr) {
                 continue;  // deleted mid-drag - nothing left to move/resize
             }
@@ -855,13 +834,9 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                 newRect.x += dx;
                 newRect.y += dy;
             }
-            item->rect = ClampRectToViewport(newRect, display.x, display.y);
-            Manager().MarkChanged();
-            // Re-anchors to this deliberate move/resize - see
-            // CanvasManager::CommitItemLayout's own doc comment on why that
-            // matters: without it, the next display-size change would
-            // silently revert this.
-            Manager().CommitItemLayout(item->id);
+            // Re-anchored to this deliberate move/resize as it goes - see
+            // Session::PreviewRect.
+            session_.PreviewRect(start.item, ClampRectToViewport(newRect, display.x, display.y));
         }
         return true;
     }
@@ -888,7 +863,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             // (see OnMouse), unless Alt picks the snippet up.
             return false;
         }
-        Item* item = Manager().FindItemAnywhere(target.item);
+        const Item* item = Manager().FindItemAnywhere(target.item);
         if (item == nullptr) {
             return false;
         }
@@ -899,7 +874,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             // The whole selection, as a block - see BringItemsToFront.
             // Reorders canvas.items, so `item` is found again afterwards
             // rather than read through the pointer from before.
-            Manager().BringItemsToFront(selection_);
+            session_.BringItemsToFront(selection_);
             item = Manager().FindItemAnywhere(target.item);
             if (item == nullptr) {
                 return false;
@@ -968,7 +943,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
                 // What is taken hold of is the selection, so the selection
                 // comes forward - as a block, in its own order, rather than
                 // the one snippet under the pointer out of it.
-                Manager().BringItemsToFront(selection_);
+                session_.BringItemsToFront(selection_);
             }
             gesture.item = target.item;
             for (const ItemId id : selection_) {
@@ -1042,27 +1017,22 @@ bool OverlayApp::HandleBoxSelection(const platform::MouseEvent& event) {
     return true;
 }
 
-void OverlayApp::BeginPlacementRecord(ItemGesture& gesture) {
+void OverlayApp::BeginPlacementRecord(const ItemGesture& gesture) {
     std::vector<ItemId> ids;
     for (const ItemGesture::StartRect& start : gesture.startRects) {
         ids.push_back(start.item);
     }
-    gesture.placementsBefore = session_.PlacementsOf(ids);
+    session_.BeginPlacement(ids);
 }
 
 void OverlayApp::ToggleFullscreenUndoably(ItemId id, bool stretch) {
-    std::vector<Session::Placement> before = session_.PlacementsOf({id});
-    const ImVec2 display = ImGui::GetIO().DisplaySize;
-    Manager().ToggleFullscreen(id, display.x, display.y, stretch);
+    session_.ToggleFullscreen(id, stretch);
     KeepDrawingsPlaced({id});
-    session_.RecordPlacements(std::move(before));
 }
 
 void OverlayApp::ResetToNativeSizeUndoably(ItemId id) {
-    std::vector<Session::Placement> before = session_.PlacementsOf({id});
-    Manager().ResetItemToNativeSize(id);
+    session_.ResetItemToNativeSize(id);
     KeepDrawingsPlaced({id});
-    session_.RecordPlacements(std::move(before));
 }
 
 void OverlayApp::KeepDrawingsPlaced(const std::vector<ItemId>& ids) {
@@ -1071,14 +1041,14 @@ void OverlayApp::KeepDrawingsPlaced(const std::vector<ItemId>& ids) {
     }
 }
 
-void OverlayApp::RecordPlacementBurst(PlacementBurst kind, std::vector<Session::Placement> before) {
+void OverlayApp::RecordPlacementBurst(PlacementBurst kind, const std::vector<std::pair<ItemId, Rect>>& rects) {
     const double now = ImGui::GetTime();
     const bool continues = lastPlacementBurst_ == kind && now - lastPlacementBurstAtSeconds_ < kPlacementBurstSeconds &&
                            session_.HistoryRevision() == lastPlacementBurstRevision_;
     // One that files nothing - a nudge against the screen's edge - starts
     // no run: armed, the next press within the second merged into whatever
     // was filed last, a drag included, and one undo took back both.
-    if (!session_.RecordPlacements(std::move(before), continues)) {
+    if (!session_.SetRects(rects, continues)) {
         return;
     }
     lastPlacementBurst_ = kind;
@@ -1153,19 +1123,14 @@ void OverlayApp::ResizeSelectionAsAGroup(float dx, float dy) {
     const float anchorY = gesture.top ? box.y + box.h : (gesture.bottom ? box.y : box.y + box.h * 0.5f);
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     for (const ItemGesture::StartRect& start : gesture.startRects) {
-        Item* item = Manager().FindItemAnywhere(start.item);
-        if (item == nullptr) {
-            continue;  // deleted mid-drag
-        }
         const Rect scaled{anchorX + (start.rect.x - anchorX) * scale, anchorY + (start.rect.y - anchorY) * scale,
                            start.rect.w * scale, start.rect.h * scale};
         // Clamped one snippet at a time, exactly as a move of the whole
         // selection is: at the very edges of the screen that can put one
         // of them out of step with the rest, and the alternative is a
-        // snippet scaled off the screen with nothing left to grab.
-        item->rect = ClampRectToViewport(scaled, display.x, display.y);
-        Manager().MarkChanged();
-        Manager().CommitItemLayout(item->id);
+        // snippet scaled off the screen with nothing left to grab. One
+        // deleted mid-drag is passed over by the session.
+        session_.PreviewRect(start.item, ClampRectToViewport(scaled, display.x, display.y));
     }
 }
 
@@ -1175,9 +1140,9 @@ void OverlayApp::ScaleSelectionByWheel(int steps) {
     }
     // The snippets to scale, as they are now: fullscreen ones fill the
     // screen by definition and have no size of their own to change.
-    std::vector<Item*> items;
+    std::vector<const Item*> items;
     for (const ItemId id : selection_) {
-        Item* item = Manager().FindItemAnywhere(id);
+        const Item* item = Manager().FindItemAnywhere(id);
         if (item != nullptr && !item->isFullscreen && item->rect.w > 0.0f && item->rect.h > 0.0f) {
             items.push_back(item);
         }
@@ -1214,22 +1179,18 @@ void OverlayApp::ScaleSelectionByWheel(int steps) {
     const float anchorX = minX + boxW * 0.5f;
     const float anchorY = minY + boxH * 0.5f;
     std::vector<ItemId> ids;
+    std::vector<std::pair<ItemId, Rect>> rects;
     for (const Item* item : items) {
         ids.push_back(item->id);
-    }
-    std::vector<Session::Placement> before = session_.PlacementsOf(ids);
-    for (Item* item : items) {
         const Rect scaled{anchorX + (item->rect.x - anchorX) * scale, anchorY + (item->rect.y - anchorY) * scale,
                            item->rect.w * scale, item->rect.h * scale};
-        item->rect = ClampRectToViewport(scaled, display.x, display.y);
-        Manager().CommitItemLayout(item->id);
+        rects.emplace_back(item->id, ClampRectToViewport(scaled, display.x, display.y));
     }
-    Manager().MarkChanged();
     // A drawing placed and then scaled is one someone wants, as one moved
     // or resized by hand is.
     KeepDrawingsPlaced(ids);
     // A spin of the wheel is one undo, back to the size it started at.
-    RecordPlacementBurst(PlacementBurst::Wheel, std::move(before));
+    RecordPlacementBurst(PlacementBurst::Wheel, rects);
 }
 
 void OverlayApp::StepSelectionOpacity(int steps, bool background) {
@@ -1243,24 +1204,27 @@ void OverlayApp::StepSelectionOpacity(int steps, bool background) {
         return std::clamp(std::round((value + delta) * 100.0f) / 100.0f, lowest, 1.0f);
     };
     std::optional<float> shown;
+    std::vector<std::pair<ItemId, ItemStyle>> styles;
     for (const ItemId id : selection_) {
-        Item* item = Manager().FindItemAnywhere(id);
+        const Item* item = Manager().FindItemAnywhere(id);
         if (item == nullptr) {
             continue;
         }
+        ItemStyle style = ItemStyle::Of(*item);
         if (background) {
-            item->picture.opacity = stepped(item->picture.opacity, 0.0f);
-            shown = item->picture.opacity;
+            style.pictureOpacity = stepped(style.pictureOpacity, 0.0f);
+            shown = style.pictureOpacity;
         } else {
             // Not below a tenth - see RenderItemOpacity.
-            item->foregroundOpacity = stepped(item->foregroundOpacity, 0.1f);
-            shown = item->foregroundOpacity;
+            style.foregroundOpacity = stepped(style.foregroundOpacity, 0.1f);
+            shown = style.foregroundOpacity;
         }
+        styles.emplace_back(id, style);
     }
     if (!shown.has_value()) {
         return;
     }
-    Manager().MarkChanged();
+    session_.SetStyles(styles);
     // The value, since the change itself can be hard to judge by eye: the
     // last snippet's, which with several selected is the one selected last.
     char text[64];
@@ -1373,7 +1337,7 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
                     untouchedDrawingRevision_ = session_.HistoryRevision();
                 }
                 // A creation tool places once. A drawing has already handed
-                // over to Draw (see ApplyCreationDefaults); a screenshot hands
+                // over to Draw (see HandOverNewItem); a screenshot hands
                 // back the tool that was in hand before it. Nothing placed -
                 // a drag too small to keep - leaves the tool in hand to try
                 // again.
@@ -1661,7 +1625,7 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
     if (!drawingItem_.has_value()) {
         return;
     }
-    Canvas* canvas = Manager().CurrentOrNull();
+    const Canvas* canvas = Manager().CurrentOrNull();
     if (!canvas) {
         return;
     }
@@ -1776,9 +1740,9 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
             // native space and moved into the armed item (see
             // Session::CommitLiveStroke).
             if (event.kind == platform::MouseEventKind::Down) {
-                canvas->liveLayer.Clear();  // nothing of an earlier stroke is part of this one
+                session_.LiveLayer().Clear();  // nothing of an earlier stroke is part of this one
             }
-            drawTool_.OnMouseEvent(event, canvas->liveLayer);
+            drawTool_.OnMouseEvent(event, session_.LiveLayer());
             if (event.kind == platform::MouseEventKind::Up) {
                 session_.CommitLiveStroke(armed);
             }

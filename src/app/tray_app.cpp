@@ -245,7 +245,7 @@ void TrayController::OnSilentCaptureHotkey() {
                                                : std::nullopt;
     overlayApp_.QuickCapture(static_cast<float>(overlayDisplay_.width), static_cast<float>(overlayDisplay_.height));
     if (stayOn.has_value()) {
-        session_.Manager().SwitchToCanvas(*stayOn);
+        session_.SwitchToCanvas(*stayOn);
         // The capture's texture is on a canvas nobody is looking at now.
         // The frame's own sync only runs when the current canvas changes,
         // and from its point of view it has not: this is the same canvas

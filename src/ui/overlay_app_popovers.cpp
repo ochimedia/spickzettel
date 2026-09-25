@@ -53,7 +53,7 @@ bool ColorSwatchButton(ImU32 fillColor, bool selected) {
 // ================= Canvases =================
 
 CanvasId OverlayApp::CreateCanvasInCurrentFolder() {
-    const CanvasId id = Manager().AddCanvas(TimestampName());
+    const CanvasId id = session_.AddCanvas(TimestampName());
     // It lands at the end of the folder, which in a long folder is off the
     // bottom of the Overview's grid - see overviewScrollToCanvasId_.
     overviewScrollToCanvasId_ = id;
@@ -66,7 +66,7 @@ CanvasId OverlayApp::CreateCanvasBesideCurrent() {
     // without opening anything is what tells them apart. A switch to the
     // new canvas re-syncs the browsed folder anyway.
     if (const Canvas* current = Manager().CurrentOrNull()) {
-        Manager().SwitchToFolder(current->folderId);
+        session_.SwitchToFolder(current->folderId);
     }
     return CreateCanvasInCurrentFolder();
 }
@@ -99,27 +99,9 @@ void OverlayApp::CreateAndSwitchToNewCanvas() {
 // snippet leaves it.
 void OverlayApp::MoveSelectionToNewCanvas() {
     SettleHand();
-    const CanvasId source = Manager().CurrentCanvasId();
     const CanvasId target = CreateCanvasBesideCurrent();
-    std::vector<ItemId> moved;
-    for (const ItemId id : selection_) {
-        if (Manager().IsItemDeleted(id)) {
-            continue;  // deleted since it was selected
-        }
-        Manager().MoveOrCopyItemToCanvas(id, target, /*copy=*/false);
-        // A move returns 0 whether it moved the snippet or found nothing
-        // to move - the caller already knows the id - so what happened is
-        // read from where the snippet is now.
-        if (Manager().CanvasHoldingItem(id) != target) {
-            continue;
-        }
-        // Its history is filed under the canvas it has left, where an undo
-        // would now edit a snippet living somewhere else - see
-        // Session::ForgetHistoryOfItem.
-        session_.ForgetHistoryOfItem(source, id);
-        moved.push_back(id);
-    }
-    Manager().SwitchToCanvas(target);
+    const std::vector<ItemId> moved = session_.SendItemsTo(selection_, target, /*copy=*/false).items;
+    session_.SwitchToCanvas(target);
     // What arrived is what is selected, so it can be arranged straight
     // away - and the canvas bar is over it rather than over nothing.
     selection_ = moved;
@@ -153,8 +135,9 @@ void OverlayApp::RenderItemPropertiesPopover() {
         // click-outside, Escape) - drop the sticky reference used by
         // RenderItems' highlight resolution along with it. A
         // harmless no-op on every ordinary frame where it was already
-        // unset.
+        // unset. A style being dragged when it closed ends with it.
         itemPropertiesPopoverItemId_.reset();
+        session_.EndStyleEdit();
         return;
     }
     KeepPopoverInFront();
@@ -162,7 +145,7 @@ void OverlayApp::RenderItemPropertiesPopover() {
         ImGui::EndPopup();
         return;
     }
-    Canvas* canvasPtr = Manager().CurrentOrNull();
+    const Canvas* canvasPtr = Manager().CurrentOrNull();
     if (!canvasPtr) {
         // The canvas this popover's item lived on was deleted out from
         // under it - same outcome as the item itself going away, below.
@@ -170,7 +153,7 @@ void OverlayApp::RenderItemPropertiesPopover() {
         ImGui::EndPopup();
         return;
     }
-    Canvas& canvas = *canvasPtr;
+    const Canvas& canvas = *canvasPtr;
     const auto it = std::find_if(canvas.items.begin(), canvas.items.end(),
                                   [&](const Item& i) { return i.id == *itemPropertiesPopoverItemId_; });
     // Gone, or deleted while the popover was open.
@@ -179,22 +162,31 @@ void OverlayApp::RenderItemPropertiesPopover() {
         ImGui::EndPopup();
         return;
     }
-    RenderItemOpacity(*it);
-    if (ImGui::Checkbox(Labeled(strings::kPopoverKeepAspect, "keepaspect"), &it->keepAspect)) {
-        Manager().MarkChanged();
+    const Item& item = *it;
+    RenderItemOpacity(item);
+    bool keepAspect = item.keepAspect;
+    if (ImGui::Checkbox(Labeled(strings::kPopoverKeepAspect, "keepaspect"), &keepAspect)) {
+        ItemStyle style = ItemStyle::Of(item);
+        style.keepAspect = keepAspect;
+        session_.PreviewStyle(item.id, style);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverKeepAspectTip);
     }
-    RenderItemBackgroundColor(it->picture);
-    RenderItemTextStyle(*it);
+    RenderItemBackgroundColor(item);
+    RenderItemTextStyle(item);
     // After the background-color ColorEdit3 swatch, not before - see
     // KeepChildPopupsInFront.
     KeepChildPopupsInFront();
+    // A change of style is one step for as long as the hand is on it - a
+    // slider dragged, the color picker's square - and ends when it lets go.
+    if (!ImGui::IsAnyItemActive()) {
+        session_.EndStyleEdit();
+    }
     ImGui::EndPopup();
 }
 
-void OverlayApp::RenderItemOpacity(Item& item) {
+void OverlayApp::RenderItemOpacity(const Item& item) {
     // Foreground (strokes) and background (captured image / color fill)
     // opacity are independent - see Item::foregroundOpacity/
     // Picture::opacity's own doc comments. Background can go all the way
@@ -210,27 +202,28 @@ void OverlayApp::RenderItemOpacity(Item& item) {
     // widget as far as ImGui is concerned - which is an ID conflict it
     // warns about, and a drag it can attribute to the wrong slider.
     if (ImGui::SliderInt(Labeled(strings::kPopoverForeground, "opacityfg"), &foregroundPct, 10, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
-        item.foregroundOpacity = static_cast<float>(foregroundPct) / 100.0f;
-        Manager().MarkChanged();
+        ItemStyle style = ItemStyle::Of(item);
+        style.foregroundOpacity = static_cast<float>(foregroundPct) / 100.0f;
+        session_.PreviewStyle(item.id, style);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverForegroundTip);
     }
 
-    Picture* picture = &item.picture;
-    int backgroundPct = static_cast<int>(std::round(picture->opacity * 100.0f));
+    int backgroundPct = static_cast<int>(std::round(item.picture.opacity * 100.0f));
     ImGui::SetNextItemWidth(Px(160.0f));
     if (ImGui::SliderInt(Labeled(strings::kPopoverBackground, "opacitybg"), &backgroundPct, 0, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
-        picture->opacity = static_cast<float>(backgroundPct) / 100.0f;
-        Manager().MarkChanged();
+        ItemStyle style = ItemStyle::Of(item);
+        style.pictureOpacity = static_cast<float>(backgroundPct) / 100.0f;
+        session_.PreviewStyle(item.id, style);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", picture->textureHandle != 0 ? strings::kPopoverBackgroundShotTip
-                                                            : strings::kPopoverBackgroundFillTip);
+        ImGui::SetTooltip("%s", item.picture.textureHandle != 0 ? strings::kPopoverBackgroundShotTip
+                                                                : strings::kPopoverBackgroundFillTip);
     }
 }
 
-void OverlayApp::RenderItemBackgroundColor(Picture& picture) {
+void OverlayApp::RenderItemBackgroundColor(const Item& item) {
     // White, and the picker for everything else. White gets a swatch of
     // its own because it is the one color with a meaning here: a no-op
     // multiply tint on a real capture (see Picture::tintColorRGBA), the way
@@ -239,24 +232,27 @@ void OverlayApp::RenderItemBackgroundColor(Picture& picture) {
     ImGui::PushID("##bg_color_section");
     ImGui::TextUnformatted(strings::kPopoverBackgroundColor);
     constexpr uint32_t kWhiteBackground = 0xFFFFFFFFu;
-    if (ColorSwatchButton(IM_COL32(255, 255, 255, 255), picture.tintColorRGBA == kWhiteBackground)) {
-        picture.tintColorRGBA = kWhiteBackground;
-        Manager().MarkChanged();
+    const auto setTint = [&](uint32_t tintRGBA) {
+        ItemStyle style = ItemStyle::Of(item);
+        style.pictureTintRGBA = tintRGBA;
+        session_.PreviewStyle(item.id, style);
+    };
+    if (ColorSwatchButton(IM_COL32(255, 255, 255, 255), item.picture.tintColorRGBA == kWhiteBackground)) {
+        setTint(kWhiteBackground);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverBackgroundWhiteTip);
     }
     ImGui::SameLine(0.0f, Px(6.0f));
     float rgb[3];
-    ColorRGBAToFloats(picture.tintColorRGBA, rgb);
+    ColorRGBAToFloats(item.picture.tintColorRGBA, rgb);
     if (ImGui::ColorEdit3("##bgcolor", rgb, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
-        picture.tintColorRGBA = FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF));
-        Manager().MarkChanged();
+        setTint(FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF)));
     }
     ImGui::PopID();
 }
 
-void OverlayApp::RenderItemTextStyle(Item& item) {
+void OverlayApp::RenderItemTextStyle(const Item& item) {
     // Per item rather than app-wide (see Item::noteTextColorRGBA/
     // noteTextSizePx for why). Shown whether or not this item currently
     // has any text: the alternative - appearing only once something's been
@@ -271,9 +267,12 @@ void OverlayApp::RenderItemTextStyle(Item& item) {
         ImGui::TextColored(theme::kGraphite200, "%s", strings::kPopoverTextNoneYet);
     }
     ImGui::SetNextItemWidth(Px(160.0f));
-    if (ImGui::SliderFloat(Labeled(strings::kPopoverTextSize, "notetextsize"), &item.noteTextSizePx, kNoteTextSizeMin, kNoteTextSizeMax,
+    float textSizePx = item.noteTextSizePx;
+    if (ImGui::SliderFloat(Labeled(strings::kPopoverTextSize, "notetextsize"), &textSizePx, kNoteTextSizeMin, kNoteTextSizeMax,
                             strings::kFormatPixels, ImGuiSliderFlags_AlwaysClamp)) {
-        Manager().MarkChanged();
+        ItemStyle style = ItemStyle::Of(item);
+        style.noteTextSizePx = textSizePx;
+        session_.PreviewStyle(item.id, style);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverTextSizeTip);
@@ -288,9 +287,10 @@ void OverlayApp::RenderItemTextStyle(Item& item) {
     if (ImGui::ColorEdit4("##notetextcolor", rgba,
                            ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar |
                                ImGuiColorEditFlags_AlphaPreview)) {
-        item.noteTextColorRGBA =
+        ItemStyle style = ItemStyle::Of(item);
+        style.noteTextColorRGBA =
             FloatsToColorRGBA(rgba, static_cast<uint8_t>(std::clamp(rgba[3], 0.0f, 1.0f) * 255.0f + 0.5f));
-        Manager().MarkChanged();
+        session_.PreviewStyle(item.id, style);
     }
     ImGui::PopID();
 }
@@ -306,10 +306,10 @@ void OverlayApp::RenderItemContextMenu() {
     // Found again every frame rather than held by pointer across them:
     // Duplicate grows the canvas's item vector and the two z-order rows
     // reorder it, either of which moves every Item in it.
-    Item* item = nullptr;
+    const Item* item = nullptr;
     if (itemContextMenuItemId_.has_value()) {
-        if (Canvas* canvas = Manager().CurrentOrNull()) {
-            for (Item& candidate : canvas->items) {
+        if (const Canvas* canvas = Manager().CurrentOrNull()) {
+            for (const Item& candidate : canvas->items) {
                 if (candidate.id == *itemContextMenuItemId_ && !Manager().IsDeleted(*canvas, candidate)) {
                     item = &candidate;
                     break;
@@ -333,7 +333,7 @@ void OverlayApp::RenderItemContextMenu() {
     }
 }
 
-void OverlayApp::BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEntry>& rows) {
+void OverlayApp::BuildItemContextMenuRows(const Item& item, std::vector<ContextMenuEntry>& rows) {
     const ItemId itemId = item.id;
     const bool nothingToClear = item.strokes.empty();
 
@@ -420,10 +420,10 @@ void OverlayApp::RunItemMenuAction(ItemMenuAction action, ItemId itemId) {
             DuplicateSelection();
             return;
         case ItemMenuAction::SendBackward:
-            Manager().MoveItemLayer(itemId, -1);
+            session_.MoveItemLayer(itemId, -1);
             return;
         case ItemMenuAction::BringForward:
-            Manager().MoveItemLayer(itemId, 1);
+            session_.MoveItemLayer(itemId, 1);
             return;
         case ItemMenuAction::MoveToCanvas:
             // Opens the Overview in picker mode to choose a destination -

@@ -127,7 +127,7 @@ void OverlayApp::SettleDeletedFolderShown() {
     // Restored while it was showing: still the folder being looked at, now
     // as any live one is.
     if (ShowingDeleted() && folder != nullptr) {
-        Manager().SwitchToFolder(folder->id);
+        session_.SwitchToFolder(folder->id);
     }
     deletedFolderShown_.reset();
 }

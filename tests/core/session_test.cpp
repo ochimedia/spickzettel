@@ -13,11 +13,13 @@
 #include "fakes/fake_platform_host.h"
 #include "support/held_library.h"
 #include "support/removed_at_end.h"
+#include "support/session_test_access.h"
 
 namespace sz::core {
 namespace {
 
 using test::HeldLibrary;
+using test::Model;
 using test::RemovedAtEnd;
 
 // The session with nothing attached - no window, no stores - is still a
@@ -38,11 +40,9 @@ const Item* ItemById(const CanvasManager& manager, ItemId id) {
 // Draws a two-point stroke across `item` on the live layer and commits it,
 // the way the pen does.
 void DrawStrokeInto(Session& session, ItemId item) {
-    Canvas* canvas = session.Manager().CurrentOrNull();
-    ASSERT_NE(canvas, nullptr);
-    canvas->liveLayer.BeginStroke(StrokePoint{10.0f, 10.0f}, 0xFF0000FFu, 3.0f);
-    canvas->liveLayer.ExtendStroke(StrokePoint{60.0f, 60.0f});
-    canvas->liveLayer.EndStroke();
+    session.LiveLayer().BeginStroke(StrokePoint{10.0f, 10.0f}, 0xFF0000FFu, 3.0f);
+    session.LiveLayer().ExtendStroke(StrokePoint{60.0f, 60.0f});
+    session.LiveLayer().EndStroke();
     session.CommitLiveStroke(item);
 }
 
@@ -50,11 +50,9 @@ void DrawStrokeInto(Session& session, ItemId item) {
 // which stroke is which: an item made at {0,0,100,100} has native space
 // equal to screen space, so the y comes back out unchanged.
 void DrawLineInto(Session& session, ItemId item, float y) {
-    Canvas* canvas = session.Manager().CurrentOrNull();
-    ASSERT_NE(canvas, nullptr);
-    canvas->liveLayer.BeginStroke(StrokePoint{10.0f, y}, 0xFF0000FFu, 3.0f);
-    canvas->liveLayer.ExtendStroke(StrokePoint{90.0f, y});
-    canvas->liveLayer.EndStroke();
+    session.LiveLayer().BeginStroke(StrokePoint{10.0f, y}, 0xFF0000FFu, 3.0f);
+    session.LiveLayer().ExtendStroke(StrokePoint{90.0f, y});
+    session.LiveLayer().EndStroke();
     session.CommitLiveStroke(item);
 }
 
@@ -70,27 +68,27 @@ std::vector<float> StrokeHeights(const CanvasManager& manager, ItemId id) {
 
 TEST(SessionTest, StartsWithNothingDeleted) {
     Session session;
-    EXPECT_EQ(session.Manager().DeletedFolderAndCanvasCount(), 0u);
-    EXPECT_TRUE(session.Manager().MarkedSnippets().empty());
-    EXPECT_TRUE(session.Manager().HasCurrentCanvas());
+    EXPECT_EQ(Model(session).DeletedFolderAndCanvasCount(), 0u);
+    EXPECT_TRUE(Model(session).MarkedSnippets().empty());
+    EXPECT_TRUE(Model(session).HasCurrentCanvas());
     EXPECT_FALSE(session.CanUndo());
 }
 
 TEST(SessionTest, ADeletedCanvasStaysWhereItIsAndComesBack) {
     Session session;
-    const CanvasId canvas = session.Manager().CurrentCanvasId();
-    const FolderId folder = session.Manager().CurrentFolderId();
+    const CanvasId canvas = Model(session).CurrentCanvasId();
+    const FolderId folder = Model(session).CurrentFolderId();
 
     ASSERT_TRUE(session.Delete(canvas));
-    const Canvas* deleted = session.Manager().FindCanvas(canvas);
+    const Canvas* deleted = Model(session).FindCanvas(canvas);
     ASSERT_NE(deleted, nullptr) << "marked, not moved anywhere";
     EXPECT_NE(deleted->deletedAt, 0);
     EXPECT_EQ(deleted->folderId, folder);
-    EXPECT_FALSE(session.Manager().HasCurrentCanvas()) << "the only canvas in its folder, and hidden now";
-    EXPECT_EQ(session.Manager().CurrentFolderId(), folder) << "still browsing where it was";
+    EXPECT_FALSE(Model(session).HasCurrentCanvas()) << "the only canvas in its folder, and hidden now";
+    EXPECT_EQ(Model(session).CurrentFolderId(), folder) << "still browsing where it was";
 
     ASSERT_TRUE(session.Restore(canvas));
-    EXPECT_EQ(session.Manager().FindCanvas(canvas)->deletedAt, 0);
+    EXPECT_EQ(Model(session).FindCanvas(canvas)->deletedAt, 0);
 }
 
 TEST(SessionTest, DeletingOrRestoringWhatIsNotThereDoesNothing) {
@@ -98,7 +96,7 @@ TEST(SessionTest, DeletingOrRestoringWhatIsNotThereDoesNothing) {
     EXPECT_FALSE(session.Delete(424242));
     EXPECT_FALSE(session.Restore(424242));
     EXPECT_FALSE(session.DeletePermanently(424242));
-    EXPECT_FALSE(session.Restore(session.Manager().CurrentCanvasId())) << "nothing deleted to restore";
+    EXPECT_FALSE(session.Restore(Model(session).CurrentCanvasId())) << "nothing deleted to restore";
 }
 
 // Undo is the only way a deleted snippet comes back, and no history
@@ -117,7 +115,7 @@ TEST(SessionTest, ALibraryOpenedErasesTheSnippetsMarkedDeleted) {
 
     Session session;
     session.ImportLibrary(source.ExportSnapshot());
-    CanvasManager& manager = session.Manager();
+    CanvasManager& manager = Model(session);
     EXPECT_EQ(manager.FindItemAnywhere(gone), nullptr);
     EXPECT_EQ(manager.FindItemAnywhere(inDeletedCanvas), nullptr) << "restoring its canvas would not bring it back";
     EXPECT_NE(manager.FindItemAnywhere(kept), nullptr);
@@ -146,9 +144,8 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
         Session session;
         session.AttachWindow(&window);
         session.SetLibraryStore(&store);
-        shot = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Shot");
-        session.CaptureShotItem(*session.Manager().FindItemAnywhere(shot));
-        const ItemId gone = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
+        shot = session.CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Shot");
+        const ItemId gone = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
         ASSERT_TRUE(session.Delete(gone));
         ASSERT_TRUE(session.Flush());
         session.SetLibraryStore(nullptr);
@@ -163,11 +160,11 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
     session.AttachWindow(&window);
     session.SetLibraryStore(&store);
     session.ImportLibrary(std::move(*loaded));
-    ASSERT_TRUE(session.Manager().MarkedSnippets().empty()) << "the deleted snippet was erased";
+    ASSERT_TRUE(Model(session).MarkedSnippets().empty()) << "the deleted snippet was erased";
 
     window.createTextureFromPixelsReturnsHandle = 9;  // the window is made, and the first frame runs
     session.EnsureTexturesForCurrentCanvas();
-    const Item* item = session.Manager().FindItemAnywhere(shot);
+    const Item* item = Model(session).FindItemAnywhere(shot);
     ASSERT_NE(item, nullptr);
     EXPECT_EQ(item->picture.textureHandle, 9u) << "not a placeholder until the canvas is switched";
 
@@ -178,7 +175,7 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
 // for good, whatever else is deleted stays, and nothing live is touched.
 TEST(SessionTest, ErasingWhatWasDeletedBeforeACutoffLeavesTheRest) {
     Session session;
-    CanvasManager& manager = session.Manager();
+    CanvasManager& manager = Model(session);
     const FolderId home = manager.CurrentFolderId();
     const CanvasId live = manager.CurrentCanvasId();
     const CanvasId old = manager.AddCanvas("Old");
@@ -204,19 +201,19 @@ TEST(SessionTest, ErasingWhatWasDeletedBeforeACutoffLeavesTheRest) {
 
 TEST(SessionTest, ErasingAFoldersDeletedCanvasesLeavesTheFolderAndTheRest) {
     Session session;
-    const FolderId folder = session.Manager().CurrentFolderId();
-    const CanvasId first = session.Manager().CurrentCanvasId();
-    const CanvasId second = session.Manager().AddCanvas("Second");
-    const CanvasId third = session.Manager().AddCanvas("Third");
+    const FolderId folder = Model(session).CurrentFolderId();
+    const CanvasId first = Model(session).CurrentCanvasId();
+    const CanvasId second = Model(session).AddCanvas("Second");
+    const CanvasId third = Model(session).AddCanvas("Third");
     EXPECT_FALSE(session.DeleteMarkedCanvasesPermanently(folder)) << "nothing deleted in it";
     ASSERT_TRUE(session.Delete(first));
     ASSERT_TRUE(session.Delete(third));
 
     EXPECT_TRUE(session.DeleteMarkedCanvasesPermanently(folder));
-    EXPECT_EQ(session.Manager().FindCanvas(first), nullptr);
-    EXPECT_EQ(session.Manager().FindCanvas(third), nullptr);
-    ASSERT_NE(session.Manager().FindFolder(folder), nullptr);
-    EXPECT_NE(session.Manager().FindCanvas(second), nullptr);
+    EXPECT_EQ(Model(session).FindCanvas(first), nullptr);
+    EXPECT_EQ(Model(session).FindCanvas(third), nullptr);
+    ASSERT_NE(Model(session).FindFolder(folder), nullptr);
+    EXPECT_NE(Model(session).FindCanvas(second), nullptr);
 }
 
 // A placement change is one entry for everything it moved, taken back and
@@ -224,22 +221,18 @@ TEST(SessionTest, ErasingAFoldersDeletedCanvasesLeavesTheFolderAndTheRest) {
 // at all is filed for a change that changed nothing.
 TEST(SessionTest, APlacementChangeIsUndoneAndRedoneWhole) {
     Session session;
-    CanvasManager& manager = session.Manager();
+    CanvasManager& manager = Model(session);
     const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
     const ItemId b = manager.CreateItem(false, Rect{200, 0, 100, 100}, "B");
     ASSERT_FALSE(session.CanUndo());
 
-    EXPECT_FALSE(session.RecordPlacements(session.PlacementsOf({a, b}))) << "nothing changed";
+    session.SyncItemsToDisplaySize(1920.0f, 1080.0f);
+    session.BeginPlacement({a, b});
+    EXPECT_FALSE(session.EndPlacement()) << "nothing changed";
     EXPECT_FALSE(session.CanUndo());
 
-    std::vector<Session::Placement> before = session.PlacementsOf({a, b});
-    manager.FindItemAnywhere(a)->rect = Rect{10, 20, 100, 100};
-    manager.FindItemAnywhere(b)->rect = Rect{210, 20, 100, 100};
-    ASSERT_TRUE(session.RecordPlacements(std::move(before)));
-
-    std::vector<Session::Placement> beforeFullscreen = session.PlacementsOf({a});
-    manager.ToggleFullscreen(a, 1920.0f, 1080.0f, /*stretch=*/true);
-    ASSERT_TRUE(session.RecordPlacements(std::move(beforeFullscreen)));
+    ASSERT_TRUE(session.SetRects({{a, Rect{10, 20, 100, 100}}, {b, Rect{210, 20, 100, 100}}}));
+    session.ToggleFullscreen(a, /*stretch=*/true);
 
     const std::optional<Session::UndoStep> out = session.Undo();
     ASSERT_TRUE(out.has_value());
@@ -261,12 +254,10 @@ TEST(SessionTest, APlacementChangeIsUndoneAndRedoneWhole) {
 // back to where the burst began; anything else filed in between ends it.
 TEST(SessionTest, AMergedBurstOfPlacementChangesIsOneUndo) {
     Session session;
-    CanvasManager& manager = session.Manager();
+    CanvasManager& manager = Model(session);
     const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
     for (int i = 1; i <= 3; ++i) {
-        std::vector<Session::Placement> before = session.PlacementsOf({a});
-        manager.FindItemAnywhere(a)->rect.x = static_cast<float>(i);
-        ASSERT_TRUE(session.RecordPlacements(std::move(before), /*merge=*/true));
+        ASSERT_TRUE(session.SetRects({{a, Rect{static_cast<float>(i), 0, 100, 100}}}, /*merge=*/true));
     }
     ASSERT_TRUE(session.Undo().has_value());
     EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.x, 0.0f) << "the whole burst, at once";
@@ -275,9 +266,7 @@ TEST(SessionTest, AMergedBurstOfPlacementChangesIsOneUndo) {
     ASSERT_TRUE(session.Redo().has_value());
     const ItemId b = session.CreateItem(false, Rect{300, 0, 50, 50}, "B");  // something else filed
     ASSERT_NE(b, 0u);
-    std::vector<Session::Placement> before = session.PlacementsOf({a});
-    manager.FindItemAnywhere(a)->rect.x = 9.0f;
-    ASSERT_TRUE(session.RecordPlacements(std::move(before), /*merge=*/true));
+    ASSERT_TRUE(session.SetRects({{a, Rect{9.0f, 0, 100, 100}}}, /*merge=*/true));
     ASSERT_TRUE(session.Undo().has_value());
     EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.x, 3.0f) << "a new entry, not merged past the one between";
 }
@@ -286,60 +275,59 @@ TEST(SessionTest, AMergedBurstOfPlacementChangesIsOneUndo) {
 // it; the others' part stays to be taken back.
 TEST(SessionTest, ForgettingOneSnippetLeavesTheRestOfAGroupMove) {
     Session session;
-    CanvasManager& manager = session.Manager();
+    CanvasManager& manager = Model(session);
     const CanvasId canvas = manager.CurrentCanvasId();
     const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
     const ItemId b = manager.CreateItem(false, Rect{200, 0, 100, 100}, "B");
-    std::vector<Session::Placement> before = session.PlacementsOf({a, b});
-    manager.FindItemAnywhere(a)->rect.y = 50.0f;
-    manager.FindItemAnywhere(b)->rect.y = 50.0f;
-    ASSERT_TRUE(session.RecordPlacements(std::move(before)));
+    const CanvasId elsewhere = session.AddCanvas("Elsewhere");
+    ASSERT_TRUE(session.SetRects({{a, Rect{0, 50, 100, 100}}, {b, Rect{200, 50, 100, 100}}}));
 
-    session.ForgetHistoryOfItem(canvas, a);
+    ASSERT_EQ(session.SendItemsTo({a}, elsewhere, /*copy=*/false).items.size(), 1u);
     ASSERT_TRUE(session.Undo().has_value());
     EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.y, 50.0f) << "forgotten";
     EXPECT_FLOAT_EQ(manager.FindItemAnywhere(b)->rect.y, 0.0f);
 
-    session.ForgetHistoryOfItem(canvas, b);
+    ASSERT_EQ(session.SendItemsTo({b}, elsewhere, /*copy=*/false).items.size(), 1u);
     EXPECT_FALSE(session.CanRedo()) << "an entry naming nothing is gone";
+    EXPECT_EQ(session.Manager().CurrentCanvasId(), canvas);
 }
 
 TEST(SessionTest, AStrokeIsUndoneAndRedone) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawStrokeInto(session, item);
-    ASSERT_EQ(ItemById(session.Manager(), item)->strokes.size(), 1u);
+    ASSERT_EQ(ItemById(Model(session), item)->strokes.size(), 1u);
     ASSERT_TRUE(session.CanUndo());
 
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
     EXPECT_TRUE(undone->undone);
-    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+    EXPECT_TRUE(ItemById(Model(session), item)->strokes.empty());
     EXPECT_FALSE(session.CanUndo());
     ASSERT_TRUE(session.CanRedo());
 
     const std::optional<Session::UndoStep> redone = session.Redo();
     ASSERT_TRUE(redone.has_value());
     EXPECT_FALSE(redone->undone);
-    EXPECT_EQ(ItemById(session.Manager(), item)->strokes.size(), 1u);
+    EXPECT_EQ(ItemById(Model(session), item)->strokes.size(), 1u);
 }
 
 TEST(SessionTest, ADeletedSnippetIsRestoredOnUndo) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     ASSERT_TRUE(session.DeleteItem(item));
-    ASSERT_NE(ItemById(session.Manager(), item), nullptr) << "marked where it is";
-    EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+    ASSERT_NE(ItemById(Model(session), item), nullptr) << "marked where it is";
+    EXPECT_TRUE(Model(session).IsItemDeleted(item));
     EXPECT_FALSE(session.DeleteItem(item)) << "a delete of something deleted is for good, and not this call";
 
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::Delete);
-    EXPECT_FALSE(session.Manager().IsItemDeleted(item));
+    EXPECT_FALSE(Model(session).IsItemDeleted(item));
 
     ASSERT_TRUE(session.Redo().has_value());
-    EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+    EXPECT_TRUE(Model(session).IsItemDeleted(item));
 }
 
 // One Delete is one undo, however many snippets it took - more than the
@@ -349,36 +337,36 @@ TEST(SessionTest, DeletingManySnippetsAtOnceIsOneUndo) {
     Session session;
     std::vector<ItemId> items;
     for (int i = 0; i < 60; ++i) {
-        items.push_back(session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A"));
+        items.push_back(Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A"));
     }
     EXPECT_EQ(session.DeleteItems(items), 60u);
     EXPECT_EQ(session.DeleteItems(items), 0u) << "deleted already";
 
     ASSERT_TRUE(session.Undo().has_value());
     for (const ItemId item : items) {
-        EXPECT_FALSE(session.Manager().IsItemDeleted(item));
+        EXPECT_FALSE(Model(session).IsItemDeleted(item));
     }
     EXPECT_FALSE(session.Undo().has_value()) << "one step, not sixty";
 
     ASSERT_TRUE(session.Redo().has_value());
     for (const ItemId item : items) {
-        EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+        EXPECT_TRUE(Model(session).IsItemDeleted(item));
     }
 }
 
 TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Note");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Note");
     session.BeginTextEdit(item);
     session.EndTextEdit(std::string("first"));
-    EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "first");
+    EXPECT_EQ(ItemById(Model(session), item)->noteText, "first");
 
     // Undone with the note open: nothing happens, and the entry is kept -
     // unlike one that no longer applies, it still does, once the note is
     // closed.
     session.BeginTextEdit(item);
     EXPECT_FALSE(session.Undo().has_value()) << "the edit in progress would overwrite it anyway";
-    EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "first");
+    EXPECT_EQ(ItemById(Model(session), item)->noteText, "first");
     EXPECT_TRUE(session.CanUndo()) << "kept for when the note is closed";
     session.EndTextEdit(std::nullopt);  // abandoned: nothing filed
 
@@ -386,7 +374,7 @@ TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::TextEdit);
-    EXPECT_EQ(ItemById(session.Manager(), item)->noteText, "");
+    EXPECT_EQ(ItemById(Model(session), item)->noteText, "");
     EXPECT_FALSE(session.CanUndo());
 }
 
@@ -394,10 +382,10 @@ TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
 // whole: one undo puts back what each took.
 TEST(SessionTest, AnEraseBegunOverAnOpenOneFilesThatOneFirst) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawLineInto(session, item, 20.0f);
     DrawLineInto(session, item, 80.0f);
-    const std::vector<Stroke> drawn = ItemById(session.Manager(), item)->strokes;
+    const std::vector<Stroke> drawn = ItemById(Model(session), item)->strokes;
 
     session.BeginErase(item, 50.0f, 20.0f, 10.0f);
     session.BeginErase(item, 50.0f, 80.0f, 10.0f);
@@ -405,17 +393,17 @@ TEST(SessionTest, AnEraseBegunOverAnOpenOneFilesThatOneFirst) {
 
     ASSERT_TRUE(session.Undo().has_value());
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(ItemById(session.Manager(), item)->strokes, drawn);
+    EXPECT_EQ(ItemById(Model(session), item)->strokes, drawn);
 }
 
 // The same for a rectangle erased while an erase is open: that one is
 // filed first, whole, and ending it afterwards finds nothing left open.
 TEST(SessionTest, ARectangleErasedOverAnOpenEraseFilesThatOneFirst) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawLineInto(session, item, 20.0f);
     DrawLineInto(session, item, 80.0f);
-    const std::vector<Stroke> drawn = ItemById(session.Manager(), item)->strokes;
+    const std::vector<Stroke> drawn = ItemById(Model(session), item)->strokes;
 
     session.BeginErase(item, 50.0f, 20.0f, 10.0f);
     session.EraseRect(item, 0.0f, 70.0f, 100.0f, 90.0f);
@@ -423,14 +411,14 @@ TEST(SessionTest, ARectangleErasedOverAnOpenEraseFilesThatOneFirst) {
 
     ASSERT_TRUE(session.Undo().has_value());
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(ItemById(session.Manager(), item)->strokes, drawn);
+    EXPECT_EQ(ItemById(Model(session), item)->strokes, drawn);
 }
 
 // An eraser dragged over nothing but empty space changes nothing, and
 // files nothing: the next undo takes back what came before it.
 TEST(SessionTest, AnErasePassThatChangesNothingIsNoStep) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawLineInto(session, item, 10.0f);
 
     session.BeginErase(item, 80.0f, 80.0f, 10.0f);
@@ -445,64 +433,64 @@ TEST(SessionTest, AnErasePassThatChangesNothingIsNoStep) {
 
 TEST(SessionTest, ClearingADrawingIsOneStep) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawStrokeInto(session, item);
     DrawStrokeInto(session, item);
     ASSERT_TRUE(session.ClearDrawing(item));
-    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+    EXPECT_TRUE(ItemById(Model(session), item)->strokes.empty());
     EXPECT_FALSE(session.ClearDrawing(item)) << "nothing left to clear";
 
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::Erase);
-    EXPECT_EQ(ItemById(session.Manager(), item)->strokes.size(), 2u);
+    EXPECT_EQ(ItemById(Model(session), item)->strokes.size(), 2u);
 }
 
 // ===== Erase history keeps the draw order =====
 
 TEST(SessionTest, UndoingAnEraseRestoresTheStrokeWhereItWas) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawLineInto(session, item, 30.0f);
     DrawLineInto(session, item, 100.0f);
     session.EraseRect(item, 0.0f, 20.0f, 100.0f, 40.0f);  // the first stroke, wholly
-    ASSERT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{100.0f}));
+    ASSERT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{100.0f}));
 
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f}))
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 100.0f}))
         << "back where it was, not at the end";
 
     // The next undo is of the second stroke, and takes off the second
     // stroke - not whichever one happens to be last.
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f}));
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f}));
 
     ASSERT_TRUE(session.Redo().has_value());
     ASSERT_TRUE(session.Redo().has_value());
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{100.0f}));
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{100.0f}));
     EXPECT_FALSE(session.CanRedo());
 }
 
 TEST(SessionTest, FragmentsOfAnErasedStrokeStandWhereItStood) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawLineInto(session, item, 30.0f);
     DrawLineInto(session, item, 100.0f);
     session.EraseRect(item, 40.0f, 0.0f, 60.0f, 50.0f);  // the middle out of the first stroke
-    ASSERT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 30.0f, 100.0f}))
+    ASSERT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 30.0f, 100.0f}))
         << "two fragments, in the erased stroke's place";
 
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f}));
-    EXPECT_EQ(ItemById(session.Manager(), item)->strokes[0].points.size(), 2u) << "the whole original";
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 100.0f}));
+    EXPECT_EQ(ItemById(Model(session), item)->strokes[0].points.size(), 2u) << "the whole original";
 
     ASSERT_TRUE(session.Redo().has_value());
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 30.0f, 100.0f}));
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 30.0f, 100.0f}));
 }
 
 TEST(SessionTest, AStrokeClippedTwiceInOneDragComesBackWhole) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawLineInto(session, item, 30.0f);
     DrawLineInto(session, item, 100.0f);
     // One drag, two bites out of the first stroke - the second bite clips a
@@ -510,82 +498,83 @@ TEST(SessionTest, AStrokeClippedTwiceInOneDragComesBackWhole) {
     session.BeginErase(item, 30.0f, 30.0f, 10.0f);
     session.ExtendErase(70.0f, 30.0f, 10.0f);
     session.EndErase();
-    ASSERT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 30.0f, 30.0f, 100.0f}));
+    ASSERT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 30.0f, 30.0f, 100.0f}));
 
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f}));
-    EXPECT_EQ(ItemById(session.Manager(), item)->strokes[0].points.size(), 2u) << "as before the drag";
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 100.0f}));
+    EXPECT_EQ(ItemById(Model(session), item)->strokes[0].points.size(), 2u) << "as before the drag";
     EXPECT_TRUE(session.CanRedo()) << "one entry for the drag";
     ASSERT_TRUE(session.Redo().has_value());
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 30.0f, 30.0f, 100.0f}));
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 30.0f, 30.0f, 100.0f}));
 }
 
 TEST(SessionTest, EqualStrokesAreToldApartByPosition) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawLineInto(session, item, 30.0f);
     DrawLineInto(session, item, 100.0f);
     DrawLineInto(session, item, 30.0f);  // equal to the first, by value
     session.EraseRect(item, 0.0f, 20.0f, 100.0f, 40.0f);  // both equal strokes, wholly
-    ASSERT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{100.0f}));
+    ASSERT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{100.0f}));
 
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f, 30.0f}))
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 100.0f, 30.0f}))
         << "each equal stroke back in its own place";
     ASSERT_TRUE(session.Undo().has_value()) << "the third stroke";
-    EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f, 100.0f}));
+    EXPECT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 100.0f}));
 }
 
 // Nothing leaves the library when a canvas is deleted, so nothing of its
 // history does either: restored, it can be undone into as before.
 TEST(SessionTest, ACanvasDeletedAndRestoredKeepsItsHistory) {
     Session session;
-    const CanvasId first = session.Manager().CurrentCanvasId();
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const CanvasId first = Model(session).CurrentCanvasId();
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawStrokeInto(session, item);
     ASSERT_TRUE(session.CanUndo());
 
-    const CanvasId second = session.Manager().AddCanvas("Second");
-    session.Manager().SwitchToCanvas(second);
+    const CanvasId second = Model(session).AddCanvas("Second");
+    Model(session).SwitchToCanvas(second);
     ASSERT_TRUE(session.Delete(first));
     ASSERT_TRUE(session.Restore(first));
-    session.Manager().SwitchToCanvas(first);
-    ASSERT_EQ(session.Manager().CurrentCanvasId(), first);
+    Model(session).SwitchToCanvas(first);
+    ASSERT_EQ(Model(session).CurrentCanvasId(), first);
     EXPECT_TRUE(session.CanUndo());
 }
 
 TEST(SessionTest, AnItemMovedAwayTakesNoHistoryWithIt) {
     Session session;
-    const CanvasId first = session.Manager().CurrentCanvasId();
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const CanvasId first = Model(session).CurrentCanvasId();
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DrawStrokeInto(session, item);
-    session.ForgetHistoryOfItem(first, item);
+    const CanvasId second = session.AddCanvas("Second");
+    ASSERT_EQ(session.SendItemsTo({item}, second, /*copy=*/false).items.size(), 1u);
+    EXPECT_EQ(session.Manager().CurrentCanvasId(), first);
     EXPECT_FALSE(session.CanUndo());
 }
 
 TEST(SessionTest, RestoringASnippetRestoresWhatHoldsIt) {
     Session session;
-    const FolderId folder = session.Manager().CurrentFolderId();
-    const CanvasId canvas = session.Manager().CurrentCanvasId();
-    const ItemId kept = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
-    const ItemId back = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Back");
+    const FolderId folder = Model(session).CurrentFolderId();
+    const CanvasId canvas = Model(session).CurrentCanvasId();
+    const ItemId kept = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
+    const ItemId back = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Back");
     ASSERT_TRUE(session.Delete(kept));
     ASSERT_TRUE(session.Delete(folder));
-    EXPECT_TRUE(session.Manager().IsItemDeleted(back)) << "inside a deleted folder";
+    EXPECT_TRUE(Model(session).IsItemDeleted(back)) << "inside a deleted folder";
 
     ASSERT_TRUE(session.Restore(back));
-    EXPECT_FALSE(session.Manager().IsItemDeleted(back));
-    EXPECT_EQ(session.Manager().FindCanvas(canvas)->deletedAt, 0);
-    EXPECT_EQ(session.Manager().FindFolder(folder)->deletedAt, 0) << "the folder came back with it";
-    EXPECT_TRUE(session.Manager().IsItemDeleted(kept)) << "deleted on its own before, and still";
+    EXPECT_FALSE(Model(session).IsItemDeleted(back));
+    EXPECT_EQ(Model(session).FindCanvas(canvas)->deletedAt, 0);
+    EXPECT_EQ(Model(session).FindFolder(folder)->deletedAt, 0) << "the folder came back with it";
+    EXPECT_TRUE(Model(session).IsItemDeleted(kept)) << "deleted on its own before, and still";
 }
 
 TEST(SessionTest, CapturingWithoutAWindowLeavesAPlaceholder) {
     Session session;
-    const ItemId id = session.Manager().CreateItem(/*hasBackground=*/true, Rect{0, 0, 100, 100}, "Shot");
-    Item* item = session.Manager().FindItemAnywhere(id);
+    const ItemId id = session.CreateItem(/*hasBackground=*/true, Rect{0, 0, 100, 100}, "Shot");
+    Item* item = Model(session).FindItemAnywhere(id);
     ASSERT_NE(item, nullptr);
-    session.CaptureShotItem(*item);
     EXPECT_EQ(item->picture.textureHandle, 0u);
     EXPECT_FALSE(item->picture.stored);
     EXPECT_EQ(session.FrozenScreenTexture(), 0u);
@@ -601,13 +590,13 @@ void DragShape(Session& session, ItemId item, Session::Shape shape, float x, flo
 
 TEST(SessionTest, AShapeIsBakedAsOneStrokeAndUndoneInOneStep) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DragShape(session, item, Session::Shape::Rectangle, 80.0f, 60.0f);
 
-    const Item* baked = ItemById(session.Manager(), item);
+    const Item* baked = ItemById(Model(session), item);
     ASSERT_EQ(baked->strokes.size(), 1u);
     EXPECT_EQ(baked->strokes[0].points.size(), 5u) << "an outline closed back on its corner";
-    const CanvasState& live = session.Manager().CurrentOrNull()->liveLayer;
+    const CanvasState& live = session.LiveLayer();
     EXPECT_TRUE(live.Strokes().empty());
     EXPECT_FALSE(live.ActiveStroke().has_value());
     EXPECT_FALSE(session.IsDrawingShape());
@@ -615,21 +604,21 @@ TEST(SessionTest, AShapeIsBakedAsOneStrokeAndUndoneInOneStep) {
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
-    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+    EXPECT_TRUE(ItemById(Model(session), item)->strokes.empty());
 }
 
 TEST(SessionTest, AShapeCanChangeWhileItIsDragged) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     session.BeginShape(item, Session::Shape::Rectangle, 10.0f, 10.0f, 0xFF0000FFu, 3.0f);
     session.UpdateShape(80.0f, 60.0f);
     session.SetShape(Session::Shape::Line);
-    const CanvasState& live = session.Manager().CurrentOrNull()->liveLayer;
+    const CanvasState& live = session.LiveLayer();
     ASSERT_TRUE(live.ActiveStroke().has_value());
     EXPECT_EQ(live.ActiveStroke()->points.size(), 2u) << "the preview follows at once";
 
     session.EndShape(80.0f, 60.0f);
-    const Item* baked = ItemById(session.Manager(), item);
+    const Item* baked = ItemById(Model(session), item);
     ASSERT_EQ(baked->strokes.size(), 1u);
     EXPECT_EQ(baked->strokes[0].points.size(), 2u);
 }
@@ -638,37 +627,37 @@ TEST(SessionTest, AShapeCanChangeWhileItIsDragged) {
 // goes out and back over itself.
 TEST(SessionTest, AFlatRectangleIsALine) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     session.BeginShape(item, Session::Shape::Rectangle, 10.0f, 40.0f, 0xFF0000FFu, 3.0f);
     session.EndShape(80.0f, 40.0f);
-    const Item* baked = ItemById(session.Manager(), item);
+    const Item* baked = ItemById(Model(session), item);
     ASSERT_EQ(baked->strokes.size(), 1u);
     EXPECT_EQ(baked->strokes[0].points.size(), 2u);
 }
 
 TEST(SessionTest, AShapeTooShortToBeMeantLeavesNothing) {
     Session session;
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
     DragShape(session, item, Session::Shape::Line, 15.0f, 15.0f);
-    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
-    EXPECT_FALSE(session.Manager().CurrentOrNull()->liveLayer.ActiveStroke().has_value());
+    EXPECT_TRUE(ItemById(Model(session), item)->strokes.empty());
+    EXPECT_FALSE(session.LiveLayer().ActiveStroke().has_value());
     EXPECT_FALSE(session.CanUndo());
 }
 
 TEST(SessionTest, MakingASnippetIsUndoneIntoDeletedAndRedoneOutOfIt) {
     Session session;
     const ItemId item = session.CreateItem(/*hasBackground=*/true, Rect{0, 0, 100, 100}, "Shot");
-    ASSERT_NE(ItemById(session.Manager(), item), nullptr);
+    ASSERT_NE(ItemById(Model(session), item), nullptr);
     ASSERT_TRUE(session.CanUndo());
 
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::Create);
-    ASSERT_NE(ItemById(session.Manager(), item), nullptr) << "where a capture taken by mistake can still be found";
-    EXPECT_TRUE(session.Manager().IsItemDeleted(item));
+    ASSERT_NE(ItemById(Model(session), item), nullptr) << "where a capture taken by mistake can still be found";
+    EXPECT_TRUE(Model(session).IsItemDeleted(item));
 
     ASSERT_TRUE(session.Redo().has_value());
-    EXPECT_FALSE(session.Manager().IsItemDeleted(item));
+    EXPECT_FALSE(Model(session).IsItemDeleted(item));
 }
 
 TEST(SessionTest, AnUntouchedSnippetIsDiscardedWithoutATrace) {
@@ -678,7 +667,7 @@ TEST(SessionTest, AnUntouchedSnippetIsDiscardedWithoutATrace) {
     const ItemId empty = session.CreateItem(false, Rect{200, 0, 100, 100}, "Empty");
 
     EXPECT_TRUE(session.DiscardIfUntouched(empty));
-    EXPECT_EQ(ItemById(session.Manager(), empty), nullptr) << "erased, not marked deleted";
+    EXPECT_EQ(ItemById(Model(session), empty), nullptr) << "erased, not marked deleted";
     // Its own making is off the history; the rest of the canvas's is not.
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
@@ -698,21 +687,21 @@ TEST(SessionTest, ASnippetWithAnythingInItIsNotDiscarded) {
     EXPECT_FALSE(session.DiscardIfUntouched(noted));
     EXPECT_FALSE(session.DiscardIfUntouched(shot)) << "a capture is content, even one that failed";
     EXPECT_FALSE(session.DiscardIfUntouched(424242));
-    EXPECT_NE(ItemById(session.Manager(), drawn), nullptr);
-    EXPECT_NE(ItemById(session.Manager(), noted), nullptr);
-    EXPECT_NE(ItemById(session.Manager(), shot), nullptr);
+    EXPECT_NE(ItemById(Model(session), drawn), nullptr);
+    EXPECT_NE(ItemById(Model(session), noted), nullptr);
+    EXPECT_NE(ItemById(Model(session), shot), nullptr);
 }
 
 // Deleting a snippet for good takes its own entries with it, and nothing
 // else of its canvas's history.
 TEST(SessionTest, DeletingASnippetPermanentlyLeavesItsCanvasHistoryAlone) {
     Session session;
-    const ItemId kept = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
+    const ItemId kept = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
     DrawStrokeInto(session, kept);
-    const ItemId gone = session.Manager().CreateItem(false, Rect{200, 0, 100, 100}, "Gone");
+    const ItemId gone = Model(session).CreateItem(false, Rect{200, 0, 100, 100}, "Gone");
     ASSERT_TRUE(session.Delete(gone));
     ASSERT_TRUE(session.DeletePermanently(gone));
-    EXPECT_EQ(ItemById(session.Manager(), gone), nullptr);
+    EXPECT_EQ(ItemById(Model(session), gone), nullptr);
     EXPECT_TRUE(session.CanUndo());
 }
 
@@ -731,17 +720,15 @@ int StackIndex(const Session& session, CanvasId canvasId, ItemId id) {
 // stack it came from; redone, it comes back on top.
 TEST(SessionTest, ACutsPasteIsUndoneBackToWhereItStood) {
     Session session;
-    const CanvasId first = session.Manager().CurrentCanvasId();
-    session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Below");
-    const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
-    session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Above");
-    const CanvasId second = session.Manager().AddCanvas("Second");
-    session.Manager().SwitchToCanvas(second);
-    session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Resident");
+    const CanvasId first = Model(session).CurrentCanvasId();
+    Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Below");
+    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Above");
+    const CanvasId second = Model(session).AddCanvas("Second");
+    Model(session).SwitchToCanvas(second);
+    Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Resident");
 
-    const std::optional<Session::Arrival> arrival = session.MoveItemHere(moved);
-    ASSERT_TRUE(arrival.has_value());
-    session.RecordArrivals({*arrival}, /*duplicate=*/false);
+    ASSERT_EQ(session.Paste({moved}, /*cut=*/true).items.size(), 1u);
     ASSERT_EQ(StackIndex(session, second, moved), 1);
 
     const std::optional<Session::UndoStep> undone = session.Undo();
@@ -763,22 +750,22 @@ TEST(SessionTest, SeveralSnippetsCutFromOneStackGoBackInItsOrder) {
     for (const std::vector<size_t>& cutOrder : {std::vector<size_t>{1, 2}, std::vector<size_t>{3, 1},
                                                 std::vector<size_t>{2, 0, 3}}) {
         Session session;
-        const CanvasId first = session.Manager().CurrentCanvasId();
+        const CanvasId first = Model(session).CurrentCanvasId();
         std::vector<ItemId> stack;
         for (const char* name : {"A", "B", "C", "D"}) {
-            stack.push_back(session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, name));
+            stack.push_back(Model(session).CreateItem(false, Rect{0, 0, 100, 100}, name));
         }
-        const CanvasId second = session.Manager().AddCanvas("Second");
-        session.Manager().SwitchToCanvas(second);
-        std::vector<Session::Arrival> arrivals;
+        const CanvasId second = Model(session).AddCanvas("Second");
+        Model(session).SwitchToCanvas(second);
+        std::vector<ItemId> cut;
         for (const size_t at : cutOrder) {
-            arrivals.push_back(*session.MoveItemHere(stack[at]));
+            cut.push_back(stack[at]);
         }
-        session.RecordArrivals(std::move(arrivals), /*duplicate=*/false);
+        ASSERT_EQ(session.Paste(cut, /*cut=*/true).items.size(), cut.size());
 
         ASSERT_TRUE(session.Undo().has_value());
         std::vector<ItemId> after;
-        for (const Item& item : session.Manager().FindCanvas(first)->items) {
+        for (const Item& item : Model(session).FindCanvas(first)->items) {
             after.push_back(item.id);
         }
         EXPECT_EQ(after, stack) << "cut in order " << cutOrder[0] << "," << cutOrder[1];
@@ -790,27 +777,27 @@ TEST(SessionTest, SeveralSnippetsCutFromOneStackGoBackInItsOrder) {
 // would edit a snippet that is no longer on the canvas.
 TEST(SessionTest, ARedonePasteLeavesTheHistoryItGatheredMeanwhileBehind) {
     Session session;
-    const CanvasId first = session.Manager().CurrentCanvasId();
-    const ItemId stays = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Stays");
-    const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    const CanvasId first = Model(session).CurrentCanvasId();
+    const ItemId stays = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Stays");
+    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
     DrawStrokeInto(session, stays);
-    const CanvasId second = session.Manager().AddCanvas("Second");
-    session.Manager().SwitchToCanvas(second);
-    session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+    const CanvasId second = Model(session).AddCanvas("Second");
+    Model(session).SwitchToCanvas(second);
+    session.Paste({moved}, /*cut=*/true);
     ASSERT_TRUE(session.Undo().has_value());
 
-    session.Manager().SwitchToCanvas(first);
+    Model(session).SwitchToCanvas(first);
     DrawStrokeInto(session, moved);
-    session.Manager().SwitchToCanvas(second);
+    Model(session).SwitchToCanvas(second);
     ASSERT_TRUE(session.Redo().has_value());
     ASSERT_EQ(StackIndex(session, second, moved), 0);
 
-    session.Manager().SwitchToCanvas(first);
+    Model(session).SwitchToCanvas(first);
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
     EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
-    EXPECT_TRUE(ItemById(session.Manager(), stays)->strokes.empty()) << "the stroke on what stayed";
-    EXPECT_EQ(ItemById(session.Manager(), moved)->strokes.size(), 1u) << "not the one on what left";
+    EXPECT_TRUE(ItemById(Model(session), stays)->strokes.empty()) << "the stroke on what stayed";
+    EXPECT_EQ(ItemById(Model(session), moved)->strokes.size(), 1u) << "not the one on what left";
 }
 
 // The canvas a cut came from, deleted - marked, or for good - before the
@@ -821,12 +808,12 @@ TEST(SessionTest, APasteWhoseSourceCanvasIsDeletedIsNotUndoneAndSaysSo) {
     for (const bool forGood : {false, true}) {
         SCOPED_TRACE(forGood ? "deleted for good" : "deleted");
         Session session;
-        const CanvasId first = session.Manager().CurrentCanvasId();
-        const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
-        const CanvasId second = session.Manager().AddCanvas("Second");
-        session.Manager().SwitchToCanvas(second);
+        const CanvasId first = Model(session).CurrentCanvasId();
+        const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+        const CanvasId second = Model(session).AddCanvas("Second");
+        Model(session).SwitchToCanvas(second);
         const ItemId made = session.CreateItem(false, Rect{0, 0, 100, 100}, "Made");
-        session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+        session.Paste({moved}, /*cut=*/true);
         ASSERT_TRUE(session.Delete(first));
         if (forGood) {
             ASSERT_TRUE(session.DeletePermanently(first));
@@ -837,12 +824,12 @@ TEST(SessionTest, APasteWhoseSourceCanvasIsDeletedIsNotUndoneAndSaysSo) {
         EXPECT_TRUE(refused->refused);
         EXPECT_EQ(refused->what, Session::UndoWhat::Paste);
         EXPECT_EQ(StackIndex(session, second, moved), 1) << "still where it was pasted, on top";
-        EXPECT_FALSE(session.Manager().IsItemDeleted(moved));
+        EXPECT_FALSE(Model(session).IsItemDeleted(moved));
 
         const std::optional<Session::UndoStep> next = session.Undo();
         ASSERT_TRUE(next.has_value());
         EXPECT_EQ(next->what, Session::UndoWhat::Create);
-        EXPECT_TRUE(session.Manager().IsItemDeleted(made));
+        EXPECT_TRUE(Model(session).IsItemDeleted(made));
     }
 }
 
@@ -850,11 +837,11 @@ TEST(SessionTest, APasteWhoseSourceCanvasIsDeletedIsNotUndoneAndSaysSo) {
 // the redo says so rather than moving a deleted snippet here.
 TEST(SessionTest, ARedoOfAPasteWhoseSnippetWasDeletedSinceIsRefused) {
     Session session;
-    const CanvasId first = session.Manager().CurrentCanvasId();
-    const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
-    const CanvasId second = session.Manager().AddCanvas("Second");
-    session.Manager().SwitchToCanvas(second);
-    session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+    const CanvasId first = Model(session).CurrentCanvasId();
+    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    const CanvasId second = Model(session).AddCanvas("Second");
+    Model(session).SwitchToCanvas(second);
+    session.Paste({moved}, /*cut=*/true);
     ASSERT_TRUE(session.Undo().has_value());
     ASSERT_TRUE(session.Delete(moved));
 
@@ -869,23 +856,23 @@ TEST(SessionTest, ARedoOfAPasteWhoseSnippetWasDeletedSinceIsRefused) {
 // canvas's now, and the redo leaves it there.
 TEST(SessionTest, ARedoOfAPasteWhoseSnippetMovedOnSinceIsRefused) {
     Session session;
-    const CanvasId first = session.Manager().CurrentCanvasId();
-    const ItemId moved = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
-    const CanvasId second = session.Manager().AddCanvas("Second");
-    const CanvasId third = session.Manager().AddCanvas("Third");
-    session.Manager().SwitchToCanvas(second);
-    session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
+    const CanvasId first = Model(session).CurrentCanvasId();
+    const ItemId moved = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Moved");
+    const CanvasId second = Model(session).AddCanvas("Second");
+    const CanvasId third = Model(session).AddCanvas("Third");
+    Model(session).SwitchToCanvas(second);
+    session.Paste({moved}, /*cut=*/true);
     ASSERT_TRUE(session.Undo().has_value());
-    ASSERT_EQ(session.Manager().CanvasHoldingItem(moved), std::optional<CanvasId>(first));
-    session.Manager().SwitchToCanvas(third);
-    session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
-    session.Manager().SwitchToCanvas(second);
+    ASSERT_EQ(Model(session).CanvasHoldingItem(moved), std::optional<CanvasId>(first));
+    Model(session).SwitchToCanvas(third);
+    session.Paste({moved}, /*cut=*/true);
+    Model(session).SwitchToCanvas(second);
 
     const std::optional<Session::UndoStep> refused = session.Redo();
     ASSERT_TRUE(refused.has_value());
     EXPECT_TRUE(refused->refused);
-    EXPECT_EQ(session.Manager().CanvasHoldingItem(moved), std::optional<CanvasId>(third)) << "left where it is";
-    session.Manager().SwitchToCanvas(third);
+    EXPECT_EQ(Model(session).CanvasHoldingItem(moved), std::optional<CanvasId>(third)) << "left where it is";
+    Model(session).SwitchToCanvas(third);
     EXPECT_TRUE(session.CanUndo()) << "with the third canvas's history of it";
 }
 
@@ -895,21 +882,23 @@ TEST(SessionTest, CopiesArriveAndGoWithOneUndo) {
     for (const bool duplicate : {false, true}) {
         SCOPED_TRACE(duplicate ? "duplicate" : "paste");
         Session session;
-        const ItemId source = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Source");
-        const ItemId copyA = session.Manager().DuplicateItem(source);
-        const ItemId copyB = session.Manager().DuplicateItem(source);
-        session.RecordArrivals({Session::Arrival{copyA}, Session::Arrival{copyB}}, duplicate);
+        const ItemId source = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Source");
+        const Session::Placed placed =
+            duplicate ? session.Duplicate({source, source}) : session.Paste({source, source}, /*cut=*/false);
+        ASSERT_EQ(placed.items.size(), 2u);
+        const ItemId copyA = placed.items[0];
+        const ItemId copyB = placed.items[1];
 
         const std::optional<Session::UndoStep> undone = session.Undo();
         ASSERT_TRUE(undone.has_value());
         EXPECT_EQ(undone->what, duplicate ? Session::UndoWhat::Duplicate : Session::UndoWhat::Paste);
-        EXPECT_TRUE(session.Manager().IsItemDeleted(copyA));
-        EXPECT_TRUE(session.Manager().IsItemDeleted(copyB));
-        EXPECT_FALSE(session.Manager().IsItemDeleted(source));
+        EXPECT_TRUE(Model(session).IsItemDeleted(copyA));
+        EXPECT_TRUE(Model(session).IsItemDeleted(copyB));
+        EXPECT_FALSE(Model(session).IsItemDeleted(source));
 
         ASSERT_TRUE(session.Redo().has_value());
-        EXPECT_FALSE(session.Manager().IsItemDeleted(copyA));
-        EXPECT_FALSE(session.Manager().IsItemDeleted(copyB));
+        EXPECT_FALSE(Model(session).IsItemDeleted(copyA));
+        EXPECT_FALSE(Model(session).IsItemDeleted(copyB));
     }
 }
 
@@ -917,16 +906,16 @@ TEST(SessionTest, CopiesArriveAndGoWithOneUndo) {
 // paste's entry; the rest of the paste is still one undo.
 TEST(SessionTest, ForgettingOneSnippetLeavesTheRestOfAPaste) {
     Session session;
-    const CanvasId first = session.Manager().CurrentCanvasId();
-    const ItemId one = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "One");
-    const ItemId other = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Other");
-    const CanvasId second = session.Manager().AddCanvas("Second");
-    session.Manager().SwitchToCanvas(second);
-    session.RecordArrivals({*session.MoveItemHere(one), *session.MoveItemHere(other)}, /*duplicate=*/false);
-    const CanvasId third = session.Manager().AddCanvas("Third");
-    session.Manager().SwitchToCanvas(third);
-    ASSERT_TRUE(session.MoveItemHere(one).has_value());
-    session.Manager().SwitchToCanvas(second);
+    const CanvasId first = Model(session).CurrentCanvasId();
+    const ItemId one = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "One");
+    const ItemId other = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Other");
+    const CanvasId second = Model(session).AddCanvas("Second");
+    Model(session).SwitchToCanvas(second);
+    session.Paste({one, other}, /*cut=*/true);
+    const CanvasId third = Model(session).AddCanvas("Third");
+    Model(session).SwitchToCanvas(third);
+    ASSERT_EQ(session.Paste({one}, /*cut=*/true).items.size(), 1u);
+    Model(session).SwitchToCanvas(second);
 
     ASSERT_TRUE(session.Undo().has_value());
     EXPECT_EQ(StackIndex(session, first, other), 0) << "went back";
@@ -961,10 +950,9 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     ASSERT_EQ(session.FrozenScreenTexture(), 7u);
 
     // The middle two columns of the bottom two rows.
-    const ItemId id = session.Manager().CreateItem(true, Rect{1.0f, 1.0f, 2.0f, 2.0f}, "Shot");
-    Item* shot = session.Manager().FindItemAnywhere(id);
+    const ItemId id = session.CreateItem(true, Rect{1.0f, 1.0f, 2.0f, 2.0f}, "Shot");
+    Item* shot = Model(session).FindItemAnywhere(id);
     ASSERT_NE(shot, nullptr);
-    session.CaptureShotItem(*shot);
 
     EXPECT_EQ(window.captureCallCount, 1) << "cut from the frozen screen, not captured again";
     EXPECT_EQ(shot->picture.textureHandle, 8u) << "the cut's own upload";
@@ -980,9 +968,8 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     // say - rather than the live screen, which has moved on: the snippet
     // gets its texture from the library once there is a device again.
     window.createTextureFromPixelsReturnsHandle = 0;
-    const ItemId again = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Again");
-    Item* againShot = session.Manager().FindItemAnywhere(again);
-    session.CaptureShotItem(*againShot);
+    const ItemId again = session.CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Again");
+    Item* againShot = Model(session).FindItemAnywhere(again);
     EXPECT_EQ(window.captureCallCount, 1);
     EXPECT_EQ(againShot->picture.textureHandle, 0u);
     const std::optional<persistence::DecodedImage> againSaved = store.LoadImage(again);
@@ -1011,9 +998,8 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     session.AttachWindow(&window);
     session.SetLibraryStore(&store);
 
-    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    Item* shot = session.Manager().FindItemAnywhere(id);
-    session.CaptureShotItem(*shot);
+    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    Item* shot = Model(session).FindItemAnywhere(id);
     ASSERT_TRUE(shot->picture.stored);
     const std::optional<persistence::DecodedImage> saved = store.LoadImage(id);
     ASSERT_TRUE(saved.has_value());
@@ -1021,9 +1007,7 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
 
     session.FreezeScreen(platform::DisplayInfo{"d", "D", 0, 0, 2, 1, true, 60, 100});
     EXPECT_EQ(session.FrozenScreenTexture(), 0u);
-    const ItemId cut = session.Manager().CreateItem(true, Rect{1.0f, 0.0f, 1.0f, 1.0f}, "Cut");
-    Item* cutShot = session.Manager().FindItemAnywhere(cut);
-    session.CaptureShotItem(*cutShot);
+    const ItemId cut = session.CreateItem(true, Rect{1.0f, 0.0f, 1.0f, 1.0f}, "Cut");
     EXPECT_EQ(window.captureCallCount, 2) << "cut from what was frozen";
     const std::optional<persistence::DecodedImage> cutSaved = store.LoadImage(cut);
     ASSERT_TRUE(cutSaved.has_value());
@@ -1057,9 +1041,8 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
     session.AttachWindow(&window);
     session.SetLibraryStore(&store);
 
-    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
-    const Item* shot = session.Manager().FindItemAnywhere(id);
+    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    const Item* shot = Model(session).FindItemAnywhere(id);
     EXPECT_EQ(shot->picture.textureHandle, 7u) << "on screen as captured";
     EXPECT_FALSE(shot->picture.stored) << "but not in the library";
     EXPECT_TRUE(session.HasUnsavedChanges());
@@ -1073,7 +1056,7 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
     EXPECT_TRUE(session.Flush());
     EXPECT_FALSE(session.HasUnsavedChanges());
     EXPECT_FALSE(session.LastSaveFailed());
-    shot = session.Manager().FindItemAnywhere(id);
+    shot = Model(session).FindItemAnywhere(id);
     ASSERT_TRUE(shot->picture.stored);
 
     persistence::LibraryStore reopened(dir / "library.db");
@@ -1115,10 +1098,9 @@ TEST(SessionTest, ARecoveryCopyHoldsEveryPictureItsRecordsName) {
     Session session;
     session.AttachWindow(&window);
     session.SetLibraryStore(&store);
-    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
+    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     ASSERT_TRUE(session.Flush());
-    ASSERT_TRUE(session.Manager().FindItemAnywhere(id)->picture.stored)
+    ASSERT_TRUE(Model(session).FindItemAnywhere(id)->picture.stored)
         << "in the real library, not in memory";
 
     EXPECT_TRUE(session.WriteRecoveryCopy(whole));
@@ -1176,14 +1158,14 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
     session.AttachWindow(&window);
     session.SetLibraryStore(&store);
 
-    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
-    ASSERT_FALSE(session.Manager().FindItemAnywhere(id)->picture.stored) << "not in the library";
+    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    ASSERT_FALSE(Model(session).FindItemAnywhere(id)->picture.stored) << "not in the library";
 
-    const ItemId copyId = session.Manager().DuplicateItem(id);
-    ASSERT_NE(copyId, 0u);
-    EXPECT_TRUE(session.ClonePicturesForCopy(id, copyId)) << "the pixels are in the session";
-    EXPECT_NE(session.Manager().FindItemAnywhere(copyId)->picture.textureHandle, 0u) << "on screen at once";
+    const Session::Placed made = session.Duplicate({id});
+    ASSERT_EQ(made.items.size(), 1u);
+    const ItemId copyId = made.items[0];
+    EXPECT_FALSE(made.pictureLost) << "the pixels are in the session";
+    EXPECT_NE(Model(session).FindItemAnywhere(copyId)->picture.textureHandle, 0u) << "on screen at once";
 
     EXPECT_FALSE(session.Flush()) << "the file is still held";
     held.Release();
@@ -1216,13 +1198,14 @@ TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
     persistence::LibraryStore store(dir / "library.db");
     Session session;
     session.SetLibraryStore(&store);
-    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    session.Manager().FindItemAnywhere(id)->picture.stored = true;  // and yet there is none
+    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    Model(session).FindItemAnywhere(id)->picture.stored = true;  // and yet there is none
 
-    const ItemId copyId = session.Manager().DuplicateItem(id);
-    ASSERT_NE(copyId, 0u);
-    EXPECT_FALSE(session.ClonePicturesForCopy(id, copyId));
-    EXPECT_FALSE(session.Manager().FindItemAnywhere(copyId)->picture.stored);
+    const Session::Placed made = session.Duplicate({id});
+    ASSERT_EQ(made.items.size(), 1u);
+    const ItemId copyId = made.items[0];
+    EXPECT_TRUE(made.pictureLost);
+    EXPECT_FALSE(Model(session).FindItemAnywhere(copyId)->picture.stored);
 
     session.SetLibraryStore(nullptr);
 }
@@ -1241,14 +1224,14 @@ TEST(SessionTest, APermanentDeleteRightAfterAMoveKeepsWhatWasMoved) {
         persistence::LibraryStore store(dir / "library.db");
         Session session;
         session.SetLibraryStore(&store);
-        const CanvasId left = session.Manager().CurrentCanvasId();
-        id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+        const CanvasId left = Model(session).CurrentCanvasId();
+        id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
         ASSERT_TRUE(store.SaveImage(id, pixels.data(), 2, 1));
-        session.Manager().FindItemAnywhere(id)->picture.stored = true;
-        const CanvasId other = session.Manager().AddCanvas("Other");
+        Model(session).FindItemAnywhere(id)->picture.stored = true;
+        const CanvasId other = Model(session).AddCanvas("Other");
         ASSERT_TRUE(session.Flush());
 
-        ASSERT_NE(session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
+        ASSERT_NE(Model(session).PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
         ASSERT_TRUE(session.Delete(left));
         EXPECT_TRUE(session.DeletePermanently(left));
         EXPECT_FALSE(session.HasUnsavedChanges()) << "saved with the delete";
@@ -1280,13 +1263,13 @@ TEST(SessionTest, APermanentDeleteRightAfterAMoveIntoTheCanvasTakesWhatWasMovedI
         persistence::LibraryStore store(dir / "library.db");
         Session session;
         session.SetLibraryStore(&store);
-        id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+        id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
         ASSERT_TRUE(store.SaveImage(id, pixels.data(), 2, 1));
-        session.Manager().FindItemAnywhere(id)->picture.stored = true;
-        const CanvasId other = session.Manager().AddCanvas("Other");
+        Model(session).FindItemAnywhere(id)->picture.stored = true;
+        const CanvasId other = Model(session).AddCanvas("Other");
         ASSERT_TRUE(session.Flush());
 
-        ASSERT_NE(session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
+        ASSERT_NE(Model(session).PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
         ASSERT_TRUE(session.Delete(other));
         EXPECT_TRUE(session.DeletePermanently(other));
         session.SetLibraryStore(nullptr);

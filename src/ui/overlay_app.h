@@ -123,10 +123,9 @@ struct ItemGesture {
     bool right = false;
     bool top = false;
     bool bottom = false;
-    // Where the snippets it may touch were when the press came - filed as
-    // one undo entry when it ends, if anything moved (see
-    // Session::RecordPlacements).
-    std::vector<Session::Placement> placementsBefore;
+    // Where the snippets it may touch were when the press came is the
+    // session's, which files the gesture as one undo entry when it ends, if
+    // anything moved (see Session::BeginPlacement).
 };
 
 // A box drawn over the canvas to select by - Shift held, dragged from
@@ -542,7 +541,7 @@ private:
     // An item's content, its in-progress stroke (`drawing`: it is the
     // snippet in drawing mode, whose stroke in flight is on the live layer)
     // and its border, into the items layer's draw list - see the definition.
-    void PaintItemBody(ImDrawList* drawList, const Item& item, const Canvas& canvas, bool drawing, bool highlighted,
+    void PaintItemBody(ImDrawList* drawList, const Item& item, bool drawing, bool highlighted,
                        bool isFrontmost);
     // What a selected snippet wears while the selection is live, *drawn*:
     // an accent outline and, unless it is fullscreen, its eight handles.
@@ -642,9 +641,9 @@ private:
     // does, so shapes and spacing are kept, and the smallest snippet's
     // floor stops all of them. A fullscreen snippet is left as it is.
     void ScaleSelectionByWheel(int steps);
-    // What a move or resize gesture may change the placement of, taken as
-    // the press starts it - see ItemGesture::placementsBefore.
-    void BeginPlacementRecord(ItemGesture& gesture);
+    // Opens the session's placement gesture over what a move or resize
+    // may change, as the press starts it - see Session::BeginPlacement.
+    void BeginPlacementRecord(const ItemGesture& gesture);
     // Files a placement change made in one step - a fullscreen toggle, a
     // reset to the original size - as its own undo entry.
     void ToggleFullscreenUndoably(ItemId id, bool stretch);
@@ -654,9 +653,9 @@ private:
     // enough after it, with nothing filed, undone or redone in between - a
     // drag of the same snippets, or an undo that left an older entry of
     // theirs on top, would otherwise be taken into the burst. What decides
-    // that a burst is one undo (see Session::RecordPlacements).
+    // that a burst is one undo (see Session::EndPlacement).
     enum class PlacementBurst { None, Wheel, Nudge };
-    void RecordPlacementBurst(PlacementBurst kind, std::vector<Session::Placement> before);
+    void RecordPlacementBurst(PlacementBurst kind, const std::vector<std::pair<ItemId, Rect>>& rects);
     // Ctrl or Shift with the wheel: the selection's background or
     // foreground opacity, kWheelOpacityStep per notch, within the ranges
     // the Properties popover's sliders have. Says the new value in a toast.
@@ -670,7 +669,7 @@ private:
     // The live text editor over an item whose note is being edited - the
     // one piece of an item that is a real ImGui widget, in a window of its
     // own above the items layer. See the definition.
-    void RenderNoteEditor(Item& item, ImVec2 pMin, ImVec2 pMax);
+    void RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax);
     // Small chips along the bottom of the screen, one per minimized item
     // on the current canvas (see Item::minimized) - click one to restore
     // it (unset minimized, bring to front). A no-op (renders nothing) if
@@ -727,10 +726,12 @@ private:
     // Its sections, top to bottom, for the item it is open on: the two
     // opacities, the background color, and the text's size and color.
     // What is done *to* a snippet - fullscreen, copy, restack, move - is
-    // the context menu's (see below), not the popover's.
-    void RenderItemOpacity(Item& item);
-    void RenderItemBackgroundColor(Picture& picture);
-    void RenderItemTextStyle(Item& item);
+    // the context menu's (see below), not the popover's. Each widget
+    // previews its change through the session (see Session::PreviewStyle),
+    // and the edit ends as the hand lets go of it.
+    void RenderItemOpacity(const Item& item);
+    void RenderItemBackgroundColor(const Item& item);
+    void RenderItemTextStyle(const Item& item);
 
     // The context menu a right-click on a snippet opens - the popover's
     // actions as a list of named rows with their shortcuts beside them,
@@ -743,7 +744,7 @@ private:
     // it is up, so "nothing to clear" and "nothing behind it" are answered
     // from the canvas as it is now rather than as it was when the menu
     // opened.
-    void BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEntry>& rows);
+    void BuildItemContextMenuRows(const Item& item, std::vector<ContextMenuEntry>& rows);
     void RunItemMenuAction(ItemMenuAction action, ItemId itemId);
     // The context menu a right click on empty canvas opens: the ways to
     // make a snippet, Paste, and the way to the Overview and Settings -
@@ -1027,10 +1028,14 @@ private:
     // happens at once.
     void RunCreateAction(CreateAction action);
     void RunClipboardAction(ClipboardAction action);
-    // The defaults a freshly created item gets for its kind - a capture
-    // for Screenshot, drawing mode with the pen for Drawing. Shared by the
-    // fullscreen and region-drag creation paths so the two can't drift.
-    void ApplyCreationDefaults(ItemCreationKind kind, ItemId id, Item& item);
+    // A new snippet of `kind` as Settings > Defaults says it starts, at
+    // `rect` - what the session makes it from (see Session::CreateItem).
+    // Shared by the fullscreen and region-drag creation paths so the two
+    // can't drift.
+    Item PrototypeForKind(ItemCreationKind kind, Rect rect, std::string name);
+    // What the hand does with a snippet just made: a screenshot is
+    // selected, a drawing entered with the pen.
+    void HandOverNewItem(ItemCreationKind kind, ItemId id);
     // Forgets the creation gesture in flight, if any.
     void ClearCreationGesture();
     // Hands back the tool that was in hand before a creation tool, if one is
@@ -1042,7 +1047,7 @@ private:
     // a dangling reference: the create path always produces a canvas.
     // Shared by both item-creation paths so neither has to decide what an
     // empty library means on its own.
-    Canvas& EnsureCanvasForNewItem();
+    const Canvas& EnsureCanvasForNewItem();
     // Places the first-run notes, centered as a group: the welcome, and the
     // two warnings beside it - see RequestWelcomeNote.
     // Ordinary items, deliberately: each can be moved, edited, or closed
@@ -1274,15 +1279,6 @@ private:
     // on top) as one undoable step - see Session::ClearDrawing - and says
     // so. No-op if `itemId` doesn't exist or has nothing drawn on it.
     void ClearItemDrawing(ItemId itemId);
-    // Nudges a freshly-made copy diagonally so it doesn't sit exactly on
-    // top of the original it was copied from - the usual desktop "paste"
-    // cascade. Clamped to the viewport the same way any other move is
-    // (see ClampRectToViewport), so it never actually offsets somewhere
-    // there's no room for - "if there is space" falls out of that
-    // existing guarantee rather than needing its own check. Re-anchors
-    // afterward (see CanvasManager::CommitItemLayout), same as any other
-    // deliberate reposition. No-op if `itemId` doesn't exist.
-    void OffsetCopiedItem(ItemId itemId);
 
     // Undo and redo, as Ctrl+Z and Ctrl+Y reach them: the session steps
     // the current canvas's history (see Session::Undo), and this says
@@ -1345,7 +1341,6 @@ private:
     Session& session_;
     // The visible library's model and store, which is what nearly
     // everything in this class means by "the library".
-    CanvasManager& Manager() { return session_.Manager(); }
     const CanvasManager& Manager() const { return session_.Manager(); }
     persistence::LibraryStore* Store() const { return session_.Store(); }
 
@@ -1657,7 +1652,7 @@ private:
     uint64_t untouchedDrawingRevision_ = 0;
 
     // RectEraser's own placement gesture (see OnMouse): unlike Rectangle/
-    // Line above, nothing is drawn into liveLayer while dragging - the
+    // Line above, nothing is drawn into the live layer while dragging - the
     // rect is only ever a preview (see RenderRectEraserOverlay), and the
     // actual erase (CanvasManager::EraseRectAt) happens once, at Up, with
     // the final dragged rect, as one undoable step (see Session::EraseRect).

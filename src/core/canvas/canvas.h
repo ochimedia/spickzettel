@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "core/canvas/item.h"
-#include "core/drawing/canvas_state.h"
 
 namespace sz::core {
 
@@ -38,13 +37,6 @@ struct Canvas {
     int64_t createdAt = 0;
     int64_t deletedAt = 0;
     std::vector<Item> items;
-    // Scratch space, not content: a stroke accumulates here in screen space
-    // while it is being drawn and is moved into the snippet in drawing mode
-    // the moment it ends (see Session::CommitLiveStroke). Empty at every
-    // point that isn't mid-gesture, and never persisted. Per canvas rather
-    // than shared, so an in-progress stroke can't leak across a canvas
-    // switch.
-    CanvasState liveLayer;
 };
 
 }  // namespace sz::core

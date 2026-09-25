@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/canvas/item_geometry.h"
 #include "core/util/timestamp_name.h"
 
 namespace sz::core {
@@ -66,13 +67,13 @@ bool Session::WriteRecoveryCopy(const std::filesystem::path& file) {
     if (copiedLibrary) {
         copy.Load();
     }
-    const bool recordsWritten = copy.Save(Manager().View());
+    const bool recordsWritten = copy.Save(Model().View());
     // Every picture: a capture whose write never landed from this session,
     // the rest with the library it was copied from. The first version
     // copied only what was in memory and left every screenshot out, so the
     // copy opened with placeholders and nothing to say why.
     size_t picturesMissing = 0;
-    for (const Canvas& canvas : Manager().Canvases()) {
+    for (const Canvas& canvas : Model().Canvases()) {
         for (const Item& item : canvas.items) {
             if (const auto pending = pendingPictures_.find(item.id); pending != pendingPictures_.end()) {
                 if (!copy.SaveImage(item.id, pending->second.pixelsRGBA.data(), pending->second.width,
@@ -111,8 +112,8 @@ void Session::SyncTexturesToCurrentCanvas() {
     if (!Store() || !window_) {
         return;
     }
-    Manager().SyncShotTexturesToCanvas(
-        Manager().CurrentCanvasId(),
+    Model().SyncShotTexturesToCanvas(
+        Model().CurrentCanvasId(),
         [this](const Item& item) -> uint64_t {
             const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id);
             if (!decoded.has_value()) {
@@ -121,11 +122,11 @@ void Session::SyncTexturesToCurrentCanvas() {
             return window_->CreateTextureFromPixels(decoded->pixelsRGBA.data(), decoded->width, decoded->height);
         },
         [this](uint64_t texture) { window_->ReleaseTexture(texture); });
-    shotTextureCanvasId_ = Manager().CurrentCanvasId();
+    shotTextureCanvasId_ = Model().CurrentCanvasId();
 }
 
 void Session::EnsureTexturesForCurrentCanvas() {
-    if (shotTextureCanvasId_ != Manager().CurrentCanvasId()) {
+    if (shotTextureCanvasId_ != Model().CurrentCanvasId()) {
         SyncTexturesToCurrentCanvas();
     }
 }
@@ -134,7 +135,7 @@ void Session::ReplaceLostTextures() {
     if (!window_) {
         return;
     }
-    for (Canvas& canvas : Manager().CanvasesMutable()) {
+    for (Canvas& canvas : Model().CanvasesMutable()) {
         for (Item& item : canvas.items) {
             Picture& picture = item.picture;
             if (picture.textureHandle == 0) {
@@ -243,6 +244,76 @@ bool Session::FlushIfDirty(LibraryInstance& instance) {
 
 bool Session::Flush() { return FlushIfDirty(library_); }
 
+// ================= Changes that are not undone =================
+
+void Session::SwitchToCanvas(CanvasId id) {
+    if (id == Model().CurrentCanvasId()) {
+        return;
+    }
+    Model().SwitchToCanvas(id);
+    if (Model().CurrentCanvasId() == id) {
+        liveLayer_.Clear();
+    }
+}
+
+void Session::SwitchToFolder(FolderId id) { Model().SwitchToFolder(id); }
+
+CanvasId Session::AddCanvas(std::string name) {
+    const CanvasId before = Model().CurrentCanvasId();
+    const CanvasId id = Model().AddCanvas(std::move(name));
+    // The first canvas of an empty library is current as it is made.
+    if (Model().CurrentCanvasId() != before) {
+        liveLayer_.Clear();
+    }
+    return id;
+}
+
+FolderId Session::AddFolder(std::string name) { return Model().AddFolder(std::move(name)); }
+
+void Session::RenameFolder(FolderId id, std::string name) { Model().RenameFolder(id, std::move(name)); }
+
+void Session::RenameCanvas(CanvasId id, std::string name) { Model().RenameCanvas(id, std::move(name)); }
+
+void Session::ReorderFolder(FolderId id, size_t newIndex) { Model().ReorderFolder(id, newIndex); }
+
+void Session::ReorderCanvas(CanvasId id, size_t newIndex) { Model().ReorderCanvas(id, newIndex); }
+
+void Session::MoveCanvasToFolder(CanvasId canvasId, FolderId folderId) {
+    Model().MoveCanvasToFolder(canvasId, folderId);
+}
+
+void Session::SetPinned(const std::vector<ItemId>& ids, bool pinned) {
+    bool changed = false;
+    for (const ItemId id : ids) {
+        if (Item* item = Model().FindItemAnywhere(id); item != nullptr && item->pinned != pinned) {
+            item->pinned = pinned;
+            changed = true;
+        }
+    }
+    if (changed) {
+        Model().MarkChanged();
+    }
+}
+
+void Session::SetMinimized(const std::vector<ItemId>& ids, bool minimized) {
+    bool changed = false;
+    for (const ItemId id : ids) {
+        if (Item* item = Model().FindItemAnywhere(id); item != nullptr && item->minimized != minimized) {
+            item->minimized = minimized;
+            changed = true;
+        }
+    }
+    if (changed) {
+        Model().MarkChanged();
+    }
+}
+
+void Session::BringItemsToFront(const std::vector<ItemId>& ids) { Model().BringItemsToFront(ids); }
+
+void Session::MoveItemLayer(ItemId id, int direction) { Model().MoveItemLayer(id, direction); }
+
+void Session::SyncItemsToDisplaySize(float width, float height) { Model().SyncItemsToDisplaySize(width, height); }
+
 // ================= Deleting and restoring =================
 
 void Session::ImportLibrary(CanvasManagerSnapshot snapshot) {
@@ -252,13 +323,13 @@ void Session::ImportLibrary(CanvasManagerSnapshot snapshot) {
     // still record the current canvas as loaded, leaving its pictures as
     // placeholders until the canvas changed. Nothing is resident yet for the
     // erasing to give back; the first frame loads what is there.
-    for (const ItemId id : Manager().MarkedSnippets()) {
+    for (const ItemId id : Model().MarkedSnippets()) {
         Erase(id);
     }
 }
 
 bool Session::Delete(uint64_t id) {
-    if (!Manager().MarkDeleted(id, static_cast<int64_t>(std::time(nullptr)))) {
+    if (!Model().MarkDeleted(id, static_cast<int64_t>(std::time(nullptr)))) {
         return false;
     }
     // Hidden now - and what leaves the screen gives its pictures back in the
@@ -269,7 +340,7 @@ bool Session::Delete(uint64_t id) {
 }
 
 bool Session::Restore(uint64_t id) {
-    if (!Manager().Restore(id)) {
+    if (!Model().Restore(id)) {
         return false;
     }
     SyncTexturesToCurrentCanvas();
@@ -288,7 +359,7 @@ bool Session::DeletePermanently(uint64_t id) {
 }
 
 bool Session::Erase(uint64_t id) {
-    CanvasManager& manager = Manager();
+    CanvasManager& manager = Model();
     // What goes with it: the textures of every snippet under it, and the
     // history of every canvas - or, for a lone snippet, its own entries on
     // its canvas's history, and nothing else of that canvas's. The library
@@ -320,7 +391,7 @@ bool Session::Erase(uint64_t id) {
 
 bool Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
     bool any = false;
-    for (const CanvasId id : Manager().MarkedCanvasesIn(folderId)) {
+    for (const CanvasId id : Model().MarkedCanvasesIn(folderId)) {
         any = Erase(id) || any;
     }
     if (any) {
@@ -332,7 +403,7 @@ bool Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
 
 size_t Session::EraseDeletedBefore(int64_t cutoff) {
     size_t erased = 0;
-    for (const uint64_t id : Manager().MarkedBefore(cutoff)) {
+    for (const uint64_t id : Model().MarkedBefore(cutoff)) {
         if (Erase(id)) {
             ++erased;
         }
@@ -485,8 +556,8 @@ bool Session::ClonePicturesForCopy(ItemId sourceId, ItemId copyId) {
     if (!Store()) {
         return true;
     }
-    const Item* source = Manager().FindItemAnywhere(sourceId);
-    Item* copy = Manager().FindItemAnywhere(copyId);
+    const Item* source = Model().FindItemAnywhere(sourceId);
+    Item* copy = Model().FindItemAnywhere(copyId);
     if (!source || !copy) {
         return true;
     }

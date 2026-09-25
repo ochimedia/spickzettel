@@ -35,15 +35,14 @@ std::vector<StrokePoint> ShapePoints(Session::Shape shape, float startX, float s
 void Session::BeginShape(ItemId itemId, Shape shape, float screenX, float screenY, uint32_t colorRGBA,
                          float widthScreenPx) {
     CancelShape();
-    Canvas* canvas = Manager().CurrentOrNull();
-    if (canvas == nullptr || Manager().FindItemAnywhere(itemId) == nullptr) {
+    if (Model().CurrentOrNull() == nullptr || Model().FindItemAnywhere(itemId) == nullptr) {
         return;
     }
     shapeItemId_ = itemId;
     shape_ = shape;
     shapeStartX_ = shapeLastX_ = screenX;
     shapeStartY_ = shapeLastY_ = screenY;
-    canvas->liveLayer.BeginStroke(StrokePoint{screenX, screenY}, colorRGBA, widthScreenPx);
+    liveLayer_.BeginStroke(StrokePoint{screenX, screenY}, colorRGBA, widthScreenPx);
 }
 
 void Session::UpdateShape(float screenX, float screenY) {
@@ -55,9 +54,8 @@ void Session::UpdateShape(float screenX, float screenY) {
     // A shape's whole point list is recomputed from its fixed corner on
     // every move, where a freehand stroke appends - so the live stroke is
     // replaced rather than extended.
-    Canvas* canvas = Manager().CurrentOrNull();
-    if (canvas != nullptr && canvas->liveLayer.ActiveStroke().has_value()) {
-        canvas->liveLayer.SetActiveStrokePoints(ShapePoints(shape_, shapeStartX_, shapeStartY_, screenX, screenY));
+    if (liveLayer_.ActiveStroke().has_value()) {
+        liveLayer_.SetActiveStrokePoints(ShapePoints(shape_, shapeStartX_, shapeStartY_, screenX, screenY));
     }
 }
 
@@ -75,14 +73,10 @@ void Session::EndShape(float screenX, float screenY) {
     }
     const ItemId itemId = *shapeItemId_;
     shapeItemId_.reset();
-    Canvas* canvas = Manager().CurrentOrNull();
-    if (canvas == nullptr) {
-        return;
-    }
-    CanvasState& live = canvas->liveLayer;
+    CanvasState& live = liveLayer_;
     const float dx = screenX - shapeStartX_;
     const float dy = screenY - shapeStartY_;
-    if (!live.ActiveStroke().has_value() || Manager().FindItemAnywhere(itemId) == nullptr ||
+    if (!live.ActiveStroke().has_value() || Model().FindItemAnywhere(itemId) == nullptr ||
         std::sqrt(dx * dx + dy * dy) < kMinShapeLengthPx) {
         live.CancelActiveStroke();
         return;
@@ -97,9 +91,7 @@ void Session::CancelShape() {
         return;
     }
     shapeItemId_.reset();
-    if (Canvas* canvas = Manager().CurrentOrNull()) {
-        canvas->liveLayer.CancelActiveStroke();
-    }
+    liveLayer_.CancelActiveStroke();
 }
 
 }  // namespace sz::core

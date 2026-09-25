@@ -313,23 +313,31 @@ std::vector<uint64_t> CanvasManager::CaptureTextureHandlesForCanvas(CanvasId id)
 }
 
 ItemId CanvasManager::CreateItem(bool hasBackground, Rect rect, std::string name) {
-    Canvas* canvas = CurrentOrNull();
-    if (!canvas) {
-        return 0;  // nothing to create it on - see the class comment
-    }
     Item item;
-    item.id = NewId();
     item.hasBackground = hasBackground;
     // Opaque by default for a Screenshot, none at all for a Drawing, whose
     // picture starts fully transparent and waits to be given something;
     // tintColorRGBA stays at its own in-class default (white) either way.
     item.picture.opacity = hasBackground ? 1.0f : 0.0f;
-    item.picture.showsPlaceholder = hasBackground;
     item.name = std::move(name);
     item.rect = rect;
-    item.nativeW = rect.w;
-    item.nativeH = rect.h;
-    item.anchorRect = rect;
+    return CreateItem(std::move(item));
+}
+
+ItemId CanvasManager::CreateItem(Item prototype) {
+    Canvas* canvas = CurrentOrNull();
+    if (!canvas) {
+        return 0;  // nothing to create it on - see the class comment
+    }
+    Item item = std::move(prototype);
+    item.id = NewId();
+    item.deletedAt = 0;
+    item.picture.showsPlaceholder = item.hasBackground;
+    item.picture.stored = false;
+    item.picture.textureHandle = 0;
+    item.nativeW = item.rect.w;
+    item.nativeH = item.rect.h;
+    item.anchorRect = item.rect;
     item.anchorDisplayWidth = currentDisplayWidth_;
     item.anchorDisplayHeight = currentDisplayHeight_;
     canvas->items.push_back(std::move(item));
@@ -356,6 +364,10 @@ Item* CanvasManager::FindItemAnywhere(ItemId id) {
         }
     }
     return nullptr;
+}
+
+const Item* CanvasManager::FindItemAnywhere(ItemId id) const {
+    return const_cast<CanvasManager*>(this)->FindItemAnywhere(id);
 }
 
 bool CanvasManager::CurrentCanvasHasPinnedItems() const {
