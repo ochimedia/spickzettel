@@ -2945,8 +2945,10 @@ DIB is not an alpha channel, GDI leaves it undefined. It used to hide the
 overlay instead, which flickered and, worse, handed activation to the game
 underneath and took it back: a focus gained and lost that the game had no
 part in. `BitBlt` honors the exclusion (measured, and a test captures a
-window of known color with and without it); before Windows 10 2004, where
-the affinity cannot be set, the overlay is still hidden for the moment.
+window of known color with and without it). Before Windows 10 2004 the
+overlay is still hidden for the moment. Those builds are told apart by
+their build number, not by the call failing: they accept the flag and
+treat it as `WDA_MONITOR`, which captures the overlay as black.
 The exclusion is not left on: a screenshot or a stream the user takes of
 their own screen should show the overlay. The rectangle goes through `ClientToScreen`, so a capture
 comes from the overlay's display rather than from wherever its

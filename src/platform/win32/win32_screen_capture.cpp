@@ -47,6 +47,29 @@ bool ReadScreen(POINT origin, int width, int height, std::vector<uint8_t>& pixel
     return captured;
 }
 
+// Whether this system leaves a window out of a capture when asked to.
+// Windows 10 before 2004 (build 19041) accepts WDA_EXCLUDEFROMCAPTURE all
+// the same and treats it as WDA_MONITOR, which captures the window as
+// black - so the call succeeding says nothing there, and the build has to
+// be asked. RtlGetVersion, since GetVersionEx answers what the manifest
+// claims to support rather than what is running.
+bool ExcludesFromCapture() {
+    static const bool excludes = [] {
+        using RtlGetVersionFn = LONG(WINAPI*)(RTL_OSVERSIONINFOW*);
+        const HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+        const auto getVersion =
+            ntdll ? reinterpret_cast<RtlGetVersionFn>(reinterpret_cast<void*>(GetProcAddress(ntdll, "RtlGetVersion")))
+                  : nullptr;
+        RTL_OSVERSIONINFOW version{};
+        version.dwOSVersionInfoSize = sizeof(version);
+        if (!getVersion || getVersion(&version) != 0) {
+            return false;
+        }
+        return version.dwMajorVersion > 10 || (version.dwMajorVersion == 10 && version.dwBuildNumber >= 19041);
+    }();
+    return excludes;
+}
+
 }  // namespace
 
 bool CaptureScreen(HWND exclude, POINT origin, int width, int height, std::vector<uint8_t>& pixelsBGRA) {
@@ -59,7 +82,7 @@ bool CaptureScreen(HWND exclude, POINT origin, int width, int height, std::vecto
     // DwmFlush blocks until the next composition pass has happened, which
     // is what makes the change actually take effect in what BitBlt sees
     // before the capture runs - without it, this is a race.
-    if (SetWindowDisplayAffinity(exclude, WDA_EXCLUDEFROMCAPTURE)) {
+    if (ExcludesFromCapture() && SetWindowDisplayAffinity(exclude, WDA_EXCLUDEFROMCAPTURE)) {
         DwmFlush();
         const bool captured = ReadScreen(origin, width, height, pixelsBGRA);
         SetWindowDisplayAffinity(exclude, WDA_NONE);

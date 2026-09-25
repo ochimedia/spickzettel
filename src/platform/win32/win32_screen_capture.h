@@ -19,7 +19,9 @@ namespace sz::platform::win32 {
 // hands activation to the one underneath - the game - and showing it again
 // takes it back: a focus gained and lost that the game had no part in, and
 // that some games pause on. Where the system cannot exclude a window from
-// capture (before Windows 10 2004) it is hidden for the moment instead.
+// capture it is hidden for the moment instead: before Windows 10 2004,
+// which is told by its build - the flag is accepted there, and captures
+// the window as black.
 bool CaptureScreen(HWND exclude, POINT origin, int width, int height, std::vector<uint8_t>& pixelsBGRA);
 
 }  // namespace sz::platform::win32
