@@ -405,9 +405,8 @@ TEST_F(LibraryStoreTest, LoadGivesAnItemALayerEvenIfTheListIsEmpty) {
     EXPECT_EQ(loaded->canvases[0].items[0].layers.size(), 1u);
 }
 
-// More than one layer round-trips in order, which is the whole reason the
-// list exists - nothing creates a second one yet, so this is what holds the
-// door open for the painting work.
+// More than one layer round-trips in order - nothing creates a second one,
+// but a record is whatever it says it is.
 TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsSeveralLayersInOrder) {
     LibraryStore store(dir_);
     CanvasManagerSnapshot snapshot = MakeSampleSnapshot();

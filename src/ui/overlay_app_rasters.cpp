@@ -184,7 +184,7 @@ void OverlayApp::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
         // the upload below is the retry.
         firstStroke = raster.builtFrom.size();
     } else {
-        raster.pixels = PaintedImage(width, height);
+        raster.pixels = StrokeBitmap(width, height);
         if (raster.textureHandle != 0 && window_) {
             window_->ReleaseTexture(raster.textureHandle);
             raster.textureHandle = 0;
@@ -201,7 +201,7 @@ void OverlayApp::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
         if (stroke.points.empty()) {
             continue;
         }
-        raster.pixels.BeginStroke(stroke.colorRGBA, stroke.width * 0.5f * scale, PaintedImage::BrushMode::Paint);
+        raster.pixels.BeginStroke(stroke.colorRGBA, stroke.width * 0.5f * scale);
         if (stroke.points.size() == 1) {
             const StrokePoint& p = stroke.points.front();
             raster.pixels.ExtendStroke(p.x * scale, p.y * scale, p.x * scale, p.y * scale);  // a dot
@@ -210,7 +210,7 @@ void OverlayApp::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
             raster.pixels.ExtendStroke(stroke.points[s - 1].x * scale, stroke.points[s - 1].y * scale,
                                         stroke.points[s].x * scale, stroke.points[s].y * scale);
         }
-        raster.pixels.EndStroke();  // the tiles it returns are nobody's undo entry: this is a cache
+        raster.pixels.EndStroke();
     }
 
     raster.nativeW = item.nativeW;

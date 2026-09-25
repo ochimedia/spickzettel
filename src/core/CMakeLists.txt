@@ -13,7 +13,7 @@ add_library(sz_core STATIC
     config/shortcut_action.cpp
     drawing/canvas_state.cpp
     drawing/draw_tool.cpp
-    drawing/painted_image.cpp
+    drawing/stroke_bitmap.cpp
     drawing/stroke_mesh.cpp
     drawing/stroke_mesh_cache.cpp
     drawing/stroke_clip.cpp

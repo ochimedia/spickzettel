@@ -99,10 +99,9 @@ TEST_F(ImageCodecTest, QoiEncodeRejectsInvalidDimensions) {
     EXPECT_FALSE(EncodeQoiToFile(dir_ / "bad.qoi", nullptr, 3, 2));
 }
 
-// A painted layer is re-encoded over its own previous file on every save,
-// so the destination has to be replaced whole: a crash or a full disk
-// halfway through a truncate-and-write left the only copy of a drawing as
-// the first half of it.
+// The destination is replaced whole: a crash or a full disk halfway
+// through a truncate-and-write leaves the only copy of a picture as the
+// first half of it.
 TEST_F(ImageCodecTest, QoiEncodeReplacesTheDestinationWholeOrNotAtAll) {
     const std::vector<uint8_t> pixels = SamplePixels();
     const std::filesystem::path path = dir_ / "layer.qoi";

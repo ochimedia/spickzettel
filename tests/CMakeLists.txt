@@ -19,7 +19,7 @@ add_executable(sz_core_tests
     core/library_crash_test.cpp
     core/library_random_test.cpp
     core/library_store_test.cpp
-    core/painted_image_test.cpp
+    core/stroke_bitmap_test.cpp
     core/profile_test.cpp
     core/session_test.cpp
     core/settings_test.cpp

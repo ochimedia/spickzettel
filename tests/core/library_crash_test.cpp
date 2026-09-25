@@ -1112,8 +1112,8 @@ TEST(LibraryFaultTest, ARemovalThatCannotBeRecordedRemovesNothing) {
     ExpectNothingLeftOf(disk, {kCanvasA, kShot, kDrawing}, 0);
 }
 
-// A picture written again over itself - a painted layer does, every save -
-// is the old picture or the new one after a crash, never half of either.
+// A picture written again over itself is the old picture or the new one
+// after a crash, never half of either.
 TEST(LibraryCrashTest, RewritingAPictureLeavesTheOldOneOrTheNewOne) {
     size_t changes = ForEachCrashPoint(
         [](FaultyFileSystem& fs, MemoryFileSystem&) { SetUpLibrary(fs); },

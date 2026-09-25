@@ -94,8 +94,7 @@ public:
     // Replaces a rectangle of an existing texture's pixels in place.
     // `pixelsRGBA` is the whole source image, `sourceWidth` its width, and
     // x/y/w/h the part of it that changed - see
-    // IOverlayWindow::UpdateTextureRegion for why painting needs this
-    // rather than re-creating the texture.
+    // IOverlayWindow::UpdateTextureRegion.
     bool UpdateTextureRegionRGBA(ID3D11ShaderResourceView* srv, const uint8_t* pixelsRGBA, int sourceWidth,
                                   int x, int y, int w, int h);
     // Releases a texture returned by CreateTextureFromRGBA. No-op for nullptr.

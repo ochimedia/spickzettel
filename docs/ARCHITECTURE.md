@@ -369,7 +369,7 @@ having to know the cache exists.
 ### Rasterized strokes
 
 The Rasterized render mode (`StrokeRenderMode::Rasterized`) draws an
-item's strokes into a bitmap, `PaintedImage`, and composites it once -
+item's strokes into a bitmap, `StrokeBitmap`, and composites it once -
 the only mode in which a translucent stroke crossing itself does not
 darken at the crossing. The bitmap is a cache of the strokes, rebuilt
 from them and never saved. Each stroke is a capsule per segment - the

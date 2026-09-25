@@ -18,8 +18,8 @@
 #include "core/canvas/item.h"
 #include "core/config/app_config.h"
 #include "core/drawing/draw_tool.h"
-#include "core/drawing/painted_image.h"
 #include "core/drawing/stroke.h"
+#include "core/drawing/stroke_bitmap.h"
 #include "core/drawing/stroke_mesh_cache.h"
 #include "core/persistence/library_store.h"
 #include "core/session/actions.h"
@@ -1201,7 +1201,7 @@ private:
     // truth, this is thrown away and rebuilt from them, and is never
     // persisted.
     struct StrokeRaster {
-        PaintedImage pixels;
+        StrokeBitmap pixels;
         uint64_t textureHandle = 0;
         // What it was built from, kept so a stale raster is recognized by
         // comparing rather than by guessing. A count is not enough and

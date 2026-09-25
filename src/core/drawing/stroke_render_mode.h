@@ -16,9 +16,8 @@ enum class StrokeRenderMode {
     // tessellation can be judged against something.
     Polyline,
     // Drawn into a bitmap and composited once (see
-    // core/drawing/painted_image.h). The only one
-    // of the three where a stroke that crosses over *itself* doesn't
-    // darken at the crossing: coverage is accumulated per stroke and the
+    // core/drawing/stroke_bitmap.h). The only one of the three where a
+    // stroke that crosses over *itself* doesn't darken at the crossing: coverage is accumulated per stroke and the
     // color applied once, which no triangle renderer can do. The cost is
     // that the result is pixels at the item's native size, so scaling the
     // item up softens it - which is precisely the trade the other two
