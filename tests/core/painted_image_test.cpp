@@ -83,37 +83,39 @@ TEST(PaintedImageTest, TheEdgeOfABrushIsPartiallyCovered) {
 // the ink lands once. A brush moving a pixel at a time overlaps almost
 // completely, so summing coverage would turn a translucent line opaque
 // within a few steps.
+TEST(PaintedImageTest, AStrokeThatOverlapsItselfIsNotPaintedTwice) {
+    PaintedImage overlapping(60, 20);
+    overlapping.BeginStroke(kHalfRed, 4.0f, PaintedImage::BrushMode::Paint);
+    for (int i = 0; i < 20; ++i) {
+        // Back and forth over the same pixels, twenty times.
+        overlapping.ExtendStroke(10.0f, 10.0f, 30.0f, 10.0f);
+        overlapping.ExtendStroke(30.0f, 10.0f, 10.0f, 10.0f);
+    }
+    overlapping.EndStroke();
+
+    PaintedImage once(60, 20);
+    PaintSegment(once, 10.0f, 10.0f, 30.0f, 10.0f, 4.0f, kHalfRed);
+
+    EXPECT_EQ(At(overlapping, 20, 10), At(once, 20, 10));
+    EXPECT_EQ(At(overlapping, 20, 10).a, 128);
+}
+
+// ...but two *separate* strokes do build up, because each is its own
+// deliberate mark.
+TEST(PaintedImageTest, SeparateStrokesAccumulate) {
+    PaintedImage image(60, 20);
+    PaintSegment(image, 10.0f, 10.0f, 30.0f, 10.0f, 4.0f, kHalfRed);
+    const int afterOne = At(image, 20, 10).a;
+    PaintSegment(image, 10.0f, 10.0f, 30.0f, 10.0f, 4.0f, kHalfRed);
+    const int afterTwo = At(image, 20, 10).a;
+
+    EXPECT_EQ(afterOne, 128);
+    EXPECT_GT(afterTwo, afterOne);
+}
+
 // A corner-to-corner line crosses a sliver of the tiles in its bounding
 // box, and only those are saved for undo - every one it paints, and none
 // of the rest. Saving the whole box was 8 MB of undo per line at 1080p.
-// And uploads only them: what changed is reported tile by tile, a sliver
-// of the bounding box, and every pixel that changed is inside it.
-TEST(PaintedImageTest, ALongDiagonalReportsOnlyTheTilesItChanged) {
-    PaintedImage image(1920, 1080);
-    image.BeginStroke(0xFF0000FFu, 3.0f, PaintedImage::BrushMode::Paint);
-    const PixelRect box = image.ExtendStroke(0.0f, 0.0f, 1919.0f, 1079.0f);
-    const std::vector<PixelRect>& regions = image.LastChangedRegions();
-    ASSERT_FALSE(regions.empty());
-    size_t area = 0;
-    for (const PixelRect& region : regions) {
-        area += static_cast<size_t>(region.w) * static_cast<size_t>(region.h);
-    }
-    EXPECT_LT(area * 8, static_cast<size_t>(box.w) * static_cast<size_t>(box.h));
-
-    const std::vector<uint8_t>& pixels = image.PixelsRGBA();
-    for (int y = 0; y < image.Height(); ++y) {
-        for (int x = 0; x < image.Width(); ++x) {
-            if (pixels[(static_cast<size_t>(y) * image.Width() + x) * 4 + 3] == 0) {
-                continue;
-            }
-            const bool inside = std::any_of(regions.begin(), regions.end(), [x, y](const PixelRect& r) {
-                return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
-            });
-            ASSERT_TRUE(inside) << x << "," << y;
-        }
-    }
-}
-
 TEST(PaintedImageTest, ALongDiagonalSavesOnlyTheTilesItCrosses) {
     PaintedImage image(1920, 1080);
     image.BeginStroke(0xFF0000FFu, 3.0f, PaintedImage::BrushMode::Paint);
@@ -159,6 +161,34 @@ TEST(PaintedImageTest, ALongDiagonalSavesOnlyTheTilesItCrosses) {
     }
 }
 
+// And uploads only them: what changed is reported tile by tile, a sliver
+// of the bounding box, and every pixel that changed is inside it.
+TEST(PaintedImageTest, ALongDiagonalReportsOnlyTheTilesItChanged) {
+    PaintedImage image(1920, 1080);
+    image.BeginStroke(0xFF0000FFu, 3.0f, PaintedImage::BrushMode::Paint);
+    const PixelRect box = image.ExtendStroke(0.0f, 0.0f, 1919.0f, 1079.0f);
+    const std::vector<PixelRect>& regions = image.LastChangedRegions();
+    ASSERT_FALSE(regions.empty());
+    size_t area = 0;
+    for (const PixelRect& region : regions) {
+        area += static_cast<size_t>(region.w) * static_cast<size_t>(region.h);
+    }
+    EXPECT_LT(area * 8, static_cast<size_t>(box.w) * static_cast<size_t>(box.h));
+
+    const std::vector<uint8_t>& pixels = image.PixelsRGBA();
+    for (int y = 0; y < image.Height(); ++y) {
+        for (int x = 0; x < image.Width(); ++x) {
+            if (pixels[(static_cast<size_t>(y) * image.Width() + x) * 4 + 3] == 0) {
+                continue;
+            }
+            const bool inside = std::any_of(regions.begin(), regions.end(), [x, y](const PixelRect& r) {
+                return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+            });
+            ASSERT_TRUE(inside) << x << "," << y;
+        }
+    }
+}
+
 // An eraser over transparent pixels changes nothing: nothing to upload,
 // and nothing to take back.
 TEST(PaintedImageTest, AStrokeThatChangesNothingReportsNothing) {
@@ -178,36 +208,6 @@ TEST(PaintedImageTest, AStrokeThatChangesNothingReportsNothing) {
     const std::vector<PaintedTile> saved = image.EndStroke();
     ASSERT_EQ(saved.size(), 1u);
     EXPECT_EQ(saved[0].index, image.TileIndex(0, 0));
-}
-
-TEST(PaintedImageTest, AStrokeThatOverlapsItselfIsNotPaintedTwice) {
-    PaintedImage overlapping(60, 20);
-    overlapping.BeginStroke(kHalfRed, 4.0f, PaintedImage::BrushMode::Paint);
-    for (int i = 0; i < 20; ++i) {
-        // Back and forth over the same pixels, twenty times.
-        overlapping.ExtendStroke(10.0f, 10.0f, 30.0f, 10.0f);
-        overlapping.ExtendStroke(30.0f, 10.0f, 10.0f, 10.0f);
-    }
-    overlapping.EndStroke();
-
-    PaintedImage once(60, 20);
-    PaintSegment(once, 10.0f, 10.0f, 30.0f, 10.0f, 4.0f, kHalfRed);
-
-    EXPECT_EQ(At(overlapping, 20, 10), At(once, 20, 10));
-    EXPECT_EQ(At(overlapping, 20, 10).a, 128);
-}
-
-// ...but two *separate* strokes do build up, because each is its own
-// deliberate mark.
-TEST(PaintedImageTest, SeparateStrokesAccumulate) {
-    PaintedImage image(60, 20);
-    PaintSegment(image, 10.0f, 10.0f, 30.0f, 10.0f, 4.0f, kHalfRed);
-    const int afterOne = At(image, 20, 10).a;
-    PaintSegment(image, 10.0f, 10.0f, 30.0f, 10.0f, 4.0f, kHalfRed);
-    const int afterTwo = At(image, 20, 10).a;
-
-    EXPECT_EQ(afterOne, 128);
-    EXPECT_GT(afterTwo, afterOne);
 }
 
 // Pixel-perfect erasing: the point of a painted layer. What comes away is

@@ -147,8 +147,8 @@ public:
     // version above kFormatVersion. Such a library is not this build's to
     // open - every record it rewrote would lose what the newer build put
     // there - so once this has been seen, by this or by Load, the store
-    // writes nothing at all: Save, Remove, SaveImage and SaveThumbnail all
-    // fail. TrayController::Initialize asks before loading, and refuses to
+    // writes nothing at all: Save, Remove, SaveImage, SaveLayerImage and
+    // SaveThumbnail all fail. TrayController::Initialize asks before loading, and refuses to
     // start. A library.json that is missing, is not JSON or has no version
     // is not newer, and neither is a directory in its place or a file far
     // larger than any record. A file that is there and cannot be read -
@@ -196,8 +196,8 @@ public:
     //
     // True only once every directory named is gone. False if this store
     // knows no directory for any of them - a thing never saved has none,
-    // and a capture of one still in staging is collected by the next save
-    // - or if a removal is still owed. The caller can tell the two falses
+    // and a capture of one still in staging goes here too (see
+    // stagedRemovals_) - or if a removal is still owed. The caller can tell the two falses
     // apart with HasPendingRemoval.
     //
     // `remaining` is the library without them, which is what says whether
@@ -486,8 +486,9 @@ private:
     // with the rename that moves its directory, and only once that rename
     // has happened (see placeDirectory in Save). Being wrong is
     // survivable rather than corrupting: a directory the index has lost is
-    // written afresh under its proper name and the stale one is collected by
-    // the same GC pass that handles a deleted snippet.
+    // written afresh under its proper name, and the stale one - which Load
+    // reads at the next start as a copy, and gives an id of its own - stays
+    // where it is rather than being deleted.
     mutable std::map<uint64_t, std::filesystem::path> folderDirs_;
     mutable std::map<uint64_t, std::filesystem::path> canvasDirs_;
     mutable std::map<uint64_t, std::filesystem::path> itemDirs_;

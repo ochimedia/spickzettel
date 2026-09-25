@@ -974,9 +974,7 @@ json OrderFileJson(const char* key, const std::vector<std::string>& names) {
     return json{{key, std::move(list)}};
 }
 
-// What library.json holds: the things with no other home. One function for
-// both directions, so that what Load compares against is exactly what Save
-// writes.
+// What pending.json holds - see LibraryStore::PendingRecord:
 // {"erased": ["k3j9x2", ...], "moves": {"s7d2k1": "b4n6c3"}} - the uids
 // spelled the way the directory names spell them; "moves" only while
 // there are any.
@@ -996,6 +994,9 @@ json PendingJson(const std::set<uint64_t>& erased, const std::map<uint64_t, uint
     return doc;
 }
 
+// What library.json holds: the things with no other home. One function for
+// both directions, so that what Load compares against is exactly what Save
+// writes.
 json LibraryJson(FolderId currentFolderId, CanvasId currentCanvasId) {
     json doc;
     doc["version"] = LibraryStore::kFormatVersion;
@@ -1555,8 +1556,10 @@ bool LibraryStore::NotePendingRemoval(const std::filesystem::path& dir) const {
         if (!uid) {
             return true;
         }
-        // Recorded on disk as much as pending.json would record it; the
-        // next save writes it there too. An older build marked a directory
+        // Recorded on disk as much as pending.json would record it, and
+        // the mark stays the record until the removal is done - the next
+        // save writes it into pending.json only if something else changes
+        // what is owed. An older build marked a directory
         // only once nothing moved out of it was left inside, so whatever
         // is inside went with it.
         writtenPending_.erased.insert(*uid);

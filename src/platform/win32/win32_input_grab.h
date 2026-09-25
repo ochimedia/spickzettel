@@ -216,7 +216,7 @@ public:
     // Whether a heartbeat at `lastBeatMs` is too old at `nowMs`. A beat
     // later than `now` - the app thread beat between the hook reading the
     // clock and reading the beat - is as fresh as they come, not a
-    // subtraction wrapped round to "stalled for ever".
+    // subtraction wrapped around to "stalled forever".
     static bool IsStalled(uint64_t nowMs, uint64_t lastBeatMs) {
         return nowMs > lastBeatMs && nowMs - lastBeatMs > kStalledAfterMs;
     }
@@ -258,8 +258,8 @@ private:
     // its definition for the hotkey that stops working without it.
     static void HandHeldModifiersToSystem(const bool (&swallowed)[256]);
     // Posts a key-up to the overlay for every key still marked swallowed, and
-    // clears the record. Called whenever a grab starts or ends - see its
-    // definition for the every-other-keypress bug that needs both halves.
+    // clears the record. Called as a grab ends - see its definition for the
+    // every-other-keypress bug that needs both halves.
     void ReleaseSwallowedKeys();
 
     // The two handovers, each run from Refresh on the transition rather than
@@ -440,7 +440,7 @@ private:
     // because it is written from the hook callback, where the cost of a lock
     // is paid by every mouse event on the machine; a virtual-key code is one
     // byte, so the whole thing is 256 bools. Written on the hook thread,
-    // cleared from the app thread when a grab starts or ends.
+    // cleared from the app thread as a grab ends.
     static constexpr UINT kVirtualKeyCount = 256;
     std::atomic<bool> swallowedDown_[kVirtualKeyCount] = {};
     // See SetGameKeepsFocus. Defaults false so nothing is grabbed until the

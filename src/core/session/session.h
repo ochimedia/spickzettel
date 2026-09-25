@@ -195,10 +195,12 @@ public:
     // the whole dispatch just to decide a button's tint.
     bool CanUndo() const;
     bool CanRedo() const;
-    // Counts every change to the history - an entry filed, undone, redone
-    // or dropped - so that a caller can tell whether anything came between
-    // two of its own edits (see OverlayApp::ContinuesPlacementBurst). A
-    // merge into the top entry is that entry, and counts for nothing.
+    // Counts the changes to the history that move its top - an entry
+    // filed, undone or redone - so that a caller can tell whether anything
+    // came between two of its own edits (see
+    // OverlayApp::RecordPlacementBurst). A merge into the top entry is that
+    // entry, and counts for nothing; so does forgetting a snippet's or a
+    // canvas's entries, or the oldest falling off the end.
     uint64_t HistoryRevision() const { return historyRevision_; }
     // Forgets every entry naming `itemId`, on `canvasId` only - for an item
     // moved to a different canvas, where its history would otherwise stay

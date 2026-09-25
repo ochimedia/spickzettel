@@ -1267,8 +1267,8 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
         // the tray/hotkeys to ever bring the overlay back. This window's
         // lifecycle is owned entirely by Show()/Hide()/Destroy() (driven
         // by the tray icon and hotkeys), not by its own default close
-        // affordances - swallow both instead of falling through to the
-        // default handling.
+        // affordances - so neither falls through to the default handling:
+        // Alt+F4 is swallowed, and a WM_CLOSE is an exit (below).
         case WM_SYSCOMMAND: {
             // The low 4 bits of an SC_* command are reserved by Windows
             // for its own internal use - mask them off before comparing,

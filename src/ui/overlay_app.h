@@ -374,8 +374,7 @@ public:
     // edit mode afterward so the capture is noticed. Safe to call while
     // hidden: needs no active ImGui frame (it's plain CanvasManager/
     // IOverlayWindow calls), and `window`'s own CaptureRegionAsTexture
-    // already hides/reshows itself around the OS-level capture regardless
-    // of visibility.
+    // leaves the overlay out of the capture whether it is up or not.
     // A fullscreen screenshot onto a canvas of its own: a new one at the
     // end of the folder the current canvas lives in, switched to, with the
     // shot on it and a message saying so. Both capture hotkeys come here -

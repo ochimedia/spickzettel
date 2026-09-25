@@ -372,10 +372,8 @@ void TrayController::EnsureMode(bool viewOnly, bool keepProfileContext) {
     overlayApp_.SetViewOnly(viewOnly);
     window.SetInputPassthrough(viewOnly);
     // After SetViewOnly, which decides whether freezing applies at all, and
-    // after Show, so the capture's own hide/show cycle starts from the
-    // state we're actually going to be in. Re-captured on every entry, so
-    // what you see frozen is always what was on screen a moment ago.
-    // The still picture edit mode shows instead of the live application -
+    // after Show, so the capture leaves out the overlay as it is going to
+    // be (see CaptureScreen). The still picture edit mode shows instead of the live application -
     // see AppConfig::freezeScreenInEditMode. Re-captured on every entry, so
     // it is never stale; never in view-only mode, which is click-through
     // and has to show what is really underneath.
@@ -529,7 +527,7 @@ void TrayController::OnDisplaysChanged() {
 
 void TrayController::MoveOverlayTo(const platform::DisplayInfo& display) {
     // Most changes are to some other display, and retaking a frozen screen
-    // for those would flash the overlay off and on for nothing.
+    // for those would be a full-screen capture for nothing.
     if (display == overlayDisplay_) {
         return;
     }

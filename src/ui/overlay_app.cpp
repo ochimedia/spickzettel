@@ -2464,10 +2464,9 @@ void OverlayApp::RenderBrushSizePreview() {
 // The demo build's permanent mark (see build::kDemoMode). Drawn in *both*
 // edit and view-only mode - it goes wherever the overlay is visible at all,
 // and a mark you could drop by pressing the other hotkey wouldn't be one.
-// It needs no suppression for screen capture: the platform layer hides the
-// whole overlay window before grabbing pixels (see
-// Win32OverlayWindow::CaptureRegionAsTexture's own ShowWindow(SW_HIDE)), so
-// nothing this draws can reach a captured image.
+// It needs no suppression for screen capture: the platform layer leaves the
+// whole overlay window out of what it grabs (see CaptureScreen), so nothing
+// this draws can reach a captured image.
 //
 // It moves, every kDemoWatermarkMoveSeconds. A mark that lives in one
 // corner is a mark you stop seeing after a minute and can work around

@@ -2452,10 +2452,10 @@ watching it fail on the real thing: showing a window activates it
 window given `WS_EX_LAYERED` before its first show draws nothing, so the
 order is show first, click-through styles second - with the window
 already counted click-through for the input grab, which a show in edit
-mode starts and the passthrough a moment later took down again; and ImGui's clock is not the
-app's clock, so the first frame after an hour in the tray carries an
-hour's delta and puts every expiry set while hidden in the past - the
-renderer caps the delta at 0.1 s.
+mode starts and the passthrough a moment later took down again; and
+ImGui's clock is not the app's clock, so the first frame after an hour
+in the tray carries an hour's delta and puts every expiry set while
+hidden in the past - the renderer caps the delta at 0.1 s.
 
 **View-only draws only now and then.** Its picture does not change by
 itself, and with pinned snippets it can sit over a game for hours, where
