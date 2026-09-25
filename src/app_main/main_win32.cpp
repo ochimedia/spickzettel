@@ -73,6 +73,15 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     if (!host->Initialize("Spickzettel")) {
         return 1;
     }
+    // Before the config is read: a second copy that could not read it
+    // would set it aside and write defaults in its place - under the copy
+    // already running, which then saves over both - and show the prerelease
+    // notice and the set-aside message before giving up. TrayController
+    // asks again, and is answered from the mutex already held.
+    if (!host->AcquireSingleInstance()) {
+        MessageBoxA(nullptr, sz::strings::kStartupFailed, "Spickzettel", MB_OK | MB_ICONWARNING);
+        return 1;
+    }
 
     const sz::core::LoadedConfig config = LoadConfig(host->GetConfigFilePath());
 
