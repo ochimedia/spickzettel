@@ -21,6 +21,7 @@
 #include "platform/win32/win32_dx11_renderer.h"
 #include "platform/win32/win32_input_grab.h"
 #include "platform/win32/win32_integrity.h"
+#include "platform/win32/win32_screen_capture.h"
 #include "platform/win32/win32_text.h"
 
 // imgui_impl_win32.h intentionally wraps its real declaration of this
@@ -871,61 +872,11 @@ CaptureResult Win32OverlayWindow::CaptureRegionAsTexture(const Rect& rect) {
     POINT source{static_cast<LONG>(rect.x), static_cast<LONG>(rect.y)};
     ClientToScreen(hwnd_, &source);
 
-    // Hide this window before grabbing pixels, so the capture shows what's
-    // actually behind the overlay rather than the overlay's own content -
-    // BitBlt from the desktop DC reads the fully composited image, which
-    // would otherwise include this (topmost, alpha-composited) window.
-    // DwmFlush() blocks until the next composition pass has happened,
-    // which is what makes the hide actually take effect in what BitBlt
-    // sees before the capture below runs - without it, this is a race.
-    const bool wasVisible = visible_;
-    if (wasVisible) {
-        ShowWindow(hwnd_, SW_HIDE);
-        DwmFlush();
-    }
-
-    std::vector<uint8_t> pixelsBGRA(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
-    bool captured = false;
-
-    if (HDC screenDC = GetDC(nullptr)) {
-        if (HDC memDC = CreateCompatibleDC(screenDC)) {
-            if (HBITMAP bitmap = CreateCompatibleBitmap(screenDC, width, height)) {
-                HGDIOBJ oldObj = SelectObject(memDC, bitmap);
-                // CAPTUREBLT includes layered windows (other apps' own
-                // translucent UI) in the capture, matching what's visually
-                // on screen rather than just the opaque desktop.
-                const BOOL blitted =
-                    BitBlt(memDC, 0, 0, width, height, screenDC, source.x, source.y, SRCCOPY | CAPTUREBLT);
-                // Deselected *before* it is read: GetDIBits documents that
-                // the bitmap must not be selected into a DC when it is
-                // called. It happened to work while selected, on the
-                // drivers tried, which is not the same as being allowed.
-                SelectObject(memDC, oldObj);
-                if (blitted) {
-                    BITMAPINFOHEADER bi{};
-                    bi.biSize = sizeof(bi);
-                    bi.biWidth = width;
-                    bi.biHeight = -height;  // negative = top-down DIB, matching our RGBA row order
-                    bi.biPlanes = 1;
-                    bi.biBitCount = 32;
-                    bi.biCompression = BI_RGB;
-                    BITMAPINFO bmi{};
-                    bmi.bmiHeader = bi;
-                    // Every row, or nothing: a short read is a picture
-                    // with garbage along its bottom, not a capture.
-                    captured = GetDIBits(memDC, bitmap, 0, static_cast<UINT>(height), pixelsBGRA.data(), &bmi,
-                                          DIB_RGB_COLORS) == height;
-                }
-                DeleteObject(bitmap);
-            }
-            DeleteDC(memDC);
-        }
-        ReleaseDC(nullptr, screenDC);
-    }
-
-    if (wasVisible) {
-        ShowWindow(hwnd_, SW_SHOW);
-    }
+    // Without this window in it, so the capture shows what is behind the
+    // overlay rather than the overlay's own content - see CaptureScreen,
+    // which leaves it out without hiding it.
+    std::vector<uint8_t> pixelsBGRA;
+    const bool captured = CaptureScreen(visible_ ? hwnd_ : nullptr, source, width, height, pixelsBGRA);
 
     if (!captured) {
         return CaptureResult{};

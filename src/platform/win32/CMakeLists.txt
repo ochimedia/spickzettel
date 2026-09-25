@@ -6,6 +6,7 @@ add_library(sz_platform_win32 STATIC
     win32_dx11_renderer.cpp
     win32_input_grab.cpp
     win32_crash_dump.cpp
+    win32_screen_capture.cpp
     ${IMGUI_BACKENDS_DIR}/imgui_impl_win32.cpp
     ${IMGUI_BACKENDS_DIR}/imgui_impl_dx11.cpp
 )

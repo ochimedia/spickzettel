@@ -1485,7 +1485,7 @@ behind rather than erase it - which took the redo of the stroke with it.
 ### Freezing the screen
 
 `FreezeScreen` captures the whole display through the same call a
-snippet's capture uses, which hides the overlay for the duration, so the
+snippet's capture uses, which leaves the overlay out of it, so the
 picture is the application underneath and none of our content. While a
 screen is frozen a region capture is cropped out of it rather than taken
 live; without that the user drags a region over a still picture and gets
@@ -2594,15 +2594,22 @@ same reason, which is the fallback to reach for if it turns up.
 
 ### Screen capture
 
-`CaptureRegionAsTexture` hides the overlay, `DwmFlush`es so the next
-composition pass has happened, `BitBlt`s with `CAPTUREBLT` so other
-applications' layered windows are included, deselects the bitmap and
-reads it with `GetDIBits` (which documents that the bitmap must not be
-selected into a DC while it is read, and whose row count is checked
-rather than taken as nonzero), converts GDI's BGRA to RGBA once and sets
-every alpha byte to opaque - the fourth byte of a 32bpp DIB is not an
-alpha channel, GDI leaves it undefined - and shows the overlay again: a
-real, brief flicker, expected for this technique. The rectangle goes through `ClientToScreen`, so a capture
+`CaptureRegionAsTexture` excludes the overlay from capture
+(`WDA_EXCLUDEFROMCAPTURE`, for the moment of the capture only),
+`DwmFlush`es so the next composition pass has happened, `BitBlt`s with
+`CAPTUREBLT` so other applications' layered windows are included,
+deselects the bitmap and reads it with `GetDIBits` (which documents that
+the bitmap must not be selected into a DC while it is read, and whose row
+count is checked rather than taken as nonzero), and converts GDI's BGRA to
+RGBA once, setting every alpha byte to opaque - the fourth byte of a 32bpp
+DIB is not an alpha channel, GDI leaves it undefined. It used to hide the
+overlay instead, which flickered and, worse, handed activation to the game
+underneath and took it back: a focus gained and lost that the game had no
+part in. `BitBlt` honors the exclusion (measured, and a test captures a
+window of known color with and without it); before Windows 10 2004, where
+the affinity cannot be set, the overlay is still hidden for the moment.
+The exclusion is not left on: a screenshot or a stream the user takes of
+their own screen should show the overlay. The rectangle goes through `ClientToScreen`, so a capture
 comes from the overlay's display rather than from wherever its
 coordinates land on the primary. Textures are `D3D11_USAGE_DEFAULT`
 rather than immutable so a painted layer can be updated in place.

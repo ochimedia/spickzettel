@@ -82,6 +82,7 @@ if(WIN32)
         platform/win32_input_grab_test.cpp
         platform/win32_integrity_test.cpp
         platform/win32_platform_host_test.cpp
+        platform/win32_screen_capture_test.cpp
     )
     target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 GTest::gtest_main)
     target_compile_features(sz_win32_tests PRIVATE cxx_std_20)
