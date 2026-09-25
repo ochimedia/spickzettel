@@ -378,7 +378,11 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
         case WM_HOTKEY: {
             auto it = hotkeyCallbacks_.find(static_cast<int>(wParam));
             if (it != hotkeyCallbacks_.end() && it->second) {
-                it->second();
+                // Called on a copy: a callback can unregister its own
+                // hotkey - capturing View on the Edit combo does, from
+                // inside Edit's - and the one in the map is destroyed then.
+                const HotkeyCallback callback = it->second;
+                callback();
             }
             return 0;
         }

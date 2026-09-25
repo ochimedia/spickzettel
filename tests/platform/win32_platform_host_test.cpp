@@ -96,5 +96,27 @@ TEST(Win32PlatformHostTest, ACloseSentToTheOverlayExitsToo) {
     EXPECT_EQ(exits, 1) << "Alt+F4 over the overlay is not a way out";
 }
 
+// A hotkey's callback may unregister that same hotkey while it runs - a
+// capture that moves the combo to another hotkey does - and runs on to
+// the end with what it captured intact.
+TEST(Win32PlatformHostTest, AHotkeyCallbackCanUnregisterItsOwnHotkey) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    const KeyCombo combo{true, true, true, KeyCombo::kFunctionKeyBase + 24};
+    int id = 0;
+    std::string ranToTheEnd;
+    const std::string word = "all of it, and well past what a small string holds in place";
+    id = host.RegisterGlobalHotkey(combo, [&host, &id, &ranToTheEnd, word] {
+        host.UnregisterGlobalHotkey(id);
+        ranToTheEnd = word;
+    });
+    ASSERT_NE(id, 0) << "Ctrl+Alt+Shift+F24 taken by something else";
+
+    SendMessageA(FindWindowA(nullptr, name.c_str()), WM_HOTKEY, static_cast<WPARAM>(id), 0);
+
+    EXPECT_EQ(ranToTheEnd, word);
+}
+
 }  // namespace
 }  // namespace sz::platform::win32
