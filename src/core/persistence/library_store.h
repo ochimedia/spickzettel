@@ -232,7 +232,9 @@ public:
     // and only a save brings it in line. What it names that this session
     // could not look at is not (see unobservedPending_): no save can do
     // anything about it.
-    bool HasPendingRemovals() const { return !pendingRemovals_.empty() || writtenPending_ != unobservedPending_; }
+    bool HasPendingRemovals() const {
+        return !pendingRemovals_.empty() || !stagedRemovals_.empty() || writtenPending_ != unobservedPending_;
+    }
 
     // Loads the on-disk library, or returns nullopt only if `rootDir` has
     // none at all - no library.json *and* no folders/ tree - which is a
@@ -399,6 +401,14 @@ private:
     // - and so is owed and not to be read. Anything inside it deleted for
     // good too is noted with it.
     bool NotePendingRemoval(const std::filesystem::path& dir) const;
+    // Adds to stagedRemovals_ those of `uids` with a picture waiting - all
+    // of them, if where they wait cannot be listed.
+    void OweStagedPictures(const std::vector<uint64_t>& uids) const;
+    // Deletes the pictures in staging that stagedRemovals_ owns and
+    // pending.json records, and keeps owing those that are left.
+    void RunStagedRemovals() const;
+    // Where pictures without a directory wait: staging/, and retired/staging/.
+    std::vector<std::filesystem::path> StagedPictureDirs() const;
     // What pending.json says: the uids deleted for good, and where each
     // thing moved out of one of them belongs - a canvas's folder, a
     // snippet's canvas - while its directory is still inside.
@@ -500,6 +510,12 @@ private:
     // nothing under it is placed, retired or read meanwhile: it was
     // deleted, not lost.
     mutable std::map<uint64_t, std::filesystem::path> pendingRemovals_;
+    // The same for pictures in staging: those of a snippet deleted for
+    // good before any save gave it a directory. Owed by uid until none of
+    // them is left, recorded in pending.json meanwhile, and never set aside
+    // by the staging pass - which could not tell them from what a crash
+    // leaves, and put them in retired/.
+    mutable std::set<uint64_t> stagedRemovals_;
     // What pending.json says as it is on disk: what a removal may be run
     // for, since only what is recorded survives a crash partway.
     mutable PendingRecord writtenPending_;

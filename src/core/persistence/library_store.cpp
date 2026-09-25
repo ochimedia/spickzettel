@@ -1168,6 +1168,11 @@ bool LibraryStore::Remove(const std::vector<uint64_t>& uids, const LibraryView& 
     if (writtenByANewerVersion_) {
         return false;
     }
+    // The pictures in staging of whatever of it no save gave a directory
+    // go too, as its directory would - and are owed until they have. Left,
+    // the staging pass could not tell them from what a crash leaves, and
+    // set them aside in retired/.
+    OweStagedPictures(uids);
     const std::unordered_set<uint64_t> held = IdsIn(remaining);
     bool known = false;
     for (const uint64_t uid : uids) {
@@ -1200,12 +1205,89 @@ bool LibraryStore::Remove(const std::vector<uint64_t>& uids, const LibraryView& 
         // for something gone missing and set aside, meanwhile.
         ForgetUnder(dir, held);
     }
-    if (!known) {
+    // Pictures in staging that could not go are recorded as owed too, so
+    // that a restart does not find them and set them aside.
+    if (!known && stagedRemovals_.empty()) {
         return false;
     }
     ++writeGeneration_;
     RunPendingRemovals(remaining);
-    return std::none_of(uids.begin(), uids.end(), [this](uint64_t uid) { return pendingRemovals_.count(uid) > 0; });
+    return known &&
+           std::none_of(uids.begin(), uids.end(), [this](uint64_t uid) { return pendingRemovals_.count(uid) > 0; });
+}
+
+namespace {
+// The uid a picture in staging belongs to: "<uid>.qoi", "<uid>_p<n>.qoi",
+// or a thumbnail or a temporary of either all start with it.
+std::optional<uint64_t> PictureOwner(const std::string& name) {
+    if (name.size() <= kUidLength || (name[kUidLength] != '.' && name[kUidLength] != '_') ||
+        !IsPictureFilename(std::string(WithoutTemporarySuffix(name)))) {
+        return std::nullopt;
+    }
+    return ParseUid(std::string_view(name).substr(0, kUidLength));
+}
+}  // namespace
+
+void LibraryStore::OweStagedPictures(const std::vector<uint64_t>& uids) const {
+    const std::unordered_set<uint64_t> asked(uids.begin(), uids.end());
+    for (const std::filesystem::path& dir : StagedPictureDirs()) {
+        if (fs_->LinkStatus(dir) == FileSystem::Kind::None || !IsOurs(dir)) {
+            continue;
+        }
+        const std::optional<std::vector<FileSystem::Entry>> entries = ListNamed(*fs_, dir);
+        if (!entries) {
+            stagedRemovals_.insert(uids.begin(), uids.end());  // not looked at: all of them, to be sure
+            return;
+        }
+        for (const FileSystem::Entry& entry : *entries) {
+            const std::optional<uint64_t> owner = PictureOwner(entry.name.string());
+            if (entry.kind == FileSystem::Kind::File && owner && asked.count(*owner) > 0) {
+                stagedRemovals_.insert(*owner);
+            }
+        }
+    }
+}
+
+void LibraryStore::RunStagedRemovals() const {
+    if (stagedRemovals_.empty()) {
+        return;
+    }
+    // Only what pending.json records is removed, as for a directory: a
+    // capture saved, its picture not yet moved in, deleted for good - and
+    // the process stopped before the removal was recorded. Its record
+    // loads again at the next start, and has to find its picture.
+    std::set<uint64_t> left;
+    for (const std::filesystem::path& dir : StagedPictureDirs()) {
+        if (fs_->LinkStatus(dir) == FileSystem::Kind::None || !IsOurs(dir)) {
+            continue;  // nothing waiting there, or nothing of ours
+        }
+        const std::optional<std::vector<FileSystem::Entry>> entries = ListNamed(*fs_, dir);
+        if (!entries) {
+            return;  // not looked at, so not gone - all owed, and tried again with the next save
+        }
+        for (const FileSystem::Entry& entry : *entries) {
+            const std::optional<uint64_t> owner = PictureOwner(entry.name.string());
+            if (entry.kind != FileSystem::Kind::File || !owner || stagedRemovals_.count(*owner) == 0) {
+                continue;
+            }
+            const std::filesystem::path picture = dir / entry.name;
+            if (writtenPending_.erased.count(*owner) > 0) {
+                fs_->Remove(picture);
+                ++writeGeneration_;
+            }
+            if (fs_->LinkStatus(picture) != FileSystem::Kind::None) {
+                left.insert(*owner);
+            }
+        }
+    }
+    stagedRemovals_ = std::move(left);
+}
+
+std::vector<std::filesystem::path> LibraryStore::StagedPictureDirs() const {
+    // Staging, and what a staging pass set aside from it while the snippet
+    // was still in the library - a thumbnail's temporary a crash left, say:
+    // nothing of what is deleted for good is left in retired/ either.
+    return {rootDir_ / kStagingDir, rootDir_ / kRetiredDir / kStagingDir};
 }
 
 LibraryStore::PendingRecord LibraryStore::PendingFor(const LibraryView& library) const {
@@ -1235,6 +1317,8 @@ LibraryStore::PendingRecord LibraryStore::PendingFor(const LibraryView& library)
             }
         }
     }
+    // ...pictures in staging still owed...
+    record.erased.insert(stagedRemovals_.begin(), stagedRemovals_.end());
     // ...and what the file said that this session could not look at.
     record.erased.insert(unobservedPending_.erased.begin(), unobservedPending_.erased.end());
     record.moves.insert(unobservedPending_.moves.begin(), unobservedPending_.moves.end());
@@ -1263,6 +1347,10 @@ std::vector<std::filesystem::path> LibraryStore::WalkInto(const std::filesystem:
 }
 
 void LibraryStore::NoteUnobservedPending(const std::unordered_set<uint64_t>& seen, bool sawEverything) const {
+    // What it names may have pictures waiting in staging still - from
+    // before any save gave it a directory, or a move in held up: owed,
+    // until a save finds none.
+    stagedRemovals_ = writtenPending_.erased;
     unobservedPending_ = {};
     // A walk that saw everything and did not find it shows it gone - by
     // hand, or by a removal that finished before the file was rewritten.
@@ -1291,6 +1379,7 @@ bool LibraryStore::RunPendingRemovals(const LibraryView& library) const {
     // still inside. Only what is recorded is removed, so a record that
     // could not be written removes nothing new.
     const bool recorded = WritePendingFile(PendingFor(library));
+    RunStagedRemovals();
     std::set<uint64_t> erased = writtenPending_.erased;
     for (const auto& [uid, dir] : pendingRemovals_) {
         erased.insert(uid);
@@ -2496,6 +2585,9 @@ bool LibraryStore::Save(const LibraryView& view) const {
                     fs_->Rename(waiting, home->second / name);
                     continue;
                 }
+            } else if (const std::optional<uint64_t> erasedOwner = PictureOwner(name);
+                       erasedOwner && stagedRemovals_.count(*erasedOwner) > 0) {
+                continue;  // deleted for good, and owed a removal, not a place in retired/
             } else if (!walkedEverything_ || !readEverything_) {
                 // Perhaps the picture of a snippet whose record another
                 // program held at the start - saved, and its picture not

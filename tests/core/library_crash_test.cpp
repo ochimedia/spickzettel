@@ -271,12 +271,18 @@ std::function<bool(const std::filesystem::path&)> DirectoryOf(uint64_t uid) {
 
 // Nothing of what was deleted for good is anywhere in the library - not in
 // the tree, not set aside in retired/ - once a restart has saved.
+// A picture is named after its owner - "<uid>.qoi", "<uid>_p0.qoi" - which
+// is what finds one in staging, or set aside from it, with no directory.
 void ExpectNothingLeftOf(MemoryFileSystem& disk, const std::vector<uint64_t>& erased, size_t crashedAfter) {
     for (const auto& [path, text] : disk.FilesUnder(Root())) {
         (void)text;
+        const std::string file = path.filename().string();
         for (const uint64_t uid : erased) {
-            EXPECT_FALSE(IsOf(path, uid)) << path << " is left of " << uid << ", deleted for good (crashed after "
-                                          << crashedAfter << ")";
+            const std::string stem = FormatUid(uid);
+            const bool picture = file.size() > stem.size() && file.compare(0, stem.size(), stem) == 0 &&
+                                 (file[stem.size()] == '.' || file[stem.size()] == '_');
+            EXPECT_FALSE(IsOf(path, uid) || picture)
+                << path << " is left of " << uid << ", deleted for good (crashed after " << crashedAfter << ")";
         }
     }
 }
@@ -535,6 +541,61 @@ TEST(LibraryFaultTest, WhatASaveLeftOfADirectoryWithoutItsRecordGoesWithWhatItIs
     library.canvases.clear();
     EXPECT_TRUE(store.Remove({kFolder, kCanvasA, kCanvasB, kShot, kDrawing, kNote}, library));
     EXPECT_EQ(disk.Status(folderDir), FileSystem::Kind::None) << "left standing";
+}
+
+// A capture deleted for good before any save gave it a directory: its
+// picture waits in staging, and goes with it - not set aside by the next
+// save's staging pass as what a crash left.
+TEST(LibraryFaultTest, APictureInStagingGoesWithASnippetDeletedForGood) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    LibraryStore store(Root(), disk);
+    CanvasManagerSnapshot library = *store.Load();
+    const std::vector<uint8_t> pixels = Pixels(0x80);
+    ASSERT_TRUE(store.SaveImage(kCapture, pixels.data(), 4, 4).has_value());
+    store.Remove({kCapture}, library);  // never in the saved library
+    EXPECT_TRUE(store.Save(library));
+    ExpectNothingLeftOf(disk, {kCapture}, 0);
+}
+
+// The same for a capture that was saved, its picture still in staging - the
+// move held up - at every point a crash can stop the delete: the picture
+// goes only once the removal is recorded, so a restart that loads the
+// capture again finds its picture, and one that does not finds nothing of
+// it left.
+TEST(LibraryCrashTest, DeletingForGoodACaptureWhosePictureIsStillInStaging) {
+    const auto inStaging = [](const std::filesystem::path& path) {
+        return path.parent_path().filename() == "staging";
+    };
+    const size_t changes = ForEachCrashPoint(
+        [&](FaultyFileSystem& fs, MemoryFileSystem&) {
+            SetUpLibrary(fs);
+            LibraryStore store(Root(), fs);
+            CanvasManagerSnapshot library = *store.Load();
+            Item capture = MakeItem(kCapture, "Capture", 0);
+            const std::vector<uint8_t> pixels = Pixels(0x80);
+            capture.ImageLayer()->imageFile = *store.SaveImage(kCapture, pixels.data(), 4, 4);
+            FindCanvas(library, kCanvasB)->items.push_back(capture);
+            fs.FailWhen(FaultyFileSystem::Op::Rename, inStaging);
+            ASSERT_TRUE(store.Save(library));
+            fs.ClearFailures();
+        },
+        [](FaultyFileSystem& fs) {
+            RunChange(fs, [](LibraryStore& store, CanvasManagerSnapshot& library) {
+                std::vector<Item>& onB = FindCanvas(library, kCanvasB)->items;
+                onB.erase(std::remove_if(onB.begin(), onB.end(),
+                                         [](const Item& item) { return item.id == kCapture; }),
+                          onB.end());
+                store.Remove({kCapture}, library);
+            });
+        },
+        [](MemoryFileSystem& disk, size_t crashedAfter, size_t) {
+            const Layout loaded = CheckRestart(disk, crashedAfter);
+            if (loaded.count(kCapture) == 0) {
+                ExpectNothingLeftOf(disk, {kCapture}, crashedAfter);
+            }
+        });
+    EXPECT_GT(changes, 0u);
 }
 
 // A leftover of a save's inside something deleted for good that cannot be

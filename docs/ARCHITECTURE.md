@@ -1019,6 +1019,21 @@ the picture. Set aside, it was missing from the snippet once the
 record could be read. The randomized test found this once it began
 holding records while a restart loads.
 
+A snippet deleted for good before any save gave it a directory has
+nothing on disk but its pictures in staging. The staging pass cannot
+tell those from what a crash leaves, so it set them aside in
+`retired/staging/`, and something deleted for good was left in the
+library after all. A permanent delete now takes the pictures of
+everything it names from staging, and from `retired/staging/`, where a
+thumbnail's temporary may already have been set aside. As with a
+directory, a picture goes only once `pending.json` records its owner.
+Consider a capture that was saved with its picture still in staging,
+then deleted for good, with the process stopping before the record was
+written: it loads again at the next start and needs its picture. The
+randomized test found that, once its checks began matching pictures by
+name. A picture that cannot go yet is owed, and retried by every save,
+and the staging pass never sets it aside.
+
 A snippet's directory is swept for pictures its layers no longer name
 only after the record that stopped naming them is on disk. Until then
 the old record is what a restart reloads, and the pictures it names have

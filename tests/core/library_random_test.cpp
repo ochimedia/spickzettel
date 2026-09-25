@@ -408,7 +408,14 @@ private:
         // asked for, should the process stop before a save records it.
         const bool writing = !crashedBefore && !faulty_.Crashed();
         const std::string pending = disk_.Read(Root() / "pending.json", 1 << 20).value_or("");
-        const std::set<uint64_t> onDisk = IdsOnDisk();
+        std::set<uint64_t> onDisk = IdsOnDisk();
+        // A picture waiting in staging is on disk too, named after its owner.
+        for (const auto& [path, text] : disk_.FilesUnder(Root() / "staging")) {
+            (void)text;
+            if (const std::optional<uint64_t> owner = ParseUid(path.filename().string().substr(0, kUidLength))) {
+                onDisk.insert(*owner);
+            }
+        }
         bool certain = writing;
         for (const uint64_t gone : going) {
             durable_.erase(gone);
@@ -597,6 +604,13 @@ private:
                 const std::optional<uint64_t> uid = ParseUid(name.substr(dash + 1));
                 EXPECT_FALSE(uid && erased_.count(*uid) > 0)
                     << path << " is left of " << name << ", deleted for good";
+            }
+            // And a picture, which is named after its owner - found in
+            // staging, or set aside from it, with no directory of its own.
+            const std::string file = path.filename().string();
+            if (file.size() > kUidLength && (file[kUidLength] == '.' || file[kUidLength] == '_')) {
+                const std::optional<uint64_t> owner = ParseUid(file.substr(0, kUidLength));
+                EXPECT_FALSE(owner && erased_.count(*owner) > 0) << path << " is a picture deleted for good";
             }
         }
         const Layout want = LayoutOf(Manager().View().folders, Manager().View().canvases);
