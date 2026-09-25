@@ -255,6 +255,20 @@ TEST(ProfileTest, AProfileNamedLikeAnotherIsRenamed) {
     EXPECT_EQ(reparsed.profiles[1].overrides, second.overrides);
 }
 
+// The duplicate is renamed around every name in the file, the later ones
+// too - not into a name a later profile already has, which that profile
+// then lost for one it was never given.
+TEST(ProfileTest, ADuplicateIsNotRenamedIntoALaterProfilesName) {
+    AppConfig config = DefaultConfig();
+    config.profiles = {GameProfile("Game", "a.exe"), GameProfile("Game", "b.exe"), GameProfile("Game 2", "c.exe")};
+
+    const AppConfig reparsed = ParseConfig(SerializeConfig(config));
+    ASSERT_EQ(reparsed.profiles.size(), 3u);
+    EXPECT_EQ(reparsed.profiles[0].name, "Game");
+    EXPECT_EQ(reparsed.profiles[1].name, "Game 3");
+    EXPECT_EQ(reparsed.profiles[2].name, "Game 2") << "as named";
+}
+
 TEST(ProfileTest, AnOverrideOfEveryKindSurvivesTheFile) {
     AppConfig config = DefaultConfig();
     Profile profile = GameProfile("Game", "game.exe");

@@ -682,9 +682,11 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
             // every override with it, at the next start, for a name cleared
             // by hand. It gets the name a new profile would (the UI's
             // "profiles.namePrefix"). A name another profile already has is
-            // made unique the same way: two rows named alike in the picker
-            // cannot be told apart.
-            profile.name = UniqueProfileName(config.profiles, profile.name.empty() ? "Profile" : profile.name);
+            // made unique the same way, once every profile is read (below):
+            // two rows named alike in the picker cannot be told apart.
+            if (profile.name.empty()) {
+                profile.name = "Profile";
+            }
             const json& match = Group(entry, "match");
             profile.match.executables = ReadStringList(match, "exe");
             profile.match.titleContains = ReadStringList(match, "titleContains");
@@ -719,6 +721,20 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
                 }
             }
             config.profiles.push_back(std::move(profile));
+        }
+        // Against every name in the file, the later ones included: made
+        // unique against the earlier ones alone, [Game, Game, "Game 2"]
+        // came out Game, Game 2, Game 2 2 - renaming the profile its owner
+        // had named, rather than the duplicate.
+        for (size_t i = 0; i < config.profiles.size(); ++i) {
+            const std::string& name = config.profiles[i].name;
+            const auto end = config.profiles.begin() + static_cast<std::ptrdiff_t>(i);
+            if (std::none_of(config.profiles.begin(), end, [&name](const Profile& p) { return p.name == name; })) {
+                continue;
+            }
+            std::vector<Profile> others = config.profiles;
+            others.erase(others.begin() + static_cast<std::ptrdiff_t>(i));
+            config.profiles[i].name = UniqueProfileName(others, name);
         }
     }
 
