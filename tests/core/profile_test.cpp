@@ -222,6 +222,22 @@ TEST(ProfileTest, AProfileWithoutANameIsKeptAndNamed) {
     EXPECT_EQ(reparsed.profiles[1].overrides, nameless.overrides);
 }
 
+// Two profiles of one name - typed so by hand - come back as two that can
+// be told apart, each with its own match and overrides.
+TEST(ProfileTest, AProfileNamedLikeAnotherIsRenamed) {
+    AppConfig config = DefaultConfig();
+    Profile second = GameProfile("Game", "other.exe");
+    second.overrides.freezeScreen = true;
+    config.profiles = {GameProfile("Game", "game.exe"), second};
+
+    const AppConfig reparsed = ParseConfig(SerializeConfig(config));
+    ASSERT_EQ(reparsed.profiles.size(), 2u);
+    EXPECT_EQ(reparsed.profiles[0].name, "Game");
+    EXPECT_EQ(reparsed.profiles[1].name, "Game 2");
+    EXPECT_EQ(reparsed.profiles[1].match, second.match);
+    EXPECT_EQ(reparsed.profiles[1].overrides, second.overrides);
+}
+
 TEST(ProfileTest, AnOverrideOfEveryKindSurvivesTheFile) {
     AppConfig config = DefaultConfig();
     Profile profile = GameProfile("Game", "game.exe");

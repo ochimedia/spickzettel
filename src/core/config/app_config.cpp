@@ -677,14 +677,14 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
             if (const auto name = entry.find("name"); name != entry.end() && name->is_string()) {
                 profile.name = name->get<std::string>();
             }
-            if (profile.name.empty()) {
-                // Nameless is unusable - the name is what the UI lists and
-                // what the picker names - but dropping the profile took its
-                // match and every override with it, at the next start, for
-                // a name cleared by hand. It gets the name a new profile
-                // would (the UI's "profiles.namePrefix").
-                profile.name = UniqueProfileName(config.profiles, "Profile");
-            }
+            // Nameless is unusable - the name is what the UI lists and what
+            // the picker names - but dropping the profile took its match and
+            // every override with it, at the next start, for a name cleared
+            // by hand. It gets the name a new profile would (the UI's
+            // "profiles.namePrefix"). A name another profile already has is
+            // made unique the same way: two rows named alike in the picker
+            // cannot be told apart.
+            profile.name = UniqueProfileName(config.profiles, profile.name.empty() ? "Profile" : profile.name);
             const json& match = Group(entry, "match");
             profile.match.executables = ReadStringList(match, "exe");
             profile.match.titleContains = ReadStringList(match, "titleContains");
