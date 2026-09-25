@@ -665,7 +665,6 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
     const json& diagnostics = Group(doc, "diagnostics");
     ReadBool(diagnostics, "showDebugOverlay", config.showDebugOverlay);
     ReadBool(diagnostics, "showInputOptionsHud", config.showInputOptionsHud);
-    ReadBool(diagnostics, "showLibraryTreeHud", config.showLibraryTreeHud);
 
     if (const auto profiles = doc.find("profiles"); profiles != doc.end() && profiles->is_array()) {
         for (const json& entry : *profiles) {
@@ -846,7 +845,6 @@ std::string SerializeConfig(const AppConfig& config) {
     doc["diagnostics"] = {
         {"showDebugOverlay", config.showDebugOverlay},
         {"showInputOptionsHud", config.showInputOptionsHud},
-        {"showLibraryTreeHud", config.showLibraryTreeHud},
     };
 
     // Sparse, unlike every group above: a profile writes only what it

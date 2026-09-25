@@ -437,17 +437,6 @@ public:
         displayListCallback_ = std::move(callback);
     }
 
-    // One line of the library tree HUD: a file or directory, and how deep
-    // under the library root it sits. Public so a test can check what the
-    // HUD would show against what it put on disk.
-    struct LibraryTreeLine {
-        int depth = 0;
-        std::string name;
-        bool isDirectory = false;
-    };
-    // What the HUD showed on the last frame it was drawn - the tree as it
-    // was on disk after the store's most recent write.
-    const std::vector<LibraryTreeLine>& LibraryTreeHudLines() const { return libraryTreeLines_; }
 
 
     // Installed once by TrayController - called from the Settings panel's
@@ -533,13 +522,6 @@ private:
     // Draws into whichever layer the caller hands it - see
     // RenderScreenChrome, which is what decides how high that layer sits.
     void DrawInputOptionsHud(ImDrawList* drawList) const;
-    // The library directory as it is on disk, top-right, read-only - see
-    // AppConfig::showLibraryTreeHud. Walks the real filesystem rather than
-    // mirroring the model, since disagreement between the two is the whole
-    // thing it exists to show, and walks it again only after the store has
-    // written something (see LibraryStore::WriteGeneration).
-    void DrawLibraryTreeHud(ImDrawList* drawList, float displayW, float displayH);
-    void RefreshLibraryTreeIfChanged();
     // Handles the number keys the HUD advertises. Toggles the option,
     // persists it, and re-enters edit mode so options that only apply on
     // entry actually take hold.
@@ -1382,12 +1364,6 @@ private:
     const AppConfig& Cfg() const { return settings_.Stored(); }
 
     DrawTool drawTool_;
-    // See DrawLibraryTreeHud for the two below: the lines last read off the
-    // disk, and the store's write count they were read at, so the walk
-    // happens after a write and not per frame.
-    std::vector<LibraryTreeLine> libraryTreeLines_;
-    std::optional<uint64_t> libraryTreeSeenGeneration_;
-    const persistence::LibraryStore* libraryTreeSeenStore_ = nullptr;
     // The last count handed to IOverlayWindow::SetInputOptionsHudDigits, so
     // that only an actual change reaches the platform - it can install or
     // remove a keyboard hook, which is not something to ask for every frame.

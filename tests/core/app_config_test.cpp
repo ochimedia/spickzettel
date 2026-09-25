@@ -187,15 +187,6 @@ TEST(AppConfigTest, CounterThresholdIsReadClampedAndRoundTrips) {
     EXPECT_EQ(ParseConfig(SerializeConfig(config)).editModeInput.counterThreshold, 123);
 }
 
-TEST(AppConfigTest, LibraryTreeHudDefaultsToOffAndRoundTrips) {
-    EXPECT_FALSE(DefaultConfig().showLibraryTreeHud);
-    EXPECT_TRUE(ParseConfig(One("diagnostics", "showLibraryTreeHud", "true")).showLibraryTreeHud);
-
-    AppConfig config = DefaultConfig();
-    config.showLibraryTreeHud = true;
-    EXPECT_TRUE(ParseConfig(SerializeConfig(config)).showLibraryTreeHud);
-}
-
 TEST(AppConfigTest, InputOptionsHudDefaultsToOffAndRoundTrips) {
     EXPECT_FALSE(DefaultConfig().showInputOptionsHud);
     EXPECT_TRUE(ParseConfig(One("diagnostics", "showInputOptionsHud", "true")).showInputOptionsHud);

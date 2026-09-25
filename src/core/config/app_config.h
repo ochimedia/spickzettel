@@ -128,12 +128,6 @@ struct AppConfig {
     // to the overlay instead of the game for as long as it's on. That is
     // the whole reason it isn't on all the time.
     bool showInputOptionsHud = false;
-    // A read-only listing of the library directory as it is on disk, drawn
-    // top-right in edit mode and re-read after every write the store makes
-    // - so what was just saved can be checked against what the app
-    // believes, without leaving the overlay. Costs a directory walk per
-    // write while it is on, and nothing while it is off.
-    bool showLibraryTreeHud = false;
     // true (default): the overlay window never steals OS input focus just
     // from being shown or clicked in edit mode (WS_EX_NOACTIVATE on
     // Windows) - drawing/item interaction all work purely via

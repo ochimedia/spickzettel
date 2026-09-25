@@ -3780,50 +3780,6 @@ TEST_F(HeadlessSaveTest, DeletingASnippetHidesItInPlaceAndUndoBringsItBack) {
     EXPECT_EQ(Canvases().CurrentOrNull()->items[0].deletedAt, 0);
 }
 
-// ===== The library tree HUD shows the disk, not the model =====
-
-TEST_F(HeadlessSaveTest, TheLibraryTreeHudReadsTheDiskAgainAfterEveryWrite) {
-    AppConfig config = DefaultConfig();
-    config.showLibraryTreeHud = true;
-    StartWith(std::move(config));
-    PlaceADrawing();
-    AttachStore();
-
-    // Nothing written yet: an empty root shows as nothing.
-    StepFrame();
-    EXPECT_TRUE(App().LibraryTreeHudLines().empty());
-
-    controller_->GetSession().Flush();
-    StepFrame();
-    const auto& lines = App().LibraryTreeHudLines();
-    const auto find = [&lines](const std::string& name) {
-        return std::find_if(lines.begin(), lines.end(),
-                            [&name](const OverlayApp::LibraryTreeLine& line) { return line.name == name; });
-    };
-    ASSERT_NE(find("library.json"), lines.end()) << "the pointer file the save just wrote";
-    EXPECT_FALSE(find("library.json")->isDirectory);
-    EXPECT_EQ(find("library.json")->depth, 0);
-    ASSERT_NE(find("folders"), lines.end());
-    EXPECT_TRUE(find("folders")->isDirectory);
-    ASSERT_NE(find("item.json"), lines.end()) << "the drawing's record, four levels down";
-    EXPECT_EQ(find("item.json")->depth, 4);
-    // Directories before files at every level, and the tree in one pass:
-    // the record's directory sits directly above the record.
-    const auto record = find("item.json");
-    ASSERT_NE(record, lines.begin());
-    EXPECT_TRUE(std::prev(record)->isDirectory);
-    EXPECT_EQ(std::prev(record)->depth, 3);
-
-    // A file that appeared behind the store's back is not seen until the
-    // store writes again - the walk is per write, not per frame.
-    std::ofstream(root_ / "stray.txt") << "put here by hand";
-    StepFrames(3);
-    EXPECT_EQ(find("stray.txt"), lines.end());
-    ASSERT_TRUE(store_->Save(Canvases().ExportSnapshot()));
-    StepFrame();
-    EXPECT_NE(find("stray.txt"), lines.end()) << "the next write brought it into view";
-}
-
 // The most opaque any vertex of the snippets' layer was drawn last frame -
 // 0 with nothing on it.
 unsigned MostOpaqueSnippetVertex() {

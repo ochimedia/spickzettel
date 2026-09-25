@@ -2107,8 +2107,6 @@ void OverlayApp::RenderSettingsDebug(bool& anyChanged) {
                                     strings::kDebugShowDebugOverlayHelp);
     anyChanged |= CheckboxWithHelp("debugshowinputhud", strings::kDebugShowInputHud, &Cfg().showInputOptionsHud,
         strings::kDebugShowInputHudHelp);
-    anyChanged |= CheckboxWithHelp("debugshowlibrarytree", strings::kDebugShowLibraryTree, &Cfg().showLibraryTreeHud,
-                                    strings::kDebugShowLibraryTreeHelp);
 }
 
 

@@ -162,8 +162,7 @@ public:
     // not be read, rather than because it named a newer version.
     bool VersionUnreadable() const { return versionUnreadable_; }
 
-    // Where the library lives - for a diagnostic that shows the tree as it
-    // is on disk (see OverlayApp::DrawLibraryTreeHud).
+    // Where the library lives.
     const std::filesystem::path& RootDir() const { return rootDir_; }
     // Bumped by every write this store makes to the disk - a save, whatever
     // it wrote or failed to write; a picture; a thumbnail; a file set aside
