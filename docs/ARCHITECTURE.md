@@ -1143,7 +1143,9 @@ what a person does:
 - save.
 
 Meanwhile files are held open, single operations fail, and the process
-crashes and starts again. Every restart is checked:
+crashes and starts again. Now and then a restart loads with a record
+held or a directory that cannot be listed, which another program lets
+go of once the load is done. Every restart is checked:
 
 - nothing loads twice;
 - every picture a record names loads;
@@ -1171,10 +1173,11 @@ found five things the scenarios had not:
 - a saved snippet moved into a new canvas whose record did not land was
   lost to a restart (see "A save is a plan").
 
-What the randomized test does not judge: a removal whose `pending.json`
-cannot be written is owed in memory only. A crash then brings the thing
-back, still marked deleted. That is the documented cost, not a bug the
-test should find.
+A removal whose `pending.json` cannot be written is owed in memory only,
+and a crash then brings the thing back, still marked deleted. That is
+the documented cost, not a bug, so the test counts a delete for good as
+certain only once the file names it or its directory is gone. Writes of
+`pending.json` fail at random like any other.
 
 ### Images: QOI
 

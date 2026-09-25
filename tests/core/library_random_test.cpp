@@ -3,8 +3,10 @@
 // Each seed runs a few hundred steps of what a person does to a library -
 // make folders, canvases and snippets, some with pictures; edit, rename and
 // move them; delete, restore and delete for good; save - while a picture
-// viewer holds files open, single operations fail, and the process crashes
-// and starts again. Every restart is held to the rules a crash must never
+// viewer holds files open, single operations fail (pending.json's writes
+// among them), and the process crashes and starts again, now and then with
+// a record held or a directory unlistable while it loads. Every restart is
+// held to the rules a crash must never
 // break, and the end of every run to the rule that the disk comes to agree
 // with the library once nothing is in the way any more:
 //
@@ -191,14 +193,23 @@ private:
         // What was just loaded is on disk, as it is - all but what the load
         // made up: a first start's folder and canvas, or the "Recovered"
         // one a rescue with nowhere to go gets, which is on disk only once
-        // a save has written it.
+        // a save has written it. And what was on disk before and did not
+        // load - a record another program held at the start - still is,
+        // for a later start to read.
+        const std::set<uint64_t> before = std::move(durable_);
         durable_.clear();
+        const std::vector<uint64_t> held = AllIds();
         if (loadedAnything) {
             const std::set<uint64_t> onDisk = IdsOnDisk();
-            for (const uint64_t id : AllIds()) {
+            for (const uint64_t id : held) {
                 if (onDisk.count(id) > 0) {
                     durable_.insert(id);
                 }
+            }
+        }
+        for (const uint64_t id : before) {
+            if (std::find(held.begin(), held.end(), id) == held.end() && erased_.count(id) == 0) {
+                durable_.insert(id);
             }
         }
     }
@@ -370,22 +381,46 @@ private:
         }
         const uint64_t id = ids[Pick(ids.size())];
         const std::vector<uint64_t> going = WithEverythingUnder(id);
+        // Whatever is on disk inside it that this session never read - a
+        // record another program held at the start - goes with it.
+        for (const auto& [path, text] : disk_.FilesUnder(Root() / "folders")) {
+            (void)text;
+            bool inside = false;
+            for (const std::filesystem::path& part : path.lexically_relative(Root() / "folders")) {
+                const std::string name = part.string();
+                const size_t dash = name.rfind('-');
+                const std::optional<uint64_t> uid =
+                    dash == std::string::npos ? std::nullopt : ParseUid(name.substr(dash + 1));
+                if (uid && inside) {
+                    durable_.erase(*uid);
+                }
+                inside = inside || (uid && std::find(going.begin(), going.end(), *uid) != going.end());
+            }
+        }
         const bool crashedBefore = faulty_.Crashed();
         const Session::Removal removal = session_->DeletePermanently(id);
         if (removal == Session::Removal::NotFound) {
             return;
         }
-        // Certain only if the process was still writing throughout: a crash
-        // before the removal was recorded leaves it as if never asked for.
-        const bool certain = !crashedBefore && !faulty_.Crashed();
+        // Certain only if the process was still writing throughout, and the
+        // removal is recorded or done: a crash before it was recorded, or a
+        // pending.json that could not be written, leaves it as if never
+        // asked for, should the process stop before a save records it.
+        const bool writing = !crashedBefore && !faulty_.Crashed();
+        const std::string pending = disk_.Read(Root() / "pending.json", 1 << 20).value_or("");
+        const std::set<uint64_t> onDisk = IdsOnDisk();
+        bool certain = writing;
         for (const uint64_t gone : going) {
             durable_.erase(gone);
-            if (certain) {
+            if (writing && (onDisk.count(gone) == 0 || pending.find(FormatUid(gone)) != std::string::npos)) {
                 erased_.insert(gone);
+            } else {
+                certain = false;
             }
         }
         Note("delete for good " + FormatUid(id) + " (" + std::to_string(going.size()) + ")" +
-             (removal == Session::Removal::FilesRemain ? ", files remain" : "") + (certain ? "" : ", crashed"));
+             (removal == Session::Removal::FilesRemain ? ", files remain" : "") +
+             (writing ? (certain ? "" : ", not recorded") : ", crashed"));
     }
 
     void Save() {
@@ -427,8 +462,17 @@ private:
         const std::vector<uint64_t> ids = AllIds();
         const std::string uid = ids.empty() ? std::string() : FormatUid(ids[Pick(ids.size())]);
         const int times = 1 + static_cast<int>(Pick(3));
-        // Never pending.json: a removal that cannot be recorded is owed in
-        // memory only, and deliberately not what these runs judge.
+        // Now and then pending.json: a removal that cannot be recorded is
+        // owed in memory, and certain only once it is (see DeleteForGood).
+        if (Chance(20)) {
+            const Op changes[] = {Op::WriteNewFile, Op::Rename, Op::Remove};
+            const Op change = changes[Pick(std::size(changes))];
+            faulty_.FailWhen(change, [](const std::filesystem::path& path) {
+                return path.filename().string().starts_with("pending.json");
+            }, times);
+            Note("fail " + std::to_string(static_cast<int>(change)) + " on pending.json x" + std::to_string(times));
+            return;
+        }
         faulty_.FailWhen(op, [uid](const std::filesystem::path& path) {
             const std::string text = path.generic_string();
             return text.find("pending.json") == std::string::npos && text.find(uid) != std::string::npos;
@@ -442,7 +486,10 @@ private:
         Note("crash after " + std::to_string(after) + " more changes");
     }
 
-    void Restart() {
+    // `trouble`: now and then, another program holds a record, or keeps a
+    // directory from being listed, while the new process loads - and lets
+    // go once it has.
+    void Restart(bool trouble = true) {
         Note(faulty_.Crashed() ? "restart after the crash" : "restart");
         session_->SetLibraryStore(nullptr);
         session_.reset();
@@ -450,7 +497,19 @@ private:
         faulty_.ClearCrash();
         faulty_.ClearFailures();  // passing trouble passes; what is held stays held
         CheckRestart();
+        const std::set<uint64_t> onDisk = IdsOnDisk();
+        if (trouble && !onDisk.empty() && Chance(30)) {
+            const std::string uid = FormatUid(*std::next(onDisk.begin(), static_cast<long>(Pick(onDisk.size()))));
+            const FaultyFileSystem::Op op = Chance(50) ? FaultyFileSystem::Op::Read : FaultyFileSystem::Op::List;
+            faulty_.FailWhen(op, [uid](const std::filesystem::path& path) {
+                const std::string text = path.generic_string();
+                return text.find("pending.json") == std::string::npos && text.find(uid) != std::string::npos;
+            });
+            Note(std::string("while loading, ") + (op == FaultyFileSystem::Op::Read ? "unreadable: " : "unlistable: ") +
+                 uid);
+        }
         Start();
+        faulty_.ClearFailures();
     }
 
     // What any restart may find, whatever happened before it.
@@ -507,13 +566,14 @@ private:
     // the library.
     void Finish() {
         faulty_.ReleaseAll();
-        Restart();
+        Restart(/*trouble=*/false);
         if (::testing::Test::HasFailure()) {
             return;
         }
         EXPECT_TRUE(session_->Flush());
         EXPECT_TRUE(session_->Flush());
-        EXPECT_FALSE(store_->HasPendingRemovals()) << "a removal still owed with nothing in the way";
+        EXPECT_FALSE(store_->HasPendingRemovals()) << "a removal still owed with nothing in the way; on disk:\n"
+                                                   << DiskListing();
         EXPECT_EQ(disk_.Status(Root() / "pending.json"), FileSystem::Kind::None)
             << "pending.json still says:\n"
             << disk_.Read(Root() / "pending.json", 1 << 20).value_or("(unreadable)");
