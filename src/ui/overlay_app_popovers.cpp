@@ -214,7 +214,7 @@ void OverlayApp::RenderItemOpacity(Item& item) {
     // hashes only the id, so one spelling for the two of them made them one
     // widget as far as ImGui is concerned - which is an ID conflict it
     // warns about, and a drag it can attribute to the wrong slider.
-    if (ImGui::SliderInt(Labeled(strings::kPopoverForeground, "opacityfg"), &foregroundPct, 10, 100, strings::kFormatPercent)) {
+    if (ImGui::SliderInt(Labeled(strings::kPopoverForeground, "opacityfg"), &foregroundPct, 10, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
         item.foregroundOpacity = static_cast<float>(foregroundPct) / 100.0f;
         Manager().MarkChanged();
     }
@@ -228,7 +228,7 @@ void OverlayApp::RenderItemOpacity(Item& item) {
     }
     int backgroundPct = static_cast<int>(std::round(picture->opacity * 100.0f));
     ImGui::SetNextItemWidth(Px(160.0f));
-    if (ImGui::SliderInt(Labeled(strings::kPopoverBackground, "opacitybg"), &backgroundPct, 0, 100, strings::kFormatPercent)) {
+    if (ImGui::SliderInt(Labeled(strings::kPopoverBackground, "opacitybg"), &backgroundPct, 0, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
         picture->opacity = static_cast<float>(backgroundPct) / 100.0f;
         Manager().MarkChanged();
     }
@@ -280,7 +280,7 @@ void OverlayApp::RenderItemTextStyle(Item& item) {
     }
     ImGui::SetNextItemWidth(Px(160.0f));
     if (ImGui::SliderFloat(Labeled(strings::kPopoverTextSize, "notetextsize"), &item.noteTextSizePx, kNoteTextSizeMin, kNoteTextSizeMax,
-                            strings::kFormatPixels)) {
+                            strings::kFormatPixels, ImGuiSliderFlags_AlwaysClamp)) {
         Manager().MarkChanged();
     }
     if (ImGui::IsItemHovered()) {

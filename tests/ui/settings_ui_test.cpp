@@ -286,6 +286,33 @@ TEST_F(UiTest, TheRetentionPeriodIsSwitchedOnAndItsDaysSet) {
     EXPECT_EQ(AppSettings().Stored().purgeDeletedAfterDays, days + 1);
 }
 
+// Ctrl+Click turns a slider into a text field, and ImGui takes what is
+// typed there as it is unless told to clamp. A border 5000 px wide covered
+// the screen, and a negative text size reached the font code.
+TEST_F(UiTest, AValueTypedIntoASliderIsHeldToItsRange) {
+    controller_->GetSettings().Mutable().showEditModeBorder = true;
+    controller_->GetSettings().Commit();
+    ShowEditMode();
+    StepFrame();
+
+    OpenOverviewUi();
+    RunUi("type values past the ends of two sliders", [&](ImGuiTestContext* ctx) {
+        // The slider's id as ImGui makes it, in the settings body: the
+        // engine hashes a path that starts with ### differently.
+        const auto inBody = [ctx](const char* id) -> ImGuiTestRef {
+            return ImHashStr(id, 0, ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID);
+        };
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionappearance");
+        ctx->ItemInputValue(inBody("###editborderwidth"), 5000.0f);
+        ctx->ItemClick("**/###sectiondefaults");
+        ctx->ItemInputValue(inBody("###defaulttextsize"), -40.0f);
+    });
+    EXPECT_FLOAT_EQ(AppSettings().Stored().editModeBorderWidthPx, kEditModeBorderWidthMax);
+    EXPECT_FLOAT_EQ(AppSettings().Stored().noteTextSizePx, kNoteTextSizeMin);
+}
+
 TEST_F(UiTest, MakingAProfileForWhatIsUnderneathTakesOneClick) {
     host_.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "Test Game"};
     ShowEditMode();

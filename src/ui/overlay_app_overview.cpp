@@ -1598,13 +1598,13 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
     }
     ImGui::SetNextItemWidth(Px(160.0f));
     int borderPct = static_cast<int>(std::round(Cfg().editModeBorderOpacity * 100.0f));
-    if (ImGui::SliderInt(Labeled(strings::kAppearanceEditBorderOpacity, "editborderopacity"), &borderPct, 0, 100, strings::kFormatPercent)) {
+    if (ImGui::SliderInt(Labeled(strings::kAppearanceEditBorderOpacity, "editborderopacity"), &borderPct, 0, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
         Cfg().editModeBorderOpacity = static_cast<float>(borderPct) / 100.0f;
     }
     anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
     ImGui::SetNextItemWidth(Px(160.0f));
     ImGui::SliderFloat(Labeled(strings::kAppearanceEditBorderWidth, "editborderwidth"), &Cfg().editModeBorderWidthPx, kEditModeBorderWidthMin,
-                        kEditModeBorderWidthMax, strings::kFormatPixels);
+                        kEditModeBorderWidthMax, strings::kFormatPixels, ImGuiSliderFlags_AlwaysClamp);
     anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
     anyChanged |= CheckboxWithHelp("appearanceeditborderemptyonly", strings::kAppearanceEditBorderEmptyOnly, &Cfg().editModeBorderOnlyWhenEmpty,
         strings::kAppearanceEditBorderEmptyOnlyHelp);
@@ -1837,14 +1837,14 @@ void OverlayApp::RenderSettingsDefaults(bool& anyChanged) {
         int foregroundPct = static_cast<int>(std::round(kind.foregroundOpacity * 100.0f));
         ImGui::SetNextItemWidth(Px(160.0f));
         if (ImGui::SliderInt(Labeled(strings::kDefaultsForeground, "foreground"), &foregroundPct, 10, 100,
-                             strings::kFormatPercent)) {
+                             strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
             kind.foregroundOpacity = static_cast<float>(foregroundPct) / 100.0f;
         }
         anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
         int backgroundPct = static_cast<int>(std::round(kind.backgroundOpacity * 100.0f));
         ImGui::SetNextItemWidth(Px(160.0f));
         if (ImGui::SliderInt(Labeled(strings::kDefaultsBackground, "background"), &backgroundPct, 0, 100,
-                             strings::kFormatPercent)) {
+                             strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
             kind.backgroundOpacity = static_cast<float>(backgroundPct) / 100.0f;
         }
         anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
@@ -1879,7 +1879,7 @@ void OverlayApp::RenderSettingsDefaults(bool& anyChanged) {
         // never still 0 by the time a panel can show it.
         ImGui::SetNextItemWidth(Px(160.0f));
         ImGui::SliderFloat(Labeled(strings::kDefaultsTextSize, "defaulttextsize"), &Cfg().noteTextSizePx,
-                           kNoteTextSizeMin, kNoteTextSizeMax, strings::kFormatPixels);
+                           kNoteTextSizeMin, kNoteTextSizeMax, strings::kFormatPixels, ImGuiSliderFlags_AlwaysClamp);
         anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
         float rgba[4];
         ColorRGBAToFloats4(Cfg().noteTextColorRGBA, rgba);
