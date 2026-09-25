@@ -454,6 +454,38 @@ TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
     EXPECT_FALSE(session.CanUndo());
 }
 
+// An erase over strokes and pixels both, undone while the pixels were not
+// in memory: the strokes come back, and the pixels, once loaded again from
+// what was saved, are not later swapped for the ones from before the erase.
+TEST(SessionTest, AnEraseUndoneWithoutItsPixelsLeavesThemOutOfItsRedo) {
+    test::FakeOverlayWindow window;
+    window.createTextureFromPixelsReturnsHandle = 9;
+    Session session;
+    session.AttachWindow(&window);
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawStrokeInto(session, item);
+    session.BeginPaint(item, 10.0f, 60.0f, 0xFF0000FFu, 6.0f);
+    session.ExtendPaint(60.0f, 10.0f);
+    session.EndPaint();
+    session.BeginErase(item, 35.0f, 35.0f, 20.0f);
+    session.EndErase();
+    Layer* found = Session::FindPaintedLayer(*session.Manager().FindItemAnywhere(item));
+    ASSERT_NE(found, nullptr);
+    ASSERT_NE(found->painted, nullptr);
+    Layer& layer = *found;
+    const PaintedImage afterErase = *layer.painted;
+    const size_t strokesAfterErase = ItemById(session.Manager(), item)->strokes.size();
+
+    layer.painted.reset();
+    ASSERT_TRUE(session.Undo().has_value()) << "the strokes are there to put back";
+    EXPECT_NE(ItemById(session.Manager(), item)->strokes.size(), strokesAfterErase);
+
+    layer.painted = std::make_shared<PaintedImage>(afterErase);  // as read back from disk
+    ASSERT_TRUE(session.Redo().has_value());
+    EXPECT_EQ(ItemById(session.Manager(), item)->strokes.size(), strokesAfterErase);
+    EXPECT_EQ(layer.painted->PixelsRGBA(), afterErase.PixelsRGBA()) << "not the pixels from before the erase";
+}
+
 TEST(SessionTest, ClearingADrawingIsOneStep) {
     Session session;
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");

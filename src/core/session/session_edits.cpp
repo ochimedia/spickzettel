@@ -217,7 +217,17 @@ std::optional<Session::UndoWhat> Session::Apply(undo::Erased& entry, bool undo) 
     // the entry to count.
     const bool strokesChanged =
         !entry.replacements.empty() && (undo ? RestoreStrokesBeforeErase(*item, entry) : ReapplyErase(*item, entry));
+    const bool hadPainted = !entry.painted.Empty();
     const bool paintChanged = SwapPainted(entry.painted);
+    // Pixels not in memory - let go of with a snippet deleted from the
+    // Overview, say - leave the tiles where they are while the strokes
+    // move on, and the entry crosses to the other stack all the same. The
+    // tiles would then be a step behind: the next swap would put back
+    // what this one should have, and take an erase back where it meant to
+    // redo it. Dropped instead, so what the entry still holds stays true.
+    if (hadPainted && !paintChanged) {
+        entry.painted = undo::Painted{};
+    }
     if (!strokesChanged && !paintChanged) {
         return std::nullopt;
     }
