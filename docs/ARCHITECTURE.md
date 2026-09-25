@@ -873,9 +873,10 @@ a key. Config spells them `Mouse3`, `Mouse4` and `Mouse5`, the way games
 number them. Not the left or the right, which are what every gesture is
 made with; and not as a global hotkey, which Windows registers for keys
 only - one written into the file by hand is read as nothing said. A
-bound button pressed over one of the overlay's panels is the panel's,
-and one pressed while a gesture is in flight waits for it, as the wheel
-does (see "The hand").
+bound button reaches its command as a key does, over a panel too - none
+of them does anything with these buttons, and taken for the panel's, the
+button that opened the cheat sheet could not close it. Only while a
+gesture is in flight does it wait, as the wheel does (see "The hand").
 
 Duplicate is Copy and Paste in one step and deliberately does not go
 through the clipboard: duplicating something is not a reason to lose what

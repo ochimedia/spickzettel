@@ -400,11 +400,12 @@ bool OverlayApp::KeyReaches(CommandId id) const {
 
 bool OverlayApp::Pressed(const platform::KeyCombo& key, bool repeats) const {
     if (const std::optional<ImGuiMouseButton> button = ImGuiMouseButtonForCombo(key)) {
-        // A mouse button pressed over one of ImGui's windows is the
-        // window's, as any press is; and one pressed while a gesture is in
-        // flight is the gesture's own mouse, which waits for it to end
-        // rather than settling it (see Hand::ignoredButton).
-        return ImGui::IsMouseClicked(*button, false) && !ImGui::GetIO().WantCaptureMouse && !GestureInFlight();
+        // Reaching its command as a key would, over a panel too - no panel
+        // here does anything with these buttons, and taken for the panel's,
+        // the button that opened the cheat sheet could not close it. Only
+        // while a gesture is in flight does it wait: it is on the mouse
+        // holding the gesture (see Hand::ignoredButton).
+        return ImGui::IsMouseClicked(*button, false) && !GestureInFlight();
     }
     const ImGuiKey imguiKey = ImGuiKeyForCombo(key);
     return imguiKey != ImGuiKey_None && ImGui::IsKeyPressed(imguiKey, repeats);

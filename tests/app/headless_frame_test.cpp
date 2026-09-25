@@ -231,6 +231,31 @@ TEST_F(HeadlessAppTest, AMouseButtonWaitsForTheGestureInFlight) {
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
 }
 
+// A bound button reaches its command as its key would, over a panel too:
+// the cheat sheet on the side button opens with it and closes with it
+// again, as its header says. Taken for the panel's, as a press on a panel
+// is, the button that opened the sheet could not close it.
+TEST_F(HeadlessAppTest, AMouseButtonClosesThePanelItOpened) {
+    AppConfig config = DefaultConfig();
+    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::CheatSheet)] =
+        platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button};
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    MoveTo(640.0f, 400.0f);
+    StepFrame();
+    const auto click = [this](int button) {
+        ImGui::GetIO().AddMouseButtonEvent(button, true);
+        StepFrame();
+        ImGui::GetIO().AddMouseButtonEvent(button, false);
+        StepFrames(2);
+    };
+    click(3);
+    ASSERT_TRUE(App().IsCheatSheetOpen());
+    click(3);
+    EXPECT_FALSE(App().IsCheatSheetOpen());
+}
+
 TEST_F(HeadlessAppTest, AnUnboundKeyPicksNothing) {
     ShowEditMode();
     StepFrame();
