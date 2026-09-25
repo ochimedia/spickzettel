@@ -505,6 +505,11 @@ private:
     // record cannot be read is looked into all the same, for what was
     // deleted for good inside it (see ReadTree).
     mutable bool walkedEverything_ = true;
+    // Whether the last load read every folder, canvas and snippet record
+    // it found. False while one was there and could not be read: what a
+    // picture in staging that nothing loaded names belongs to is then not
+    // known, and it is not set aside (see Save).
+    mutable bool readEverything_ = true;
     // False when pending.json is there and cannot be read. What it names
     // is then unknown - those directories load as they are - and it is not
     // written over this session, so that it keeps naming them.

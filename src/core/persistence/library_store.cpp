@@ -1447,6 +1447,14 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             }
         };
 
+    // A record that is there and was not read - held, for a moment - as
+    // opposed to a directory with none, which is not ours.
+    const auto noteUnreadRecord = [this](const std::filesystem::path& record) {
+        if (fs_->LinkStatus(record) != FileSystem::Kind::None) {
+            readEverything_ = false;
+        }
+    };
+
     std::vector<std::pair<std::string, Folder>> foundFolders;
     std::set<std::string> foldersNotRead;
     for (const std::filesystem::path& folderDir : WalkInto(foldersRoot)) {
@@ -1459,6 +1467,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
             // Not a folder of ours, or not one that can be read right now:
             // left alone rather than guessed at.
             foldersNotRead.insert(uidNameOf(folderDir));
+            noteUnreadRecord(folderDir / kFolderFile);
             noteRemovalsInside(folderDir, 2);
             continue;
         }
@@ -1565,6 +1574,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                 foundItems.emplace_back(itemDir.filename().string(), std::move(*item));
             } else {
                 itemsNotRead.insert(uidNameOf(itemDir));
+                noteUnreadRecord(itemDir / kItemFile);
             }
         }
         // Item order is z-order, back to front - so a snippet dropped in by
@@ -1594,6 +1604,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                 foundCanvases.emplace_back(canvasDir.filename().string(), std::move(*canvas));
             } else {
                 canvasesNotRead.insert(uidNameOf(canvasDir));
+                noteUnreadRecord(canvasDir / kCanvasFile);
                 noteRemovalsInside(canvasDir, 1);
             }
         }
@@ -1770,6 +1781,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     // Anything else in the file is ignored and left out by the next save.
 
     walkedEverything_ = true;
+    readEverything_ = true;
     ReadTree(foldersRoot, snapshot);
     NoteUnobservedPending(IdsIn(LibraryView{snapshot.folders, snapshot.canvases, 0, 0}), walkedEverything_);
 
@@ -2354,6 +2366,12 @@ bool LibraryStore::Save(const LibraryView& view) const {
                     fs_->Rename(waiting, home->second / name);
                     continue;
                 }
+            } else if (!walkedEverything_ || !readEverything_) {
+                // Perhaps the picture of a snippet whose record another
+                // program held at the start - saved, and its picture not
+                // yet moved in when the process stopped. Set aside, it was
+                // missing from the snippet once the record could be read.
+                continue;
             }
             const std::filesystem::path setAside = rootDir_ / kRetiredDir / kStagingDir;
             if (!IsOurs(setAside)) {

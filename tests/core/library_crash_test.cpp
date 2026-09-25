@@ -705,6 +705,50 @@ TEST(LibraryFaultTest, ARemovalUnderADirectoryThatCouldNotBeListedIsNotForgotten
                                                                  DirectoryOf(kCanvasA));
 }
 
+// A capture saved, and its picture not yet moved in from staging when the
+// process stopped - and at the restart, its record cannot be read for a
+// moment. The save that session does not take the picture for one nothing
+// names and set it aside: the next start where the record reads finds it.
+TEST(LibraryFaultTest, APictureInStagingIsKeptWhileItsSnippetCannotBeRead) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    FaultyFileSystem fs(disk);
+    const auto inStaging = [](const std::filesystem::path& path) {
+        return path.parent_path().filename() == "staging";
+    };
+    {
+        LibraryStore store(Root(), fs);
+        CanvasManagerSnapshot library = *store.Load();
+        Item capture = MakeItem(kCapture, "Capture", 0);
+        const std::vector<uint8_t> pixels = Pixels(0x80);
+        const std::optional<std::string> file = store.SaveImage(kCapture, pixels.data(), 4, 4);
+        ASSERT_TRUE(file.has_value());
+        capture.ImageLayer()->imageFile = *file;
+        FindCanvas(library, kCanvasB)->items.push_back(capture);
+        fs.FailWhen(FaultyFileSystem::Op::Rename, inStaging);  // the process gone before it moves
+        EXPECT_TRUE(store.Save(library));
+    }
+    fs.ClearFailures();
+    fs.FailWhen(FaultyFileSystem::Op::Read, RecordOf(kCapture, "item.json"));
+    {
+        LibraryStore restarted(Root(), fs);
+        const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(LayoutOf(*loaded).count(kCapture), 0u);
+        restarted.Save(*loaded);
+    }
+    fs.ClearFailures();
+    LibraryStore again(Root(), fs);
+    std::optional<CanvasManagerSnapshot> reloaded = again.Load();
+    ASSERT_TRUE(reloaded.has_value());
+    const Canvas* canvasB = FindCanvas(*reloaded, kCanvasB);
+    ASSERT_NE(canvasB, nullptr);
+    const auto capture = std::find_if(canvasB->items.begin(), canvasB->items.end(),
+                                      [](const Item& item) { return item.id == kCapture; });
+    ASSERT_NE(capture, canvasB->items.end());
+    EXPECT_TRUE(again.LoadImage(kCapture, capture->ImageLayer()->imageFile).has_value()) << "set aside";
+}
+
 // A canvas moved out of a folder, a snippet moved from another canvas of
 // that folder into it, and the folder deleted for good - the process gone
 // before the save that moves either. The rescue puts the canvas back first,

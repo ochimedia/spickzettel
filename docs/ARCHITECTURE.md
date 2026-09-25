@@ -974,6 +974,14 @@ it kept `pending.json` from ever emptying. For the same reason, a
 moved-out directory with no record at all has nothing to rescue, and
 goes with what it is in.
 
+A record that is there and cannot be read also keeps the staging pass
+from setting aside pictures that nothing loaded names. A capture saved
+just before the process stopped can still be waiting in staging, and
+if its record is held at the next start, nothing in that session names
+the picture. Set aside, it was missing from the snippet once the
+record could be read. The randomized test found this once it began
+holding records while a restart loads.
+
 A snippet's directory is swept for pictures its layers no longer name
 only after the record that stopped naming them is on disk. Until then
 the old record is what a restart reloads, and the pictures it names have
