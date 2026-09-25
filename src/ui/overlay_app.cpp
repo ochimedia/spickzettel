@@ -1015,6 +1015,11 @@ void OverlayApp::SettleForPersistence() {
 
 void OverlayApp::SettleHand() {
     ReleaseGesture();
+    // Neither button is down from here, as far as this knows: a release
+    // that went missing - a press on a panel, then the overlay hidden - left
+    // the other button ignored until it was pressed again.
+    pressedButton_.reset();
+    ignoredButton_.reset();
     if (editingNoteItemId_.has_value()) {
         EndEditingNote(noteEditBuffer_);
     }
@@ -1512,6 +1517,10 @@ void OverlayApp::OnOverlayShown() {
     // Hiding is moving on too, and nothing ran while hidden to notice - see
     // untouchedDrawing_.
     SettleUntouchedDrawing();
+    // No button is down as the overlay comes up: what went down before it
+    // was hidden has come up since, wherever that release went.
+    pressedButton_.reset();
+    ignoredButton_.reset();
     // The panels docked against the edges come out for a moment, so they
     // are seen where they are - asked for here, done on the first frame.
     edgePanelsFlashPending_ = true;

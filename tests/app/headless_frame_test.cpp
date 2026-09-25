@@ -1046,6 +1046,37 @@ TEST_F(HeadlessAppTest, APressAfterALostReleaseEndsWhatThatButtonWasDoing) {
     EXPECT_LT(firstRight, secondLeft);
 }
 
+// A release lost with the overlay going away: the button is not taken for
+// held when it comes back, and the other one is not ignored for it.
+TEST_F(HeadlessAppTest, AReleaseLostWhileHiddenLeavesNoButtonHeld) {
+    ShowEditMode();
+    StepFrame();
+    RawMouse(900.0f, 650.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);
+    StepFrame();
+    ShowEditMode();  // away, the release lost on the way
+    ShowEditMode();  // and back
+    StepFrame();
+    const size_t before = ItemCountOnCurrentCanvas();
+    Drag(200.0f, 200.0f, 500.0f, 400.0f);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), before + 1) << "the left button's drag, not ignored";
+}
+
+// The ignored button's release lost: pressed again, it is taken as that
+// release and then as the press it is, not swallowed with its own release.
+TEST_F(HeadlessAppTest, AnIgnoredButtonPressedAgainIsNotIgnoredStill) {
+    ShowEditMode();
+    StepFrame();
+    MoveTo(900.0f, 650.0f);
+    RawMouse(900.0f, 650.0f, platform::MouseEventKind::Down, platform::MouseButton::Left);
+    StepFrame();
+    RawMouse(900.0f, 650.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);  // ignored
+    StepFrame();
+    RawMouse(900.0f, 650.0f, platform::MouseEventKind::Up, platform::MouseButton::Left);
+    StepFrames(30);  // the right button's release lost
+    RightClick(900.0f, 650.0f);
+    EXPECT_TRUE(App().IsEmptyCanvasMenuOpen());
+}
+
 // ===== The panels docked against the screen's edges =====
 
 // Enough frames for the moment the panels come out when the overlay comes

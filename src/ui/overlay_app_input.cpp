@@ -1470,10 +1470,18 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
     // not part of this, so a wheel click cannot lock a button out.
     if (event.button == platform::MouseButton::Left || event.button == platform::MouseButton::Right) {
         if (ignoredButton_ == event.button) {
-            if (event.kind == platform::MouseEventKind::Up) {
-                ignoredButton_.reset();
+            if (event.kind != platform::MouseEventKind::Down) {
+                if (event.kind == platform::MouseEventKind::Up) {
+                    ignoredButton_.reset();
+                }
+                return;
             }
-            return;
+            // Pressed again, still ignored as far as this knows: its
+            // release went missing, as the owning button's can (below).
+            // Taken as that release, rather than as one more event of the
+            // press it ended - which swallowed this press, and its release
+            // with it.
+            ignoredButton_.reset();
         }
         if (event.kind == platform::MouseEventKind::Down) {
             if (pressedButton_.has_value() && *pressedButton_ != event.button) {
