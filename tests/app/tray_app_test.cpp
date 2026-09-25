@@ -1190,6 +1190,30 @@ TEST(TrayControllerProfileTest, EditModeFromThePinnedViewByWayOfViewModeRunsTheM
     EXPECT_FALSE(host.overlayWindow.editModeInput.counterRawMouseInput);
 }
 
+// And from the pinned view that view mode was put away into in place - the
+// window never went down, and still carried the profile view mode came up
+// with, for whatever was underneath then.
+TEST(TrayControllerProfileTest, EditModeFromThePinnedViewViewModeWasPutAwayIntoRunsTheMatchingProfile) {
+    test::FakePlatformHost host;
+    host.overlayWindow.underlyingApp = platform::ForegroundApp{"notepad.exe", "Untitled"};
+    const AppConfig config = ConfigWithGameProfile();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    CanvasManager& manager = controller.GetSession().Manager();
+    manager.FindItemAnywhere(manager.CreateItem(false, Rect{100, 100, 300, 200}, "Pinned"))->pinned = true;
+    const int viewId = FindHotkeyId(host, config.hotkeyViewMode);
+    host.TriggerHotkey(viewId);
+    host.TriggerHotkey(viewId);
+    ASSERT_TRUE(controller.Overlay().IsPinnedOnly());
+    ASSERT_TRUE(host.overlayWindow.IsVisible()) << "put away in place";
+
+    host.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "The Game"};
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+
+    EXPECT_FALSE(controller.Overlay().IsViewOnly());
+    EXPECT_FALSE(host.overlayWindow.editModeInput.counterRawMouseInput) << "the game's profile";
+}
+
 TEST(TrayControllerProfileTest, NothingUnderneathMeansTheDefaultsRun) {
     test::FakePlatformHost host;
     host.overlayWindow.underlyingApp = platform::ForegroundApp{"notepad.exe", "Untitled"};

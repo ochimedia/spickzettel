@@ -389,7 +389,10 @@ void TrayController::PutAway() {
     session_.ReleaseFrozenScreen();
     if (overlayApp_.IsViewOnly() && session_.Manager().CurrentCanvasHasPinnedItems()) {
         // Already click-through and unfocused: only what is drawn changes.
+        // It is the pinned view from here on, which carries no profile -
+        // edit mode from it comes up afresh, for what is underneath then.
         overlayApp_.SetPinnedOnly(true);
+        profileAppliedThisShowing_ = false;
         return;
     }
     host_.GetOverlayWindow().Hide();
