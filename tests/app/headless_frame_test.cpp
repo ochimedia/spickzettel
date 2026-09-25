@@ -3102,6 +3102,31 @@ TEST_F(HeadlessAppTest, AnEmptyDrawingThatWasMovedStays) {
         << "the selection moved on to the screenshot just made";
 }
 
+// The same for one scaled with the wheel, made fullscreen or set back to
+// its size: each files a step on the drawing itself, and an undo takes
+// back that step alone - not the drawing, and not the step before it.
+TEST_F(HeadlessAppTest, AnEmptyDrawingThatWasScaledStaysAndTheScalingIsUndoneAlone) {
+    ShowEditMode();
+    StepFrame();
+    Drag(1000.0f, 100.0f, 1300.0f, 300.0f);  // a screenshot: the step before
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    ASSERT_TRUE(App().DrawingItem().has_value());
+    const ItemId id = *App().DrawingItem();
+    const Rect before = controller_->GetSession().Manager().FindItemAnywhere(id)->rect;
+    PressKey(ImGuiKey_Escape);  // out of drawing mode, still selected
+    ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
+    MoveTo(500.0f, 400.0f);
+    StepFrames(2);
+    Wheel(2.0f);
+    ASSERT_GT(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "the drawing and the screenshot, both";
+    ASSERT_NE(controller_->GetSession().Manager().FindItemAnywhere(id), nullptr);
+    EXPECT_NEAR(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w, 0.5f) << "the scaling taken back";
+}
+
 TEST_F(HeadlessAppTest, AnEmptyDrawingThatWasOnlySelectedStillGoes) {
     ShowEditMode();
     StepFrame();

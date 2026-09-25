@@ -448,9 +448,7 @@ void OverlayApp::NudgeSelection(float dx, float dy) {
         if (item == nullptr || item->isFullscreen) {
             continue;  // a fullscreen snippet has nowhere to go
         }
-        if (untouchedDrawing_ == id) {
-            untouchedDrawing_.reset();  // placed on purpose - see KeepPlacedDrawings
-        }
+        KeepDrawingsPlaced({id});
         item->rect = ClampRectToViewport(Rect{item->rect.x + dx, item->rect.y + dy, item->rect.w, item->rect.h},
                                          display.x, display.y);
         Manager().MarkChanged();

@@ -1062,13 +1062,21 @@ void OverlayApp::ToggleFullscreenUndoably(ItemId id, bool stretch) {
     std::vector<Session::Placement> before = session_.PlacementsOf({id});
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     Manager().ToggleFullscreen(id, display.x, display.y, stretch);
+    KeepDrawingsPlaced({id});
     session_.RecordPlacements(std::move(before));
 }
 
 void OverlayApp::ResetToNativeSizeUndoably(ItemId id) {
     std::vector<Session::Placement> before = session_.PlacementsOf({id});
     Manager().ResetItemToNativeSize(id);
+    KeepDrawingsPlaced({id});
     session_.RecordPlacements(std::move(before));
+}
+
+void OverlayApp::KeepDrawingsPlaced(const std::vector<ItemId>& ids) {
+    if (untouchedDrawing_.has_value() && std::find(ids.begin(), ids.end(), *untouchedDrawing_) != ids.end()) {
+        untouchedDrawing_.reset();
+    }
 }
 
 void OverlayApp::RecordPlacementBurst(PlacementBurst kind, std::vector<Session::Placement> before) {
@@ -1220,11 +1228,11 @@ void OverlayApp::ScaleSelectionByWheel(int steps) {
         Manager().CommitItemLayout(item->id);
     }
     Manager().MarkChanged();
-    // A spin of the wheel is one undo, back to the size it started at.
-    RecordPlacementBurst(PlacementBurst::Wheel, std::move(before));
     // A drawing placed and then scaled is one someone wants, as one moved
     // or resized by hand is.
-    KeepPlacedDrawings();
+    KeepDrawingsPlaced(ids);
+    // A spin of the wheel is one undo, back to the size it started at.
+    RecordPlacementBurst(PlacementBurst::Wheel, std::move(before));
 }
 
 void OverlayApp::StepSelectionOpacity(int steps, bool background) {

@@ -1166,8 +1166,14 @@ private:
     // and stops watching it either way.
     void SettleUntouchedDrawing();
     // Stops watching untouchedDrawing_ if the gesture in flight moves or
-    // resizes it - see its own doc comment. Also what a nudge by key does.
+    // resizes it - see its own doc comment.
     void KeepPlacedDrawings();
+    // Stops watching untouchedDrawing_ if it is among `ids`, placed on
+    // purpose other than by hand: nudged, scaled by the wheel, made
+    // fullscreen, set back to its size. Each files a step on the drawing
+    // itself; watched on, an undo took it for a step made elsewhere, took
+    // the drawing away for it - and then undid the step before.
+    void KeepDrawingsPlaced(const std::vector<ItemId>& ids);
 
     // A new empty canvas at the end of the browsed folder, named for when
     // it was made (see TimestampName), and *not* switched to - every
@@ -1675,7 +1681,8 @@ private:
     // without using it: a press anywhere else, another canvas, its own
     // Close, the overlay going away, or an undo (see SettleUntouchedDrawing). What
     // makes a snippet on every click on empty space harmless to miss with.
-    // Moving, resizing or nudging it is using it (see KeepPlacedDrawings):
+    // Moving, resizing or nudging it is using it (see KeepPlacedDrawings
+    // and KeepDrawingsPlaced):
     // a box someone has placed is a box they want, empty or not. And so is
     // putting anything into it: once it has held a stroke it is watched no
     // longer (see OnFrame), so an undo that empties it again leaves it as
