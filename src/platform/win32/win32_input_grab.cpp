@@ -945,7 +945,11 @@ void Win32InputGrab::Heartbeat() { lastHeartbeatMs_.store(GetTickCount64(), std:
 // everything through until it is back: the overlay stops working, which it
 // has already, and the machine does not.
 bool Win32InputGrab::AppThreadStalled() const {
-    return IsStalled(GetTickCount64(), lastHeartbeatMs_.load(std::memory_order_relaxed));
+    // The beat first, then the clock, so that now is never before it -
+    // IsStalled copes either way, and this is the order that needs no
+    // coping.
+    const uint64_t lastBeatMs = lastHeartbeatMs_.load(std::memory_order_relaxed);
+    return IsStalled(GetTickCount64(), lastBeatMs);
 }
 
 LRESULT Win32InputGrab::OnMouse(WPARAM message, const MSLLHOOKSTRUCT& event) {

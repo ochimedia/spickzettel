@@ -182,6 +182,7 @@ TEST(Win32InputGrabTest, TheHooksStandDownWhenTheAppThreadStopsBeating) {
     EXPECT_FALSE(Win32InputGrab::IsStalled(beat + 250, beat)) << "an idle frame's gap";
     EXPECT_FALSE(Win32InputGrab::IsStalled(beat + Win32InputGrab::kStalledAfterMs, beat));
     EXPECT_TRUE(Win32InputGrab::IsStalled(beat + Win32InputGrab::kStalledAfterMs + 1, beat));
+    EXPECT_FALSE(Win32InputGrab::IsStalled(beat - 1, beat)) << "a beat newer than the clock read before it";
 }
 
 // A modifier held since before the grab reached Windows itself, and has

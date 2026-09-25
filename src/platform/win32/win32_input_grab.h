@@ -177,8 +177,13 @@ public:
     // stop swallowing - see AppThreadStalled. Frames come at least four times
     // a second while the overlay is up, so this is several missed in a row.
     static constexpr uint64_t kStalledAfterMs = 2000;
-    // Whether a heartbeat at `lastBeatMs` is too old at `nowMs`.
-    static bool IsStalled(uint64_t nowMs, uint64_t lastBeatMs) { return nowMs - lastBeatMs > kStalledAfterMs; }
+    // Whether a heartbeat at `lastBeatMs` is too old at `nowMs`. A beat
+    // later than `now` - the app thread beat between the hook reading the
+    // clock and reading the beat - is as fresh as they come, not a
+    // subtraction wrapped round to "stalled for ever".
+    static bool IsStalled(uint64_t nowMs, uint64_t lastBeatMs) {
+        return nowMs > lastBeatMs && nowMs - lastBeatMs > kStalledAfterMs;
+    }
 
     // The key-downs to hand Windows as a grab of the keyboard ends: one per
     // side of Ctrl, Shift and Alt whose down `swallowed` (indexed by
