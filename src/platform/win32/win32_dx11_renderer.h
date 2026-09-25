@@ -45,6 +45,12 @@ public:
     void LoseDeviceForTesting() { deviceLost_ = true; }
     // As if the last Present had found the window occluded.
     void OccludeForTesting() { occluded_ = true; }
+    // As a WM_SIZE whose ResizeBuffers failed leaves it.
+    void FailResizeForTesting() {
+        resizePending_ = true;
+        CleanupRenderTarget();
+    }
+    bool ResizePendingForTesting() const { return resizePending_; }
 
     // Overrides the mouse position ImGui sees for subsequent frames, in
     // client coordinates - for when the overlay is navigating by its own
@@ -117,6 +123,9 @@ private:
     void ReleaseDevice();
     bool CreateRenderTarget();
     void CleanupRenderTarget();
+    // The swapchain's buffers resized to the window, and a target made on
+    // them. True once they are; see resizePending_.
+    bool ResizeSwapChain();
     // The shaders ImGui does not have: the mip builder and the two
     // resampling filters. False if any failed to compile, which leaves
     // Bicubic and Lanczos drawing as Bilinear rather than the overlay not
@@ -142,6 +151,10 @@ private:
     bool deviceLost_ = false;
     uint64_t deviceGeneration_ = 0;
     bool occluded_ = false;
+    // A resize whose ResizeBuffers failed, tried again by every frame until
+    // it works; drawn at the old size, stretched, meanwhile. Not retried,
+    // the frames went on stretched until the next WM_SIZE.
+    bool resizePending_ = false;
     // See ReleaseTexture.
     bool inFrame_ = false;
     std::vector<ID3D11ShaderResourceView*> releaseAfterFrame_;

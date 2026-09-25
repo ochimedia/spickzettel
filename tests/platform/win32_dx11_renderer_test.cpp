@@ -231,6 +231,14 @@ TEST_F(Win32Dx11RendererTest, AnOccludedWindowIsAskedAboutAgainBeforeDrawing) {
     EXPECT_EQ(renderer_.DeviceGeneration(), 0u) << "the device was never in question";
 }
 
+// A resize whose ResizeBuffers failed is tried again by the next frame,
+// rather than drawing at the old size, stretched, until the next WM_SIZE.
+TEST_F(Win32Dx11RendererTest, AFailedResizeIsTriedAgainByTheNextFrame) {
+    renderer_.FailResizeForTesting();
+    EXPECT_TRUE(renderer_.ReadyToRender());
+    EXPECT_FALSE(renderer_.ResizePendingForTesting());
+}
+
 TEST_F(Win32Dx11RendererTest, WithItsDeviceInPlaceTheRendererIsReadyAsItWas) {
     EXPECT_TRUE(renderer_.ReadyToRender());
     EXPECT_EQ(renderer_.DeviceGeneration(), 0u);

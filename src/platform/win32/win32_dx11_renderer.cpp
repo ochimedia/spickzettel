@@ -199,6 +199,7 @@ bool Win32Dx11Renderer::Initialize(HWND hwnd) {
     }
     imguiInitialized_ = true;
     imguiBackendInitialized_ = true;
+    resizePending_ = false;  // a new swapchain is made at the window's size
     CreateFilterShaders();
     return true;
 }
@@ -279,6 +280,11 @@ bool Win32Dx11Renderer::ReadyToRender() {
             }
             occluded_ = false;
         }
+        // A resize that failed is tried again; failing again, the frame is
+        // drawn at the old size rather than not at all.
+        if (resizePending_ && ResizeSwapChain()) {
+            return true;
+        }
         // A resize that could not make its target leaves none, and a frame
         // drawn into none is an access violation inside d3d11.dll.
         return renderTargetView_ || CreateRenderTarget();
@@ -299,6 +305,7 @@ bool Win32Dx11Renderer::ReadyToRender() {
         return false;
     }
     imguiBackendInitialized_ = true;
+    resizePending_ = false;  // a new swapchain is made at the window's size
     CreateFilterShaders();
     return true;
 }
@@ -320,12 +327,19 @@ void Win32Dx11Renderer::HandleResize() {
     if (!swapChain_) {
         return;
     }
+    resizePending_ = true;
+    ResizeSwapChain();
+}
+
+bool Win32Dx11Renderer::ResizeSwapChain() {
     CleanupRenderTarget();
-    // Either failing leaves no target, which ReadyToRender tries again, or
-    // a lost device, which it replaces.
-    if (SUCCEEDED(swapChain_->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0))) {
-        CreateRenderTarget();
+    // A failure is a lost device, which ReadyToRender replaces, or buffers
+    // still held, which it tries again - see resizePending_.
+    if (FAILED(swapChain_->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0))) {
+        return false;
     }
+    resizePending_ = false;
+    return CreateRenderTarget();
 }
 
 void Win32Dx11Renderer::SetMousePositionOverride(bool active, float clientX, float clientY) {
