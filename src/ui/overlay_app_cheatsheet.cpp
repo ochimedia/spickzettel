@@ -42,25 +42,35 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
         sections.push_back(CheatSheetSection{title, {}});
         return sections.back().rows;
     };
-    // A row for a key that may be unbound: none, then, rather than one that
-    // promises "(none)".
-    const auto combo = [](std::vector<CheatSheetRow>& rows, const platform::KeyCombo& key, const char* what) {
-        if (key.key != 0) {
-            rows.push_back({FormatKeyComboLabel(key), what});
-        }
+    // A command's keys, as the command table has them bound right now (see
+    // KeysFor): the first, or every one of them.
+    const auto firstKey = [&](CommandId id) {
+        const std::vector<platform::KeyCombo> keys = KeysFor(id, config, shortcuts);
+        return keys.empty() ? std::string() : FormatKeyComboLabel(keys.front());
     };
-    const auto shortcut = [&](std::vector<CheatSheetRow>& rows, ShortcutAction action, const char* what) {
-        combo(rows, shortcuts[ShortcutActionIndex(action)], what);
+    const auto everyKey = [&](CommandId id) {
+        std::string text;
+        for (const platform::KeyCombo& key : KeysFor(id, config, shortcuts)) {
+            text += (text.empty() ? "" : ", ") + FormatKeyComboLabel(key);
+        }
+        return text;
+    };
+    // A row for a command no key may reach: none, then, rather than one
+    // that promises "(none)".
+    const auto shortcut = [&](std::vector<CheatSheetRow>& rows, CommandId id, const char* what) {
+        if (std::string keys = firstKey(id); !keys.empty()) {
+            rows.push_back({std::move(keys), what});
+        }
     };
 
     std::vector<CheatSheetRow>& general = section(strings::kCheatSheetGeneral);
-    combo(general, config.hotkeyEditMode, strings::kCheatSheetShowHide);
-    combo(general, config.hotkeyViewMode, strings::kCheatSheetViewOnly);
-    combo(general, config.hotkeyQuickCapture, strings::kCheatSheetQuickCapture);
-    combo(general, config.hotkeySilentCapture, strings::kCheatSheetSilentCapture);
-    shortcut(general, ShortcutAction::CheatSheet, strings::kCheatSheetSelf);
-    general.push_back({strings::kCheatSheetUndoKeys, strings::kCheatSheetUndo});
-    general.push_back({strings::kCheatSheetEscKey, strings::kCheatSheetEsc});
+    shortcut(general, CommandId::ToggleEditMode, strings::kCheatSheetShowHide);
+    shortcut(general, CommandId::ToggleViewMode, strings::kCheatSheetViewOnly);
+    shortcut(general, CommandId::QuickCapture, strings::kCheatSheetQuickCapture);
+    shortcut(general, CommandId::SilentCapture, strings::kCheatSheetSilentCapture);
+    shortcut(general, CommandId::CheatSheet, strings::kCheatSheetSelf);
+    general.push_back({firstKey(CommandId::Undo) + ", " + firstKey(CommandId::Redo), strings::kCheatSheetUndo});
+    general.push_back({firstKey(CommandId::PutDown), strings::kCheatSheetEsc});
     general.push_back({strings::kCheatSheetRightClickKey, strings::kCheatSheetRightClick});
 
     // The presses on empty canvas, as the triggers in Settings have them.
@@ -75,9 +85,9 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
     creation(config.screenshotTrigger, strings::kCheatSheetScreenshotArea, strings::kCheatSheetScreenshotFull);
     creation(config.drawingTrigger, strings::kCheatSheetDrawingArea, strings::kCheatSheetDrawingFull);
     const size_t beforeKeys = making.size();
-    shortcut(making, ShortcutAction::NewScreenshot, strings::kCheatSheetScreenshotTool);
-    shortcut(making, ShortcutAction::NewDrawing, strings::kCheatSheetDrawingTool);
-    shortcut(making, ShortcutAction::NewCanvas, strings::kCheatSheetNewCanvas);
+    shortcut(making, CommandId::NewScreenshotTool, strings::kCheatSheetScreenshotTool);
+    shortcut(making, CommandId::NewDrawingTool, strings::kCheatSheetDrawingTool);
+    shortcut(making, CommandId::NewCanvas, strings::kCheatSheetNewCanvas);
     if (making.size() > beforeKeys) {
         making.insert(making.begin() + static_cast<std::ptrdiff_t>(beforeKeys),
                       CheatSheetRow{"", strings::kCheatSheetAnywhere});
@@ -95,10 +105,10 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
 
     std::vector<CheatSheetRow>& drawing = section(strings::kCheatSheetDrawing);
     drawing.push_back({strings::kCheatSheetDoubleClickOrHold, strings::kCheatSheetStartDrawing});
-    shortcut(drawing, ShortcutAction::Draw, strings::kCheatSheetPen);
-    shortcut(drawing, ShortcutAction::Erase, strings::kCheatSheetEraser);
-    shortcut(drawing, ShortcutAction::Text, strings::kCheatSheetText);
-    shortcut(drawing, ShortcutAction::Select, strings::kCheatSheetSelectTool);
+    shortcut(drawing, CommandId::DrawTool, strings::kCheatSheetPen);
+    shortcut(drawing, CommandId::EraseTool, strings::kCheatSheetEraser);
+    shortcut(drawing, CommandId::TextTool, strings::kCheatSheetText);
+    shortcut(drawing, CommandId::SelectTool, strings::kCheatSheetSelectTool);
     drawing.push_back({strings::kCheatSheetShapeKeys, strings::kCheatSheetShape});
     drawing.push_back({strings::kCheatSheetRightDragKey, strings::kCheatSheetRightDrag});
     drawing.push_back({strings::kCheatSheetEraseRectKeys, strings::kCheatSheetEraseRect});
@@ -107,12 +117,12 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
     drawing.push_back({strings::kCheatSheetStopKeys, strings::kCheatSheetStop});
 
     std::vector<CheatSheetRow>& clipboard = section(strings::kCheatSheetClipboard);
-    shortcut(clipboard, ShortcutAction::Copy, strings::kCheatSheetCopy);
-    shortcut(clipboard, ShortcutAction::Cut, strings::kCheatSheetCut);
-    shortcut(clipboard, ShortcutAction::Paste, strings::kCheatSheetPaste);
-    shortcut(clipboard, ShortcutAction::Duplicate, strings::kCheatSheetDuplicate);
-    shortcut(clipboard, ShortcutAction::NewCanvasWithSelection, strings::kCheatSheetToNewCanvas);
-    clipboard.push_back({strings::kCheatSheetDeleteKeys, strings::kCheatSheetDelete});
+    shortcut(clipboard, CommandId::Copy, strings::kCheatSheetCopy);
+    shortcut(clipboard, CommandId::Cut, strings::kCheatSheetCut);
+    shortcut(clipboard, CommandId::Paste, strings::kCheatSheetPaste);
+    shortcut(clipboard, CommandId::Duplicate, strings::kCheatSheetDuplicate);
+    shortcut(clipboard, CommandId::NewCanvasWithSelection, strings::kCheatSheetToNewCanvas);
+    clipboard.push_back({everyKey(CommandId::DeleteSelection), strings::kCheatSheetDelete});
 
     std::vector<CheatSheetRow>& canvases = section(strings::kCheatSheetCanvases);
     canvases.push_back({strings::kCheatSheetAltWheelKey, strings::kCheatSheetAltWheel});

@@ -1817,8 +1817,9 @@ A key belongs to one command: the first row it is bound to, which puts
 the fixed keys ahead of chosen ones, and the table's order ahead of a
 profile that bound one key twice. A fixed key matches exactly the
 modifiers it names, except Escape, Delete and the arrows, which never
-cared (a nudge reads Shift itself, for ten pixels). The menus' key
-labels are read from the same table, so they show what is bound.
+cared (a nudge reads Shift itself, for ten pixels). The cheat sheet's
+rows and the menus' key labels are read from the same table, so they
+show what is bound, not what a string says is.
 
 Three behaviors changed with this, each toward one rule:
 

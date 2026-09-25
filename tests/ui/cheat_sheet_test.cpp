@@ -44,6 +44,9 @@ TEST(CheatSheetTest, ShowsTheKeysAsShipped) {
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetScreenshotArea), "Drag");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetDrawingArea), "Ctrl+Drag");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetText), "") << "Text ships unbound, so has no row";
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetUndo), "Ctrl+Z, Ctrl+Y");
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetEsc), "Esc");
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetDelete), "Delete, Backspace");
 }
 
 // The sheet reads the bindings, not the defaults: a rebound key shows as
