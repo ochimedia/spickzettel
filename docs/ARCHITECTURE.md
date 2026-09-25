@@ -2751,7 +2751,15 @@ Consequences that shape `Win32InputGrab`:
   everything through until one comes. Checked by suspending the app
   thread with the overlay up: input stayed with the overlay for half a
   second, reached Windows after three, and was taken back once the thread
-  resumed.
+  resumed. A key or button that passes through is the system's from then
+  on. The hook thread notes that as each one goes past: the grab's
+  record of Ctrl, Alt and Shift follows it, the up of a key whose down
+  was swallowed before the stall is no longer swallowed, and the overlay
+  is told that key went up. The first version worked this out after the
+  stall from what the system said was held. The system never saw a
+  swallowed key go down, though, so a key held through the stall looked
+  let go, and one pressed again during it still looked ours: its up was
+  swallowed, and the key stayed down system-wide.
 - **Typing needs the keyboard, not focus.** ImGui implements text editing
   from key events; what it cannot do is turn a virtual key into a
   character, which is the layout's job and arrives as `WM_CHAR` only for

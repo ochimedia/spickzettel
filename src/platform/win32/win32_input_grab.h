@@ -530,15 +530,9 @@ private:
     // Whether the app thread has gone quiet while the hooks are swallowing
     // everything - see its definition.
     bool AppThreadStalled() const;
-    // Takes the keyboard's state back from the system once a stall is over -
-    // from the first heartbeat after it, the moment the hooks go back to
-    // swallowing:
-    // everything pressed and let go during it went past the hook, and the
-    // grab's record still had a Ctrl released then as held - bare keys
-    // matched Ctrl hotkeys and typing was dropped as shortcuts - and a key
-    // whose down it took before the stall still waiting for an up the
-    // overlay would never be sent.
-    void ResyncKeyboardAfterStall();
+    // The books on a key let through while the app thread is stalled, kept
+    // on the hook thread as it goes past - see its definition.
+    void KeyPassedThroughWhileStalled(WPARAM message, const KBDLLHOOKSTRUCT& event);
     // Movement taken from the game since the last correction, banked by the
     // raw-input sink on the hook thread and injected back once it strays too
     // far or countering ends - see FlushPendingCorrection.

@@ -42,6 +42,27 @@ UINT VirtualKeyFor(const KeyCombo& combo) {
     }
     return static_cast<UINT>(combo.key);
 }
+
+// The bit a button's down or up stands for in swallowedButtons_, or 0 for a
+// message that is no button's.
+uint8_t ButtonBit(WPARAM message, DWORD mouseData) {
+    switch (message) {
+        case WM_LBUTTONDOWN:
+        case WM_LBUTTONUP:
+            return 1u << 0;
+        case WM_RBUTTONDOWN:
+        case WM_RBUTTONUP:
+            return 1u << 1;
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+            return 1u << 2;
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+            return HIWORD(mouseData) == XBUTTON1 ? (1u << 3) : (1u << 4);
+        default:
+            return 0;
+    }
+}
 }  // namespace
 
 Win32InputGrab& Win32InputGrab::Instance() {
@@ -878,6 +899,13 @@ LRESULT CALLBACK Win32InputGrab::MouseProc(int code, WPARAM wParam, LPARAM lPara
         return 1;
     }
     if (self.AppThreadStalled()) {
+        // A button let through, down or up, is the system's from here on,
+        // as a key is (see KeyPassedThroughWhileStalled): its up is not
+        // ours to swallow. The overlay hears the button from raw input,
+        // which the stall does not touch.
+        if (const uint8_t bit = ButtonBit(wParam, event.mouseData); bit != 0) {
+            self.swallowedButtons_.fetch_and(static_cast<uint8_t>(~bit), std::memory_order_relaxed);
+        }
         return CallNextHookEx(self.mouseHook_, code, wParam, lParam);
     }
     // One call per report, on time, however the raw stream is merged - see
@@ -890,6 +918,49 @@ LRESULT CALLBACK Win32InputGrab::MouseProc(int code, WPARAM wParam, LPARAM lPara
         return result;
     }
     return CallNextHookEx(self.mouseHook_, code, wParam, lParam);
+}
+
+void Win32InputGrab::Heartbeat() { lastHeartbeatMs_.store(GetTickCount64(), std::memory_order_relaxed); }
+
+// The hooks swallow every mouse event and, with keystroke forwarding off,
+// every key on the machine, whatever the app thread is doing - and the only
+// way out, the hotkey, is posted to that same thread. Hung or blocked there
+// (a deadlock, a loop, a write to a disk that stopped answering), it left
+// the whole machine with no mouse and no keyboard short of Ctrl+Alt+Del,
+// and for a standard user Task Manager's input was swallowed too. So once
+// the app thread has missed a couple of seconds of frames, both hooks let
+// everything through until it is back: the overlay stops working, which it
+// has already, and the machine does not.
+bool Win32InputGrab::AppThreadStalled() const {
+    // The beat first, then the clock, so that now is never before it -
+    // IsStalled copes either way, and this is the order that needs no
+    // coping.
+    const uint64_t lastBeatMs = lastHeartbeatMs_.load(std::memory_order_relaxed);
+    return IsStalled(GetTickCount64(), lastBeatMs);
+}
+
+// A key let through while the app thread is stalled belongs to the system
+// from here on, down or up: the up of one whose down was swallowed before
+// the stall is not ours to swallow any more, since the system has either
+// seen it go up or - a repeat let through - go down. The overlay had that
+// down, and is told the key went up, which is all it can be told. And the
+// grab's record of Ctrl, Alt and Shift follows the key, as the swallowing
+// path would have it.
+//
+// Kept here, on the hook thread as each key goes past, rather than worked
+// out from the system's view once the stall is over: the system never saw
+// a swallowed key go down, so a key held through the stall without
+// repeating looked let go, and one it had seen go down again looked still
+// ours - whose up was then swallowed, and the key stuck down system-wide.
+void Win32InputGrab::KeyPassedThroughWhileStalled(WPARAM message, const KBDLLHOOKSTRUCT& event) {
+    const UINT vk = event.vkCode;
+    if (event.dwExtraInfo == kOwnInjectionMarker || vk >= kVirtualKeyCount) {
+        return;
+    }
+    TrackModifier(vk, message == WM_KEYDOWN || message == WM_SYSKEYDOWN);
+    if (swallowedDown_[vk].exchange(false, std::memory_order_relaxed) && overlay_) {
+        PostMessageA(overlay_, WM_KEYUP, static_cast<WPARAM>(vk), (1LL << 30) | (1LL << 31) | 1);
+    }
 }
 
 // The hook's whole remaining job is to discard. Everything the overlay is
@@ -913,57 +984,6 @@ LRESULT CALLBACK Win32InputGrab::MouseProc(int code, WPARAM wParam, LPARAM lPara
 // Raw button events reach the game regardless of any of this: nothing in
 // user mode can stop those, which is why a game that reads its clicks that
 // way still needs the overlay to take focus outright.
-namespace {
-// The bit a button's down or up stands for in swallowedButtons_, or 0 for a
-// message that is no button's.
-uint8_t ButtonBit(WPARAM message, DWORD mouseData) {
-    switch (message) {
-        case WM_LBUTTONDOWN:
-        case WM_LBUTTONUP:
-            return 1u << 0;
-        case WM_RBUTTONDOWN:
-        case WM_RBUTTONUP:
-            return 1u << 1;
-        case WM_MBUTTONDOWN:
-        case WM_MBUTTONUP:
-            return 1u << 2;
-        case WM_XBUTTONDOWN:
-        case WM_XBUTTONUP:
-            return HIWORD(mouseData) == XBUTTON1 ? (1u << 3) : (1u << 4);
-        default:
-            return 0;
-    }
-}
-}  // namespace
-
-void Win32InputGrab::Heartbeat() {
-    const uint64_t now = GetTickCount64();
-    // Stalled until this beat, and so letting the keyboard through: what
-    // happened to it meanwhile is the system's to say. Also true of a first
-    // frame after a long time hidden, where it costs a look at the keyboard.
-    if (IsStalled(now, lastHeartbeatMs_.load(std::memory_order_relaxed))) {
-        ResyncKeyboardAfterStall();
-    }
-    lastHeartbeatMs_.store(now, std::memory_order_relaxed);
-}
-
-// The hooks swallow every mouse event and, with keystroke forwarding off,
-// every key on the machine, whatever the app thread is doing - and the only
-// way out, the hotkey, is posted to that same thread. Hung or blocked there
-// (a deadlock, a loop, a write to a disk that stopped answering), it left
-// the whole machine with no mouse and no keyboard short of Ctrl+Alt+Del,
-// and for a standard user Task Manager's input was swallowed too. So once
-// the app thread has missed a couple of seconds of frames, both hooks let
-// everything through until it is back: the overlay stops working, which it
-// has already, and the machine does not.
-bool Win32InputGrab::AppThreadStalled() const {
-    // The beat first, then the clock, so that now is never before it -
-    // IsStalled copes either way, and this is the order that needs no
-    // coping.
-    const uint64_t lastBeatMs = lastHeartbeatMs_.load(std::memory_order_relaxed);
-    return IsStalled(GetTickCount64(), lastBeatMs);
-}
-
 LRESULT Win32InputGrab::OnMouse(WPARAM message, const MSLLHOOKSTRUCT& event) {
     // Every mouse event is swallowed, nothing here is interpreted - with the
     // keyboard's exception (see OnKeyboard): a button-up is only ours to
@@ -1130,6 +1150,7 @@ LRESULT CALLBACK Win32InputGrab::KeyboardProc(int code, WPARAM wParam, LPARAM lP
     // keystroke came from.
     const auto& event = *reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
     if (self.AppThreadStalled()) {
+        self.KeyPassedThroughWhileStalled(wParam, event);
         return CallNextHookEx(self.keyboardHook_, code, wParam, lParam);  // see AppThreadStalled
     }
     const LRESULT result = self.OnKeyboard(wParam, event);
@@ -1227,23 +1248,6 @@ void Win32InputGrab::PostKeyToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event, boo
 //
 // The physical up that arrives afterwards is then passed through to the OS.
 // That leaves the OS an up for a key it never saw go down, which it ignores.
-void Win32InputGrab::ResyncKeyboardAfterStall() {
-    // The system saw every key of the stall, so what it says is held is
-    // held.
-    const auto asyncDown = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
-    modifiers_.Seed(asyncDown);
-    for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
-        if (asyncDown(static_cast<int>(vk)) || !swallowedDown_[vk].exchange(false, std::memory_order_relaxed)) {
-            continue;
-        }
-        // Let go of during the stall: the overlay had its down, and gets
-        // the up it missed, as a grab's end would send it.
-        if (overlay_) {
-            PostMessageA(overlay_, WM_KEYUP, static_cast<WPARAM>(vk), (1LL << 30) | (1LL << 31) | 1);
-        }
-    }
-}
-
 void Win32InputGrab::ReleaseSwallowedKeys() {
     for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
         if (!swallowedDown_[vk].exchange(false, std::memory_order_relaxed)) {
