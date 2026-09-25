@@ -288,7 +288,6 @@ TEST_F(LibraryStoreTest, ALibraryWrittenByANewerVersionIsNeitherReadNorWritten) 
     EXPECT_FALSE(store.Remove(4, changed));
     const uint8_t pixels[4] = {1, 2, 3, 255};
     EXPECT_FALSE(store.SaveImage(4, pixels, 1, 1).has_value());
-    EXPECT_FALSE(store.SaveLayerImage(4, 1, pixels, 1, 1).has_value());
     EXPECT_EQ(store.WriteGeneration(), 0u);
 
     EXPECT_EQ(FileText(dir_ / "library.json"), pointerFile);
@@ -539,7 +538,7 @@ TEST_F(LibraryStoreTest, LoadReadsANumberTooLargeForAFloatAsTheDefault) {
             "rect": {"x": 1e100, "y": 20, "w": 300, "h": -1e300},
             "nativeW": 1e6, "nativeH": 1e40, "foregroundOpacity": 7,
             "strokes": [{"width": 1e100, "points": [{"x": 1e100, "y": 5}, {"x": 10, "y": 6}]}],
-            "layers": [{"opacity": 5, "resolutionScale": 100}]
+            "layers": [{"opacity": 5}]
         }]}]
     })");
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(dir_).Load();
@@ -557,7 +556,6 @@ TEST_F(LibraryStoreTest, LoadReadsANumberTooLargeForAFloatAsTheDefault) {
     EXPECT_FLOAT_EQ(item.strokes[0].points[0].x, 0.0f);
     EXPECT_FLOAT_EQ(item.strokes[0].points[0].y, 5.0f);
     EXPECT_FLOAT_EQ(item.layers[0].opacity, 1.0f);
-    EXPECT_FLOAT_EQ(item.layers[0].resolutionScale, 16.0f);
 }
 
 // ...and what was repaired reaches the disk with the next save. A record
@@ -1716,9 +1714,9 @@ TEST_F(LibraryStoreTest, RenamingASnippetKeepsItsPictureReadableThroughTheSameSt
     EXPECT_TRUE(store.LoadThumbnail(4, "000004.qoi").has_value());
     // ...and a picture written *after* the rename lands in the renamed
     // directory, not in a ghost of the old one.
-    ASSERT_TRUE(store.SaveLayerImage(4, 1, pixels.data(), 64, 64).has_value());
+    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 64, 64).has_value());
     const std::filesystem::path renamed = dir_ / "folders" / "folder-1-000001" / "canvas-1-000002" / "renamed-000004";
-    EXPECT_TRUE(std::filesystem::exists(renamed / "000004_p1.qoi"));
+    EXPECT_TRUE(std::filesystem::exists(renamed / "000004.qoi"));
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir()));
 }
 
@@ -2264,39 +2262,6 @@ TEST_F(LibraryStoreTest, SaveKeepsALiveImagesThumbnailAndCollectsADeadOnes) {
     EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000008.qoi"));
 }
 
-TEST_F(LibraryStoreTest, ARecordThatCouldNotBeWrittenKeepsThePicturesTheOldOneNames) {
-    LibraryStore store(dir_);
-    const std::vector<uint8_t> pixels = {1, 2, 3, 255};
-    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
-    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 1, 1).has_value());
-    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004.qoi";
-    ASSERT_TRUE(store.Save(snapshot));
-    ASSERT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"));
-
-    // The layer comes to name a different picture, and the record saying
-    // so cannot be written.
-    ASSERT_TRUE(store.SaveLayerImage(4, 0, pixels.data(), 1, 1).has_value());
-    snapshot.canvases[0].items[1].ImageLayer()->imageFile = "000004_p0.qoi";
-    ObstructEveryTemporaryName(ShotItemDir() / "item.json");
-    EXPECT_FALSE(store.Save(snapshot));
-
-    // The record on disk is still the old one, and what it names must still
-    // be there for it: a restart reloads exactly that.
-    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004.qoi"))
-        << "collected on the strength of a record that never landed";
-    LibraryStore reopened(dir_);
-    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
-    ASSERT_TRUE(loaded.has_value());
-    EXPECT_EQ(loaded->canvases[0].items[1].ImageLayer()->imageFile, "000004.qoi");
-    EXPECT_TRUE(reopened.LoadImage(4, "000004.qoi").has_value());
-
-    ClearTemporaryObstructions(ShotItemDir() / "item.json");
-    ASSERT_TRUE(store.Save(snapshot));
-    EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "000004.qoi"))
-        << "collected once the record naming its replacement is on disk";
-    EXPECT_TRUE(std::filesystem::exists(ShotItemDir() / "000004_p0.qoi"));
-}
-
 TEST_F(LibraryStoreTest, SaveCollectsOnlyPicturesOutOfASnippetsDirectory) {
     LibraryStore store(dir_);
     CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
@@ -2439,9 +2404,7 @@ TEST_F(IncrementalSaveTest, EveryPersistedItemFieldCausesARewrite) {
         {"strokes: width", [](Item& i) { i.strokes[0].width += 1.0f; }},
         {"strokes: one added", [](Item& i) { i.strokes.push_back(i.strokes[0]); }},
         {"strokes: all removed", [](Item& i) { i.strokes.clear(); }},
-        {"layers: kind", [](Item& i) { i.layers[0].kind = LayerKind::Painted; }},
         {"layers: opacity", [](Item& i) { i.layers[0].opacity = 0.5f; }},
-        {"layers: resolutionScale", [](Item& i) { i.layers[0].resolutionScale = 0.5f; }},
         {"layers: tintColorRGBA", [](Item& i) { i.layers[0].tintColorRGBA ^= 0xFFu; }},
         {"layers: showsPlaceholder", [](Item& i) { i.layers[0].showsPlaceholder = !i.layers[0].showsPlaceholder; }},
         {"layers: placeholderHue", [](Item& i) { i.layers[0].placeholderHue += 1.0f; }},

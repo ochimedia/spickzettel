@@ -316,9 +316,7 @@ void OverlayApp::ExitDrawingMode() {
     // Escape and the view-only hotkey can come with the button still held.
     // What it was doing ends here, kept: a stroke as a release would end
     // it, filed as its undo step, and a right-drag erase likewise (see
-    // EndGesture). Dropping a stroke instead left painted pixels on screen
-    // with no change recorded, so nothing saved them, and left the brush
-    // session open for the next stroke to file late.
+    // EndGesture).
     //
     // Only the mode's own gestures, though: leaving it is also what a
     // press on another snippet does, a frame later (see PruneSelection),
@@ -655,9 +653,7 @@ std::optional<platform::MouseButton> OverlayApp::GestureButton() const {
 // current position, so the gesture ends the way it always does rather than
 // being abandoned halfway. Needed when the canvas changes under a gesture:
 // Alt+wheel is handled at frame time and can land mid-stroke, and a capture
-// hotkey at any time. Carried across the switch, a stroke left a brush
-// session open with its undo entry filed under whichever canvas was
-// current when the next gesture began, and a vector stroke went with the
+// hotkey at any time. Carried across the switch, a stroke went with the
 // live layer it sat on. Ended here, everything is filed under the canvas
 // it happened on - for either button: this once ended the left button's
 // gestures only, and a right-drag resize went on across the switch.
@@ -1714,13 +1710,7 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
             stroke.kind = ShapeForPress() == DrawShape::Rectangle ? Kind::EraseRect : Kind::Erase;
         } else {
             stroke.shape = ShapeForPress();
-            stroke.kind = stroke.shape != DrawShape::Freehand ? Kind::Shape
-                          // The mode is read here rather than inside the
-                          // gesture so that flipping the setting mid-stroke
-                          // can't move the rest of that stroke somewhere
-                          // else.
-                          : Cfg().paintPixelsInsteadOfStrokes ? Kind::Paint
-                                                              : Kind::Freehand;
+            stroke.kind = stroke.shape != DrawShape::Freehand ? Kind::Shape : Kind::Freehand;
         }
         gesture_ = stroke;
     }
@@ -1737,10 +1727,9 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
 
     switch (stroke->kind) {
         case Kind::Erase:
-            // One gesture in the session: the strokes it clips and the
-            // pixels it takes off any painted layer, snapshotted as it
-            // starts and filed as a single undo entry as it ends - see
-            // Session::BeginErase.
+            // One gesture in the session: the strokes it clips,
+            // snapshotted as it starts and filed as a single undo entry as
+            // it ends - see Session::BeginErase.
             if (event.kind == platform::MouseEventKind::Down) {
                 session_.BeginErase(armed, event.position.x, event.position.y, eraserWidth_);
             } else if (event.kind == platform::MouseEventKind::Move) {
@@ -1771,14 +1760,13 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
             }
             break;
         case Kind::Shape:
-            // The whole of a shape is the session's: its preview, how short
-            // a drag is a stray click, and whether it ends as a stroke or as
-            // painted pixels - see Session::BeginShape. Pressing the other
+            // The whole of a shape is the session's: its preview, and how
+            // short a drag is a stray click - see Session::BeginShape. Pressing the other
             // modifier mid-drag turns a line into a rectangle or back;
             // letting go of both leaves it as it was.
             if (event.kind == platform::MouseEventKind::Down) {
                 session_.BeginShape(armed, sessionShape(stroke->shape), event.position.x, event.position.y,
-                                    drawColorRGBA_, drawWidth_, Cfg().paintPixelsInsteadOfStrokes);
+                                    drawColorRGBA_, drawWidth_);
             } else if (event.kind == platform::MouseEventKind::Move) {
                 if (io.KeyCtrl || io.KeyShift) {
                     stroke->shape = DrawShapeFor(io.KeyCtrl, io.KeyShift);
@@ -1789,19 +1777,8 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
                 session_.EndShape(event.position.x, event.position.y);
             }
             break;
-        case Kind::Paint:
-            // Freehand, in pixels: the brush writes straight into the armed
-            // item's own painted layer, with no stroke stored anywhere.
-            if (event.kind == platform::MouseEventKind::Down) {
-                session_.BeginPaint(armed, event.position.x, event.position.y, drawColorRGBA_, drawWidth_);
-            } else if (event.kind == platform::MouseEventKind::Move) {
-                session_.ExtendPaint(event.position.x, event.position.y);
-            } else {
-                session_.EndPaint();
-            }
-            break;
         case Kind::Freehand:
-            // Freehand, in vector: accumulated into the live layer (screen
+            // Freehand: accumulated into the live layer (screen
             // space) while the stroke is in progress, then transformed into
             // native space and moved into the armed item (see
             // Session::CommitLiveStroke).

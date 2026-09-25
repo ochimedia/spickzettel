@@ -125,13 +125,11 @@ public:
     // reach into its contents.
     CanvasId CurrentCanvasId() const { return currentCanvasId_; }
     const std::vector<Canvas>& Canvases() const { return canvases_; }
-    // Mutable access for the one caller that has to touch every canvas
-    // rather than the current one: writing painted layers out to disk
-    // records the filename it chose back onto each layer (see
-    // OverlayApp::SavePaintedLayers). Deliberately does *not* bump the
-    // generation counter - recording where pixels were saved is not a
-    // change to the drawing, and treating it as one would make every save
-    // dirty the library again and save forever.
+    // Mutable access for the session, which has to touch every canvas
+    // rather than the current one to give back or replace textures (see
+    // Session::ReplaceLostTextures). Deliberately does *not* bump the
+    // generation counter - a texture handle is not a change to the
+    // drawing.
     std::vector<Canvas>& CanvasesMutable() { return canvases_; }
 
     // Added at the end of Folders() (newest last, the order they were
@@ -253,9 +251,9 @@ public:
     // body both of them are: copies or moves `id` - found on whichever
     // canvas holds it, not only the current one - onto `targetCanvasId`,
     // which may be the canvas it is already on. Returns the resulting
-    // snippet's id: a new one for a copy (which owns its own strokes,
-    // painted pixels and, once the caller has given it one, image file -
-    // see DetachLayersForCopy - and starts unmarked, whatever its source's
+    // snippet's id: a new one for a copy (which owns its own strokes and,
+    // once the caller has given it one, image file - see
+    // DetachLayersForCopy - and starts unmarked, whatever its source's
     // mark: a copy is a new thing), the same one for a move. 0 if there is
     // no such snippet, no such canvas, or the canvas is deleted - nothing
     // is placed where it cannot be seen.
@@ -389,18 +387,15 @@ public:
     // textures are pure cost.
     //
     // On `canvasId`, for every item there that isn't deleted: any layer
-    // with a persisted image or painted pixels but no live texture gets one
-    // from `loadLayer` (0 meaning the load failed, leaving the placeholder
-    // like a failed capture). On every other canvas, and for a deleted item
-    // on this one: any *resident* layer - holding a texture, or painted
-    // pixels, or both - is handed to `releaseLayer` and its handle cleared.
-    // Residency is asked directly rather than read off the handle: a
-    // painted layer with pixels but no texture is just as resident, and
-    // only the callback knows whether its pixels are safe to drop.
+    // with a persisted image but no live texture gets one from `loadLayer`
+    // (0 meaning the load failed, leaving the placeholder like a failed
+    // capture). On every other canvas, and for a deleted item on this one:
+    // any layer holding a texture is handed to `releaseLayer` and its
+    // handle cleared.
     //
-    // A release only ever happens for a layer with a file to reload from
-    // or pixels in memory; a texture with nothing behind it (a capture
-    // whose save failed) is kept rather than freed into blankness.
+    // A release only ever happens for a layer with a file to reload from;
+    // a texture with nothing behind it (a capture whose save failed) is
+    // kept rather than freed into blankness.
     // Idempotent and cheap when nothing changed. Doesn't touch Generation():
     // a GPU handle isn't content.
     void SyncShotTexturesToCanvas(CanvasId canvasId, const std::function<uint64_t(const Item&, Layer&)>& loadLayer,

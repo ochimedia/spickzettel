@@ -1816,11 +1816,8 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
 }
 
 void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
-    // What a pen stroke becomes and how strokes are drawn, as one group: the
-    // two are the same question - what a mark is - asked from either end.
+    // How strokes are drawn.
     SettingsHeading("drawingpenheading", strings::kDrawingPenHeading);
-    anyChanged |= CheckboxWithHelp("drawingpaintpixels", strings::kDrawingPaintPixels, &Cfg().paintPixelsInsteadOfStrokes,
-        strings::kDrawingPaintPixelsHelp);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(strings::kDrawingStrokeRenderingHeading);
     ImGui::SameLine();
@@ -3299,8 +3296,7 @@ void OverlayApp::DeleteItemsWithToast(const std::vector<ItemId>& itemIds) {
 }
 
 void OverlayApp::ClearItemDrawing(ItemId itemId) {
-    // Strokes and painted pixels both, as one undoable step - see
-    // Session::ClearDrawing.
+    // Every stroke, as one undoable step - see Session::ClearDrawing.
     if (session_.ClearDrawing(itemId)) {
         ShowActionToast(strings::kToastClearedDrawing);
     }

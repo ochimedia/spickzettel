@@ -68,9 +68,6 @@ void OverlayApp::ShowUndoStep(const std::optional<Session::UndoStep>& step) {
         case Session::UndoWhat::TextEdit:
             what = strings::kUndoTextEdit;
             break;
-        case Session::UndoWhat::Painting:
-            what = strings::kUndoPainting;
-            break;
         case Session::UndoWhat::Create:
             what = strings::kUndoCreate;
             break;

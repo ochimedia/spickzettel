@@ -107,8 +107,8 @@ bool RectsOverlap(const Rect& a, const Rect& b);
 
 // A screen-space point carried into an item's native space (see
 // Item::nativeW/nativeH), plus the factor a length travels by on the way -
-// the average of the two axes' scales, which is what a stroke width or a
-// brush radius uses, since neither has an axis of its own.
+// the average of the two axes' scales, which is what a stroke width or an
+// eraser radius uses, since neither has an axis of its own.
 struct NativePoint {
     float x = 0.0f;
     float y = 0.0f;
@@ -116,10 +116,9 @@ struct NativePoint {
 };
 
 // The one screen-to-native transform, for everything that lands a gesture
-// on an item: the pen baking a stroke, the erasers clipping strokes, and
-// the brush finding its pixel. One function so the three cannot disagree
-// about where the pen is. Pure: depends only on the item's rect and
-// native size.
+// on an item: the pen baking a stroke and the erasers clipping strokes. One
+// function so the two cannot disagree about where the pen is. Pure:
+// depends only on the item's rect and native size.
 NativePoint ScreenToNative(const Item& item, float screenX, float screenY);
 
 // Applies one resize handle's drag delta to `rect`. A corner handle moves

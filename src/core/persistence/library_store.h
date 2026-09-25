@@ -147,8 +147,8 @@ public:
     // version above kFormatVersion. Such a library is not this build's to
     // open - every record it rewrote would lose what the newer build put
     // there - so once this has been seen, by this or by Load, the store
-    // writes nothing at all: Save, Remove, SaveImage, SaveLayerImage and
-    // SaveThumbnail all fail. TrayController::Initialize asks before loading, and refuses to
+    // writes nothing at all: Save, Remove, SaveImage and SaveThumbnail
+    // all fail. TrayController::Initialize asks before loading, and refuses to
     // start. A library.json that is missing, is not JSON or has no version
     // is not newer, and neither is a directory in its place or a file far
     // larger than any record. A file that is there and cannot be read -
@@ -301,24 +301,12 @@ public:
     // in a twentieth of the time PNG took (see EncodeQoiToFile).
     std::optional<std::string> SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int width, int height) const;
 
-    // The same for a painted layer's pixels, as "<itemId>_p<layerIndex>.qoi":
-    // an item can have several layers with pixels of their own (a
-    // screenshot with something painted over it), and the id alone no
-    // longer names a file uniquely. The store names the file rather than
-    // the caller, so that every picture's name says which snippet it
-    // belongs to, even where no record does.
-    std::optional<std::string> SaveLayerImage(uint64_t itemId, size_t layerIndex, const uint8_t* pixelsRGBA,
-                                               int width, int height) const;
-
     // Decodes a previously-saved picture of snippet `itemId` (see
     // SaveImage/Layer::imageFile) back into raw pixels, for reloading its
     // texture when its canvas becomes current. Returns nullopt for an
     // empty filename or if the file is missing/undecodable. The snippet is
     // what says where to look - see FindImage.
     std::optional<DecodedImage> LoadImage(uint64_t itemId, const std::string& filename) const;
-    // Whether that picture is there at all - what tells a picture that
-    // could not be read (held open, say) from one that does not exist.
-    bool HasImage(uint64_t itemId, const std::string& filename) const;
 
     // The longest edge a thumbnail is written at. A canvas tile in the
     // Overview is 200x130 and an item inside one is smaller still, so this
@@ -359,7 +347,7 @@ private:
     // while it has no directory yet.
     std::filesystem::path ImageHome(uint64_t itemId) const;
     std::filesystem::path FindImage(uint64_t itemId, const std::string& filename) const;
-    // Behind SaveImage and SaveLayerImage: encodes into the snippet's home
+    // Behind SaveImage: encodes into the snippet's home
     // under `filename`, with a thumbnail beside it.
     std::optional<std::string> WritePicture(uint64_t itemId, const std::string& filename, const uint8_t* pixelsRGBA,
                                              int width, int height) const;

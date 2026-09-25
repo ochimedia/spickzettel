@@ -22,7 +22,7 @@ add_library(sz_core STATIC
     persistence/library_store.cpp
     session/session.cpp
     session/session_edits.cpp
-    session/session_paint.cpp
+    session/session_shapes.cpp
     session/settings.cpp
     session/undo_entry.cpp
     util/atomic_file.cpp

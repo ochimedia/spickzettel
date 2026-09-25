@@ -164,11 +164,10 @@ bool EncodeQoiToFile(FileSystem& fs, const std::filesystem::path& path, const ui
     }
 
     // Written beside the destination and renamed onto it, the same
-    // discipline every record gets (see core/util/atomic_file.h): a painted
-    // layer is re-encoded over its own previous file every time it is
-    // saved, and truncating that file in place left a window in which a
-    // crash - or a full disk - replaced the only copy on disk of a drawing
-    // with the first half of it.
+    // discipline every record gets (see core/util/atomic_file.h): a file
+    // truncated in place leaves a window in which a crash - or a full disk
+    // - replaces the only copy on disk of a picture with the first half of
+    // it.
     const bool ok = WriteFileAtomically(fs, path, encoded, static_cast<size_t>(encodedSize));
     free(encoded);
     return ok;

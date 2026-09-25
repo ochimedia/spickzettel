@@ -18,6 +18,7 @@
 #include "core/canvas/item.h"
 #include "core/config/app_config.h"
 #include "core/drawing/draw_tool.h"
+#include "core/drawing/painted_image.h"
 #include "core/drawing/stroke.h"
 #include "core/drawing/stroke_mesh_cache.h"
 #include "core/persistence/library_store.h"
@@ -1198,8 +1199,7 @@ private:
     // An item's vector strokes, drawn into a bitmap so they can be
     // composited in one go. Purely derived - the strokes are still the
     // truth, this is thrown away and rebuilt from them, and is never
-    // persisted. That is the whole difference between this and a painted
-    // layer, which looks almost identical from the outside.
+    // persisted.
     struct StrokeRaster {
         PaintedImage pixels;
         uint64_t textureHandle = 0;
@@ -1284,10 +1284,6 @@ private:
     PreviewTextureFn PreviewTextureLookup();
     void ReleaseLayerPreviews();
 
-    // ===== Painting (see AppConfig::paintPixelsInsteadOfStrokes) =====
-
-
-
     // Overview: switch canvases, delete/reorder them, or (when opened from
     // the context menu's Move to canvas) pick a target canvas for that
     // item.
@@ -1298,8 +1294,8 @@ private:
     // Delete on the selection: one undoable delete of them all (see
     // Session::DeleteItems). Those not on the current canvas are passed over.
     void DeleteItemsWithToast(const std::vector<ItemId>& itemIds);
-    // Removes every stroke and every painted pixel from the item (its
-    // captured screenshot is untouched - this only ever clears ink drawn
+    // Removes every stroke from the item (its captured screenshot is
+    // untouched - this only ever clears ink drawn
     // on top) as one undoable step - see Session::ClearDrawing - and says
     // so. No-op if `itemId` doesn't exist or has nothing drawn on it.
     void ClearItemDrawing(ItemId itemId);
@@ -1706,7 +1702,7 @@ private:
     // shape it is making, since a shape can switch between line and
     // rectangle mid-drag; for the rectangular eraser, the rectangle.
     struct StrokeInFlight {
-        enum class Kind { Freehand, Paint, Shape, Erase, EraseRect };
+        enum class Kind { Freehand, Shape, Erase, EraseRect };
         Kind kind = Kind::Freehand;
         DrawShape shape = DrawShape::Freehand;  // Shape only
         RectErase rect;                         // EraseRect only

@@ -169,75 +169,6 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
     std::filesystem::remove_all(dir);
 }
 
-// A painted layer whose file was there but could not be read when its
-// canvas came back - held by another program, say; here, unreadable for a
-// while. Painting must not start the layer over from blank, which the next
-// save would write over the drawing; it waits until the file reads again,
-// and then paints onto what is in it.
-TEST(SessionTest, PaintingNeverStartsOverALayerWhoseFileCouldNotBeRead) {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_paint_unreadable";
-    std::filesystem::remove_all(dir);
-    persistence::LibraryStore store(dir);
-    test::FakeOverlayWindow window;
-    window.createTextureFromPixelsReturnsHandle = 9;
-    Session session;
-    session.AttachWindow(&window);
-    session.SetLibraryStore(&store);
-    const CanvasId home = session.Manager().CurrentCanvasId();
-    const ItemId drawing = session.Manager().CreateItem(false, Rect{0.0f, 0.0f, 32.0f, 32.0f}, "Drawing");
-    session.BeginPaint(drawing, 4.0f, 4.0f, 0xFF0000FFu, 4.0f);
-    session.ExtendPaint(12.0f, 4.0f);
-    session.EndPaint();
-    ASSERT_TRUE(session.Flush());
-    const auto paintedLayer = [&]() -> Layer& {
-        return *Session::FindPaintedLayer(*session.Manager().FindItemAnywhere(drawing));
-    };
-    const std::vector<uint8_t> first = paintedLayer().painted->PixelsRGBA();
-    std::filesystem::path file;
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
-        file = entry.path().filename() == paintedLayer().imageFile ? entry.path() : file;
-    }
-    ASSERT_FALSE(file.empty());
-
-    // Away, so its pixels are let go of; the file unreadable; and back.
-    session.Manager().SwitchToCanvas(session.Manager().AddCanvas("Elsewhere"));
-    session.EnsureTexturesForCurrentCanvas();
-    ASSERT_EQ(paintedLayer().painted, nullptr);
-    const std::string saved = [&] {
-        std::ifstream in(file, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(in), {});
-    }();
-    std::ofstream(file, std::ios::binary | std::ios::trunc) << "not a picture";
-    session.Manager().SwitchToCanvas(home);
-    session.EnsureTexturesForCurrentCanvas();
-    ASSERT_EQ(paintedLayer().painted, nullptr) << "could not be read";
-
-    session.BeginPaint(drawing, 4.0f, 20.0f, 0xFF0000FFu, 4.0f);
-    session.EndPaint();
-    EXPECT_EQ(paintedLayer().painted, nullptr) << "painted into blank pixels in its place";
-    ASSERT_TRUE(session.Flush());
-
-    // Readable again: painting goes onto the drawing that is there.
-    std::ofstream(file, std::ios::binary | std::ios::trunc) << saved;
-    session.BeginPaint(drawing, 4.0f, 20.0f, 0xFF0000FFu, 4.0f);
-    session.EndPaint();
-    ASSERT_NE(paintedLayer().painted, nullptr);
-    ASSERT_TRUE(session.Flush());
-    const std::optional<persistence::DecodedImage> onDisk = store.LoadImage(drawing, paintedLayer().imageFile);
-    ASSERT_TRUE(onDisk.has_value());
-    ASSERT_EQ(onDisk->pixelsRGBA.size(), first.size());
-    for (size_t i = 3; i < first.size(); i += 4) {
-        if (first[i] != 0) {
-            ASSERT_NE(onDisk->pixelsRGBA[i], 0) << "the first stroke was painted over with blank";
-        }
-    }
-    EXPECT_NE(onDisk->pixelsRGBA, first) << "and the second stroke is there too";
-
-    session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
-}
-
 // The retention period: what has been deleted since before the cutoff goes
 // for good, whatever else is deleted stays, and nothing live is touched.
 TEST(SessionTest, ErasingWhatWasDeletedBeforeACutoffLeavesTheRest) {
@@ -454,38 +385,6 @@ TEST(SessionTest, AnOpenTextEditIsNotUndoneFromUnderIt) {
     EXPECT_FALSE(session.CanUndo());
 }
 
-// An erase over strokes and pixels both, undone while the pixels were not
-// in memory: the strokes come back, and the pixels, once loaded again from
-// what was saved, are not later swapped for the ones from before the erase.
-TEST(SessionTest, AnEraseUndoneWithoutItsPixelsLeavesThemOutOfItsRedo) {
-    test::FakeOverlayWindow window;
-    window.createTextureFromPixelsReturnsHandle = 9;
-    Session session;
-    session.AttachWindow(&window);
-    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
-    DrawStrokeInto(session, item);
-    session.BeginPaint(item, 10.0f, 60.0f, 0xFF0000FFu, 6.0f);
-    session.ExtendPaint(60.0f, 10.0f);
-    session.EndPaint();
-    session.BeginErase(item, 35.0f, 35.0f, 20.0f);
-    session.EndErase();
-    Layer* found = Session::FindPaintedLayer(*session.Manager().FindItemAnywhere(item));
-    ASSERT_NE(found, nullptr);
-    ASSERT_NE(found->painted, nullptr);
-    Layer& layer = *found;
-    const PaintedImage afterErase = *layer.painted;
-    const size_t strokesAfterErase = ItemById(session.Manager(), item)->strokes.size();
-
-    layer.painted.reset();
-    ASSERT_TRUE(session.Undo().has_value()) << "the strokes are there to put back";
-    EXPECT_NE(ItemById(session.Manager(), item)->strokes.size(), strokesAfterErase);
-
-    layer.painted = std::make_shared<PaintedImage>(afterErase);  // as read back from disk
-    ASSERT_TRUE(session.Redo().has_value());
-    EXPECT_EQ(ItemById(session.Manager(), item)->strokes.size(), strokesAfterErase);
-    EXPECT_EQ(layer.painted->PixelsRGBA(), afterErase.PixelsRGBA()) << "not the pixels from before the erase";
-}
-
 // An erase begun while another is still open ends that one first, filed
 // whole: one undo puts back what each took.
 TEST(SessionTest, AnEraseBegunOverAnOpenOneFilesThatOneFirst) {
@@ -522,27 +421,20 @@ TEST(SessionTest, ARectangleErasedOverAnOpenEraseFilesThatOneFirst) {
     EXPECT_EQ(ItemById(session.Manager(), item)->strokes, drawn);
 }
 
-// An eraser dragged over nothing but transparent pixels changes nothing,
-// and files nothing: the next undo takes back what came before it.
+// An eraser dragged over nothing but empty space changes nothing, and
+// files nothing: the next undo takes back what came before it.
 TEST(SessionTest, AnErasePassThatChangesNothingIsNoStep) {
-    test::FakeOverlayWindow window;
-    window.createTextureFromPixelsReturnsHandle = 9;
     Session session;
-    session.AttachWindow(&window);
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
-    session.BeginPaint(item, 10.0f, 10.0f, 0xFF0000FFu, 6.0f);
-    session.EndPaint();
-    Layer& layer = *Session::FindPaintedLayer(*session.Manager().FindItemAnywhere(item));
-    layer.paintedDirty = false;  // as once saved
+    DrawLineInto(session, item, 10.0f);
 
     session.BeginErase(item, 80.0f, 80.0f, 10.0f);
     session.ExtendErase(90.0f, 60.0f, 10.0f);
     session.EndErase();
-    EXPECT_FALSE(layer.paintedDirty) << "nothing to write out again";
 
     const std::optional<Session::UndoStep> undone = session.Undo();
     ASSERT_TRUE(undone.has_value());
-    EXPECT_NE(undone->what, Session::UndoWhat::Erase) << "the paint, not an erase of nothing";
+    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke) << "the stroke, not an erase of nothing";
     EXPECT_FALSE(session.CanUndo());
 }
 
@@ -697,7 +589,7 @@ TEST(SessionTest, CapturingWithoutAWindowLeavesAPlaceholder) {
 
 // Drags a shape from (10, 10) to (x, y), the way the mouse does.
 void DragShape(Session& session, ItemId item, Session::Shape shape, float x, float y) {
-    session.BeginShape(item, shape, 10.0f, 10.0f, 0xFF0000FFu, 3.0f, /*paintPixels=*/false);
+    session.BeginShape(item, shape, 10.0f, 10.0f, 0xFF0000FFu, 3.0f);
     session.UpdateShape((10.0f + x) * 0.5f, (10.0f + y) * 0.5f);
     session.UpdateShape(x, y);
     session.EndShape(x, y);
@@ -725,7 +617,7 @@ TEST(SessionTest, AShapeIsBakedAsOneStrokeAndUndoneInOneStep) {
 TEST(SessionTest, AShapeCanChangeWhileItIsDragged) {
     Session session;
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
-    session.BeginShape(item, Session::Shape::Rectangle, 10.0f, 10.0f, 0xFF0000FFu, 3.0f, false);
+    session.BeginShape(item, Session::Shape::Rectangle, 10.0f, 10.0f, 0xFF0000FFu, 3.0f);
     session.UpdateShape(80.0f, 60.0f);
     session.SetShape(Session::Shape::Line);
     const CanvasState& live = session.Manager().CurrentOrNull()->liveLayer;
@@ -743,7 +635,7 @@ TEST(SessionTest, AShapeCanChangeWhileItIsDragged) {
 TEST(SessionTest, AFlatRectangleIsALine) {
     Session session;
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
-    session.BeginShape(item, Session::Shape::Rectangle, 10.0f, 40.0f, 0xFF0000FFu, 3.0f, false);
+    session.BeginShape(item, Session::Shape::Rectangle, 10.0f, 40.0f, 0xFF0000FFu, 3.0f);
     session.EndShape(80.0f, 40.0f);
     const Item* baked = ItemById(session.Manager(), item);
     ASSERT_EQ(baked->strokes.size(), 1u);
@@ -1308,82 +1200,6 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
         }
     }
     EXPECT_EQ(pictures, 2u);
-
-    session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
-}
-
-// The ordinary paste across canvases: the source's painted pixels were let
-// go of when its canvas stopped being current, so the copy has to be given
-// them from the source's file - or it comes out blank, for good.
-TEST(SessionTest, APasteAcrossCanvasesKeepsThePaintedLayer) {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_painted_paste";
-    std::filesystem::remove_all(dir);
-    persistence::LibraryStore store(dir);
-    test::FakeOverlayWindow window;
-    window.createTextureFromPixelsReturnsHandle = 9;
-    Session session;
-    session.AttachWindow(&window);
-    session.SetLibraryStore(&store);
-
-    const std::vector<uint8_t> paint = {1, 2, 3, 255, 4, 5, 6, 255};
-    const ItemId id = session.Manager().CreateItem(false, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Painted");
-    {
-        Layer painted;
-        painted.kind = LayerKind::Painted;
-        painted.painted = std::make_shared<PaintedImage>(PaintedImage::FromPixels(2, 1, paint));
-        painted.paintedDirty = true;
-        session.Manager().FindItemAnywhere(id)->layers.push_back(painted);
-    }
-    ASSERT_TRUE(session.Flush());
-    const std::string paintedFile = session.Manager().FindItemAnywhere(id)->layers[1].imageFile;
-    ASSERT_FALSE(paintedFile.empty());
-
-    // Away to another canvas: the pixels are on disk, so they are let go of.
-    const CanvasId other = session.Manager().AddCanvas("Other");
-    session.Manager().SwitchToCanvas(other);
-    session.SyncTexturesToCurrentCanvas();
-    ASSERT_FALSE(session.Manager().FindItemAnywhere(id)->layers[1].HasPaintedPixels()) << "released, as it should be";
-
-    // Paste here, the way PasteFromClipboard does it.
-    const ItemId copyId = session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/true);
-    ASSERT_NE(copyId, 0u);
-    EXPECT_TRUE(session.ClonePicturesForCopy(id, copyId));
-    Item* copy = session.Manager().FindItemAnywhere(copyId);
-    ASSERT_EQ(copy->layers.size(), 2u);
-    EXPECT_TRUE(copy->layers[1].HasPaintedPixels()) << "pixels of its own";
-    EXPECT_EQ(copy->layers[1].painted->PixelsRGBA(), paint);
-    session.SyncTexturesToCurrentCanvas();
-    EXPECT_NE(copy->layers[1].textureHandle, 0u) << "and on screen";
-    ASSERT_TRUE(session.Flush());
-
-    persistence::LibraryStore reopened(dir);
-    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
-    ASSERT_TRUE(loaded.has_value());
-    size_t paintedLayers = 0;
-    for (const Canvas& canvas : loaded->canvases) {
-        for (const Item& item : canvas.items) {
-            ASSERT_EQ(item.layers.size(), 2u);
-            ASSERT_FALSE(item.layers[1].imageFile.empty()) << "every copy names its painted layer's file";
-            const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(item.id, item.layers[1].imageFile);
-            ASSERT_TRUE(saved.has_value());
-            EXPECT_EQ(saved->pixelsRGBA, paint);
-            ++paintedLayers;
-        }
-    }
-    EXPECT_EQ(paintedLayers, 2u);
-
-    // A source whose painted file is gone gives its copy nothing there, and
-    // says so.
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
-        if (entry.path().filename() == paintedFile && entry.path().string().find("painted") != std::string::npos) {
-            std::filesystem::remove(entry.path());
-        }
-    }
-    const ItemId another = session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/true);
-    ASSERT_NE(another, 0u);
-    EXPECT_FALSE(session.ClonePicturesForCopy(id, another));
 
     session.SetLibraryStore(nullptr);
     std::filesystem::remove_all(dir);

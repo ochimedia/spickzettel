@@ -40,54 +40,6 @@ constexpr float kRemovalRetrySeconds = 10.0f;
 
 // ================= Persistence =================
 
-bool Session::SavePaintedLayers(LibraryInstance& instance) {
-    if (!instance.store) {
-        return true;
-    }
-    bool wroteEverything = true;
-    // Every painted layer on every canvas, not just the current one: a
-    // layer painted on canvas A and then switched away from still has its
-    // pixels in memory and nothing on disk until this runs.
-    for (Canvas& canvas : instance.manager.CanvasesMutable()) {
-        for (Item& item : canvas.items) {
-            for (size_t index = 0; index < item.layers.size(); ++index) {
-                Layer& layer = item.layers[index];
-                if (!layer.HasPaintedPixels()) {
-                    continue;
-                }
-                // Only what has actually changed. Encoding a fullscreen
-                // layer is 13ms, and this now runs on every canvas switch
-                // as well as every autosave - re-writing pixels that are
-                // already on disk would make switching canvases cost real
-                // time for nothing.
-                if (!layer.paintedDirty) {
-                    continue;
-                }
-                // Named by the store for the item and the layer's place in
-                // its stack, so two painted layers on one item can't
-                // collide. A layer that moves in the stack is written under
-                // a new name and the old file is collected by Save's own GC.
-                if (const std::optional<std::string> filename =
-                        instance.store->SaveLayerImage(item.id, index, layer.painted->PixelsRGBA().data(),
-                                                       layer.painted->Width(), layer.painted->Height())) {
-                    layer.imageFile = *filename;
-                    layer.paintedDirty = false;
-                } else {
-                    // A failed write leaves it dirty on purpose: these
-                    // pixels are still the only copy, and the sync below
-                    // refuses to drop a layer that is still the only copy
-                    // of itself. And it is reported, so the save that
-                    // called this is not acknowledged either - a layer
-                    // that stayed dirty behind an acknowledged save was
-                    // never retried until something unrelated changed.
-                    wroteEverything = false;
-                }
-            }
-        }
-    }
-    return wroteEverything;
-}
-
 bool Session::SavePendingPictures(LibraryInstance& instance) {
     if (!instance.store) {
         return true;
@@ -125,9 +77,7 @@ bool Session::WriteRecoveryCopy(const std::filesystem::path& dir) {
                 // Into the copy under whatever the copy calls it; the
                 // record is rewritten to name that.
                 const auto write = [&](const uint8_t* pixelsRGBA, int width, int height) {
-                    const std::optional<std::string> filename =
-                        &layer == picture ? copy.SaveImage(item.id, pixelsRGBA, width, height)
-                                          : copy.SaveLayerImage(item.id, index, pixelsRGBA, width, height);
+                    const std::optional<std::string> filename = copy.SaveImage(item.id, pixelsRGBA, width, height);
                     if (filename) {
                         layer.imageFile = *filename;
                     } else {
@@ -135,21 +85,16 @@ bool Session::WriteRecoveryCopy(const std::filesystem::path& dir) {
                     }
                 };
                 // Where the pixels are, in order: this session (a capture
-                // whose write never landed; a painted layer, dirty or not),
-                // else the real library, re-encoded from there. The first
-                // version copied only what was in memory and left every
-                // record naming a file that was not in the copy, so the copy
-                // opened with its screenshots as placeholders and nothing to
-                // say why.
+                // whose write never landed), else the real library,
+                // re-encoded from there. The first version copied only what
+                // was in memory and left every record naming a file that was
+                // not in the copy, so the copy opened with its screenshots
+                // as placeholders and nothing to say why.
                 if (&layer == picture) {
                     if (const auto pending = pendingPictures_.find(item.id); pending != pendingPictures_.end()) {
                         write(pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
                         continue;
                     }
-                }
-                if (layer.HasPaintedPixels()) {
-                    write(layer.painted->PixelsRGBA().data(), layer.painted->Width(), layer.painted->Height());
-                    continue;
                 }
                 if (layer.imageFile.empty()) {
                     continue;  // nothing named, nothing owed
@@ -183,8 +128,7 @@ bool Session::WriteRecoveryCopy(const std::filesystem::path& dir) {
 }
 
 bool Session::HasUnsavedChanges() const {
-    return library_.manager.Generation() != library_.lastSavedGeneration ||
-           library_.paintRevision != library_.lastSavedPaintRevision || !pendingPictures_.empty() ||
+    return library_.manager.Generation() != library_.lastSavedGeneration || !pendingPictures_.empty() ||
            (library_.store && library_.store->HasPendingRemovals());
 }
 
@@ -192,55 +136,16 @@ void Session::SyncTexturesToCurrentCanvas() {
     if (!Store() || !window_) {
         return;
     }
-    // Before anything is dropped, not after: the sync below throws away
-    // every non-current canvas's painted pixels, and pixels that were never
-    // written are the only copy there is. Waiting for the debounced
-    // autosave was not good enough - switching canvas calls MarkChanged
-    // itself, which pushes that save *further* away at exactly the moment
-    // the pixels are discarded. Cheap in the ordinary case: only layers
-    // actually painted on since their last write are re-encoded.
-    SavePaintedLayers(library_);
-
     Manager().SyncShotTexturesToCanvas(
         Manager().CurrentCanvasId(),
         [this](const Item& item, Layer& layer) -> uint64_t {
-            // Still holding its pixels - because they weren't safely on
-            // disk to drop (see the release path below) - so they, not the
-            // file, are what this layer actually is.
-            if (layer.HasPaintedPixels()) {
-                return window_->CreateTextureFromPixels(layer.painted->PixelsRGBA().data(),
-                                                         layer.painted->Width(), layer.painted->Height());
-            }
             const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id, layer.imageFile);
             if (!decoded.has_value()) {
                 return 0;
             }
-            // A painted layer needs the pixels in memory as well as on the
-            // GPU: a brush composites against what is already there, and a
-            // texture is write-only from this side. An Image layer needs no
-            // CPU copy, which is most of them and all of the big ones.
-            if (layer.kind == LayerKind::Painted) {
-                layer.painted = std::make_shared<PaintedImage>(
-                    PaintedImage::FromPixels(decoded->width, decoded->height, decoded->pixelsRGBA));
-            }
             return window_->CreateTextureFromPixels(decoded->pixelsRGBA.data(), decoded->width, decoded->height);
         },
-        [this](Layer& layer) {
-            // Offered for release because it is resident - a texture, or
-            // pixels, or both (see SyncShotTexturesToCanvas) - so either
-            // half may be absent.
-            if (layer.textureHandle != 0) {
-                window_->ReleaseTexture(layer.textureHandle);
-            }
-            // The pixels go too - holding a canvas's worth for every canvas
-            // is the unbounded growth per-canvas syncing exists to avoid -
-            // but only once they are safely on disk. Still dirty here means
-            // the write above failed, and these are the only copy: keeping
-            // them costs memory, dropping them costs the drawing.
-            if (!layer.paintedDirty) {
-                layer.painted.reset();
-            }
-        });
+        [this](Layer& layer) { window_->ReleaseTexture(layer.textureHandle); });
     shotTextureCanvasId_ = Manager().CurrentCanvasId();
 }
 
@@ -296,9 +201,8 @@ void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {
     }
 
     const uint64_t generation = instance.manager.Generation();
-    if (generation != instance.lastObservedGeneration || instance.paintRevision != instance.lastObservedPaintRevision) {
+    if (generation != instance.lastObservedGeneration) {
         instance.lastObservedGeneration = generation;
-        instance.lastObservedPaintRevision = instance.paintRevision;
         instance.secondsSinceLastChange = 0.0f;
     } else {
         instance.secondsSinceLastChange += deltaSeconds;
@@ -323,9 +227,8 @@ void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {
     // Nothing owed but a removal - the records are saved and no picture
     // is waiting - is on its own clock (see kRemovalRetrySeconds), unless a
     // failed save's retry is what brought us here, which goes ahead.
-    const bool onlyARemovalOwed = generation == instance.lastSavedGeneration &&
-                                  instance.paintRevision == instance.lastSavedPaintRevision &&
-                                  pendingPictures_.empty() && instance.saveRetryBackoffSeconds <= 0.0f;
+    const bool onlyARemovalOwed = generation == instance.lastSavedGeneration && pendingPictures_.empty() &&
+                                  instance.saveRetryBackoffSeconds <= 0.0f;
     if (onlyARemovalOwed) {
         instance.removalRetryCountdownSeconds -= deltaSeconds;
         if (instance.removalRetryCountdownSeconds > 0.0f) {
@@ -348,20 +251,17 @@ bool Session::SaveLibraryNow(LibraryInstance& instance) {
     }
     // Pixels first, then the metadata that points at them. Both have to
     // land for the save to count: the generation is acknowledged only when
-    // everything it covers is on disk, and a painted layer's pixels - or a
-    // capture's still waiting to be written - are covered by it as much as
-    // the record that names them. The metadata is written even when a
-    // picture wasn't - what did land is worth having, and the whole thing
-    // is retried until all of it has.
+    // everything it covers is on disk, and a capture's pixels still waiting
+    // to be written are covered by it as much as the record that names
+    // them. The metadata is written even when a picture wasn't - what did
+    // land is worth having, and the whole thing is retried until all of it
+    // has.
     const uint64_t generation = instance.manager.Generation();
-    const uint64_t paintRevision = instance.paintRevision;
-    const bool pixelsSaved = SavePaintedLayers(instance);
     const bool picturesSaved = SavePendingPictures(instance);
     const bool metadataSaved = instance.store->Save(instance.manager.View());
-    const bool saved = pixelsSaved && picturesSaved && metadataSaved;
+    const bool saved = picturesSaved && metadataSaved;
     if (saved) {
         instance.lastSavedGeneration = generation;
-        instance.lastSavedPaintRevision = paintRevision;
         instance.saveRetryBackoffSeconds = 0.0f;
         if (instance.store->HasPendingRemovals()) {
             instance.removalRetryCountdownSeconds = kRemovalRetrySeconds;
@@ -672,7 +572,6 @@ bool Session::ClonePicturesForCopy(ItemId sourceId, ItemId copyId) {
     }
     bool whole = true;
 
-    // ----- The picture layer -----
     // The session's own copy of the pixels first: a capture whose write has
     // not landed has no file yet and its pixels are here, and a copy taken
     // of it in that window used to come out with no picture at all, for
@@ -710,31 +609,6 @@ bool Session::ClonePicturesForCopy(ItemId sourceId, ItemId copyId) {
         }
     }
 
-    // ----- Every painted layer -----
-    // One whose pixels are resident was deep-copied by CanvasManager
-    // (DetachLayersForCopy) and starts dirty, so the next save writes it.
-    // One whose pixels were let go of when its canvas stopped being current
-    // - the ordinary state of a layer copied from another canvas - arrived
-    // with nothing: no pixels to copy, and its filename cleared, since the
-    // file is the source's. Read back from the source's file here, into
-    // pixels of the copy's own, dirty: the copy's only copy until written.
-    // The first version restored the picture layer alone, and a painted
-    // layer pasted across canvases came out blank, for good.
-    for (size_t index = 0; index < source->layers.size() && index < copy->layers.size(); ++index) {
-        const Layer& from = source->layers[index];
-        Layer& to = copy->layers[index];
-        if (to.kind != LayerKind::Painted || to.HasPaintedPixels() || from.imageFile.empty()) {
-            continue;
-        }
-        const std::optional<persistence::DecodedImage> pixels = Store()->LoadImage(sourceId, from.imageFile);
-        if (!pixels.has_value()) {
-            whole = false;
-            continue;
-        }
-        to.painted = std::make_shared<PaintedImage>(
-            PaintedImage::FromPixels(pixels->width, pixels->height, pixels->pixelsRGBA));
-        to.paintedDirty = true;
-    }
     // No MarkChanged() call needed - same reasoning as CaptureShotItem's
     // own: this runs synchronously right after the copy itself
     // (CanvasManager::DuplicateItem/MoveOrCopyItemToCanvas), which already

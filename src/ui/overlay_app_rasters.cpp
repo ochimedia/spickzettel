@@ -13,19 +13,18 @@ namespace sz::ui {
 //
 // GPU-side caches the UI keeps for drawing: the bitmaps strokes are drawn
 // into in the rasterized render mode, and the thumbnail textures the
-// Overview shows. Painting itself - putting pixels into a snippet's painted
-// layer - is the session's (see core/session/session_paint.cpp).
+// Overview shows.
 
 namespace {
 
-// A painted layer is not allowed to be enormous no matter how the item is
+// A stroke raster is not allowed to be enormous no matter how the item is
 // sized - 4096 on a side is well past a fullscreen capture and is where
 // the memory (64 MB at RGBA8) stops being reasonable to hold per item. An
 // item larger than this gets a *smaller resolution scale*, not a cropped
 // bitmap - see FitResolutionScale for why the distinction is the
-// difference between a stroke landing under the pen and a quarter of the
-// way across the screen from it.
-constexpr int kMaxPaintedExtent = 4096;
+// difference between a stroke landing where it was drawn and a quarter of
+// the way across the screen from it.
+constexpr int kMaxRasterExtent = 4096;
 
 }  // namespace
 
@@ -149,7 +148,7 @@ void OverlayApp::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
     // doesn't - and then every coordinate below goes through the same
     // scale, so the raster stays in register with the strokes whatever
     // size it came out at.
-    const float scale = FitResolutionScale(item.nativeW, item.nativeH, 1.0f, kMaxPaintedExtent);
+    const float scale = FitResolutionScale(item.nativeW, item.nativeH, 1.0f, kMaxRasterExtent);
     const int width = ScaledPixelExtent(item.nativeW, scale);
     const int height = ScaledPixelExtent(item.nativeH, scale);
 
@@ -220,8 +219,8 @@ void OverlayApp::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
     if (!window_ || raster.pixels.Empty()) {
         return;
     }
-    // Uploaded whole rather than by dirty rectangle: unlike a brush, this
-    // runs once per finished stroke, not several times a frame.
+    // Uploaded whole rather than by dirty rectangle: this runs once per
+    // finished stroke, not several times a frame.
     if (raster.textureHandle == 0) {
         raster.textureHandle = window_->CreateTextureFromPixels(raster.pixels.PixelsRGBA().data(),
                                                                  raster.pixels.Width(), raster.pixels.Height());

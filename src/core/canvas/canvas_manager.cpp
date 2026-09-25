@@ -16,21 +16,10 @@ namespace {
 // must not be duplicated. imageFile names a file in the source's own
 // directory, so it is cleared and the caller gives the copy a file of its
 // own (see Session::ClonePicturesForCopy); this class has no file access.
-//
-// Painted pixels are deep-copied, not shared: this is a live item being
-// duplicated, and painting on one copy must not show up on the other. The
-// clone starts *dirty*: it has no file, so these pixels are the only copy
-// there is, and paintedDirty is what the save writes and what the release
-// path refuses to drop. Copying the source's flag - false the moment it has
-// autosaved - would lose every copied painting on the next canvas switch.
 void DetachLayersForCopy(Item& copied) {
     for (Layer& layer : copied.layers) {
         layer.textureHandle = 0;
         layer.imageFile.clear();
-        if (layer.painted) {
-            layer.painted = std::make_shared<PaintedImage>(*layer.painted);
-            layer.paintedDirty = true;
-        }
     }
 }
 
@@ -338,12 +327,10 @@ ItemId CanvasManager::CreateItem(bool hasBackground, Rect rect, std::string name
     // Every item is created with exactly one layer - its picture - even a
     // plain Drawing, which starts fully transparent and is a layer waiting
     // to be given something rather than an item with no layer at all. That
-    // keeps ImageLayer() non-null everywhere downstream, and is what a
-    // second layer will be pushed on top of. Opaque by default for a
-    // Screenshot, none at all for a Drawing; tintColorRGBA stays at its own
-    // in-class default (white) either way.
+    // keeps ImageLayer() non-null everywhere downstream. Opaque by default
+    // for a Screenshot, none at all for a Drawing; tintColorRGBA stays at
+    // its own in-class default (white) either way.
     Layer picture;
-    picture.kind = LayerKind::Image;
     picture.opacity = hasBackground ? 1.0f : 0.0f;
     picture.showsPlaceholder = hasBackground;
     item.layers = {std::move(picture)};
@@ -1105,26 +1092,16 @@ void CanvasManager::SyncShotTexturesToCanvas(CanvasId canvasId,
             // another canvas.
             const bool isCurrent = canvas.id == canvasId && !IsDeleted(canvas, item);
             for (Layer& layer : item.layers) {
-                // Nothing persisted to load from and nothing in memory
-                // either - so nothing to load, and nothing safe to release
-                // into. A painted layer holding pixels with no file is the
-                // exception: it has something to show, and something to
-                // lose (see OverlayApp's own release path).
-                if (layer.imageFile.empty() && !layer.HasPaintedPixels()) {
+                // Nothing persisted to load from - so nothing to load, and
+                // nothing safe to release into.
+                if (layer.imageFile.empty()) {
                     continue;
                 }
-                // "Resident" is the question, asked directly: holding a
-                // texture *or* holding pixels. A texture handle alone used
-                // to stand in for it, and a painted layer that had pixels
-                // but never got a texture - a copy dropped onto a canvas
-                // that wasn't current - was never offered for release and
-                // sat in memory for as long as the app ran.
-                const bool resident = layer.textureHandle != 0 || layer.HasPaintedPixels();
                 if (isCurrent) {
                     if (layer.textureHandle == 0) {
                         layer.textureHandle = loadLayer(item, layer);
                     }
-                } else if (resident) {
+                } else if (layer.textureHandle != 0) {
                     releaseLayer(layer);
                     layer.textureHandle = 0;
                 }

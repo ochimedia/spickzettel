@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "core/canvas/canvas_manager.h"
-#include "core/drawing/painted_image.h"
 #include "core/drawing/stroke.h"
 #include "core/persistence/library_store.h"
 #include "core/session/undo_entry.h"
@@ -107,10 +106,8 @@ public:
     // Whether anything is owed to the disk: a change since the last save
     // that landed, a capture whose picture could not be written yet (see
     // CaptureShotItem), or a permanent delete whose directory could not
-    // be wholly removed yet (see DeletePermanently) - and painted pixels
-    // changed since the last save, whether or not the gesture that changed
-    // them has ended. What the autosave and Flush act on, and what a UI
-    // can show. The removal keeps this true across a Flush that returned
+    // be wholly removed yet (see DeletePermanently). What the autosave and
+    // Flush act on, and what a UI can show. The removal keeps this true across a Flush that returned
     // true: the intent is on disk and the save counted, but the autosave's
     // clock keeps asking until the directory is gone, rather than waiting
     // for an unrelated edit.
@@ -120,8 +117,8 @@ public:
     bool LastSaveFailed() const { return library_.saveRetryBackoffSeconds > 0.0f; }
     // Writes what is in memory to a fresh, whole library at `dir`: every
     // record, and every picture every record names - from this session
-    // where it holds the pixels (a capture whose write has not landed, a
-    // painted layer), and re-encoded from the real library otherwise, so
+    // where it holds the pixels (a capture whose write has not landed), and
+    // re-encoded from the real library otherwise, so
     // that the copy opens on its own. A `recovery.txt` beside the tree
     // says where it came from and whether it is whole. For the moment the
     // app has to go - exit, the OS ending the session - and the library it
@@ -162,7 +159,7 @@ public:
     // Every texture this handed out is lost - the GPU device was replaced
     // (see IOverlayWindow::TextureGeneration). Each is let go of, and made
     // again from what it showed: the current canvas's pictures on the next
-    // EnsureTexturesForCurrentCanvas, from memory or the library, a picture
+    // EnsureTexturesForCurrentCanvas, from the library, a picture
     // not written yet from the pixels kept for it, and the frozen screen
     // from the pixels kept for cropping.
     void ReplaceLostTextures();
@@ -171,7 +168,7 @@ public:
 
     // What a step of undo or redo took back or put back - for a UI to say
     // so. `undone` is true for an undo, false for a redo.
-    enum class UndoWhat { Stroke, Erase, Delete, TextEdit, Painting, Create, Placement, Paste, Duplicate };
+    enum class UndoWhat { Stroke, Erase, Delete, TextEdit, Create, Placement, Paste, Duplicate };
     struct UndoStep {
         UndoWhat what = UndoWhat::Stroke;
         bool undone = true;
@@ -266,8 +263,8 @@ public:
     // what was moved comes back on top, or is refused the same way if it
     // has been deleted since. Nothing is filed for no arrivals.
     void RecordArrivals(std::vector<Arrival> arrivals, bool duplicate);
-    // Removes a snippet nothing has been put into - no strokes, no painted
-    // pixels, no text, no picture of its own - as if it had never been
+    // Removes a snippet nothing has been put into - no strokes, no text, no
+    // picture of its own - as if it had never been
     // made: erased rather than marked, and off the history. For a snippet a
     // click made that turned out not to be meant. False, doing nothing, for
     // a snippet with anything in it or no snippet by that id.
@@ -275,8 +272,7 @@ public:
     // Whether nothing has been put into the snippet yet - the question
     // DiscardIfUntouched asks, on its own. False for no snippet by that id.
     bool IsUntouched(ItemId itemId) const;
-    // Everything drawn on a snippet - its strokes and its painted pixels -
-    // cleared as one undoable step. False if there was nothing to clear.
+    // Every stroke on a snippet, cleared as one undoable step. False if there was nothing to clear.
     bool ClearDrawing(ItemId itemId);
     // A text edit of a snippet's note: Begin remembers what the text was,
     // End commits the new text and files one entry for the whole edit if it
@@ -286,15 +282,9 @@ public:
     void BeginTextEdit(ItemId itemId);
     void EndTextEdit(std::optional<std::string> text);
 
-    // The brush, as a gesture in screen space: paints into the item's
-    // painted layer (made on first use), and files one entry when it ends.
-    void BeginPaint(ItemId itemId, float screenX, float screenY, uint32_t colorRGBA, float widthScreenPx);
-    void ExtendPaint(float screenX, float screenY);
-    void EndPaint();
-
-    // The eraser, as a gesture: clips the item's strokes and erases its
-    // painted pixels under a circle `widthScreenPx` across, and files the
-    // whole gesture - both halves - as one entry when it ends.
+    // The eraser, as a gesture: clips the item's strokes under a circle
+    // `widthScreenPx` across, and files the whole gesture as one entry when
+    // it ends.
     void BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx);
     void ExtendErase(float screenX, float screenY, float widthScreenPx);
     void EndErase();
@@ -306,21 +296,15 @@ public:
     // A shape, as a gesture in screen space from a fixed corner: previewed
     // on the current canvas's live layer while it is dragged - a vector
     // stroke in either mode, cheap to replace wholesale as the shape changes
-    // - and on End baked into the item as a stroke, or painted into its
-    // pixels with `paintPixels`, as one undo entry. SetShape changes which
+    // - and on End baked into the item as a stroke, as one undo entry.
+    // SetShape changes which
     // shape it is mid-drag; Cancel drops it, leaving nothing.
     void BeginShape(ItemId itemId, Shape shape, float screenX, float screenY, uint32_t colorRGBA,
-                    float widthScreenPx, bool paintPixels);
+                    float widthScreenPx);
     void UpdateShape(float screenX, float screenY);
     void SetShape(Shape shape);
     void EndShape(float screenX, float screenY);
     bool IsDrawingShape() const { return shapeItemId_.has_value(); }
-
-    // The painted layer of `item`, of which there is one - see
-    // EnsurePaintedLayer, which reuses rather than stacks. Null if it has
-    // none. Whatever state it is in: a caller that needs pixels asks
-    // Layer::HasPaintedPixels.
-    static Layer* FindPaintedLayer(Item& item, size_t* outIndex = nullptr);
 
     // ===== Capturing the screen =====
 
@@ -340,18 +324,14 @@ public:
     // writes it to disk at once rather than waiting for the autosave (see
     // LibraryStore::SaveImage).
     void CaptureShotItem(Item& item);
-    // Gives the copy `copyId` pixels of its own for every layer of
-    // `sourceId`'s that has any - a copy must never share a file or a
-    // texture with its source. The picture layer's come from this session
-    // when the source's capture is still waiting to be written (see
-    // PendingPicture) and from disk otherwise, and are written under the
-    // copy's own name at once (a write that fails waits the same way). A
-    // painted layer's come from the deep copy CanvasManager made when
-    // they were resident, and from the source's file when they had been
-    // let go of - the state of every layer on a canvas that is not
-    // current, which is what a paste across canvases copies from. False
-    // when a layer names a picture that could not be read, so the copy
-    // lacks it: a UI says so rather than showing a copy that looks whole.
+    // Gives the copy `copyId` a picture of its own when `sourceId` has one
+    // - a copy must never share a file or a texture with its source. The
+    // pixels come from this session when the source's capture is still
+    // waiting to be written (see PendingPicture) and from disk otherwise,
+    // and are written under the copy's own name at once (a write that
+    // fails waits the same way). False when the source names a picture
+    // that could not be read, so the copy lacks it: a UI says so rather
+    // than showing a copy that looks whole.
     bool ClonePicturesForCopy(ItemId sourceId, ItemId copyId);
 
 private:
@@ -380,23 +360,8 @@ private:
         // LibraryStore::HasPendingRemovals) is tried again on this clock,
         // not every frame - see UpdateAutosave.
         float removalRetryCountdownSeconds = 0.0f;
-        // Bumped by every change to painted pixels (see
-        // UploadPaintedRegion), which the generation only follows once the
-        // brush gesture ends. Counted as a change of its own, so that
-        // pixels on screen are saved even if that end never comes - and
-        // a stroke still in progress keeps the quiet period from running
-        // out under it, as a moving drag does through the generation.
-        uint64_t paintRevision = 0;
-        uint64_t lastObservedPaintRevision = 0;
-        uint64_t lastSavedPaintRevision = 0;
     };
 
-    // Writes every painted layer's pixels out as QOI and records the
-    // filename on the layer. Called just before the library metadata is
-    // written, so the two always agree about what is on disk. Returns false
-    // if any layer's pixels could not be written; that layer stays dirty,
-    // and the save this is part of is not acknowledged.
-    bool SavePaintedLayers(LibraryInstance& instance);
     // A capture's pixels whose write failed at capture time, kept so the
     // write can be tried again - see CaptureShotItem. A screenshot is the
     // one thing in the library that cannot be remade, so its pixels are
@@ -407,13 +372,13 @@ private:
         int height = 0;
     };
     // Tries again to write every pending picture, recording the filename
-    // on its item's picture layer as it lands. Called with SavePaintedLayers
-    // before the records are written, and part of the same all-or-nothing
-    // answer. A picture whose item has since gone for good is dropped.
+    // on its item's picture layer as it lands. Called before the records
+    // are written, and part of the same all-or-nothing answer. A picture
+    // whose item has since gone for good is dropped.
     bool SavePendingPictures(LibraryInstance& instance);
     void UpdateAutosave(LibraryInstance& instance, float deltaSeconds);
     // The actual write. True means everything the current generation covers
-    // is on disk: every painted layer's pixels and every record. False means
+    // is on disk: every pending picture and every record. False means
     // it is not, nothing is acknowledged, and a retry is scheduled on its
     // own backoff.
     bool SaveLibraryNow(LibraryInstance& instance);
@@ -422,18 +387,14 @@ private:
 
     // ----- Undo -----
 
-    // The painted half of an edit, before it becomes an entry - see
-    // undo::Painted.
-    using PaintedUndo = undo::Painted;
-
     // Appends `entry` to the current canvas's history, evicting past the
     // caps, and clears that canvas's redo stack: a new action makes whatever
     // was on it unreachable by any sequence of undos.
     void PushUndo(undo::Entry entry);
     // The one push every stack goes through - PushUndo's, and the two
     // hand-overs between undo and redo - so the caps live in one place: at
-    // most kUndoStackCap entries, and at most kUndoStackCapBytes of pixels
-    // and points between them. Evicts from the oldest end until both hold,
+    // most kUndoStackCap entries, and at most kUndoStackCapBytes of points
+    // and text between them. Evicts from the oldest end until both hold,
     // always keeping the entry just pushed.
     static void PushCapped(std::deque<undo::Entry>& stack, undo::Entry entry);
     // Pops the current canvas's top entry off one stack, applies it, and -
@@ -447,7 +408,6 @@ private:
     std::optional<UndoWhat> Apply(undo::Erased& entry, bool undo);
     std::optional<UndoWhat> Apply(undo::ItemDeleted& entry, bool undo);
     std::optional<UndoWhat> Apply(undo::NoteTextChanged& entry, bool undo);
-    std::optional<UndoWhat> Apply(undo::PaintedTilesChanged& entry, bool undo);
     std::optional<UndoWhat> Apply(undo::ItemCreated& entry, bool undo);
     std::optional<UndoWhat> Apply(undo::PlacementChanged& entry, bool undo);
     std::optional<UndoWhat> Apply(undo::ItemsArrived& entry, bool undo);
@@ -460,11 +420,6 @@ private:
     // `undo` says: back to a canvas that is still there and not deleted,
     // or here again from one, itself not deleted. A copy always can.
     bool ArrivalsCanMove(const undo::ItemsArrived& entry, bool undo) const;
-    // The painted half of an entry, applied in either direction: puts back
-    // the tiles (or the whole image) it holds and keeps what they
-    // replaced, so it is its own inverse afterwards. False when there is
-    // no painted half, or no layer for it.
-    bool SwapPainted(undo::Painted& painted);
     // Forgets everything recorded for a canvas - called when the canvas is
     // deleted for good, which is safe precisely because there is nothing
     // left there that could ever want these. A canvas merely deleted keeps
@@ -484,48 +439,8 @@ private:
     void NoteEraseOutcome(const std::vector<size_t>& outcome);
     // Pushes one Erased entry for the whole gesture, built from what was
     // followed: every original marked replaced, with the fragments now
-    // standing for it, *and* the painted pixels the same gesture took away.
-    // No-op if neither half changed anything.
-    void PushEraseGestureUndoEntry(ItemId itemId, PaintedUndo painted);
-
-    // ----- Painting -----
-
-    // The painted layer `item` paints into, in a paintable state: created
-    // on first use - sized from the item's native size times the resolution
-    // multiplier, so an item that is never painted on costs nothing - or,
-    // when the item already has one that lost its pixels or never got a
-    // texture, that same layer given what it lacks rather than a second one
-    // beside it. Null without a window to make a texture with, or for a
-    // degenerate size.
-    Layer* EnsurePaintedLayer(Item& item);
-    // Screen space to a painted layer's own pixels: through the item's
-    // native space (the same transform strokes are baked with), then scaled
-    // by the layer's own resolution.
-    void ScreenToPaintedPixels(const Item& item, const Layer& layer, float screenX, float screenY, float& outX,
-                               float& outY) const;
-    // Pushes the dirty rectangle a brush just wrote to the layer's texture,
-    // and marks the layer's pixels as not yet on disk.
-    void UploadPaintedRegion(Layer& layer, const PixelRect& region);
-    // The same for several - what a brush segment changed, tile by tile
-    // (see PaintedImage::LastChangedRegions).
-    void UploadPaintedRegions(Layer& layer, const std::vector<PixelRect>& regions);
-    // The three halves of a brush gesture, for the pen and the eraser alike.
-    // `erase` picks the blend and decides one more thing: a pen creates the
-    // painted layer it needs, an eraser only acts on one that is already
-    // there with pixels in it, so an erase over a snippet nothing was
-    // painted on starts no stroke and leaves no blank layer behind.
-    void BeginPaintStroke(Item& item, float screenX, float screenY, bool erase, uint32_t colorRGBA,
-                          float widthScreenPx);
-    void ExtendPaintStroke(float screenX, float screenY);
-    // Ends the stroke and hands back what undo needs - empty for a stroke
-    // that marked nothing.
-    PaintedUndo EndPaintStroke();
-    void PushPaintedTilesUndo(PaintedUndo painted);
-    // The rectangular eraser's pixel half, opening and closing its own
-    // brush stroke.
-    PaintedUndo ErasePaintedLayersInRect(Item& item, float minX, float minY, float maxX, float maxY);
-    // Empties the painted layer on `item`, returning the old image whole.
-    PaintedUndo ClearPaintedLayers(Item& item);
+    // standing for it. No-op if the gesture changed nothing.
+    void PushEraseGestureUndoEntry(ItemId itemId);
 
     platform::IOverlayWindow* window_ = nullptr;
     // A library as the session holds one - see LibraryInstance. The shape
@@ -572,19 +487,6 @@ private:
     // The text edit in progress, and the note as it was when it began.
     std::optional<ItemId> textEditItemId_;
     std::string textEditOriginal_;
-    // The brush stroke in progress, if any - which item and which of its
-    // layers, so the tiles it saves go on the stack against the right one.
-    // `paintStrokeTouched_` stays false for a stroke that never marked
-    // anything, which is what stops a stray click pushing an empty entry.
-    std::optional<ItemId> paintStrokeItemId_;
-    size_t paintStrokeLayerIndex_ = 0;
-    bool paintStrokeTouched_ = false;
-    // Where the stroke last was, in screen space - a layer's own pixel grid
-    // is one conversion away and differs per layer, while the gesture is
-    // defined in the space the hand moves in.
-    float paintLastScreenX_ = 0.0f;
-    float paintLastScreenY_ = 0.0f;
-
     // Drops the shape in progress without leaving anything - what EndShape
     // does with a drag too short to be meant.
     void CancelShape();
@@ -596,9 +498,6 @@ private:
     float shapeStartY_ = 0.0f;
     float shapeLastX_ = 0.0f;
     float shapeLastY_ = 0.0f;
-    uint32_t shapeColorRGBA_ = 0;
-    float shapeWidth_ = 0.0f;
-    bool shapePaintsPixels_ = false;
 
     // The frozen screen, while one is held - see FreezeScreen. The pixels
     // are kept for CaptureShotItem to crop out of.

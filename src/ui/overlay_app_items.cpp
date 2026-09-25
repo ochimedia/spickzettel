@@ -395,9 +395,9 @@ void OverlayApp::DuplicateSelection() {
         return;
     }
     session_.RecordArrivals(std::move(arrivals), /*duplicate=*/true);
-    // The copies are on the current canvas, so a painted layer's pixels
-    // need a texture now rather than at the next canvas switch, which is
-    // the only other time the sync runs.
+    // The copies are on the current canvas, so a picture of theirs still
+    // without a texture needs one now rather than at the next canvas
+    // switch, which is the only other time the sync runs.
     session_.SyncTexturesToCurrentCanvas();
     selection_ = made;
     ShowActionToast(pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastDuplicated);

@@ -343,11 +343,7 @@ void OverlayApp::RenderItemContextMenu() {
 
 void OverlayApp::BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEntry>& rows) {
     const ItemId itemId = item.id;
-    // Same rule as the popover's Clear button: painted pixels count as
-    // something to clear, or the row is grayed out over a snippet that
-    // visibly has ink on it.
-    const Layer* painted = Session::FindPaintedLayer(item);
-    const bool nothingToClear = item.strokes.empty() && (painted == nullptr || !painted->HasPaintedPixels());
+    const bool nothingToClear = item.strokes.empty();
 
     // By value rather than by reference into `rows`: a push_back that
     // reallocates would leave a reference handed back from an earlier one

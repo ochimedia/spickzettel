@@ -233,28 +233,11 @@ struct AppConfig {
     // so the same drawing can be looked at three ways without redrawing it.
     // "Does this look better" is not a question any test answers.
     StrokeRenderMode strokeRenderMode = StrokeRenderMode::Tessellated;
-    // How every picture in a snippet - a screenshot, a painted layer, the
-    // Rasterized strokes - is resampled when shown at a size other than its
+    // How every picture in a snippet - a screenshot, the Rasterized
+    // strokes - is resampled when shown at a size other than its
     // own. The same kind of choice: nothing stored changes, and switching
     // redraws what is already there. See platform::ImageFilter.
     platform::ImageFilter imageFilter = platform::ImageFilter::Bilinear;
-    // Whether the drawing tools produce vector strokes or paint pixels.
-    // One set of tools either way - a pen is a pen, and this decides where
-    // its marks land, not which tools exist.
-    //
-    // Global for now, and deliberately so: it could as well be per snippet
-    // or per tool, and which of those is right is not yet knowable. What
-    // makes moving it later cheap is that it only ever picks the *target*
-    // of a new mark - each layer records its own kind, so nothing already
-    // drawn is reinterpreted when this changes, and a per-snippet version
-    // would be the same decision read from the item instead of from here.
-    //
-    // Two tools ignore it. The eraser acts on whatever is under it, vector
-    // and painted alike, because a snippet can hold both and "why won't
-    // this erase" with no visible cause is the worst kind of bug. Text
-    // stays live in both modes: rasterizing a caption would throw away the
-    // one thing that makes it worth having.
-    bool paintPixelsInsteadOfStrokes = false;
     // Whether selecting a snippet - a click on it, or the press that starts
     // dragging it - brings it in front of the others, the way a window
     // manager raises a window you take hold of. Off, the stacking order is
@@ -280,7 +263,7 @@ struct AppConfig {
     BarButtonList drawingBar = DefaultDrawingBar();
     // What the canvas overview's thumbnails show. Strokes are nearly free
     // to draw at tile size and are on by default, as they always were.
-    // Bitmaps - screenshots and painted layers - are not: showing one means
+    // Screenshots are not: showing one means
     // reading and decoding its file, for canvases that aren't current and
     // whose pixels are therefore deliberately not in memory. On by default
     // all the same: a canvas that is mostly screenshots is unrecognizable

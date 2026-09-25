@@ -159,8 +159,8 @@ private:
     bool inFrame_ = false;
     std::vector<ID3D11ShaderResourceView*> releaseAfterFrame_;
     // Textures whose top level changed since their mips were built: every
-    // new one, and a painted layer after each brush move. Rebuilt once a
-    // frame, however many moves there were.
+    // new one, and a stroke raster after each update. Rebuilt once a
+    // frame, however many updates there were.
     std::vector<ID3D11ShaderResourceView*> staleMips_;
     Microsoft::WRL::ComPtr<ID3D11VertexShader> fullscreenVS_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> mipPS_;

@@ -1,14 +1,12 @@
 #pragma once
 
 #include <cstddef>
-#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
 
 #include "core/canvas/canvas.h"
 #include "core/canvas/item.h"
-#include "core/drawing/painted_image.h"
 #include "core/drawing/stroke.h"
 
 namespace sz::core::undo {
@@ -55,20 +53,6 @@ struct Arrival {
     size_t fromIndex = 0;
 };
 
-// The painted half of a change: the tiles a brush gesture touched, as they
-// were before (see PaintedImage::EndStroke), or the whole image a clear
-// replaced. Tiles rather than the whole layer because a fullscreen layer is
-// 8 MB and a stroke touches a few hundred kilobytes of it. Applying it puts
-// them back and keeps what they replaced, so it is its own inverse.
-struct Painted {
-    ItemId itemId = 0;
-    size_t layerIndex = 0;
-    std::vector<PaintedTile> tiles;
-    std::shared_ptr<PaintedImage> wholeImage;
-    bool Empty() const { return tiles.empty() && !wholeImage; }
-    size_t Bytes() const;
-};
-
 // A stroke was appended to the item's strokes. Undo takes that stroke back
 // off, found from the back so it is still the last of two equal ones; redo
 // pushes it on again, which is why the value is kept rather than only the
@@ -79,12 +63,9 @@ struct StrokeBaked {
 };
 
 // One erase gesture - the circular eraser, the rectangular one, or "Clear
-// drawing" - over an item that may carry vector strokes, painted pixels,
-// or both. One entry for the whole gesture, whichever kinds of ink it
-// touched: an eraser that took two undos to take back one drag read as a
-// bug.
+// drawing" - over an item's strokes. One entry for the whole gesture.
 //
-// The vector half is a list of replacements (see CanvasManager::EraseAt - a
+// It is a list of replacements (see CanvasManager::EraseAt - a
 // stroke only partly within the eraser is shortened or split rather than
 // removed, and the fragments stand where it stood). Each names one
 // original by its index in the list as it was before the gesture, carries
@@ -94,8 +75,7 @@ struct StrokeBaked {
 // matched strokes by value put the restored originals at the end, which
 // changed the draw order and left the next undo of a stroke taking off a
 // different stroke than the one it was for, and could not tell two equal
-// strokes apart. Empty when the gesture clipped nothing; `painted` empty
-// when it touched no pixels.
+// strokes apart.
 struct Erased {
     struct Replacement {
         size_t index = 0;
@@ -105,7 +85,6 @@ struct Erased {
     ItemId itemId = 0;
     size_t strokeCountBefore = 0;          // the list's length before the gesture
     std::vector<Replacement> replacements;  // ascending by index
-    Painted painted;
 };
 
 // Snippets deleted in one go - one Delete, however many were selected. They
@@ -119,12 +98,6 @@ struct ItemDeleted {
 struct NoteTextChanged {
     ItemId itemId = 0;
     std::string previousText;
-};
-
-// A brush stroke painted onto a painted layer. An erase that touches pixels
-// is an Erased entry instead, since it may have touched strokes too.
-struct PaintedTilesChanged {
-    Painted painted;
 };
 
 // A snippet was made, on the canvas the entry is filed under (see
@@ -151,10 +124,10 @@ struct ItemsArrived {
     bool duplicate = false;
 };
 
-using Entry = std::variant<StrokeBaked, Erased, ItemDeleted, NoteTextChanged, PaintedTilesChanged, ItemCreated,
-                           PlacementChanged, ItemsArrived>;
+using Entry =
+    std::variant<StrokeBaked, Erased, ItemDeleted, NoteTextChanged, ItemCreated, PlacementChanged, ItemsArrived>;
 
-// What an entry holds, in bytes of points, pixels and text - what the
+// What an entry holds, in bytes of points and text - what the
 // stacks are capped by besides their length (see Session::PushCapped).
 size_t Bytes(const Entry& entry);
 

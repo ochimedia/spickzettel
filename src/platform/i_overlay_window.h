@@ -159,9 +159,8 @@ public:
     // `pixelsRGBA` is the *whole* image the texture was created from, with
     // `sourceWidth` its width; x/y/w/h select the changed part. Returns false
     // for an unknown handle, a rectangle outside the texture, or a backend
-    // that cannot do this. Painting needs it: a brush moves several times a
-    // frame and touches a few hundred pixels, where re-uploading a
-    // fullscreen layer would be 8 MB a move.
+    // that cannot do this. What a rasterized stroke list is brought up to
+    // date with (see OverlayApp::BuildStrokeRaster).
     virtual bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* pixelsRGBA, int sourceWidth,
                                       int x, int y, int w, int h) = 0;
 

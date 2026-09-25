@@ -151,7 +151,7 @@ bool IsPlainFilename(const std::string& name) {
 }
 
 // Whether `name` is one this store could have written a picture under: a
-// capture or painted layer or a thumbnail beside one, all .qoi. What the
+// capture or a thumbnail beside one, both .qoi. What the
 // per-snippet collection below is limited to.
 bool IsPictureFilename(const std::string& name) {
     return name.size() >= 4 && std::string_view(name).substr(name.size() - 4) == ".qoi";
@@ -162,9 +162,7 @@ json ToJson(const Layer& layer) {
     // run is never valid to reuse, and imageFile is what it is re-derived
     // from - see CanvasManager::SyncShotTexturesToCanvas.
     return json{
-        {"kind", layer.kind == LayerKind::Painted ? "painted" : "image"},
         {"opacity", layer.opacity},
-        {"resolutionScale", layer.resolutionScale},
         {"tintColorRGBA", layer.tintColorRGBA},
         {"showsPlaceholder", layer.showsPlaceholder},
         {"placeholderHue", layer.placeholderHue},
@@ -173,12 +171,12 @@ json ToJson(const Layer& layer) {
 }
 
 bool FromJson(const json& j, Layer& out, bool& repaired) {
-    if (!j.is_object()) {
+    // A painted layer, from a build that still painted pixels, is left out
+    // like anything else that is not a picture layer.
+    if (!j.is_object() || j.value("kind", std::string("image")) != "image") {
         return false;
     }
-    out.kind = j.value("kind", std::string("image")) == "painted" ? LayerKind::Painted : LayerKind::Image;
     out.opacity = ClampedOr(j, "opacity", 0.0f, 0.0f, 1.0f, repaired);
-    out.resolutionScale = ClampedOr(j, "resolutionScale", 1.0f, 0.05f, 16.0f, repaired);
     out.tintColorRGBA = j.value("tintColorRGBA", uint32_t{0xFFFFFFFF});
     out.showsPlaceholder = j.value("showsPlaceholder", false);
     out.placeholderHue = ClampedOr(j, "placeholderHue", 0.0f, 0.0f, 360.0f, repaired);
@@ -333,13 +331,11 @@ uint64_t HashItem(const Item& item) {
     for (const Layer& layer : item.layers) {
         // Matches ToJson(Layer)'s own list - textureHandle is deliberately
         // absent from both, being a GPU handle that is never persisted.
-        h.Mix(static_cast<uint64_t>(layer.kind));
         h.Mix(layer.imageFile);
         h.Mix(layer.opacity);
         h.Mix(layer.tintColorRGBA);
         h.Mix(layer.showsPlaceholder);
         h.Mix(layer.placeholderHue);
-        h.Mix(layer.resolutionScale);
     }
     return h.Value();
 }
@@ -2395,8 +2391,8 @@ bool LibraryStore::Save(const LibraryView& view) const {
                 }
 
                 // Any picture in the directory its layers no longer name -
-                // a painted layer that moved in the stack is written under
-                // a new name, and this is what collects the old one. Only
+                // a painted layer's, from a build that still painted
+                // pixels, and this is what collects it. Only
                 // on a changed record, because that is the only time a file
                 // can have stopped being named; a no-op save lists nothing.
                 //
@@ -2568,7 +2564,7 @@ bool LibraryStore::Save(const LibraryView& view) const {
     // snippet has no directory, and to the directory from the moment it
     // has one (see ImageHome). So the waiting one is what a move that
     // failed left behind - a file held open at the save that made the
-    // directory - and the painting has been saved again at home since.
+    // directory - and the picture has been saved again at home since.
     // Moving it in would put the older pixels back over the newer, under a
     // layer that believes itself saved; it is set aside instead.
     const std::filesystem::path stagingDir = rootDir_ / kStagingDir;
@@ -2624,19 +2620,9 @@ std::optional<std::string> LibraryStore::SaveImage(uint64_t itemId, const uint8_
     return WritePicture(itemId, FormatUid(itemId) + ".qoi", pixelsRGBA, width, height);
 }
 
-std::optional<std::string> LibraryStore::SaveLayerImage(uint64_t itemId, size_t layerIndex,
-                                                         const uint8_t* pixelsRGBA, int width, int height) const {
-    // The owner's uid first, then the layer's place in its stack - so two
-    // painted layers on one snippet can't collide, and so the name says
-    // whose it is even when no record does.
-    return WritePicture(itemId, FormatUid(itemId) + "_p" + std::to_string(layerIndex) + ".qoi", pixelsRGBA,
-                        width, height);
-}
-
 std::optional<std::string> LibraryStore::WritePicture(uint64_t itemId, const std::string& filename,
                                                        const uint8_t* pixelsRGBA, int width, int height) const {
-    // Nothing is written into a library a newer build wrote - a painted
-    // layer no more than a screenshot, which alone was refused.
+    // Nothing is written into a library a newer build wrote.
     if (writtenByANewerVersion_) {
         return std::nullopt;
     }
@@ -2693,10 +2679,6 @@ std::optional<DecodedImage> LibraryStore::LoadImage(uint64_t itemId, const std::
         return std::nullopt;
     }
     return DecodeQoiFromFile(*fs_, FindImage(itemId, filename));
-}
-
-bool LibraryStore::HasImage(uint64_t itemId, const std::string& filename) const {
-    return !filename.empty() && fs_->Exists(FindImage(itemId, filename));
 }
 
 }  // namespace sz::core::persistence

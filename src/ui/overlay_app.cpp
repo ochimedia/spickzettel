@@ -801,14 +801,6 @@ void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMa
         // (see Layer::tintColorRGBA) - white, the default, leaves a capture
         // unmodified; any other color mixes into it.
         DrawPicture(drawList, texture, pMin, pMax, ToImColor(layer.tintColorRGBA, layer.opacity), sampling);
-    } else if (layer.kind == LayerKind::Painted) {
-        // Nothing. A painted layer with no pixels loaded has nothing to
-        // stand in with: its tintColorRGBA is a tint for those pixels, not
-        // a fill, and the flat-fill fallback below only means something for
-        // an Image layer that never had any (a Drawing item's colored
-        // background). Falling through to it painted an opaque white block
-        // - which is what every painted snippet looked like in the canvas
-        // overview, where no textures are loaded at all.
     } else if (layer.showsPlaceholder) {
         // No capture yet (the OS-level capture failed, or the canvas this
         // belongs to isn't resident) - a placeholder gradient, faded by the
@@ -826,8 +818,7 @@ void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMa
 void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
                       uint64_t strokeRasterTexture, bool skipNoteText, StrokeMeshSlot meshCache,
                       ImageSampling sampling) {
-    // Bottom-first, each layer over the one below it - a screenshot, then
-    // whatever has been painted on top of it.
+    // Bottom-first, each layer over the one below it.
     for (const Layer& layer : item.layers) {
         DrawLayer(drawList, layer, pMin, pMax, std::nullopt, sampling);
     }

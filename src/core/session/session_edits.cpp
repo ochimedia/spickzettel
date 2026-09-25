@@ -16,13 +16,9 @@ namespace {
 // See Session::PushUndo - plenty of headroom for "take back what I just
 // did" without growing unbounded across a long session.
 constexpr size_t kUndoStackCap = 50;
-// ...and how much those entries may hold between them, per stack. The
-// count alone was the only bound, and an entry can be a few bytes or
-// eight megabytes: a brush stroke keeps the tiles it touched (a few
-// hundred KB), Clear drawing keeps a fullscreen layer's whole image. Fifty
-// clears of a fullscreen layer was 400 MB on one canvas's undo stack, and
-// the redo stack could hold as much again. 128 MB is sixteen fullscreen
-// clears or several hundred strokes, on each of the two stacks.
+// ...and how much those entries may hold between them, per stack. An
+// entry can be a few bytes or a whole drawing's strokes: Clear drawing
+// keeps every stroke it took.
 constexpr size_t kUndoStackCapBytes = size_t{128} << 20;
 
 }  // namespace
@@ -149,33 +145,9 @@ void Session::PushUndo(undo::Entry entry) {
     redoStacks_.erase(canvasId);
 }
 
-bool Session::SwapPainted(undo::Painted& painted) {
-    if (painted.Empty()) {
-        return false;  // no painted half
-    }
-    Item* item = Manager().FindItemAnywhere(painted.itemId);
-    if (!item || painted.layerIndex >= item->layers.size() || !item->layers[painted.layerIndex].painted) {
-        return false;
-    }
-    Layer& layer = item->layers[painted.layerIndex];
-    if (painted.wholeImage) {
-        // The whole image, a pointer each way - no pixels copied.
-        std::swap(layer.painted, painted.wholeImage);
-        UploadPaintedRegion(layer, PixelRect{0, 0, layer.painted->Width(), layer.painted->Height()});
-        return true;
-    }
-    // Put the saved tiles back and keep what they replaced: the entry
-    // becomes its own redo (or undo) entry, with no second copy of the
-    // pixels anywhere.
-    PixelRect changed;
-    painted.tiles = layer.painted->RestoreTiles(painted.tiles, changed);
-    UploadPaintedRegion(layer, changed);
-    return true;
-}
-
 // One overload per kind, each for both directions. Every kind is either its
-// own inverse - a swap, for NoteTextChanged, PaintedTilesChanged,
-// PlacementChanged and Erased's painted half - or a mirror in which two
+// own inverse - a swap, for NoteTextChanged and PlacementChanged - or a
+// mirror in which two
 // arrays trade roles (Erased's strokes) or one action has an opposite
 // (StrokeBaked's pop/push, ItemDeleted's restore/delete, ItemsArrived's
 // send-back/bring). So a function with the direction as a parameter says
@@ -212,24 +184,11 @@ std::optional<Session::UndoWhat> Session::Apply(undo::Erased& entry, bool undo) 
     if (!item) {
         return std::nullopt;
     }
-    // The vector half, rebuilt by position in either direction - see
-    // RestoreStrokesBeforeErase/ReapplyErase - and the painted half, which
-    // is its own inverse. Either half having something to do is enough for
-    // the entry to count.
+    // Rebuilt by position in either direction - see
+    // RestoreStrokesBeforeErase/ReapplyErase.
     const bool strokesChanged =
         !entry.replacements.empty() && (undo ? RestoreStrokesBeforeErase(*item, entry) : ReapplyErase(*item, entry));
-    const bool hadPainted = !entry.painted.Empty();
-    const bool paintChanged = SwapPainted(entry.painted);
-    // Pixels not in memory - let go of with a snippet deleted from the
-    // Overview, say - leave the tiles where they are while the strokes
-    // move on, and the entry crosses to the other stack all the same. The
-    // tiles would then be a step behind: the next swap would put back
-    // what this one should have, and take an erase back where it meant to
-    // redo it. Dropped instead, so what the entry still holds stays true.
-    if (hadPainted && !paintChanged) {
-        entry.painted = undo::Painted{};
-    }
-    if (!strokesChanged && !paintChanged) {
+    if (!strokesChanged) {
         return std::nullopt;
     }
     return UndoWhat::Erase;
@@ -263,14 +222,6 @@ std::optional<Session::UndoWhat> Session::Apply(undo::NoteTextChanged& entry, bo
     // direction needs, with no separate capture step.
     std::swap(item->noteText, entry.previousText);
     return UndoWhat::TextEdit;
-}
-
-std::optional<Session::UndoWhat> Session::Apply(undo::PaintedTilesChanged& entry, bool /*undo*/) {
-    // Its own inverse - see SwapPainted.
-    if (!SwapPainted(entry.painted)) {
-        return std::nullopt;
-    }
-    return UndoWhat::Painting;
 }
 
 std::optional<Session::UndoWhat> Session::Apply(undo::ItemCreated& entry, bool undo) {
@@ -549,12 +500,10 @@ ItemId Session::CreateItem(bool hasBackground, Rect rect, std::string name) {
 }
 
 namespace {
-// Nothing put into it: no ink of either kind, no text, and no picture of
-// its own - a screenshot is content even when the capture failed.
+// Nothing put into it: no ink, no text, and no picture of its own - a
+// screenshot is content even when the capture failed.
 bool ItemIsUntouched(const Item& item) {
-    return !item.hasBackground && item.strokes.empty() && item.noteText.empty() &&
-           std::none_of(item.layers.begin(), item.layers.end(),
-                        [](const Layer& layer) { return layer.HasPaintedPixels(); });
+    return !item.hasBackground && item.strokes.empty() && item.noteText.empty();
 }
 }  // namespace
 
@@ -612,15 +561,11 @@ bool Session::ClearDrawing(ItemId itemId) {
     if (!item) {
         return false;
     }
-    // Ink drawn on top of the snippet, in both senses of drawn: the vector
-    // strokes and whatever has been painted. Clearing one and silently
-    // leaving the other is what this did before painted layers existed,
-    // and is not what the button says. Both halves go into one Erased
-    // entry - the same one an eraser gesture that wholly erased everything
-    // would push (`addedFragments` stays empty: nothing replaces what's
-    // removed, it's just gone) - so one undo brings all of it back.
-    PaintedUndo painted = ClearPaintedLayers(*item);
-    if (item->strokes.empty() && painted.Empty()) {
+    // Every stroke on the snippet, as one Erased entry - the same one an
+    // eraser gesture that wholly erased everything would push (no
+    // fragments: nothing replaces what's removed, it's just gone) - so one
+    // undo brings all of it back.
+    if (item->strokes.empty()) {
         return false;
     }
     undo::Erased entry;
@@ -630,7 +575,6 @@ bool Session::ClearDrawing(ItemId itemId) {
     for (size_t index = 0; index < item->strokes.size(); ++index) {
         entry.replacements.push_back({index, std::move(item->strokes[index]), {}});
     }
-    entry.painted = std::move(painted);
     PushUndo(std::move(entry));
     item->strokes.clear();
     Manager().MarkChanged();
@@ -707,9 +651,8 @@ void Session::NoteEraseOutcome(const std::vector<size_t>& outcome) {
 }
 
 void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx) {
-    // A gesture still open is over, and filed whole - both halves in one
-    // entry. Without this its strokes' snapshot was taken over by this
-    // one's, and only its pixels were filed, on their own.
+    // A gesture still open is over, and filed whole. Without this its
+    // strokes' snapshot was taken over by this one's.
     EndErase();
     // Snapshot the item's whole stroke list right as the gesture starts,
     // diffed against its final state when it ends to build one combined
@@ -719,15 +662,6 @@ void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widt
     SnapshotStrokesForErase(itemId);
     eraseItemId_ = itemId;
     NoteEraseOutcome(Manager().EraseAt(itemId, screenX, screenY, widthScreenPx * 0.5f));
-    // ...and the same gesture takes pixels off any painted layer it passes
-    // over - the brush gesture the pen uses, with the erase blend. The
-    // eraser deliberately ignores the drawing mode: an item can hold both
-    // kinds of mark, and an eraser that silently refuses half of them -
-    // with nothing on screen to say why - is the worst failure this design
-    // can have.
-    if (Item* item = Manager().FindItemAnywhere(itemId)) {
-        BeginPaintStroke(*item, screenX, screenY, /*erase=*/true, 0xFFFFFFFFu, widthScreenPx);
-    }
 }
 
 void Session::ExtendErase(float screenX, float screenY, float widthScreenPx) {
@@ -735,16 +669,14 @@ void Session::ExtendErase(float screenX, float screenY, float widthScreenPx) {
         return;
     }
     NoteEraseOutcome(Manager().EraseAt(*eraseItemId_, screenX, screenY, widthScreenPx * 0.5f));
-    ExtendPaintStroke(screenX, screenY);
 }
 
 void Session::EndErase() {
     if (!eraseItemId_.has_value()) {
         return;
     }
-    // Both halves of the gesture - the strokes it clipped and the pixels it
-    // took - in one entry, so it is one undo.
-    PushEraseGestureUndoEntry(*eraseItemId_, EndPaintStroke());
+    // The whole gesture in one entry, so it is one undo.
+    PushEraseGestureUndoEntry(*eraseItemId_);
     eraseItemId_.reset();
     eraseGestureStartSnapshot_.clear();
 }
@@ -759,18 +691,11 @@ void Session::EraseRect(ItemId itemId, float minX, float minY, float maxX, float
     // snapshot taken here is the one the press would have taken.
     SnapshotStrokesForErase(itemId);
     NoteEraseOutcome(Manager().EraseRectAt(itemId, minX, minY, maxX, maxY));
-    // ...and the same rectangle out of any painted layer, for the same
-    // reason the circular eraser does it: an eraser acts on whatever is
-    // under it, whichever mode the marks were made in. One entry for both.
-    PaintedUndo painted;
-    if (Item* item = Manager().FindItemAnywhere(itemId)) {
-        painted = ErasePaintedLayersInRect(*item, minX, minY, maxX, maxY);
-    }
-    PushEraseGestureUndoEntry(itemId, std::move(painted));
+    PushEraseGestureUndoEntry(itemId);
     eraseGestureStartSnapshot_.clear();
 }
 
-void Session::PushEraseGestureUndoEntry(ItemId itemId, PaintedUndo painted) {
+void Session::PushEraseGestureUndoEntry(ItemId itemId) {
     Item* item = Manager().FindItemAnywhere(itemId);
     if (!item) {
         return;
@@ -802,13 +727,10 @@ void Session::PushEraseGestureUndoEntry(ItemId itemId, PaintedUndo painted) {
             replacements.push_back(std::move(replacement));
         }
     }
-    if (replacements.empty() && painted.Empty()) {
-        return;  // the gesture touched nothing of either kind
+    if (replacements.empty()) {
+        return;  // the gesture touched nothing
     }
-    // The painted half, if the gesture had one. Its own item is by
-    // construction this one - the eraser only acts on the snippet being
-    // drawn on.
-    PushUndo(undo::Erased{itemId, eraseGestureStartSnapshot_.size(), std::move(replacements), std::move(painted)});
+    PushUndo(undo::Erased{itemId, eraseGestureStartSnapshot_.size(), std::move(replacements)});
 }
 
 }  // namespace sz::core

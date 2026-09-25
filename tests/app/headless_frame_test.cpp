@@ -3653,30 +3653,15 @@ TEST_F(HeadlessSaveTest, AFailedSaveIsRetriedOnItsOwnClockNotEveryFrame) {
     EXPECT_TRUE(std::filesystem::is_regular_file(root_ / "library.json")) << "never retried";
 }
 
-// A save that fails is said on screen for as long as it stays failed -
-// what is drawn looks saved whether or not it is.
-// Escape with the button still held, halfway through a stroke of painted
-// pixels on a layer whose earlier strokes are saved: the stroke is ended
-// there as a release would end it - one undo step, and a change the next
-// save writes. Dropped instead, the pixels stayed on screen with nothing
-// recorded, so a flush wrote nothing and they were gone at the next start.
-TEST_F(HeadlessSaveTest, LeavingDrawingModeMidPaintStrokeKeepsAndSavesTheStroke) {
-    AppConfig config = DefaultConfig();
-    config.paintPixelsInsteadOfStrokes = true;
-    StartWith(config);
-    host_.overlayWindow.createTextureFromPixelsReturnsHandle = 7;
+// Escape with the button still held, halfway through a stroke on a snippet
+// whose earlier strokes are saved: the stroke is ended there as a release
+// would end it - one undo step, and a change the next save writes.
+TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     AttachStore();
     PlaceADrawing();
     Session& session = controller_->GetSession();
     const ItemId drawing = Canvases().CurrentOrNull()->items[0].id;
-    const auto paintedPixels = [&]() -> std::vector<uint8_t> {
-        for (const Layer& layer : session.Manager().FindItemAnywhere(drawing)->layers) {
-            if (layer.kind == LayerKind::Painted && layer.painted) {
-                return layer.painted->PixelsRGBA();
-            }
-        }
-        return {};
-    };
+    const auto strokeCount = [&] { return session.Manager().FindItemAnywhere(drawing)->strokes.size(); };
 
     // A first stroke, whole, and saved.
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
@@ -3689,8 +3674,7 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidPaintStrokeKeepsAndSavesTheStroke)
     StepFrame();
     ASSERT_TRUE(session.Flush());
     ASSERT_FALSE(session.HasUnsavedChanges());
-    const std::vector<uint8_t> afterFirst = paintedPixels();
-    ASSERT_FALSE(afterFirst.empty());
+    ASSERT_EQ(strokeCount(), 1u);
 
     // A second, left mid-way.
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
@@ -3698,35 +3682,31 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidPaintStrokeKeepsAndSavesTheStroke)
     StepFrame();
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Move);
     StepFrame();
-    EXPECT_TRUE(session.HasUnsavedChanges()) << "painted pixels are unsaved work before the stroke ends";
     PressKey(ImGuiKey_Escape);
     ASSERT_FALSE(App().DrawingItem().has_value());
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Up);
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrames(2);
-    const std::vector<uint8_t> afterSecond = paintedPixels();
-    ASSERT_NE(afterSecond, afterFirst);
+    ASSERT_EQ(strokeCount(), 2u);
 
     EXPECT_TRUE(session.HasUnsavedChanges());
     ASSERT_TRUE(session.Flush());
     persistence::LibraryStore reopened(root_);
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
     ASSERT_TRUE(loaded.has_value());
-    std::string file;
+    size_t strokesOnDisk = 0;
     for (const Item& item : loaded->canvases[0].items) {
-        for (const Layer& layer : item.layers) {
-            file = item.id == drawing && layer.kind == LayerKind::Painted ? layer.imageFile : file;
-        }
+        strokesOnDisk = item.id == drawing ? item.strokes.size() : strokesOnDisk;
     }
-    const std::optional<persistence::DecodedImage> onDisk = reopened.LoadImage(drawing, file);
-    ASSERT_TRUE(onDisk.has_value());
-    EXPECT_EQ(onDisk->pixelsRGBA, afterSecond) << "the second stroke is on disk";
+    EXPECT_EQ(strokesOnDisk, 2u) << "the second stroke is on disk";
 
     // And it is one undo step of its own, taken back whole.
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(paintedPixels(), afterFirst);
+    EXPECT_EQ(strokeCount(), 1u);
 }
 
+// A save that fails is said on screen for as long as it stays failed -
+// what is drawn looks saved whether or not it is.
 TEST_F(HeadlessSaveTest, AFailedSaveIsSaidOnScreenUntilItLands) {
     PlaceADrawing();
     std::filesystem::create_directories(root_ / "library.json");
@@ -3751,40 +3731,6 @@ TEST_F(HeadlessSaveTest, ASnippetTooLargeToSaveIsSaidAsSuch) {
     AttachStore();
     StepFrames(130);  // past the quiet period: one attempt, which failed
     EXPECT_EQ(App().PersistenceWarning(), std::string(strings::kStatusRecordTooLarge));
-}
-
-// The record went through and the picture didn't: the save must not be
-// acknowledged on the strength of the half that worked, or the picture
-// waits for some unrelated edit to trigger the next save - and a hide or
-// exit in the meantime flushes nothing, since nothing looks pending.
-TEST_F(HeadlessSaveTest, APictureThatCouldNotBeWrittenKeepsTheSaveUnacknowledged) {
-    PlaceADrawing();
-    CanvasManagerSnapshot snapshot = Canvases().ExportSnapshot();
-    Layer painted;
-    painted.kind = LayerKind::Painted;
-    painted.opacity = 1.0f;
-    painted.painted = std::make_shared<PaintedImage>(16, 16);
-    painted.paintedDirty = true;
-    snapshot.canvases[0].items[0].layers.push_back(painted);
-    const ItemId itemId = snapshot.canvases[0].items[0].id;
-    controller_->GetSession().ImportLibrary(std::move(snapshot));
-    // A file where the staging directory wants to be: no picture can be
-    // written, while every record can.
-    std::ofstream(root_ / "staging") << "in the way";
-    AttachStore();
-
-    StepFrames(3);
-    controller_->GetSession().Flush();
-    ASSERT_TRUE(std::filesystem::is_regular_file(root_ / "library.json")) << "the records should have gone through";
-    const auto paintedLayer = [this] { return Canvases().CurrentOrNull()->items[0].layers.back(); };
-    ASSERT_TRUE(paintedLayer().paintedDirty) << "the pixels can't have been written";
-
-    // Out of the way again. Nothing else changes; the retry alone has to
-    // bring the picture to disk.
-    std::filesystem::remove(root_ / "staging");
-    StepFrames(150);
-    EXPECT_FALSE(paintedLayer().paintedDirty) << "the failed picture was never retried";
-    EXPECT_TRUE(store_->LoadImage(itemId, FormatUid(itemId) + "_p1.qoi").has_value());
 }
 
 // ===== Deleted things, on the screen =====

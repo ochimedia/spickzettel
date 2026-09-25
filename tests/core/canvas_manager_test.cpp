@@ -645,15 +645,13 @@ TEST(CanvasManagerTest, CreateItemWithBackgroundDefaultsToFullyOpaque) {
     EXPECT_EQ(item.ImageLayer()->tintColorRGBA, 0xffffffffu);
 }
 
-// Exactly one layer, of the kind everything downstream looks for. The
-// count is the part worth pinning: a second layer arriving by accident
-// would silently double-draw the item's picture.
+// Exactly one layer. The count is the part worth pinning: a second layer
+// arriving by accident would silently double-draw the item's picture.
 TEST(CanvasManagerTest, CreateItemGivesItExactlyOnePictureLayer) {
     CanvasManager manager;
     manager.CreateItem(true, Rect{0, 0, 100, 100}, "Shot");
     const Item& shot = manager.CurrentOrNull()->items.front();
     ASSERT_EQ(shot.layers.size(), 1u);
-    EXPECT_EQ(shot.layers[0].kind, LayerKind::Image);
     EXPECT_EQ(shot.ImageLayer(), &shot.layers[0]);
     // A Screenshot's layer stands in with the placeholder gradient until
     // its capture loads; a Drawing's has nothing to stand in for.
@@ -665,93 +663,11 @@ TEST(CanvasManagerTest, CreateItemGivesItExactlyOnePictureLayer) {
     EXPECT_FALSE(drawing.layers[0].showsPlaceholder);
 }
 
-// A painted layer whose pixels have never reached disk has something to
-// show *and* something to lose, so the sync has to offer it to the loader
-// rather than skipping it the way it skips a layer with nothing at all.
-TEST(CanvasManagerTest, SyncOffersAPaintedLayerThatHasPixelsButNoFile) {
+// A layer with nothing behind it - no file, no texture - is not resident
+// and is left alone in both directions: a Drawing's picture layer.
+TEST(CanvasManagerTest, SyncIgnoresALayerWithNothingBehindIt) {
     CanvasManager manager;
-    const ItemId id = manager.CreateItem(false, Rect{0, 0, 64, 64}, "Painted");
-    Item* item = manager.FindItemAnywhere(id);
-    ASSERT_NE(item, nullptr);
-    Layer painted;
-    painted.kind = LayerKind::Painted;
-    painted.painted = std::make_shared<PaintedImage>(64, 64);
-    ASSERT_TRUE(painted.imageFile.empty());
-    item->layers.push_back(painted);
-
-    int loads = 0;
-    manager.SyncShotTexturesToCanvas(
-        manager.CurrentCanvasId(),
-        [&](const Item&, Layer&) -> uint64_t {
-            ++loads;
-            return 42;
-        },
-        [](Layer&) { FAIL() << "nothing on the current canvas should be released"; });
-
-    EXPECT_EQ(loads, 1);
-    EXPECT_EQ(item->layers.back().textureHandle, 42u);
-}
-
-// ...and the same layer, once it isn't current, is handed to the release
-// callback rather than passed over - that callback is what decides whether
-// dropping its pixels is safe.
-TEST(CanvasManagerTest, SyncReleasesAPaintedLayerThatHasPixelsButNoFile) {
-    CanvasManager manager;
-    const ItemId id = manager.CreateItem(false, Rect{0, 0, 64, 64}, "Painted");
-    Item* item = manager.FindItemAnywhere(id);
-    ASSERT_NE(item, nullptr);
-    Layer painted;
-    painted.kind = LayerKind::Painted;
-    painted.painted = std::make_shared<PaintedImage>(64, 64);
-    painted.textureHandle = 7;
-    item->layers.push_back(painted);
-
-    int releases = 0;
-    manager.SyncShotTexturesToCanvas(
-        /*canvasId=*/9999,  // some other canvas is current
-        [](const Item&, Layer&) -> uint64_t { return 0; }, [&](Layer&) { ++releases; });
-
-    EXPECT_EQ(releases, 1);
-}
-
-// ...and so is one holding pixels with *no* texture at all - a copy dropped
-// onto a canvas that wasn't current. Residency is pixels or texture, not the
-// texture handle alone; reading it off the handle left such a layer in
-// memory for as long as the app ran.
-TEST(CanvasManagerTest, SyncReleasesAPaintedLayerThatHasPixelsButNoTexture) {
-    CanvasManager manager;
-    const ItemId id = manager.CreateItem(false, Rect{0, 0, 64, 64}, "Painted");
-    Item* item = manager.FindItemAnywhere(id);
-    ASSERT_NE(item, nullptr);
-    Layer painted;
-    painted.kind = LayerKind::Painted;
-    painted.painted = std::make_shared<PaintedImage>(64, 64);
-    ASSERT_EQ(painted.textureHandle, 0u);
-    item->layers.push_back(painted);
-
-    int releases = 0;
-    manager.SyncShotTexturesToCanvas(
-        /*canvasId=*/9999, [](const Item&, Layer&) -> uint64_t { return 0; },
-        [&](Layer& layer) {
-            ++releases;
-            layer.painted.reset();  // what the real callback does once the pixels are on disk
-        });
-
-    EXPECT_EQ(releases, 1);
-    EXPECT_EQ(item->layers.back().painted, nullptr);
-    EXPECT_EQ(item->layers.back().textureHandle, 0u);
-}
-
-// A layer with nothing behind it - no file, no pixels, no texture - is not
-// resident and is left alone in both directions.
-TEST(CanvasManagerTest, SyncIgnoresAPaintedLayerWithNothingBehindIt) {
-    CanvasManager manager;
-    const ItemId id = manager.CreateItem(false, Rect{0, 0, 64, 64}, "Painted");
-    Item* item = manager.FindItemAnywhere(id);
-    ASSERT_NE(item, nullptr);
-    Layer bare;
-    bare.kind = LayerKind::Painted;
-    item->layers.push_back(bare);
+    manager.CreateItem(false, Rect{0, 0, 64, 64}, "Drawing");
 
     int calls = 0;
     manager.SyncShotTexturesToCanvas(
@@ -1235,65 +1151,6 @@ TEST(CanvasManagerTest, DuplicateItemResetsCaptureTextureHandleAndShotImageFile)
     EXPECT_EQ(copy.id, newId);
     EXPECT_EQ(copy.ImageLayer()->textureHandle, 0u);
     EXPECT_TRUE(copy.ImageLayer()->imageFile.empty());
-}
-
-// A copy's painted layer has no file of its own yet, so its pixels are the
-// only copy there is - it has to start dirty, or nothing ever writes it and
-// the release path drops it on the next canvas switch. Reproduced end to
-// end before this test existed: copy a painted snippet, restart, and the
-// copy came back blank.
-TEST(CanvasManagerTest, DuplicateItemDeepCopiesThePaintedLayerAndMarksItDirty) {
-    CanvasManager manager;
-    const ItemId id = manager.CreateItem(false, Rect{0, 0, 64, 64}, "A");
-    Item* original = manager.FindItemAnywhere(id);
-    ASSERT_NE(original, nullptr);
-    Layer painted;
-    painted.kind = LayerKind::Painted;
-    painted.painted = std::make_shared<PaintedImage>(64, 64);
-    painted.imageFile = "4_p1.qoi";
-    painted.paintedDirty = false;  // the source has long since autosaved
-    original->layers.push_back(painted);
-
-    const ItemId newId = manager.DuplicateItem(id);
-
-    // Re-fetched: the duplicate was appended to the same vector, which may
-    // have reallocated out from under the pointer taken above.
-    original = manager.FindItemAnywhere(id);
-    const Item* copy = manager.FindItemAnywhere(newId);
-    ASSERT_NE(original, nullptr);
-    ASSERT_NE(copy, nullptr);
-    ASSERT_EQ(copy->layers.size(), 2u);
-    const Layer& copied = copy->layers.back();
-    EXPECT_EQ(copied.kind, LayerKind::Painted);
-    ASSERT_NE(copied.painted, nullptr);
-    EXPECT_NE(copied.painted, original->layers.back().painted);  // its own pixels, not shared
-    EXPECT_TRUE(copied.imageFile.empty());
-    EXPECT_TRUE(copied.paintedDirty);
-    EXPECT_FALSE(original->layers.back().paintedDirty);  // the original is untouched
-}
-
-TEST(CanvasManagerTest, CopyToAnotherCanvasDeepCopiesThePaintedLayerAndMarksItDirty) {
-    CanvasManager manager("First");
-    const CanvasId target = manager.AddCanvas("Second");
-    manager.SwitchToCanvas(manager.Canvases().front().id);  // back on First
-    const ItemId id = manager.CreateItem(false, Rect{0, 0, 64, 64}, "A");
-    Item* original = manager.FindItemAnywhere(id);
-    ASSERT_NE(original, nullptr);
-    Layer painted;
-    painted.kind = LayerKind::Painted;
-    painted.painted = std::make_shared<PaintedImage>(64, 64);
-    painted.imageFile = "4_p1.qoi";
-    original->layers.push_back(painted);
-
-    const ItemId newId = manager.MoveOrCopyItemToCanvas(id, target, /*copy=*/true);
-
-    const Item* copy = manager.FindItemAnywhere(newId);
-    ASSERT_NE(copy, nullptr);
-    const Layer& copied = copy->layers.back();
-    ASSERT_NE(copied.painted, nullptr);
-    EXPECT_NE(copied.painted, manager.FindItemAnywhere(id)->layers.back().painted);
-    EXPECT_TRUE(copied.imageFile.empty());
-    EXPECT_TRUE(copied.paintedDirty);
 }
 
 TEST(CanvasManagerTest, DuplicateUnknownItemIsNoOpAndReturnsZero) {

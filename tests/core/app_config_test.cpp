@@ -259,7 +259,6 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.editModeNoActivate = false;
     config.showItemBorders = false;
     config.strokeRenderMode = StrokeRenderMode::Rasterized;
-    config.paintPixelsInsteadOfStrokes = true;
     config.raiseSelectedSnippet = false;
     config.screenshotTrigger = CreationTrigger::Alt;
     config.drawingTrigger = CreationTrigger::Off;
@@ -610,14 +609,9 @@ TEST(AppConfigTest, ImageFilterDefaultsToBilinearAndRoundTripsAllFour) {
               platform::ImageFilter::Bilinear);
 }
 
-// Default off: strokes are what this app has always drawn, and painting
-// pixels gives up scaling for pixel-exact erasing - a trade to opt into.
-TEST(AppConfigTest, PaintPixelsInsteadOfStrokesDefaultsToOffAndParses) {
-    EXPECT_FALSE(DefaultConfig().paintPixelsInsteadOfStrokes);
+TEST(AppConfigTest, RaiseSelectedSnippetDefaultsToOnAndParses) {
     EXPECT_TRUE(DefaultConfig().raiseSelectedSnippet);
     EXPECT_FALSE(ParseConfig(One("drawing", "raiseSelected", "false")).raiseSelectedSnippet);
-    EXPECT_TRUE(ParseConfig(One("drawing", "paintPixels", "true")).paintPixelsInsteadOfStrokes);
-    EXPECT_FALSE(ParseConfig(One("drawing", "paintPixels", "false")).paintPixelsInsteadOfStrokes);
 }
 
 // A plain press makes a screenshot and Ctrl a drawing unless told

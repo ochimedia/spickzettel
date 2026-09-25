@@ -563,7 +563,6 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
             config.strokeRenderMode = *mode;
         }
     }
-    ReadBool(drawing, "paintPixels", config.paintPixelsInsteadOfStrokes);
     ReadBool(drawing, "raiseSelected", config.raiseSelectedSnippet);
     ReadCreationTrigger(drawing, "screenshotTrigger", config.screenshotTrigger);
     ReadCreationTrigger(drawing, "drawingTrigger", config.drawingTrigger);
@@ -756,7 +755,6 @@ std::string SerializeConfig(const AppConfig& config) {
         {"strokeColor", FormatHexColor(config.strokeColorRGBA)},
         {"strokeWidth", Num(config.strokeWidth)},
         {"renderMode", StrokeRenderModeName(config.strokeRenderMode)},
-        {"paintPixels", config.paintPixelsInsteadOfStrokes},
         {"raiseSelected", config.raiseSelectedSnippet},
         {"screenshotTrigger", CreationTriggerName(config.screenshotTrigger)},
         {"drawingTrigger", CreationTriggerName(config.drawingTrigger)},

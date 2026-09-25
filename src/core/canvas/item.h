@@ -22,9 +22,9 @@ struct Rect {
 
 // An item - a *snippet*, in the interface's words - placed on a Canvas:
 // freehand strokes over a stack of layers (see layer.h), each holding a
-// captured screenshot, painted pixels or a plain fill. There is no hard
-// screenshot/drawing type split: `hasBackground` records how an item was
-// made, and everything visible about it is a layer's own opacity.
+// captured screenshot or a plain fill. There is no hard screenshot/drawing
+// type split: `hasBackground` records how an item was made, and everything
+// visible about it is a layer's own opacity.
 //
 // `strokes` are stored in the item's own fixed native coordinate space
 // (nativeW/nativeH, set at creation), independent of `rect`'s current
@@ -85,25 +85,16 @@ struct Item {
     bool pinned = false;
 
     // The item's picture, composited bottom-first, underneath `strokes` and
-    // `noteText`. Never empty: an item always has an Image layer, even one
+    // `noteText`. Never empty: an item always has a picture layer, even one
     // that is fully transparent and draws nothing, which is exactly what a
     // plain drawing starts as. CanvasManager::CreateItem sets it up and the
     // library reader guarantees it for a loaded item.
     std::vector<Layer> layers{Layer{}};
 
-    // The bottom-most Image layer - the item's background. Null only for a
-    // hypothetical item whose layers are all Painted, which nothing makes.
-    Layer* ImageLayer() {
-        return const_cast<Layer*>(static_cast<const Item*>(this)->ImageLayer());
-    }
-    const Layer* ImageLayer() const {
-        for (const Layer& layer : layers) {
-            if (layer.kind == LayerKind::Image) {
-                return &layer;
-            }
-        }
-        return nullptr;
-    }
+    // The bottom-most layer - the item's background. Null only for an item
+    // with no layers, which nothing makes.
+    Layer* ImageLayer() { return layers.empty() ? nullptr : &layers.front(); }
+    const Layer* ImageLayer() const { return layers.empty() ? nullptr : &layers.front(); }
 
     // Whether this item was made as a screenshot rather than a drawing. Set
     // once at creation and never changed; it does not gate whether a

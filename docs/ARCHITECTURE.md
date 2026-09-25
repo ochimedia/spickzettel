@@ -310,8 +310,7 @@ about what erasing means.
 Why not rasterize instead: a bitmap erase gives up resolution
 independence and turns undo into pixel diffs, for a problem that a
 bounded piece of segment geometry solves while keeping every stroke a
-plain, inspectable polyline. (Painted layers, below, are the case where
-pixels are the right answer and are treated as such.)
+plain, inspectable polyline.
 
 The boundary points only cut a segment into pieces; each piece is then
 classified by its midpoint, rather than each boundary point being taken
@@ -367,49 +366,33 @@ against. `EndFrame` drops whatever was not drawn that frame, so
 switching canvas or deleting an item releases the memory without either
 having to know the cache exists.
 
-### Painting: the pixel brush
+### Rasterized strokes
 
-`PaintedImage` holds a pixel-authoritative layer's pixels and the brush
-that writes them. The brush is a capsule per segment - the same figure
-the tessellator builds - with coverage taken analytically from each
-pixel's distance to the centerline, so round caps, round joins and
-anti-aliasing come out of the arithmetic, a zero-length segment is a dab
-and therefore a dot, and a line drawn in either mode is the same shape.
-Only what can be done to it afterwards differs.
+The Rasterized render mode (`StrokeRenderMode::Rasterized`) draws an
+item's strokes into a bitmap, `PaintedImage`, and composites it once -
+the only mode in which a translucent stroke crossing itself does not
+darken at the crossing. The bitmap is a cache of the strokes, rebuilt
+from them and never saved. Each stroke is a capsule per segment - the
+same figure the tessellator builds - with coverage taken analytically
+from each pixel's distance to the centerline, so round caps, round joins
+and anti-aliasing come out of the arithmetic, and a zero-length segment
+is a dab and therefore a dot.
 
 A stroke is a session, not a run of stamps. Compositing each segment as
-it arrives would darken every overlap, and a brush moving a pixel at a
-time overlaps almost entirely, so a translucent line would go opaque
-within a few steps. Instead a stroke accumulates coverage into a mask
-(taking the maximum) and recomposites each touched tile from the pixels
-it held *before* the stroke began. Those saved pixels are exactly what
-undo needs, so nothing is stored twice: `EndStroke` hands them back as
-the undo entry's tiles, and `RestoreTiles` puts them back and returns
-what it replaced, which is the redo state. Tiles are 64x64 (16 KB); a
-stroke across a 640x640 layer touches four of a hundred, where a
-whole-image undo entry would be 8 MB a step.
+it arrives would darken every overlap, and consecutive segments overlap
+at every join, so a translucent line would go darker at each one.
+Instead a stroke accumulates coverage into a mask (taking the maximum)
+and recomposites each touched tile from the pixels it held *before* the
+stroke began. Tiles are 64x64 (16 KB), so a stroke keeps copies of only
+the part of the bitmap it touched.
 
-The rectangular eraser is the same session with a different coverage
-function (`ExtendRect`), so it shares the mask, the tiles and the undo
-entry. Erasing takes alpha and leaves color, so a half-erased edge
-fades instead of shifting toward black.
-
-A layer's size is capped at 4096 on a side, and the cap is applied to
+A bitmap's size is capped at 4096 on a side, and the cap is applied to
 the *resolution scale*, not to the bitmap: `FitResolutionScale` lowers
 the scale uniformly until the longer side fits, and because every
-coordinate on the way in is multiplied by that same scale, a 5120-wide
-capture paints where the pen is. Clamping the bitmap's width and height
-while still mapping coordinates 1:1 cropped everything past the cap and
-stretched the rest, putting a stroke a quarter of the way across the
-item from the pen.
-
-A painted layer without pixels gets fresh, blank ones when a brush
-first touches it - but only if it has no file, or its file is gone. A
-file that is there and could not be read when the canvas came back
-(another program holding it) is read again as the brush starts, and
-while it still cannot be, the brush paints nothing. Taking the failed
-load for an empty layer painted on blank pixels, and the next save wrote
-them over the drawing in the file.
+coordinate on the way in is multiplied by that same scale, the strokes
+of a 5120-wide capture land where they were drawn. Clamping the
+bitmap's width and height while still mapping coordinates 1:1 cropped
+everything past the cap and stretched the rest.
 
 ## Canvases, items and folders
 
@@ -442,27 +425,22 @@ left, and the library saves and loads empty.
 ### Layers
 
 An item's picture is a list of `Layer`s composited bottom-first, with
-strokes and the caption always on top. Every item has an Image layer
-(its screenshot, or a transparent fill for a drawing), and gets a
-Painted layer on top the first time something is painted on it. The rule
-that keeps the kinds honest: a layer is either vector-authoritative (its
-pixels are a rebuildable cache) or pixel-authoritative (its pixels are
-the document, persisted and undone as pixels), never both. Strokes are
-the first kind; both layer kinds are the second.
+strokes and the caption always on top. Every item has one: its
+screenshot, or a transparent fill for a drawing. A picture is written
+once, when it is captured, and never changed after; everything drawn
+over it is strokes.
 
 A texture handle has single-owner lifetime even though `Item` is a
 freely copyable struct, so a copy detaches its layers: the handle is
-reset and reloaded from the file, painted pixels are deep-copied, and
-the clone starts *dirty* because it has no file yet and its pixels are
-the only copy.
+reset, and the copy is given a file of its own.
 
 ### Strokes live in the item's native space
 
 Strokes are stored in a fixed coordinate space set at creation
 (`nativeW/nativeH`), not in screen space, so a stroke drawn at one size
 still looks right after the item is resized. `ScreenToNative` is the one
-transform for everything that lands a gesture on an item - the pen, the
-erasers, the brush - so they cannot disagree about where the pen is.
+transform for everything that lands a gesture on an item - the pen and
+the erasers - so they cannot disagree about where the pen is.
 
 ### Resolution-relative item sizing
 
@@ -1076,9 +1054,8 @@ measured, and every stroke mutation would have to remember to bump it.
 
 Every file goes through write-to-temp-then-rename, pictures and the
 settings file included, and through one writer (`WriteFileAtomically`
-in `core/util`): a painted layer is re-encoded over its own previous
-file on every save, and truncating in place left a window in which the
-only copy on disk of a drawing was the first half of it. The temporary
+in `core/util`): truncating in place leaves a window in which the only
+copy on disk of a file is the first half of it. The temporary
 is created exclusively, under a name nothing was at. A file already at
 `<file>.tmp` is never opened: a plain file with no other name is a
 temporary of ours that a crash left, and is removed; anything else - a
@@ -1277,7 +1254,7 @@ A picture goes to staging only while its snippet has no directory and
 to the directory from the moment it has one, so the one at home is
 always the newer: the waiting one is what a move refused at the save
 that made the directory left behind - a file held open - and the
-painting has been saved again at home since. Moving it in once the file
+picture has been saved again at home since. Moving it in once the file
 was let go of put the older pixels back under a layer that believed
 itself saved, where no later save would notice.
 
@@ -1481,8 +1458,8 @@ autosave and the texture sync that keeps the GPU in step with the current
 canvas; screen capture (the frozen screen, a snippet's capture, the
 picture a copy gets); and the per-canvas undo history with every edit
 that goes on it, offered as commands (`DeleteItem`, `ClearDrawing`,
-`CommitLiveStroke`, text edits) and as gestures in screen space (paint,
-erase, shapes). The session needs two things of the platform, textures
+`CommitLiveStroke`, text edits) and as gestures in screen space (erase,
+shapes). The session needs two things of the platform, textures
 and captures, and takes them from the window it is attached to, which may
 be absent: the session tests drive all of this with no window, no store
 and no ImGui.
@@ -1518,33 +1495,19 @@ long as the overlay stayed hidden. A failed write (disk full, a file held open) 
 on a clock of its own, doubling up to 30 s; falling through to the quiet
 check, which a failed save does nothing to reset, retried on every frame
 and turned a full disk into a synchronous rewrite per frame. A save is
-acknowledged only when *all* of it landed, painted pixels included, so a
-layer whose write failed is retried rather than waiting for an unrelated
-edit. A capture whose picture could not be written at capture time keeps
+acknowledged only when *all* of it landed, pictures included, so a
+picture whose write failed is retried rather than waiting for an
+unrelated edit. A capture whose picture could not be written at capture
+time keeps
 its pixels in the session and is written by the next save that can, and
 no save counts until it has. A screenshot is the one thing in the
 library that cannot be remade; the first version let the pixels go with
 the capture result, so a picture that failed to write stayed on screen,
 looking captured, and was gone at the next restart.
 
-Painted pixels are written before the texture sync discards anything
-non-current, and the release path refuses to drop a layer that is still
-dirty. Waiting for the debounced save was not good enough: switching
-canvas bumps the generation, which pushes the save *further away* at the
-exact moment the pixels are thrown out.
-
-Painted pixels also count as a change on their own. The generation only
-follows a brush stroke when it ends (`EndPaintStroke`), and a stroke
-whose end never came - drawing mode left with Escape or the view-only
-hotkey while the button was held - left its pixels on screen and dirty
-with the generation unchanged: nothing looked unsaved, a flush wrote
-nothing, and the stroke was gone at the next start. Every pixel change
-now bumps a paint revision beside the generation, which `HasUnsavedChanges`
-and the autosave's quiet period both read, so pixels on screen are saved
-whether or not their gesture ever ends - and a stroke in progress holds
-the quiet period off the way a drag does. Leaving drawing mode also ends
-a stroke in flight as a release would, so it is its own undo step rather
-than one the next stroke files late.
+Leaving drawing mode - Escape or the view-only hotkey while the button
+is held - ends a stroke in flight as a release would, so it is kept, is
+its own undo step, and is saved like any other.
 
 **One writer per library.** Two copies of the app would each save the
 library from a stale picture of it, through the same temp-file names.
@@ -1595,8 +1558,8 @@ save twice - the first attempt may be what clears the way - and, if the
 library still cannot be written, write a **recovery copy** beside it:
 `library-recovery-<timestamp>/`, a fresh tree holding every record and
 every picture those records name - from the session where it holds the
-pixels (a capture whose write never landed, a painted layer), and
-re-encoded from the real library otherwise - with a `recovery.txt`
+pixels (a capture whose write never landed), and re-encoded from the
+real library otherwise - with a `recovery.txt`
 beside the tree saying where it came from and whether it is whole. The
 copy has to open on its own: the first version copied only what was in
 memory, so its records named screenshot files that were still in the
@@ -1691,29 +1654,22 @@ it.
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
 copy made from them (paste, duplicate, copy to another canvas) must
 share neither a file nor a texture with its source. `CanvasManager`
-clears the copied layers' filenames and deep-copies whatever painted
-pixels are resident; `Session::ClonePicturesForCopy` then gives the
-copy the rest, layer by layer: the picture layer from the session's own
-pending pixels or the source's file, written under the copy's name at
-once, and every painted layer whose pixels were let go of - the state
-of every layer on a canvas that is not current, which is what a paste
-across canvases copies from - read back from the source's file into
-pixels of the copy's own, dirty, for the next save to write. The first
-version restored the picture layer alone, so painting copied to another
-canvas came out blank, for good; the UI says so when a layer's source
-cannot be read, rather than showing a copy that looks whole.
+clears the copied layers' filenames; `Session::ClonePicturesForCopy`
+then gives the copy its picture, from the session's own pending pixels
+or the source's file, written under the copy's name at once. The UI
+says so when the source's picture cannot be read, rather than showing a
+copy that looks whole.
 
 ### Undo is per canvas
 
 History is a `deque` per canvas, capped at 50 entries *and* 128 MB of
-what they hold (a Clear drawing holds a whole fullscreen layer, 8 MB;
-fifty of them was 400 MB on one stack). A canvas is this app's document,
+what they hold (a Clear drawing holds every stroke it took). A canvas is this app's document,
 and undo scoped to a document is what every editor does. One global
 stack reached across canvases and failed invisibly: draw on A, switch to
 B, draw, come back to A, press Ctrl+Z, and the stroke that vanished was
 B's, on a canvas you were not looking at.
 
-Eight kinds of entry, and every one is either its own inverse or a mirror
+Seven kinds of entry, and every one is either its own inverse or a mirror
 with the direction as the only difference, so undo and redo are one walk
 in opposite directions through one dispatch. Each kind is a struct of
 its own in one `std::variant` (`core/session/undo_entry.h`), holding
@@ -1738,14 +1694,13 @@ against the result by value, removed fragments by value and appended
 the originals at the end: that changed the draw order, left the next
 undo of a stroke popping a different stroke than it was for, could not
 tell two equal strokes apart, and was quadratic in the drawing's size.
-The painted half of the same gesture rides in the same entry, so one
-drag is one undo whichever kinds of ink it touched. `ItemCreated` carries
+`ItemCreated` carries
 an id and toggles the mark, and `ItemDeleted` does the same for every
 snippet one Delete took: one entry each made deleting a selection that
 many undos, and past the history's cap of 50 the earliest could not be
 undone at all - for a deleted snippet, which comes back only by undo,
-that was deleted for good. `NoteTextChanged` and the painted entries swap
-their contents with the item's, so the popped entry is already what the
+that was deleted for good. `NoteTextChanged` swaps its contents with
+the item's, so the popped entry is already what the
 opposite stack needs. Undo is best-effort about staleness: an entry
 naming something gone does nothing and is dropped rather than moved to
 the other stack.
@@ -1791,7 +1746,7 @@ files nothing. A placement is the whole of where a snippet is - its
 rect, its fullscreen state and the anchor its rect is recomputed from on
 a display change - because a drag takes a fullscreen snippet out of
 fullscreen, and an undo that brought back the rect but not the
-fullscreen would not be the snippet as it was. Like the painted kinds
+fullscreen would not be the snippet as it was. Like `NoteTextChanged`
 the entry is its own inverse, a swap each way. The one-shot changes -
 fullscreen from the bar or the menu, Original size - are an entry each.
 Steps that come in bursts, wheel notches and arrow-key nudges, fold
@@ -1811,7 +1766,7 @@ Snippets are made through `Session::CreateItem`, so a screenshot taken
 by mistake can be undone into its deletion mark and redone out of it. A
 drawing a press made is watched until the hand moves on, and
 `DiscardIfUntouched` erases it for good if nothing was put into it: no
-strokes, no paint, no text, no picture. A screenshot is content even when
+strokes, no text, no picture. A screenshot is content even when
 its capture failed. The watch ends the frame after something first goes
 in, not when the hand moves on: a drawing that has held a stroke is a
 drawing, and an undo that empties it again must leave an empty drawing
@@ -1937,7 +1892,7 @@ caption written beside it by hand.
 
 `ui::OverlayApp` is the overlay as it is drawn, with Dear ImGui: a view
 of the session. Its definition is split across `overlay_app_*.cpp` by
-section of the UI (items, input, paint, popovers, docks, overview,
+section of the UI (items, input, rasters, popovers, docks, overview,
 deleted, undo) with `overlay_app.cpp` holding the per-frame entry points
 and construction; it is still one class. Helpers used by more than one
 file live in `overlay_app_internal.h` under `overlay_detail`; anything
@@ -2957,12 +2912,12 @@ The exclusion is not left on: a screenshot or a stream the user takes of
 their own screen should show the overlay. The rectangle goes through `ClientToScreen`, so a capture
 comes from the overlay's display rather than from wherever its
 coordinates land on the primary. Textures are `D3D11_USAGE_DEFAULT`
-rather than immutable so a painted layer can be updated in place.
+rather than immutable so a stroke raster can be updated in place.
 
 ### Picture scaling
 
-Every picture in a snippet - a screenshot, a painted layer, the
-Rasterized strokes - is drawn through `DrawPicture`, resampled the way
+Every picture in a snippet - a screenshot, the Rasterized strokes - is
+drawn through `DrawPicture`, resampled the way
 Settings > Appearance says (`AppConfig::imageFilter`). Bilinear is the
 default and what every picture had before there was a choice; drawn
 below about half size it lands on one texel in two or three and text
@@ -2989,18 +2944,18 @@ a picture shown near its own size. The mips are box-filtered, which is
 where some quality goes; this keeps most of it for a fraction of the
 cost. Other routes were weighed: a pre-scaled copy per snippet, redone
 whenever its size changes, is the best quality but a cache to invalidate
-on every resize and brush stroke; a separable two-pass filter needs an
+on every resize and stroke; a separable two-pass filter needs an
 intermediate target per picture per frame.
 
 **The mips are built by hand.** `GenerateMips` averages what it is
-given, and the pictures are straight alpha: a painted layer is mostly
+given, and the pictures are straight alpha: a stroke raster is mostly
 (0,0,0,0) around its ink, so a plain average darkens every edge toward
 black as the picture shrinks. `BuildMips` averages premultiplied instead,
 one full-target triangle per level, and the resampling shader sums
 premultiplied too, then clamps - both kernels have negative lobes that
 ring past 0 and 1 at a hard edge. A texture's chain is rebuilt once at
 the start of the next frame after it is created or updated, however many
-brush moves there were in between. The chain costs a third more memory
+updates there were in between. The chain costs a third more memory
 per picture whatever the filter, and Bilinear and Nearest never read it:
 ImGui's samplers clamp to the top level.
 
@@ -3101,6 +3056,15 @@ one twice.
   by a save whose writes are bounded by what changed.
 - **PNG for captures.** Six to twenty times slower than QOI on this
   app's own screenshots.
+- **Painting pixels** (`AppConfig::paintPixelsInsteadOfStrokes`): the pen
+  and the erasers writing into a pixel layer of each snippet's own
+  instead of making strokes. It made pictures mutable, and so needed a
+  re-encode of every changed layer on every save, tiles of pixels on the
+  undo stack (capped at 128 MB), a texture release that had to wait for
+  the write, a revision counter beside the generation, and a copy that
+  deep-copied pixels and read back released ones. Removed so that a
+  picture is written once and never changed, ahead of moving the library
+  into a database.
 - **Loading every canvas's textures at startup.** 1.6 GB of VRAM behind a
   game for fifty 4K captures; replaced by per-canvas residency.
 - **A global undo stack.** Undid strokes on canvases not on screen;
