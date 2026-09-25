@@ -954,8 +954,8 @@ bool WriteConfigFile(const std::filesystem::path& path, const AppConfig& config)
     if (path.empty()) {
         return false;
     }
-    // Written to a temp file and renamed over the real one, the same way the
-    // library's records are (see core/util/atomic_file.h): truncating the
+    // Written to a temp file and renamed over the real one (see
+    // core/util/atomic_file.h): truncating the
     // real file leaves a window in which every setting the user has is a
     // half-written file, which ParseConfig quite correctly reads as
     // defaults. Nothing half-written is left beside the real file on any

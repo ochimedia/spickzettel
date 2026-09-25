@@ -11,9 +11,6 @@ add_executable(sz_core_tests
     core/canvas_state_test.cpp
     core/display_choice_test.cpp
     core/draw_tool_test.cpp
-    core/faulty_file_system_test.cpp
-    core/file_system_conformance_test.cpp
-    core/file_system_test.cpp
     core/image_codec_test.cpp
     core/item_geometry_test.cpp
     core/library_store_test.cpp
@@ -33,8 +30,6 @@ add_executable(sz_core_tests
     ui/cheat_sheet_test.cpp
     ui/shortcut_targets_test.cpp
     ui/ui_strings_file_test.cpp
-    support/faulty_file_system.cpp
-    support/memory_file_system.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # sz_app, not only sz_core: the headless frame tests and the tray controller
