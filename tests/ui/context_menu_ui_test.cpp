@@ -247,6 +247,24 @@ TEST_F(ContextMenuUiTest, ThePickerKeepsTheCanvasItSendsFrom) {
     EXPECT_EQ(controller_->GetSession().Manager().CanvasHoldingItem(snippet), std::optional<CanvasId>(other));
 }
 
+// "Move to canvas" is there when there is a canvas to move to - and a
+// deleted one is not that: the picker does not show it.
+TEST_F(ContextMenuUiTest, MoveToCanvasWantsACanvasThatIsNotDeleted) {
+    MakeASnippet();
+    CanvasManager& manager = controller_->GetSession().Manager();
+    const CanvasId other = manager.AddCanvas("Other");
+    ASSERT_TRUE(manager.MarkDeleted(other, 100));
+    StepFrame();
+
+    OpenTheMenu();
+    bool available = true;
+    RunUi("look at the row", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//$FOCUSED");
+        available = (ctx->ItemInfo("##menu_move_to_canvas").ItemFlags & ImGuiItemFlags_Disabled) == 0;
+    });
+    EXPECT_FALSE(available);
+}
+
 // The picker's Cancel closes the Overview there and then, and nothing more
 // of it is drawn that frame - not the Settings page it was last left on,
 // which the body fell back to once there was nothing being picked.

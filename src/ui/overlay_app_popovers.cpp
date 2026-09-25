@@ -390,8 +390,13 @@ void OverlayApp::BuildItemContextMenuRows(Item& item, std::vector<ContextMenuEnt
     add(ItemMenuAction::BringForward, "##menu_bring_forward", icons::kLayerUp, strings::kMenuBringForward,
         Manager().CanMoveItemLayer(itemId, 1));
 
-    add(ItemMenuAction::MoveToCanvas, "##menu_move_to_canvas", icons::kMove, strings::kMenuMoveToCanvas,
-        Manager().Canvases().size() > 1, /*shortcut=*/{}, /*separatorAbove=*/true);
+    // Somewhere to move it to: a canvas the picker shows, which a deleted
+    // one is not - counted, they opened a picker with nothing in it.
+    const CanvasId here = Manager().CurrentCanvasId();
+    const bool elsewhere = std::any_of(Manager().Canvases().begin(), Manager().Canvases().end(),
+                                       [&](const Canvas& c) { return c.id != here && !Manager().IsDeleted(c); });
+    add(ItemMenuAction::MoveToCanvas, "##menu_move_to_canvas", icons::kMove, strings::kMenuMoveToCanvas, elsewhere,
+        /*shortcut=*/{}, /*separatorAbove=*/true);
     // The selection again, and for the same reason as Duplicate: this is
     // the row for the Ctrl+Shift+N beside it.
     add(ItemMenuAction::MoveToNewCanvas, "##menu_move_to_new_canvas", icons::kPlus, strings::kMenuMoveToNewCanvas,
