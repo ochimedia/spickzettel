@@ -309,7 +309,7 @@ public:
     // 0 while nothing is frozen - which is also how "the capture failed"
     // is represented.
     uint64_t FrozenScreenTexture() const { return frozenScreenTexture_; }
-    // Captures what is under `item` into its picture layer - cropped out of
+    // Captures what is under `item` into its picture - cropped out of
     // the frozen screen while one is held, live otherwise - uploads it, and
     // writes it to disk at once rather than waiting for the autosave (see
     // LibraryStore::SaveImage).
@@ -358,7 +358,7 @@ private:
         int height = 0;
     };
     // Tries again to write every pending picture, recording the filename
-    // on its item's picture layer as it lands. Called before the records
+    // on its item's picture as it lands. Called before the records
     // are written, and part of the same all-or-nothing answer. A picture
     // whose item has since gone for good is dropped.
     bool SavePendingPictures(LibraryInstance& instance);

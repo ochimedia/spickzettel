@@ -40,14 +40,13 @@ bool Session::SavePendingPictures(LibraryInstance& instance) {
     bool wroteEverything = true;
     for (auto it = pendingPictures_.begin(); it != pendingPictures_.end();) {
         Item* item = instance.manager.FindItemAnywhere(it->first);
-        Layer* picture = item ? item->ImageLayer() : nullptr;
-        if (!picture) {
+        if (!item) {
             it = pendingPictures_.erase(it);  // erased for good since; nothing to keep it for
             continue;
         }
         const PendingPicture& pending = it->second;
         if (instance.store->SaveImage(it->first, pending.pixelsRGBA.data(), pending.width, pending.height)) {
-            picture->stored = true;
+            item->picture.stored = true;
             it = pendingPictures_.erase(it);
         } else {
             wroteEverything = false;
@@ -75,13 +74,12 @@ bool Session::WriteRecoveryCopy(const std::filesystem::path& file) {
     size_t picturesMissing = 0;
     for (const Canvas& canvas : Manager().Canvases()) {
         for (const Item& item : canvas.items) {
-            const Layer* picture = item.ImageLayer();
             if (const auto pending = pendingPictures_.find(item.id); pending != pendingPictures_.end()) {
                 if (!copy.SaveImage(item.id, pending->second.pixelsRGBA.data(), pending->second.width,
                                     pending->second.height)) {
                     ++picturesMissing;
                 }
-            } else if (picture != nullptr && picture->stored && !copy.HasImage(item.id)) {
+            } else if (item.picture.stored && !copy.HasImage(item.id)) {
                 ++picturesMissing;
             }
         }
@@ -115,14 +113,14 @@ void Session::SyncTexturesToCurrentCanvas() {
     }
     Manager().SyncShotTexturesToCanvas(
         Manager().CurrentCanvasId(),
-        [this](const Item& item, Layer& /*layer*/) -> uint64_t {
+        [this](const Item& item) -> uint64_t {
             const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id);
             if (!decoded.has_value()) {
                 return 0;
             }
             return window_->CreateTextureFromPixels(decoded->pixelsRGBA.data(), decoded->width, decoded->height);
         },
-        [this](Layer& layer) { window_->ReleaseTexture(layer.textureHandle); });
+        [this](uint64_t texture) { window_->ReleaseTexture(texture); });
     shotTextureCanvasId_ = Manager().CurrentCanvasId();
 }
 
@@ -138,19 +136,18 @@ void Session::ReplaceLostTextures() {
     }
     for (Canvas& canvas : Manager().CanvasesMutable()) {
         for (Item& item : canvas.items) {
-            for (Layer& layer : item.layers) {
-                if (layer.textureHandle == 0) {
-                    continue;
-                }
-                window_->ReleaseTexture(layer.textureHandle);
-                layer.textureHandle = 0;
-                // Not stored yet, so the sync has nothing to load it from:
-                // the pixels waiting to be written are what it showed.
-                const auto pending = pendingPictures_.find(item.id);
-                if (&layer == item.ImageLayer() && !layer.stored && pending != pendingPictures_.end()) {
-                    layer.textureHandle = window_->CreateTextureFromPixels(
-                        pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
-                }
+            Picture& picture = item.picture;
+            if (picture.textureHandle == 0) {
+                continue;
+            }
+            window_->ReleaseTexture(picture.textureHandle);
+            picture.textureHandle = 0;
+            // Not stored yet, so the sync has nothing to load it from: the
+            // pixels waiting to be written are what it showed.
+            const auto pending = pendingPictures_.find(item.id);
+            if (!picture.stored && pending != pendingPictures_.end()) {
+                picture.textureHandle = window_->CreateTextureFromPixels(
+                    pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
             }
         }
     }
@@ -312,12 +309,10 @@ bool Session::Erase(uint64_t id) {
             if (!wholeCanvas) {
                 ForgetHistoryOfItem(canvas.id, item.id);
             }
-            for (Layer& layer : item.layers) {
-                if (layer.textureHandle != 0 && window_) {
-                    window_->ReleaseTexture(layer.textureHandle);
-                }
-                layer.textureHandle = 0;
+            if (item.picture.textureHandle != 0 && window_) {
+                window_->ReleaseTexture(item.picture.textureHandle);
             }
+            item.picture.textureHandle = 0;
         }
     }
     return found && manager.Erase(id);
@@ -440,13 +435,10 @@ void Session::ReleaseFrozenScreen() {
 }
 
 void Session::CaptureShotItem(Item& item) {
-    Layer* picture = item.ImageLayer();
-    if (!picture) {
-        return;  // nothing to capture into - see Item::layers
-    }
+    Picture* picture = &item.picture;
     // Placeholder gradient seed, used as a fallback below (and always
     // needed if a later resize or a canvas-to-canvas copy loses the real
-    // capture - see Layer::textureHandle's own doc comment).
+    // capture - see Picture::textureHandle's own doc comment).
     picture->placeholderHue = std::fmod(static_cast<float>(item.id) * 47.0f, 360.0f);
 
     if (!window_) {
@@ -495,11 +487,11 @@ bool Session::ClonePicturesForCopy(ItemId sourceId, ItemId copyId) {
     }
     const Item* source = Manager().FindItemAnywhere(sourceId);
     Item* copy = Manager().FindItemAnywhere(copyId);
-    const Layer* sourcePicture = source != nullptr ? source->ImageLayer() : nullptr;
-    Layer* copyPicture = copy != nullptr ? copy->ImageLayer() : nullptr;
-    if (!sourcePicture || !copyPicture) {
+    if (!source || !copy) {
         return true;
     }
+    const Picture* sourcePicture = &source->picture;
+    Picture* copyPicture = &copy->picture;
     // The session's own copy of the pixels first: a capture whose write has
     // not landed is not in the library yet, and a copy taken of it in that
     // window used to come out with no picture at all, for good. Written for

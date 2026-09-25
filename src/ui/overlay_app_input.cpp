@@ -495,10 +495,8 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
         // A Text Note's backing (see kNoteBackgroundColorRGBA), but darker:
         // these land on whatever the desktop happens to show, and half
         // transparent over a white window left the red text washed out.
-        if (Layer* picture = item.ImageLayer()) {
-            picture->tintColorRGBA = kNoteBackgroundColorRGBA;
-            picture->opacity = 0.8f;
-        }
+        item.picture.tintColorRGBA = kNoteBackgroundColorRGBA;
+        item.picture.opacity = 0.8f;
         return &item;
     };
 
@@ -591,11 +589,9 @@ void OverlayApp::ApplyCreationDefaults(ItemCreationKind kind, ItemId id, Item& i
         kind == ItemCreationKind::Screenshot ? Cfg().screenshotDefaults : Cfg().drawingDefaults;
     item.keepAspect = defaults.keepAspect;
     item.foregroundOpacity = defaults.foregroundOpacity;
-    if (Layer* picture = item.ImageLayer()) {
-        picture->opacity = defaults.backgroundOpacity;
-        if (kind == ItemCreationKind::Drawing) {
-            picture->tintColorRGBA = Cfg().drawingBackgroundColorRGBA;
-        }
+    item.picture.opacity = defaults.backgroundOpacity;
+    if (kind == ItemCreationKind::Drawing) {
+        item.picture.tintColorRGBA = Cfg().drawingBackgroundColorRGBA;
     }
     if (Cfg().noteTextSizePx > 0.0f) {
         item.noteTextSizePx = Cfg().noteTextSizePx;
@@ -1253,11 +1249,8 @@ void OverlayApp::StepSelectionOpacity(int steps, bool background) {
             continue;
         }
         if (background) {
-            // A snippet with no picture has no background to fade.
-            if (Layer* picture = item->ImageLayer()) {
-                picture->opacity = stepped(picture->opacity, 0.0f);
-                shown = picture->opacity;
-            }
+            item->picture.opacity = stepped(item->picture.opacity, 0.0f);
+            shown = item->picture.opacity;
         } else {
             // Not below a tenth - see RenderItemOpacity.
             item->foregroundOpacity = stepped(item->foregroundOpacity, 0.1f);

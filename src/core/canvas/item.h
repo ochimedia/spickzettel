@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "core/canvas/layer.h"
+#include "core/canvas/picture.h"
 #include "core/drawing/stroke.h"
 
 namespace sz::core {
@@ -21,10 +21,10 @@ struct Rect {
 };
 
 // An item - a *snippet*, in the interface's words - placed on a Canvas:
-// freehand strokes over a stack of layers (see layer.h), each holding a
-// captured screenshot or a plain fill. There is no hard screenshot/drawing
-// type split: `hasBackground` records how an item was made, and everything
-// visible about it is a layer's own opacity.
+// freehand strokes over a picture (see picture.h), which is a captured
+// screenshot or a plain fill. There is no hard screenshot/drawing type
+// split: `hasBackground` records how an item was made, and everything
+// visible about it is the picture's own opacity.
 //
 // `strokes` are stored in the item's own fixed native coordinate space
 // (nativeW/nativeH, set at creation), independent of `rect`'s current
@@ -43,7 +43,7 @@ struct Item {
 
     std::vector<Stroke> strokes;  // native space
 
-    // Opacity of this item's own strokes, independent of every layer's.
+    // Opacity of this item's own strokes, independent of the picture's.
     float foregroundOpacity = 1.0f;  // 0..1
     // Whether a resize by a handle keeps the item's shape (Shift does the
     // other). A property of its own, set from the defaults when the item
@@ -84,22 +84,15 @@ struct Item {
     // nothing else - and unpinning is how they go.
     bool pinned = false;
 
-    // The item's picture, composited bottom-first, underneath `strokes` and
-    // `noteText`. Never empty: an item always has a picture layer, even one
+    // Underneath `strokes` and `noteText`. Every item has one, even one
     // that is fully transparent and draws nothing, which is exactly what a
-    // plain drawing starts as. CanvasManager::CreateItem sets it up and the
-    // library reader guarantees it for a loaded item.
-    std::vector<Layer> layers{Layer{}};
-
-    // The bottom-most layer - the item's background. Null only for an item
-    // with no layers, which nothing makes.
-    Layer* ImageLayer() { return layers.empty() ? nullptr : &layers.front(); }
-    const Layer* ImageLayer() const { return layers.empty() ? nullptr : &layers.front(); }
+    // plain drawing starts as.
+    Picture picture;
 
     // Whether this item was made as a screenshot rather than a drawing. Set
     // once at creation and never changed; it does not gate whether a
-    // background is drawn (the Image layer's opacity does). It decides the
-    // layer's starting opacity and placeholder, the item's "Screenshot N" /
+    // background is drawn (the picture's opacity does). It decides the
+    // picture's starting opacity and placeholder, the item's "Screenshot N" /
     // "Drawing N" name, and whether an empty item counts as untouched: a
     // screenshot is content even when its capture failed. The name is also
     // the on-disk key.
@@ -114,7 +107,7 @@ struct Item {
 
     // How `noteText` is drawn, per item rather than app-wide: a caption over
     // a dark screenshot and one over a pale drawing want different answers,
-    // and both can sit on one canvas. 0xRRGGBBAA, and unlike a layer's tint
+    // and both can sit on one canvas. 0xRRGGBBAA, and unlike a picture's tint
     // the alpha *is* used - text has no separate opacity, so fading a
     // caption means fading its color.
     uint32_t noteTextColorRGBA = 0xFFFFFFFFu;  // opaque white
@@ -125,7 +118,7 @@ struct Item {
     // to kNoteTextSizeMin..Max wherever it is edited or loaded.
     float noteTextSizePx = 17.0f;
 
-    // Every field, texture handles included (see Layer's).
+    // Every field, texture handles included (see Picture's).
     bool operator==(const Item&) const = default;
 };
 

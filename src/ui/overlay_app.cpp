@@ -787,41 +787,38 @@ void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMa
     }
 }
 
-void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMax,
-                std::optional<uint64_t> textureHandle, ImageSampling sampling) {
-    if (layer.opacity <= 0.0f) {
+void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMin, ImVec2 pMax,
+                        std::optional<uint64_t> textureHandle, ImageSampling sampling) {
+    if (picture.opacity <= 0.0f) {
         return;
     }
-    const uint64_t texture = textureHandle.value_or(layer.textureHandle);
+    const uint64_t texture = textureHandle.value_or(picture.textureHandle);
     if (texture != 0) {
         // Real pixels - AddImage stretches the whole texture to fill
         // pMin..pMax on its own, the same way the gradient/fill below fills
         // whatever rect the item currently has, so resizing the item needs
         // no extra handling here. The tint multiplies the sampled texture
-        // (see Layer::tintColorRGBA) - white, the default, leaves a capture
-        // unmodified; any other color mixes into it.
-        DrawPicture(drawList, texture, pMin, pMax, ToImColor(layer.tintColorRGBA, layer.opacity), sampling);
-    } else if (layer.showsPlaceholder) {
+        // (see Picture::tintColorRGBA) - white, the default, leaves a
+        // capture unmodified; any other color mixes into it.
+        DrawPicture(drawList, texture, pMin, pMax, ToImColor(picture.tintColorRGBA, picture.opacity), sampling);
+    } else if (picture.showsPlaceholder) {
         // No capture yet (the OS-level capture failed, or the canvas this
         // belongs to isn't resident) - a placeholder gradient, faded by the
         // same opacity a real capture would use.
-        const ImU32 top = ImColor::HSV(layer.placeholderHue / 360.0f, 0.38f, 0.55f, layer.opacity);
-        const ImU32 bottom = ImColor::HSV(layer.placeholderHue / 360.0f, 0.24f, 0.82f, layer.opacity);
+        const ImU32 top = ImColor::HSV(picture.placeholderHue / 360.0f, 0.38f, 0.55f, picture.opacity);
+        const ImU32 bottom = ImColor::HSV(picture.placeholderHue / 360.0f, 0.24f, 0.82f, picture.opacity);
         drawList->AddRectFilledMultiColor(pMin, pMax, top, top, bottom, bottom);
     } else {
-        // A layer given a solid color instead - just the color itself, no
+        // A picture given a solid color instead - just the color itself, no
         // image to tint.
-        drawList->AddRectFilled(pMin, pMax, ToImColor(layer.tintColorRGBA, layer.opacity));
+        drawList->AddRectFilled(pMin, pMax, ToImColor(picture.tintColorRGBA, picture.opacity));
     }
 }
 
 void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
                       uint64_t strokeRasterTexture, bool skipNoteText, StrokeMeshSlot meshCache,
                       ImageSampling sampling) {
-    // Bottom-first, each layer over the one below it.
-    for (const Layer& layer : item.layers) {
-        DrawLayer(drawList, layer, pMin, pMax, std::nullopt, sampling);
-    }
+    DrawSnippetPicture(drawList, item.picture, pMin, pMax, std::nullopt, sampling);
 
     if (rendering == StrokeRenderMode::Rasterized && strokeRasterTexture != 0) {
         // Every stroke, already drawn into one bitmap and composited here
@@ -1233,7 +1230,7 @@ void OverlayApp::OnFrame(float deltaSeconds) {
     if (window_ != nullptr && window_->TextureGeneration() != textureGeneration_) {
         textureGeneration_ = window_->TextureGeneration();
         session_.ReplaceLostTextures();
-        ReleaseLayerPreviews();
+        ReleasePicturePreviews();
         ReleaseStrokeRasters();
     }
     session_.EnsureTexturesForCurrentCanvas();

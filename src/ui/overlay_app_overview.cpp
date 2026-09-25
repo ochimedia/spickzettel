@@ -410,7 +410,7 @@ namespace overlay_detail {
 // the same frame - see OverlayApp::previewMeshCache_.
 void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax, float displayW,
                         float displayH, StrokeRenderMode rendering, bool showStrokes,
-                        const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
+                        const std::function<std::optional<uint64_t>(const Item&)>& previewTexture,
                         StrokeMeshSlot meshCache, ImageSampling sampling) {
     drawList->PushClipRect(thumbMin, thumbMax, true);
     drawList->AddRectFilled(thumbMin, thumbMax, IM_COL32(14, 16, 20, 255));
@@ -437,36 +437,28 @@ void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbM
 
 void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
                      bool showStrokes,
-                     const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
+                     const std::function<std::optional<uint64_t>(const Item&)>& previewTexture,
                      StrokeMeshSlot meshCache, ImageSampling sampling) {
-    // Each layer with whichever texture it can have here: the real one for
+    // The picture with whichever texture it can have here: the real one for
     // the current canvas (already loaded), a thumbnail-sized copy for the
     // rest if previews are on, and none at all otherwise - in which case
-    // DrawLayer falls back to the same placeholder gradient or plain fill it
-    // uses anywhere else.
+    // DrawSnippetPicture falls back to the same placeholder gradient or
+    // plain fill it uses anywhere else.
     bool drewAnything = false;
-    for (size_t index = 0; index < item.layers.size(); ++index) {
-        const Layer& layer = item.layers[index];
-        if (layer.opacity <= 0.0f) {
-            continue;
-        }
-        // Nothing at all for a layer whose pixels are still being read (see
-        // LayerPreviewTexture, which says so by returning nothing rather
-        // than 0). The placeholder gradient means "there is no image here",
-        // and a few frames of it in front of an image that *is* there and is
-        // on its way reads as the thumbnails being wrong and then correcting
-        // themselves. An outlined empty box - what the fall-through below
-        // draws - says the same thing quietly.
+    if (item.picture.opacity > 0.0f) {
+        // Nothing at all for a picture whose pixels are still being read
+        // (see PicturePreviewTexture, which says so by returning nothing
+        // rather than 0). The placeholder gradient means "there is no image
+        // here", and a few frames of it in front of an image that *is*
+        // there and is on its way reads as the thumbnails being wrong and
+        // then correcting themselves. An outlined empty box - what the
+        // fall-through below draws - says the same thing quietly.
         const std::optional<uint64_t> texture =
-            previewTexture ? previewTexture(item, index) : std::optional<uint64_t>(0);
-        if (!texture.has_value()) {
-            continue;
+            previewTexture ? previewTexture(item) : std::optional<uint64_t>(0);
+        if (texture.has_value()) {
+            DrawSnippetPicture(drawList, item.picture, pMin, pMax, *texture, sampling);
+            drewAnything = true;
         }
-        // The layer itself, with the texture handed in beside it. This used
-        // to copy the whole Layer to override that one integer - a string
-        // and a shared_ptr refcount per layer, per tile, per frame.
-        DrawLayer(drawList, layer, pMin, pMax, *texture, sampling);
-        drewAnything = true;
     }
     if (!drewAnything) {
         drawList->AddRect(pMin, pMax, IM_COL32(90, 96, 110, 180));
@@ -741,7 +733,7 @@ void OverlayApp::RenderOverviewHeader() {
     }
     if (changed) {
         if (!Cfg().overviewShowsBitmaps) {
-            ReleaseLayerPreviews();
+            ReleasePicturePreviews();
         }
         settings_.Commit();
     }
@@ -3239,8 +3231,8 @@ void OverlayApp::CloseOverview() {
     // The thumbnails' own textures go with the panel. They exist to be
     // looked at, and a library's worth of them held for a panel nobody has
     // open is exactly the memory this app spent stage A learning not to
-    // hold - see LayerPreview.
-    ReleaseLayerPreviews();
+    // hold - see PicturePreview.
+    ReleasePicturePreviews();
 }
 
 void OverlayApp::ShowActionToast(std::string text) {

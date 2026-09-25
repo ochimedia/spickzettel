@@ -144,7 +144,7 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     // Thumbnails of other canvases are loaded to be looked at; once the bar
     // is back behind its edge, nothing is - unless the Overview has them.
     if (barBefore > 0.0f && canvasBarReveal_.amount <= 0.0f && !PanelOpen()) {
-        ReleaseLayerPreviews();
+        ReleasePicturePreviews();
     }
 
     // ----- The canvas bar: centered on the bottom edge -----

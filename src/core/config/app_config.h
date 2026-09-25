@@ -24,7 +24,7 @@ enum class CreationTrigger { Plain, Ctrl, Alt, Off };
 // What a new snippet of one kind starts with - see AppConfig::
 // screenshotDefaults. Each is the snippet property of the same name, which
 // the snippet's own popover changes from then on: Item::keepAspect,
-// Item::foregroundOpacity, and the picture layer's opacity.
+// Item::foregroundOpacity, and the picture's opacity.
 struct SnippetDefaults {
     bool keepAspect = true;
     float foregroundOpacity = 1.0f;  // 0.1..1, as the popover's slider

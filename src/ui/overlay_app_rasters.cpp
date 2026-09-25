@@ -54,49 +54,48 @@ constexpr int kOverviewThumbnailLoadsPerFrame = 48;
 
 void OverlayApp::BeginOverviewPreviewFrame() {
     const bool wanted = Cfg().overviewShowsBitmaps;
-    layerPreviewLoadBudget_ = wanted ? kOverviewFullDecodesPerFrame : 0;
-    layerPreviewThumbnailBudget_ = wanted ? kOverviewThumbnailLoadsPerFrame : 0;
+    picturePreviewLoadBudget_ = wanted ? kOverviewFullDecodesPerFrame : 0;
+    picturePreviewThumbnailBudget_ = wanted ? kOverviewThumbnailLoadsPerFrame : 0;
 }
 
 OverlayApp::PreviewTextureFn OverlayApp::PreviewTextureLookup() {
     if (!Cfg().overviewShowsBitmaps) {
         return {};
     }
-    return [this](const Item& item, size_t index) { return LayerPreviewTexture(item, index); };
+    return [this](const Item& item) { return PicturePreviewTexture(item); };
 }
 
-std::optional<uint64_t> OverlayApp::LayerPreviewTexture(const Item& item, size_t layerIndex) {
-    if (layerIndex >= item.layers.size() || !window_ || !Store()) {
+std::optional<uint64_t> OverlayApp::PicturePreviewTexture(const Item& item) {
+    if (!window_ || !Store()) {
         return 0;
     }
-    const Layer& layer = item.layers[layerIndex];
-    // The current canvas's layers already have their full-size texture
+    const Picture& picture = item.picture;
+    // The current canvas's pictures already have their full-size texture
     // loaded, and drawing that scaled into a 200px tile costs nothing extra
     // - no decode, no second texture. Which is also the canvas most likely
     // to be looked at in the overview.
-    if (layer.textureHandle != 0) {
-        return layer.textureHandle;
+    if (picture.textureHandle != 0) {
+        return picture.textureHandle;
     }
 
-    const LayerKey key{item.id, layerIndex};
-    const auto existing = layerPreviews_.find(key);
-    if (existing != layerPreviews_.end()) {
+    const auto existing = picturePreviews_.find(item.id);
+    if (existing != picturePreviews_.end()) {
         return existing->second.textureHandle;  // 0 if it failed, which stops it being retried
     }
-    if (!layer.stored) {
+    if (!picture.stored) {
         return 0;  // never had pixels of its own: the placeholder is the answer
     }
 
     // The thumbnail first, and on its own budget: this is the path nearly
     // every picture takes, and it is cheap enough that a whole folder's
     // worth lands on the first frame.
-    if (layerPreviewThumbnailBudget_ > 0) {
-        --layerPreviewThumbnailBudget_;
+    if (picturePreviewThumbnailBudget_ > 0) {
+        --picturePreviewThumbnailBudget_;
         if (const std::optional<persistence::DecodedImage> thumb = Store()->LoadThumbnail(item.id)) {
-            LayerPreview preview;
+            PicturePreview preview;
             preview.textureHandle =
                 window_->CreateTextureFromPixels(thumb->pixelsRGBA.data(), thumb->width, thumb->height);
-            layerPreviews_.emplace(key, preview);
+            picturePreviews_.emplace(item.id, preview);
             return preview.textureHandle;
         }
     } else {
@@ -105,7 +104,7 @@ std::optional<uint64_t> OverlayApp::LayerPreviewTexture(const Item& item, size_t
 
     // No thumbnail: it could not be made when the picture was stored.
     // Decode the real thing, under the small budget.
-    if (layerPreviewLoadBudget_ <= 0) {
+    if (picturePreviewLoadBudget_ <= 0) {
         // Its turn is next frame, or the one after. Distinct from the 0
         // above, and the caller draws the two differently: a stand-in for
         // an image that is arriving shortly is a wrong thumbnail that
@@ -113,29 +112,29 @@ std::optional<uint64_t> OverlayApp::LayerPreviewTexture(const Item& item, size_t
         // like for the first few frames of every Overview visit.
         return std::nullopt;
     }
-    --layerPreviewLoadBudget_;
+    --picturePreviewLoadBudget_;
 
-    LayerPreview preview;
+    PicturePreview preview;
     if (const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id)) {
         const persistence::DecodedImage small =
             persistence::DownscaleToFit(*decoded, persistence::LibraryStore::kThumbnailMaxExtent);
         preview.textureHandle =
             window_->CreateTextureFromPixels(small.pixelsRGBA.data(), small.width, small.height);
     }
-    layerPreviews_.emplace(key, preview);
+    picturePreviews_.emplace(item.id, preview);
     return preview.textureHandle;
 }
 
-void OverlayApp::ReleaseLayerPreviews() {
+void OverlayApp::ReleasePicturePreviews() {
     if (window_) {
-        for (auto& [key, preview] : layerPreviews_) {
+        for (auto& [key, preview] : picturePreviews_) {
             (void)key;
             if (preview.textureHandle != 0) {
                 window_->ReleaseTexture(preview.textureHandle);
             }
         }
     }
-    layerPreviews_.clear();
+    picturePreviews_.clear();
 }
 
 // ================= Rasterized vector strokes =================
@@ -276,7 +275,7 @@ void OverlayApp::RefreshStrokeRasters() {
     }
 
     // Anything not on this canvas any more - switched away from, or
-    // deleted - gives its texture back. Same discipline as the layer
+    // deleted - gives its texture back. Same discipline as the picture
     // textures next door, and for the same reason.
     for (auto it = strokeRasters_.begin(); it != strokeRasters_.end();) {
         const bool stillHere = std::any_of(canvas->items.begin(), canvas->items.end(),

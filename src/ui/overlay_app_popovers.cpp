@@ -186,23 +186,18 @@ void OverlayApp::RenderItemPropertiesPopover() {
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverKeepAspectTip);
     }
-    // Every item has a picture layer (see Item::ImageLayer) - the guard is
-    // for the hypothetical one that does not, which shows its foreground
-    // opacity and nothing else.
-    if (Layer* picture = it->ImageLayer()) {
-        RenderItemBackgroundColor(*picture);
-        RenderItemTextStyle(*it);
-        // After the background-color ColorEdit3 swatch, not before - see
-        // KeepChildPopupsInFront.
-        KeepChildPopupsInFront();
-    }
+    RenderItemBackgroundColor(it->picture);
+    RenderItemTextStyle(*it);
+    // After the background-color ColorEdit3 swatch, not before - see
+    // KeepChildPopupsInFront.
+    KeepChildPopupsInFront();
     ImGui::EndPopup();
 }
 
 void OverlayApp::RenderItemOpacity(Item& item) {
     // Foreground (strokes) and background (captured image / color fill)
     // opacity are independent - see Item::foregroundOpacity/
-    // Layer::opacity's own doc comments. Background can go all the way
+    // Picture::opacity's own doc comments. Background can go all the way
     // to 0 (invisible) unlike foreground, which bottoms out at 10% - a
     // fully invisible drawing surface still has strokes to see, but there
     // being nothing left to *tell* whether it's an item at all is only a
@@ -222,10 +217,7 @@ void OverlayApp::RenderItemOpacity(Item& item) {
         ImGui::SetTooltip("%s", strings::kPopoverForegroundTip);
     }
 
-    Layer* picture = item.ImageLayer();
-    if (!picture) {
-        return;
-    }
+    Picture* picture = &item.picture;
     int backgroundPct = static_cast<int>(std::round(picture->opacity * 100.0f));
     ImGui::SetNextItemWidth(Px(160.0f));
     if (ImGui::SliderInt(Labeled(strings::kPopoverBackground, "opacitybg"), &backgroundPct, 0, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
@@ -238,10 +230,10 @@ void OverlayApp::RenderItemOpacity(Item& item) {
     }
 }
 
-void OverlayApp::RenderItemBackgroundColor(Layer& picture) {
+void OverlayApp::RenderItemBackgroundColor(Picture& picture) {
     // White, and the picker for everything else. White gets a swatch of
     // its own because it is the one color with a meaning here: a no-op
-    // multiply tint on a real capture (see Layer::tintColorRGBA), the way
+    // multiply tint on a real capture (see Picture::tintColorRGBA), the way
     // back to the picture as it was - and hitting exact white in a picker
     // takes aim. Nothing else is preset: the picker does the whole job.
     ImGui::PushID("##bg_color_section");

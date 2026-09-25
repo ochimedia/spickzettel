@@ -225,18 +225,15 @@ void ReadRect(const json& j, const char* key, Rect& out, bool& repaired) {
 }
 
 std::string ItemRecord(const Item& item) {
-    json layers = json::array();
-    for (const Layer& layer : item.layers) {
-        // textureHandle is deliberately absent: a GPU handle from a
-        // previous run is never valid to reuse. Whether it has pixels is
-        // the pictures table's to say.
-        layers.push_back(json{
-            {"opacity", layer.opacity},
-            {"tintColorRGBA", layer.tintColorRGBA},
-            {"showsPlaceholder", layer.showsPlaceholder},
-            {"placeholderHue", layer.placeholderHue},
-        });
-    }
+    // textureHandle is deliberately absent: a GPU handle from a previous
+    // run is never valid to reuse. Whether there are pixels is the pictures
+    // table's to say.
+    json picture{
+        {"opacity", item.picture.opacity},
+        {"tintColorRGBA", item.picture.tintColorRGBA},
+        {"showsPlaceholder", item.picture.showsPlaceholder},
+        {"placeholderHue", item.picture.placeholderHue},
+    };
     const json j{
         {"name", item.name},
         {"createdAt", item.createdAt},
@@ -254,7 +251,7 @@ std::string ItemRecord(const Item& item) {
         {"anchorDisplayHeight", item.anchorDisplayHeight},
         {"minimized", item.minimized},
         {"pinned", item.pinned},
-        {"layers", std::move(layers)},
+        {"picture", std::move(picture)},
         {"noteText", item.noteText},
         {"noteTextColorRGBA", item.noteTextColorRGBA},
         {"noteTextSizePx", item.noteTextSizePx},
@@ -302,26 +299,15 @@ void ReadItemRecord(std::string_view text, Item& out, bool& repaired) {
     out.anchorDisplayHeight = ClampedOr(j, "anchorDisplayHeight", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
     out.minimized = Value(j, "minimized", false, repaired);
     out.pinned = Value(j, "pinned", false, repaired);
-    out.layers.clear();
-    if (const auto it = j.find("layers"); it != j.end() && it->is_array()) {
-        for (const json& layerJson : *it) {
-            if (!layerJson.is_object()) {
-                repaired = true;
-                continue;
-            }
-            Layer layer;
-            layer.opacity = ClampedOr(layerJson, "opacity", 0.0f, 0.0f, 1.0f, repaired);
-            layer.tintColorRGBA = Value(layerJson, "tintColorRGBA", uint32_t{0xFFFFFFFF}, repaired);
-            layer.showsPlaceholder = Value(layerJson, "showsPlaceholder", false, repaired);
-            layer.placeholderHue = ClampedOr(layerJson, "placeholderHue", 0.0f, 0.0f, 360.0f, repaired);
-            out.layers.push_back(layer);
+    if (const auto it = j.find("picture"); it != j.end()) {
+        if (it->is_object()) {
+            out.picture.opacity = ClampedOr(*it, "opacity", 0.0f, 0.0f, 1.0f, repaired);
+            out.picture.tintColorRGBA = Value(*it, "tintColorRGBA", uint32_t{0xFFFFFFFF}, repaired);
+            out.picture.showsPlaceholder = Value(*it, "showsPlaceholder", false, repaired);
+            out.picture.placeholderHue = ClampedOr(*it, "placeholderHue", 0.0f, 0.0f, 360.0f, repaired);
+        } else {
+            repaired = true;
         }
-    }
-    if (out.layers.empty()) {
-        // Item::layers is never empty - see its own comment - and this is
-        // where that promise is kept for a loaded snippet.
-        out.layers.push_back(Layer{});
-        repaired = true;
     }
     out.noteText = Value(j, "noteText", std::string(), repaired);
     out.noteTextColorRGBA = Value(j, "noteTextColorRGBA", uint32_t{0xFFFFFFFF}, repaired);
@@ -648,7 +634,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
                 const std::vector<uint8_t> strokes = statement.Blob(4);
                 ReadItemRecord(record, item, repaired);
                 item.strokes = ReadStrokes(strokes, repaired);
-                item.layers.front().stored = statement.Int(5) != 0;
+                item.picture.stored = statement.Int(5) != 0;
                 items[item.id] = ItemRow{canvasId, statement.Int(2), repaired ? 0 : HashRow(record, strokes)};
                 snapshot.canvases[canvas->second].items.push_back(std::move(item));
             }

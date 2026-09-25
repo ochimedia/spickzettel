@@ -169,7 +169,7 @@ public:
 
     const std::vector<Folder>& Folders() const { return folders_; }
     FolderId CurrentFolderId() const { return currentFolderId_; }
-    // Every layer texture handle on the named canvas - what deleting it for
+    // Every picture texture handle on the named canvas - what deleting it for
     // good would leak. Call *before* DeleteCanvas/DeleteFolder so the caller
     // can release each one first; this class has no platform dependency.
     // Empty if `id` doesn't exist.
@@ -252,7 +252,7 @@ public:
     // canvas holds it, not only the current one - onto `targetCanvasId`,
     // which may be the canvas it is already on. Returns the resulting
     // snippet's id: a new one for a copy (which owns its own strokes and,
-    // once the caller has given it one, picture - see DetachLayersForCopy -
+    // once the caller has given it one, picture - see DetachPictureForCopy -
     // and starts unmarked, whatever its source's
     // mark: a copy is a new thing), the same one for a move. 0 if there is
     // no such snippet, no such canvas, or the canvas is deleted - nothing
@@ -386,20 +386,19 @@ public:
     // canvas is ever drawn from a real texture, so every other canvas's
     // textures are pure cost.
     //
-    // On `canvasId`, for every item there that isn't deleted: any layer
-    // with a stored picture but no live texture gets one from `loadLayer`
-    // (0 meaning the load failed, leaving the placeholder like a failed
-    // capture). On every other canvas, and for a deleted item on this one:
-    // any layer holding a texture is handed to `releaseLayer` and its
-    // handle cleared.
+    // On `canvasId`, for every item there that isn't deleted: a stored
+    // picture with no live texture gets one from `loadPicture` (0 meaning
+    // the load failed, leaving the placeholder like a failed capture). On
+    // every other canvas, and for a deleted item on this one: a texture is
+    // handed to `releaseTexture` and the handle cleared.
     //
-    // A release only ever happens for a layer with a stored picture to
-    // reload from; a texture with nothing behind it (a capture whose save
+    // A release only ever happens for a stored picture, which can be
+    // loaded again; a texture with nothing behind it (a capture whose save
     // failed) is kept rather than freed into blankness.
     // Idempotent and cheap when nothing changed. Doesn't touch Generation():
     // a GPU handle isn't content.
-    void SyncShotTexturesToCanvas(CanvasId canvasId, const std::function<uint64_t(const Item&, Layer&)>& loadLayer,
-                                   const std::function<void(Layer&)>& releaseLayer);
+    void SyncShotTexturesToCanvas(CanvasId canvasId, const std::function<uint64_t(const Item&)>& loadPicture,
+                                   const std::function<void(uint64_t)>& releaseTexture);
 
 private:
     // Where `id` sits in `canvas`'s stack, and which snippet a z-order

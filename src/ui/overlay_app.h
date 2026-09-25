@@ -729,7 +729,7 @@ private:
     // What is done *to* a snippet - fullscreen, copy, restack, move - is
     // the context menu's (see below), not the popover's.
     void RenderItemOpacity(Item& item);
-    void RenderItemBackgroundColor(Layer& picture);
+    void RenderItemBackgroundColor(Picture& picture);
     void RenderItemTextStyle(Item& item);
 
     // The context menu a right-click on a snippet opens - the popover's
@@ -1203,7 +1203,7 @@ private:
     // Brings the current canvas's rasters in line with its items, and
     // releases every other one. A no-op in the other two render modes,
     // which also frees whatever was cached the moment the mode changes.
-    // Called once a frame from the same place the layer textures are
+    // Called once a frame from the same place the picture textures are
     // brought up to date.
     void RefreshStrokeRasters();
     // Brings `raster` in line with `item`'s strokes: nothing at all when it
@@ -1222,7 +1222,7 @@ private:
 
     // ===== Overview bitmap previews (AppConfig::overviewShowsBitmaps) =====
 
-    // A layer's pixels, decoded and scaled down to thumbnail size, for the
+    // A picture's pixels, decoded and scaled down to thumbnail size, for the
     // canvas overview - which draws canvases that aren't current and whose
     // full-size pixels are deliberately not in memory.
     //
@@ -1235,36 +1235,29 @@ private:
     // A handle of 0 means it was tried and failed - a missing or unreadable
     // file. The entry exists either way, which is what stops a failure
     // being retried on every frame the panel is open.
-    struct LayerPreview {
+    struct PicturePreview {
         uint64_t textureHandle = 0;
-    };
-    // Identifies a layer across the whole library: which item, and where in
-    // its stack.
-    using LayerKey = std::pair<ItemId, size_t>;
-    struct LayerKeyHash {
-        size_t operator()(const LayerKey& key) const {
-            return std::hash<uint64_t>{}(key.first) ^ (std::hash<size_t>{}(key.second) << 1);
-        }
     };
     // Resets the per-frame decode budget - called once, at the top of the
     // overview's own rendering.
     void BeginOverviewPreviewFrame();
-    // The preview texture for one layer, loading it if there is budget left
-    // this frame and it hasn't already failed. Three answers, and the
-    // Overview draws each differently: a handle to draw with; 0 for a layer
-    // that has no pixels to show at all (or whose read failed), which gets
+    // The preview texture for one snippet's picture, loading it if there is
+    // budget left this frame and it hasn't already failed. Three answers,
+    // and the Overview draws each differently: a handle to draw with; 0 for
+    // a picture with no pixels to show at all (or whose read failed), which
+    // gets
     // the placeholder gradient; and nothing at all for one whose turn to be
     // read hasn't come yet, which gets drawn as an empty tile rather than a
     // stand-in that will be replaced a few frames later. A slow library
     // fills in over those frames rather than stalling the panel.
-    std::optional<uint64_t> LayerPreviewTexture(const Item& item, size_t layerIndex);
-    // How a preview finds a layer's pixels: LayerPreviewTexture while the
+    std::optional<uint64_t> PicturePreviewTexture(const Item& item);
+    // How a preview finds a picture's pixels: PicturePreviewTexture while the
     // Overview shows bitmaps (see AppConfig::overviewShowsBitmaps), else
     // nothing - an empty lookup, which DrawCanvasPreview tests for. Shared
     // by the canvas grid, the canvas bar and the recently-deleted list.
-    using PreviewTextureFn = std::function<std::optional<uint64_t>(const Item&, size_t)>;
+    using PreviewTextureFn = std::function<std::optional<uint64_t>(const Item&)>;
     PreviewTextureFn PreviewTextureLookup();
-    void ReleaseLayerPreviews();
+    void ReleasePicturePreviews();
 
     // Overview: switch canvases, delete/reorder them, or (when opened from
     // the context menu's Move to canvas) pick a target canvas for that
@@ -1438,10 +1431,11 @@ private:
     ImageSampling PictureSampling() const {
         return ImageSampling{Cfg().imageFilter, window_ != nullptr ? window_->ImageFilterCallback() : nullptr};
     }
-    // Thumbnail-sized copies of layer pixels, alive only while the overview
-    // is open - see LayerPreview. Emptied by ReleaseLayerPreviews when it
-    // closes, or when the setting is switched off.
-    std::unordered_map<LayerKey, LayerPreview, LayerKeyHash> layerPreviews_;
+    // Thumbnail-sized copies of pictures, by snippet, alive only while the
+    // overview is open - see PicturePreview. Emptied by
+    // ReleasePicturePreviews when it closes, or when the setting is
+    // switched off.
+    std::unordered_map<ItemId, PicturePreview> picturePreviews_;
     // How many previews are still allowed to be read this frame, one budget
     // per cost. Both reset each frame the overview is drawn.
     //
@@ -1452,8 +1446,8 @@ private:
     // under a millisecond, so the budget is high enough that a normal
     // library appears at once, and bounded only against a folder holding
     // an unreasonable number of canvases.
-    int layerPreviewLoadBudget_ = 0;
-    int layerPreviewThumbnailBudget_ = 0;
+    int picturePreviewLoadBudget_ = 0;
+    int picturePreviewThumbnailBudget_ = 0;
     // Which resize handle (if any) is currently hovered or dragging, as a
     // short human-readable label ("nw item=3", "e item=5 (dragging)") -
     // empty when none is. Set by RenderItems from the resolver's answer,

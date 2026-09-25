@@ -11,16 +11,14 @@ namespace sz::core {
 
 namespace {
 
-// What a copied item's layers have to give up so the copy owns its own
-// resources. A texture handle has single-owner lifetime (see layer.h) and
-// must not be duplicated. The stored picture is the source's, so the copy
-// starts without one and the caller gives it its own (see
+// What a copied item's picture has to give up so the copy owns its own
+// resources. A texture handle has single-owner lifetime (see picture.h) and
+// must not be duplicated. The stored pixels are the source's, so the copy
+// starts without them and the caller gives it its own (see
 // Session::ClonePicturesForCopy); this class has no store.
-void DetachLayersForCopy(Item& copied) {
-    for (Layer& layer : copied.layers) {
-        layer.textureHandle = 0;
-        layer.stored = false;
-    }
+void DetachPictureForCopy(Item& copied) {
+    copied.picture.textureHandle = 0;
+    copied.picture.stored = false;
 }
 
 }  // namespace
@@ -307,10 +305,8 @@ std::vector<uint64_t> CanvasManager::CaptureTextureHandlesForCanvas(CanvasId id)
         return handles;
     }
     for (const Item& item : it->items) {
-        for (const Layer& layer : item.layers) {
-            if (layer.textureHandle != 0) {
-                handles.push_back(layer.textureHandle);
-            }
+        if (item.picture.textureHandle != 0) {
+            handles.push_back(item.picture.textureHandle);
         }
     }
     return handles;
@@ -324,16 +320,11 @@ ItemId CanvasManager::CreateItem(bool hasBackground, Rect rect, std::string name
     Item item;
     item.id = NewId();
     item.hasBackground = hasBackground;
-    // Every item is created with exactly one layer - its picture - even a
-    // plain Drawing, which starts fully transparent and is a layer waiting
-    // to be given something rather than an item with no layer at all. That
-    // keeps ImageLayer() non-null everywhere downstream. Opaque by default
-    // for a Screenshot, none at all for a Drawing; tintColorRGBA stays at
-    // its own in-class default (white) either way.
-    Layer picture;
-    picture.opacity = hasBackground ? 1.0f : 0.0f;
-    picture.showsPlaceholder = hasBackground;
-    item.layers = {std::move(picture)};
+    // Opaque by default for a Screenshot, none at all for a Drawing, whose
+    // picture starts fully transparent and waits to be given something;
+    // tintColorRGBA stays at its own in-class default (white) either way.
+    item.picture.opacity = hasBackground ? 1.0f : 0.0f;
+    item.picture.showsPlaceholder = hasBackground;
     item.name = std::move(name);
     item.rect = rect;
     item.nativeW = rect.w;
@@ -673,7 +664,7 @@ ItemId CanvasManager::PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool
         // among the deleted with a stamp from before it existed.
         copied.deletedAt = 0;
         const ItemId newId = copied.id;
-        DetachLayersForCopy(copied);
+        DetachPictureForCopy(copied);
         // Read off `source` before this, which may be the very vector
         // being pushed to.
         targetIt->items.push_back(std::move(copied));
@@ -1083,28 +1074,26 @@ std::vector<uint64_t> CanvasManager::MarkedBefore(int64_t cutoff) const {
 }
 
 void CanvasManager::SyncShotTexturesToCanvas(CanvasId canvasId,
-                                              const std::function<uint64_t(const Item&, Layer&)>& loadLayer,
-                                              const std::function<void(Layer&)>& releaseLayer) {
+                                              const std::function<uint64_t(const Item&)>& loadPicture,
+                                              const std::function<void(uint64_t)>& releaseTexture) {
     for (Canvas& canvas : canvases_) {
         for (Item& item : canvas.items) {
+            // Nothing stored to load from - so nothing to load, and nothing
+            // safe to release into.
+            Picture& picture = item.picture;
+            if (!picture.stored) {
+                continue;
+            }
             // Only what is on screen needs a texture: a deleted snippet on
             // the current canvas is as far from being drawn as one on
             // another canvas.
-            const bool isCurrent = canvas.id == canvasId && !IsDeleted(canvas, item);
-            for (Layer& layer : item.layers) {
-                // Nothing persisted to load from - so nothing to load, and
-                // nothing safe to release into.
-                if (!layer.stored) {
-                    continue;
+            if (canvas.id == canvasId && !IsDeleted(canvas, item)) {
+                if (picture.textureHandle == 0) {
+                    picture.textureHandle = loadPicture(item);
                 }
-                if (isCurrent) {
-                    if (layer.textureHandle == 0) {
-                        layer.textureHandle = loadLayer(item, layer);
-                    }
-                } else if (layer.textureHandle != 0) {
-                    releaseLayer(layer);
-                    layer.textureHandle = 0;
-                }
+            } else if (picture.textureHandle != 0) {
+                releaseTexture(picture.textureHandle);
+                picture.textureHandle = 0;
             }
         }
     }

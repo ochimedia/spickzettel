@@ -400,8 +400,8 @@ everything past the cap and stretched the rest.
 
 ## Canvases, items and folders
 
-`Item` is a snippet: freehand strokes over a stack of layers, at a
-`rect` on screen. `Canvas` is an independent collection of items whose
+`Item` is a snippet: freehand strokes over a picture, at a `rect` on
+screen. `Canvas` is an independent collection of items whose
 order is paint order; `Folder` is a flat, non-nesting group of canvases
 - one per game, or per set of levels. `CanvasManager` owns all three,
 plus which folder is browsed and which canvas is current.
@@ -426,17 +426,17 @@ accessor for the current canvas is `CurrentOrNull()`, every item
 operation no-ops without one, `AddCanvas` mints a folder if none is
 left, and the library saves and loads empty.
 
-### Layers
+### The picture
 
-An item's picture is a list of `Layer`s composited bottom-first, with
-strokes and the caption always on top. Every item has one: its
-screenshot, or a transparent fill for a drawing. A picture is written
-once, when it is captured, and never changed after; everything drawn
-over it is strokes.
+Every item has one `Picture`, with strokes and the caption on top: its
+screenshot, or a fill for a drawing, transparent until given a color. A
+picture's pixels are stored once, when they are captured, and never
+changed after; everything drawn over them is strokes. It was a list of
+layers while pixels could be painted on top of it (see "Dead ends").
 
 A texture handle has single-owner lifetime even though `Item` is a
-freely copyable struct, so a copy detaches its layers: the handle is
-reset, and the copy is given a file of its own.
+freely copyable struct, so a copy detaches its picture: the handle is
+reset, and the copy is given stored pixels of its own.
 
 ### Strokes live in the item's native space
 
@@ -1115,8 +1115,8 @@ and the on-screen warning while the app ran was the time to say so.
 
 ### GPU textures are per canvas
 
-`SyncTexturesToCurrentCanvas` uploads a texture for every layer on the
-current canvas that has a stored picture but no texture, and releases
+`SyncTexturesToCurrentCanvas` uploads a texture for every picture on
+the current canvas that is stored but has no texture, and releases
 every other canvas's. Only the current canvas is ever drawn from a real
 texture, so everything else is pure cost - a library of fifty 4K
 captures would otherwise pin ~1.6 GB of VRAM behind a game and pay for
@@ -1741,12 +1741,12 @@ on a tile that had just appeared. The move/copy picker deliberately does
 not follow the item to its destination.
 
 Thumbnails draw strokes by default (nearly free at tile size) and
-bitmaps only when asked, because a bitmap means decoding a file for a
-canvas whose pixels are deliberately not in memory. A 256px sidecar
-thumbnail beside every picture makes the ordinary case a sub-millisecond
-decode; the full decode is a budgeted fallback that writes the sidecar
-on its way out, so an old library acquires them one visit at a time. A
-layer waiting its turn draws nothing rather than the placeholder
+bitmaps only when asked, because a bitmap means decoding a picture for a
+canvas whose pixels are deliberately not in memory. The 256px thumbnail
+stored with every picture makes the ordinary case a sub-millisecond
+decode; the full decode is a budgeted fallback for a picture stored
+without one. A picture waiting its turn draws nothing rather than the
+placeholder
 gradient, which would read as thumbnails being wrong and then correcting
 themselves.
 

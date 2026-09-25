@@ -771,9 +771,8 @@ TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImag
     ASSERT_NE(canvas, nullptr);
     ASSERT_EQ(canvas->items.size(), 1u);
     const Item& shot = canvas->items.front();
-    ASSERT_NE(shot.ImageLayer(), nullptr);
-    EXPECT_EQ(shot.ImageLayer()->textureHandle, 7u);
-    ASSERT_TRUE(shot.ImageLayer()->stored) << "the pixels went to the library";
+    EXPECT_EQ(shot.picture.textureHandle, 7u);
+    ASSERT_TRUE(shot.picture.stored) << "the pixels went to the library";
     const std::optional<persistence::DecodedImage> saved = persistence::LibraryStore(library_).LoadImage(shot.id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->width, 4);
@@ -815,7 +814,7 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAF
         }
     }
     ASSERT_NE(shot, nullptr);
-    ASSERT_TRUE(shot->ImageLayer()->stored);
+    ASSERT_TRUE(shot->picture.stored);
     const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(shot->id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->pixelsRGBA, host.overlayWindow.captureReturnsPixelsRGBA);
@@ -899,7 +898,7 @@ TEST_F(TrayControllerPersistenceTest, ExitWritesARecoveryCopyWhenTheLibraryCanno
     for (const Canvas& canvas : loaded->canvases) {
         for (const Item& item : canvas.items) {
             ++items;
-            ASSERT_TRUE(item.ImageLayer()->stored) << "the snippet has its picture";
+            ASSERT_TRUE(item.picture.stored) << "the snippet has its picture";
             // The picture was in the real library, not in memory; the copy
             // has to hold it all the same, or it does not open on its own.
             const std::optional<persistence::DecodedImage> picture = recovered.LoadImage(item.id);
@@ -1539,8 +1538,8 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureInThePinnedViewGivesItsTextu
         }
     }
     ASSERT_NE(shot, nullptr);
-    ASSERT_TRUE(shot->ImageLayer()->stored) << "in the library, so the texture is not the only copy";
-    EXPECT_EQ(shot->ImageLayer()->textureHandle, 0u) << "not resident on a canvas nobody is looking at";
+    ASSERT_TRUE(shot->picture.stored) << "in the library, so the texture is not the only copy";
+    EXPECT_EQ(shot->picture.textureHandle, 0u) << "not resident on a canvas nobody is looking at";
     EXPECT_EQ(host.overlayWindow.releaseTextureCallCount, releasedBefore + 1);
 }
 

@@ -169,7 +169,7 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
     session.EnsureTexturesForCurrentCanvas();
     const Item* item = session.Manager().FindItemAnywhere(shot);
     ASSERT_NE(item, nullptr);
-    EXPECT_EQ(item->ImageLayer()->textureHandle, 9u) << "not a placeholder until the canvas is switched";
+    EXPECT_EQ(item->picture.textureHandle, 9u) << "not a placeholder until the canvas is switched";
 
     session.SetLibraryStore(nullptr);
 }
@@ -586,9 +586,8 @@ TEST(SessionTest, CapturingWithoutAWindowLeavesAPlaceholder) {
     Item* item = session.Manager().FindItemAnywhere(id);
     ASSERT_NE(item, nullptr);
     session.CaptureShotItem(*item);
-    ASSERT_NE(item->ImageLayer(), nullptr);
-    EXPECT_EQ(item->ImageLayer()->textureHandle, 0u);
-    EXPECT_FALSE(item->ImageLayer()->stored);
+    EXPECT_EQ(item->picture.textureHandle, 0u);
+    EXPECT_FALSE(item->picture.stored);
     EXPECT_EQ(session.FrozenScreenTexture(), 0u);
 }
 
@@ -968,9 +967,8 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     session.CaptureShotItem(*shot);
 
     EXPECT_EQ(window.captureCallCount, 1) << "cut from the frozen screen, not captured again";
-    ASSERT_NE(shot->ImageLayer(), nullptr);
-    EXPECT_EQ(shot->ImageLayer()->textureHandle, 8u) << "the cut's own upload";
-    ASSERT_TRUE(shot->ImageLayer()->stored);
+    EXPECT_EQ(shot->picture.textureHandle, 8u) << "the cut's own upload";
+    ASSERT_TRUE(shot->picture.stored);
     const std::optional<persistence::DecodedImage> saved = store.LoadImage(id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->width, 2);
@@ -986,7 +984,7 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     Item* againShot = session.Manager().FindItemAnywhere(again);
     session.CaptureShotItem(*againShot);
     EXPECT_EQ(window.captureCallCount, 1);
-    EXPECT_EQ(againShot->ImageLayer()->textureHandle, 0u);
+    EXPECT_EQ(againShot->picture.textureHandle, 0u);
     const std::optional<persistence::DecodedImage> againSaved = store.LoadImage(again);
     ASSERT_TRUE(againSaved.has_value());
     EXPECT_EQ(againSaved->pixelsRGBA, (std::vector<uint8_t>{0, 0, 0, 255}));
@@ -1016,7 +1014,7 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     Item* shot = session.Manager().FindItemAnywhere(id);
     session.CaptureShotItem(*shot);
-    ASSERT_TRUE(shot->ImageLayer()->stored);
+    ASSERT_TRUE(shot->picture.stored);
     const std::optional<persistence::DecodedImage> saved = store.LoadImage(id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
@@ -1062,8 +1060,8 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
     const Item* shot = session.Manager().FindItemAnywhere(id);
-    EXPECT_EQ(shot->ImageLayer()->textureHandle, 7u) << "on screen as captured";
-    EXPECT_FALSE(shot->ImageLayer()->stored) << "but not in the library";
+    EXPECT_EQ(shot->picture.textureHandle, 7u) << "on screen as captured";
+    EXPECT_FALSE(shot->picture.stored) << "but not in the library";
     EXPECT_TRUE(session.HasUnsavedChanges());
 
     // Nothing lands while the file is held, and the save does not count.
@@ -1076,7 +1074,7 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
     EXPECT_FALSE(session.HasUnsavedChanges());
     EXPECT_FALSE(session.LastSaveFailed());
     shot = session.Manager().FindItemAnywhere(id);
-    ASSERT_TRUE(shot->ImageLayer()->stored);
+    ASSERT_TRUE(shot->picture.stored);
 
     persistence::LibraryStore reopened(dir / "library.db");
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
@@ -1090,7 +1088,7 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
         }
     }
     ASSERT_NE(reloaded, nullptr);
-    EXPECT_TRUE(reloaded->ImageLayer()->stored);
+    EXPECT_TRUE(reloaded->picture.stored);
     const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
@@ -1120,7 +1118,7 @@ TEST(SessionTest, ARecoveryCopyHoldsEveryPictureItsRecordsName) {
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
     ASSERT_TRUE(session.Flush());
-    ASSERT_TRUE(session.Manager().FindItemAnywhere(id)->ImageLayer()->stored)
+    ASSERT_TRUE(session.Manager().FindItemAnywhere(id)->picture.stored)
         << "in the real library, not in memory";
 
     EXPECT_TRUE(session.WriteRecoveryCopy(whole));
@@ -1134,7 +1132,7 @@ TEST(SessionTest, ARecoveryCopyHoldsEveryPictureItsRecordsName) {
         }
     }
     ASSERT_NE(copy, nullptr);
-    EXPECT_TRUE(copy->ImageLayer()->stored);
+    EXPECT_TRUE(copy->picture.stored);
     const std::optional<persistence::DecodedImage> picture = recovered.LoadImage(copy->id);
     ASSERT_TRUE(picture.has_value()) << "a snippet with a picture, and the copy does not hold it";
     EXPECT_EQ(picture->pixelsRGBA, window.captureReturnsPixelsRGBA);
@@ -1180,12 +1178,12 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
 
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
-    ASSERT_FALSE(session.Manager().FindItemAnywhere(id)->ImageLayer()->stored) << "not in the library";
+    ASSERT_FALSE(session.Manager().FindItemAnywhere(id)->picture.stored) << "not in the library";
 
     const ItemId copyId = session.Manager().DuplicateItem(id);
     ASSERT_NE(copyId, 0u);
     EXPECT_TRUE(session.ClonePicturesForCopy(id, copyId)) << "the pixels are in the session";
-    EXPECT_NE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->textureHandle, 0u) << "on screen at once";
+    EXPECT_NE(session.Manager().FindItemAnywhere(copyId)->picture.textureHandle, 0u) << "on screen at once";
 
     EXPECT_FALSE(session.Flush()) << "the file is still held";
     held.Release();
@@ -1196,7 +1194,7 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
     size_t pictures = 0;
     for (const Canvas& canvas : loaded->canvases) {
         for (const Item& item : canvas.items) {
-            ASSERT_TRUE(item.ImageLayer()->stored) << "every copy has a picture";
+            ASSERT_TRUE(item.picture.stored) << "every copy has a picture";
             const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(item.id);
             ASSERT_TRUE(saved.has_value());
             EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
@@ -1219,12 +1217,12 @@ TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
     Session session;
     session.SetLibraryStore(&store);
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    session.Manager().FindItemAnywhere(id)->ImageLayer()->stored = true;  // and yet there is none
+    session.Manager().FindItemAnywhere(id)->picture.stored = true;  // and yet there is none
 
     const ItemId copyId = session.Manager().DuplicateItem(id);
     ASSERT_NE(copyId, 0u);
     EXPECT_FALSE(session.ClonePicturesForCopy(id, copyId));
-    EXPECT_FALSE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->stored);
+    EXPECT_FALSE(session.Manager().FindItemAnywhere(copyId)->picture.stored);
 
     session.SetLibraryStore(nullptr);
 }
@@ -1246,7 +1244,7 @@ TEST(SessionTest, APermanentDeleteRightAfterAMoveKeepsWhatWasMoved) {
         const CanvasId left = session.Manager().CurrentCanvasId();
         id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
         ASSERT_TRUE(store.SaveImage(id, pixels.data(), 2, 1));
-        session.Manager().FindItemAnywhere(id)->ImageLayer()->stored = true;
+        session.Manager().FindItemAnywhere(id)->picture.stored = true;
         const CanvasId other = session.Manager().AddCanvas("Other");
         ASSERT_TRUE(session.Flush());
 
@@ -1284,7 +1282,7 @@ TEST(SessionTest, APermanentDeleteRightAfterAMoveIntoTheCanvasTakesWhatWasMovedI
         session.SetLibraryStore(&store);
         id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
         ASSERT_TRUE(store.SaveImage(id, pixels.data(), 2, 1));
-        session.Manager().FindItemAnywhere(id)->ImageLayer()->stored = true;
+        session.Manager().FindItemAnywhere(id)->picture.stored = true;
         const CanvasId other = session.Manager().AddCanvas("Other");
         ASSERT_TRUE(session.Flush());
 

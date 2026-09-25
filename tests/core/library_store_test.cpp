@@ -93,8 +93,8 @@ CanvasManagerSnapshot MakeSampleSnapshot() {
     drawing.nativeW = 300;
     drawing.nativeH = 200;
     drawing.foregroundOpacity = 0.75f;
-    drawing.ImageLayer()->opacity = 0.3f;
-    drawing.ImageLayer()->tintColorRGBA = 0xaabbccffu;
+    drawing.picture.opacity = 0.3f;
+    drawing.picture.tintColorRGBA = 0xaabbccffu;
     drawing.minimized = true;
     drawing.pinned = true;
     drawing.noteText = "A caption, styled per snippet \xE2\x9C\x93";
@@ -123,10 +123,10 @@ CanvasManagerSnapshot MakeSampleSnapshot() {
     shot.anchorRect = Rect{50, 50, 400, 300};
     shot.anchorDisplayWidth = 1920.0f;
     shot.anchorDisplayHeight = 1080.0f;
-    shot.ImageLayer()->placeholderHue = 123.5f;
-    shot.ImageLayer()->opacity = 0.9f;
-    shot.ImageLayer()->tintColorRGBA = 0x112233ffu;
-    shot.ImageLayer()->showsPlaceholder = true;
+    shot.picture.placeholderHue = 123.5f;
+    shot.picture.opacity = 0.9f;
+    shot.picture.tintColorRGBA = 0x112233ffu;
+    shot.picture.showsPlaceholder = true;
     canvas.items.push_back(shot);
     snapshot.canvases.push_back(canvas);
 
@@ -269,10 +269,10 @@ TEST_F(LibraryStoreTest, EveryFieldOfASnippetIsSaved) {
         [](Item& i) { i.anchorDisplayHeight += 1.0f; },
         [](Item& i) { i.minimized = !i.minimized; },
         [](Item& i) { i.pinned = !i.pinned; },
-        [](Item& i) { i.layers[0].opacity = 0.25f; },
-        [](Item& i) { i.layers[0].tintColorRGBA ^= 0xFF00u; },
-        [](Item& i) { i.layers[0].showsPlaceholder = !i.layers[0].showsPlaceholder; },
-        [](Item& i) { i.layers[0].placeholderHue += 1.0f; },
+        [](Item& i) { i.picture.opacity = 0.25f; },
+        [](Item& i) { i.picture.tintColorRGBA ^= 0xFF00u; },
+        [](Item& i) { i.picture.showsPlaceholder = !i.picture.showsPlaceholder; },
+        [](Item& i) { i.picture.placeholderHue += 1.0f; },
         [](Item& i) { i.noteText += "!"; },
         [](Item& i) { i.noteTextColorRGBA ^= 0xFFu; },
         [](Item& i) { i.noteTextSizePx += 1.0f; },
@@ -391,8 +391,8 @@ TEST_F(LibraryStoreTest, ASnippetWithAStoredPictureLoadsKnowingIt) {
 
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
     ASSERT_TRUE(loaded.has_value());
-    EXPECT_FALSE(loaded->canvases[0].items[0].ImageLayer()->stored);
-    EXPECT_TRUE(loaded->canvases[0].items[1].ImageLayer()->stored);
+    EXPECT_FALSE(loaded->canvases[0].items[0].picture.stored);
+    EXPECT_TRUE(loaded->canvases[0].items[1].picture.stored);
 }
 
 TEST_F(LibraryStoreTest, APictureIsCopiedAsStored) {
@@ -609,7 +609,7 @@ TEST_F(LibraryStoreTest, ACopyOfTheFileIsAWholeLibrary) {
     const std::optional<CanvasManagerSnapshot> loaded = copy.Load();
     ASSERT_TRUE(loaded.has_value());
     CanvasManagerSnapshot expected = MakeSampleSnapshot();
-    expected.canvases[0].items[1].ImageLayer()->stored = true;
+    expected.canvases[0].items[1].picture.stored = true;
     ExpectSameLibrary(expected, *loaded);
     EXPECT_TRUE(copy.LoadImage(4).has_value());
 }

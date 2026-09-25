@@ -352,20 +352,20 @@ uint32_t FloatsToColorRGBA4(const float in[4]);
 void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint,
                   ImageSampling sampling);
 
-// One layer's pixels (its image, its placeholder gradient, or its plain
-// fill - see layer.h) stretched to fill `pMin..pMax`, at the layer's own
-// opacity. Nothing is drawn for a layer at zero opacity.
+// A snippet's picture (its pixels, its placeholder gradient, or its plain
+// fill - see picture.h) stretched to fill `pMin..pMax`, at its own opacity.
+// Nothing is drawn at zero opacity.
 //
-// `textureHandle` stands in for Layer::textureHandle when given, including
-// when it is 0 ("no pixels, draw the fallback"). That is what the Overview's
-// canvas previews need: the same layer drawn with a thumbnail-sized copy of
-// its pixels, or with none, without touching the layer or copying it.
-// `sampling` is how its picture, if it has one, is resampled - see
-// ImageSampling.
-void DrawLayer(ImDrawList* drawList, const Layer& layer, ImVec2 pMin, ImVec2 pMax,
-                std::optional<uint64_t> textureHandle = std::nullopt, ImageSampling sampling = {});
+// `textureHandle` stands in for Picture::textureHandle when given,
+// including when it is 0 ("no pixels, draw the fallback"). That is what the
+// Overview's canvas previews need: the same picture drawn with a
+// thumbnail-sized copy of its pixels, or with none, without touching or
+// copying it. `sampling` is how the pixels, if there are some, are
+// resampled - see ImageSampling.
+void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMin, ImVec2 pMax,
+                        std::optional<uint64_t> textureHandle = std::nullopt, ImageSampling sampling = {});
 
-// An item's layers, bottom-first, plus its baked strokes, into
+// An item's picture, plus its baked strokes, into
 // `pMin..pMax` - shared by
 // RenderItems' per-item interactive window, RenderViewOnly's flat
 // read-only pass, and the dock's own thumbnail chips. Caller owns clipping
@@ -390,21 +390,21 @@ void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 // A scaled-down snapshot of `canvas`'s items in `thumbMin..thumbMax`, the
 // way the display shows them - uniform scale, letterboxed. What the
 // Overview's tiles and the canvas bar both draw; defined in
-// overlay_app_overview.cpp. `previewTexture` supplies each layer's
+// overlay_app_overview.cpp. `previewTexture` supplies each picture's
 // thumbnail-sized pixels (empty for none), and `meshCache` must not be the
 // canvas's own - see OverlayApp::previewMeshCache_. A snippet deleted on
 // its own is left out: a preview is of what the canvas holds, which for a
 // deleted canvas is also what restoring it brings back.
 void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax, float displayW,
                         float displayH, StrokeRenderMode rendering, bool showStrokes,
-                        const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
+                        const std::function<std::optional<uint64_t>(const Item&)>& previewTexture,
                         StrokeMeshSlot meshCache, ImageSampling sampling);
-// One item as a preview draws it into `pMin..pMax`: each layer with the
+// One item as a preview draws it into `pMin..pMax`: its picture with the
 // texture `previewTexture` has for it, then its strokes scaled from the
 // item's native size to the box. What DrawCanvasPreview draws per item.
 void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
                      bool showStrokes,
-                     const std::function<std::optional<uint64_t>(const Item&, size_t)>& previewTexture,
+                     const std::function<std::optional<uint64_t>(const Item&)>& previewTexture,
                      StrokeMeshSlot meshCache, ImageSampling sampling);
 // An icon+text button in the accent color - the Overview's primary actions
 // (New folder, New canvas). Defined in overlay_app_overview.cpp.

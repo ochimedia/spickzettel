@@ -289,8 +289,8 @@ TEST_F(HeadlessAppTest, ANewSnippetStartsWithTheDefaultsForItsKind) {
         ASSERT_TRUE(shot.hasBackground);
         EXPECT_FALSE(shot.keepAspect);
         EXPECT_FLOAT_EQ(shot.foregroundOpacity, 0.5f);
-        EXPECT_FLOAT_EQ(shot.ImageLayer()->opacity, 0.75f);
-        EXPECT_EQ(shot.ImageLayer()->tintColorRGBA, 0xFFFFFFFFu) << "a capture is not tinted by the drawing's color";
+        EXPECT_FLOAT_EQ(shot.picture.opacity, 0.75f);
+        EXPECT_EQ(shot.picture.tintColorRGBA, 0xFFFFFFFFu) << "a capture is not tinted by the drawing's color";
         EXPECT_FLOAT_EQ(shot.noteTextSizePx, 30.0f);
         EXPECT_EQ(shot.noteTextColorRGBA, 0xFF000080u);
     }
@@ -302,8 +302,8 @@ TEST_F(HeadlessAppTest, ANewSnippetStartsWithTheDefaultsForItsKind) {
     ASSERT_FALSE(drawing.hasBackground);
     EXPECT_FALSE(drawing.keepAspect);
     EXPECT_FLOAT_EQ(drawing.foregroundOpacity, 0.25f);
-    EXPECT_FLOAT_EQ(drawing.ImageLayer()->opacity, 0.6f);
-    EXPECT_EQ(drawing.ImageLayer()->tintColorRGBA, 0x112233FFu);
+    EXPECT_FLOAT_EQ(drawing.picture.opacity, 0.6f);
+    EXPECT_EQ(drawing.picture.tintColorRGBA, 0x112233FFu);
     EXPECT_FLOAT_EQ(drawing.noteTextSizePx, 30.0f);
 }
 
@@ -3266,7 +3266,7 @@ TEST_F(HeadlessAppTest, TheWheelScalesTheSelectionOutsideDrawingModeAndSizesTheP
 TEST_F(HeadlessAppTest, CtrlAndShiftWithTheWheelSetTheSelectionsOpacities) {
     ShowEditMode();
     StepFrame();
-    Drag(300.0f, 300.0f, 700.0f, 550.0f);  // a region: a screenshot, with a picture layer
+    Drag(300.0f, 300.0f, 700.0f, 550.0f);  // a region: a screenshot, with a picture
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     const ItemId id = Canvases().CurrentOrNull()->items[0].id;
     RawClick(500.0f, 400.0f);
@@ -3283,14 +3283,13 @@ TEST_F(HeadlessAppTest, CtrlAndShiftWithTheWheelSetTheSelectionsOpacities) {
     };
     wheelWith(ImGuiMod_Ctrl, -2.0f);
     const Item* item = controller_->GetSession().Manager().FindItemAnywhere(id);
-    ASSERT_NE(item->ImageLayer(), nullptr);
-    EXPECT_FLOAT_EQ(item->ImageLayer()->opacity, 0.9f);
+    EXPECT_FLOAT_EQ(item->picture.opacity, 0.9f);
     EXPECT_FLOAT_EQ(item->foregroundOpacity, 1.0f);
 
     wheelWith(ImGuiMod_Shift, -40.0f);
     EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->foregroundOpacity, 0.1f) << "not below a tenth";
     wheelWith(ImGuiMod_Ctrl, 5.0f);
-    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->ImageLayer()->opacity, 1.0f) << "not above whole";
+    EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->picture.opacity, 1.0f) << "not above whole";
     EXPECT_FLOAT_EQ(controller_->GetSession().Manager().FindItemAnywhere(id)->rect.w, before.w) << "a modified wheel does not scale";
 }
 
@@ -3956,9 +3955,7 @@ TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn)
     StepFrame();
     Session& session = controller_->GetSession();
     ASSERT_TRUE(session.Flush());
-    const Layer* picture = Canvases().CurrentOrNull()->items[0].ImageLayer();
-    ASSERT_NE(picture, nullptr);
-    ASSERT_EQ(picture->textureHandle, 9u);
+    ASSERT_EQ(Canvases().CurrentOrNull()->items[0].picture.textureHandle, 9u);
     ASSERT_EQ(session.FrozenScreenTexture(), 7u);
 
     const int releasedBefore = host_.overlayWindow.releaseTextureCallCount;
@@ -3966,7 +3963,7 @@ TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn)
     host_.overlayWindow.textureGeneration = 1;
     StepFrame();
     EXPECT_EQ(host_.overlayWindow.releaseTextureCallCount - releasedBefore, 2) << "the picture and the frozen screen";
-    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].ImageLayer()->textureHandle, 11u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].picture.textureHandle, 11u);
     EXPECT_EQ(session.FrozenScreenTexture(), 11u);
     EXPECT_TRUE(FilterDrawnWith(11) == std::nullopt) << "drawn, with the new texture";
 }
