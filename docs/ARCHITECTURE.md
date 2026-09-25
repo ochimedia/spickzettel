@@ -1758,6 +1758,15 @@ under it, and one mid-drag would have been filed inside the drag. An
 arrow key is a command like any other: mid-drag it ends the drag where
 it is and nudges after it, two undo steps.
 
+`HeadlessAppTest.EveryCommandSettlesTheHandWhateverItInterrupts` holds
+this: random presses with either button, moves, releases (a quarter of
+them lost), modifiers, the wheel and holds, with drawing mode entered and
+strokes left in flight, interrupted by every key command and every
+hotkey. After each command that acts, nothing is in flight in the app or
+open on the session, and a stroke it interrupted is on its snippet (or,
+after an undo, taken back). It counts the strokes it checked that way, so
+the check cannot quietly stop running.
+
 ### Item text
 
 A caption is a plain string on any item, not a separate note kind - a

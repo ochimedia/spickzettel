@@ -1103,6 +1103,290 @@ TEST_F(HeadlessAppTest, AnIgnoredButtonPressedAgainIsNotIgnoredStill) {
     EXPECT_TRUE(App().IsEmptyCanvasMenuOpen());
 }
 
+// Whatever the pointer is in the middle of - a stroke, a shape, an erase,
+// a move or a resize, a box, a snippet being framed, a hold, a right
+// click, with releases lost and the other button pressed on top - every
+// command that is not the pointer's own ends it first (see
+// OverlayApp::SettleHand): straight after, nothing is in flight in the
+// app or open on the session, and a stroke it interrupted is kept. In
+// between, nothing is left open on the session that the hand has let go
+// of. And once every button has been pressed and let go, the hand is at
+// rest whatever came before.
+TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
+    using platform::MouseButton;
+    using platform::MouseEventKind;
+    constexpr uint32_t kSeeds = 16;
+    constexpr int kSteps = 200;
+    const ImGuiKey kModifiers[] = {ImGuiMod_Ctrl, ImGuiMod_Shift, ImGuiMod_Alt};
+    const ImGuiKey kArrows[] = {ImGuiKey_LeftArrow, ImGuiKey_RightArrow, ImGuiKey_UpArrow, ImGuiKey_DownArrow};
+    // How many strokes a command found in flight and was checked to keep -
+    // enough that the check is not one that never runs.
+    size_t strokesInterrupted = 0;
+    for (uint32_t seed = 1; seed <= kSeeds; ++seed) {
+        SCOPED_TRACE(::testing::Message() << "seed " << seed);
+        host_.overlayWindow.visible = false;  // the last seed's overlay went with its app
+        StartWith(DefaultConfig());
+        ShowEditMode();
+        StepFrame();
+        Drag(100.0f, 100.0f, 500.0f, 400.0f);           // a screenshot
+        MakeADrawing(600.0f, 150.0f, 1100.0f, 600.0f);  // and a drawing, in drawing mode
+        StepFrames(30);
+        Session& session = controller_->GetSession();
+        std::mt19937 rng(seed);
+        const auto pick = [&rng](size_t count) { return std::uniform_int_distribution<size_t>(0, count - 1)(rng); };
+        // Where a press lands: on a snippet, mostly, and anywhere else.
+        const auto somewhere = [&]() -> ImVec2 {
+            std::uniform_real_distribution<float> unit(0.0f, 1.0f);
+            const Canvas* canvas = Canvases().CurrentOrNull();
+            if (canvas != nullptr && !canvas->items.empty() && pick(4) != 0) {
+                const Rect& rect = canvas->items[pick(canvas->items.size())].rect;
+                return ImVec2(rect.x + rect.w * unit(rng), rect.y + rect.h * unit(rng));
+            }
+            return ImVec2(kDisplayWidth * unit(rng), kDisplayHeight * unit(rng));
+        };
+        ImVec2 pointer(640.0f, 400.0f);
+        std::vector<MouseButton> held;    // down, as the hand on the mouse knows it
+        std::vector<ImGuiKey> modifiers;  // likewise
+        const auto imguiButton = [](MouseButton button) {
+            return button == MouseButton::Left ? ImGuiMouseButton_Left : ImGuiMouseButton_Right;
+        };
+        // The stroke a command would find in flight, big enough to be kept
+        // whatever its shape: the snippet it goes into, and how many
+        // strokes that has now.
+        const auto strokeToKeep = [&]() -> std::optional<std::pair<ItemId, size_t>> {
+            const std::optional<Stroke>& active = session.LiveLayer().ActiveStroke();
+            if (!active.has_value() || active->points.empty() || !App().DrawingItem().has_value()) {
+                return std::nullopt;
+            }
+            float x0 = active->points[0].x;
+            float x1 = x0;
+            float y0 = active->points[0].y;
+            float y1 = y0;
+            for (const StrokePoint& point : active->points) {
+                x0 = std::min(x0, point.x);
+                x1 = std::max(x1, point.x);
+                y0 = std::min(y0, point.y);
+                y1 = std::max(y1, point.y);
+            }
+            const Item* item = Canvases().FindItemAnywhere(*App().DrawingItem());
+            if (item == nullptr || std::max(x1 - x0, y1 - y0) < 30.0f) {
+                return std::nullopt;
+            }
+            return std::pair{item->id, item->strokes.size()};
+        };
+
+        for (int step = 0; step < kSteps && !HasFailure(); ++step) {
+            // Edit mode, which is where the hand does anything: a command
+            // before may have put the overlay away or switched it to view.
+            if (!host_.overlayWindow.visible || App().IsViewOnly()) {
+                ShowEditMode();
+                StepFrame();
+            }
+            const size_t what = pick(19);
+            if (what >= 16 && held.empty()) {
+                // A stroke begun on a snippet and carried some way, left in
+                // flight for what comes next - into drawing mode first, the
+                // way a hand gets there, if no snippet is in it.
+                const Canvas* canvas = Canvases().CurrentOrNull();
+                if (!App().DrawingItem().has_value() && canvas != nullptr && !canvas->items.empty()) {
+                    for (const ImGuiKey modifier : modifiers) {
+                        ImGui::GetIO().AddKeyEvent(modifier, false);
+                    }
+                    modifiers.clear();
+                    const Rect& rect = canvas->items[pick(canvas->items.size())].rect;
+                    DoubleClick(rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f);
+                }
+                if (const Item* item = App().DrawingItem().has_value()
+                                           ? Canvases().FindItemAnywhere(*App().DrawingItem())
+                                           : nullptr) {
+                    pointer = ImVec2(item->rect.x + item->rect.w * 0.3f, item->rect.y + item->rect.h * 0.3f);
+                    MoveTo(pointer.x, pointer.y);
+                    StepFrame();
+                    RawMouse(pointer.x, pointer.y, MouseEventKind::Down);
+                    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+                    held.push_back(MouseButton::Left);
+                    for (int i = 0; i < 3; ++i) {
+                        pointer = ImVec2(pointer.x + 20.0f, pointer.y + 15.0f);
+                        RawMouse(pointer.x, pointer.y, MouseEventKind::Move);
+                        StepFrame();
+                    }
+                }
+            } else if (what < 2) {
+                const MouseButton button = pick(3) == 0 ? MouseButton::Right : MouseButton::Left;
+                pointer = somewhere();
+                MoveTo(pointer.x, pointer.y);
+                StepFrame();
+                RawMouse(pointer.x, pointer.y, MouseEventKind::Down, button);
+                ImGui::GetIO().AddMouseButtonEvent(imguiButton(button), true);
+                if (std::find(held.begin(), held.end(), button) == held.end()) {
+                    held.push_back(button);
+                }
+            } else if (what < 5) {
+                std::uniform_real_distribution<float> by(-150.0f, 150.0f);
+                pointer = ImVec2(std::clamp(pointer.x + by(rng), 0.0f, kDisplayWidth - 1.0f),
+                                 std::clamp(pointer.y + by(rng), 0.0f, kDisplayHeight - 1.0f));
+                const MouseButton button = held.empty() ? MouseButton::Left : held[pick(held.size())];
+                RawMouse(pointer.x, pointer.y, MouseEventKind::Move, button);
+            } else if (what < 7) {
+                if (!held.empty()) {
+                    const size_t which = pick(held.size());
+                    const MouseButton button = held[which];
+                    held.erase(held.begin() + static_cast<std::ptrdiff_t>(which));
+                    if (pick(4) != 0) {  // and otherwise the release is lost on the way
+                        RawMouse(pointer.x, pointer.y, MouseEventKind::Up, button);
+                    }
+                    ImGui::GetIO().AddMouseButtonEvent(imguiButton(button), false);
+                }
+            } else if (what == 7) {
+                const ImGuiKey modifier = kModifiers[pick(3)];
+                const auto it = std::find(modifiers.begin(), modifiers.end(), modifier);
+                ImGui::GetIO().AddKeyEvent(modifier, it == modifiers.end());
+                if (it == modifiers.end()) {
+                    modifiers.push_back(modifier);
+                } else {
+                    modifiers.erase(it);
+                }
+            } else if (what == 8) {
+                ImGui::GetIO().AddMouseWheelEvent(0.0f, pick(2) == 0 ? 1.0f : -1.0f);
+            } else if (what == 9) {
+                StepFrames(35);  // long enough for a hold to mature
+            } else if (what < 16) {
+                // A command. Keys want exactly their own modifiers, so the
+                // ones the hand holds are let go of first.
+                const size_t command = pick(19);
+                if (command < 15) {
+                    for (const ImGuiKey modifier : modifiers) {
+                        ImGui::GetIO().AddKeyEvent(modifier, false);
+                    }
+                    modifiers.clear();
+                    StepFrame();
+                }
+                // Whether the key acts where it is pressed - a key that
+                // does nothing there is no command. Under a panel, a menu
+                // or a note being typed, the canvas's keys are not its.
+                const bool typing = App().EditingNote().has_value() || App().IsOverviewOpen();
+                const bool canvasKeys = !typing && !App().IsCheatSheetOpen();
+                const bool selectionKeys = canvasKeys && !ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+                const bool onSelection = selectionKeys && !App().Selection().empty() && !App().DrawingItem();
+                const std::optional<std::pair<ItemId, size_t>> stroke = strokeToKeep();
+                bool acts = true;
+                switch (command) {
+                    case 0:
+                        PressCtrlKey(ImGuiKey_Z);
+                        acts = canvasKeys;
+                        break;
+                    case 1:
+                        PressCtrlKey(ImGuiKey_Y);
+                        acts = canvasKeys;
+                        break;
+                    case 2:
+                        PressKey(ImGuiKey_Escape);
+                        acts = selectionKeys;
+                        break;
+                    case 3:
+                        PressKey(ImGuiKey_Delete);
+                        acts = onSelection && !App().DrawingItem();
+                        break;
+                    case 4:
+                        PressKey(kArrows[pick(4)]);
+                        acts = onSelection && !App().DrawingItem();
+                        break;
+                    case 5:
+                        PressKey(ImGuiKey_P);
+                        acts = canvasKeys;
+                        break;
+                    case 6:
+                        PressKey(ImGuiKey_E);
+                        acts = canvasKeys;
+                        break;
+                    case 7:
+                        PressKey(ImGuiKey_S);
+                        acts = canvasKeys;
+                        break;
+                    case 8:
+                        PressKey(ImGuiKey_D);
+                        acts = canvasKeys;
+                        break;
+                    case 9:
+                        PressCtrlKey(ImGuiKey_C);
+                        acts = canvasKeys;
+                        break;
+                    case 10:
+                        PressCtrlKey(ImGuiKey_V);
+                        acts = canvasKeys;
+                        break;
+                    case 11:
+                        PressCtrlKey(ImGuiKey_X);
+                        acts = canvasKeys;
+                        break;
+                    case 12:
+                        PressCtrlKey(ImGuiKey_D);
+                        acts = canvasKeys;
+                        break;
+                    case 13:
+                        PressCtrlShiftKey(ImGuiKey_N);
+                        acts = canvasKeys;
+                        break;
+                    case 14:
+                        PressCtrlKey(ImGuiKey_H);
+                        acts = !typing;
+                        break;
+                    case 15:
+                        ShowEditMode();  // which puts it away
+                        break;
+                    case 16:
+                        ShowViewMode();
+                        break;
+                    case 17:
+                        TriggerHotkey(config_.hotkeyQuickCapture);
+                        break;
+                    default:
+                        TriggerHotkey(config_.hotkeySilentCapture);
+                        break;
+                }
+                if (acts) {
+                    ASSERT_TRUE(App().HandAtRest()) << "step " << step << ", command " << command;
+                    ASSERT_FALSE(session.LiveLayer().ActiveStroke().has_value()) << "step " << step;
+                    ASSERT_FALSE(HandGestureOpen(session)) << "step " << step << ", command " << command;
+                    if (stroke.has_value()) {
+                        ++strokesInterrupted;
+                        const Item* item = Canvases().FindItemAnywhere(stroke->first);
+                        ASSERT_NE(item, nullptr) << "step " << step;
+                        // Kept - and an undo then takes it back, as the
+                        // most recent thing done.
+                        EXPECT_EQ(item->strokes.size(), stroke->second + (command == 0 ? 0u : 1u))
+                            << "step " << step << ", command " << command;
+                    }
+                }
+            }
+            StepFrames(1 + static_cast<int>(pick(2)));
+            // Nothing the hand has let go of is left open on the session.
+            if (App().HandAtRest() && !App().EditingNote().has_value()) {
+                ASSERT_FALSE(HandGestureOpen(session)) << "step " << step;
+            }
+        }
+
+        // Every button let go of, and each pressed and let go of once more:
+        // whatever was lost on the way, the hand is at rest.
+        for (const MouseButton button : held) {
+            RawMouse(pointer.x, pointer.y, MouseEventKind::Up, button);
+            ImGui::GetIO().AddMouseButtonEvent(imguiButton(button), false);
+        }
+        for (const ImGuiKey modifier : modifiers) {
+            ImGui::GetIO().AddKeyEvent(modifier, false);
+        }
+        StepFrame();
+        if (!host_.overlayWindow.visible || App().IsViewOnly()) {
+            ShowEditMode();
+            StepFrame();
+        }
+        RawClick(20.0f, 20.0f);
+        RightClick(20.0f, 20.0f);
+        EXPECT_TRUE(App().HandAtRest());
+    }
+    EXPECT_GE(strokesInterrupted, 20u);
+}
+
 // ===== The panels docked against the screen's edges =====
 
 // Enough frames for the moment the panels come out when the overlay comes
