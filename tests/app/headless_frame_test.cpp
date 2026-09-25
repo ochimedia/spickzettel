@@ -971,6 +971,32 @@ TEST_F(HeadlessAppTest, AShortcutThatSwitchesCanvasEndsTheStrokeInFlightFirst) {
     EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
 }
 
+// A press of the button that is down already: its release was lost on the
+// way. The stroke it was drawing ends where it got to, and the new press
+// starts a stroke of its own rather than drawing a line on from the last.
+TEST_F(HeadlessAppTest, APressAfterALostReleaseEndsWhatThatButtonWasDoing) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
+    CanvasManager& manager = controller_->GetSession().Manager();
+    const ItemId drawing = manager.CurrentOrNull()->items[0].id;
+
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(150.0f, 150.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(300.0f, 300.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    // No Up.
+    RawMouse(500.0f, 150.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(600.0f, 150.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(600.0f, 150.0f, platform::MouseEventKind::Up);
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrame();
+    EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 2u);
+}
+
 // ===== The panels docked against the screen's edges =====
 
 // Enough frames for the moment the panels come out when the overlay comes

@@ -1458,6 +1458,15 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
                 ignoredButton_ = event.button;
                 return;
             }
+            // Pressed again while it is still down, as far as this knows:
+            // its release went missing - capture taken mid-drag, a focus
+            // stolen - and never came. Whatever it began ends where it got
+            // to, as that release would have ended it. Left in flight, it
+            // took this press as its own and carried on from where it was:
+            // an item jumped, a stroke drew a line from its last point.
+            if (pressedButton_ == event.button) {
+                EndGesture();
+            }
             pressedButton_ = event.button;
         } else if (event.kind == platform::MouseEventKind::Up && pressedButton_ == event.button) {
             pressedButton_.reset();
