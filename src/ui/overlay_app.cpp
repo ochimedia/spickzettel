@@ -787,12 +787,11 @@ void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMa
     }
 }
 
-void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMin, ImVec2 pMax,
-                        std::optional<uint64_t> textureHandle, ImageSampling sampling) {
+void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMin, ImVec2 pMax, uint64_t texture,
+                        ImageSampling sampling) {
     if (picture.opacity <= 0.0f) {
         return;
     }
-    const uint64_t texture = textureHandle.value_or(picture.textureHandle);
     if (texture != 0) {
         // Real pixels - AddImage stretches the whole texture to fill
         // pMin..pMax on its own, the same way the gradient/fill below fills
@@ -802,9 +801,9 @@ void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMi
         // capture unmodified; any other color mixes into it.
         DrawPicture(drawList, texture, pMin, pMax, ToImColor(picture.tintColorRGBA, picture.opacity), sampling);
     } else if (picture.showsPlaceholder) {
-        // No capture yet (the OS-level capture failed, or the canvas this
-        // belongs to isn't resident) - a placeholder gradient, faded by the
-        // same opacity a real capture would use.
+        // No pixels to show (the OS-level capture failed, or the picture
+        // cannot be read) - a placeholder gradient, faded by the same
+        // opacity a real capture would use.
         const ImU32 top = ImColor::HSV(picture.placeholderHue / 360.0f, 0.38f, 0.55f, picture.opacity);
         const ImU32 bottom = ImColor::HSV(picture.placeholderHue / 360.0f, 0.24f, 0.82f, picture.opacity);
         drawList->AddRectFilledMultiColor(pMin, pMax, top, top, bottom, bottom);
@@ -816,9 +815,9 @@ void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMi
 }
 
 void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
-                      uint64_t strokeRasterTexture, bool skipNoteText, StrokeMeshSlot meshCache,
-                      ImageSampling sampling) {
-    DrawSnippetPicture(drawList, item.picture, pMin, pMax, std::nullopt, sampling);
+                      uint64_t pictureTexture, uint64_t strokeRasterTexture, bool skipNoteText,
+                      StrokeMeshSlot meshCache, ImageSampling sampling) {
+    DrawSnippetPicture(drawList, item.picture, pMin, pMax, pictureTexture, sampling);
 
     if (rendering == StrokeRenderMode::Rasterized && strokeRasterTexture != 0) {
         // Every stroke, already drawn into one bitmap and composited here
@@ -1213,25 +1212,12 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
             appliedFramePacing_ = pacing;
         }
     }
-    // Deferred to frame time rather than done at switch/import time
-    // because it needs a live GPU device/context, which isn't guaranteed
-    // to exist yet at ImportSnapshot time - same reasoning as
-    // styleApplied_ above. This call covers the switch that happened
-    // between frames (the Overview, the canvas bar, startup); the one further
-    // down covers a switch made during this frame - see
-    // Session::EnsureTexturesForCurrentCanvas.
-    //
-    // First, every texture from before a device the driver replaced is
-    // let go of, before anything draws with one: the session's are made
-    // again at once, the Overview's previews and the stroke rasters as
-    // they are next wanted.
-    if (window_ != nullptr && window_->TextureGeneration() != textureGeneration_) {
-        textureGeneration_ = window_->TextureGeneration();
-        session_.ReplaceLostTextures();
-        ReleasePicturePreviews();
-        ReleaseStrokeRasters();
-    }
-    session_.EnsureTexturesForCurrentCanvas();
+    // Before anything draws: what the last frame drew and this one has not
+    // asked for yet is let go of (see TextureCache::BeginFrame), and the
+    // current canvas's pictures - from the library, the first time - are
+    // asked for, which is what keeps them.
+    Textures().BeginFrame();
+    KeepCurrentCanvasTextures();
 
     const ImGuiIO& io = ImGui::GetIO();
     const float displayW = io.DisplaySize.x;
@@ -1322,9 +1308,9 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     }
     // A key that picks a tool or starts something new - see
     // AppConfig::toolShortcuts and the Overview's Shortcuts tab. Up here
-    // with the other key handling, and above
-    // Session::EnsureTexturesForCurrentCanvas below, because one of them ("New
-    // canvas") changes which canvas the rest of the frame draws.
+    // with the other key handling, and above RefreshStrokeRasters below,
+    // because one of them ("New canvas") changes which canvas the rest of
+    // the frame draws.
     HandleToolShortcuts();
 
     HandleMouseWheel();
@@ -1348,15 +1334,11 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         }
     }
 
-    // Last thing before anything item-shaped is drawn. Everything above
-    // this line is input handling, and Alt+wheel canvas stepping lives up
-    // there - so without this, the frame that first shows a new canvas
-    // shows it with no textures at all, which is the placeholder gradient.
-    // Costs one comparison on every frame that didn't switch.
-    session_.EnsureTexturesForCurrentCanvas();
-    // ...and, in the rasterized mode, the bitmaps the strokes are drawn
-    // into. Same placement and the same reason: after every input that
-    // could have changed what is on the canvas, before anything draws it.
+    // In the rasterized mode, the bitmaps the strokes are drawn into. Last
+    // thing before anything item-shaped is drawn: everything above this
+    // line is input handling, and Alt+wheel canvas stepping lives up there.
+    // A picture needs nothing of the kind - its texture is asked for as it
+    // is drawn, so a canvas switched to mid-frame is drawn whole.
     RefreshStrokeRasters();
 
     // Where the panels docked against the screen's edges are this frame, and
@@ -2157,8 +2139,9 @@ void OverlayApp::RenderViewOnly(float displayW, float displayH) {
             const ImVec2 pMin(item.rect.x, item.rect.y);
             const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
             drawList->PushClipRect(pMin, pMax, true);
-            DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, StrokeRasterTextureFor(item.id),
-                             /*skipNoteText=*/false, CanvasMeshSlot(), PictureSampling());
+            DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, PictureTexture(item),
+                            StrokeRasterTextureFor(item.id), /*skipNoteText=*/false, CanvasMeshSlot(),
+                            PictureSampling());
             drawList->PopClipRect();
         }
     }
@@ -2453,8 +2436,8 @@ void OverlayApp::RenderCanvasLayer(float displayW, float displayH) {
     // to the display rather than drawn 1:1 so a resolution change between
     // the capture and now scales instead of leaving a gap - it will look
     // soft, but a soft backdrop beats a torn one.
-    if (session_.FrozenScreenTexture() != 0) {
-        drawList->AddImage(ImTextureRef(static_cast<ImTextureID>(session_.FrozenScreenTexture())), ImVec2(0.0f, 0.0f),
+    if (const uint64_t frozen = session_.FrozenScreenTexture(); frozen != 0) {
+        drawList->AddImage(ImTextureRef(static_cast<ImTextureID>(frozen)), ImVec2(0.0f, 0.0f),
                             ImVec2(displayW, displayH));
     }
 

@@ -860,7 +860,7 @@ InputGrabDiagnostics Win32OverlayWindow::GetInputGrabDiagnostics() const {
     return Win32InputGrab::Instance().Diagnostics();
 }
 
-CaptureResult Win32OverlayWindow::CaptureRegionAsTexture(const Rect& rect) {
+CaptureResult Win32OverlayWindow::CaptureRegion(const Rect& rect) {
     const int width = static_cast<int>(rect.w);
     const int height = static_cast<int>(rect.h);
     if (!renderer_ || !hwnd_ || width <= 0 || height <= 0) {
@@ -883,9 +883,10 @@ CaptureResult Win32OverlayWindow::CaptureRegionAsTexture(const Rect& rect) {
         return CaptureResult{};
     }
 
-    // GDI's 32bpp DIBs are byte-order BGRA; D3D11's DXGI_FORMAT_R8G8B8A8_UNORM
-    // (what CreateTextureFromRGBA uses, matching imgui_impl_dx11.cpp's own
-    // texture format) wants RGBA - swap the B/R bytes of each pixel in place.
+    // GDI's 32bpp DIBs are byte-order BGRA; CaptureResult is RGBA, which is
+    // also what D3D11's DXGI_FORMAT_R8G8B8A8_UNORM (what
+    // CreateTextureFromRGBA uses) wants - swap the B/R bytes of each pixel
+    // in place.
     // The fourth byte of a 32bpp DIB is not an alpha channel: GDI leaves it
     // undefined (zero for most of the screen, whatever a layered window
     // wrote for the rest), and a screenshot is opaque by definition, so it
@@ -895,14 +896,7 @@ CaptureResult Win32OverlayWindow::CaptureRegionAsTexture(const Rect& rect) {
         pixelsBGRA[i + 3] = 255;
     }
 
-    // An upload that fails - the device lost, and no frame since to replace
-    // it, which is every capture made from the tray after a driver reset -
-    // still returns the pixels: they are what cannot be taken again, and
-    // the snippet gets its texture from the file they are written to once
-    // there is a device to put it on.
-    ID3D11ShaderResourceView* srv = renderer_->CreateTextureFromRGBA(pixelsBGRA.data(), width, height);
     CaptureResult result;
-    result.textureHandle = srv ? static_cast<uint64_t>(reinterpret_cast<uintptr_t>(srv)) : 0;
     result.pixelsRGBA = std::move(pixelsBGRA);  // renamed in place above - now actually RGBA
     result.width = width;
     result.height = height;

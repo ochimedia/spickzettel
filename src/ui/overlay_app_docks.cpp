@@ -136,15 +136,9 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     // click that chooses or dismisses it, so this cannot hold the bar out.
     const bool barWanted =
         cfg.showCanvasBar && !busy && (atBottom || onBar || canvasContextMenu_.IsOpen());
-    const float barBefore = canvasBarReveal_.amount;
     canvasBarReveal_.Update(barWanted, now, io.DeltaTime);
     if (!cfg.showCanvasBar) {
         canvasBarReveal_ = EdgeReveal{};
-    }
-    // Thumbnails of other canvases are loaded to be looked at; once the bar
-    // is back behind its edge, nothing is - unless the Overview has them.
-    if (barBefore > 0.0f && canvasBarReveal_.amount <= 0.0f && !PanelOpen()) {
-        ReleasePicturePreviews();
     }
 
     // ----- The canvas bar: centered on the bottom edge -----

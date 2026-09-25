@@ -14,15 +14,10 @@ namespace sz::core {
 
 namespace {
 
-// What a copied item's picture has to give up so the copy owns its own
-// resources. A texture handle has single-owner lifetime (see picture.h) and
-// must not be duplicated. The stored pixels are the source's, so the copy
-// starts without them and the caller gives it its own (see
-// Session::ClonePicturesForCopy); this class has no store.
-void DetachPictureForCopy(Item& copied) {
-    copied.picture.textureHandle = 0;
-    copied.picture.stored = false;
-}
+// What a copied item's picture has to give up: the stored pixels are the
+// source's, so the copy starts without them and the caller gives it its own
+// (see Session::ClonePicturesForCopy); this class has no store.
+void DetachPictureForCopy(Item& copied) { copied.picture.stored = false; }
 
 }  // namespace
 
@@ -300,20 +295,6 @@ const Canvas* CanvasManager::CurrentOrNull() const {
     return it == canvases_.end() ? nullptr : &*it;
 }
 
-std::vector<uint64_t> CanvasManager::CaptureTextureHandlesForCanvas(CanvasId id) const {
-    std::vector<uint64_t> handles;
-    const auto it = std::find_if(canvases_.begin(), canvases_.end(), [id](const Canvas& c) { return c.id == id; });
-    if (it == canvases_.end()) {
-        return handles;
-    }
-    for (const Item& item : it->items) {
-        if (item.picture.textureHandle != 0) {
-            handles.push_back(item.picture.textureHandle);
-        }
-    }
-    return handles;
-}
-
 ItemId CanvasManager::CreateItem(bool hasBackground, Rect rect, std::string name) {
     Item item;
     item.hasBackground = hasBackground;
@@ -336,7 +317,6 @@ ItemId CanvasManager::CreateItem(Item prototype) {
     item.deletedAt = 0;
     item.picture.showsPlaceholder = item.hasBackground;
     item.picture.stored = false;
-    item.picture.textureHandle = 0;
     item.nativeW = item.rect.w;
     item.nativeH = item.rect.h;
     item.anchorRect = item.rect;
@@ -815,16 +795,6 @@ bool SameCanvasRow(const Canvas& a, const Canvas& b) {
            a.deletedAt == b.deletedAt;
 }
 
-// The same content: every field but the texture, which is GPU state.
-bool SameContent(const Item& a, const Item& b) {
-    if (a.picture.textureHandle == b.picture.textureHandle) {
-        return a == b;
-    }
-    Item copy = a;
-    copy.picture.textureHandle = b.picture.textureHandle;
-    return copy == b;
-}
-
 }  // namespace
 
 CanvasManager::Checkpoint CanvasManager::TakeCheckpoint(const std::vector<ItemId>& items) const {
@@ -897,14 +867,14 @@ LibraryChanges CanvasManager::ChangesSince(const Checkpoint& checkpoint) const {
     }
     for (const Item& copy : checkpoint.items) {
         const Item* item = FindItemAnywhere(copy.id);
-        if (item != nullptr && !SameContent(*item, copy)) {
+        if (item != nullptr && *item != copy) {
             changes.items.push_back(copy.id);
         }
     }
     return changes;
 }
 
-std::vector<uint64_t> CanvasManager::RollBack(const Checkpoint& checkpoint) {
+void CanvasManager::RollBack(const Checkpoint& checkpoint) {
     std::unordered_map<ItemId, Item> pool;
     for (Canvas& canvas : canvases_) {
         for (Item& item : canvas.items) {
@@ -915,12 +885,10 @@ std::vector<uint64_t> CanvasManager::RollBack(const Checkpoint& checkpoint) {
     for (const Item& copy : checkpoint.items) {
         const auto it = pool.find(copy.id);
         if (it == pool.end()) {
-            pool.emplace(copy.id, copy);  // gone since: back as it was, texture and all
+            pool.emplace(copy.id, copy);  // gone since: back as it was
             continue;
         }
-        const uint64_t texture = it->second.picture.textureHandle;
         it->second = copy;
-        it->second.picture.textureHandle = texture;
     }
     std::vector<Canvas> canvases;
     canvases.reserve(checkpoint.canvases.size());
@@ -939,18 +907,11 @@ std::vector<uint64_t> CanvasManager::RollBack(const Checkpoint& checkpoint) {
         }
         canvases.push_back(std::move(canvas));
     }
-    std::vector<uint64_t> released;
-    for (const auto& [id, item] : pool) {
-        if (item.picture.textureHandle != 0) {
-            released.push_back(item.picture.textureHandle);  // made since, and not kept
-        }
-    }
     canvases_ = std::move(canvases);
     folders_ = checkpoint.folders;
     currentFolderId_ = checkpoint.currentFolderId;
     currentCanvasId_ = checkpoint.currentCanvasId;
     MarkChanged();
-    return released;
 }
 
 CanvasManagerSnapshot CanvasManager::ExportSnapshot() const {
@@ -1254,32 +1215,6 @@ std::vector<uint64_t> CanvasManager::MarkedBefore(int64_t cutoff) const {
     }
     ids.insert(ids.end(), canvasIds.begin(), canvasIds.end());
     return ids;
-}
-
-void CanvasManager::SyncShotTexturesToCanvas(CanvasId canvasId,
-                                              const std::function<uint64_t(const Item&)>& loadPicture,
-                                              const std::function<void(uint64_t)>& releaseTexture) {
-    for (Canvas& canvas : canvases_) {
-        for (Item& item : canvas.items) {
-            // Nothing stored to load from - so nothing to load, and nothing
-            // safe to release into.
-            Picture& picture = item.picture;
-            if (!picture.stored) {
-                continue;
-            }
-            // Only what is on screen needs a texture: a deleted snippet on
-            // the current canvas is as far from being drawn as one on
-            // another canvas.
-            if (canvas.id == canvasId && !IsDeleted(canvas, item)) {
-                if (picture.textureHandle == 0) {
-                    picture.textureHandle = loadPicture(item);
-                }
-            } else if (picture.textureHandle != 0) {
-                releaseTexture(picture.textureHandle);
-                picture.textureHandle = 0;
-            }
-        }
-    }
 }
 
 }  // namespace sz::core

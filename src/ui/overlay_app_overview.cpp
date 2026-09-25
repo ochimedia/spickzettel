@@ -447,8 +447,8 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
     bool drewAnything = false;
     if (item.picture.opacity > 0.0f) {
         // Nothing at all for a picture whose pixels are still being read
-        // (see PicturePreviewTexture, which says so by returning nothing
-        // rather than 0). The placeholder gradient means "there is no image
+        // (see OverlayApp::PicturePreviewTexture, which says so by
+        // returning nothing rather than 0). The placeholder gradient means "there is no image
         // here", and a few frames of it in front of an image that *is*
         // there and is on its way reads as the thumbnails being wrong and
         // then correcting themselves. An outlined empty box - what the
@@ -732,9 +732,6 @@ void OverlayApp::RenderOverviewHeader() {
         ImGui::SetTooltip("%s", strings::kOverviewPreviewsBitmapHelp);
     }
     if (changed) {
-        if (!Cfg().overviewShowsBitmaps) {
-            ReleasePicturePreviews();
-        }
         settings_.Commit();
     }
 }
@@ -3101,9 +3098,8 @@ void OverlayApp::RenderConfirmDeletePopover() {
 void OverlayApp::PerformDelete(const ConfirmDeleteTarget& target) {
     const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
     const bool deletedIn = target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
-    // Its textures go as it leaves the screen, either way - see
-    // Session::Delete and DeletePermanently - and its history only with the
-    // thing itself, for good.
+    // Its textures go as it leaves the screen, either way (see
+    // TextureCache), and its history only with the thing itself, for good.
     if (forGood) {
         if (deletedIn ? session_.DeleteMarkedCanvasesPermanently(target.id) : session_.DeletePermanently(target.id)) {
             ShowActionToast(strings::kToastDeletedForGood);
@@ -3210,11 +3206,6 @@ void OverlayApp::CloseOverview() {
     // Escape *itself* (see RenderOverview), so what this covers is the
     // panel being closed some other way with a row still waiting.
     shortcutCaptureAction_.reset();
-    // The thumbnails' own textures go with the panel. They exist to be
-    // looked at, and a library's worth of them held for a panel nobody has
-    // open is exactly the memory this app spent stage A learning not to
-    // hold - see PicturePreview.
-    ReleasePicturePreviews();
 }
 
 void OverlayApp::ShowActionToast(std::string text) {

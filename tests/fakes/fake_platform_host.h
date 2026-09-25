@@ -102,29 +102,56 @@ public:
 
     platform::InputGrabDiagnostics GetInputGrabDiagnostics() const override { return {}; }
 
-    platform::CaptureResult CaptureRegionAsTexture(const platform::Rect& rect) override {
+    platform::CaptureResult CaptureRegion(const platform::Rect& rect) override {
         ++captureCallCount;
         lastCaptureRect = rect;
         platform::CaptureResult result;
-        result.textureHandle = captureReturnsHandle;
         result.pixelsRGBA = captureReturnsPixelsRGBA;
         result.width = captureReturnsWidth;
         result.height = captureReturnsHeight;
         return result;
     }
 
-    uint64_t CreateTextureFromPixels(const uint8_t* /*pixelsRGBA*/, int /*width*/, int /*height*/) override {
-        return createTextureFromPixelsReturnsHandle;
+    // Each upload a handle of its own, held in liveTextures - with the
+    // device it was made on - until it is released.
+    uint64_t CreateTextureFromPixels(const uint8_t* pixelsRGBA, int width, int height) override {
+        if (!uploadsSucceed || pixelsRGBA == nullptr || width <= 0 || height <= 0) {
+            return 0;
+        }
+        ++uploadCount;
+        const uint64_t handle = nextTextureHandle++;
+        liveTextures.emplace(handle, textureGeneration);
+        return handle;
     }
 
     bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* /*pixelsRGBA*/, int /*sourceWidth*/, int /*x*/,
                               int /*y*/, int /*w*/, int /*h*/) override {
-        return textureHandle != 0;
+        const auto it = liveTextures.find(textureHandle);
+        if (it == liveTextures.end() || it->second != textureGeneration) {
+            ++badTextureUses;  // freed, or made on a device that is gone
+            return false;
+        }
+        return true;
     }
 
-    void ReleaseTexture(uint64_t /*textureHandle*/) override { ++releaseTextureCallCount; }
+    void ReleaseTexture(uint64_t textureHandle) override {
+        if (textureHandle == 0) {
+            return;
+        }
+        ++releaseTextureCallCount;
+        if (liveTextures.erase(textureHandle) == 0) {
+            ++badTextureUses;  // released twice, or never made
+        }
+    }
 
     uint64_t TextureGeneration() const override { return textureGeneration; }
+
+    // Whether `handle` is one that may be drawn with now: made, not
+    // released, and on the device there is.
+    bool IsDrawable(uint64_t handle) const {
+        const auto it = liveTextures.find(handle);
+        return it != liveTextures.end() && it->second == textureGeneration;
+    }
 
     // Never run - nothing renders the fake's draw lists - only looked for
     // among their commands.
@@ -166,21 +193,26 @@ public:
     platform::FrameCallback frameCallback;
     platform::MouseCallback mouseCallback;
 
-    // What a capture comes back with. 0 and nothing by default: a backend
-    // that cannot capture, which is the ordinary "couldn't" every caller
-    // has to take. A handle alone is a capture with nothing to save; with
-    // pixels and a size it is what a real backend returns, and those go to
-    // the library as the snippet's image.
-    uint64_t captureReturnsHandle = 0;
+    // What a capture comes back with. Nothing by default: a backend that
+    // cannot capture, which is the ordinary "couldn't" every caller has to
+    // take. With pixels and a size it is what a real backend returns, and
+    // those go to the library as the snippet's image.
     std::vector<uint8_t> captureReturnsPixelsRGBA;
     int captureReturnsWidth = 0;
     int captureReturnsHeight = 0;
     int captureCallCount = 0;
     platform::Rect lastCaptureRect{};
+    // Off by default, like a capture: no device to upload to.
+    bool uploadsSucceed = false;
+    uint64_t nextTextureHandle = 1;
+    int uploadCount = 0;
     int releaseTextureCallCount = 0;
-    // 0 by default, same as a capture: an upload that fails. A crop out of
-    // a frozen screen is only kept when its upload succeeds.
-    uint64_t createTextureFromPixelsReturnsHandle = 0;
+    // Every texture made and not yet released, with the device (the
+    // generation) it was made on.
+    std::unordered_map<uint64_t, uint64_t> liveTextures;
+    // A texture released twice, or updated after it was released or its
+    // device replaced. Never anything but 0.
+    int badTextureUses = 0;
     // Moved on by a test to lose every texture, as a device reset does.
     uint64_t textureGeneration = 0;
 };

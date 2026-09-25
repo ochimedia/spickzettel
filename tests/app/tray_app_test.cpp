@@ -752,13 +752,13 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {
 }
 
 // A capture that comes back with pixels - which is what a real backend's
-// does - is written to the library as the snippet's image, beside the
-// texture it is shown with. The fake's default capture has a handle and
-// nothing to save, and every other test here is content with that.
+// does - is written to the library as the snippet's image, and shown from
+// the pixels captured rather than read back. The fake's default capture
+// fails, and every other test here is content with that.
 TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImage) {
     test::FakePlatformHost host;
     host.libraryPath = library_;
-    host.overlayWindow.captureReturnsHandle = 7;
+    host.overlayWindow.uploadsSucceed = true;
     host.overlayWindow.captureReturnsWidth = 4;
     host.overlayWindow.captureReturnsHeight = 3;
     host.overlayWindow.captureReturnsPixelsRGBA.assign(4u * 3u * 4u, 0x80);
@@ -772,7 +772,10 @@ TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImag
     ASSERT_NE(canvas, nullptr);
     ASSERT_EQ(canvas->items.size(), 1u);
     const Item& shot = canvas->items.front();
-    EXPECT_EQ(shot.picture.textureHandle, 7u);
+    const std::optional<uint64_t> texture =
+        controller.GetSession().Textures().Find(TextureKey{TextureKey::Kind::Picture, shot.id});
+    ASSERT_TRUE(texture.has_value());
+    EXPECT_TRUE(host.overlayWindow.IsDrawable(*texture));
     ASSERT_TRUE(shot.picture.stored) << "the pixels went to the library";
     const std::optional<persistence::DecodedImage> saved = persistence::LibraryStore(library_).LoadImage(shot.id);
     ASSERT_TRUE(saved.has_value());
@@ -790,7 +793,6 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAF
     ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
     host.libraryPath = library_;
-    host.overlayWindow.captureReturnsHandle = 7;
     host.overlayWindow.captureReturnsWidth = 2;
     host.overlayWindow.captureReturnsHeight = 1;
     host.overlayWindow.captureReturnsPixelsRGBA = {1, 2, 3, 255, 4, 5, 6, 255};
@@ -828,7 +830,6 @@ TEST_F(TrayControllerPersistenceTest, ACaptureWhileHiddenThatCannotBeWrittenIsNo
     ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
     host.libraryPath = library_;
-    host.overlayWindow.captureReturnsHandle = 7;
     host.overlayWindow.captureReturnsWidth = 1;
     host.overlayWindow.captureReturnsHeight = 1;
     host.overlayWindow.captureReturnsPixelsRGBA = {9, 9, 9, 255};
@@ -856,7 +857,6 @@ TEST_F(TrayControllerPersistenceTest, TheOSEndingTheSessionFindsTheLibraryWritte
     ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
     host.libraryPath = library_;
-    host.overlayWindow.captureReturnsHandle = 7;
     const AppConfig config = DefaultConfig();
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
@@ -1404,14 +1404,13 @@ TEST(TrayControllerPinnedTest, ASilentCaptureInThePinnedViewKeepsThePinnedCanvas
 }
 
 // The capture lands on a canvas that is not current, so its texture is
-// pure cost: handed back at once, rather than held until the next real
-// canvas switch - which the frame's own sync, gated on a change of
-// current canvas, would never see here.
+// pure cost: nothing draws it, and it goes with the frame after next -
+// without anyone saying so.
 TEST_F(TrayControllerPersistenceTest, ASilentCaptureInThePinnedViewGivesItsTextureBack) {
     ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
     host.libraryPath = library_;
-    host.overlayWindow.captureReturnsHandle = 7;
+    host.overlayWindow.uploadsSucceed = true;
     host.overlayWindow.captureReturnsWidth = 2;
     host.overlayWindow.captureReturnsHeight = 1;
     host.overlayWindow.captureReturnsPixelsRGBA = {1, 2, 3, 255, 4, 5, 6, 255};
@@ -1424,7 +1423,6 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureInThePinnedViewGivesItsTextu
     host.TriggerHotkey(editId);
     ASSERT_TRUE(controller.Overlay().IsPinnedOnly());
     const CanvasId pinnedCanvas = test::Model(controller.GetSession()).CurrentCanvasId();
-    const int releasedBefore = host.overlayWindow.releaseTextureCallCount;
 
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
 
@@ -1440,8 +1438,14 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureInThePinnedViewGivesItsTextu
     }
     ASSERT_NE(shot, nullptr);
     ASSERT_TRUE(shot->picture.stored) << "in the library, so the texture is not the only copy";
-    EXPECT_EQ(shot->picture.textureHandle, 0u) << "not resident on a canvas nobody is looking at";
-    EXPECT_EQ(host.overlayWindow.releaseTextureCallCount, releasedBefore + 1);
+    TextureCache& textures = controller.GetSession().Textures();
+    const TextureKey key{TextureKey::Kind::Picture, shot->id};
+    const std::optional<uint64_t> texture = textures.Find(key);
+    ASSERT_TRUE(texture.has_value()) << "made from the pixels captured";
+    textures.BeginFrame();
+    textures.BeginFrame();  // the pinned view draws the canvas it shows, and nothing of this one
+    EXPECT_FALSE(textures.Find(key).has_value());
+    EXPECT_EQ(host.overlayWindow.liveTextures.count(*texture), 0u) << "not resident on a canvas nobody is looking at";
 }
 
 TEST_F(TrayControllerPersistenceTest, PinnedSnippetsAreOnScreenFromTheStart) {
@@ -1539,7 +1543,6 @@ TEST(TrayControllerDisplayTest, WhileTheChosenDisplayIsNotConnectedThePrimarySta
 TEST(TrayControllerDisplayTest, AQuickCaptureWhileHiddenIsTakenFromTheChosenDisplay) {
     test::FakePlatformHost host;
     AttachDisplayOnTheLeft(host);
-    host.overlayWindow.captureReturnsHandle = 7;
     AppConfig config = DefaultConfig();
     config.overlayDisplayId = "fake-left";
     config.overlayDisplayName = "Left Display";
@@ -1588,7 +1591,6 @@ TEST(TrayControllerDisplayTest, WhenItsDisplayChangesTheOverlayFollows) {
 
 TEST(TrayControllerDisplayTest, AFrozenScreenIsTakenAgainWhenItsDisplayChanges) {
     test::FakePlatformHost host;
-    host.overlayWindow.captureReturnsHandle = 7;
     AppConfig config = DefaultConfig();
     config.freezeScreenInEditMode = true;
     TrayController controller(host, config);
@@ -1606,7 +1608,6 @@ TEST(TrayControllerDisplayTest, AFrozenScreenIsTakenAgainWhenItsDisplayChanges) 
 
 TEST(TrayControllerDisplayTest, AChangeToAnotherDisplayLeavesAFrozenScreenAlone) {
     test::FakePlatformHost host;
-    host.overlayWindow.captureReturnsHandle = 7;
     AppConfig config = DefaultConfig();
     config.freezeScreenInEditMode = true;
     TrayController controller(host, config);

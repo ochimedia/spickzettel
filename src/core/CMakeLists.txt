@@ -18,6 +18,7 @@ add_library(sz_core STATIC
     drawing/stroke_mesh_cache.cpp
     drawing/stroke_clip.cpp
     drawing/stroke_smoothing.cpp
+    gpu/texture_cache.cpp
     persistence/image_codec.cpp
     persistence/library_store.cpp
     session/history.cpp

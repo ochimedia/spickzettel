@@ -218,8 +218,8 @@ void OverlayApp::RenderItemOpacity(const Item& item) {
         session_.PreviewStyle(item.id, style);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", item.picture.textureHandle != 0 ? strings::kPopoverBackgroundShotTip
-                                                                : strings::kPopoverBackgroundFillTip);
+        ImGui::SetTooltip("%s", item.picture.stored ? strings::kPopoverBackgroundShotTip
+                                                    : strings::kPopoverBackgroundFillTip);
     }
 }
 
@@ -492,7 +492,7 @@ void OverlayApp::RunEmptyCanvasMenuAction(EmptyCanvasMenuAction action) {
         case EmptyCanvasMenuAction::FullscreenScreenshot:
             // The menu is gone by now, and was never in the picture anyway:
             // a capture leaves the overlay's own window out (see
-            // IOverlayWindow::CaptureRegionAsTexture).
+            // IOverlayWindow::CaptureRegion).
             CreateFullscreenItem(ItemCreationKind::Screenshot, io.DisplaySize.x, io.DisplaySize.y);
             return;
         case EmptyCanvasMenuAction::FullscreenDrawing:

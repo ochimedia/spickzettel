@@ -222,9 +222,7 @@ void ReadRect(const json& j, const char* key, Rect& out, bool& repaired) {
 }
 
 std::string ItemRecord(const Item& item) {
-    // textureHandle is deliberately absent: a GPU handle from a previous
-    // run is never valid to reuse. Whether there are pixels is the pictures
-    // table's to say.
+    // Whether there are pixels is the pictures table's to say.
     json picture{
         {"opacity", item.picture.opacity},
         {"tintColorRGBA", item.picture.tintColorRGBA},

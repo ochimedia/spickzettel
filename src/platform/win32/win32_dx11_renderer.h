@@ -83,7 +83,7 @@ public:
     // bytes/pixel, no row padding) as a new GPU texture with a full mip
     // chain (built on the next RefreshMips)
     // and returns its shader-resource-view, ready to hand straight to
-    // ImGui as an ImTextureID (see IOverlayWindow::CaptureRegionAsTexture).
+    // ImGui as an ImTextureID (see IOverlayWindow::CreateTextureFromPixels).
     // Caller owns the returned pointer's single reference and must
     // eventually pass it to ReleaseTexture - mirrors the exact
     // CreateTexture2D/CreateShaderResourceView pattern

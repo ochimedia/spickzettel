@@ -116,9 +116,8 @@ public:
     // No-op for a deleted canvas, which is never the one looked at.
     void SwitchToCanvas(CanvasId id);
     // Erases `id` and every one of its items for good - immediate, and not
-    // what a delete is (see the class comment). GPU textures aren't this
-    // class's concern; the caller releases them first (see
-    // CaptureTextureHandlesForCanvas). No-op only if `id` doesn't exist.
+    // what a delete is (see the class comment). No-op only if `id` doesn't
+    // exist.
     //
     // If `id` was current, this stays inside the folder it lived in and
     // makes the canvas *before* it there current - or that folder's first,
@@ -153,12 +152,6 @@ public:
     // reach into its contents.
     CanvasId CurrentCanvasId() const { return currentCanvasId_; }
     const std::vector<Canvas>& Canvases() const { return canvases_; }
-    // Mutable access for the session, which has to touch every canvas
-    // rather than the current one to give back or replace textures (see
-    // Session::ReplaceLostTextures). Deliberately does *not* bump the
-    // generation counter - a texture handle is not a change to the
-    // drawing.
-    std::vector<Canvas>& CanvasesMutable() { return canvases_; }
 
     // Added at the end of Folders() (newest last, the order they were
     // made) and becomes
@@ -174,12 +167,11 @@ public:
     // Erases `id` *and every canvas within it, and every item on those* for
     // good - immediate, and not what a delete is. No-op only if `id`
     // doesn't exist: deleting the last folder, or one holding every
-    // remaining canvas, is allowed and leaves the library empty. GPU
-    // textures are the caller's to release first. If the current canvas
-    // lived in the deleted folder, switches to another canvas (or to none);
-    // otherwise, if `id` was merely the browsed folder, switches
-    // `currentFolderId_` to the new front of Folders(), or to 0 if that was
-    // the last folder.
+    // remaining canvas, is allowed and leaves the library empty. If the
+    // current canvas lived in the deleted folder, switches to another
+    // canvas (or to none); otherwise, if `id` was merely the browsed
+    // folder, switches `currentFolderId_` to the new front of Folders(), or
+    // to 0 if that was the last folder.
     void DeleteFolder(FolderId id);
     // Moves `id` so it sits at `newIndex` in Folders() (clamped to the
     // valid range). No-op if `id` doesn't exist.
@@ -197,11 +189,6 @@ public:
 
     const std::vector<Folder>& Folders() const { return folders_; }
     FolderId CurrentFolderId() const { return currentFolderId_; }
-    // Every picture texture handle on the named canvas - what deleting it for
-    // good would leak. Call *before* DeleteCanvas/DeleteFolder so the caller
-    // can release each one first; this class has no platform dependency.
-    // Empty if `id` doesn't exist.
-    std::vector<uint64_t> CaptureTextureHandlesForCanvas(CanvasId id) const;
 
     // Also sets Item::nativeW/H and the initial anchor
     // (anchorRect/anchorDisplayWidth/Height, see their own doc comments)
@@ -218,10 +205,9 @@ public:
     // drawing's clear.
     ItemId CreateItem(Item prototype);
     // Erases `id` for good from the current canvas - immediate, and not
-    // what a delete is. Texture cleanup is the caller's job. No-op if `id`
-    // isn't on the current canvas. The app's snippet delete is not this: it
-    // marks the snippet deleted, where an undo can find it (see
-    // Session::DeleteItem).
+    // what a delete is. No-op if `id` isn't on the current canvas. The
+    // app's snippet delete is not this: it marks the snippet deleted, where
+    // an undo can find it (see Session::DeleteItem).
     void DeleteItem(ItemId id);
     // The cross-canvas counterpart to DeleteItem, for Erase, which takes a
     // snippet out of whichever canvas holds it. No-op if `canvasId` or `id`
@@ -415,10 +401,8 @@ public:
     LibraryChanges ChangesSince(const Checkpoint& checkpoint) const;
     // Puts the library back as `checkpoint` has it: what a change whose
     // write failed is undone with, so that the model never holds what the
-    // file does not. A snippet keeps the texture it has now, which is GPU
-    // state and not content; one made since goes, and its texture is
-    // returned for the caller to release.
-    std::vector<uint64_t> RollBack(const Checkpoint& checkpoint);
+    // file does not.
+    void RollBack(const Checkpoint& checkpoint);
 
     // Keeps every item's `rect` correct for the display it is shown on
     // right now. Called every frame with the display size, so a resolution
@@ -458,25 +442,6 @@ public:
     // viewport-filling override contradict. No-op if `id` isn't on the
     // current canvas or has no native size.
     void ResetItemToNativeSize(ItemId id);
-
-    // Makes `canvasId` the *only* canvas holding live textures, which is
-    // the whole GPU-memory budget this app needs: nothing but the current
-    // canvas is ever drawn from a real texture, so every other canvas's
-    // textures are pure cost.
-    //
-    // On `canvasId`, for every item there that isn't deleted: a stored
-    // picture with no live texture gets one from `loadPicture` (0 meaning
-    // the load failed, leaving the placeholder like a failed capture). On
-    // every other canvas, and for a deleted item on this one: a texture is
-    // handed to `releaseTexture` and the handle cleared.
-    //
-    // A release only ever happens for a stored picture, which can be
-    // loaded again; a texture with nothing behind it (a capture whose save
-    // failed) is kept rather than freed into blankness.
-    // Idempotent and cheap when nothing changed. Doesn't touch Generation():
-    // a GPU handle isn't content.
-    void SyncShotTexturesToCanvas(CanvasId canvasId, const std::function<uint64_t(const Item&)>& loadPicture,
-                                   const std::function<void(uint64_t)>& releaseTexture);
 
 private:
     // Where `id` sits in `canvas`'s stack, and which snippet a z-order

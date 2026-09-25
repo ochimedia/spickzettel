@@ -10,6 +10,7 @@
 #include "core/canvas/canvas_manager.h"
 #include "core/drawing/canvas_state.h"
 #include "core/drawing/stroke.h"
+#include "core/gpu/texture_cache.h"
 #include "core/persistence/library_store.h"
 #include "core/session/history.h"
 #include "platform/i_overlay_window.h"
@@ -30,8 +31,9 @@ namespace sz::core {
 // not made - the model is put back as it was, and LastWriteFailed says so.
 //
 // No ImGui here, and nothing about gestures, popovers or panels. The window
-// it is attached to is the platform's, for the two things the session needs
-// from it: textures, and screen captures.
+// it is attached to is the platform's, for screen captures, and for the
+// textures the app draws with - which are the TextureCache's, not the
+// model's: the model is content only.
 class Session {
 public:
     Session() = default;
@@ -43,7 +45,14 @@ public:
     // For textures and captures. May stay null - a test that never shows a
     // window - in which case nothing is uploaded or captured, and everything
     // else still works.
-    void AttachWindow(platform::IOverlayWindow* window) { window_ = window; }
+    void AttachWindow(platform::IOverlayWindow* window) {
+        window_ = window;
+        textures_.AttachWindow(window);
+    }
+    // Every texture the app draws with - see TextureCache. A capture puts
+    // its picture's here as it is taken, so that it is not read back from
+    // the library it was just written to.
+    TextureCache& Textures() { return textures_; }
     // Where the library is read from and written to. Left null, it is never
     // persisted, and everything else works the same.
     void SetLibraryStore(persistence::LibraryStore* store) { store_ = store; }
@@ -56,8 +65,8 @@ public:
     // outlives the session it was made in, so nothing could reach it again.
     void ImportLibrary(CanvasManagerSnapshot snapshot);
 
-    // The library, to read: what every gesture, the Overview and the
-    // texture sync look at. Changed only through the commands below.
+    // The library, to read: what every gesture and the Overview look at.
+    // Changed only through the commands below.
     const CanvasManager& Manager() const { return manager_; }
 
     // Whether the last command's write failed - so that command was not
@@ -118,9 +127,9 @@ public:
     // - see CanvasManager::Restore. False if nothing was deleted, and for a
     // snippet, as Delete.
     bool Restore(uint64_t id);
-    // Erases `id` for good: out of the model, its textures released, its
-    // history forgotten, and the library saved at once. False, doing
-    // nothing, if there is no such thing.
+    // Erases `id` for good: out of the model, its history forgotten, and
+    // the library saved at once. False, doing nothing, if there is no such
+    // thing.
     bool DeletePermanently(uint64_t id);
     // DeletePermanently for every canvas in `folderId` that carries a mark
     // of its own (see CanvasManager::MarkedCanvasesIn) - what a folder's
@@ -131,47 +140,8 @@ public:
     // Deletes for good every folder and canvas deleted before `cutoff`
     // (seconds since the epoch) - see CanvasManager::MarkedBefore for which
     // those are - and returns how many went. The retention period
-    // (AppConfig::purgeDeleted), run once the library is opened. Without
-    // DeletePermanently's texture sync, like ImportLibrary's own erasing and
-    // for the same reason; and nothing deleted has a texture to give back.
+    // (AppConfig::purgeDeleted), run once the library is opened.
     size_t EraseDeletedBefore(int64_t cutoff);
-    // ===== Keeping the GPU in step =====
-
-    // Brings GPU shot textures in line with whichever canvas is current:
-    // loads the ones it needs, frees every other canvas's (see
-    // CanvasManager::SyncShotTexturesToCanvas for the exact rule and why
-    // only the current canvas ever needs one). A no-op without a store or a
-    // window.
-    //
-    // Deliberately *not* a one-time startup load of every canvas's images:
-    // a 4K capture is ~33 MB of RGBA8, so a library of fifty of them would
-    // pin ~1.6 GB of VRAM behind a game and pay for all of it as a stall on
-    // the very first hotkey. The cost is one canvas's worth, paid on
-    // switching to it.
-    //
-    // The ungated form, for a change that leaves the same canvas current -
-    // something arriving on it, or leaving it.
-    void SyncTexturesToCurrentCanvas();
-    // The gated form: syncs only when the current canvas isn't the one
-    // whose textures are resident. Cheap enough to call whenever it might
-    // matter.
-    //
-    // Call it immediately before anything draws item content, not merely
-    // once a frame. A canvas switch can happen *during* a frame - Alt+wheel
-    // is handled from the frame itself, well after it began - and a switch
-    // that lands after the sync leaves every shot on the new canvas with no
-    // texture for the rest of that frame, which renders as the placeholder
-    // gradient. That is what the gradient flash on Alt+wheel was: not a
-    // slow load showing through, but the frame drawn between the switch and
-    // the load.
-    void EnsureTexturesForCurrentCanvas();
-
-    // Every texture this handed out is lost - the GPU device was replaced
-    // (see IOverlayWindow::TextureGeneration). Each is let go of, and made
-    // again from what it showed: the current canvas's pictures on the next
-    // EnsureTexturesForCurrentCanvas, from the library, and the frozen
-    // screen from the pixels kept for cropping.
-    void ReplaceLostTextures();
 
     // ===== Undo =====
 
@@ -357,12 +327,14 @@ public:
     // and captures can be cropped out of it (see CaptureShotItem). Replaces
     // whatever was frozen before.
     void FreezeScreen(const platform::DisplayInfo& display);
-    // Drops that image. Call on hiding the overlay: it's a full-screen
-    // texture, and there's no reason to hold one while nothing is shown.
+    // Drops that image, and its texture with it. Call on hiding the
+    // overlay: it's a full screen's worth, and there's no reason to hold
+    // one while nothing is shown.
     void ReleaseFrozenScreen();
-    // 0 while nothing is frozen - which is also how "the capture failed"
-    // is represented.
-    uint64_t FrozenScreenTexture() const { return frozenScreenTexture_; }
+    // The frozen screen's texture, for this frame (see TextureCache): 0
+    // while nothing is frozen - which is also how "the capture failed" is
+    // represented - or while it cannot be uploaded.
+    uint64_t FrozenScreenTexture();
 private:
     // What the tests reach the model through, to set up a library without
     // going command by command - see tests/support/session_test_access.h.
@@ -397,12 +369,11 @@ private:
     size_t EraseForGood(const std::vector<uint64_t>& ids);
 
     // Captures what is under `item` into its picture - cropped out of the
-    // frozen screen while one is held, live otherwise - and uploads it. The
-    // pixels are written with the command that made the snippet (see
-    // captured_).
+    // frozen screen while one is held, live otherwise - and puts its
+    // texture in the cache. The pixels are written with the command that
+    // made the snippet (see captured_).
     void CaptureShotItem(Item& item);
-    // Gives the copy `copyId` a picture of its own when `sourceId` has one
-    // - a copy must never share a picture or a texture with its source -
+    // Gives the copy `copyId` a picture of its own when `sourceId` has one,
     // copied as stored, with the command that made the copy. False when
     // the source's picture cannot be found in the library, so the copy
     // lacks it.
@@ -467,11 +438,8 @@ private:
     // where to: their histories follow them once it has landed, and not
     // before - a command whose write fails has moved nothing.
     std::vector<std::pair<ItemId, CanvasId>> migrations_;
-    // Which canvas's shot textures are currently resident on the GPU, or
-    // nullopt before the first sync has run. Compared against the current
-    // canvas by EnsureTexturesForCurrentCanvas; a mismatch is what triggers
-    // the sync.
-    std::optional<CanvasId> shotTextureCanvasId_;
+    // See Textures.
+    TextureCache textures_;
 
     // The undo history, per canvas - see history::History.
     history::History history_;
@@ -526,9 +494,8 @@ private:
     float shapeLastX_ = 0.0f;
     float shapeLastY_ = 0.0f;
 
-    // The frozen screen, while one is held - see FreezeScreen. The pixels
-    // are kept for CaptureShotItem to crop out of.
-    uint64_t frozenScreenTexture_ = 0;
+    // The frozen screen, while one is held - see FreezeScreen: what its
+    // texture is made from, and what CaptureShotItem crops out of.
     int frozenScreenWidth_ = 0;
     int frozenScreenHeight_ = 0;
     std::vector<uint8_t> frozenScreenPixels_;

@@ -30,14 +30,8 @@ struct Picture {
     // LibraryStore::SaveImage). Not itself saved: the library says it.
     bool stored = false;
 
-    // Opaque platform texture handle, 0 for none. Loaded and released by
-    // the session as canvases become and stop being current; never
-    // persisted. Single-ownership: two pictures sharing one handle would
-    // double-release, so a copy resets it and loads its own.
-    uint64_t textureHandle = 0;
-
-    // Compares textureHandle too: a copy that kept the original's handle is
-    // not equal to it, and that is the bug this would otherwise hide.
+    // Content only: the texture it is drawn with is TextureCache's, kept
+    // under the snippet's id (see TextureKey), and never here.
     bool operator==(const Picture&) const = default;
 };
 

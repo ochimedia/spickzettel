@@ -136,18 +136,19 @@ public:
     // ===== Textures and capture =====
 
     // Captures `rect` (in this window's own coordinates) as it appears with
-    // this window's own content excluded, and uploads it as a GPU texture.
-    // The handle is an ImTextureID kept as a bare uint64_t so this header
-    // stays free of ImGui; the caller casts. textureHandle is 0 and
-    // pixelsRGBA empty if the backend cannot capture or the OS refused;
-    // callers then fall back to a placeholder. textureHandle alone is 0
-    // when the capture worked and the upload did not - the GPU device
-    // lost, say - and the pixels are still worth keeping.
-    virtual CaptureResult CaptureRegionAsTexture(const Rect& rect) = 0;
+    // this window's own content excluded. The pixels are empty if the
+    // backend cannot capture or the OS refused; callers then fall back to a
+    // placeholder.
+    virtual CaptureResult CaptureRegion(const Rect& rect) = 0;
 
+    // The texture calls below are core::TextureCache's, which is the only
+    // caller: everything else asks it for a texture by what it shows (see
+    // TextureCache for why).
+    //
     // Uploads RGBA8 pixels (the layout CaptureResult uses) as a new
-    // texture - for reloading a persisted picture. Returns 0 if the backend
-    // has no device to create one with.
+    // texture. The handle is an ImTextureID kept as a bare uint64_t so this
+    // header stays free of ImGui; the caller casts. Returns 0 if the
+    // backend has no device to create one with.
     virtual uint64_t CreateTextureFromPixels(const uint8_t* pixelsRGBA, int width, int height) = 0;
 
     // Replaces a rectangle of an existing texture's pixels in place.
@@ -155,7 +156,7 @@ public:
     // `sourceWidth` its width; x/y/w/h select the changed part. Returns false
     // for an unknown handle, a rectangle outside the texture, or a backend
     // that cannot do this. What a rasterized stroke list is brought up to
-    // date with (see OverlayApp::BuildStrokeRaster).
+    // date with (see TextureCache::Get).
     virtual bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* pixelsRGBA, int sourceWidth,
                                       int x, int y, int w, int h) = 0;
 

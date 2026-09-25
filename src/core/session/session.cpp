@@ -29,17 +29,13 @@ bool Session::Land(const Checkpoint& before) {
         lastWriteFailed_ = false;
         return true;
     }
-    // Not written, so not made: the model goes back to what the file holds,
-    // and what the command gave the GPU goes with it.
+    // Not written, so not made: the model goes back to what the file holds.
+    // A texture the command made - a capture's - is asked for by no one
+    // from here, and goes with the next frame (see TextureCache).
     lastWriteFailed_ = true;
     migrations_.clear();
-    for (const uint64_t texture : Model().RollBack(before)) {
-        if (window_) {
-            window_->ReleaseTexture(texture);
-        }
-    }
+    Model().RollBack(before);
     liveLayer_.Clear();
-    SyncTexturesToCurrentCanvas();
     return false;
 }
 
@@ -94,13 +90,10 @@ size_t Session::EraseForGood(const std::vector<uint64_t>& ids) {
     if (erased == 0 || !Land(before)) {
         return 0;
     }
-    // Gone from the file: now its textures, and every change about any of
-    // it on any canvas's history, with the stacks of every canvas that went
-    // and every move from or to one (see history::History::ForgetCanvas).
+    // Gone from the file: now every change about any of it on any canvas's
+    // history, with the stacks of every canvas that went and every move from
+    // or to one (see history::History::ForgetCanvas).
     for (const Item& item : before.items) {
-        if (item.picture.textureHandle != 0 && window_) {
-            window_->ReleaseTexture(item.picture.textureHandle);
-        }
         history_.ForgetItem(item.id);
     }
     for (const CanvasId canvas : canvases) {
@@ -109,59 +102,6 @@ size_t Session::EraseForGood(const std::vector<uint64_t>& ids) {
     return erased;
 }
 
-// ================= Keeping the GPU in step =================
-
-void Session::SyncTexturesToCurrentCanvas() {
-    if (!Store() || !window_) {
-        return;
-    }
-    Model().SyncShotTexturesToCanvas(
-        Model().CurrentCanvasId(),
-        [this](const Item& item) -> uint64_t {
-            const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id);
-            if (!decoded.has_value()) {
-                return 0;
-            }
-            return window_->CreateTextureFromPixels(decoded->pixelsRGBA.data(), decoded->width, decoded->height);
-        },
-        [this](uint64_t texture) { window_->ReleaseTexture(texture); });
-    shotTextureCanvasId_ = Model().CurrentCanvasId();
-}
-
-void Session::EnsureTexturesForCurrentCanvas() {
-    if (shotTextureCanvasId_ != Model().CurrentCanvasId()) {
-        SyncTexturesToCurrentCanvas();
-    }
-}
-
-void Session::ReplaceLostTextures() {
-    if (!window_) {
-        return;
-    }
-    for (Canvas& canvas : Model().CanvasesMutable()) {
-        for (Item& item : canvas.items) {
-            if (item.picture.textureHandle != 0) {
-                window_->ReleaseTexture(item.picture.textureHandle);
-                item.picture.textureHandle = 0;
-            }
-        }
-    }
-    shotTextureCanvasId_.reset();
-    // Frozen with or without a texture - a freeze made while the device was
-    // gone has only its pixels - it has one from here.
-    if (!frozenScreenPixels_.empty()) {
-        if (frozenScreenTexture_ != 0) {
-            window_->ReleaseTexture(frozenScreenTexture_);
-        }
-        frozenScreenTexture_ =
-            window_->CreateTextureFromPixels(frozenScreenPixels_.data(), frozenScreenWidth_, frozenScreenHeight_);
-        if (frozenScreenTexture_ == 0) {
-            ReleaseFrozenScreen();  // nothing frozen, as when the capture itself fails
-        }
-    }
-}
-
-// ================= Changes that are not undone =================
 // ================= Changes that are not undone =================
 
 void Session::SwitchToCanvas(CanvasId id) {
@@ -282,11 +222,6 @@ void Session::SyncItemsToDisplaySize(float width, float height) { Model().SyncIt
 
 void Session::ImportLibrary(CanvasManagerSnapshot snapshot) {
     manager_.ImportSnapshot(std::move(snapshot));
-    // Without DeletePermanently's texture sync: this runs before the overlay
-    // window has made its device, so the sync could load nothing - and would
-    // still record the current canvas as loaded, leaving its pictures as
-    // placeholders until the canvas changed. Nothing is resident yet for the
-    // erasing to give back; the first frame loads what is there.
     EraseForGood(Model().MarkedSnippets());
 }
 
@@ -296,14 +231,7 @@ bool Session::Delete(uint64_t id) {
         return false;
     }
     const Checkpoint before = Before({});
-    if (!Model().MarkDeleted(id, static_cast<int64_t>(std::time(nullptr))) || !Land(before)) {
-        return false;
-    }
-    // Hidden now - and what leaves the screen gives its pictures back in the
-    // same frame, as anything leaving it does. The gated form would see the
-    // same canvas current and do nothing.
-    SyncTexturesToCurrentCanvas();
-    return true;
+    return Model().MarkDeleted(id, static_cast<int64_t>(std::time(nullptr))) && Land(before);
 }
 
 bool Session::Restore(uint64_t id) {
@@ -312,30 +240,18 @@ bool Session::Restore(uint64_t id) {
         return false;
     }
     const Checkpoint before = Before({});
-    if (!Model().Restore(id) || !Land(before)) {
-        return false;
-    }
-    SyncTexturesToCurrentCanvas();
-    return true;
+    return Model().Restore(id) && Land(before);
 }
 
 bool Session::DeletePermanently(uint64_t id) {
     EndOpenGesture();
-    if (EraseForGood({id}) == 0) {
-        return false;
-    }
-    SyncTexturesToCurrentCanvas();
-    return true;
+    return EraseForGood({id}) != 0;
 }
 
 bool Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
     EndOpenGesture();
     const std::vector<CanvasId> marked = Model().MarkedCanvasesIn(folderId);
-    if (marked.empty() || EraseForGood(marked) == 0) {
-        return false;
-    }
-    SyncTexturesToCurrentCanvas();
-    return true;
+    return !marked.empty() && EraseForGood(marked) != 0;
 }
 
 size_t Session::EraseDeletedBefore(int64_t cutoff) { return EraseForGood(Model().MarkedBefore(cutoff)); }
@@ -349,30 +265,38 @@ void Session::FreezeScreen(const platform::DisplayInfo& display) {
     }
     // The whole display the overlay is on. The window is sized to it, and
     // the capture excludes the overlay's own content (see
-    // IOverlayWindow::CaptureRegionAsTexture), so what comes back is the
-    // application underneath and nothing of ours.
-    platform::CaptureResult capture = window_->CaptureRegionAsTexture(
+    // IOverlayWindow::CaptureRegion), so what comes back is the application
+    // underneath and nothing of ours.
+    platform::CaptureResult capture = window_->CaptureRegion(
         platform::Rect{0.0f, 0.0f, static_cast<float>(display.width), static_cast<float>(display.height)});
-    // A zero handle is the ordinary "couldn't" answer - a backend without
+    // No pixels is the ordinary "couldn't" answer - a backend without
     // capture, or a display the OS won't hand over - and it needs no
     // special case: with nothing frozen the overlay just stays transparent,
     // exactly as it behaves with the setting off.
-    frozenScreenTexture_ = capture.textureHandle;
+    //
+    // Kept for CaptureShotItem to crop out of, and for the texture to be
+    // made from - again, should the device be replaced while it is held.
+    // Moved rather than copied: this is a full screen's worth of pixels and
+    // nothing else wants them.
     frozenScreenWidth_ = capture.width;
     frozenScreenHeight_ = capture.height;
-    // Kept for CaptureShotItem to crop out of. Moved rather than copied:
-    // this is a full screen's worth of pixels and nothing else wants them.
-    // Kept without a texture too - a device lost and not yet replaced - so
-    // that the shots taken meanwhile are cut from what was frozen, and the
-    // picture shows once the device is back (see ReplaceLostTextures).
     frozenScreenPixels_ = std::move(capture.pixelsRGBA);
 }
 
-// A sub-rectangle of the frozen screen, uploaded as its own texture and
-// returned in the same shape a live capture would come back in - so the
-// caller can treat the two identically. nullopt means "nothing frozen, go
-// and capture", which covers the setting being off, the freeze having
-// failed, and a backend that can't capture at all.
+uint64_t Session::FrozenScreenTexture() {
+    const size_t expected = static_cast<size_t>(frozenScreenWidth_) * static_cast<size_t>(frozenScreenHeight_) * 4u;
+    if (frozenScreenPixels_.empty() || frozenScreenPixels_.size() < expected) {
+        return 0;
+    }
+    return textures_.Get(TextureKey{TextureKey::Kind::FrozenScreen, 0}, 0,
+                         TexturePixels{frozenScreenPixels_.data(), frozenScreenWidth_, frozenScreenHeight_});
+}
+
+// A sub-rectangle of the frozen screen, returned in the same shape a live
+// capture would come back in - so the caller can treat the two
+// identically. nullopt means "nothing frozen, go and capture", which
+// covers the setting being off, the freeze having failed, and a backend
+// that can't capture at all.
 //
 // The rect is in screen coordinates, which is also the frozen image's own
 // coordinate space (it is the whole primary display), so the crop is a plain
@@ -412,19 +336,11 @@ std::optional<platform::CaptureResult> Session::CropFrozenScreen(const Rect& rec
         std::memcpy(result.pixelsRGBA.data() + static_cast<size_t>(row) * rowBytes,
                      frozenScreenPixels_.data() + sourceOffset, rowBytes);
     }
-    // An upload that fails leaves the cut without a texture, as a live
-    // capture's would: the pixels are what the user framed, and what is
-    // saved. Captured live instead, the shot was of whatever the screen
-    // showed by then.
-    result.textureHandle = window_->CreateTextureFromPixels(result.pixelsRGBA.data(), width, height);
     return result;
 }
 
 void Session::ReleaseFrozenScreen() {
-    if (frozenScreenTexture_ != 0 && window_) {
-        window_->ReleaseTexture(frozenScreenTexture_);
-    }
-    frozenScreenTexture_ = 0;
+    textures_.Drop(TextureKey{TextureKey::Kind::FrozenScreen, 0});
     frozenScreenWidth_ = 0;
     frozenScreenHeight_ = 0;
     // shrink_to_fit, not just clear: a full-screen RGBA buffer is worth
@@ -436,9 +352,8 @@ void Session::ReleaseFrozenScreen() {
 
 void Session::CaptureShotItem(Item& item) {
     Picture* picture = &item.picture;
-    // Placeholder gradient seed, used as a fallback below (and always
-    // needed if a later resize or a canvas-to-canvas copy loses the real
-    // capture - see Picture::textureHandle's own doc comment).
+    // Placeholder gradient seed, what is drawn while there are no pixels to
+    // show - a capture that failed, or a picture that cannot be read.
     picture->placeholderHue = std::fmod(static_cast<float>(item.id) * 47.0f, 360.0f);
 
     if (!window_) {
@@ -453,17 +368,23 @@ void Session::CaptureShotItem(Item& item) {
     // freeze itself failed.
     std::optional<platform::CaptureResult> cropped = CropFrozenScreen(item.rect);
     platform::CaptureResult result =
-        cropped.has_value() ? std::move(*cropped)
-                             : window_->CaptureRegionAsTexture(
-                                   platform::Rect{item.rect.x, item.rect.y, item.rect.w, item.rect.h});
-    if (result.textureHandle != 0) {
-        picture->textureHandle = result.textureHandle;
+        cropped.has_value()
+            ? std::move(*cropped)
+            : window_->CaptureRegion(platform::Rect{item.rect.x, item.rect.y, item.rect.w, item.rect.h});
+    if (result.pixelsRGBA.empty()) {
+        return;
     }
+    // Its texture from the pixels at hand, rather than read back from the
+    // library by the first frame that draws it. An upload that fails - the
+    // device lost, say - is tried again once the device is replaced, from
+    // the library.
+    textures_.Put(TextureKey{TextureKey::Kind::Picture, item.id},
+                  TexturePixels{result.pixelsRGBA.data(), result.width, result.height});
     // Written with the snippet it belongs to, in the same transaction (see
     // Land): a write that fails takes the snippet back out with its
     // picture, rather than leaving one on screen that looks captured and is
     // not in the library.
-    if (!result.pixelsRGBA.empty() && Store()) {
+    if (Store()) {
         captured_.push_back(Captured{item.id, std::move(result.pixelsRGBA), result.width, result.height});
         picture->stored = true;
     }
@@ -479,7 +400,7 @@ bool Session::ClonePicturesForCopy(ItemId sourceId, ItemId copyId) {
         return true;  // nothing to copy
     }
     // Copied as stored, without decoding it, in the same write as the copy.
-    // The texture sync gives the copy its texture.
+    // Its texture is made from it the first time it is drawn.
     if (!Store()->HasImage(sourceId)) {
         return false;  // said to be stored, and it is not: the copy lacks it
     }

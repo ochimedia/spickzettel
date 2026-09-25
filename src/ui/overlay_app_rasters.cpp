@@ -9,11 +9,12 @@
 
 namespace sz::ui {
 
-// ================= Stroke rasters and overview previews =================
+// ================= Textures, stroke rasters and overview previews =================
 //
-// GPU-side caches the UI keeps for drawing: the bitmaps strokes are drawn
-// into in the rasterized render mode, and the thumbnail textures the
-// Overview shows.
+// What the UI draws pictures with: the textures of snippets' pictures, the
+// bitmaps strokes are drawn into in the rasterized render mode, and the
+// thumbnails the Overview shows - every one of them asked of the
+// TextureCache as it is drawn.
 
 namespace {
 
@@ -27,6 +28,39 @@ namespace {
 constexpr int kMaxRasterExtent = 4096;
 
 }  // namespace
+
+// ================= Pictures =================
+
+uint64_t OverlayApp::PictureTexture(const Item& item) {
+    const TextureKey key{TextureKey::Kind::Picture, item.id};
+    // A capture's is there from the moment it was taken (see
+    // Session::CaptureShotItem).
+    if (const std::optional<uint64_t> made = Textures().Find(key)) {
+        return *made;
+    }
+    if (!item.picture.stored || !Store()) {
+        return 0;  // never had pixels of its own: the placeholder or the fill
+    }
+    const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id);
+    return Textures().Put(key, decoded.has_value()
+                                   ? TexturePixels{decoded->pixelsRGBA.data(), decoded->width, decoded->height}
+                                   : TexturePixels{});
+}
+
+void OverlayApp::KeepCurrentCanvasTextures() {
+    const Canvas* canvas = Manager().CurrentOrNull();
+    if (canvas == nullptr) {
+        return;
+    }
+    for (const Item& item : canvas->items) {
+        // Only what can be on screen: a deleted snippet on the current
+        // canvas is as far from being drawn as one on another canvas.
+        if (!Manager().IsDeleted(*canvas, item)) {
+            PictureTexture(item);
+            StrokeRasterTextureFor(item.id);
+        }
+    }
+}
 
 // ================= Overview bitmap previews =================
 
@@ -66,23 +100,23 @@ OverlayApp::PreviewTextureFn OverlayApp::PreviewTextureLookup() {
 }
 
 std::optional<uint64_t> OverlayApp::PicturePreviewTexture(const Item& item) {
-    if (!window_ || !Store()) {
+    if (!Store()) {
         return 0;
     }
-    const Picture& picture = item.picture;
     // The current canvas's pictures already have their full-size texture
     // loaded, and drawing that scaled into a 200px tile costs nothing extra
     // - no decode, no second texture. Which is also the canvas most likely
     // to be looked at in the overview.
-    if (picture.textureHandle != 0) {
-        return picture.textureHandle;
+    if (const std::optional<uint64_t> full = Textures().Find(TextureKey{TextureKey::Kind::Picture, item.id});
+        full.has_value() && *full != 0) {
+        return *full;
     }
 
-    const auto existing = picturePreviews_.find(item.id);
-    if (existing != picturePreviews_.end()) {
-        return existing->second.textureHandle;  // 0 if it failed, which stops it being retried
+    const TextureKey key{TextureKey::Kind::Thumbnail, item.id};
+    if (const std::optional<uint64_t> made = Textures().Find(key)) {
+        return *made;  // 0 if it failed, which stops it being retried
     }
-    if (!picture.stored) {
+    if (!item.picture.stored) {
         return 0;  // never had pixels of its own: the placeholder is the answer
     }
 
@@ -92,11 +126,7 @@ std::optional<uint64_t> OverlayApp::PicturePreviewTexture(const Item& item) {
     if (picturePreviewThumbnailBudget_ > 0) {
         --picturePreviewThumbnailBudget_;
         if (const std::optional<persistence::DecodedImage> thumb = Store()->LoadThumbnail(item.id)) {
-            PicturePreview preview;
-            preview.textureHandle =
-                window_->CreateTextureFromPixels(thumb->pixelsRGBA.data(), thumb->width, thumb->height);
-            picturePreviews_.emplace(item.id, preview);
-            return preview.textureHandle;
+            return Textures().Put(key, TexturePixels{thumb->pixelsRGBA.data(), thumb->width, thumb->height});
         }
     } else {
         return std::nullopt;  // even the cheap path is spoken for this frame
@@ -114,27 +144,13 @@ std::optional<uint64_t> OverlayApp::PicturePreviewTexture(const Item& item) {
     }
     --picturePreviewLoadBudget_;
 
-    PicturePreview preview;
-    if (const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id)) {
-        const persistence::DecodedImage small =
-            persistence::DownscaleToFit(*decoded, persistence::LibraryStore::kThumbnailMaxExtent);
-        preview.textureHandle =
-            window_->CreateTextureFromPixels(small.pixelsRGBA.data(), small.width, small.height);
+    const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id);
+    if (!decoded.has_value()) {
+        return Textures().Put(key, TexturePixels{});
     }
-    picturePreviews_.emplace(item.id, preview);
-    return preview.textureHandle;
-}
-
-void OverlayApp::ReleasePicturePreviews() {
-    if (window_) {
-        for (auto& [key, preview] : picturePreviews_) {
-            (void)key;
-            if (preview.textureHandle != 0) {
-                window_->ReleaseTexture(preview.textureHandle);
-            }
-        }
-    }
-    picturePreviews_.clear();
+    const persistence::DecodedImage small =
+        persistence::DownscaleToFit(*decoded, persistence::LibraryStore::kThumbnailMaxExtent);
+    return Textures().Put(key, TexturePixels{small.pixelsRGBA.data(), small.width, small.height});
 }
 
 // ================= Rasterized vector strokes =================
@@ -165,26 +181,17 @@ void OverlayApp::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
         raster.builtFrom.size() <= item.strokes.size() &&
         std::equal(raster.builtFrom.begin(), raster.builtFrom.end(), item.strokes.begin());
     // The same comparison answers "is there anything to do at all": the
-    // whole list unchanged, the same shape, and a texture to show it with.
-    // Asked here rather than by the caller - one comparison that decides
-    // both whether and how much to draw.
-    const bool upToDate = sameShape && prefixUnchanged && raster.builtFrom.size() == item.strokes.size() &&
-                          raster.textureHandle != 0;
-    if (upToDate) {
+    // whole list unchanged, and the same shape. Asked here rather than by
+    // the caller - one comparison that decides both whether and how much
+    // to draw.
+    if (sameShape && prefixUnchanged && raster.builtFrom.size() == item.strokes.size()) {
         return;
     }
     size_t firstStroke = 0;
     if (sameShape && prefixUnchanged) {
-        // Possibly nothing new to draw at all - the one way here with an
-        // unchanged list is a texture that failed to come into being, and
-        // the upload below is the retry.
         firstStroke = raster.builtFrom.size();
     } else {
         raster.pixels = StrokeBitmap(width, height);
-        if (raster.textureHandle != 0 && window_) {
-            window_->ReleaseTexture(raster.textureHandle);
-            raster.textureHandle = 0;
-        }
     }
 
     // Strokes are in the item's own native space; the image is that space
@@ -212,19 +219,10 @@ void OverlayApp::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
     raster.nativeW = item.nativeW;
     raster.nativeH = item.nativeH;
     raster.builtFrom = item.strokes;
-    if (!window_ || raster.pixels.Empty()) {
-        return;
-    }
-    // Uploaded whole rather than by dirty rectangle: this runs once per
-    // finished stroke, not several times a frame.
-    if (raster.textureHandle == 0) {
-        raster.textureHandle = window_->CreateTextureFromPixels(raster.pixels.PixelsRGBA().data(),
-                                                                 raster.pixels.Width(), raster.pixels.Height());
-    } else {
-        window_->UpdateTextureRegion(raster.textureHandle, raster.pixels.PixelsRGBA().data(),
-                                      raster.pixels.Width(), 0, 0, raster.pixels.Width(),
-                                      raster.pixels.Height());
-    }
+    // Its texture follows the next time it is drawn - uploaded whole rather
+    // than by dirty rectangle: this runs once per finished stroke, not
+    // several times a frame.
+    ++raster.revision;
 }
 
 void OverlayApp::RefreshStrokeRasters() {
@@ -248,56 +246,39 @@ void OverlayApp::RefreshStrokeRasters() {
         return;
     }
 
-    bool everythingBuilt = true;
     for (const Item& item : canvas->items) {
         // An item with nothing on it must *lose* its raster, not keep the
         // one it had. Skipping it here is what left the last undone stroke
         // on screen with nothing left in the model to explain it.
         if (item.strokes.empty() || item.nativeW <= 0.0f || item.nativeH <= 0.0f) {
-            const auto stale = strokeRasters_.find(item.id);
-            if (stale != strokeRasters_.end()) {
-                if (stale->second.textureHandle != 0) {
-                    window_->ReleaseTexture(stale->second.textureHandle);
-                }
-                strokeRasters_.erase(stale);
-            }
+            strokeRasters_.erase(item.id);
             continue;
         }
         // The builder decides for itself whether there is anything to do -
         // nothing, the new strokes only, or everything from scratch - from
         // one comparison of what it built from against what is there now.
-        StrokeRaster& raster = strokeRasters_[item.id];
-        BuildStrokeRaster(item, raster);
-        // A texture that couldn't be created is worth trying again rather
-        // than leaving the item drawn tessellated forever, so the gate
-        // below stays open until one exists.
-        everythingBuilt = everythingBuilt && raster.textureHandle != 0;
+        BuildStrokeRaster(item, strokeRasters_[item.id]);
     }
 
     // Anything not on this canvas any more - switched away from, or
-    // deleted - gives its texture back. Same discipline as the picture
-    // textures next door, and for the same reason.
+    // deleted - goes, and its texture with it, unasked for (see
+    // TextureCache).
     for (auto it = strokeRasters_.begin(); it != strokeRasters_.end();) {
         const bool stillHere = std::any_of(canvas->items.begin(), canvas->items.end(),
                                             [&](const Item& item) { return item.id == it->first; });
-        if (stillHere) {
-            ++it;
-            continue;
-        }
-        if (it->second.textureHandle != 0) {
-            window_->ReleaseTexture(it->second.textureHandle);
-        }
-        it = strokeRasters_.erase(it);
+        it = stillHere ? std::next(it) : strokeRasters_.erase(it);
     }
-
-    if (everythingBuilt) {
-        strokeRasterGeneration_ = generation;
-    }
+    strokeRasterGeneration_ = generation;
 }
 
-uint64_t OverlayApp::StrokeRasterTextureFor(ItemId itemId) const {
+uint64_t OverlayApp::StrokeRasterTextureFor(ItemId itemId) {
     const auto it = strokeRasters_.find(itemId);
-    return it == strokeRasters_.end() ? 0 : it->second.textureHandle;
+    if (it == strokeRasters_.end() || it->second.pixels.Empty()) {
+        return 0;
+    }
+    const StrokeBitmap& pixels = it->second.pixels;
+    return Textures().Get(TextureKey{TextureKey::Kind::StrokeRaster, itemId}, it->second.revision,
+                          TexturePixels{pixels.PixelsRGBA().data(), pixels.Width(), pixels.Height()});
 }
 
 void OverlayApp::ReleaseStrokeRasters() {
@@ -305,14 +286,6 @@ void OverlayApp::ReleaseStrokeRasters() {
     // rebuild from nothing, which is exactly what switching the mode back
     // on needs.
     strokeRasterGeneration_.reset();
-    if (window_) {
-        for (auto& [itemId, raster] : strokeRasters_) {
-            (void)itemId;
-            if (raster.textureHandle != 0) {
-                window_->ReleaseTexture(raster.textureHandle);
-            }
-        }
-    }
     strokeRasters_.clear();
 }
 

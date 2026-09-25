@@ -118,7 +118,6 @@ struct Item {
     // to kNoteTextSizeMin..Max wherever it is edited or loaded.
     float noteTextSizePx = 17.0f;
 
-    // Every field, texture handles included (see Picture's).
     bool operator==(const Item&) const = default;
 };
 

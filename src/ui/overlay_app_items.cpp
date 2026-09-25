@@ -649,8 +649,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // one way to reach every part of a snippet alike: its pictures are
     // drawn in their own colors, not the style's, and PushStyleVar(Alpha)
     // would only reach what asks the style. Only the look: the capture
-    // itself never sees the overlay (see IOverlayWindow::
-    // CaptureRegionAsTexture).
+    // itself never sees the overlay (see IOverlayWindow::CaptureRegion).
     if (ItemsFadedForCreation()) {
         for (ImDrawVert& vertex : drawList->VtxBuffer) {
             const ImU32 alpha = (vertex.col >> IM_COL32_A_SHIFT) & 0xFFu;
@@ -761,8 +760,9 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
     const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
     drawList->PushClipRect(pMin, pMax, true);
 
-    DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, StrokeRasterTextureFor(item.id),
-                    /*skipNoteText=*/editingNoteItemId_ == item.id, CanvasMeshSlot(), PictureSampling());
+    DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, PictureTexture(item),
+                    StrokeRasterTextureFor(item.id), /*skipNoteText=*/editingNoteItemId_ == item.id, CanvasMeshSlot(),
+                    PictureSampling());
 
     if (drawing) {
         // The stroke currently being drawn (not yet baked into
@@ -1284,8 +1284,9 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         // very different scale: RenderItems skips minimized items and this
         // draws only those, so no item is ever in both in one frame - see
         // strokeMeshCache_'s own doc comment.
-        DrawItemContent(dl, *item, contentMin, contentMax, Cfg().strokeRenderMode, StrokeRasterTextureFor(item->id),
-                         /*skipNoteText=*/false, CanvasMeshSlot(), PictureSampling());
+        DrawItemContent(dl, *item, contentMin, contentMax, Cfg().strokeRenderMode, PictureTexture(*item),
+                        StrokeRasterTextureFor(item->id), /*skipNoteText=*/false, CanvasMeshSlot(),
+                        PictureSampling());
         dl->PopClipRect();
 
         dl->AddRect(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), Px(theme::kRadiusSm));

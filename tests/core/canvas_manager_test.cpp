@@ -655,33 +655,6 @@ TEST(CanvasManagerTest, OnlyAScreenshotsPictureStandsInWithThePlaceholder) {
     EXPECT_FALSE(manager.CurrentOrNull()->items.back().picture.showsPlaceholder);
 }
 
-// A picture with nothing behind it - nothing stored, no texture - is left
-// alone in both directions: a Drawing's.
-TEST(CanvasManagerTest, SyncIgnoresAPictureWithNothingBehindIt) {
-    CanvasManager manager;
-    manager.CreateItem(false, Rect{0, 0, 64, 64}, "Drawing");
-
-    int calls = 0;
-    manager.SyncShotTexturesToCanvas(
-        manager.CurrentCanvasId(), [&](const Item&) -> uint64_t { ++calls; return 0; }, [&](uint64_t) { ++calls; });
-    manager.SyncShotTexturesToCanvas(
-        /*canvasId=*/9999, [&](const Item&) -> uint64_t { ++calls; return 0; }, [&](uint64_t) { ++calls; });
-
-    EXPECT_EQ(calls, 0);
-}
-
-TEST(CanvasManagerTest, CaptureTextureHandlesForCanvasCoversEverySnippet) {
-    CanvasManager manager;
-    const ItemId first = manager.CreateItem(true, Rect{0, 0, 100, 100}, "Shot");
-    const ItemId second = manager.CreateItem(true, Rect{0, 0, 100, 100}, "Shot 2");
-    manager.CreateItem(false, Rect{0, 0, 100, 100}, "Drawing");  // no texture
-    manager.FindItemAnywhere(first)->picture.textureHandle = 11;
-    manager.FindItemAnywhere(second)->picture.textureHandle = 22;
-
-    const std::vector<uint64_t> handles = manager.CaptureTextureHandlesForCanvas(manager.CurrentCanvasId());
-    EXPECT_EQ(handles, (std::vector<uint64_t>{11, 22}));
-}
-
 TEST(CanvasManagerTest, DeleteItemRemovesIt) {
     CanvasManager manager;
     const ItemId a = manager.CreateItem(false, Rect{}, "A");
@@ -1056,11 +1029,13 @@ TEST(CanvasManagerTest, CopyItemToCanvasLeavesOriginalAndDeepCopiesStrokes) {
     EXPECT_EQ(manager.CurrentOrNull()->items.front().strokes.front().points.size(), 2u);
 }
 
-TEST(CanvasManagerTest, MoveItemToCanvasPreservesCaptureTextureHandle) {
+// A snippet moved keeps its picture: it is the same snippet, stored under
+// the same id.
+TEST(CanvasManagerTest, MoveItemToCanvasKeepsItsStoredPicture) {
     CanvasManager manager("First");
     const CanvasId target = manager.AddCanvas("Second");
     const ItemId id = manager.CreateItem(true, Rect{0, 0, 100, 100}, "A");
-    manager.CurrentOrNull()->items.front().picture.textureHandle = 42;
+    manager.CurrentOrNull()->items.front().picture.stored = true;
 
     manager.MoveOrCopyItemToCanvas(id, target, /*copy=*/false);
 
@@ -1068,25 +1043,25 @@ TEST(CanvasManagerTest, MoveItemToCanvasPreservesCaptureTextureHandle) {
         *std::find_if(manager.Canvases().begin(), manager.Canvases().end(),
                       [target](const Canvas& c) { return c.id == target; });
     ASSERT_EQ(targetCanvas.items.size(), 1u);
-    EXPECT_EQ(targetCanvas.items.front().picture.textureHandle, 42u);
+    EXPECT_TRUE(targetCanvas.items.front().picture.stored);
 }
 
-TEST(CanvasManagerTest, CopyItemToCanvasResetsCaptureTextureHandle) {
+// A copy starts without the source's stored picture; the session gives it
+// one of its own (see Session::ClonePicturesForCopy).
+TEST(CanvasManagerTest, CopyItemToCanvasLeavesTheCopyWithoutAStoredPicture) {
     CanvasManager manager("First");
     const CanvasId target = manager.AddCanvas("Second");
     const ItemId id = manager.CreateItem(true, Rect{0, 0, 100, 100}, "A");
-    manager.CurrentOrNull()->items.front().picture.textureHandle = 42;
+    manager.CurrentOrNull()->items.front().picture.stored = true;
 
     manager.MoveOrCopyItemToCanvas(id, target, /*copy=*/true);
 
-    // Original keeps its handle - only the copy must not share it (see the
-    // field's doc comment in item.h for why: single-owner GPU resource).
-    EXPECT_EQ(manager.CurrentOrNull()->items.front().picture.textureHandle, 42u);
+    EXPECT_TRUE(manager.CurrentOrNull()->items.front().picture.stored);
     const auto& targetCanvas =
         *std::find_if(manager.Canvases().begin(), manager.Canvases().end(),
                       [target](const Canvas& c) { return c.id == target; });
     ASSERT_EQ(targetCanvas.items.size(), 1u);
-    EXPECT_EQ(targetCanvas.items.front().picture.textureHandle, 0u);
+    EXPECT_FALSE(targetCanvas.items.front().picture.stored);
 }
 
 TEST(CanvasManagerTest, MoveOrCopyToOwnCanvasIsNoOp) {
@@ -1124,22 +1099,17 @@ TEST(CanvasManagerTest, DuplicateItemAddsASecondItemOnTheSameCanvasWithDeepCopie
     EXPECT_EQ(manager.CurrentOrNull()->items.front().strokes.front().points.size(), 2u);
 }
 
-TEST(CanvasManagerTest, DuplicateItemResetsCaptureTextureHandleAndStoredPicture) {
+TEST(CanvasManagerTest, DuplicateItemLeavesTheCopyWithoutAStoredPicture) {
     CanvasManager manager;
     const ItemId id = manager.CreateItem(true, Rect{0, 0, 100, 100}, "A");
-    manager.CurrentOrNull()->items.front().picture.textureHandle = 42;
     manager.CurrentOrNull()->items.front().picture.stored = true;
 
     const ItemId newId = manager.DuplicateItem(id);
 
-    // Original keeps its handle and picture - only the copy must not share
-    // them (see layer.h: a single-owner GPU resource, and a picture stored
-    // for the source); the caller gives it its own.
-    EXPECT_EQ(manager.CurrentOrNull()->items.front().picture.textureHandle, 42u);
+    // The picture stored is the source's; the caller gives the copy its own.
     EXPECT_TRUE(manager.CurrentOrNull()->items.front().picture.stored);
     const auto& copy = manager.CurrentOrNull()->items.back();
     EXPECT_EQ(copy.id, newId);
-    EXPECT_EQ(copy.picture.textureHandle, 0u);
     EXPECT_FALSE(copy.picture.stored);
 }
 
@@ -1332,130 +1302,6 @@ TEST(CanvasManagerTest, ImportSnapshotDoesNotBumpGeneration) {
     // A fresh load isn't itself a user change - matches the constructor's
     // own "generation starts at 0" behavior.
     EXPECT_EQ(loaded.Generation(), 0u);
-}
-
-namespace {
-// Finds an item by id on whichever canvas holds it - the texture tests
-// below deliberately look at canvases that aren't current.
-const Item* FindItemForTest(const CanvasManager& manager, ItemId id) {
-    for (const Canvas& canvas : manager.Canvases()) {
-        for (const Item& item : canvas.items) {
-            if (item.id == id) {
-                return &item;
-            }
-        }
-    }
-    return nullptr;
-}
-}  // namespace
-
-TEST(CanvasManagerTest, SyncShotTexturesOnlyCallsLoaderForUntexturedShotItemsWithAPersistedImage) {
-    CanvasManager manager;
-    const ItemId drawingId = manager.CreateItem(false, Rect{}, "Drawing");
-    const ItemId shotNoImageId = manager.CreateItem(true, Rect{}, "Shot no image");
-    const ItemId shotWithImageId = manager.CreateItem(true, Rect{}, "Shot with image");
-    for (Item& item : manager.CurrentOrNull()->items) {
-        if (item.id == shotWithImageId) {
-            item.picture.stored = true;
-        }
-    }
-    (void)drawingId;
-    (void)shotNoImageId;
-
-    std::vector<ItemId> requested;
-    manager.SyncShotTexturesToCanvas(
-        manager.CurrentOrNull()->id,
-        [&](const Item& item) -> uint64_t {
-            requested.push_back(item.id);
-            return 99;
-        },
-        [](uint64_t) { FAIL() << "nothing on the current canvas should ever be released"; });
-
-    ASSERT_EQ(requested.size(), 1u);
-    EXPECT_EQ(requested.front(), shotWithImageId);
-    ASSERT_NE(FindItemForTest(manager, shotWithImageId), nullptr);
-    EXPECT_EQ(FindItemForTest(manager, shotWithImageId)->picture.textureHandle, 99u);
-}
-
-// The whole point of the per-canvas sync: only what's on screen holds GPU
-// memory. Everything else gets handed back, no matter how big the library.
-TEST(CanvasManagerTest, SyncShotTexturesReleasesEveryOtherCanvasesTextures) {
-    CanvasManager manager;
-    const ItemId onFirst = manager.CreateItem(true, Rect{}, "Shot A");
-    for (Item& item : manager.CurrentOrNull()->items) {
-        item.picture.stored = true;
-        item.picture.textureHandle = 11;
-    }
-
-    const CanvasId second = manager.AddCanvas("Second");
-    manager.SwitchToCanvas(second);
-    const ItemId onSecond = manager.CreateItem(true, Rect{}, "Shot B");
-    for (Item& item : manager.CurrentOrNull()->items) {
-        item.picture.stored = true;
-    }
-
-    std::vector<ItemId> loaded;
-    std::vector<uint64_t> released;
-    manager.SyncShotTexturesToCanvas(
-        second,
-        [&](const Item& item) -> uint64_t {
-            loaded.push_back(item.id);
-            return 22;
-        },
-        [&](uint64_t handle) { released.push_back(handle); });
-
-    // The canvas we're on gets loaded; the one we left gets freed.
-    EXPECT_EQ(loaded, std::vector<ItemId>{onSecond});
-    EXPECT_EQ(released, std::vector<uint64_t>{11});
-    EXPECT_EQ(FindItemForTest(manager, onSecond)->picture.textureHandle, 22u);
-    EXPECT_EQ(FindItemForTest(manager, onFirst)->picture.textureHandle, 0u)
-        << "a released handle must be cleared, or the next sync would release it twice";
-}
-
-TEST(CanvasManagerTest, SyncShotTexturesIsIdempotent) {
-    CanvasManager manager;
-    manager.CreateItem(true, Rect{}, "Shot");
-    for (Item& item : manager.CurrentOrNull()->items) {
-        item.picture.stored = true;
-    }
-    const CanvasId current = manager.CurrentOrNull()->id;
-
-    int loads = 0;
-    int releases = 0;
-    const auto sync = [&] {
-        manager.SyncShotTexturesToCanvas(
-            current, [&](const Item&) -> uint64_t { ++loads; return 5; },
-            [&](uint64_t) { ++releases; });
-    };
-    sync();
-    sync();
-    sync();
-
-    // Called every frame it would still only ever load once - the guard is
-    // captureTextureHandle already being set.
-    EXPECT_EQ(loads, 1);
-    EXPECT_EQ(releases, 0);
-}
-
-// An item can hold a live texture with no stored picture behind it (a
-// capture whose SaveImage failed, say). Releasing that would throw the pixels away with
-// no way to get them back, so it's deliberately kept.
-TEST(CanvasManagerTest, SyncShotTexturesNeverReleasesATextureItCouldNotReload) {
-    CanvasManager manager;
-    const ItemId strandedId = manager.CreateItem(true, Rect{}, "No file");
-    for (Item& item : manager.CurrentOrNull()->items) {
-        item.picture.textureHandle = 77;
-        item.picture.stored = false;
-    }
-    const CanvasId other = manager.AddCanvas("Other");
-
-    std::vector<uint64_t> released;
-    manager.SyncShotTexturesToCanvas(
-        other, [](const Item&) -> uint64_t { return 0; },
-        [&](uint64_t handle) { released.push_back(handle); });
-
-    EXPECT_TRUE(released.empty());
-    EXPECT_EQ(FindItemForTest(manager, strandedId)->picture.textureHandle, 77u);
 }
 
 // ================= SyncItemsToDisplaySize (resolution-relative item sizing) =================

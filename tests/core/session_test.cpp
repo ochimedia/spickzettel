@@ -125,53 +125,6 @@ TEST(SessionTest, ALibraryOpenedErasesTheSnippetsMarkedDeleted) {
     EXPECT_NE(manager.FindCanvas(second), nullptr);
 }
 
-// The erasing happens at startup, before the overlay window - and with it
-// anything to make a texture with - exists. It must not count as the
-// current canvas's textures having been loaded: they could not have been,
-// and nothing would try again until the canvas changed.
-TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLater) {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_erase_on_open_textures";
-    std::filesystem::remove_all(dir);
-    const RemovedAtEnd cleanup(dir);
-    ItemId shot = 0;
-    {
-        persistence::LibraryStore store(dir / "library.db");
-        test::FakeOverlayWindow window;
-        window.captureReturnsHandle = 7;
-        window.captureReturnsWidth = 1;
-        window.captureReturnsHeight = 1;
-        window.captureReturnsPixelsRGBA = {10, 20, 30, 255};
-        Session session;
-        session.AttachWindow(&window);
-        session.SetLibraryStore(&store);
-        ASSERT_TRUE(session.WriteWholeLibrary());
-        shot = session.CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Shot");
-        const ItemId gone = session.CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
-        ASSERT_TRUE(session.DeleteItem(gone));
-        session.SetLibraryStore(nullptr);
-    }
-
-    persistence::LibraryStore store(dir / "library.db");
-    std::optional<CanvasManagerSnapshot> loaded = store.Load();
-    ASSERT_TRUE(loaded.has_value());
-    test::FakeOverlayWindow window;
-    window.createTextureFromPixelsReturnsHandle = 0;  // no device yet
-    Session session;
-    session.AttachWindow(&window);
-    session.SetLibraryStore(&store);
-    session.ImportLibrary(std::move(*loaded));
-    ASSERT_TRUE(Model(session).MarkedSnippets().empty()) << "the deleted snippet was erased";
-
-    window.createTextureFromPixelsReturnsHandle = 9;  // the window is made, and the first frame runs
-    session.EnsureTexturesForCurrentCanvas();
-    const Item* item = Model(session).FindItemAnywhere(shot);
-    ASSERT_NE(item, nullptr);
-    EXPECT_EQ(item->picture.textureHandle, 9u) << "not a placeholder until the canvas is switched";
-
-    session.SetLibraryStore(nullptr);
-}
-
 // The retention period: what has been deleted since before the cutoff goes
 // for good, whatever else is deleted stays, and nothing live is touched.
 TEST(SessionTest, ErasingWhatWasDeletedBeforeACutoffLeavesTheRest) {
@@ -521,8 +474,8 @@ TEST(SessionTest, CapturingWithoutAWindowLeavesAPlaceholder) {
     const ItemId id = session.CreateItem(/*hasBackground=*/true, Rect{0, 0, 100, 100}, "Shot");
     Item* item = Model(session).FindItemAnywhere(id);
     ASSERT_NE(item, nullptr);
-    EXPECT_EQ(item->picture.textureHandle, 0u);
     EXPECT_FALSE(item->picture.stored);
+    EXPECT_EQ(session.Textures().Size(), 0u);
     EXPECT_EQ(session.FrozenScreenTexture(), 0u);
 }
 
@@ -755,8 +708,7 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     const RemovedAtEnd cleanup(dir);
     persistence::LibraryStore store(dir / "library.db");
     test::FakeOverlayWindow window;
-    window.captureReturnsHandle = 7;
-    window.createTextureFromPixelsReturnsHandle = 8;
+    window.uploadsSucceed = true;
     // A 4x3 screen with every pixel its own value, so the cut can be told
     // from the whole and from any other cut.
     window.captureReturnsWidth = 4;
@@ -770,7 +722,7 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     ASSERT_TRUE(session.WriteWholeLibrary());
     session.FreezeScreen(platform::DisplayInfo{"d", "D", 0, 0, 4, 3, true, 60, 100});
     ASSERT_EQ(window.captureCallCount, 1);
-    ASSERT_EQ(session.FrozenScreenTexture(), 7u);
+    ASSERT_NE(session.FrozenScreenTexture(), 0u);
 
     // The middle two columns of the bottom two rows.
     const ItemId id = session.CreateItem(true, Rect{1.0f, 1.0f, 2.0f, 2.0f}, "Shot");
@@ -778,7 +730,9 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     ASSERT_NE(shot, nullptr);
 
     EXPECT_EQ(window.captureCallCount, 1) << "cut from the frozen screen, not captured again";
-    EXPECT_EQ(shot->picture.textureHandle, 8u) << "the cut's own upload";
+    const std::optional<uint64_t> texture = session.Textures().Find(TextureKey{TextureKey::Kind::Picture, id});
+    ASSERT_TRUE(texture.has_value());
+    EXPECT_TRUE(window.IsDrawable(*texture)) << "the cut's own texture, from its pixels";
     ASSERT_TRUE(shot->picture.stored);
     const std::optional<persistence::DecodedImage> saved = store.LoadImage(id);
     ASSERT_TRUE(saved.has_value());
@@ -790,11 +744,10 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     // Without the upload the cut is still what is saved - the device lost,
     // say - rather than the live screen, which has moved on: the snippet
     // gets its texture from the library once there is a device again.
-    window.createTextureFromPixelsReturnsHandle = 0;
+    window.uploadsSucceed = false;
     const ItemId again = session.CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Again");
-    Item* againShot = Model(session).FindItemAnywhere(again);
     EXPECT_EQ(window.captureCallCount, 1);
-    EXPECT_EQ(againShot->picture.textureHandle, 0u);
+    EXPECT_EQ(session.Textures().Find(TextureKey{TextureKey::Kind::Picture, again}), std::optional<uint64_t>(0));
     const std::optional<persistence::DecodedImage> againSaved = store.LoadImage(again);
     ASSERT_TRUE(againSaved.has_value());
     EXPECT_EQ(againSaved->pixelsRGBA, (std::vector<uint8_t>{0, 0, 0, 255}));
@@ -813,7 +766,6 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     const RemovedAtEnd cleanup(dir);
     persistence::LibraryStore store(dir / "library.db");
     test::FakeOverlayWindow window;
-    window.captureReturnsHandle = 0;
     window.captureReturnsWidth = 2;
     window.captureReturnsHeight = 1;
     window.captureReturnsPixelsRGBA = {10, 20, 30, 255, 40, 50, 60, 255};
@@ -837,9 +789,12 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     ASSERT_TRUE(cutSaved.has_value());
     EXPECT_EQ(cutSaved->pixelsRGBA, (std::vector<uint8_t>{40, 50, 60, 255}));
 
-    window.createTextureFromPixelsReturnsHandle = 9;  // a device again
-    session.ReplaceLostTextures();
-    EXPECT_EQ(session.FrozenScreenTexture(), 9u);
+    // Not tried again on every frame - but a device again is a new one,
+    // and on it everything is made again.
+    window.uploadsSucceed = true;
+    EXPECT_EQ(session.FrozenScreenTexture(), 0u);
+    ++window.textureGeneration;
+    EXPECT_TRUE(window.IsDrawable(session.FrozenScreenTexture()));
 
     session.SetLibraryStore(nullptr);
 }
@@ -881,11 +836,10 @@ protected:
         cleanup_.emplace(dir_);
         store_.emplace(File());
         ASSERT_EQ(store_->Open(), persistence::LibraryStore::OpenResult::Opened);
-        window_.captureReturnsHandle = 7;
         window_.captureReturnsWidth = 2;
         window_.captureReturnsHeight = 1;
         window_.captureReturnsPixelsRGBA = kPixels;
-        window_.createTextureFromPixelsReturnsHandle = 9;
+        window_.uploadsSucceed = true;
         session_.AttachWindow(&window_);
         session_.SetLibraryStore(&*store_);
         ASSERT_TRUE(session_.WriteWholeLibrary());
@@ -933,10 +887,10 @@ TEST_F(WrittenSessionTest, ACaptureIsWrittenWithItsPictureAsItIsMade) {
 
 // A capture whose write fails is not made: nothing on screen that looks
 // captured and is not in the library, nothing on the history, and the
-// texture it had given back. The next one, once the file is free, is.
+// texture it had given back once nothing has drawn it for a frame. The
+// next one, once the file is free, is.
 TEST_F(WrittenSessionTest, ACaptureThatCannotBeWrittenIsNotMade) {
     const size_t before = session_.Manager().CurrentOrNull()->items.size();
-    const int released = window_.releaseTextureCallCount;
     {
         HeldLibrary held(File(), /*readers=*/false);
         EXPECT_EQ(session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot"), 0u);
@@ -944,7 +898,10 @@ TEST_F(WrittenSessionTest, ACaptureThatCannotBeWrittenIsNotMade) {
     EXPECT_EQ(session_.Manager().CurrentOrNull()->items.size(), before);
     EXPECT_TRUE(session_.LastWriteFailed());
     EXPECT_FALSE(session_.CanUndo());
-    EXPECT_EQ(window_.releaseTextureCallCount, released + 1) << "its texture";
+    EXPECT_EQ(window_.liveTextures.size(), 1u);
+    session_.Textures().BeginFrame();
+    session_.Textures().BeginFrame();
+    EXPECT_TRUE(window_.liveTextures.empty()) << "its texture";
 
     const ItemId id = session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     ASSERT_NE(id, 0u);

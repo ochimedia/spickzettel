@@ -259,9 +259,9 @@ one, rather than being redesigned per feature.
 Everything crossing the boundary is plain data in `platform_types.h`: a
 `KeyCombo` is modifiers plus one logical key (letters and digits share
 their virtual-key value on every platform; function keys get their own
-encoding), a `CaptureResult` carries the GPU texture *and* the CPU pixels
-so persisting a capture needs no second OS call, and a texture is an
-opaque `uint64_t` so no platform header ever names an ImGui type.
+encoding), a `CaptureResult` is the pixels captured, and a texture is an
+opaque `uint64_t` so no platform header ever names an ImGui type. The
+texture calls have one caller, `TextureCache` (see "Textures").
 
 `pen_glyph.h` is the one small piece of drawing that lives here: the pen
 pointer's outline, which both the software pointer (drawn by the UI) and
@@ -434,9 +434,9 @@ picture's pixels are stored once, when they are captured, and never
 changed after; everything drawn over them is strokes. It was a list of
 layers while pixels could be painted on top of it (see "Dead ends").
 
-A texture handle has single-owner lifetime even though `Item` is a
-freely copyable struct, so a copy detaches its picture: the handle is
-reset, and the copy is given stored pixels of its own.
+A picture is content only. The texture it is drawn with is kept by
+`TextureCache` under the snippet's id (see "Textures"), so copying an
+`Item` never copies a handle; a copy is given stored pixels of its own.
 
 ### Strokes live in the item's native space
 
@@ -559,11 +559,7 @@ comes back while the rest stay deleted as of when they went.
 A snippet's mark is only ever cleared by undo, and no history outlives
 its session, so `Session::ImportLibrary` erases every snippet that comes
 in marked. That includes one deleted before its canvas: restoring the
-canvas would not bring it back either. It erases without the texture
-sync a delete for good ends with: the library is opened before the overlay
-window has made its device, so that sync would load nothing and still
-record the current canvas as loaded, and its pictures would stay
-placeholders until the canvas changed.
+canvas would not bring it back either.
 
 Folders and canvases can be given a retention period
 (`AppConfig::purgeDeleted`, on by default, and `purgeDeletedAfterDays`, 14):
@@ -982,8 +978,8 @@ disagree.
 
 **`Session`** is what is being worked on, independent of how it is
 shown: the library and deleting and restoring in it; every command
-written to the library as it is made, and the texture sync that keeps
-the GPU in step with the current canvas; screen capture (the frozen screen, a snippet's capture, the
+written to the library as it is made; the texture cache the app draws
+from; screen capture (the frozen screen, a snippet's capture, the
 picture a copy gets); and the per-canvas undo history with every edit
 that goes on it, offered as commands (`DeleteItem`, `ClearDrawing`,
 `CommitLiveStroke`, text edits) and as gestures in screen space (erase,
@@ -1053,7 +1049,7 @@ beside a stale one; a screenshot's pixels and a copy's picture are
 written in the same transaction as the snippet they belong to.
 
 **A command whose write fails is not made.** The model goes back to the
-checkpoint (`CanvasManager::RollBack`) - a capture's texture released, a
+checkpoint (`CanvasManager::RollBack`) - a capture gone again, a
 moved snippet back where it was, a snippet deleted for good back with
 its history - and a line along the bottom of the screen says the
 library could not be written and the last change was not made, drawn
@@ -1120,23 +1116,59 @@ Exit, which is where `taskkill` sends it while the overlay is up - it
 closes the windows it can see, and the host window is hidden. Alt+F4
 over the overlay arrives as `SC_CLOSE` instead, and stays swallowed.
 
-### GPU textures are per canvas
+### Textures
 
-`SyncTexturesToCurrentCanvas` uploads a texture for every picture on
-the current canvas that is stored but has no texture, and releases
-every other canvas's. Only the current canvas is ever drawn from a real
-texture, so everything else is pure cost - a library of fifty 4K
-captures would otherwise pin ~1.6 GB of VRAM behind a game and pay for
-it as a stall on the first hotkey. The gated form runs immediately
-before anything draws item content, not merely once a frame: a canvas
-switch can happen mid-frame (Alt+wheel is handled from the frame), and
-one frame drawn between the switch and the load renders every shot as
-the placeholder gradient - the gradient flash the gate removed.
+Every GPU texture the app draws with is held by one object,
+`TextureCache`, and by nothing else. A texture is asked for by what it
+shows - a `TextureKey`: a snippet's picture, its thumbnail, its stroke
+raster, the frozen screen - at the moment it is drawn, and made from its
+pixels when there is none: a picture read from the library, a thumbnail
+read or scaled down, a raster uploaded from its bitmap, the frozen
+screen from the pixels the session keeps. A handle is good for the frame
+it was asked for in, and nothing keeps one past it.
 
-**A release waits for the frame.** Anything may release a texture
-mid-frame after it has already been drawn into that frame: clicking an
-overview tile drops the tile previews, moving an item to another canvas
-drops its texture. ImGui's draw commands hold the raw pointer without a
+Before, a handle was a field of the picture, in the model, and four
+owners kept their own: the pictures, the frozen screen, the Overview's
+thumbnails and the stroke rasters. Each released on occasions of its own
+- a canvas switch, a delete, an erase for good, a failed write's
+rollback - and a replaced device had to be answered by each of them,
+from a list in the frame that a fifth owner would not have been on,
+and would have drawn a dead texture after a driver reset: a crash, and
+only in the rare case. The model carried the GPU through all of it: a
+checkpoint compared snippets "in all but the texture", a rollback handed
+textures back to release, a copy reset its handle so as not to release
+it twice. The picture is content only now, and none of that is anyone's
+concern.
+
+**What is not drawn goes.** A texture no one asked for through a whole
+frame is released at the start of the next (`TextureCache::BeginFrame`).
+That one rule is the lifetime of everything: a canvas switched away
+from, a snippet deleted or sent elsewhere, a panel closed, a capture
+whose write failed - each gives its textures back without anyone saying
+so. What must stay while it is not drawn is asked for all the same:
+each frame begins by asking for the textures of every snippet on the
+current canvas (`OverlayApp::KeepCurrentCanvasTextures`), minimized ones
+and those the pinned view leaves out included. That is the budget there
+was before: only the current canvas is on the GPU, since a library of
+fifty 4K captures would otherwise pin ~1.6 GB of VRAM behind a game. The
+frame of grace covers a canvas switched away from after something of it
+was drawn. And since a picture's texture is asked for as it is drawn, a
+canvas switched to in the middle of a frame - Alt+wheel is handled from
+the frame - is drawn whole, where a load gated on the canvas having
+changed once drew a frame of placeholder gradients.
+
+**A failure is remembered.** A texture that could not be made - no
+pixels, or an upload that failed - is kept as 0, so that a picture that
+cannot be read is not read on every frame. It is tried again once it has
+gone unasked for a frame, or the device is replaced.
+
+**A capture is not read back.** The session puts a capture's texture
+into the cache from the pixels it has just taken, so the frame that
+shows the new snippet does not decode the picture just written.
+
+**A release waits for the frame.** A texture may be released mid-frame
+after it has already been drawn into that frame: the frozen screen
+dropped as the overlay goes, a texture made again in place of another. ImGui's draw commands hold the raw pointer without a
 reference and are only submitted at the end of the frame, so the D3D11
 renderer holds releases made between `NewFrame` and `RenderAndPresent`
 until the frame has been handed to D3D, which keeps what it uses alive
@@ -1156,24 +1188,23 @@ ImGui makes its font atlas again by itself. While no device can be made,
 the frame is skipped: a short wait stands in for vsync, and the grab,
 no longer hearing from the frame loop, lets input through. What the app
 holds cannot be carried over: every texture was made on the old device.
-So the window's `TextureGeneration` moves on, and at the start of the
-next frame, before anything draws, the app lets go of each texture and
-makes it again. The session remakes the current canvas's pictures from
-the library and the frozen screen from the pixels it keeps for cropping. The
-Overview's previews and the stroke rasters rebuild as they are next
-wanted. A stray old texture handed to `UpdateTextureRegionRGBA` is
-refused, not written with the new device's context.
+So the window's `TextureGeneration` moves on, and the cache, which looks
+at it before every answer, lets go of every texture before it hands out
+another; each is made again as it is next asked for - the pictures from
+the library, the frozen screen from its pixels, the rasters from their
+bitmaps. No handle from a device that is gone is handed out, whatever
+order the calls come in. A stray old texture handed to
+`UpdateTextureRegionRGBA` is refused, not written with the new device's
+context.
 
-Only a frame notices a lost device, and no frame runs while the overlay
-is hidden. So a capture made from the tray after a driver reset has
-pixels and no device to upload them to. It returns the pixels anyway,
-with no texture. They are the one thing that cannot be taken again, and
-the snippet's picture is stored from them and gets its texture from the
-library after the device is replaced. The first version returned nothing, and
-the snippet kept its placeholder for good while the notice reported a
-capture. A freeze keeps its pixels without a texture the same way:
-shots are cut from what was frozen, and the frozen screen shows once
-the device is back.
+A capture is pixels only (`IOverlayWindow::CaptureRegion`); uploading
+them is the cache's. Only a frame notices a lost device, and no frame
+runs while the overlay is hidden, so a capture made from the tray after
+a driver reset cannot be uploaded. Its pixels are stored all the same -
+they are the one thing that cannot be taken again - and its texture is
+read from the library once the device is replaced. A freeze keeps its
+pixels the same way: shots are cut from what was frozen, and the frozen
+screen shows once the device is back.
 
 A window nobody can see is skipped the same way. With the screen locked
 or the secure desktop up, `Present` returns `DXGI_STATUS_OCCLUDED` at
@@ -1183,9 +1214,9 @@ first asks with `DXGI_PRESENT_TEST`, which draws nothing, and waits
 while the answer is still occluded.
 
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
-copy made from them (paste, duplicate, copy to another canvas) must
-share neither a picture nor a texture with its source. `CanvasManager`
-starts the copy with neither; `Session::ClonePicturesForCopy` then gives
+copy made from them (paste, duplicate, copy to another canvas) must not
+share a picture with its source. `CanvasManager` starts the copy without
+one; `Session::ClonePicturesForCopy` then gives
 it its picture - the source's row copied as stored, in the write that
 makes the copy. The UI says so when the source's picture cannot be
 found, rather than showing a copy that looks whole.
@@ -1332,9 +1363,9 @@ picture is the application underneath and none of our content. While a
 screen is frozen a region capture is cropped out of it rather than taken
 live; without that the user drags a region over a still picture and gets
 back whatever the game showed a moment later, which for a moving camera
-is a different scene. The pixels are kept alongside the texture for
-exactly this. Released on hide: it is a fullscreen texture with no reason
-to exist while nothing is shown.
+is a different scene. The pixels are kept for exactly this, and its
+texture is made from them - again, after a lost device. Both go on hide:
+a full screen's worth, with no reason to exist while nothing is shown.
 
 ## Visual theme
 
@@ -2440,7 +2471,7 @@ same reason, which is the fallback to reach for if it turns up.
 
 ### Screen capture
 
-`CaptureRegionAsTexture` excludes the overlay from capture
+`CaptureRegion` excludes the overlay from capture
 (`WDA_EXCLUDEFROMCAPTURE`, for the moment of the capture only),
 `DwmFlush`es so the next composition pass has happened, `BitBlt`s with
 `CAPTUREBLT` so other applications' layered windows are included,

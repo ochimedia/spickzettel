@@ -352,20 +352,17 @@ uint32_t FloatsToColorRGBA4(const float in[4]);
 void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint,
                   ImageSampling sampling);
 
-// A snippet's picture (its pixels, its placeholder gradient, or its plain
-// fill - see picture.h) stretched to fill `pMin..pMax`, at its own opacity.
-// Nothing is drawn at zero opacity.
-//
-// `textureHandle` stands in for Picture::textureHandle when given,
-// including when it is 0 ("no pixels, draw the fallback"). That is what the
-// Overview's canvas previews need: the same picture drawn with a
-// thumbnail-sized copy of its pixels, or with none, without touching or
-// copying it. `sampling` is how the pixels, if there are some, are
-// resampled - see ImageSampling.
-void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMin, ImVec2 pMax,
-                        std::optional<uint64_t> textureHandle = std::nullopt, ImageSampling sampling = {});
+// A snippet's picture stretched to fill `pMin..pMax`, at its own opacity:
+// its pixels from `texture`, or, for 0, its placeholder gradient or its
+// plain fill (see picture.h). Nothing is drawn at zero opacity. `texture`
+// is the full-size picture's or, in the Overview's previews, a
+// thumbnail-sized copy of it. `sampling` is how the pixels, if there are
+// some, are resampled - see ImageSampling.
+void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMin, ImVec2 pMax, uint64_t texture,
+                        ImageSampling sampling = {});
 
-// An item's picture, plus its baked strokes, into
+// An item's picture, from `pictureTexture` (see DrawSnippetPicture), plus
+// its baked strokes, into
 // `pMin..pMax` - shared by
 // RenderItems' per-item interactive window, RenderViewOnly's flat
 // read-only pass, and the dock's own thumbnail chips. Caller owns clipping
@@ -384,8 +381,8 @@ void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMi
 // rather than nothing.
 // `meshCache` is passed straight down to each stroke - see StrokeMeshSlot.
 void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
-                      uint64_t strokeRasterTexture = 0, bool skipNoteText = false, StrokeMeshSlot meshCache = {},
-                      ImageSampling sampling = {});
+                      uint64_t pictureTexture, uint64_t strokeRasterTexture = 0, bool skipNoteText = false,
+                      StrokeMeshSlot meshCache = {}, ImageSampling sampling = {});
 
 // A scaled-down snapshot of `canvas`'s items in `thumbMin..thumbMax`, the
 // way the display shows them - uniform scale, letterboxed. What the

@@ -56,7 +56,7 @@ public:
     void SetFrameCallback(FrameCallback callback) override;
     void SetFramePacing(FramePacing pacing) override;
     void SetMouseCallback(MouseCallback callback) override;
-    CaptureResult CaptureRegionAsTexture(const Rect& rect) override;
+    CaptureResult CaptureRegion(const Rect& rect) override;
     InputGrabDiagnostics GetInputGrabDiagnostics() const override;
     uint64_t CreateTextureFromPixels(const uint8_t* pixelsRGBA, int width, int height) override;
     bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* pixelsRGBA, int sourceWidth, int x, int y,

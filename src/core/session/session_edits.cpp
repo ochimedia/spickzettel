@@ -122,9 +122,6 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     for (const auto& [item, now] : moved) {
         history_.Migrate(item, now);
     }
-    // Snippets came, went, or were marked or unmarked on the canvas being
-    // looked at.
-    SyncTexturesToCurrentCanvas();
     return result;
 }
 
@@ -206,8 +203,6 @@ size_t Session::DeleteItems(const std::vector<ItemId>& itemIds) {
     if (deleted == 0 || !Commit(before, canvasId, std::move(step))) {
         return 0;
     }
-    // Hidden now, and what leaves the screen gives its pictures back.
-    SyncTexturesToCurrentCanvas();
     return deleted;
 }
 
@@ -495,8 +490,6 @@ Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
     if (!Commit(before, here, std::move(step))) {
         return Placed{};
     }
-    // Whatever arrived needs a texture now: this is the current canvas.
-    SyncTexturesToCurrentCanvas();
     return placed;
 }
 
@@ -524,7 +517,6 @@ Session::Placed Session::Duplicate(const std::vector<ItemId>& ids) {
     if (!Commit(before, Model().CurrentCanvasId(), std::move(step))) {
         return Placed{};
     }
-    SyncTexturesToCurrentCanvas();
     return placed;
 }
 
@@ -559,11 +551,6 @@ Session::Placed Session::SendItemsTo(const std::vector<ItemId>& ids, CanvasId ta
     }
     if (!Commit(before, target, std::move(step))) {
         return Placed{};
-    }
-    if (!placed.items.empty()) {
-        // What went is on a canvas nobody is looking at, and gives its
-        // textures back now rather than at the next switch.
-        SyncTexturesToCurrentCanvas();
     }
     return placed;
 }

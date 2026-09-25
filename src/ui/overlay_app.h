@@ -373,8 +373,8 @@ public:
     // the capture step; TrayController::OnQuickCaptureHotkey switches to
     // edit mode afterward so the capture is noticed. Safe to call while
     // hidden: needs no active ImGui frame (it's plain CanvasManager/
-    // IOverlayWindow calls), and `window`'s own CaptureRegionAsTexture
-    // leaves the overlay out of the capture whether it is up or not.
+    // IOverlayWindow calls), and `window`'s own CaptureRegion leaves the
+    // overlay out of the capture whether it is up or not.
     // A fullscreen screenshot onto a canvas of its own: a new one at the
     // end of the folder the current canvas lives in, switched to, with the
     // shot on it and a message saying so. Both capture hotkeys come here -
@@ -1193,7 +1193,9 @@ private:
     // persisted.
     struct StrokeRaster {
         StrokeBitmap pixels;
-        uint64_t textureHandle = 0;
+        // Moved on whenever `pixels` change: what its texture is told to
+        // bring itself up to date by (see TextureCache::Get).
+        uint64_t revision = 0;
         // What it was built from, kept so a stale raster is recognized by
         // comparing rather than by guessing. A count is not enough and
         // never could be: undoing back to nothing and drawing something new
@@ -1210,10 +1212,10 @@ private:
         std::vector<Stroke> builtFrom;
     };
     // Brings the current canvas's rasters in line with its items, and
-    // releases every other one. A no-op in the other two render modes,
-    // which also frees whatever was cached the moment the mode changes.
-    // Called once a frame from the same place the picture textures are
-    // brought up to date.
+    // drops every other one. A no-op in the other two render modes, which
+    // also frees whatever was cached the moment the mode changes. Called
+    // once a frame, after every input that could have changed what is on
+    // the canvas and before anything draws it.
     void RefreshStrokeRasters();
     // Brings `raster` in line with `item`'s strokes: nothing at all when it
     // already matches, just the new strokes on top of what is there when
@@ -1226,27 +1228,37 @@ private:
     void BuildStrokeRaster(const Item& item, StrokeRaster& raster);
     // The texture for `itemId`'s rasterized strokes, or 0 if there isn't
     // one - which DrawItemContent takes as "draw them tessellated instead".
-    uint64_t StrokeRasterTextureFor(ItemId itemId) const;
+    uint64_t StrokeRasterTextureFor(ItemId itemId);
     void ReleaseStrokeRasters();
+
+    // ===== Textures =====
+
+    // Every texture is the session's TextureCache's, asked for by what it
+    // shows as it is about to be drawn, and never held here - see
+    // TextureCache for what that settles.
+    TextureCache& Textures() { return session_.Textures(); }
+    // A snippet's picture's texture, read from the library the first time
+    // it is asked for: 0 while there are no pixels to show - none stored,
+    // or they cannot be read - which draws the placeholder or the fill.
+    uint64_t PictureTexture(const Item& item);
+    // Asks for the textures of every snippet on the current canvas, drawn
+    // this frame or not - minimized, or left out of the pinned view - so
+    // that none is let go of and read again the moment it is drawn: the
+    // current canvas's pictures stay on the GPU, and no other canvas's do.
+    // Once a frame, before anything draws.
+    void KeepCurrentCanvasTextures();
 
     // ===== Overview bitmap previews (AppConfig::overviewShowsBitmaps) =====
 
     // A picture's pixels, decoded and scaled down to thumbnail size, for the
     // canvas overview - which draws canvases that aren't current and whose
-    // full-size pixels are deliberately not in memory.
+    // full-size pixels are deliberately not in memory. Kept, like every
+    // texture, only while something draws it: while a panel shows its
+    // canvas, so a library of screenshots costs nothing while it isn't
+    // being browsed. The expensive part is the decode, not the memory - a
+    // preview is at most kOverviewPreviewMaxExtent on its long edge, a
+    // couple of hundred kilobytes against the eight megabytes it came from.
     //
-    // Deliberately not a cache that survives the panel: these are loaded
-    // while the overview is open and released when it closes, so a library
-    // of screenshots costs nothing while it isn't being browsed. The
-    // expensive part is the decode, not the memory - a preview is at most
-    // kOverviewPreviewMaxExtent on its long edge, a couple of hundred
-    // kilobytes against the eight megabytes it came from.
-    // A handle of 0 means it was tried and failed - a missing or unreadable
-    // file. The entry exists either way, which is what stops a failure
-    // being retried on every frame the panel is open.
-    struct PicturePreview {
-        uint64_t textureHandle = 0;
-    };
     // Resets the per-frame decode budget - called once, at the top of the
     // overview's own rendering.
     void BeginOverviewPreviewFrame();
@@ -1266,7 +1278,6 @@ private:
     // by the canvas grid, the canvas bar and the recently-deleted list.
     using PreviewTextureFn = std::function<std::optional<uint64_t>(const Item&)>;
     PreviewTextureFn PreviewTextureLookup();
-    void ReleasePicturePreviews();
 
     // Overview: switch canvases, delete/reorder them, or (when opened from
     // the context menu's Move to canvas) pick a target canvas for that
@@ -1429,11 +1440,6 @@ private:
     ImageSampling PictureSampling() const {
         return ImageSampling{Cfg().imageFilter, window_ != nullptr ? window_->ImageFilterCallback() : nullptr};
     }
-    // Thumbnail-sized copies of pictures, by snippet, alive only while the
-    // overview is open - see PicturePreview. Emptied by
-    // ReleasePicturePreviews when it closes, or when the setting is
-    // switched off.
-    std::unordered_map<ItemId, PicturePreview> picturePreviews_;
     // How many previews are still allowed to be read this frame, one budget
     // per cost. Both reset each frame the overview is drawn.
     //
@@ -1568,13 +1574,11 @@ private:
     std::optional<platform::MouseButton> pressedButton_;
     std::optional<platform::MouseButton> ignoredButton_;
 
-    // Set by AttachTo; used for real screen capture (CaptureShotItem) and
-    // releasing a deleted item's captured texture. Never null once
-    // AttachTo has been called - a window that outlives this OverlayApp,
-    // per the ownership already established by TrayController/main.
+    // Set by AttachTo; what the overlay asks of the platform itself - the
+    // frame pacing, the pointer, the keyboard. Never null once AttachTo has
+    // been called - a window that outlives this OverlayApp, per the
+    // ownership already established by TrayController/main.
     platform::IOverlayWindow* window_ = nullptr;
-    // The window's TextureGeneration the textures held were made in.
-    uint64_t textureGeneration_ = 0;
 
     // See SetRestartOverlayCallback's own doc comment.
     std::function<void()> restartOverlayCallback_;

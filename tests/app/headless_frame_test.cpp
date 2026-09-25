@@ -496,6 +496,11 @@ std::optional<platform::ImageFilter> FilterDrawnWith(uint64_t texture) {
     return std::nullopt;
 }
 
+// The texture `item`'s picture has this frame, 0 for none.
+uint64_t PictureTextureOf(Session& session, ItemId item) {
+    return session.Textures().Find(TextureKey{TextureKey::Kind::Picture, item}).value_or(0);
+}
+
 // A screenshot is drawn through the filter in settings, and the default
 // adds nothing to the draw list - it is ImGui's own sampler.
 TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
@@ -503,21 +508,22 @@ TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
     config.imageFilter = platform::ImageFilter::Lanczos;
     config.freezeScreenInEditMode = true;  // the drag crops the frozen screen
     StartWith(config);
-    host_.overlayWindow.captureReturnsHandle = 7;
     host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
     host_.overlayWindow.captureReturnsHeight = static_cast<int>(kDisplayHeight);
     host_.overlayWindow.captureReturnsPixelsRGBA.assign(static_cast<size_t>(kDisplayWidth * kDisplayHeight) * 4, 255);
-    host_.overlayWindow.createTextureFromPixelsReturnsHandle = 9;  // the part of the frozen screen kept
+    host_.overlayWindow.uploadsSucceed = true;
     ShowEditMode();
     StepFrame();
     Drag(100.0f, 100.0f, 400.0f, 300.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     StepFrame();
-    EXPECT_EQ(FilterDrawnWith(9), platform::ImageFilter::Lanczos);
+    const uint64_t picture = PictureTextureOf(controller_->GetSession(), Canvases().CurrentOrNull()->items[0].id);
+    ASSERT_NE(picture, 0u);
+    EXPECT_EQ(FilterDrawnWith(picture), platform::ImageFilter::Lanczos);
 
     controller_->GetSettings().Mutable().imageFilter = platform::ImageFilter::Bilinear;
     StepFrame();
-    EXPECT_EQ(FilterDrawnWith(9), std::nullopt);
+    EXPECT_EQ(FilterDrawnWith(picture), std::nullopt);
 }
 
 // A drawing that was not meant costs nothing: it goes as soon as the hand
@@ -3925,28 +3931,31 @@ TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn)
     config.freezeScreenInEditMode = true;  // the drag crops the frozen screen
     StartWith(config);
     AttachStore();
-    host_.overlayWindow.captureReturnsHandle = 7;
     host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
     host_.overlayWindow.captureReturnsHeight = static_cast<int>(kDisplayHeight);
     host_.overlayWindow.captureReturnsPixelsRGBA.assign(static_cast<size_t>(kDisplayWidth * kDisplayHeight) * 4, 255);
-    host_.overlayWindow.createTextureFromPixelsReturnsHandle = 9;
+    host_.overlayWindow.uploadsSucceed = true;
     ShowEditMode();
     StepFrame();
     Drag(100.0f, 100.0f, 400.0f, 300.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     StepFrame();
     Session& session = controller_->GetSession();
-    ASSERT_EQ(Canvases().CurrentOrNull()->items[0].picture.textureHandle, 9u);
-    ASSERT_EQ(session.FrozenScreenTexture(), 7u);
+    const ItemId shot = Canvases().CurrentOrNull()->items[0].id;
+    const uint64_t pictureBefore = PictureTextureOf(session, shot);
+    const uint64_t frozenBefore = session.FrozenScreenTexture();
+    ASSERT_TRUE(host_.overlayWindow.IsDrawable(pictureBefore));
+    ASSERT_TRUE(host_.overlayWindow.IsDrawable(frozenBefore));
 
-    const int releasedBefore = host_.overlayWindow.releaseTextureCallCount;
-    host_.overlayWindow.createTextureFromPixelsReturnsHandle = 11;
-    host_.overlayWindow.textureGeneration = 1;
+    ++host_.overlayWindow.textureGeneration;
     StepFrame();
-    EXPECT_EQ(host_.overlayWindow.releaseTextureCallCount - releasedBefore, 2) << "the picture and the frozen screen";
-    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].picture.textureHandle, 11u);
-    EXPECT_EQ(session.FrozenScreenTexture(), 11u);
-    EXPECT_TRUE(FilterDrawnWith(11) == std::nullopt) << "drawn, with the new texture";
+    EXPECT_EQ(host_.overlayWindow.liveTextures.count(pictureBefore), 0u) << "let go of";
+    EXPECT_EQ(host_.overlayWindow.liveTextures.count(frozenBefore), 0u) << "let go of";
+    const uint64_t pictureAfter = PictureTextureOf(session, shot);
+    EXPECT_TRUE(host_.overlayWindow.IsDrawable(pictureAfter)) << "read back from the library";
+    EXPECT_TRUE(host_.overlayWindow.IsDrawable(session.FrozenScreenTexture())) << "from the pixels kept";
+    EXPECT_TRUE(FilterDrawnWith(pictureAfter) == std::nullopt) << "drawn, with the new texture";
+    EXPECT_EQ(host_.overlayWindow.badTextureUses, 0);
 }
 
 }  // namespace
