@@ -9,6 +9,8 @@
 // it runs the action it promises.
 #include "fakes/ui_test.h"
 
+#include <cstring>
+
 namespace sz::test {
 namespace {
 
@@ -243,6 +245,43 @@ TEST_F(ContextMenuUiTest, ThePickerKeepsTheCanvasItSendsFrom) {
     EXPECT_TRUE(newFolderOff);
     EXPECT_TRUE(deleteOff);
     EXPECT_EQ(controller_->GetSession().Manager().CanvasHoldingItem(snippet), std::optional<CanvasId>(other));
+}
+
+// The picker's Cancel closes the Overview there and then, and nothing more
+// of it is drawn that frame - not the Settings page it was last left on,
+// which the body fell back to once there was nothing being picked.
+TEST_F(ContextMenuUiTest, ThePickersCancelDrawsNothingMoreOfThePanel) {
+    MakeASnippet();
+    controller_->GetSession().Manager().AddCanvas("Other");
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("leave the overview on Settings", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+    });
+    PressKey(ImGuiKey_Escape);
+    ASSERT_FALSE(App().IsOverviewOpen());
+    OpenTheMenu();
+    ClickRow("##menu_move_to_canvas");
+    ASSERT_TRUE(App().IsOverviewOpen());
+
+    bool settingsDrawn = true;
+    RunUi("cancel the pick", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        const int frame = ImGui::GetFrameCount();
+        ctx->ItemClick("**/###pickercancel");
+        ctx->Yield(2);
+        // By name: a child window's path lookup finds nothing once its
+        // parent is gone, and the panel is.
+        const ImGuiWindow* body = nullptr;
+        for (const ImGuiWindow* window : ctx->UiContext->Windows) {
+            body = std::strstr(window->Name, "##settings_body") != nullptr ? window : body;
+        }
+        IM_CHECK(body != nullptr);  // drawn when Settings was open
+        settingsDrawn = body->LastFrameActive >= frame;
+    });
+    EXPECT_FALSE(App().IsOverviewOpen());
+    EXPECT_FALSE(settingsDrawn);
 }
 
 }  // namespace

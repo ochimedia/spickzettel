@@ -533,6 +533,14 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     BringToFront("##overview_panel");
 
     RenderOverviewHeader();
+    // Closed from the header - the picker's Cancel: nothing more of the
+    // panel this frame. Drawn on, the body fell back to whichever tab was
+    // last open, a frame of Settings, and the grid read back the
+    // thumbnails CloseOverview had just let go of, to hold them unseen.
+    if (!overviewOpen_) {
+        ImGui::End();
+        return;
+    }
     ImGui::Separator();
     BeginOverviewPreviewFrame();
 
