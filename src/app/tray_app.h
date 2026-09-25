@@ -95,7 +95,9 @@ public:
     // start: whether the person had it on, and for how long, is exactly
     // what could not be read. And with keepFile, nothing is written over
     // that file for as long as this runs - it is still where it was, and
-    // may be the only copy of their settings.
+    // may be the only copy of their settings. Without it, the file was set
+    // aside, and the stand-in is written in its place at Initialize, and
+    // tried again until it lands.
     void StartOnStandInSettings(bool keepFile) {
         skipRetentionThisStart_ = true;
         configFileKept_ = keepFile;

@@ -1314,7 +1314,12 @@ start was not enough: the next start found no file, or the defaults a
 settings change had written, and both turn a 14-day retention back on
 over a library whose owner may have switched it off. So a file set aside
 is replaced at once by the defaults with retention switched off, and it
-stays off until switched on again. The file is written
+stays off until switched on again. That write can fail too, a full disk
+say, and then the next start found no file after all. So the tray
+writes the stand-in again as it starts, and a write that fails is owed
+and retried from the background timer, like any settings write. The
+stand-in has retention off even when the file could not be moved aside.
+The file is written
 through temp-then-rename, since truncating it in place leaves a window
 in which every setting is a half-written file.
 

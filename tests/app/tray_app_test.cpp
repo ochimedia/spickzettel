@@ -982,6 +982,28 @@ TEST_F(TrayControllerPersistenceTest, ASettingsFileThatCannotBeWrittenIsSaidOnSc
     EXPECT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).hotkeyViewMode, (platform::KeyCombo{true, false, true, 'Z'}));
 }
 
+// A settings file set aside whose stand-in could not be written in its
+// place: the write is owed and tried again, retention off and all - left
+// unwritten, the next start found no file, made the defaults, and had
+// retention back on.
+TEST_F(TrayControllerPersistenceTest, TheStandInForASettingsFileSetAsideIsWrittenOnceItCanBe) {
+    std::filesystem::create_directories(dir_ / "config.json");  // in the way of the stand-in
+    test::FakePlatformHost host;
+    host.configFilePath = dir_ / "config.json";
+    AppConfig config = DefaultConfig();
+    config.purgeDeleted = false;  // as LoadOrCreateConfig hands the stand-in over
+    TrayController controller(host, config);
+    controller.StartOnStandInSettings(/*keepFile=*/false);
+    ASSERT_TRUE(controller.Initialize());
+    EXPECT_FALSE(controller.Overlay().PersistenceWarning().empty());
+    ASSERT_GT(host.backgroundTimerIntervalMs, 0) << "owed";
+
+    std::filesystem::remove_all(dir_ / "config.json");
+    host.FireBackgroundTimer();
+    ASSERT_TRUE(std::filesystem::is_regular_file(dir_ / "config.json"));
+    EXPECT_FALSE(ParseConfig(ReadFile(dir_ / "config.json")).purgeDeleted);
+}
+
 TEST_F(TrayControllerPersistenceTest, ExitWritesASettingsFileStillOwed) {
     std::filesystem::create_directories(dir_ / "config.json");
     test::FakePlatformHost host;

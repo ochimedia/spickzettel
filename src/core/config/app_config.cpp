@@ -920,16 +920,19 @@ LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_v
     }
     // Not settings - not JSON, or too big to be - and set aside rather than
     // written over, so that whatever the user had in it can still be found.
+    // Retention off in the stand-in, whether or not the file can be moved:
+    // whether it was on is what could not be read.
     loaded.source = ConfigSource::SetAside;
+    loaded.config.purgeDeleted = false;
     std::filesystem::path aside = path;
     aside.replace_filename(path.stem().string() + "-unreadable-" + std::string(stamp) + path.extension().string());
     std::filesystem::rename(path, aside, ec);
     if (!ec) {
         loaded.setAsideAs = aside;
-        // The stand-in goes where the file was at once, with retention
-        // off: whether it was on is what could not be read, and a missing
-        // file or the defaults at the next start would turn it back on.
-        loaded.config.purgeDeleted = false;
+        // The stand-in goes where the file was at once: a missing file or
+        // the defaults at the next start would turn retention back on. A
+        // write that fails here is the tray's to retry - see
+        // TrayController::StartOnStandInSettings.
         WriteConfigFile(path, loaded.config);
     }
     return loaded;

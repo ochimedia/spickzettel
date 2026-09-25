@@ -798,6 +798,20 @@ TEST_F(WriteConfigFileTest, WhatStandsInForAFileSetAsideKeepsRetentionOff) {
     EXPECT_EQ(second.config, expected);
 }
 
+// A file that cannot be moved aside stays where it is, not written over -
+// and what stands in for it has retention off all the same.
+TEST_F(WriteConfigFileTest, AFileThatCannotBeSetAsideStillStartsWithRetentionOff) {
+    std::filesystem::create_directories(dir_ / "config-unreadable-stamp.json");  // in the way
+    const std::string broken = R"({"deleted": {"afterDays": 3650},})";
+    std::ofstream(dir_ / "config.json", std::ios::binary) << broken;
+
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
+    EXPECT_EQ(loaded.source, ConfigSource::SetAside);
+    EXPECT_TRUE(loaded.setAsideAs.empty());
+    EXPECT_FALSE(loaded.config.purgeDeleted);
+    EXPECT_EQ(ReadFile(dir_ / "config.json"), broken);
+}
+
 // A settings file is a few kilobytes. Whatever a file of megabytes at that
 // path is, it is not settings, and is set aside rather than allocated for.
 TEST_F(WriteConfigFileTest, AFileTooBigToBeASettingsFileIsSetAside) {

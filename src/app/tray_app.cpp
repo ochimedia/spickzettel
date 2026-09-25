@@ -55,6 +55,13 @@ bool TrayController::Initialize() {
     if (!host_.ShowTrayIcon()) {
         return false;
     }
+    // The stand-in for a settings file set aside, written where the file
+    // was - by the loader already, unless that write failed, and then
+    // owed and tried again like any settings write. Not on the file: the
+    // next start found none, made the defaults, and had retention back on.
+    if (skipRetentionThisStart_ && !configFileKept_) {
+        PersistConfig();
+    }
 
     // Two of the app's own hotkeys on one combination would register once
     // and fail once, and a failure below refuses to start - so a later
