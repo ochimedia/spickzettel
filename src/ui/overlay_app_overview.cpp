@@ -2984,9 +2984,8 @@ bool OverlayApp::TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
             field = &Cfg().hotkeySilentCapture;
             break;
     }
-    if (combo == *field) {
-        return true;
-    }
+    // Offered even when unchanged: the combo it already has may be one
+    // that never registered, and picking it again is how to try again.
     if (hotkeyChangeCallback_ && !hotkeyChangeCallback_(slot, combo)) {
         return false;
     }

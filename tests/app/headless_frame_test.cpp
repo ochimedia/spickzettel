@@ -1063,6 +1063,25 @@ TEST_F(HeadlessAppTest, AHotkeyPressedWhileCapturingBecomesTheCapturedCombo) {
     EXPECT_FALSE(stored.hotkeyViewMode.IsValid()) << "taken from the view hotkey";
 }
 
+// A hotkey another application held at the start has its combo and no
+// registration. Picking the same combo again, once it is free, registers
+// it - rather than counting as no change.
+TEST_F(HeadlessAppTest, PickingTheSameComboAgainRegistersAHotkeyThatFailedAtTheStart) {
+    host_.registerHotkeySucceeds = false;
+    StartWith(DefaultConfig());
+    ASSERT_FALSE(controller_->UnregisteredHotkeys().empty());
+    host_.registerHotkeySucceeds = true;
+
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::EditMode);
+    controller_->Overlay().CompleteHotkeyCapture(config_.hotkeyEditMode);
+
+    bool registered = false;
+    for (const auto& [id, combo] : host_.registeredCombos) {
+        registered = registered || combo == config_.hotkeyEditMode;
+    }
+    EXPECT_TRUE(registered);
+}
+
 // ===== The hand at rest: Select =====
 
 // A marking tool is in hand only in drawing mode, so putting it down -

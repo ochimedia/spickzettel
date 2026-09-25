@@ -686,8 +686,10 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
         return false;  // unreachable: every slot has a row
     }
 
-    if (combo == *configField) {
-        return true;  // no actual change
+    // No actual change - unless the hotkey has no registration: one another
+    // application held at the start is picked again to try again.
+    if (combo == *configField && (*hotkeyId != 0 || !combo.IsValid())) {
+        return true;
     }
     // A combo one of the app's own other hotkeys has moves over: that one
     // is unbound, the way a tool shortcut's key is taken from the row that
