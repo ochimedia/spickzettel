@@ -1020,7 +1020,10 @@ TEST_F(HeadlessAppTest, APressAfterALostReleaseEndsWhatThatButtonWasDoing) {
     StepFrame();
     RawMouse(300.0f, 300.0f, platform::MouseEventKind::Move);
     StepFrame();
-    // No Up.
+    // No Up - and the frames in between have the pointer where the next
+    // press is, as the hover frames before it would.
+    ImGui::GetIO().AddMousePosEvent(500.0f, 150.0f);
+    StepFrame();
     RawMouse(500.0f, 150.0f, platform::MouseEventKind::Down);
     StepFrame();
     RawMouse(600.0f, 150.0f, platform::MouseEventKind::Move);
@@ -1028,7 +1031,19 @@ TEST_F(HeadlessAppTest, APressAfterALostReleaseEndsWhatThatButtonWasDoing) {
     RawMouse(600.0f, 150.0f, platform::MouseEventKind::Up);
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrame();
-    EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 2u);
+    const Item* item = manager.FindItemAnywhere(drawing);
+    ASSERT_EQ(item->strokes.size(), 2u);
+    // The first ends where it got to, well short of where the second
+    // starts - not with a straight tail to the next press.
+    float firstRight = -1e9f;
+    for (const StrokePoint& point : item->strokes[0].points) {
+        firstRight = std::max(firstRight, point.x);
+    }
+    float secondLeft = 1e9f;
+    for (const StrokePoint& point : item->strokes[1].points) {
+        secondLeft = std::min(secondLeft, point.x);
+    }
+    EXPECT_LT(firstRight, secondLeft);
 }
 
 // ===== The panels docked against the screen's edges =====

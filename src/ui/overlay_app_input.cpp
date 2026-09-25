@@ -692,13 +692,14 @@ void OverlayApp::EndGesture() {
     // enter drawing mode on its snippet half a second after an undo or a
     // delete had ended the press it came with.
     heldPress_.reset();
-    if (GestureIf<StrokeInFlight>() != nullptr) {
-        // As its release would end it: the stroke, the shape or the erase
-        // kept and filed as one undo step - see HandleStrokeEvent.
+    if (const StrokeInFlight* stroke = GestureIf<StrokeInFlight>(); stroke != nullptr) {
+        // As its release would end it, where it last was: the stroke, the
+        // shape or the erase kept and filed as one undo step - see
+        // HandleStrokeEvent. Ended where the pointer is instead, a stroke
+        // whose release went missing got a straight tail to the next press.
         if (ImGui::GetCurrentContext() != nullptr) {
-            const ImVec2 mouse = ImGui::GetMousePos();
-            HandleStrokeEvent(platform::MouseEvent{platform::Vec2{mouse.x, mouse.y}, platform::MouseButton::Left,
-                                                   platform::MouseEventKind::Up});
+            HandleStrokeEvent(
+                platform::MouseEvent{stroke->last, platform::MouseButton::Left, platform::MouseEventKind::Up});
         }
         gesture_ = std::monostate{};
         return;
@@ -1705,6 +1706,9 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
     StrokeInFlight* stroke = GestureIf<StrokeInFlight>();
     if (stroke == nullptr) {
         return;
+    }
+    if (event.kind != platform::MouseEventKind::Up) {
+        stroke->last = event.position;
     }
     const auto sessionShape = [](DrawShape shape) {
         return shape == DrawShape::Rectangle ? Session::Shape::Rectangle : Session::Shape::Line;

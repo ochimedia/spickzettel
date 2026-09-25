@@ -1704,6 +1704,11 @@ private:
         Kind kind = Kind::Freehand;
         DrawShape shape = DrawShape::Freehand;  // Shape only
         RectErase rect;                         // EraseRect only
+        // Where its last press or move was - where it ends when it has to
+        // be ended without its release (see EndGesture). The pointer is
+        // somewhere else by then: at the next press, for a release that
+        // went missing.
+        platform::Vec2 last{};
     };
     // A press on one of the selection bar's buttons, held until the
     // release that fires it (if it lands on the same button - see
