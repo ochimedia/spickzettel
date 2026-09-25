@@ -1725,6 +1725,11 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
     // drawn from.
     std::optional<size_t> toggle;
     std::optional<std::pair<size_t, size_t>> move;
+    // A payload type of the row's own: the payload is an index into this
+    // row's list, and a tile dropped on the other row moved whatever sat
+    // at that index there.
+    char payloadType[32] = {};
+    std::snprintf(payloadType, sizeof(payloadType), "HB_BAR_%s", id);
     for (size_t at = 0; at < buttons.size(); ++at) {
         const BarButtonSetting& entry = buttons[at];
         // Named for the button rather than for the place it currently
@@ -1758,12 +1763,12 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
         }
         if (ImGui::BeginDragDropSource()) {
             const int from = static_cast<int>(at);
-            ImGui::SetDragDropPayload("HB_BAR_BUTTON", &from, sizeof(int));
+            ImGui::SetDragDropPayload(payloadType, &from, sizeof(int));
             ImGui::TextUnformatted(BarButtonName(entry.button));
             ImGui::EndDragDropSource();
         }
         if (ImGui::BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_BAR_BUTTON")) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(payloadType)) {
                 const auto from = static_cast<size_t>(*static_cast<const int*>(payload->Data));
                 if (from != at && from < buttons.size()) {
                     move = std::make_pair(from, at);

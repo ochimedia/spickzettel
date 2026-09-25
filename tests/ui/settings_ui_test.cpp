@@ -313,6 +313,32 @@ TEST_F(UiTest, AValueTypedIntoASliderIsHeldToItsRange) {
     EXPECT_FLOAT_EQ(AppSettings().Stored().noteTextSizePx, kNoteTextSizeMin);
 }
 
+// A bar's buttons are reordered by dragging them along their own row. One
+// dropped on the other bar's row moves nothing there - it carried only its
+// place in its own row, and moved whatever sat at that place in the other.
+TEST_F(UiTest, ABarButtonDraggedOntoTheOtherBarMovesNothingThere) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("drag bar buttons within and across the rows", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectioninteraction");
+        const ImGuiID body = ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID;
+        const auto tile = [body](const char* row, const char* key) -> ImGuiTestRef {
+            return ImHashStr(key, 0, ImHashStr(row, 0, body));
+        };
+        ctx->ItemDragAndDrop(tile("snippetbar", "##tilepin"), tile("drawingbar", "##tiletext"));
+        ctx->ItemDragAndDrop(tile("snippetbar", "##tilepin"), tile("snippetbar", "##tileclose"));
+    });
+    const AppConfig& stored = AppSettings().Stored();
+    ASSERT_EQ(stored.drawingBar.size(), 4u);
+    EXPECT_EQ(stored.drawingBar[0].button, ChromeButton::Pen) << "the drawing bar as it was";
+    EXPECT_EQ(stored.drawingBar[2].button, ChromeButton::Text);
+    ASSERT_EQ(stored.snippetBar.size(), 5u);
+    EXPECT_EQ(stored.snippetBar[4].button, ChromeButton::Pin) << "and its own row still reorders";
+}
+
 // Settings edits one profile at a time, picked by where it is in the list.
 // Deleting one above it moves it up a place, and what is edited next still
 // goes to it; deleting it leaves nothing picked, not the one after it.
