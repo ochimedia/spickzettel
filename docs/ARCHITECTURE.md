@@ -1652,6 +1652,13 @@ used a whole core until unlock. Once a present has said so, each frame
 first asks with `DXGI_PRESENT_TEST`, which draws nothing, and waits
 while the answer is still occluded.
 
+A skipped frame still runs the autosave's clock, through a callback of
+its own (`SetSkippedFrameCallback`). The autosave runs in the frame, and
+the background timer leaves the library alone while the overlay is up.
+So with frames skipped, nothing was saved: an edit made just before
+Win+L waited for the unlock, and a crash or power cut meanwhile lost
+it.
+
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
 copy made from them (paste, duplicate, copy to another canvas) must
 share neither a file nor a texture with its source. `CanvasManager`

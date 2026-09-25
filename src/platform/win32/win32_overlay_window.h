@@ -54,6 +54,7 @@ public:
     void RequestTextInput() override;
     void ReleaseTextInput() override;
     void SetFrameCallback(FrameCallback callback) override;
+    void SetSkippedFrameCallback(FrameCallback callback) override { skippedFrameCallback_ = std::move(callback); }
     void SetFramePacing(FramePacing pacing) override;
     void SetMouseCallback(MouseCallback callback) override;
     CaptureResult CaptureRegionAsTexture(const Rect& rect) override;
@@ -144,6 +145,7 @@ private:
     // See SetFramePacing.
     FramePacing framePacing_ = FramePacing::EveryFrame;
     FrameCallback frameCallback_;
+    FrameCallback skippedFrameCallback_;
     MouseCallback mouseCallback_;
     std::unique_ptr<Win32Dx11Renderer> renderer_;
     // The texture generations of renderers since destroyed, which took

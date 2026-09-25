@@ -1001,18 +1001,30 @@ void Win32OverlayWindow::RenderFrame() {
     // waited for, so the loop does not spin. Skipped before the grab's
     // heartbeat, too: an overlay that shows nothing should not keep the
     // input, and the grab lets it through once this thread stops beating.
+    LARGE_INTEGER now{};
+    const auto secondsSinceLastFrame = [&] {
+        QueryPerformanceCounter(&now);
+        const float seconds = perfFrequency_.QuadPart > 0
+                                  ? static_cast<float>(now.QuadPart - lastFrameTime_.QuadPart) /
+                                        static_cast<float>(perfFrequency_.QuadPart)
+                                  : 0.0f;
+        lastFrameTime_ = now;
+        return seconds;
+    };
     if (!renderer_->ReadyToRender()) {
         MsgWaitForMultipleObjectsEx(0, nullptr, kNoDeviceRetryMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
+        // What must not stop with the frames goes on: without them, the
+        // edits made just before the screen was locked waited for the
+        // unlock to be saved, and a crash or a power cut meanwhile lost
+        // them.
+        const float skippedSeconds = secondsSinceLastFrame();
+        if (skippedFrameCallback_) {
+            skippedFrameCallback_(skippedSeconds);
+        }
         return;
     }
 
-    LARGE_INTEGER now{};
-    QueryPerformanceCounter(&now);
-    const float deltaSeconds = perfFrequency_.QuadPart > 0
-                                    ? static_cast<float>(now.QuadPart - lastFrameTime_.QuadPart) /
-                                          static_cast<float>(perfFrequency_.QuadPart)
-                                    : 0.0f;
-    lastFrameTime_ = now;
+    const float deltaSeconds = secondsSinceLastFrame();
 
     // Reclaiming the front of the topmost band has to be repeated, not done
     // once on show. Reproduced: leave the taskbar as the foreground window -

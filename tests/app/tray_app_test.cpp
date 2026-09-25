@@ -1004,6 +1004,38 @@ TEST_F(TrayControllerPersistenceTest, TheStandInForASettingsFileSetAsideIsWritte
     EXPECT_FALSE(ParseConfig(ReadFile(dir_ / "config.json")).purgeDeleted);
 }
 
+// A frame the window cannot draw - the screen locked, the device lost -
+// still counts toward the autosave: an edit made just before Win+L is
+// saved while locked, not at the unlock.
+TEST_F(TrayControllerPersistenceTest, AnEditIsSavedWhileFramesAreSkipped) {
+    test::FakePlatformHost host;
+    host.dataDirectoryPath = dir_;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    if (!host.overlayWindow.IsVisible()) {  // a first run comes up in edit mode by itself
+        host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    }
+    ASSERT_TRUE(host.overlayWindow.IsVisible());
+    CanvasManager& manager = controller.GetSession().Manager();
+    const ItemId id = manager.CreateItem(false, Rect{100, 100, 300, 200}, "Just before the lock");
+    ASSERT_FALSE(host.overlayWindow.skippedFrameCallback == nullptr);
+
+    for (int frame = 0; frame < 40; ++frame) {
+        host.overlayWindow.skippedFrameCallback(0.1f);
+    }
+
+    const std::optional<CanvasManagerSnapshot> saved = persistence::LibraryStore(dir_).Load();
+    ASSERT_TRUE(saved.has_value());
+    bool found = false;
+    for (const Canvas& canvas : saved->canvases) {
+        for (const Item& item : canvas.items) {
+            found = found || item.id == id;
+        }
+    }
+    EXPECT_TRUE(found);
+}
+
 TEST_F(TrayControllerPersistenceTest, ExitWritesASettingsFileStillOwed) {
     std::filesystem::create_directories(dir_ / "config.json");
     test::FakePlatformHost host;

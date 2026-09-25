@@ -933,6 +933,9 @@ OverlayApp::OverlayApp(Settings& settings, Session& session)
 void OverlayApp::AttachTo(platform::IOverlayWindow& window) {
     window_ = &window;
     window.SetFrameCallback([this](float dt) { OnFrame(dt); });
+    // A frame the window cannot draw - the screen locked, the device lost -
+    // still counts toward the autosave, which runs in OnFrame otherwise.
+    window.SetSkippedFrameCallback([this](float dt) { session_.Tick(dt); });
     window.SetMouseCallback([this](const platform::MouseEvent& ev) { OnMouse(ev); });
 }
 
