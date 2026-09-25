@@ -246,7 +246,8 @@ struct InputGrabDiagnostics {
 // What IOverlayWindow::CaptureRegionAsTexture returns: the uploaded GPU
 // texture (0 if capture is unsupported or failed) plus the same pixels as
 // a CPU buffer, so a caller can persist them without a second capture.
-// `pixelsRGBA` is empty exactly when `textureHandle` is 0.
+// `pixelsRGBA` is empty when the capture failed. A capture whose upload
+// failed has pixels and a `textureHandle` of 0.
 struct CaptureResult {
     uint64_t textureHandle = 0;
     std::vector<uint8_t> pixelsRGBA;  // width*height*4, row-major, top-left origin, RGBA8

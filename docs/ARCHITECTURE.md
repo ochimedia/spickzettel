@@ -1598,6 +1598,17 @@ Overview's previews and the stroke rasters rebuild as they are next
 wanted. A stray old texture handed to `UpdateTextureRegionRGBA` is
 refused, not written with the new device's context.
 
+Only a frame notices a lost device, and no frame runs while the overlay
+is hidden. So a capture made from the tray after a driver reset has
+pixels and no device to upload them to. It returns the pixels anyway,
+with no texture. They are the one thing that cannot be taken again, and
+the snippet is written from them and gets its texture from the file
+after the device is replaced. The first version returned nothing, and
+the snippet kept its placeholder for good while the notice reported a
+capture. A freeze keeps its pixels without a texture the same way:
+shots are cut from what was frozen, and the frozen screen shows once
+the device is back.
+
 A window nobody can see is skipped the same way. With the screen locked
 or the secure desktop up, `Present` returns `DXGI_STATUS_OCCLUDED` at
 once instead of waiting for vsync, and a frame loop drawing every frame

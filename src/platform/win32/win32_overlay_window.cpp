@@ -894,12 +894,14 @@ CaptureResult Win32OverlayWindow::CaptureRegionAsTexture(const Rect& rect) {
         pixelsBGRA[i + 3] = 255;
     }
 
+    // An upload that fails - the device lost, and no frame since to replace
+    // it, which is every capture made from the tray after a driver reset -
+    // still returns the pixels: they are what cannot be taken again, and
+    // the snippet gets its texture from the file they are written to once
+    // there is a device to put it on.
     ID3D11ShaderResourceView* srv = renderer_->CreateTextureFromRGBA(pixelsBGRA.data(), width, height);
-    if (!srv) {
-        return CaptureResult{};
-    }
     CaptureResult result;
-    result.textureHandle = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(srv));
+    result.textureHandle = srv ? static_cast<uint64_t>(reinterpret_cast<uintptr_t>(srv)) : 0;
     result.pixelsRGBA = std::move(pixelsBGRA);  // renamed in place above - now actually RGBA
     result.width = width;
     result.height = height;

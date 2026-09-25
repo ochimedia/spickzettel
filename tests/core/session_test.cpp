@@ -1062,13 +1062,63 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     const std::vector<uint8_t> expected{5, 5, 5, 255, 6, 6, 6, 255, 9, 9, 9, 255, 10, 10, 10, 255};
     EXPECT_EQ(saved->pixelsRGBA, expected);
 
-    // Without the upload the cut is dropped and the screen is captured
-    // live, as it is with nothing frozen at all.
+    // Without the upload the cut is still what is saved - the device lost,
+    // say - rather than the live screen, which has moved on: the snippet
+    // gets its texture from the file once there is a device again.
     window.createTextureFromPixelsReturnsHandle = 0;
     const ItemId again = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Again");
-    session.CaptureShotItem(*session.Manager().FindItemAnywhere(again));
-    EXPECT_EQ(window.captureCallCount, 2);
-    EXPECT_FLOAT_EQ(window.lastCaptureRect.w, 1.0f);
+    Item* againShot = session.Manager().FindItemAnywhere(again);
+    session.CaptureShotItem(*againShot);
+    EXPECT_EQ(window.captureCallCount, 1);
+    EXPECT_EQ(againShot->ImageLayer()->textureHandle, 0u);
+    const std::optional<persistence::DecodedImage> againSaved =
+        store.LoadImage(again, againShot->ImageLayer()->imageFile);
+    ASSERT_TRUE(againSaved.has_value());
+    EXPECT_EQ(againSaved->pixelsRGBA, (std::vector<uint8_t>{0, 0, 0, 255}));
+
+    session.SetLibraryStore(nullptr);
+    std::filesystem::remove_all(dir);
+}
+
+// A capture whose upload failed - the device lost while the overlay was
+// hidden, with no frame since to replace it - is a capture all the same:
+// its pixels are saved, and a freeze keeps them to cut shots from and to
+// show once the device is back.
+TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
+    const std::filesystem::path dir =
+        std::filesystem::temp_directory_path() / "spickzettel_session_test_capture_no_device";
+    std::filesystem::remove_all(dir);
+    persistence::LibraryStore store(dir);
+    test::FakeOverlayWindow window;
+    window.captureReturnsHandle = 0;
+    window.captureReturnsWidth = 2;
+    window.captureReturnsHeight = 1;
+    window.captureReturnsPixelsRGBA = {10, 20, 30, 255, 40, 50, 60, 255};
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+
+    const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    Item* shot = session.Manager().FindItemAnywhere(id);
+    session.CaptureShotItem(*shot);
+    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty());
+    const std::optional<persistence::DecodedImage> saved = store.LoadImage(id, shot->ImageLayer()->imageFile);
+    ASSERT_TRUE(saved.has_value());
+    EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
+
+    session.FreezeScreen(platform::DisplayInfo{"d", "D", 0, 0, 2, 1, true, 60, 100});
+    EXPECT_EQ(session.FrozenScreenTexture(), 0u);
+    const ItemId cut = session.Manager().CreateItem(true, Rect{1.0f, 0.0f, 1.0f, 1.0f}, "Cut");
+    Item* cutShot = session.Manager().FindItemAnywhere(cut);
+    session.CaptureShotItem(*cutShot);
+    EXPECT_EQ(window.captureCallCount, 2) << "cut from what was frozen";
+    const std::optional<persistence::DecodedImage> cutSaved = store.LoadImage(cut, cutShot->ImageLayer()->imageFile);
+    ASSERT_TRUE(cutSaved.has_value());
+    EXPECT_EQ(cutSaved->pixelsRGBA, (std::vector<uint8_t>{40, 50, 60, 255}));
+
+    window.createTextureFromPixelsReturnsHandle = 9;  // a device again
+    session.ReplaceLostTextures();
+    EXPECT_EQ(session.FrozenScreenTexture(), 9u);
 
     session.SetLibraryStore(nullptr);
     std::filesystem::remove_all(dir);

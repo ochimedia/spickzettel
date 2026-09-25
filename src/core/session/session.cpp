@@ -274,8 +274,12 @@ void Session::ReplaceLostTextures() {
         }
     }
     shotTextureCanvasId_.reset();
-    if (frozenScreenTexture_ != 0) {
-        window_->ReleaseTexture(frozenScreenTexture_);
+    // Frozen with or without a texture - a freeze made while the device was
+    // gone has only its pixels - it has one from here.
+    if (!frozenScreenPixels_.empty()) {
+        if (frozenScreenTexture_ != 0) {
+            window_->ReleaseTexture(frozenScreenTexture_);
+        }
         frozenScreenTexture_ =
             window_->CreateTextureFromPixels(frozenScreenPixels_.data(), frozenScreenWidth_, frozenScreenHeight_);
         if (frozenScreenTexture_ == 0) {
@@ -532,12 +536,12 @@ void Session::FreezeScreen(const platform::DisplayInfo& display) {
     frozenScreenTexture_ = capture.textureHandle;
     frozenScreenWidth_ = capture.width;
     frozenScreenHeight_ = capture.height;
-    if (frozenScreenTexture_ != 0) {
-        // Kept for CaptureShotItem to crop out of. Moved rather than copied:
-        // this is a full screen's worth of pixels and nothing else wants
-        // them.
-        frozenScreenPixels_ = std::move(capture.pixelsRGBA);
-    }
+    // Kept for CaptureShotItem to crop out of. Moved rather than copied:
+    // this is a full screen's worth of pixels and nothing else wants them.
+    // Kept without a texture too - a device lost and not yet replaced - so
+    // that the shots taken meanwhile are cut from what was frozen, and the
+    // picture shows once the device is back (see ReplaceLostTextures).
+    frozenScreenPixels_ = std::move(capture.pixelsRGBA);
 }
 
 // A sub-rectangle of the frozen screen, uploaded as its own texture and
@@ -584,10 +588,11 @@ std::optional<platform::CaptureResult> Session::CropFrozenScreen(const Rect& rec
         std::memcpy(result.pixelsRGBA.data() + static_cast<size_t>(row) * rowBytes,
                      frozenScreenPixels_.data() + sourceOffset, rowBytes);
     }
+    // An upload that fails leaves the cut without a texture, as a live
+    // capture's would: the pixels are what the user framed, and what is
+    // saved. Captured live instead, the shot was of whatever the screen
+    // showed by then.
     result.textureHandle = window_->CreateTextureFromPixels(result.pixelsRGBA.data(), width, height);
-    if (result.textureHandle == 0) {
-        return std::nullopt;  // let the caller fall back rather than return a blank
-    }
     return result;
 }
 

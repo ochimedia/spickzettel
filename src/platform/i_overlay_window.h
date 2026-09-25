@@ -140,7 +140,9 @@ public:
     // The handle is an ImTextureID kept as a bare uint64_t so this header
     // stays free of ImGui; the caller casts. textureHandle is 0 and
     // pixelsRGBA empty if the backend cannot capture or the OS refused;
-    // callers then fall back to a placeholder.
+    // callers then fall back to a placeholder. textureHandle alone is 0
+    // when the capture worked and the upload did not - the GPU device
+    // lost, say - and the pixels are still worth keeping.
     virtual CaptureResult CaptureRegionAsTexture(const Rect& rect) = 0;
 
     // Uploads RGBA8 pixels (the layout CaptureResult uses) as a new
