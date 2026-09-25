@@ -35,6 +35,10 @@ constexpr DWORD kRaisedForDump = 0xE0535A01;
 
 struct WriteRequest {
     const wchar_t* file;
+    // Where it is written until it is whole: a writer cut off - the time
+    // limit, a crash of its own - left half a dump under a dump's name,
+    // counted among the ones kept.
+    const wchar_t* partial;
     EXCEPTION_POINTERS* exception;
     DWORD threadId;
     bool written;
@@ -42,7 +46,8 @@ struct WriteRequest {
 
 DWORD WINAPI WriteDumpThread(LPVOID param) {
     WriteRequest& request = *static_cast<WriteRequest*>(param);
-    const HANDLE file = CreateFileW(request.file, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    const HANDLE file =
+        CreateFileW(request.partial, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         return 0;
     }
@@ -58,20 +63,24 @@ DWORD WINAPI WriteDumpThread(LPVOID param) {
     request.written = MiniDumpWriteDump(GetCurrentProcess(), GetCurrentProcessId(), file, type,
                                         request.exception != nullptr ? &info : nullptr, nullptr, nullptr) != FALSE;
     CloseHandle(file);
+    request.written = request.written && MoveFileExW(request.partial, request.file, MOVEFILE_REPLACE_EXISTING) != FALSE;
     if (!request.written) {
-        DeleteFileW(request.file);
+        DeleteFileW(request.partial);
     }
     return 0;
 }
 
-bool WriteDump(const wchar_t* file, EXCEPTION_POINTERS* exception) {
-    WriteRequest request{file, exception, GetCurrentThreadId(), false};
+bool WriteDump(const wchar_t* file, const wchar_t* partial, EXCEPTION_POINTERS* exception) {
+    WriteRequest request{file, partial, exception, GetCurrentThreadId(), false};
     DWORD writerId = 0;
-    const HANDLE thread = CreateThread(nullptr, 0, &WriteDumpThread, &request, 0, &writerId);
+    // Suspended until it is known for the writer: one that crashed before
+    // then was taken for another thread, and waited on for the whole limit.
+    const HANDLE thread = CreateThread(nullptr, 0, &WriteDumpThread, &request, CREATE_SUSPENDED, &writerId);
     if (thread == nullptr) {
         return false;
     }
     g_writerThreadId = writerId;
+    ResumeThread(thread);
     // Not for ever: see kDumpWriteTimeoutMs. A writer still going then is
     // ended with the process, and its half-written file is not a dump.
     const bool finished = WaitForSingleObject(thread, kDumpWriteTimeoutMs) == WAIT_OBJECT_0;
@@ -100,9 +109,11 @@ bool WriteDump(const wchar_t* file, EXCEPTION_POINTERS* exception) {
         SYSTEMTIME now;
         GetLocalTime(&now);
         wchar_t file[MAX_PATH];
+        wchar_t partial[MAX_PATH];
         if (std::swprintf(file, MAX_PATH, L"%ls%04u%02u%02u-%02u%02u%02u.dmp", g_pathPrefix, now.wYear, now.wMonth,
-                          now.wDay, now.wHour, now.wMinute, now.wSecond) > 0) {
-            WriteDump(file, exception);
+                          now.wDay, now.wHour, now.wMinute, now.wSecond) > 0 &&
+            std::swprintf(partial, MAX_PATH, L"%ls.partial", file) > 0) {
+            WriteDump(file, partial, exception);
         }
     }
     TerminateProcess(GetCurrentProcess(), 3);
@@ -147,8 +158,13 @@ void PruneCrashDumps(const std::filesystem::path& directory, size_t keep) {
     std::error_code ec;
     std::vector<std::pair<std::filesystem::file_time_type, std::filesystem::path>> dumps;
     for (std::filesystem::directory_iterator it(directory, ec), end; !ec && it != end; it.increment(ec)) {
-        if (it->is_regular_file(ec) && it->path().extension() == ".dmp") {
+        if (!it->is_regular_file(ec)) {
+            continue;
+        }
+        if (it->path().extension() == ".dmp") {
             dumps.emplace_back(it->last_write_time(ec), it->path());
+        } else if (it->path().extension() == ".partial" && it->path().stem().extension() == ".dmp") {
+            std::filesystem::remove(it->path(), ec);  // a writer cut off: never a dump
         }
     }
     if (dumps.size() <= keep) {
@@ -160,7 +176,10 @@ void PruneCrashDumps(const std::filesystem::path& directory, size_t keep) {
     }
 }
 
-bool WriteMiniDump(const std::wstring& file, EXCEPTION_POINTERS* exception) { return WriteDump(file.c_str(), exception); }
+bool WriteMiniDump(const std::wstring& file, EXCEPTION_POINTERS* exception) {
+    const std::wstring partial = file + L".partial";
+    return WriteDump(file.c_str(), partial.c_str(), exception);
+}
 
 bool CreateDirectoryChain(wchar_t* path) {
     // Each separator in turn made the end of the string for a moment, so

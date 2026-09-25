@@ -42,6 +42,7 @@ TEST_F(Win32CrashDumpTest, WritesADumpOfTheProcessAsItStands) {
     const std::filesystem::path file = dir_ / "now.dmp";
     ASSERT_TRUE(WriteMiniDump(file.wstring(), nullptr));
     EXPECT_GT(std::filesystem::file_size(file), 1024u);
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "now.dmp.partial")) << "written under its own name once whole";
 }
 
 // A crash before the app's own folder exists still has somewhere to put
@@ -71,12 +72,14 @@ TEST_F(Win32CrashDumpTest, PruningKeepsTheNewest) {
         std::filesystem::last_write_time(file, now - std::chrono::hours(5 - i));
     }
     std::ofstream(dir_ / "notes.txt") << "not a dump";
+    std::ofstream(dir_ / "cut.dmp.partial") << "half a dump";
 
     PruneCrashDumps(dir_, 2);
     EXPECT_EQ(Dumps().size(), 2u);
     EXPECT_TRUE(std::filesystem::exists(dir_ / "d3.dmp"));
     EXPECT_TRUE(std::filesystem::exists(dir_ / "d4.dmp"));
     EXPECT_TRUE(std::filesystem::exists(dir_ / "notes.txt")) << "only dumps are pruned";
+    EXPECT_FALSE(std::filesystem::exists(dir_ / "cut.dmp.partial")) << "a writer cut off left no dump";
 }
 
 // The real thing, in a child process: a crash ends the process with a dump

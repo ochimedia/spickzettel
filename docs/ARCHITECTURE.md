@@ -104,11 +104,15 @@ time in the prepared name. Each start keeps the newest ten dumps and
 deletes the rest.
 
 What can go wrong while dying is bounded. The writer thread is waited for
-20 seconds, not for ever: a crashed thread holding the loader lock keeps
+20 seconds, not forever: a crashed thread holding the loader lock keeps
 a new thread from ever starting, and a process hung in its crash handler
 is worse than one with no dump. A second crash waits for the first to end
 the process, rather than ending it under the first dump half-written -
-unless it is the writer's own, which gives that dump up. And the main
+unless it is the writer's own, which gives that dump up. The writer is
+started suspended, so that it is known for the writer before it can
+crash. A dump is written as `.dmp.partial` and renamed once whole, so a
+writer cut off leaves no half dump among the ten kept, and pruning
+deletes what it leaves. And the main
 thread keeps 64 KB of stack for the handler (`SetThreadStackGuarantee`),
 which a stack overflow otherwise leaves it without.
 
