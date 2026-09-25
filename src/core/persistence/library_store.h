@@ -137,8 +137,11 @@ public:
     // The shape of the library this build reads and writes, stamped into
     // library.json by every save. It goes up whenever a build writes
     // something an older one would misread or drop - a new field in a
-    // record, a new kind of file.
-    // 2: Item::keepAspect.
+    // record, a new kind of file - once per release, not per change: a
+    // version covers everything since the release before it, and what is
+    // added before the next release goes under the version already bumped
+    // for it.
+    // 2 (since 0.1.0): Item::keepAspect; pending.json.
     static constexpr int kFormatVersion = 2;
     // Whether library.json says a newer build wrote this library: a
     // version above kFormatVersion. Such a library is not this build's to

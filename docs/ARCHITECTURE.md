@@ -661,7 +661,10 @@ library/
 
 `library.json` carries `LibraryStore::kFormatVersion`, stamped by every
 save. It goes up whenever a build writes something an older one would
-misread or drop. A library stamped higher than the build knows is
+misread or drop, once per release rather than once per change: 2 was
+taken after 0.1.0 for `keepAspect`, and `pending.json`, added before the
+next release, is part of 2 as well. Only released builds need telling
+apart. A library stamped higher than the build knows is
 refused whole. `TrayController::Initialize` checks before the tray icon
 and the app does not start, saying why in a message box of its own. The
 store backs that up by itself: once it has seen a newer stamp, `Load`
