@@ -713,5 +713,51 @@ TEST(LibraryCrashTest, AnUnreadableLibraryFileIsNotTakenForAnOlderOne) {
     EXPECT_FALSE(store.Save(MakeLibrary()));
 }
 
+// A record that could not be read at a start - another program holding
+// it - is not in the library that session, and the save does not write it
+// out of its order file: read again at the next start, the snippet is where
+// it was in its canvas's stack, and the canvas where it was in its folder.
+TEST(LibraryCrashTest, WhatALoadCouldNotReadKeepsItsPlace) {
+    MemoryFileSystem memory;
+    SetUpLibrary(memory);
+    FaultyFileSystem disk(memory);
+    const auto recordOf = [](uint64_t uid, const char* file) {
+        return [uid, file](const std::filesystem::path& path) {
+            const std::string dir = path.parent_path().filename().string();
+            const std::string name = FormatUid(uid);
+            return path.filename() == file && dir.size() >= name.size() &&
+                   dir.compare(dir.size() - name.size(), name.size(), name) == 0;
+        };
+    };
+    // One start with `unreadable` failing to read, something else changed
+    // and saved - and the next start's load.
+    const auto startWithout = [&](const std::function<bool(const std::filesystem::path&)>& unreadable) {
+        disk.FailWhen(FaultyFileSystem::Op::Read, unreadable);
+        {
+            LibraryStore store(Root(), disk);
+            std::optional<CanvasManagerSnapshot> library = store.Load();
+            EXPECT_TRUE(library.has_value());
+            if (Canvas* canvasB = library ? FindCanvas(*library, kCanvasB) : nullptr) {
+                canvasB->name += "+";  // something to save
+            }
+            EXPECT_TRUE(library && store.Save(*library));
+        }
+        disk.ClearFailures();
+        return LibraryStore(Root(), disk).Load();
+    };
+
+    std::optional<CanvasManagerSnapshot> library = startWithout(recordOf(kShot, "item.json"));
+    ASSERT_TRUE(library.has_value());
+    const Canvas* canvasA = FindCanvas(*library, kCanvasA);
+    ASSERT_NE(canvasA, nullptr);
+    ASSERT_EQ(canvasA->items.size(), 2u);
+    EXPECT_EQ(canvasA->items[0].id, kShot) << "at the back of its canvas, as it was";
+
+    library = startWithout(recordOf(kCanvasA, "canvas.json"));
+    ASSERT_TRUE(library.has_value());
+    ASSERT_EQ(library->canvases.size(), 2u);
+    EXPECT_EQ(library->canvases[0].id, kCanvasA) << "first in its folder, as it was";
+}
+
 }  // namespace
 }  // namespace sz::core::persistence

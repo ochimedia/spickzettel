@@ -897,6 +897,27 @@ void ApplyOrder(std::vector<std::pair<std::string, T>>& found, const std::vector
     found = std::move(sorted);
 }
 
+// Puts each of `unread` back into `order` where `old` had it: after the
+// nearest name before it in `old` that `order` still has, or first when
+// there is none. Walked in `old`'s order, so two unread side by side stay
+// that way.
+void KeepUnreadPlaces(std::vector<std::string>& order, const std::vector<std::string>& old,
+                      const std::set<std::string>& unread) {
+    for (size_t i = 0; i < old.size(); ++i) {
+        if (unread.count(old[i]) == 0 || std::find(order.begin(), order.end(), old[i]) != order.end()) {
+            continue;
+        }
+        auto at = order.begin();
+        for (size_t before = i; before-- > 0;) {
+            if (const auto it = std::find(order.begin(), order.end(), old[before]); it != order.end()) {
+                at = std::next(it);
+                break;
+            }
+        }
+        order.insert(at, old[i]);
+    }
+}
+
 json OrderFileJson(const char* key, const std::vector<std::string>& names) {
     json list = json::array();
     for (const std::string& name : names) {
@@ -1335,17 +1356,40 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
         return fresh;
     };
 
+    // The uids of directories in a container that were not read - for
+    // unreadPlaces_, which keeps those the order file names.
+    const auto noteUnread = [this](const std::string& key, const OrderFile& file,
+                                   const std::set<std::string>& notRead) {
+        UnreadPlaces places;
+        for (const std::string& name : file.names) {
+            if (notRead.count(name) > 0) {
+                places.unread.insert(name);
+            }
+        }
+        if (!places.unread.empty()) {
+            places.order = file.names;
+            unreadPlaces_[key] = std::move(places);
+        }
+    };
+    const auto uidNameOf = [](const std::filesystem::path& dir) {
+        const std::optional<uint64_t> uid = UidFromDirectoryName(dir.filename().string());
+        return uid ? FormatUid(*uid) : std::string();
+    };
+
     std::vector<std::pair<std::string, Folder>> foundFolders;
+    std::set<std::string> foldersNotRead;
     for (const std::filesystem::path& folderDir : SortedSubdirectories(*fs_, foldersRoot)) {
         if (NotePendingRemoval(folderDir)) {
             continue;  // deleted for good; a removal still owed, not a folder
         }
         const std::optional<json> folderDoc = ReadJsonFile(*fs_, folderDir / kFolderFile);
         if (!folderDoc) {
+            foldersNotRead.insert(uidNameOf(folderDir));
             continue;  // not a folder of ours; left alone rather than guessed at
         }
         Folder folder;
         if (!ReadRecord(*folderDoc, folder)) {
+            foldersNotRead.insert(uidNameOf(folderDir));
             continue;
         }
         const uint64_t recordedFolderId = folder.id;
@@ -1382,6 +1426,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
     const OrderFile folderOrderFile = ReadOrderFile(*fs_, foldersRoot / kOrderFile, "folders");
     ApplyOrder(foundFolders, folderOrderFile.names);
     noteOrderFile("order:root", folderOrderFile, "folders", namesOf(foundFolders));
+    noteUnread("order:root", folderOrderFile, foldersNotRead);
 
     // A snippet's directory, read, indexed, and noted if it came back
     // exactly as a save would write it.
@@ -1441,12 +1486,15 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
 
         // ...and the same, one level down, for the snippets inside it.
         std::vector<std::pair<std::string, Item>> foundItems;
+        std::set<std::string> itemsNotRead;
         for (const std::filesystem::path& itemDir : SortedSubdirectories(*fs_, canvasDir)) {
             if (NotePendingRemoval(itemDir)) {
                 continue;
             }
             if (std::optional<Item> item = readItem(itemDir)) {
                 foundItems.emplace_back(itemDir.filename().string(), std::move(*item));
+            } else {
+                itemsNotRead.insert(uidNameOf(itemDir));
             }
         }
         // Item order is z-order, back to front - so a snippet dropped in by
@@ -1455,6 +1503,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
         const OrderFile itemOrderFile = ReadOrderFile(*fs_, canvasDir / kOrderFile, "items");
         ApplyOrder(foundItems, itemOrderFile.names);
         noteOrderFile("order:canvas:" + std::to_string(canvas.id), itemOrderFile, "items", namesOf(foundItems));
+        noteUnread("order:canvas:" + std::to_string(canvas.id), itemOrderFile, itemsNotRead);
         canvas.items.clear();
         canvas.items.reserve(foundItems.size());
         for (auto& [itemDirName, item] : foundItems) {
@@ -1466,18 +1515,22 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
     for (auto& [folderDirName, folder] : foundFolders) {
         const std::filesystem::path folderDir = foldersRoot / folderDirName;
         std::vector<std::pair<std::string, Canvas>> foundCanvases;
+        std::set<std::string> canvasesNotRead;
         for (const std::filesystem::path& canvasDir : SortedSubdirectories(*fs_, folderDir)) {
             if (NotePendingRemoval(canvasDir)) {
                 continue;
             }
             if (std::optional<Canvas> canvas = readCanvas(canvasDir, folder.id)) {
                 foundCanvases.emplace_back(canvasDir.filename().string(), std::move(*canvas));
+            } else {
+                canvasesNotRead.insert(uidNameOf(canvasDir));
             }
         }
         const OrderFile canvasOrderFile = ReadOrderFile(*fs_, folderDir / kOrderFile, "canvases");
         ApplyOrder(foundCanvases, canvasOrderFile.names);
         noteOrderFile("order:folder:" + std::to_string(folder.id), canvasOrderFile, "canvases",
                       namesOf(foundCanvases));
+        noteUnread("order:folder:" + std::to_string(folder.id), canvasOrderFile, canvasesNotRead);
         for (auto& [canvasDirName, canvas] : foundCanvases) {
             out.canvases.push_back(std::move(canvas));
         }
@@ -1599,6 +1652,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     canvasDirs_.clear();
     itemDirs_.clear();
     pendingRemovals_.clear();  // refilled from pending.json as the walk finds what it names
+    unreadPlaces_.clear();     // refilled by the walk
     ReadPendingFile();
     writtenItemHashes_.clear();
     writtenFileText_.clear();
@@ -1896,6 +1950,13 @@ bool LibraryStore::Save(const LibraryView& view) const {
 
     // ===== 1. Place and write everything the library holds =====
 
+    // What Load could not read keeps its place in each order file - see
+    // unreadPlaces_.
+    const auto keepUnread = [this](const std::string& key, std::vector<std::string>& order) {
+        if (const auto it = unreadPlaces_.find(key); it != unreadPlaces_.end()) {
+            KeepUnreadPlaces(order, it->second.order, it->second.unread);
+        }
+    };
     std::vector<std::string> folderOrder;
     folderOrder.reserve(view.folders.size());
     const std::vector<const Canvas*> noCanvases;
@@ -2020,12 +2081,15 @@ bool LibraryStore::Save(const LibraryView& view) const {
                     fs_->Remove(itemDir / entry.name);
                 }
             }
+            keepUnread("order:canvas:" + std::to_string(canvas.id), itemOrder);
             wroteEverything &= writeIfChanged("order:canvas:" + std::to_string(canvas.id), canvasDir / kOrderFile,
                                                OrderFileJson("items", itemOrder).dump(2), !placedCanvas.kept);
         }
+        keepUnread("order:folder:" + std::to_string(folder.id), canvasOrder);
         wroteEverything &= writeIfChanged("order:folder:" + std::to_string(folder.id), folderDir / kOrderFile,
                                            OrderFileJson("canvases", canvasOrder).dump(2), !placedFolder.kept);
     }
+    keepUnread("order:root", folderOrder);
     wroteEverything &= writeIfChanged("order:root", foldersRoot / kOrderFile,
                                        OrderFileJson("folders", folderOrder).dump(2), /*force=*/false);
 

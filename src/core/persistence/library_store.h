@@ -451,6 +451,19 @@ private:
     mutable std::map<uint64_t, std::filesystem::path> canvasDirs_;
     mutable std::map<uint64_t, std::filesystem::path> itemDirs_;
     mutable bool treeIndexed_ = false;
+    // Where each directory Load found and could not read sat in its order
+    // file - a record another program held for a moment, say. Not loaded,
+    // it is not in the library this session, and an order file written
+    // from the library alone left it out: read again at the next start, it
+    // came back on top of its canvas, or last among its folder's canvases,
+    // for good. Kept by order-file key ("order:root", "order:folder:<id>",
+    // "order:canvas:<id>"), and put back in its old place by every save
+    // (see KeepUnreadPlaces).
+    struct UnreadPlaces {
+        std::vector<std::string> order;  // the order file as Load read it
+        std::set<std::string> unread;    // the names in it Load could not read
+    };
+    mutable std::map<std::string, UnreadPlaces> unreadPlaces_;
     // What Remove was asked to delete and could not, wholly, and where it
     // is - see Remove. Each save tries again. Not in the index, so that
     // nothing under it is placed, retired or read meanwhile: it was
