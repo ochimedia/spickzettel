@@ -568,6 +568,26 @@ std::optional<std::string> ReadFileText(FileSystem& fs, const std::filesystem::p
     return fs.Read(path, kMaxRecordBytes);
 }
 
+// Whether `path` is a file that could be read as a record, were nothing
+// holding it: a file, and no larger than a record may be. What cannot be
+// read for any other reason - a directory in its place, a file far too big
+// - will not be read by asking again.
+bool CouldBeHeld(FileSystem& fs, const std::filesystem::path& path) {
+    return fs.Status(path) == FileSystem::Kind::File && fs.FileSize(path).value_or(0) <= kMaxRecordBytes;
+}
+
+// `path`'s text, waiting out a hold: a file there that cannot be read - a
+// backup, a sync client or a virus scanner holding it, the likely reasons
+// - is asked again, five times over half a second, the likely cure.
+std::optional<std::string> ReadWaitingOutAHold(FileSystem& fs, const std::filesystem::path& path) {
+    std::optional<std::string> text = ReadFileText(fs, path);
+    for (int attempt = 0; !text && CouldBeHeld(fs, path) && attempt < 5; ++attempt) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        text = ReadFileText(fs, path);
+    }
+    return text;
+}
+
 std::optional<json> ReadJsonFile(FileSystem& fs, const std::filesystem::path& path) {
     const std::optional<std::string> text = ReadFileText(fs, path);
     if (!text) {
@@ -1096,29 +1116,32 @@ bool LibraryStore::HoldsAnyOf(const std::filesystem::path& dir, const std::unord
 }
 
 bool LibraryStore::WrittenByANewerVersion() const {
-    if (!writtenByANewerVersion_) {
-        const std::filesystem::path path = rootDir_ / "library.json";
-        std::optional<std::string> text = ReadFileText(*fs_, path);
-        // There and not readable: another program holding it for a moment
-        // - a backup, a sync client, a virus scanner - is the likely reason,
-        // and the next attempts the likely cure.
-        for (int attempt = 0; !text && fs_->Status(path) != FileSystem::Kind::None && attempt < 5; ++attempt) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            text = ReadFileText(*fs_, path);
+    // Asked once, and the answer kept either way. Asked again by Load after
+    // TrayController::Initialize had its answer, a library.json held for a
+    // moment in between made Load report no library at all - a first run,
+    // on a store that then refused every write.
+    if (versionKnown_) {
+        return writtenByANewerVersion_;
+    }
+    versionKnown_ = true;
+    const std::filesystem::path path = rootDir_ / "library.json";
+    const std::optional<std::string> text = ReadWaitingOutAHold(*fs_, path);
+    if (!text) {
+        // A file that could be read and still cannot is not this build's
+        // to call its own. Anything else in its place - nothing, a
+        // directory, a file far bigger than any record - is repaired as a
+        // pointer file with nothing readable in it (see Load).
+        if (CouldBeHeld(*fs_, path)) {
+            writtenByANewerVersion_ = true;
+            versionUnreadable_ = true;
         }
-        if (!text) {
-            if (fs_->Status(path) != FileSystem::Kind::None) {
-                writtenByANewerVersion_ = true;
-                versionUnreadable_ = true;
-            }
-            return writtenByANewerVersion_;
-        }
-        const json doc = json::parse(*text, /*callback=*/nullptr, /*allow_exceptions=*/false);
-        if (doc.is_object()) {
-            const auto version = doc.find("version");
-            writtenByANewerVersion_ = version != doc.end() && version->is_number_integer() &&
-                                      version->get<int64_t>() > kFormatVersion;
-        }
+        return writtenByANewerVersion_;
+    }
+    const json doc = json::parse(*text, /*callback=*/nullptr, /*allow_exceptions=*/false);
+    if (doc.is_object()) {
+        const auto version = doc.find("version");
+        writtenByANewerVersion_ =
+            version != doc.end() && version->is_number_integer() && version->get<int64_t>() > kFormatVersion;
     }
     return writtenByANewerVersion_;
 }
@@ -1741,7 +1764,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     const bool treeExists = fs_->Status(foldersRoot) == FileSystem::Kind::Directory;
 
     json doc = json::object();
-    const std::optional<std::string> text = ReadFileText(*fs_, rootDir_ / "library.json");
+    const std::optional<std::string> text = ReadWaitingOutAHold(*fs_, rootDir_ / "library.json");
     if (!text && !treeExists) {
         return std::nullopt;  // nothing here at all: a first run
     }

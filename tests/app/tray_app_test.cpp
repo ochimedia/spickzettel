@@ -10,6 +10,12 @@
 
 #include <gtest/gtest.h>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#include <share.h>
+#endif
+
 #include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
 
@@ -686,17 +692,25 @@ TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryWrittenByANewerVe
     EXPECT_EQ(ReadFile(dir_ / "library.json"), newer);
 }
 
-// A library.json that cannot be read - here a directory in its place, as
-// unreadable as a file another program holds - refuses the start as well,
-// and is told apart: trying again later may work.
+// A library.json that cannot be read - held by a program that shares it
+// with nobody - refuses the start as well, and is told apart: trying again
+// later may work.
 TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryFileItCannotRead) {
-    std::filesystem::create_directories(dir_ / "library.json");
+#ifdef _WIN32
+    std::filesystem::create_directories(dir_);
+    std::ofstream(dir_ / "library.json") << "{\"version\": 2}";
+    int held = -1;
+    ASSERT_EQ(_wsopen_s(&held, (dir_ / "library.json").c_str(), _O_RDONLY, _SH_DENYRW, 0), 0);
     test::FakePlatformHost host;
     host.dataDirectoryPath = dir_;
     TrayController controller(host, DefaultConfig());
     EXPECT_FALSE(controller.Initialize());
     EXPECT_TRUE(controller.RefusedAnUnreadableLibrary());
     EXPECT_FALSE(host.trayIconShown);
+    _close(held);
+#else
+    GTEST_SKIP() << "no way to hold a file against reading here";
+#endif
 }
 
 TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {

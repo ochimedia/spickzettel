@@ -982,6 +982,41 @@ TEST(LibraryCrashTest, AnUnreadableLibraryFileIsNotTakenForAnOlderOne) {
     EXPECT_FALSE(store.Save(MakeLibrary()));
 }
 
+// The version is asked once. A library.json read at the tray's check and
+// held when Load looks again is not a library gone - which started the app
+// as a first run, on a store refusing every write.
+TEST(LibraryCrashTest, ALibraryFileHeldAfterTheVersionCheckStillLoads) {
+    MemoryFileSystem memory;
+    SetUpLibrary(memory);
+    const Layout expected = LayoutOf(*LibraryStore(Root(), memory).Load());
+    FaultyFileSystem disk(memory);
+    LibraryStore store(Root(), disk);
+    ASSERT_FALSE(store.WrittenByANewerVersion());
+    disk.FailWhen(FaultyFileSystem::Op::Read,
+                  [](const std::filesystem::path& path) { return path.filename() == "library.json"; });
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(LayoutOf(*loaded), expected);
+    disk.ClearFailures();
+    EXPECT_TRUE(store.Save(*loaded));
+}
+
+// What in library.json's place cannot be read by asking again - a
+// directory - is not taken for a newer library: the tree loads, and the
+// pointers are repaired, as for a pointer file that is not JSON.
+TEST(LibraryCrashTest, ADirectoryWhereTheLibraryFileBelongsIsNotANewerLibrary) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    const Layout expected = LayoutOf(*LibraryStore(Root(), disk).Load());
+    ASSERT_TRUE(disk.Remove(Root() / "library.json"));
+    ASSERT_TRUE(disk.MakeDirectory(Root() / "library.json"));
+    LibraryStore store(Root(), disk);
+    EXPECT_FALSE(store.WrittenByANewerVersion());
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(LayoutOf(*loaded), expected);
+}
+
 // A record that could not be read at a start - another program holding
 // it - is not in the library that session, and the save does not write it
 // out of its order file: read again at the next start, the snippet is where

@@ -147,11 +147,13 @@ public:
     // writes nothing at all: Save, Remove, SaveImage and SaveThumbnail all
     // fail. TrayController::Initialize asks before loading, and refuses to
     // start. A library.json that is missing, is not JSON or has no version
-    // is not newer. One that is there and cannot be read - held by another
-    // program - is asked again for a moment, and then counted as newer:
-    // what cannot be read cannot be said to be this build's, and the first
-    // save would have written it back at this build's version whatever it
-    // said. VersionUnreadable tells that case apart.
+    // is not newer, and neither is a directory in its place or a file far
+    // larger than any record. A file that is there and cannot be read -
+    // held by another program, or not ours to read - is asked again for a
+    // moment, and then counted as newer: what cannot be read cannot be
+    // said to be this build's, and the first save would have written it
+    // back at this build's version whatever it said. VersionUnreadable
+    // tells that case apart. Asked once per store; the answer is kept.
     bool WrittenByANewerVersion() const;
     // Whether WrittenByANewerVersion said so because library.json could
     // not be read, rather than because it named a newer version.
@@ -521,6 +523,8 @@ private:
     // See WrittenByANewerVersion: set once a newer library has been seen,
     // and never cleared.
     mutable bool writtenByANewerVersion_ = false;
+    // Whether WrittenByANewerVersion has looked, and so has its answer.
+    mutable bool versionKnown_ = false;
     // See VersionUnreadable.
     mutable bool versionUnreadable_ = false;
 

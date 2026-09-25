@@ -669,8 +669,25 @@ reads nothing and `Save`, `Remove`, `SaveImage` and `SaveThumbnail` all
 fail, so a path that forgot to ask still cannot write. Opening read-only
 was the alternative, and was not worth its cost: every write path would
 need a read-only state, for a case whose fix is running the newer
-build. A `library.json` with no version, or none readable, counts as
-not newer.
+build. A `library.json` that is missing, is not JSON or has no version
+counts as not newer.
+
+A `library.json` that is there and cannot be read counts as newer, after
+the read has been retried for half a second. Another program holding it
+is the likely reason, and what cannot be read cannot be said to be this
+build's: the first save would have written it back at this build's
+version, whatever it said. The start is refused with a message of its
+own, which does not promise that a retry helps: access denied looks the
+same from here. Only a file counts. A directory in its place, or a file
+far larger than any record, will not be read by asking again, and is
+repaired as a pointer file with nothing readable in it. Refused, it
+kept the app from starting at all.
+
+The store asks the version once and keeps the answer. `Load` asked
+again after `Initialize` had its answer, and a hold on the file in
+between made `Load` report no library at all. The tray then started a
+first run, welcome note included, over a library it refused to write
+to.
 
 `config.json` carries a version of its own, which nothing reads yet. A
 newer build's settings read by an older one lose only the fields the
