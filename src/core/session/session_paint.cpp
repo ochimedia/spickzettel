@@ -345,6 +345,9 @@ Session::PaintedUndo Session::ClearPaintedLayers(Item& item) {
 // ----- The brush, as a gesture -----
 
 void Session::BeginPaint(ItemId itemId, float screenX, float screenY, uint32_t colorRGBA, float widthScreenPx) {
+    // The same for an erase still open, whose painted half this would
+    // otherwise file on its own - see EraseRect.
+    EndErase();
     Item* item = Manager().FindItemAnywhere(itemId);
     if (!item) {
         return;

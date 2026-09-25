@@ -750,6 +750,10 @@ void Session::EndErase() {
 }
 
 void Session::EraseRect(ItemId itemId, float minX, float minY, float maxX, float maxY) {
+    // An erase still open is over, and filed whole, as BeginErase has it:
+    // left open, this took over its snapshot, and its own end then read
+    // the one this cleared.
+    EndErase();
     // A whole gesture in one call: nothing changes the item between the
     // press that started the rectangle and the release that ends it, so the
     // snapshot taken here is the one the press would have taken.

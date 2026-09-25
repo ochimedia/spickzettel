@@ -504,6 +504,24 @@ TEST(SessionTest, AnEraseBegunOverAnOpenOneFilesThatOneFirst) {
     EXPECT_EQ(ItemById(session.Manager(), item)->strokes, drawn);
 }
 
+// The same for a rectangle erased while an erase is open: that one is
+// filed first, whole, and ending it afterwards finds nothing left open.
+TEST(SessionTest, ARectangleErasedOverAnOpenEraseFilesThatOneFirst) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawLineInto(session, item, 20.0f);
+    DrawLineInto(session, item, 80.0f);
+    const std::vector<Stroke> drawn = ItemById(session.Manager(), item)->strokes;
+
+    session.BeginErase(item, 50.0f, 20.0f, 10.0f);
+    session.EraseRect(item, 0.0f, 70.0f, 100.0f, 90.0f);
+    session.EndErase();
+
+    ASSERT_TRUE(session.Undo().has_value());
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(ItemById(session.Manager(), item)->strokes, drawn);
+}
+
 // An eraser dragged over nothing but transparent pixels changes nothing,
 // and files nothing: the next undo takes back what came before it.
 TEST(SessionTest, AnErasePassThatChangesNothingIsNoStep) {
