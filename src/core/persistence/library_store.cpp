@@ -608,9 +608,32 @@ bool IsLink(FileSystem& fs, const std::filesystem::path& path) {
     return fs.LinkStatus(path) == FileSystem::Kind::Link;
 }
 
-// Everything in `dir`, or nothing when it cannot be listed.
-std::vector<FileSystem::Entry> Listing(FileSystem& fs, const std::filesystem::path& dir) {
+// Everything in `dir` whose name can be spelled in UTF-8, or nullopt when
+// it cannot be listed. The rest - a lone surrogate, which NTFS allows in a
+// name - are nothing the store wrote, its names being ASCII, and are left
+// alone as anyone else's files are: turned into a std::string to be looked
+// at, one threw std::system_error out of Save, Load and Remove alike, and
+// took the app down.
+std::optional<std::vector<FileSystem::Entry>> ListNamed(FileSystem& fs, const std::filesystem::path& dir) {
     std::optional<std::vector<FileSystem::Entry>> entries = fs.List(dir);
+    if (!entries) {
+        return std::nullopt;
+    }
+    std::erase_if(*entries, [](const FileSystem::Entry& entry) {
+        try {
+            (void)entry.name.string();
+            return false;
+        } catch (const std::system_error&) {
+            return true;
+        }
+    });
+    return entries;
+}
+
+// Everything in `dir` it is safe to look at (see ListNamed), or nothing
+// when it cannot be listed.
+std::vector<FileSystem::Entry> Listing(FileSystem& fs, const std::filesystem::path& dir) {
+    std::optional<std::vector<FileSystem::Entry>> entries = ListNamed(fs, dir);
     return entries ? std::move(*entries) : std::vector<FileSystem::Entry>{};
 }
 
@@ -728,7 +751,7 @@ bool HoldsOwnRecord(FileSystem& fs, const std::filesystem::path& dir, int depth 
 // so does a directory that could not be listed: not looked at is not
 // emptied, and calling it done left the record in it to load again.
 bool RemoveOwnContents(FileSystem& fs, const std::filesystem::path& dir, const std::set<uint64_t>& erased) {
-    const std::optional<std::vector<FileSystem::Entry>> entries = fs.List(dir);
+    const std::optional<std::vector<FileSystem::Entry>> entries = ListNamed(fs, dir);
     if (!entries) {
         return false;
     }

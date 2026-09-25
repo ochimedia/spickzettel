@@ -306,6 +306,37 @@ TEST_F(LibraryStoreTest, ALibraryOfThisVersionOrWithoutOneOpens) {
     }
 }
 
+// A name that cannot be spelled in UTF-8 - a lone surrogate, which NTFS
+// allows - is no name the store writes, and is passed over like any other
+// file that is not the store's: Load, Save and a delete for good go on
+// around it, and leave it where it is.
+TEST_F(LibraryStoreTest, ANameThatIsNotUtf8IsLeftAloneAndStopsNothing) {
+    const CanvasManagerSnapshot original = MakeSampleSnapshot();
+    ASSERT_TRUE(LibraryStore(dir_).Save(original));
+    const std::wstring loneSurrogate(1, static_cast<wchar_t>(0xD800));
+    const std::filesystem::path strayFile = ShotItemDir() / (loneSurrogate + L"note.txt");
+    const std::filesystem::path strayDir = ShotItemDir().parent_path() / (loneSurrogate + L"scans");
+    std::ofstream(strayFile) << "someone else's";
+    ASSERT_TRUE(std::filesystem::exists(strayFile)) << "the name is allowed where the test runs";
+    std::filesystem::create_directories(strayDir);
+
+    LibraryStore store(dir_);
+    std::optional<CanvasManagerSnapshot> loaded;
+    ASSERT_NO_THROW(loaded = store.Load());
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases.size(), 1u);
+    bool saved = false;
+    ASSERT_NO_THROW(saved = store.Save(*loaded));
+    EXPECT_TRUE(saved);
+
+    CanvasManagerSnapshot without = *loaded;
+    without.canvases[0].items.pop_back();  // the shot, deleted for good
+    ASSERT_NO_THROW(store.Remove(4, without));
+    EXPECT_TRUE(std::filesystem::exists(strayFile)) << "not the store's to delete";
+    EXPECT_TRUE(std::filesystem::exists(strayDir));
+    EXPECT_FALSE(std::filesystem::exists(ShotItemDir() / "item.json"));
+}
+
 TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsEverything) {
     LibraryStore store(dir_);
     const CanvasManagerSnapshot original = MakeSampleSnapshot();
