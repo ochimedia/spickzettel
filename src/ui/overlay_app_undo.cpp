@@ -19,9 +19,14 @@ void OverlayApp::Undo() {
     // history unseen. See EndGesture.
     EndGesture();
     // A drawing a click made and nothing was put into is taken back by
-    // going, not by leaving an empty snippet behind, marked deleted. It is always
-    // the most recent thing done on its canvas: anything done since began
-    // with a press somewhere else, and that press already settled it.
+    // going, not by leaving an empty snippet behind, marked deleted - when
+    // it is the most recent thing done on its canvas. A press anywhere else
+    // settles it as it happens, but a key does not: a paste made after it
+    // is the step to take back, and the hand has moved on from the drawing
+    // - which goes the way moving on takes it, without being the undo.
+    if (untouchedDrawing_.has_value() && session_.HistoryRevision() != untouchedDrawingRevision_) {
+        SettleUntouchedDrawing();
+    }
     if (untouchedDrawing_.has_value() && session_.DiscardIfUntouched(*untouchedDrawing_)) {
         untouchedDrawing_.reset();
         ShowUndoStep(Session::UndoStep{Session::UndoWhat::Create, /*undone=*/true});

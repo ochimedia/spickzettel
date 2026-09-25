@@ -553,6 +553,27 @@ TEST_F(HeadlessAppTest, AnUntouchedDrawingIsNotSavedOnTheWayOut) {
     EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty());
 }
 
+// A paste made by key after a stray drawing is the most recent thing done,
+// and the first undo takes the paste back, not the drawing.
+TEST_F(HeadlessAppTest, UndoAfterAPasteTakesThePasteBackNotAnUntouchedDrawing) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    PressCtrlKey(ImGuiKey_C);
+    RawClick(900.0f, 650.0f);  // empty canvas: the selection goes
+    StepFrames(30);
+    MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    PressCtrlKey(ImGuiKey_V);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "the paste taken back, and the stray drawing gone as moved on from";
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "and the step before the drawing is next";
+}
+
 TEST_F(HeadlessAppTest, ADrawingWithSomethingInItStays) {
     ShowEditMode();
     StepFrame();

@@ -1677,6 +1677,8 @@ private:
     // longer (see OnFrame), so an undo that empties it again leaves it as
     // an empty drawing rather than erasing it, redo and all.
     std::optional<ItemId> untouchedDrawing_;
+    // The history as it stood once untouchedDrawing_ was made - see Undo.
+    uint64_t untouchedDrawingRevision_ = 0;
 
     // RectEraser's own placement gesture (see OnMouse): unlike Rectangle/
     // Line above, nothing is drawn into liveLayer while dragging - the

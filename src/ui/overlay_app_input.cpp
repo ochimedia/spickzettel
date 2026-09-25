@@ -430,6 +430,7 @@ void OverlayApp::MatureHeldPress() {
         // goes into it - see untouchedDrawing_.
         if (*held.creates != ItemCreationKind::Screenshot && made != 0) {
             untouchedDrawing_ = made;
+            untouchedDrawingRevision_ = session_.HistoryRevision();
         }
     }
 }
@@ -1362,6 +1363,7 @@ bool OverlayApp::HandleCreationGesture(const platform::MouseEvent& event) {
                 // with a creation tool was asked for, and is not.
                 if (gesture.fromEmptyCanvas && gesture.kind != ItemCreationKind::Screenshot && made != 0) {
                     untouchedDrawing_ = made;
+                    untouchedDrawingRevision_ = session_.HistoryRevision();
                 }
                 // A creation tool places once. A drawing has already handed
                 // over to Draw (see ApplyCreationDefaults); a screenshot hands
