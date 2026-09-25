@@ -47,9 +47,9 @@ public:
     // on Windows). The directory need not exist yet.
     virtual std::filesystem::path GetConfigFilePath() const = 0;
 
-    // Per-user root of the persisted library, a sibling of the config file
-    // (%APPDATA%\Spickzettel\library\ on Windows). Need not exist yet.
-    virtual std::filesystem::path GetDataDirectoryPath() const = 0;
+    // The per-user library file, a sibling of the config file
+    // (%APPDATA%\Spickzettel\library.db on Windows). Need not exist yet.
+    virtual std::filesystem::path GetLibraryPath() const = 0;
 
     // Calls `callback` on the app thread every `intervalMs`, until called
     // again with 0. The one clock the app has while the overlay is hidden:

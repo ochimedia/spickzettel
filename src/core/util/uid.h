@@ -13,14 +13,12 @@ namespace sz::core {
 //
 // Random rather than a counter: every counter-based library starts at 1,
 // so two libraries built independently collide on nearly every id, and
-// moving a canvas directory from one into another - which the on-disk tree
-// is meant to allow - would be a guaranteed conflict. Random ids make that
-// a non-event.
+// anything that ever moves things from one into the other would be a
+// guaranteed conflict. Random ids make that a non-event.
 //
 // Six characters is 36^6 = 2,176,782,336. That is not the reason collisions
 // don't happen, though - MakeUid checks. The size is what keeps the check
-// from ever having to retry in practice, and what makes an unchecked merge
-// of two hand-copied directories overwhelmingly likely to be clean.
+// from ever having to retry in practice.
 constexpr size_t kUidLength = 6;
 constexpr uint64_t kUidSpace = 2176782336ull;  // 36^6
 
@@ -38,8 +36,7 @@ std::optional<uint64_t> ParseUid(std::string_view text);
 // "no id" throughout this codebase).
 //
 // The check is real, not a probabilistic hand-wave: with a large enough
-// space it is tempting to draw once and assume, and that assumption is
-// exactly what fails once someone has copied a directory by hand.
+// space it is tempting to draw once and assume.
 //
 // `randomBits` is injectable so a test can force the collision path by
 // handing back a value that is already taken; the default draws from a

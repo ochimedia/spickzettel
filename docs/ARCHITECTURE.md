@@ -208,6 +208,8 @@ closed-source one:
 - **Dear ImGui**, **nlohmann/json**, **QOI**: MIT. Reproduce the notice.
 - **stb_image / stb_image_write**: dual MIT or public domain; the notices
   file takes the MIT branch and says so.
+- **SQLite**: public domain. Nothing is required; the notices file names
+  it all the same, so that what the binary holds is all in one place.
 - **Manrope**: SIL OFL 1.1, which permits bundling and selling a font
   *with* software provided the license travels with it, and forbids only
   selling the font by itself.
@@ -229,9 +231,13 @@ a clone brings the repository's whole history, and nlohmann/json's alone
 was 300 MB of the 475 MB each preset downloaded - four times over in a
 clean build. The archives come to 5.5 MB. The SHA-256 is also the
 stronger pin: a clone checks out whatever the commit names on the
-server, an archive that differs by a byte is refused. json is the
+server, an archive that differs by a byte is refused. json is an
 exception to the URL pattern, fetched as the `json.tar.xz` its releases
 publish for this use - the headers and the CMake files, nothing else.
+SQLite is the other: its source lives in Fossil, not on GitHub, and it
+is fetched as the release's amalgamation zip from sqlite.org - the whole
+library as one C file - after checking it against the SHA3-256 the
+download page publishes.
 The archives were compared with the clones they replaced: the same
 files, apart from the line endings Git's `core.autocrlf` had converted
 and the ImPlot submodule the test engine's test suite pulls in, which
@@ -591,9 +597,10 @@ anything.
 Ids are random six-character base36 uids, checked against everything
 the library holds. Random rather than counted because every counted
 library starts at 1, so two libraries built independently collide on
-nearly every id, and moving a directory between them - which the on-disk
-tree is meant to allow - would be a guaranteed conflict. Lowercase only,
-since the ids become directory names on case-insensitive filesystems.
+nearly every id, and anything that ever moves things from one into the
+other would be a guaranteed conflict. They were chosen when the library
+was a directory tree, one directory per id; they stay because they cost
+nothing and keep that door open.
 
 A folder or canvas nobody has named is called for the moment it was
 made, "2026-09-07 22:36:14": a counted "Folder 2, Folder 5" says nothing
@@ -601,621 +608,152 @@ about which is which a week later. Items keep numbered names
 ("Screenshot 3"), which is all an item name is asked to carry. Names are
 not identity; the slug a directory is named by carries the id.
 
-## Persistence: the on-disk library
+## Persistence: the library file
 
-Everything the overlay shows survives a restart, written to
-`%APPDATA%\Spickzettel\library\`. There is no save action anywhere in
+Everything the overlay shows survives a restart, in one SQLite file:
+`%APPDATA%\Spickzettel\library.db`. There is no save action anywhere in
 the UI; the session decides when to write (see "Session"). Loading
 happens once, at startup.
 
-### Layout
+### Why a database
+
+The library used to be a directory tree: a directory per folder, canvas
+and snippet, a JSON record in each, order files beside them, and each
+snippet's pictures in its own directory. It was meant to be rearranged
+by hand in a file manager, and it made every change several filesystem
+steps - write a record, rename a directory, move a picture, delete a
+tree - any of which a crash, a full disk or another program holding a
+file could stop between two others. Most of the store, and most of its
+bugs, were about surviving that: a pending-removals file, a staging
+directory for pictures without a directory yet, a retired directory for
+what a save found gone, a load that reconciled whatever it found, and a
+fault-injecting file system with crash and randomized tests to check it
+all. Two review rounds in a row found real data loss in it.
+
+A transaction removes the "between two steps" state altogether: a save
+lands whole or not at all. SQLite also brings, already done, what the
+tree did by hand: retrying through the antivirus scanners that hold a
+file for a moment on Windows, rolling back what a crash interrupted, and
+a version number in the file header. Its atomicity is tested by the
+SQLite project far beyond anything this app could; the tests here are
+about what the app writes. The tree's hand-editability went with it,
+deliberately, and old libraries are not migrated: nothing released
+wrote one worth keeping.
+
+### Schema
 
 ```
-library/
-  library.json          - the format version, currentFolderId and
-                           currentCanvasId. Nothing else: the tree is
-                           the rest.
-  pending.json          - what was deleted for good and is not wholly
-                           gone from the disk yet, by uid, and where
-                           anything moved out of it belongs. Only there
-                           while something is.
-  folders/order.json    - the folders' uids, in order
-  folders/<folder>/
-    folder.json         - that folder's id and name
-    order.json          - its canvases' uids, in order
-    <canvas>/
-      canvas.json       - that canvas's id and name
-      order.json        - its snippets' uids, back to front
-      <snippet>/
-        item.json       - rect, strokes, layers, anchor, note text...
-        <uid>.qoi       - its captured pixels, if it has any
-        <uid>.thumb.qoi - a 256px copy for the Overview's thumbnails
-  staging/              - where a capture waits between being taken
-                           and the next save moving it into the
-                           snippet that names it
-  retired/<folder>/...  - what a save found the library no longer
-                           holding, set aside whole rather than deleted
-  retired/staging/      - staged pictures no snippet named, set aside
-                           for the same reason
+meta      key, value              - which folder and which canvas are current
+folders   id, position, name, created_at, deleted_at
+canvases  id, folder_id, position, name, created_at, deleted_at
+items     id, canvas_id, position, record (JSON), strokes (blob)
+pictures  item_id, width, height, pixels (QOI), thumbnail (QOI)
 ```
 
-### Format version
+A folder's and a canvas's fields are columns. A snippet's are a JSON
+record, because there are twenty of them and more come: a new field is a
+new key read with a default, and needs no change to the schema. Its
+strokes are one packed blob rather than rows or JSON - a point as JSON
+is an object of two keys, and an ordinary canvas holds tens of thousands
+of them. Folders, canvases and snippets keep their random uids as row
+ids (see "Ids and names").
 
-`library.json` carries `LibraryStore::kFormatVersion`, stamped by every
-save. It goes up whenever a build writes something an older one would
-misread or drop, once per release rather than once per change: 2 was
-taken after 0.1.0 for `keepAspect`, and `pending.json`, added before the
-next release, is part of 2 as well. Only released builds need telling
-apart. A library stamped higher than the build knows is
-refused whole. `TrayController::Initialize` checks before the tray icon
-and the app does not start, saying why in a message box of its own. The
-store backs that up by itself: once it has seen a newer stamp, `Load`
-reads nothing and `Save`, `Remove`, `SaveImage` and `SaveThumbnail` all
-fail, so a path that forgot to ask still cannot write. Opening read-only
-was the alternative, and was not worth its cost: every write path would
-need a read-only state, for a case whose fix is running the newer
-build. A `library.json` that is missing, is not JSON or has no version
-counts as not newer.
+A snippet's picture is keyed by the snippet and lives in the same file,
+so the two cannot disagree about where either is. Foreign keys keep a
+canvas in a folder and a snippet on a canvas, with a cascade, and a
+trigger deletes a snippet's picture with the snippet, however it goes.
+`pictures` itself has no foreign key, because a capture is stored before
+the save that first writes its snippet.
 
-A `library.json` that is there and cannot be read counts as newer, after
-the read has been retried for half a second. Another program holding it
-is the likely reason, and what cannot be read cannot be said to be this
-build's: the first save would have written it back at this build's
-version, whatever it said. The start is refused with a message of its
-own, which does not promise that a retry helps: access denied looks the
-same from here. Only a file counts. A directory in its place, or a file
-far larger than any record, will not be read by asking again, and is
-repaired as a pointer file with nothing readable in it. Refused, it
-kept the app from starting at all.
+The file's `application_id` ("Sztl") tells a library of ours from any
+other SQLite file, and `user_version` is `LibraryStore::kFormatVersion`.
+It goes up once per release that changes what is written, not once per
+change. `auto_vacuum` is incremental, and every load gives back the
+pages deleted rows left, so the file does not stay the size of the
+largest library it ever held.
 
-The store asks the version once and keeps the answer. `Load` asked
-again after `Initialize` had its answer, and a hold on the file in
-between made `Load` report no library at all. The tray then started a
-first run, welcome note included, over a library it refused to write
-to.
+The journal is SQLite's default rollback journal with `synchronous=FULL`,
+not WAL. WAL needs shared memory beside the file and does not work on a
+network drive, where a redirected `%APPDATA%` can be; what it buys is
+concurrent readers and cheaper small commits, and this app has one
+reader and writes every couple of seconds at most.
 
-`config.json` carries a version of its own, which nothing reads yet. A
-newer build's settings read by an older one lose only the fields the
-older one does not know, the next time it writes the file - a setting,
-not the library.
+### Opening
 
-Every directory is `<slug of its current name>-<uid>`. The readable half
-is regenerated on every save so it stays true after a rename; the
-trailing uid is the identity, so a rename is cosmetic and a failed one
-costs a stale label. A *move* - a snippet to another canvas, a canvas to
-another folder - is the same rename with a different parent, and one
-that fails is not cosmetic: the tree is the index, so a record left under
-its old parent is a move the next load undoes. The record is still
-written where the directory is, so nothing in it is lost, but the save
-reports failure, is retried, and is said on screen, where a failed
-relabel is acknowledged. The first version reported both as success, and
-a snippet moved while a picture viewer held its capture open was back on
-its old canvas at the next start. Every id inside a record is spelled the
-same six-character way, so a record and its directory can be matched by
-eye.
+`LibraryStore::Open` says what it found, and `TrayController::Initialize`
+asks before the tray icon, so a refusal is a message box and no start:
 
-The readable half is capped at 20 characters - the default timestamp
-names fit whole. It was 40, and at 40 a snippet's files sit up to 141
-characters of slugs below the library root: long names on a long profile
-path, or in the recovery copy beside it (29 characters longer again), ran
-past MAX_PATH, where a record is neither written nor read back and the
-snippet was gone at the next start. The label is the only thing lost to
-a shorter cap; the name itself is in the record.
+- **Opened** - including a file that was not there yet, which is made,
+  directory and all. `Load` of a library this `Open` made returns
+  nothing, which is what a first run is; a library someone emptied loads
+  as an empty one.
+- **Written by a newer version** - `user_version` above this build's.
+  Every row it saved back would lose what the newer build put there, so
+  the store reads and writes nothing at all, and the app does not start.
+- **Unreadable** - the file is there and cannot be opened or read:
+  another program holding it, or not ours to read. A start over it would
+  save an empty library where it was, so the app does not start, and
+  says that trying again later may work.
 
-A tree rather than one file because one file is rewritten whole on every
-save: 50 canvases of ordinary drawing is a 42 MB document taking half a
-second to serialize, on the render thread, every couple of seconds of
-quiet.
+A file that is not a library this store can read - not a SQLite
+database, a damaged one, or someone else's - is set aside beside it as
+`library-unreadable-<time>.db`, with its journal, and a new library
+starts in its place. The app says so once, naming the file kept. A load
+that finds damage partway does the same.
 
-**The tree is the index.** Nothing records which canvas is in which
-folder; the directory it sits in says so, and where a record disagrees
-with where it physically is, the filesystem wins. Rearranging the
-library in a file manager while the app is closed is a supported way to
-use it, so `Load` reconciles rather than validates: a directory without
-a record is not ours and is left alone; an order file naming something
-gone skips it, and anything present it does not name goes to the end
-(the front, for snippets, since their order is z-order); a directory
-whose readable half was renamed by hand keeps its place by its uid; two
-directories claiming one id - what copying one produces - is not
-corruption, the second gets a fresh id; a current-canvas pointer naming
-nothing falls back to a canvas that exists. The same reconciliation is
-what makes a half-finished save survivable: a crash mid-write leaves the
-same kind of inconsistency a hand edit does.
+Statements wait 250 ms for a lock another program holds - short,
+because saves run on the render thread, and a save that gives up is
+tried again.
 
-The tree also invites files that are not ours, so what is read has a
-budget checked before anything is allocated for it: a record is refused
-unread past 64 MB (some seven hundred thousand stroke points on one
-snippet, as the records are written), a picture past 256 MB of file,
-16384 pixels on a side or 64 million pixels, with the picture's header
-checked before the decoder is handed the bytes - a QOI header claiming
-100000x100000 asked for a 40 GB allocation before that. The record
-budget binds the writer too. `Save` wrote whatever a snippet had grown
-to and counted it saved, and the next `Load` skipped the record whole -
-the snippet gone, with nothing to say why. A record past the budget is
-now not written: the save fails, the last record that fitted stays on
-disk to load, and the warning along the bottom says a snippet is too
-large rather than promising a retry that cannot succeed. Every float a record carries is read through one function that
-turns a value too large for a float (`1e100` is valid JSON and infinite
-as a float) into the field's default and holds the fields with a range
-inside it, rather than letting one infinite coordinate poison every
-bounding box it meets. Repaired, never refused: the rest of the record
-is still the user's, and the next save writes the repaired value back.
-The settings file has the same shape of budget: read past 1 MB it is
-read as one that said nothing (`ReadConfigFile`), and the one setting
-that took any positive number, the stroke width, has a ceiling it is
-held to. Two budgets were considered and not added. There is no
-aggregate limit on decoded pixels because the GPU textures are per
-canvas: only the current canvas's pictures are resident, so the working
-set is bounded by one canvas rather than the library, and a library of
-a thousand screenshots costs disk, not memory. There is no separate
-limit on the number of strokes, points or layers in a record because
-the record's byte budget bounds all three at once, and a second limit
-would have to be kept in step with the first for no extra safety.
+### A save
 
-A snippet's pictures live in its own directory, so moving a snippet is
-moving one directory with no window where the record has moved and the
-picture has not. `Layer::imageFile` names a *file*, not a path, and
-`FindImage` turns it into a path through the owning snippet. A
-library-wide filename-to-directory map fell behind whenever a directory
-moved, and two snippets can legitimately hold files of the same name.
+`LibraryStore::Save` writes what changed since the store last read or
+wrote the library, in one transaction:
 
-**Links are not part of the tree.** A symlink or junction inside the
-library names something that may be anywhere on the disk, so what is
-behind one is never the store's: `Load` skips linked directories and
-does not look inside one, so nothing behind one enters the index, and
-every path the store creates, writes, moves or deletes goes through one
-check (`IsOurs`) that walks the whole path from the root down for a
-link - at the moment of the write, move or delete, whether the path was
-made just now or indexed at load. An indexed directory is trusted only
-as far as answering "unchanged?" from the hash: the moment there is
-something to write into it, it is checked like any other, so a junction
-put in its place between two saves fails that record's write rather
-than being written through. The check costs a filesystem call per path
-component, and only what is written pays it; a no-op save pays nothing.
-That covers the top-level directories too: a junction at
-`folders/` fails every save outright, one at `staging/` refuses the
-capture's write (the session keeps the pixels and the save keeps
-failing, visibly), and one at `retired/` leaves what would have been
-retired where it is. The first version checked only the directory a
-record would be created in and took the roots on trust, and a junction
-at either root had a save writing a whole tree outside the library. A
-junction standing where a save would have to create a directory makes
-that record unplaceable: the save reports failure and leaves the link
-alone rather than writing through it. The library root itself is not
-checked: a root that is a junction is how a library is moved to another
-drive, and is supported. The checks are by path, not by handle. The
-threat is a user's own junction (a snippet directory pointed at a folder
-of notes, say) meeting an ordinary sweep, not a process racing the
-store's own file operations; the latter would need handle-based
-operations with reparse checks and is out of scope for a single-user
-tray app writing its own `%APPDATA%`.
+1. every folder and canvas whose row differs from what was written;
+2. every snippet whose row differs. Each is serialized - its record and
+   its stroke blob - and hashed, and only one whose hash moved is
+   written. One that only moved, in its stack or to another canvas, has
+   just its place updated;
+3. the removal of whatever the library no longer holds, a thing before
+   what held it - after the writes, so that a snippet moved off a canvas
+   that is deleted in the same save goes with the move;
+4. the pictures no written snippet owns: a capture whose snippet was
+   deleted before its first save, or one a crash left without its
+   snippet;
+5. the current folder and canvas.
 
-### A save is a plan
+What the store remembers of the rows is updated only once the commit has
+landed. A save that fails - a lock another program holds, a full disk -
+rolls back whole, and the next one writes everything the failed one
+would have.
 
-First everything the library holds is *placed* - its directory found
-where the index says, or moved to where its current name says, or
-created - and its record written; then whatever the index knows about
-that the library no longer holds is retired; then pictures waiting in
-staging are moved in with their snippets. Placing everything before
-retiring anything is what makes a move a move: a save that swept each
-canvas for strays as it went deleted a snippet dragged to a *later*
-canvas, picture and all, before reaching the canvas it went to. Retiring
-only what the index knows is what makes an unfamiliar directory safe:
-unreadable must never become deleted.
+Serializing every snippet to compare costs a few milliseconds for a
+large library every time the autosave fires. It is the price of keeping
+`Save(view)` as the interface while the rest of the app still describes
+changes by snapshot; see "Dead ends" for the tree's field-by-field hash
+it replaced.
 
-Nothing is placed under a directory until that directory's record is
-on disk. Load reads only a directory that holds a record, so anything
-moved into a folder or canvas whose record has not landed is lost to a
-restart until it does. The case is ordinary: a snippet saved long ago,
-moved into a canvas just made, and a save that cannot write the new
-canvas's record. So when a folder's or canvas's record fails and none
-is there from before, its contents stay where they are, and wait for
-the save that writes the record. A record that only failed to be
-rewritten still has its previous version on disk, and does not hold
-anything back.
+Deleting for good (`Session::DeletePermanently`) is a save at once
+rather than at the next autosave, so that nothing deleted for good comes
+back after a crash in between. There is nothing else to it: no pending
+removals, nothing owed, no files that could stay behind.
 
-Retiring sets aside into `retired/` rather than deleting. With a delete
-a mark and a permanent delete an eager `Remove`, the index and the
-snapshot agree about everything that went on purpose by the time a save
-runs, and the pass finds nothing. It is the net under a snapshot that
-lacks something nobody deleted, the kind of disagreement that once
-emptied a library.
+### Reading what cannot be used
 
-A permanent delete takes what the store writes and nothing else: the
-records and order files, the pictures and thumbnails, an older build's
-`.removed` mark, and a temporary a crash left one of those as. A note
-someone kept beside a record, or a directory of scans beside a canvas,
-stays. The directory stands for it, holding no record, which nothing
-reads back and, never having been indexed, nothing sets aside. The
-first version deleted the directory whole, with whatever anyone had
-put in it, while every other path in the store left foreign files
-alone.
+A value a row carries that cannot be used is repaired rather than
+refused, and the repaired row is written back by the next save. A float
+that is not finite reads as its default - JSON has no infinity, but
+1e100 becomes one the moment it is read as a float, and one infinite
+coordinate poisons every bounding box it meets - and one with a range
+is held inside it. A value of the wrong type is its default. A stroke
+blob cut short keeps the strokes before the cut. A current canvas or
+folder naming nothing opens on one that exists.
 
-It recurses into a directory inside what it deletes when either of
-these holds:
+### Pictures: QOI, in the file
 
-- the directory's uid was deleted for good along with it. It may have
-  lost its record to an earlier run already.
-- the directory holds something only the store writes: a record, an
-  order file, a picture named after the directory's own uid, a
-  temporary of one of those, or such a directory below it.
-
-The second rule is broader than Load's rule of "holds a record" on
-purpose. A save that stopped partway can leave a directory whose own
-record never landed: a canvas's snippets and order file with no canvas
-record above them, or a snippet's picture moved in from staging and
-not its record. Load does not read such a directory, so nothing names
-it when its parent is deleted. Asked only about the record, the
-removal left it standing, and it kept the parent standing too. The
-randomized test found both cases.
-
-A directory is removed only once it is empty. One that cannot be
-listed counts as not emptied: calling it done dropped the removal and
-left the record in it to load again. The same goes for a directory
-inside one, whose listing is where the store looks for a record of its
-own. Read as holding none, it was skipped as someone else's, and the
-removal reported done around a leftover of the store's.
-
-A permanent delete is recorded before anything is deleted. The store
-names the uids in `pending.json`, drops the directories from the index
-so that nothing under them is placed or set aside meanwhile, and only
-then removes. A removal that stops partway is then still known when
-the process starts again. It can stop for two reasons:
-
-- a crash;
-- a file that cannot be deleted. Windows refuses to delete a file
-  another program holds open without delete sharing, and a picture
-  viewer looking at a capture is exactly that.
-
-`Load` reads nothing of a directory the file names, and owes its
-removal. Every save takes another run at it. The store removes only
-what the file already records, so a `pending.json` that cannot be
-written deletes nothing new, and fails the save. The file is gone
-again once nothing is owed.
-
-A `pending.json` that cannot be read is not written over, since what it
-names would be lost. Held by another program, it is read again for half
-a second at the load, and once more before each save's run at the
-removals. What it names loads as it is while it cannot be read. Once it
-reads, what the session loaded of that is the session's: it is on
-screen, and may have been added to, which a removal at the next start
-would take with it. The rest is kept as the file says. The first
-version read it once, at the load. A moment's hold then refused every
-save of the session once anything was deleted for good, and every exit
-wrote a recovery copy of the whole library. A file whose content is not
-a record, or which is far too big to be one, will read no better later.
-It is set aside as `pending-unreadable-<time>.json`, as a settings file
-that is not settings is; kept, it refused every save for good. A `pending.json` that still names
-something counts as owed even when everything it names is gone. A
-crash between the last removal and the rewrite leaves it so, and
-otherwise no save would come along to rewrite it.
-
-The previous version wrote a `.removed` mark into the directory, but
-only once a removal had failed. A crash partway through one left no
-mark, and the next start reloaded what was left: a snippet deleted for
-good came back without its picture, which had gone first. Found by the
-crash tests (see "One way to the disk"). Marks an older build left are
-still read as owed removals.
-
-A permanent delete names everything that goes, not only the thing: the
-session passes the thing and every folder, canvas and snippet the model
-held under it. A snippet moved into a canvas since the last save still
-has its directory under the canvas it came from, and only the model
-knows it went with this one. Named only by the canvas, it was left
-indexed under its old parent, and the next save set it aside in
-`retired/` as something the library had lost. Were its picture held
-open, the set-aside failed and a restart loaded it back. The store also
-takes whatever its index has inside a named directory that the library
-no longer holds, named or not.
-
-The session counts an owed removal as
-an unsaved change: the flush that recorded it counts, but the autosave
-keeps asking - on a clock of its own, every ten seconds, the cadence the
-hidden retry timer has - and the hidden retry timer keeps running, until
-the directory is gone. The owed path follows every rename and
-retirement of a parent, the way the index does, so a folder renamed
-before the retry does not leave the pass looking at the old spelling,
-finding nothing, and calling the removal done with the directory
-sitting under the new name. The clock matters: the save that recorded the
-removal counted, so neither the failure backoff nor the quiet period
-held the next one back, and the retry ran on every frame, hashing the
-library each time, for as long as another program held the file. The
-first version forgot the directory before
-deleting it and returned true whatever happened, which left the remains
-to be retired as something lost, or reloaded as a snippet; the second
-kept the removal pending but let the next save count as clean, so
-nothing retried until an unrelated edit, and a restart reloaded the
-record.
-
-A permanent delete must not take what was moved out of it. A move
-changes the model at once and the directories at the next save, so a
-snippet moved to another canvas, or a canvas to another folder, is still
-inside its old parent on disk until then - and deleting that parent for
-good in between took the moved snippet's pictures with it, while the
-model kept the snippet and the next save wrote its record afresh,
-without them. `Remove` is therefore handed the library as it stands
-without the thing. When anything that library still holds is indexed
-inside the directory, nothing inside is deleted yet. The removal is
-recorded all the same, and so is where each such thing belongs, under
-`moves` in `pending.json`: a snippet's canvas, or a canvas's folder. A
-save places everything before it runs the owed removals, so it
-finishes the removal once nothing held is left inside. The session
-makes that save at once, so the ordinary case completes as the delete
-is asked for. If the move cannot land, because a picture in the moved
-snippet is held open, the removal waits with it.
-
-A restart meanwhile reads the moved thing from where it is, inside the
-deleted directory, and puts it where `moves` says; the next save moves
-its directory to match. It goes to the first folder or canvas not in
-the trash instead if the one it belongs to is gone too. The first one
-of all could be in the trash; hidden there, the rescued thing was then
-erased with it by the retention pass that runs right after the load.
-Canvases are rescued before snippets, since a snippet can have been
-moved into a canvas that is itself being rescued. In the order of the
-uids, the snippet sometimes came first, did not find its canvas, and
-went elsewhere for good. If there is no live folder or canvas at all,
-it goes to a new one named "Recovered". That case is real: a
-folder is made, a canvas is moved into it, and the process stops before
-either is saved. The folder `moves` names never reached the disk. A
-rescue with nowhere to go used to leave the canvas unread, and the
-next save swept it away, snippets and all, with the folder it was
-still in. Only what `moves` names is
-rescued. The record is written, moves and all, before anything is
-removed, so anything else inside went with the deleted thing. The
-previous version wrote nothing for a removal that waited, so that a
-restart would still find what was moved. It found it in the old place,
-with the deleted canvas loaded back around it. Retention later erased
-that canvas again, and took the snippet with it.
-
-What a load could not see is carried forward, not taken for gone.
-Every save rewrites `pending.json` from what the session knows, and a
-session knows only what its load could look at. Two things escaped it:
-
-- a removal owed inside a directory that could not be listed;
-- something moved out that the rescue could not read, because another
-  program held its record for a moment.
-
-The first save dropped both. A forgotten removal loaded again at the
-next start where its directory could be read. A forgotten move let the
-removal finish, and what was moved went with the directory it was
-still inside: unreadable became deleted. So the store keeps every
-entry of the file that its load did not see, until a load that saw
-everything finds it gone. A removal also waits while something moved
-out of it that could not be read is still inside, the way it waits for
-anything the library holds. Neither counts as owed: no save could do
-anything about them, and counting them kept the autosave retrying.
-
-A folder or canvas whose own record cannot be read is still looked
-into, for what was deleted for good inside it, and does not make the
-load count as incomplete. A directory without a record is an ordinary
-sight after a save that stopped before its record landed, and counting
-it kept `pending.json` from ever emptying. For the same reason, a
-moved-out directory with no record at all has nothing to rescue, and
-goes with what it is in.
-
-A record that is there and cannot be read also keeps the staging pass
-from setting aside pictures that nothing loaded names. A capture saved
-just before the process stopped can still be waiting in staging, and
-if its record is held at the next start, nothing in that session names
-the picture. Set aside, it was missing from the snippet once the
-record could be read. The randomized test found this once it began
-holding records while a restart loads.
-
-A snippet deleted for good before any save gave it a directory has
-nothing on disk but its pictures in staging. The staging pass cannot
-tell those from what a crash leaves, so it set them aside in
-`retired/staging/`, and something deleted for good was left in the
-library after all. A permanent delete now takes the pictures of
-everything it names from staging, and from `retired/staging/`, where a
-thumbnail's temporary may already have been set aside. As with a
-directory, a picture goes only once `pending.json` records its owner.
-Consider a capture that was saved with its picture still in staging,
-then deleted for good, with the process stopping before the record was
-written: it loads again at the next start and needs its picture. The
-randomized test found that, once its checks began matching pictures by
-name. A picture that cannot go yet is owed, and retried by every save,
-and the staging pass never sets it aside.
-
-A snippet's directory is swept for pictures its layers no longer name
-only after the record that stopped naming them is on disk. Until then
-the old record is what a restart reloads, and the pictures it names have
-to still be there for it: a sweep that ran on a record that failed to
-land deleted the only image the surviving record pointed at. The sweep
-also takes only pictures (`.qoi`); anything else someone put
-beside a record is not the store's to delete.
-
-### A save writes what changed
-
-The store keeps what it last wrote - a content hash per snippet, the
-exact text for the small records - and where everything lives, so a save
-neither re-reads the tree nor re-serializes what it would write back
-unchanged. A twelve-canvas library measured 858 ms per autosave when
-every file was rewritten, for one stroke on one snippet; bounded by what
-moved it is 1.8 ms when nothing did and 7.5 ms for that stroke. `Load`
-establishes the same record as it reads, so the first save of a session
-costs only what the load had to repair. The hash and the serializer are
-kept adjacent in the source and a test asserts every field moves the
-hash, because a field added to one and not the other is an edit that is
-silently never saved.
-
-To be precise about what is and is not bounded: the *writes* are
-bounded by what changed; the *pass* that finds out what changed is not.
-A save reads the library through a `LibraryView` - borrowed references
-to the manager's own vectors - rather than a snapshot, since the
-snapshot copied every stroke point in the library on every save and was
-the largest single cost of one that then wrote nothing. What remains is
-the fingerprint: `HashItem` walks every point of every snippet, about a
-thousandth of the cost of serializing it, and linear in the library's
-size. Canvases are grouped by folder once rather than scanned per
-folder. If the fingerprint ever shows in a profile, the next step is a
-per-snippet revision counter bumped by every mutation path, so that only
-changed snippets are hashed; it has not been needed at the library sizes
-measured, and every stroke mutation would have to remember to bump it.
-
-Every file goes through write-to-temp-then-rename, pictures and the
-settings file included, and through one writer (`WriteFileAtomically`
-in `core/util`): truncating in place leaves a window in which the only
-copy on disk of a file is the first half of it. The temporary
-is created exclusively, under a name nothing was at. A file already at
-`<file>.tmp` is never opened: a plain file with no other name is a
-temporary of ours that a crash left, and is removed; anything else - a
-hard link to a file elsewhere, a symlink, a directory - is passed over
-for `<file>.tmp1` and so on. The first version opened `<file>.tmp` with
-truncation and trusted whatever was there, and a hard link at that name
-to a file outside the library had the library's bytes written into it;
-a hard link to the committed file itself would have truncated it before
-the rename, which is the opposite of what the rename is for. Hard links
-are not links in the reparse sense, so the path check for junctions
-(`IsOurs`) does not see them; exclusive creation is the only answer.
-
-**What is and is not promised.** Atomicity per file, not a transaction
-across files. The rename means no reader - this process after a crash
-included - sees half a record or half a picture. The temporary's
-contents are committed to the disk (`_commit`, which is
-`FlushFileBuffers`) before it is renamed into place. Without that, a
-power cut inside the OS's write-back window could keep the rename,
-which NTFS journals, and lose the data, which it does not: the file came
-back at its new length full of zeros, and the good version it replaced
-was already gone - a whole snippet with weeks of strokes, not a few
-seconds of ink. The rename itself is not flushed, so a power cut can
-still lose the last save, falling back to the file before it. Nor is there a
-transaction spanning a record and the pictures it names: a crash between
-the two leaves a picture with no record (kept in staging, then in
-`retired/staging/`) or a record naming a picture that was never written
-(the layer draws as its placeholder). Both are the same shape of
-inconsistency a hand edit leaves and are reconciled the same way. What
-"captured" means, precisely: the pixels are encoded to disk before the
-capture returns; the *record* naming them is written by the save that
-follows - at once when the overlay is hidden, within the debounce
-otherwise - and the session holds the pixels until both have landed.
-A journal of saves was considered and not done: the library is a
-working surface autosaved every few seconds, not a document with a save
-button, and with each file's data on the disk before its rename, the
-last few seconds of ink are the most a power loss can take. Deleting for
-good is different: it is recorded in `pending.json` before it starts
-(see "A save is a plan").
-
-### One way to the disk
-
-Every disk operation the store makes goes through one interface,
-`FileSystem` in `core/util`, and so do the atomic writer and the QOI
-codec's file reads and writes. The store is handed one at
-construction. The disk itself (`RealFileSystem`) is the default.
-
-The reason is testing. Most of what has gone wrong in the store went
-wrong when the disk refused something: a picture held open by a viewer,
-a rename that failed, a crash between two steps. Each of those tests
-used to set up its own real failure, a file opened without delete
-sharing, say. That only works on Windows, and only for the failures
-someone thought to stage. A file system a test can hand the store
-reaches every case without staging it: one that fails a chosen
-operation, holds a chosen file, or stops changing the disk after the
-Nth change, which is all a crash leaves behind.
-
-The interface is primitive on purpose: status, list, read, make one
-directory, write a new file, rename, remove. Everything built from
-several steps is built on top of those: creating a directory with its
-parents, removing a tree, writing a file atomically. That way a test
-can stop such an operation between any two of its steps. Nothing in
-it throws. A listing is whole or absent, never partial: the standard
-iterator's `++` throws on an error partway through a directory, which
-a range-for over a library directory turned into a crash.
-
-Listing reports what an entry *is*, not what it points at. So a
-symlink that stands where a snippet's picture or a staged capture
-would be is now passed over by the picture sweep and the staging pass,
-rather than removed or moved. The rule is the same one the tree
-already keeps for linked directories: a link is never the store's.
-
-**The disks the tests use** live in `tests/support`:
-
-- `MemoryFileSystem` is a model of the disk in memory. It is fast
-  enough to run a scenario hundreds of times, and it behaves the same
-  on Linux as on Windows.
-- `FaultyFileSystem` wraps any file system and adds three kinds of
-  misbehavior:
-  - holding a file open, which blocks removing it, renaming it,
-    replacing it and renaming any directory above it;
-  - failing a chosen operation;
-  - crashing: after N changes the disk stops changing, and the write
-    the crash interrupts leaves its first half.
-
-A model is only worth what it agrees with. So one conformance suite
-runs the same expectations against both the model and the real disk,
-a held file included (a stream open the way the MSVC runtime opens
-one). Anything the model gets wrong about Windows shows up as the two
-disagreeing.
-
-`ForEachCrashPoint` runs a scenario once to count its changes, then
-once more for every point it could crash at. Each time it restarts on
-what was left and checks the rules a crash must never break:
-
-- nothing loads twice;
-- every picture a record names loads;
-- each snippet is its version from before the change or from after it,
-  whole, in one place or the other;
-- the restart saves, and loads back as itself.
-
-Edits, moves of snippets and canvases, renames, captures, rewritten
-pictures and deleting for good all pass at every point. A delete also
-passes with a picture held open, and with a snippet just moved into
-the deleted canvas. It also passes with a snippet or a canvas just
-moved out of what is deleted, while a picture in it is held open so
-the move cannot land. For a delete, one more rule applies: once the
-restart has saved, nothing of what was deleted is left anywhere in the
-library, `retired/` included.
-
-The crash points cover the scenarios someone thought of. A randomized
-test (`library_random_test.cpp`) covers the combinations nobody
-thinks of. Each seed drives a `Session` through a few hundred steps of
-what a person does:
-
-- make folders, canvases and snippets, some with pictures;
-- edit, rename and move them;
-- delete, restore and delete for good;
-- save.
-
-Meanwhile files are held open, single operations fail, and the process
-crashes and starts again. Now and then a restart loads with a record
-held or a directory that cannot be listed, which another program lets
-go of once the load is done. Every restart is checked:
-
-- nothing loads twice;
-- every picture a record names loads;
-- nothing deleted for good loads again;
-- nothing the library held at its last successful save is lost.
-
-At the end, everything is let go of and saved twice. Then nothing may
-be owed, nothing deleted for good may be left on disk, and the disk
-must load as the library.
-
-A failure prints its seed and its steps. Uids are drawn from a
-generator the test seeds (`SeedUidsForTesting`), so a seed runs the
-same way again, alone, with `SPICKZETTEL_RANDOM_SEED`. ctest runs 25
-seeds of 150 steps. `SPICKZETTEL_RANDOM_SEEDS` and
-`SPICKZETTEL_RANDOM_STEPS` raise that for a long run. Its first runs
-found five things the scenarios had not:
-
-- a canvas whose record never landed was left standing inside a folder
-  deleted for good;
-- so was a snippet directory holding only its picture (see the
-  permanent delete's recursion rule above);
-- a `pending.json` naming only what was gone was never rewritten;
-- a rescue with nowhere to go lost a saved canvas (see "Recovered"
-  above);
-- a saved snippet moved into a new canvas whose record did not land was
-  lost to a restart (see "A save is a plan").
-
-A removal whose `pending.json` cannot be written is owed in memory only,
-and a crash then brings the thing back, still marked deleted. That is
-the documented cost, not a bug, so the test counts a delete for good as
-certain only once the file names it or its directory is gone. Writes of
-`pending.json` fail at random like any other.
-
-### Images: QOI
-
-Pixels are written as QOI. Measured on this app's own screenshots
-against stb's PNG:
+Pixels are stored as QOI. Measured on this app's own screenshots against
+stb's PNG:
 
 | | 1920x1080 capture | ~500x400 capture |
 |---|---|---|
@@ -1225,38 +763,36 @@ against stb's PNG:
 | QOI encode | 13 ms | 2.4 ms |
 
 Decoding is what a canvas switch pays; encoding is what every screenshot
-pays, synchronously, while the user waits. Both are lossless, and the
-files come out ~30% smaller because stb's encoder is a weak one. Raw
-pixels were measured too and are a trap: reading 8 MB off disk costs
-more than reading 1.6 MB and decoding it. The library holds QOI only;
-stb's PNG codec stays in `image_codec.h` for importing and exporting
-pictures, which nothing does yet. A 256px thumbnail is written beside every picture so the
-Overview never decodes a fullscreen capture to draw a 200px tile.
+pays, synchronously, while the user waits. Both are lossless, and QOI
+comes out ~30% smaller because stb's encoder is a weak one. Raw pixels
+were measured too and are a trap: reading 8 MB costs more than reading
+1.6 MB and decoding it. A 256px thumbnail is stored with every picture,
+so the Overview never decodes a fullscreen capture to draw a 200px tile.
 
-A capture's pixels are written synchronously at capture time, not with
-the debounced record write: a screenshot lost to a crash can never be
-recaptured, where a few seconds of strokes can be redrawn. For the same
-reason a picture found in staging that no record names is set aside
-into `retired/staging/` rather than deleted: from the store's side it is
-either the capture of a snippet deleted for good before it was saved,
-which nobody wants, or the capture a crash left without its record,
-which is exactly what writing it early was for, and the two cannot be
-told apart. `retired/` is the user's to empty.
+In the file rather than beside it, because nearly every bug of the tree
+that was hard to find was a record and a picture file disagreeing. A
+blob is a few milliseconds slower to read than a file, once per canvas
+switch.
 
-`staging/` is removed by the save that drains it, so it exists only
-between a capture and the next save, or while a picture in it could not
-be moved. An empty folder left in the library was only something for a
-person looking in to wonder about.
+A capture's pixels are stored at once (`SaveImage`), not with the
+debounced save: a screenshot lost to a crash can never be recaptured,
+where a few seconds of strokes can be redrawn. A picture is never changed
+after that. A copy of a snippet gets a copy of the row as stored
+(`CopyImage`), without decoding it.
 
-A picture waiting in staging whose snippet's directory already holds a
-file of the same name is set aside the same way, not moved in over it.
-A picture goes to staging only while its snippet has no directory and
-to the directory from the moment it has one, so the one at home is
-always the newer: the waiting one is what a move refused at the save
-that made the directory left behind - a file held open - and the
-picture has been saved again at home since. Moving it in once the file
-was let go of put the older pixels back under a layer that believed
-itself saved, where no later save would notice.
+The recovery copy an exit writes when the library cannot be saved (see
+"When the disk says no") starts as `VACUUM INTO` of the library - the
+file as last saved, pictures and all, when it can still be read - with
+what the session holds saved over it.
+
+### Testing
+
+`library_store_test.cpp` runs against real files. What would fail a
+write is another program holding the file, done with a second SQLite
+connection (`tests/support/held_library.h`): a write lock stops saves
+and leaves reads, an exclusive one stops both. A save that fails partway
+is a trigger the test adds that aborts on one row, which shows the
+writes before it rolled back with it.
 
 ## Configuration
 
@@ -1490,17 +1026,17 @@ host for a background timer (a `WM_TIMER` on the host window) and
 tries again every ten seconds until the save lands or the overlay is up
 again and frames take over. Before that, a silent capture with notices
 off created its canvas and snippet and returned to hidden without a
-save; the picture was on disk and the record naming it was not, for as
-long as the overlay stayed hidden. A failed write (disk full, a file held open) is retried
+save; the picture was on disk and the snippet it belongs to was not, for
+as long as the overlay stayed hidden. A failed write (disk full, the file
+held by another program) is retried
 on a clock of its own, doubling up to 30 s; falling through to the quiet
 check, which a failed save does nothing to reset, retried on every frame
 and turned a full disk into a synchronous rewrite per frame. A save is
 acknowledged only when *all* of it landed, pictures included, so a
 picture whose write failed is retried rather than waiting for an
 unrelated edit. A capture whose picture could not be written at capture
-time keeps
-its pixels in the session and is written by the next save that can, and
-no save counts until it has. A screenshot is the one thing in the
+time keeps its pixels in the session and is written by the next save
+that can, and no save counts until it has. A screenshot is the one thing in the
 library that cannot be remade; the first version let the pixels go with
 the capture result, so a picture that failed to write stayed on screen,
 looking captured, and was gone at the next restart.
@@ -1510,7 +1046,7 @@ is held - ends a stroke in flight as a release would, so it is kept, is
 its own undo step, and is saved like any other.
 
 **One writer per library.** Two copies of the app would each save the
-library from a stale picture of it, through the same temp-file names.
+library from a stale picture of it.
 The tray claims a per-user named mutex before it does anything else,
 and a second copy exits with the app's one message box instead of
 loading the library. Per user is per `%APPDATA%`, which is per library;
@@ -1553,19 +1089,19 @@ a `WM_CLOSE` sent to the overlay take the Exit, which is where `taskkill`
 sends it while the overlay is up - it closes the windows it can see, and
 the host window is hidden. Alt+F4 over the overlay arrives as `SC_CLOSE`
 instead, and stays swallowed. Exit and a session end both settle the
-hand's work, try the
-save twice - the first attempt may be what clears the way - and, if the
-library still cannot be written, write a **recovery copy** beside it:
-`library-recovery-<timestamp>/`, a fresh tree holding every record and
-every picture those records name - from the session where it holds the
-pixels (a capture whose write never landed), and re-encoded from the
-real library otherwise - with a `recovery.txt`
-beside the tree saying where it came from and whether it is whole. The
-copy has to open on its own: the first version copied only what was in
-memory, so its records named screenshot files that were still in the
-real library and the copy opened with placeholders where they should
-have been. A copy that could not be made whole (a picture the real
-library no longer has) is reported as such, in the return and in the
+hand's work, try the save twice - a lock another program held a moment
+ago may be gone - and, if the library still cannot be written, write a
+**recovery copy** beside it: `library-recovery-<timestamp>.db`, the
+library as last saved (see "Pictures: QOI, in the file") with what the
+session holds saved over it and every picture a snippet in it has -
+from the session where it holds the pixels (a capture whose write never
+landed), and from the real library otherwise - with a note beside it
+(`.db.txt`) saying where it came from and whether it is whole. The copy
+has to open on its own: the first version copied only what was in
+memory, so its snippets named screenshots that were still in the real
+library and the copy opened with placeholders where they should have
+been. A copy that could not be made whole (the real library could not
+be read for its pictures) is reported as such, in the return and in the
 note. Exit still exits, and this is an **accepted outcome**: when the
 library cannot be written twice over and the recovery copy beside it
 cannot be written either - a full volume, an unwritable parent - what
@@ -1576,15 +1112,12 @@ the tray has no window of its own to ask in. A retry loop at exit, an
 alternate destination to ask for, or a message box naming the copy were
 each considered and not done - a save that has failed at two places
 three times is a disk problem, not one more attempt away from working,
-and the on-screen warning while the app ran was the time to say so. A
-test pins the outcome down (both destinations unwritable, exit still
-exits, nothing forced anywhere), so that it stays a decision rather
-than drifting into an accident.
+and the on-screen warning while the app ran was the time to say so.
 
 ### GPU textures are per canvas
 
 `SyncTexturesToCurrentCanvas` uploads a texture for every layer on the
-current canvas that has a file or pixels but no texture, and releases
+current canvas that has a stored picture but no texture, and releases
 every other canvas's. Only the current canvas is ever drawn from a real
 texture, so everything else is pure cost - a library of fifty 4K
 captures would otherwise pin ~1.6 GB of VRAM behind a game and pay for
@@ -1620,7 +1153,7 @@ holds cannot be carried over: every texture was made on the old device.
 So the window's `TextureGeneration` moves on, and at the start of the
 next frame, before anything draws, the app lets go of each texture and
 makes it again. The session remakes the current canvas's pictures from
-memory or the library, a picture not written yet from its pending pixels,
+the library, a picture not written yet from its pending pixels,
 and the frozen screen from the pixels it keeps for cropping. The
 Overview's previews and the stroke rasters rebuild as they are next
 wanted. A stray old texture handed to `UpdateTextureRegionRGBA` is
@@ -1630,8 +1163,8 @@ Only a frame notices a lost device, and no frame runs while the overlay
 is hidden. So a capture made from the tray after a driver reset has
 pixels and no device to upload them to. It returns the pixels anyway,
 with no texture. They are the one thing that cannot be taken again, and
-the snippet is written from them and gets its texture from the file
-after the device is replaced. The first version returned nothing, and
+the snippet's picture is stored from them and gets its texture from the
+library after the device is replaced. The first version returned nothing, and
 the snippet kept its placeholder for good while the notice reported a
 capture. A freeze keeps its pixels without a texture the same way:
 shots are cut from what was frozen, and the frozen screen shows once
@@ -1653,18 +1186,19 @@ it.
 
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
 copy made from them (paste, duplicate, copy to another canvas) must
-share neither a file nor a texture with its source. `CanvasManager`
-clears the copied layers' filenames; `Session::ClonePicturesForCopy`
-then gives the copy its picture, from the session's own pending pixels
-or the source's file, written under the copy's name at once. The UI
-says so when the source's picture cannot be read, rather than showing a
+share neither a picture nor a texture with its source. `CanvasManager`
+starts the copy with neither; `Session::ClonePicturesForCopy` then gives
+it its picture at once - the source's row copied as stored, or the
+session's own pending pixels for a capture not written yet. The UI says
+so when the source's picture cannot be copied, rather than showing a
 copy that looks whole.
 
 ### Undo is per canvas
 
 History is a `deque` per canvas, capped at 50 entries *and* 128 MB of
-what they hold (a Clear drawing holds every stroke it took). A canvas is this app's document,
-and undo scoped to a document is what every editor does. One global
+what they hold (a Clear drawing holds every stroke it took). A canvas is
+this app's document, and undo scoped to a document is what every editor
+does. One global
 stack reached across canvases and failed invisibly: draw on A, switch to
 B, draw, come back to A, press Ctrl+Z, and the stroke that vanished was
 B's, on a canvas you were not looking at.
@@ -2996,8 +2530,8 @@ impractical, so the strategy focuses on what can be verified without a
 live compositor, in four tiers:
 
 - **Core tests** (`tests/core/`, portable) cover the drawing model, the
-  canvas model, persistence against a real temporary directory, the
-  config, the session and the settings. They are where a test of new
+  canvas model, persistence against a real library file in a temporary
+  directory, the config, the session and the settings. They are where a test of new
   behavior belongs before any UI reaches it.
 - **Headless app tests** (`tests/app/`) run the whole app - a real
   `OverlayApp` driven through a real ImGui frame - over the in-memory fake
@@ -3051,9 +2585,19 @@ one twice.
   show where a restore puts a thing. Replaced by Show deleted, in place.
 - **Profiles based on other profiles.** A third level nobody could see;
   replaced by exactly two levels.
-- **One library file.** 42 MB rewritten every two seconds at fifty
-  canvases; replaced by a directory tree that is its own index, and then
-  by a save whose writes are bounded by what changed.
+- **One library file of JSON.** 42 MB rewritten every two seconds at
+  fifty canvases; replaced by a directory tree that is its own index,
+  and then by a save whose writes are bounded by what changed.
+- **The library as a directory tree** - a directory per folder, canvas
+  and snippet, records and pictures in them, rearrangeable in a file
+  manager. Every change was several filesystem steps a crash or a held
+  file could stop between, and the store grew a pending-removals file, a
+  staging directory, a retired directory, a reconciling load and a
+  fault-injecting test file system to survive that. Replaced by one
+  SQLite file, whose transactions have no "between" (see "Why a
+  database"). It compared snippets to what it had written by a hash of
+  their fields, which had to be kept in step with the serializer by
+  hand; the database store hashes the row it would write instead.
 - **PNG for captures.** Six to twenty times slower than QOI on this
   app's own screenshots.
 - **Painting pixels** (`AppConfig::paintPixelsInsteadOfStrokes`): the pen

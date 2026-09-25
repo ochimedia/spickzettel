@@ -217,7 +217,7 @@ IOverlayWindow& Win32PlatformHost::GetOverlayWindow() { return overlayWindow_; }
 std::vector<DisplayInfo> Win32PlatformHost::ListDisplays() const { return EnumerateDisplays(); }
 
 namespace {
-// Shared by GetConfigFilePath/GetDataDirectoryPath below.
+// Shared by GetConfigFilePath/GetLibraryPath below.
 std::filesystem::path AppDataBase() {
     std::filesystem::path base;
     // GetEnvironmentVariableW rather than std::getenv: the wide form is
@@ -249,7 +249,7 @@ std::filesystem::path AppDataBase() {
 
 std::filesystem::path Win32PlatformHost::GetConfigFilePath() const { return AppDataBase() / "config.json"; }
 
-std::filesystem::path Win32PlatformHost::GetDataDirectoryPath() const { return AppDataBase() / "library"; }
+std::filesystem::path Win32PlatformHost::GetLibraryPath() const { return AppDataBase() / "library.db"; }
 
 int Win32PlatformHost::RunEventLoop() {
     running_ = true;

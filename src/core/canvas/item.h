@@ -124,6 +124,9 @@ struct Item {
     // that keeps its size and wraps sooner. 17 matches the UI font. Clamped
     // to kNoteTextSizeMin..Max wherever it is edited or loaded.
     float noteTextSizePx = 17.0f;
+
+    // Every field, texture handles included (see Layer's).
+    bool operator==(const Item&) const = default;
 };
 
 // The band noteTextSizePx is held to: below 8 the UI font stops being

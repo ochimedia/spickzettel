@@ -39,7 +39,9 @@ start; `linux-tests` builds and tests the portable core on Linux.
 ## Configuration
 
 On first run Spickzettel writes `%APPDATA%\Spickzettel\config.json` with
-defaults and stores the library beside it under `library\`. Everything
+defaults and stores the library beside it in `library.db`, one SQLite
+file. A library from a build before it (a `library\` folder beside it)
+is not read, and is left where it is. Everything
 in the config file can be changed from the overlay's own Settings tab,
 which writes it back at once; editing the file by hand works too, and is
 read at startup.

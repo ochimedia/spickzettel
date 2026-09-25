@@ -13,13 +13,13 @@ namespace {
 
 // What a copied item's layers have to give up so the copy owns its own
 // resources. A texture handle has single-owner lifetime (see layer.h) and
-// must not be duplicated. imageFile names a file in the source's own
-// directory, so it is cleared and the caller gives the copy a file of its
-// own (see Session::ClonePicturesForCopy); this class has no file access.
+// must not be duplicated. The stored picture is the source's, so the copy
+// starts without one and the caller gives it its own (see
+// Session::ClonePicturesForCopy); this class has no store.
 void DetachLayersForCopy(Item& copied) {
     for (Layer& layer : copied.layers) {
         layer.textureHandle = 0;
-        layer.imageFile.clear();
+        layer.stored = false;
     }
 }
 
@@ -1094,7 +1094,7 @@ void CanvasManager::SyncShotTexturesToCanvas(CanvasId canvasId,
             for (Layer& layer : item.layers) {
                 // Nothing persisted to load from - so nothing to load, and
                 // nothing safe to release into.
-                if (layer.imageFile.empty()) {
+                if (!layer.stored) {
                     continue;
                 }
                 if (isCurrent) {

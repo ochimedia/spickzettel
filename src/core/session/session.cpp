@@ -29,13 +29,6 @@ constexpr float kAutosaveMaxIntervalSeconds = 15.0f;
 // disk turned an ordinary autosave into a synchronous rewrite of every file
 // on every frame, for as long as the disk stayed full.
 constexpr float kAutosaveRetryMaxSeconds = 30.0f;
-// A permanent delete whose directory could not be wholly removed is tried
-// again this often while the overlay is up - the same cadence the hidden
-// retry timer has. The save that recorded the removal as owed counted, so
-// neither the failure backoff nor the quiet period holds the next one
-// back; without a clock of its own, the retry ran on every frame for as
-// long as another program held the file, hashing the library each time.
-constexpr float kRemovalRetrySeconds = 10.0f;
 }  // namespace
 
 // ================= Persistence =================
@@ -53,9 +46,8 @@ bool Session::SavePendingPictures(LibraryInstance& instance) {
             continue;
         }
         const PendingPicture& pending = it->second;
-        if (const std::optional<std::string> filename =
-                instance.store->SaveImage(it->first, pending.pixelsRGBA.data(), pending.width, pending.height)) {
-            picture->imageFile = *filename;
+        if (instance.store->SaveImage(it->first, pending.pixelsRGBA.data(), pending.width, pending.height)) {
+            picture->stored = true;
             it = pendingPictures_.erase(it);
         } else {
             wroteEverything = false;
@@ -65,71 +57,56 @@ bool Session::SavePendingPictures(LibraryInstance& instance) {
     return wroteEverything;
 }
 
-bool Session::WriteRecoveryCopy(const std::filesystem::path& dir) {
-    persistence::LibraryStore copy(dir);
-    CanvasManagerSnapshot snapshot = library_.manager.ExportSnapshot();
+bool Session::WriteRecoveryCopy(const std::filesystem::path& file) {
+    // The library as it was last saved, pictures and all, when it can still
+    // be read - then what this session holds, saved over it. Load first, so
+    // that the save knows what is there and takes out what the session no
+    // longer holds.
+    const bool copiedLibrary = Store() != nullptr && Store()->WriteCopyTo(file);
+    persistence::LibraryStore copy(file);
+    if (copiedLibrary) {
+        copy.Load();
+    }
+    const bool recordsWritten = copy.Save(Manager().View());
+    // Every picture: a capture whose write never landed from this session,
+    // the rest with the library it was copied from. The first version
+    // copied only what was in memory and left every screenshot out, so the
+    // copy opened with placeholders and nothing to say why.
     size_t picturesMissing = 0;
-    for (Canvas& canvas : snapshot.canvases) {
-        for (Item& item : canvas.items) {
+    for (const Canvas& canvas : Manager().Canvases()) {
+        for (const Item& item : canvas.items) {
             const Layer* picture = item.ImageLayer();
-            for (size_t index = 0; index < item.layers.size(); ++index) {
-                Layer& layer = item.layers[index];
-                // Into the copy under whatever the copy calls it; the
-                // record is rewritten to name that.
-                const auto write = [&](const uint8_t* pixelsRGBA, int width, int height) {
-                    const std::optional<std::string> filename = copy.SaveImage(item.id, pixelsRGBA, width, height);
-                    if (filename) {
-                        layer.imageFile = *filename;
-                    } else {
-                        ++picturesMissing;
-                    }
-                };
-                // Where the pixels are, in order: this session (a capture
-                // whose write never landed), else the real library,
-                // re-encoded from there. The first version copied only what
-                // was in memory and left every record naming a file that was
-                // not in the copy, so the copy opened with its screenshots
-                // as placeholders and nothing to say why.
-                if (&layer == picture) {
-                    if (const auto pending = pendingPictures_.find(item.id); pending != pendingPictures_.end()) {
-                        write(pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
-                        continue;
-                    }
+            if (const auto pending = pendingPictures_.find(item.id); pending != pendingPictures_.end()) {
+                if (!copy.SaveImage(item.id, pending->second.pixelsRGBA.data(), pending->second.width,
+                                    pending->second.height)) {
+                    ++picturesMissing;
                 }
-                if (layer.imageFile.empty()) {
-                    continue;  // nothing named, nothing owed
-                }
-                const std::optional<persistence::DecodedImage> onDisk =
-                    Store() ? Store()->LoadImage(item.id, layer.imageFile) : std::nullopt;
-                if (onDisk) {
-                    write(onDisk->pixelsRGBA.data(), onDisk->width, onDisk->height);
-                } else {
-                    ++picturesMissing;  // the record keeps the name, which says what was there
-                }
+            } else if (picture != nullptr && picture->stored && !copy.HasImage(item.id)) {
+                ++picturesMissing;
             }
         }
     }
-    const bool recordsWritten = copy.Save(snapshot);
-    // A note beside the tree for the person who finds it: what it is, where
-    // it came from, and whether every picture came with it.
+    // A note beside it for the person who finds it: what it is, where it
+    // came from, and whether every picture came with it.
     {
-        std::ofstream note(dir / "recovery.txt", std::ios::binary | std::ios::trunc);
+        std::filesystem::path notePath = file;
+        notePath += ".txt";
+        std::ofstream note(notePath, std::ios::binary | std::ios::trunc);
         note << "Spickzettel recovery copy, written " << TimestampName() << "\n";
-        note << "Source library: " << (Store() ? Store()->RootDir().string() : std::string("(none)")) << "\n";
+        note << "Source library: " << (Store() ? Store()->File().string() : std::string("(none)")) << "\n";
         if (picturesMissing == 0 && recordsWritten) {
-            note << "Complete: every record and every picture it names is in this directory.\n";
+            note << "Complete: everything the app held, and every picture of it, is in this file.\n";
         } else {
             note << "Incomplete: " << picturesMissing << " picture(s) could not be copied"
-                 << (recordsWritten ? "" : ", and not every record could be written") << ".\n";
+                 << (recordsWritten ? "" : ", and the library itself could not be written") << ".\n";
         }
-        note << "To use it, close the app and put this directory where the source library was.\n";
+        note << "To use it, close the app and put this file where the source library was, under its name.\n";
     }
     return recordsWritten && picturesMissing == 0;
 }
 
 bool Session::HasUnsavedChanges() const {
-    return library_.manager.Generation() != library_.lastSavedGeneration || !pendingPictures_.empty() ||
-           (library_.store && library_.store->HasPendingRemovals());
+    return library_.manager.Generation() != library_.lastSavedGeneration || !pendingPictures_.empty();
 }
 
 void Session::SyncTexturesToCurrentCanvas() {
@@ -138,8 +115,8 @@ void Session::SyncTexturesToCurrentCanvas() {
     }
     Manager().SyncShotTexturesToCanvas(
         Manager().CurrentCanvasId(),
-        [this](const Item& item, Layer& layer) -> uint64_t {
-            const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id, layer.imageFile);
+        [this](const Item& item, Layer& /*layer*/) -> uint64_t {
+            const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id);
             if (!decoded.has_value()) {
                 return 0;
             }
@@ -167,11 +144,10 @@ void Session::ReplaceLostTextures() {
                 }
                 window_->ReleaseTexture(layer.textureHandle);
                 layer.textureHandle = 0;
-                // No file yet and no pixels on the layer, so the sync has
-                // nothing to load it from: the pixels waiting to be written
-                // are what it showed.
+                // Not stored yet, so the sync has nothing to load it from:
+                // the pixels waiting to be written are what it showed.
                 const auto pending = pendingPictures_.find(item.id);
-                if (&layer == item.ImageLayer() && layer.imageFile.empty() && pending != pendingPictures_.end()) {
+                if (&layer == item.ImageLayer() && !layer.stored && pending != pendingPictures_.end()) {
                     layer.textureHandle = window_->CreateTextureFromPixels(
                         pending->second.pixelsRGBA.data(), pending->second.width, pending->second.height);
                 }
@@ -224,20 +200,6 @@ void Session::UpdateAutosave(LibraryInstance& instance, float deltaSeconds) {
         }
     }
 
-    // Nothing owed but a removal - the records are saved and no picture
-    // is waiting - is on its own clock (see kRemovalRetrySeconds), unless a
-    // failed save's retry is what brought us here, which goes ahead.
-    const bool onlyARemovalOwed = generation == instance.lastSavedGeneration && pendingPictures_.empty() &&
-                                  instance.saveRetryBackoffSeconds <= 0.0f;
-    if (onlyARemovalOwed) {
-        instance.removalRetryCountdownSeconds -= deltaSeconds;
-        if (instance.removalRetryCountdownSeconds > 0.0f) {
-            return;
-        }
-        SaveLibraryNow(instance);  // sets the clock again if still owed
-        return;
-    }
-
     const bool quietLongEnough = instance.secondsSinceLastChange >= kAutosaveQuietSeconds;
     const bool waitedTooLong = instance.secondsSinceFirstUnsavedChange >= kAutosaveMaxIntervalSeconds;
     if (quietLongEnough || waitedTooLong) {
@@ -263,9 +225,6 @@ bool Session::SaveLibraryNow(LibraryInstance& instance) {
     if (saved) {
         instance.lastSavedGeneration = generation;
         instance.saveRetryBackoffSeconds = 0.0f;
-        if (instance.store->HasPendingRemovals()) {
-            instance.removalRetryCountdownSeconds = kRemovalRetrySeconds;
-        }
     } else {
         // Disk full, permissions, a file held open by something else: try
         // again later, and later each time - see kAutosaveRetryMaxSeconds.
@@ -320,43 +279,36 @@ bool Session::Restore(uint64_t id) {
     return true;
 }
 
-Session::Removal Session::DeletePermanently(uint64_t id) {
-    const Removal removal = Erase(id);
-    if (removal != Removal::NotFound) {
-        SyncTexturesToCurrentCanvas();
+bool Session::DeletePermanently(uint64_t id) {
+    if (!Erase(id)) {
+        return false;
     }
-    return removal;
+    SyncTexturesToCurrentCanvas();
+    // Out of the library now rather than at the next autosave, so that
+    // nothing deleted for good comes back after a crash in between.
+    SaveLibraryNow(library_);
+    return true;
 }
 
-Session::Removal Session::Erase(uint64_t id) {
+bool Session::Erase(uint64_t id) {
     CanvasManager& manager = Manager();
     // What goes with it: the textures of every snippet under it, and the
     // history of every canvas - or, for a lone snippet, its own entries on
-    // its canvas's history, and nothing else of that canvas's.
-    //
-    // And every id that goes, for the store: a snippet moved into a canvas
-    // since the last save still has its directory where it came from, and
-    // only the model knows it went with this one.
+    // its canvas's history, and nothing else of that canvas's. The library
+    // loses it at the next save, which writes what the model holds.
     const bool isFolder = manager.FindFolder(id) != nullptr;
     bool found = isFolder;
-    std::vector<uint64_t> erased = {id};
     for (Canvas& canvas : manager.CanvasesMutable()) {
         const bool wholeCanvas = canvas.id == id || (isFolder && canvas.folderId == id);
         if (wholeCanvas) {
             found = true;
             DropHistoryOfCanvas(canvas.id);
-            if (canvas.id != id) {
-                erased.push_back(canvas.id);
-            }
         }
         for (Item& item : canvas.items) {
             if (!wholeCanvas && item.id != id) {
                 continue;
             }
             found = true;
-            if (item.id != id) {
-                erased.push_back(item.id);
-            }
             if (!wholeCanvas) {
                 ForgetHistoryOfItem(canvas.id, item.id);
             }
@@ -368,48 +320,25 @@ Session::Removal Session::Erase(uint64_t id) {
             }
         }
     }
-    if (!found || !manager.Erase(id)) {
-        return Removal::NotFound;
-    }
-    // Off the disk now, rather than left for the next save - which would
-    // take a directory the model no longer holds for something gone missing,
-    // and set it aside (see LibraryStore::Save). A false from the store is
-    // one of two things: nothing was ever saved for it, which is fine, or
-    // something in its directory could not be removed, which the store
-    // keeps a note of and the caller is told about.
-    //
-    // Owed is also what the store answers when something the library still
-    // holds has been moved out of that directory since the last save - a
-    // snippet to another canvas, then its old canvas deleted for good - and
-    // deleting the directory would take the moved thing's pictures with it.
-    // The save that moves it is then made now, and finishes the removal on
-    // its way; only what is still owed after it is reported.
-    const auto filesRemain = [this, &erased] {
-        return std::any_of(erased.begin(), erased.end(),
-                           [this](uint64_t uid) { return Store()->HasPendingRemoval(uid); });
-    };
-    if (!Store() || Store()->Remove(erased, manager.View()) || !filesRemain()) {
-        return Removal::Removed;
-    }
-    SaveLibraryNow(library_);
-    return filesRemain() ? Removal::FilesRemain : Removal::Removed;
+    return found && manager.Erase(id);
 }
 
-Session::Removal Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
-    Removal result = Removal::NotFound;
+bool Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
+    bool any = false;
     for (const CanvasId id : Manager().MarkedCanvasesIn(folderId)) {
-        const Removal removal = DeletePermanently(id);
-        if (removal == Removal::FilesRemain || (removal == Removal::Removed && result == Removal::NotFound)) {
-            result = removal;
-        }
+        any = Erase(id) || any;
     }
-    return result;
+    if (any) {
+        SyncTexturesToCurrentCanvas();
+        SaveLibraryNow(library_);
+    }
+    return any;
 }
 
 size_t Session::EraseDeletedBefore(int64_t cutoff) {
     size_t erased = 0;
     for (const uint64_t id : Manager().MarkedBefore(cutoff)) {
-        if (Erase(id) != Removal::NotFound) {
+        if (Erase(id)) {
             ++erased;
         }
     }
@@ -551,9 +480,8 @@ void Session::CaptureShotItem(Item& item) {
     // every save until they land, and no save counts until they have - see
     // SavePendingPictures.
     if (!result.pixelsRGBA.empty() && Store()) {
-        if (const std::optional<std::string> filename =
-                Store()->SaveImage(item.id, result.pixelsRGBA.data(), result.width, result.height)) {
-            picture->imageFile = *filename;
+        if (Store()->SaveImage(item.id, result.pixelsRGBA.data(), result.width, result.height)) {
+            picture->stored = true;
             pendingPictures_.erase(item.id);
         } else {
             pendingPictures_[item.id] = PendingPicture{std::move(result.pixelsRGBA), result.width, result.height};
@@ -567,53 +495,44 @@ bool Session::ClonePicturesForCopy(ItemId sourceId, ItemId copyId) {
     }
     const Item* source = Manager().FindItemAnywhere(sourceId);
     Item* copy = Manager().FindItemAnywhere(copyId);
-    if (!source || !copy) {
+    const Layer* sourcePicture = source != nullptr ? source->ImageLayer() : nullptr;
+    Layer* copyPicture = copy != nullptr ? copy->ImageLayer() : nullptr;
+    if (!sourcePicture || !copyPicture) {
         return true;
     }
-    bool whole = true;
-
     // The session's own copy of the pixels first: a capture whose write has
-    // not landed has no file yet and its pixels are here, and a copy taken
-    // of it in that window used to come out with no picture at all, for
-    // good - the file it would later have been read from was never named.
-    const Layer* sourcePicture = source->ImageLayer();
-    Layer* copyPicture = copy->ImageLayer();
-    std::optional<persistence::DecodedImage> decoded;
-    if (sourcePicture) {
-        if (const auto pending = pendingPictures_.find(sourceId); pending != pendingPictures_.end()) {
-            decoded = persistence::DecodedImage{pending->second.width, pending->second.height,
-                                                pending->second.pixelsRGBA};
-        } else if (!sourcePicture->imageFile.empty()) {
-            decoded = Store()->LoadImage(sourceId, sourcePicture->imageFile);
-            if (!decoded.has_value()) {
-                whole = false;  // names a picture that cannot be read: the copy gets none
-            }
-        }
-    }
-    if (decoded.has_value() && copyPicture) {
-        // Re-saved under `copyId`'s own filename - a fresh file on disk, not
-        // a second reference to the source's - same single-owner reasoning
-        // as CanvasManager clearing these on copy in the first place. A
-        // write that fails is kept for the next save, as a capture's is.
+    // not landed is not in the library yet, and a copy taken of it in that
+    // window used to come out with no picture at all, for good. Written for
+    // the copy at once, and kept for the next save when that fails, as a
+    // capture's is; its texture made here, since the texture sync loads
+    // only what is stored.
+    if (const auto pending = pendingPictures_.find(sourceId); pending != pendingPictures_.end()) {
+        PendingPicture pixels = pending->second;
         if (window_) {
             copyPicture->textureHandle =
-                window_->CreateTextureFromPixels(decoded->pixelsRGBA.data(), decoded->width, decoded->height);
+                window_->CreateTextureFromPixels(pixels.pixelsRGBA.data(), pixels.width, pixels.height);
         }
-        if (const std::optional<std::string> filename =
-                Store()->SaveImage(copyId, decoded->pixelsRGBA.data(), decoded->width, decoded->height)) {
-            copyPicture->imageFile = *filename;
-            pendingPictures_.erase(copyId);
+        if (Store()->SaveImage(copyId, pixels.pixelsRGBA.data(), pixels.width, pixels.height)) {
+            copyPicture->stored = true;
         } else {
-            pendingPictures_[copyId] =
-                PendingPicture{std::move(decoded->pixelsRGBA), decoded->width, decoded->height};
+            pendingPictures_[copyId] = std::move(pixels);
         }
+        return true;
     }
-
+    if (!sourcePicture->stored) {
+        return true;  // nothing to copy
+    }
+    // Copied as stored, without decoding it. The caller's texture sync
+    // gives the copy its texture.
+    if (!Store()->CopyImage(sourceId, copyId)) {
+        return false;  // the picture could not be copied: the copy lacks it
+    }
+    copyPicture->stored = true;
     // No MarkChanged() call needed - same reasoning as CaptureShotItem's
     // own: this runs synchronously right after the copy itself
     // (CanvasManager::DuplicateItem/MoveOrCopyItemToCanvas), which already
     // bumped the generation counter moments earlier in the same call stack.
-    return whole;
+    return true;
 }
 
 }  // namespace sz::core

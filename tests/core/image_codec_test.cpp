@@ -54,12 +54,10 @@ TEST_F(ImageCodecTest, EncodeThenDecodeRoundTripsPixelsExactly) {
 // (SamplePixels carries two translucent pixels for exactly this).
 TEST_F(ImageCodecTest, QoiEncodeThenDecodeRoundTripsPixelsExactly) {
     const std::vector<uint8_t> pixels = SamplePixels();
-    const std::filesystem::path path = dir_ / "sample.qoi";
+    const std::vector<uint8_t> encoded = EncodeQoi(pixels.data(), /*width=*/3, /*height=*/2);
+    ASSERT_FALSE(encoded.empty());
 
-    ASSERT_TRUE(EncodeQoiToFile(path, pixels.data(), /*width=*/3, /*height=*/2));
-    ASSERT_TRUE(std::filesystem::exists(path));
-
-    const std::optional<DecodedImage> decoded = DecodeQoiFromFile(path);
+    const std::optional<DecodedImage> decoded = DecodeQoi(encoded.data(), encoded.size());
     ASSERT_TRUE(decoded.has_value());
     EXPECT_EQ(decoded->width, 3);
     EXPECT_EQ(decoded->height, 2);
@@ -75,72 +73,23 @@ TEST_F(ImageCodecTest, QoiRoundTripsRunsAndRepeatsExactly) {
         const uint8_t v = static_cast<uint8_t>((i / 8) * 3);  // eight-long runs, one small step apart
         pixels.insert(pixels.end(), {v, static_cast<uint8_t>(255 - v), 128, 255});
     }
-    const std::filesystem::path path = dir_ / "runs.qoi";
-
-    ASSERT_TRUE(EncodeQoiToFile(path, pixels.data(), /*width=*/8, /*height=*/8));
-    const std::optional<DecodedImage> decoded = DecodeQoiFromFile(path);
+    const std::vector<uint8_t> encoded = EncodeQoi(pixels.data(), /*width=*/8, /*height=*/8);
+    const std::optional<DecodedImage> decoded = DecodeQoi(encoded.data(), encoded.size());
     ASSERT_TRUE(decoded.has_value());
     EXPECT_EQ(decoded->pixelsRGBA, pixels);
 }
 
 TEST_F(ImageCodecTest, QoiDecodeReturnsNulloptForUnknownContent) {
-    std::filesystem::create_directories(dir_);
-    const std::filesystem::path path = dir_ / "garbage.qoi";
-    std::ofstream(path, std::ios::binary) << "not a qoi, just some bytes";
-
-    EXPECT_FALSE(DecodeQoiFromFile(path).has_value());
-    EXPECT_FALSE(DecodeQoiFromFile(dir_ / "does_not_exist.qoi").has_value());
+    const std::string garbage = "not a qoi, just some bytes";
+    EXPECT_FALSE(DecodeQoi(reinterpret_cast<const uint8_t*>(garbage.data()), garbage.size()).has_value());
+    EXPECT_FALSE(DecodeQoi(nullptr, 0).has_value());
 }
 
 TEST_F(ImageCodecTest, QoiEncodeRejectsInvalidDimensions) {
     const std::vector<uint8_t> pixels = SamplePixels();
-    EXPECT_FALSE(EncodeQoiToFile(dir_ / "bad.qoi", pixels.data(), 0, 2));
-    EXPECT_FALSE(EncodeQoiToFile(dir_ / "bad.qoi", pixels.data(), 3, -1));
-    EXPECT_FALSE(EncodeQoiToFile(dir_ / "bad.qoi", nullptr, 3, 2));
-}
-
-// The destination is replaced whole: a crash or a full disk halfway
-// through a truncate-and-write leaves the only copy of a picture as the
-// first half of it.
-TEST_F(ImageCodecTest, QoiEncodeReplacesTheDestinationWholeOrNotAtAll) {
-    const std::vector<uint8_t> pixels = SamplePixels();
-    const std::filesystem::path path = dir_ / "layer.qoi";
-    ASSERT_TRUE(EncodeQoiToFile(path, pixels.data(), 3, 2));
-    const uintmax_t before = std::filesystem::file_size(path);
-
-    // A write that cannot even start - a directory at every temporary name
-    // the writer would try (see WriteFileAtomically) - reports failure and
-    // leaves the previous file intact.
-    for (int attempt = 0; attempt < 8; ++attempt) {
-        std::filesystem::path tmp = path;
-        tmp += attempt == 0 ? std::string(".tmp") : ".tmp" + std::to_string(attempt);
-        std::filesystem::create_directories(tmp);
-    }
-    std::vector<uint8_t> other = pixels;
-    other[0] ^= 0xFF;
-    EXPECT_FALSE(EncodeQoiToFile(path, other.data(), 3, 2));
-    EXPECT_EQ(std::filesystem::file_size(path), before);
-    const std::optional<DecodedImage> kept = DecodeQoiFromFile(path);
-    ASSERT_TRUE(kept.has_value());
-    EXPECT_EQ(kept->pixelsRGBA, pixels) << "the previous picture must survive a failed write";
-
-    // ...and a write that works leaves nothing beside the result.
-    for (int attempt = 0; attempt < 8; ++attempt) {
-        std::filesystem::path tmp = path;
-        tmp += attempt == 0 ? std::string(".tmp") : ".tmp" + std::to_string(attempt);
-        std::filesystem::remove_all(tmp);
-    }
-    EXPECT_TRUE(EncodeQoiToFile(path, other.data(), 3, 2));
-    EXPECT_FALSE(std::filesystem::exists(dir_ / "layer.qoi.tmp"));
-    EXPECT_EQ(DecodeQoiFromFile(path)->pixelsRGBA, other);
-}
-
-TEST_F(ImageCodecTest, QoiEncodeCreatesParentDirectories) {
-    const std::vector<uint8_t> pixels = SamplePixels();
-    const std::filesystem::path path = dir_ / "nested" / "deeper" / "sample.qoi";
-
-    EXPECT_TRUE(EncodeQoiToFile(path, pixels.data(), 3, 2));
-    EXPECT_TRUE(std::filesystem::exists(path));
+    EXPECT_TRUE(EncodeQoi(pixels.data(), 0, 2).empty());
+    EXPECT_TRUE(EncodeQoi(pixels.data(), 3, -1).empty());
+    EXPECT_TRUE(EncodeQoi(nullptr, 3, 2).empty());
 }
 
 TEST_F(ImageCodecTest, EncodeCreatesParentDirectories) {
@@ -161,17 +110,11 @@ TEST_F(ImageCodecTest, EncodeRejectsInvalidDimensions) {
 // A header is a claim, and the decoder allocates on the strength of it.
 // One claiming more than any capture could be is refused before that.
 TEST_F(ImageCodecTest, DecodeRefusesAHeaderClaimingMoreThanTheBudget) {
-    const std::filesystem::path path = dir_ / "huge.qoi";
-    {
-        std::ofstream out(path, std::ios::binary);
-        const uint8_t header[] = {'q', 'o', 'i', 'f', 0x00, 0x01, 0x86, 0xA0,  // 100000 wide
-                                  0x00, 0x01, 0x86, 0xA0,                       // 100000 high
-                                  4,    0};
-        out.write(reinterpret_cast<const char*>(header), sizeof(header));
-        const std::vector<uint8_t> padding(64, 0);
-        out.write(reinterpret_cast<const char*>(padding.data()), static_cast<std::streamsize>(padding.size()));
-    }
-    EXPECT_FALSE(DecodeQoiFromFile(path).has_value());
+    std::vector<uint8_t> huge = {'q', 'o', 'i', 'f', 0x00, 0x01, 0x86, 0xA0,  // 100000 wide
+                                 0x00, 0x01, 0x86, 0xA0,                       // 100000 high
+                                 4,    0};
+    huge.resize(huge.size() + 64, 0);
+    EXPECT_FALSE(DecodeQoi(huge.data(), huge.size()).has_value());
 
     // ...and a PNG making the same claim.
     const std::filesystem::path png = dir_ / "huge.png";

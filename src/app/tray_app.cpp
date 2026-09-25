@@ -14,7 +14,7 @@ namespace sz::app {
 TrayController::TrayController(platform::IPlatformHost& host, AppConfig config)
     : host_(host),
       settings_(std::move(config)),
-      libraryStore_(host.GetDataDirectoryPath()),
+      libraryStore_(host.GetLibraryPath()),
       overlayApp_(settings_, session_) {}
 
 bool TrayController::Initialize() {
@@ -44,13 +44,16 @@ bool TrayController::Initialize() {
     if (!host_.AcquireSingleInstance()) {
         return false;
     }
-    // A library a newer build wrote is not this one's to open: every
-    // record it saved back would lose what the newer build put there.
-    // Refused before the tray icon, like a second copy, and with its own
-    // message - see RefusedANewerLibrary.
-    if (!host_.GetDataDirectoryPath().empty() && libraryStore_.WrittenByANewerVersion()) {
-        refusedANewerLibrary_ = true;
-        return false;
+    // A library a newer build wrote is not this one's to open: every row
+    // it saved back would lose what the newer build put there. Nor is one
+    // that is there and cannot be read: a start over it would save an empty
+    // library where it was. Refused before the tray icon, like a second
+    // copy, and with a message of its own - see RefusedANewerLibrary.
+    if (!host_.GetLibraryPath().empty()) {
+        if (const auto opened = libraryStore_.Open(); opened != persistence::LibraryStore::OpenResult::Opened) {
+            libraryRefusal_ = opened;
+            return false;
+        }
     }
     if (!host_.ShowTrayIcon()) {
         return false;
@@ -129,7 +132,7 @@ bool TrayController::Initialize() {
     // session without a library store entirely, matching how it
     // behaves before this feature existed (no autosave, no image writes).
     bool freshInstall = false;
-    if (!host_.GetDataDirectoryPath().empty()) {
+    if (!host_.GetLibraryPath().empty()) {
         session_.SetLibraryStore(&libraryStore_);
         if (std::optional<CanvasManagerSnapshot> snapshot = libraryStore_.Load()) {
             session_.ImportLibrary(std::move(*snapshot));
@@ -143,12 +146,12 @@ bool TrayController::Initialize() {
                 overlayApp_.SayDeletedForGoodAtStart(erased, settings_.Stored().purgeDeletedAfterDays);
             }
         } else {
-            // Nothing on disk to load: a genuinely first run. Distinct from
-            // a library someone deliberately emptied, which loads fine and
-            // reports itself as empty (see LibraryStore::IsValid) - that
-            // person has already met the app and shouldn't be greeted
-            // again. Load() also returns nothing for a corrupt file, where
-            // showing the welcome note is the right call anyway.
+            // Nothing to load: a genuinely first run. Distinct from a
+            // library someone deliberately emptied, which loads fine as an
+            // empty one - that person has already met the app and shouldn't
+            // be greeted again. Load() also returns nothing for a file it
+            // set aside, where showing the welcome note is the right call
+            // anyway.
             freshInstall = true;
         }
         // No eager display-size reconciliation here anymore - OverlayApp::OnFrame
@@ -413,9 +416,8 @@ constexpr int kHiddenSaveRetryMs = 10000;
 }  // namespace
 
 void TrayController::FlushOrRetryLater() {
-    // Landed and nothing owed - a removal still pending counts as owed,
-    // though the flush that recorded it counted; so does a settings file
-    // that could not be written - or scheduled again.
+    // Landed and nothing owed - a settings file that could not be written
+    // is owed too - or scheduled again.
     if (session_.Flush() && !session_.HasUnsavedChanges() && !configWriteOwed_) {
         host_.SetBackgroundTimer(0, nullptr);
         return;
@@ -428,9 +430,8 @@ bool TrayController::FlushForShutdown() {
     if (configWriteOwed_) {
         PersistConfig();  // owed since a settings edit; the last chance for it too
     }
-    // Twice: the first attempt may have been what cleared the way - a
-    // pending removal finished, a picture's directory made - and a second
-    // is cheap against what the alternative costs.
+    // Twice: a lock another program held a moment ago may be gone, and a
+    // second attempt is cheap against what the alternative costs.
     if (session_.Flush() || session_.Flush()) {
         return true;
     }
@@ -451,20 +452,21 @@ bool TrayController::FlushForShutdown() {
 void TrayController::OnSessionEnding() { FlushForShutdown(); }
 
 std::optional<std::filesystem::path> TrayController::RecoveryCopyPath() const {
-    const std::filesystem::path library = host_.GetDataDirectoryPath();
+    const std::filesystem::path library = host_.GetLibraryPath();
     if (library.empty()) {
         return std::nullopt;
     }
-    // "library-recovery-2026-09-19-22-36-14", beside "library": the same
-    // place, which is where someone looking for their work will look, and
-    // spelled so that it sorts after the library and reads as what it is.
+    // "library-recovery-2026-09-19-22-36-14.db", beside "library.db": the
+    // same place, which is where someone looking for their work will look,
+    // and spelled so that it sorts after the library and reads as what it
+    // is.
     std::string stamp = TimestampName();
     for (char& c : stamp) {
         if (c == ' ' || c == ':') {
             c = '-';
         }
     }
-    return library.parent_path() / (library.filename().string() + "-recovery-" + stamp);
+    return library.parent_path() / (library.stem().string() + "-recovery-" + stamp + library.extension().string());
 }
 
 void TrayController::OnBackgroundTimer() {

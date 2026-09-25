@@ -16,15 +16,12 @@ add_executable(sz_core_tests
     core/file_system_test.cpp
     core/image_codec_test.cpp
     core/item_geometry_test.cpp
-    core/library_crash_test.cpp
-    core/library_random_test.cpp
     core/library_store_test.cpp
     core/stroke_bitmap_test.cpp
     core/profile_test.cpp
     core/session_test.cpp
     core/settings_test.cpp
     core/shortcut_action_test.cpp
-    core/slug_test.cpp
     core/stroke_clip_test.cpp
     core/stroke_mesh_test.cpp
     core/stroke_mesh_cache_test.cpp
@@ -42,14 +39,15 @@ add_executable(sz_core_tests
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # sz_app, not only sz_core: the headless frame tests and the tray controller
 # tests drive the whole app.
-target_link_libraries(sz_core_tests PRIVATE sz_app GTest::gtest_main)
+# sqlite too, for the store tests that reach into the file the way another
+# program would.
+target_link_libraries(sz_core_tests PRIVATE sz_app sqlite GTest::gtest_main)
 target_compile_features(sz_core_tests PRIVATE cxx_std_20)
 spickzettel_set_warnings(sz_core_tests)
 
 # The benchmark reads its scenario from the environment; MSVC deprecates
 # getenv for a shared-state reason that does not apply to a test.
 set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
-set_source_files_properties(core/library_random_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 
 # The string catalog as it is in the source tree, for the test that parses
 # it strictly - see ui/ui_strings_file_test.cpp.

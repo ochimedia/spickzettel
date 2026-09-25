@@ -13,7 +13,7 @@
 namespace sz::core {
 
 // A plain-data copy of everything CanvasManager owns - used only by
-// core::persistence::LibraryStore to (de)serialize the on-disk library
+// core::persistence::LibraryStore to read and write the library
 // (see CanvasManager::ExportSnapshot/ImportSnapshot). Not a general
 // mutation API; prefer CanvasManager's own named operations for that -
 // this exists purely so persistence code has a flat, direct view of the
@@ -252,8 +252,8 @@ public:
     // canvas holds it, not only the current one - onto `targetCanvasId`,
     // which may be the canvas it is already on. Returns the resulting
     // snippet's id: a new one for a copy (which owns its own strokes and,
-    // once the caller has given it one, image file - see
-    // DetachLayersForCopy - and starts unmarked, whatever its source's
+    // once the caller has given it one, picture - see DetachLayersForCopy -
+    // and starts unmarked, whatever its source's
     // mark: a copy is a new thing), the same one for a move. 0 if there is
     // no such snippet, no such canvas, or the canvas is deleted - nothing
     // is placed where it cannot be seen.
@@ -387,15 +387,15 @@ public:
     // textures are pure cost.
     //
     // On `canvasId`, for every item there that isn't deleted: any layer
-    // with a persisted image but no live texture gets one from `loadLayer`
+    // with a stored picture but no live texture gets one from `loadLayer`
     // (0 meaning the load failed, leaving the placeholder like a failed
     // capture). On every other canvas, and for a deleted item on this one:
     // any layer holding a texture is handed to `releaseLayer` and its
     // handle cleared.
     //
-    // A release only ever happens for a layer with a file to reload from;
-    // a texture with nothing behind it (a capture whose save failed) is
-    // kept rather than freed into blankness.
+    // A release only ever happens for a layer with a stored picture to
+    // reload from; a texture with nothing behind it (a capture whose save
+    // failed) is kept rather than freed into blankness.
     // Idempotent and cheap when nothing changed. Doesn't touch Generation():
     // a GPU handle isn't content.
     void SyncShotTexturesToCanvas(CanvasId canvasId, const std::function<uint64_t(const Item&, Layer&)>& loadLayer,
@@ -430,9 +430,7 @@ private:
 public:
     // Whether anything in this library already holds `id` - folder, canvas
     // or item alike, deleted or not. One space for all three: it costs
-    // nothing, and it means a directory found in the wrong place can never
-    // be mistaken for a different kind of thing that happens to share its
-    // number.
+    // nothing, and an id then names one thing wherever it is seen.
     bool IsIdTaken(uint64_t id) const;
 
     // Null if nothing by that id.

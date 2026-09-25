@@ -64,7 +64,7 @@ public:
     TrayController(platform::IPlatformHost& host, AppConfig config);
 
     // Registers the tray icon and all four global hotkeys, then loads any
-    // previously-saved library from host_.GetDataDirectoryPath() (a no-op
+    // previously-saved library from host_.GetLibraryPath() (a no-op
     // if that path is empty - see FakePlatformHost's own doc comment - or
     // if nothing's been saved there yet, in which case OverlayApp just
     // keeps the fresh default state CanvasManager already starts with).
@@ -72,16 +72,24 @@ public:
     // (see Session::SetLibraryStore) and CaptureShotItem's synchronous image
     // writes actually persist anything from here on. Returns false if the
     // tray icon cannot be registered, another copy is running, or the
-    // library was written by a newer build. A hotkey another application
-    // owns is not one of those - see UnregisteredHotkeys.
+    // library cannot be opened (see LibraryStore::Open). A hotkey another
+    // application owns is not one of those - see UnregisteredHotkeys.
     bool Initialize();
-    // After a failed Initialize: whether it was the library that refused -
-    // a newer build wrote it (see LibraryStore::WrittenByANewerVersion) -
-    // which the person has to be told apart from a hotkey held elsewhere.
-    bool RefusedANewerLibrary() const { return refusedANewerLibrary_; }
-    // ...and, of those, whether it was only that library.json could not be
-    // read, which is told differently: trying again later may well work.
-    bool RefusedAnUnreadableLibrary() const { return refusedANewerLibrary_ && libraryStore_.VersionUnreadable(); }
+    // After a failed Initialize: whether it was the library that refused,
+    // and why - a newer build wrote it, or it could not be read - which the
+    // person has to be told apart from a hotkey held elsewhere, and from
+    // each other: trying again later may well work for the second.
+    bool RefusedANewerLibrary() const {
+        return libraryRefusal_ == persistence::LibraryStore::OpenResult::WrittenByANewerVersion;
+    }
+    bool RefusedAnUnreadableLibrary() const {
+        return libraryRefusal_ == persistence::LibraryStore::OpenResult::Unreadable;
+    }
+    const std::filesystem::path& LibraryPath() const { return libraryStore_.File(); }
+    // After Initialize: where a library file that could not be read was set
+    // aside, to start with an empty one (see LibraryStore::SetAsideAs) -
+    // for the caller to say so. Empty when nothing was.
+    const std::filesystem::path& LibrarySetAsideAs() const { return libraryStore_.SetAsideAs(); }
     // After Initialize: the hotkeys set to a combination another application
     // already owns, which were left unregistered rather than refusing the
     // start - for the caller to name. Empty when every one registered.
@@ -222,7 +230,7 @@ private:
     // window whatever of the settings it acts on actually changed, then
     // writes the settings to host_.GetConfigFilePath() via WriteConfigFile -
     // a no-op if that path is empty, same "nowhere to persist to"
-    // convention host_.GetDataDirectoryPath() already has for
+    // convention host_.GetLibraryPath() already has for
     // libraryStore_ (see Initialize()).
     void OnSettingsChanged();
     // Whether this showing - the whole showing, not one mode of it - has
@@ -311,12 +319,12 @@ private:
     // view, which apply none. See EnsureMode.
     bool profileAppliedThisShowing_ = false;
     bool configFileKept_ = false;
-    // Constructed up front (from host.GetDataDirectoryPath(), possibly
-    // empty) but only ever used - Load()'d from, attached to overlayApp_ -
-    // when that path is non-empty; see Initialize().
+    // Constructed up front (from host.GetLibraryPath(), possibly empty) but
+    // only ever used - Load()'d from, attached to overlayApp_ - when that
+    // path is non-empty; see Initialize().
     persistence::LibraryStore libraryStore_;
     // See RefusedANewerLibrary.
-    bool refusedANewerLibrary_ = false;
+    std::optional<persistence::LibraryStore::OpenResult> libraryRefusal_;
     // What the app is working on - the library, what is on disk
     // and on the GPU. The overlay is a view of it.
     Session session_;

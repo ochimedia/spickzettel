@@ -1,13 +1,12 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 
 namespace sz::core {
 
-// An item's picture: pixels loaded from a file in the snippet's own
-// directory, or - when there is no file, or the capture failed - nothing
-// but the fill it stands in with.
+// An item's picture: pixels stored in the library with the snippet, or -
+// when there are none, or the capture failed - nothing but the fill it
+// stands in with.
 struct Layer {
     // 0..1, this layer's own alpha, independent of every other layer's and
     // of the item's strokes. A new item's picture starts at the opacity
@@ -27,16 +26,15 @@ struct Layer {
     bool showsPlaceholder = false;
     float placeholderHue = 0.0f;
 
-    // Filename of this layer's pixels, resolved through the owning snippet
-    // - the file lives in the snippet's own directory, wherever that
-    // currently is (see LibraryStore::FindImage). Empty when this layer has
-    // no pixels on disk.
-    std::string imageFile;
+    // Whether the library holds pixels for this layer - the snippet's
+    // picture, keyed by the snippet (see LibraryStore::SaveImage). Only an
+    // item's first layer can. Not itself saved: the library says it.
+    bool stored = false;
 
     // Opaque platform texture handle, 0 for none. Loaded and released by
     // the session as canvases become and stop being current; never
     // persisted. Single-ownership: two layers sharing one handle would
-    // double-release, so a copy resets it and reloads from `imageFile`.
+    // double-release, so a copy resets it and loads its own.
     uint64_t textureHandle = 0;
 
     // Compares textureHandle too: a copy that kept the original's handle is

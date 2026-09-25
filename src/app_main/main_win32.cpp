@@ -68,7 +68,7 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     // First, so that a crash anywhere after it - starting up included -
     // leaves a dump to be sent in. Beside the library and config.json,
     // in %APPDATA%\Spickzettel\crashes.
-    sz::platform::win32::InstallCrashDumpWriter(host->GetDataDirectoryPath().parent_path() / "crashes",
+    sz::platform::win32::InstallCrashDumpWriter(host->GetLibraryPath().parent_path() / "crashes",
                                                 sz::core::build::VersionLine());
     if (!host->Initialize("Spickzettel")) {
         return 1;
@@ -97,12 +97,26 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         // A message box because there is no tray icon yet to hang a
         // notice on, and a tray app that starts and silently isn't there
         // is indistinguishable from one that never started.
-        MessageBoxA(nullptr,
-                    trayController.RefusedAnUnreadableLibrary() ? sz::strings::kStartupLibraryUnreadable
-                    : trayController.RefusedANewerLibrary()     ? sz::strings::kStartupNewerLibrary
-                                                                : sz::strings::kStartupFailed,
-                    "Spickzettel", MB_OK | MB_ICONWARNING);
+        char body[1024];
+        if (trayController.RefusedAnUnreadableLibrary()) {
+            std::snprintf(body, sizeof(body), sz::strings::kStartupLibraryUnreadable,
+                          trayController.LibraryPath().string().c_str());
+        } else {
+            std::snprintf(body, sizeof(body), "%s",
+                          trayController.RefusedANewerLibrary() ? sz::strings::kStartupNewerLibrary
+                                                                : sz::strings::kStartupFailed);
+        }
+        MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING);
         return 1;
+    }
+    // Started on an empty library because the file there could not be read:
+    // said once, with where it was kept.
+    if (!trayController.LibrarySetAsideAs().empty()) {
+        char body[1024];
+        std::snprintf(body, sizeof(body), sz::strings::kStartupLibrarySetAside,
+                      trayController.LibraryPath().string().c_str(),
+                      trayController.LibrarySetAsideAs().filename().string().c_str());
+        MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING);
     }
 
     // Started without some of its hotkeys: said once, naming each and the

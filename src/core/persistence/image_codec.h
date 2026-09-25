@@ -1,11 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <vector>
-
-#include "core/util/file_system.h"
 
 namespace sz::core::persistence {
 
@@ -26,50 +25,34 @@ struct DecodedImage {
 // capture doesn't have to read every one of its two million pixels; see the
 // definition.
 //
-// Shared by the sidecar thumbnails written beside each image (see
-// LibraryStore::SaveThumbnail) and the Overview's own fallback for a
-// picture whose thumbnail is missing, so both produce the same picture.
+// Shared by the thumbnail stored with each picture (see
+// LibraryStore::SaveImage) and the Overview's own fallback for a picture
+// without one, so both produce the same picture.
 DecodedImage DownscaleToFit(const uint8_t* pixelsRGBA, int width, int height, int maxExtent);
 DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent);
 
-// Encodes `pixelsRGBA` as a QOI image and writes it to `path`, creating
-// parent directories as needed. Returns false on any failure (bad input,
-// encode error, can't write the file) rather than throwing; filesystem
-// calls take an error_code, and streams report through their state. An
-// allocation failure is the one thing that can still throw. This is what a Shot
-// item's captured screenshot is written with, synchronously at capture
-// time (see Session::CaptureShotItem) rather than as part of the
-// debounced library autosave - losing a few seconds of drawing to a crash
-// is a much smaller deal than losing a screenshot that can never be
-// recaptured.
+// Encodes `pixelsRGBA` as a QOI image, or returns nothing on bad input or
+// an encode error. What a snippet's picture is stored as (see
+// LibraryStore::SaveImage), synchronously at capture time.
 //
-// QOI rather than PNG because both halves of that sentence are measured
-// costs. Encoding a 1920x1080 capture: 13ms here against 296ms for
-// EncodePngToFile, paid on the spot every time a screenshot is taken.
-// Decoding the same image: 7ms against 43ms, paid every time its canvas
-// becomes current. Lossless either way - QOI is byte-exact, not a quality
-// tradeoff - and the files come out ~30% smaller than stb's PNG besides.
-// The cost is that a .qoi file opens in far fewer image viewers than a
-// .png; see FetchQoi.cmake.
-//
-// Through `fs`, or the disk itself when none is given - as is the reading
-// below.
-bool EncodeQoiToFile(FileSystem& fs, const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width,
-                     int height);
-inline bool EncodeQoiToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height) {
-    return EncodeQoiToFile(DefaultFileSystem(), path, pixelsRGBA, width, height);
-}
+// QOI rather than PNG because both halves of that are measured costs.
+// Encoding a 1920x1080 capture: 13ms here against 296ms for PNG, paid on
+// the spot every time a screenshot is taken. Decoding the same image: 7ms
+// against 43ms, paid every time its canvas becomes current. Lossless either
+// way - QOI is byte-exact, not a quality tradeoff - and it comes out ~30%
+// smaller than stb's PNG besides.
+std::vector<uint8_t> EncodeQoi(const uint8_t* pixelsRGBA, int width, int height);
 
-// Encodes `pixelsRGBA` as a PNG, same contract as EncodeQoiToFile above.
+// Encodes `pixelsRGBA` as a PNG and writes it to `path`, creating parent
+// directories as needed. False on any failure rather than throwing.
 // Nothing in the app writes PNG today; it is the format anything else can
 // open, and an export path is the obvious use for it.
 bool EncodePngToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height);
 
 // What a picture may be before this reads it, checked before anything is
 // allocated for it: the file's size before it is read, the dimensions in
-// its header before it is decoded. A library is a directory tree anyone
-// can drop files into, and a header claiming 100000x100000 pixels asked
-// for a 40 GB allocation before these existed. 16384 on a side and 64
+// its header before it is decoded. A header claiming 100000x100000 pixels
+// asked for a 40 GB allocation before these existed. 16384 on a side and 64
 // million pixels (an 8K display is 33 million) is well past any capture
 // this app takes; 256 MB of file is past any picture those dimensions
 // encode to.
@@ -77,18 +60,14 @@ constexpr int kMaxImageExtent = 16384;
 constexpr uint64_t kMaxImagePixels = uint64_t{64} << 20;
 constexpr uint64_t kMaxImageFileBytes = uint64_t{256} << 20;
 
-// Reads and decodes a previously written image back into raw RGBA8 pixels
-// - used to reload a persisted snippet's picture into a GPU texture (see
-// IOverlayWindow::CreateTextureFromPixels). Returns nullopt if the file
-// doesn't exist, isn't QOI, or is outside the budgets above - never
-// throws.
-std::optional<DecodedImage> DecodeQoiFromFile(FileSystem& fs, const std::filesystem::path& path);
-inline std::optional<DecodedImage> DecodeQoiFromFile(const std::filesystem::path& path) {
-    return DecodeQoiFromFile(DefaultFileSystem(), path);
-}
+// Decodes a QOI image back into raw RGBA8 pixels - a snippet's picture,
+// for its GPU texture (see IOverlayWindow::CreateTextureFromPixels).
+// Nullopt if it isn't QOI or is outside the budgets above - never throws.
+std::optional<DecodedImage> DecodeQoi(const uint8_t* bytes, size_t size);
 
-// The same for a PNG, under the same budgets. The library holds none;
-// like EncodePngToFile, it is here for importing pictures from elsewhere.
+// Reads and decodes a PNG file, under the same budgets. The library holds
+// none; like EncodePngToFile, it is here for importing pictures from
+// elsewhere.
 std::optional<DecodedImage> DecodePngFromFile(const std::filesystem::path& path);
 
 }  // namespace sz::core::persistence

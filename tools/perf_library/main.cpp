@@ -12,7 +12,7 @@
 // fraction of it). See docs/PERF.md for the scenarios this is used to build
 // and what they are for.
 //
-//   perf_library --out <dir> [--canvases N] [--items N] [--strokes N]
+//   perf_library --out <file> [--canvases N] [--items N] [--strokes N]
 //                [--points N] [--width W] [--height H] [--seed N]
 //
 // `--width/--height` are the display the layout is meant for, so the items
@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
     Options options;
     if (!ParseArgs(argc, argv, options)) {
         std::fprintf(stderr,
-                     "usage: perf_library --out <dir> [--canvases N] [--items N] [--strokes N]\n"
+                     "usage: perf_library --out <file> [--canvases N] [--items N] [--strokes N]\n"
                      "                    [--points N] [--width W] [--height H] [--seed N]\n");
         return 2;
     }
@@ -174,9 +174,13 @@ int main(int argc, char** argv) {
         manager.SwitchToCanvas(firstCanvas);
     }
 
+    // A file that is already there would be added to rather than replaced.
     std::error_code ec;
-    std::filesystem::create_directories(options.out, ec);
-    const sz::core::persistence::LibraryStore store{options.out};
+    if (std::filesystem::exists(options.out, ec)) {
+        std::fprintf(stderr, "%s already exists\n", options.out.string().c_str());
+        return 1;
+    }
+    sz::core::persistence::LibraryStore store{options.out};
     if (!store.Save(manager.ExportSnapshot())) {
         std::fprintf(stderr, "could not write the library to %s\n", options.out.string().c_str());
         return 1;

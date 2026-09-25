@@ -38,9 +38,9 @@ namespace {
 // the thumbnails fill in over a fraction of a second and the panel stays
 // responsive throughout.
 //
-// This is the fallback path. A picture normally has a thumbnail beside it (see LibraryStore::SaveThumbnail), and those are read
-// under a much larger budget below, because a 256px QOI decodes in well
-// under a millisecond.
+// This is the fallback path. A picture is normally stored with a thumbnail
+// (see LibraryStore::SaveImage), and those are read under a much larger
+// budget below, because a 256px QOI decodes in well under a millisecond.
 constexpr int kOverviewFullDecodesPerFrame = 2;
 
 // The same, for thumbnails. High enough that a normal library fills in on
@@ -83,17 +83,16 @@ std::optional<uint64_t> OverlayApp::LayerPreviewTexture(const Item& item, size_t
     if (existing != layerPreviews_.end()) {
         return existing->second.textureHandle;  // 0 if it failed, which stops it being retried
     }
-    if (layer.imageFile.empty()) {
+    if (!layer.stored) {
         return 0;  // never had pixels of its own: the placeholder is the answer
     }
 
-    // The sidecar first, and on its own budget: this is the path nearly
-    // every picture takes, and it is cheap enough that a whole
-    // folder's worth lands on the first frame.
+    // The thumbnail first, and on its own budget: this is the path nearly
+    // every picture takes, and it is cheap enough that a whole folder's
+    // worth lands on the first frame.
     if (layerPreviewThumbnailBudget_ > 0) {
         --layerPreviewThumbnailBudget_;
-        if (const std::optional<persistence::DecodedImage> thumb =
-                Store()->LoadThumbnail(item.id, layer.imageFile)) {
+        if (const std::optional<persistence::DecodedImage> thumb = Store()->LoadThumbnail(item.id)) {
             LayerPreview preview;
             preview.textureHandle =
                 window_->CreateTextureFromPixels(thumb->pixelsRGBA.data(), thumb->width, thumb->height);
@@ -104,9 +103,8 @@ std::optional<uint64_t> OverlayApp::LayerPreviewTexture(const Item& item, size_t
         return std::nullopt;  // even the cheap path is spoken for this frame
     }
 
-    // No sidecar: its thumbnail was never written or didn't survive. Decode the real thing under the small
-    // budget, and write the sidecar on the way out so this is the last time
-    // this image costs that.
+    // No thumbnail: it could not be made when the picture was stored.
+    // Decode the real thing, under the small budget.
     if (layerPreviewLoadBudget_ <= 0) {
         // Its turn is next frame, or the one after. Distinct from the 0
         // above, and the caller draws the two differently: a stand-in for
@@ -118,12 +116,11 @@ std::optional<uint64_t> OverlayApp::LayerPreviewTexture(const Item& item, size_t
     --layerPreviewLoadBudget_;
 
     LayerPreview preview;
-    if (const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id, layer.imageFile)) {
+    if (const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id)) {
         const persistence::DecodedImage small =
             persistence::DownscaleToFit(*decoded, persistence::LibraryStore::kThumbnailMaxExtent);
         preview.textureHandle =
             window_->CreateTextureFromPixels(small.pixelsRGBA.data(), small.width, small.height);
-        Store()->SaveThumbnail(item.id, layer.imageFile, small);
     }
     layerPreviews_.emplace(key, preview);
     return preview.textureHandle;

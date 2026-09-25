@@ -1,6 +1,6 @@
 // How long one frame of the overlay costs on the CPU, against a library of a
-// known size. Opt-in: skipped unless SZ_PERF_LIBRARY names a library
-// directory (see tools/perf_library and docs/PERF.md).
+// known size. Opt-in: skipped unless SZ_PERF_LIBRARY names a library file
+// (see tools/perf_library and docs/PERF.md).
 //
 // Why here rather than by timing the real app. The overlay presents on
 // vsync, so wall-clock CPU sampling of the running process measures "how
@@ -72,7 +72,7 @@ protected:
 TEST_F(PerfBench, OneFrameAgainstAGeneratedLibrary) {
     const char* root = std::getenv("SZ_PERF_LIBRARY");
     if (root == nullptr || *root == '\0') {
-        GTEST_SKIP() << "set SZ_PERF_LIBRARY to a library directory (see tools/perf_library)";
+        GTEST_SKIP() << "set SZ_PERF_LIBRARY to a library file (see tools/perf_library)";
     }
     // SZ_PERF_MODE picks the stroke renderer, so the three can be compared
     // against identical content. Default is what the app ships with.
@@ -107,7 +107,7 @@ TEST_F(PerfBench, OneFrameAgainstAGeneratedLibrary) {
         StartWith(config);
     }
 
-    const persistence::LibraryStore store{std::filesystem::path(root)};
+    persistence::LibraryStore store{std::filesystem::path(root)};
     const std::optional<CanvasManagerSnapshot> snapshot = store.Load();
     ASSERT_TRUE(snapshot.has_value()) << "no library at " << root;
 
@@ -166,9 +166,9 @@ TEST_F(PerfBench, OneFrameAgainstAGeneratedLibrary) {
 TEST_F(PerfBench, SavingTheWholeLibrary) {
     const char* root = std::getenv("SZ_PERF_LIBRARY");
     if (root == nullptr || *root == '\0') {
-        GTEST_SKIP() << "set SZ_PERF_LIBRARY to a library directory (see tools/perf_library)";
+        GTEST_SKIP() << "set SZ_PERF_LIBRARY to a library file (see tools/perf_library)";
     }
-    const persistence::LibraryStore source{std::filesystem::path(root)};
+    persistence::LibraryStore source{std::filesystem::path(root)};
     const std::optional<CanvasManagerSnapshot> loaded = source.Load();
     ASSERT_TRUE(loaded.has_value()) << "no library at " << root;
 
@@ -180,14 +180,14 @@ TEST_F(PerfBench, SavingTheWholeLibrary) {
     const std::filesystem::path out =
         std::filesystem::temp_directory_path() / "sz_save_bench" / std::filesystem::path(root).filename();
     std::error_code ec;
-    std::filesystem::remove_all(out, ec);
-    const persistence::LibraryStore store{out};
+    std::filesystem::remove(out, ec);
+    persistence::LibraryStore store{out};
     ASSERT_TRUE(store.Save(manager.ExportSnapshot()));
 
     // The first save of a session: a store that has only loaded, saving
-    // what it loaded. It costs what the load repaired, which for a tree
+    // what it loaded. It costs what the load repaired, which for a library
     // that needed no repair is nothing.
-    const persistence::LibraryStore reopened{out};
+    persistence::LibraryStore reopened{out};
     ASSERT_TRUE(reopened.Load().has_value());
     const auto firstStart = std::chrono::steady_clock::now();
     ASSERT_TRUE(reopened.Save(manager.ExportSnapshot()));
@@ -227,22 +227,15 @@ TEST_F(PerfBench, SavingTheWholeLibrary) {
     std::sort(oneItemMs.begin(), oneItemMs.end());
     const std::vector<double>& saveMs = idleMs;
 
-    size_t files = 0;
-    uintmax_t bytes = 0;
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(out)) {
-        if (entry.is_regular_file()) {
-            ++files;
-            bytes += entry.file_size();
-        }
-    }
+    const uintmax_t bytes = std::filesystem::file_size(out, ec);
 
-    std::printf("%-10s %zu files / %.0f KB | ExportSnapshot %.2f ms | Save: first after load %.2f ms, "
+    std::printf("%-10s %.0f KB | ExportSnapshot %.2f ms | Save: first after load %.2f ms, "
                 "nothing changed %.2f ms, one snippet changed %.2f ms\n",
-                std::filesystem::path(root).filename().string().c_str(), files,
-                static_cast<double>(bytes) / 1024.0, exportMs[exportMs.size() / 2], firstSaveMs,
-                idleMs[idleMs.size() / 2], oneItemMs[oneItemMs.size() / 2]);
+                std::filesystem::path(root).filename().string().c_str(), static_cast<double>(bytes) / 1024.0,
+                exportMs[exportMs.size() / 2], firstSaveMs, idleMs[idleMs.size() / 2],
+                oneItemMs[oneItemMs.size() / 2]);
     (void)saveMs;
-    std::filesystem::remove_all(out, ec);
+    std::filesystem::remove(out, ec);
 }
 
 }  // namespace

@@ -1,7 +1,5 @@
 #include "core/persistence/image_codec.h"
 
-#include "core/util/atomic_file.h"
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -21,11 +19,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
-// qoi.h's own file helpers (qoi_read/qoi_write) are fopen(const char*)
-// based, which would mangle a data directory containing non-ASCII
-// characters exactly the way stb_image_write's would (see WriteCallback
-// below). Only the memory-to-memory half is used here, with std::ifstream/
-// std::ofstream either side of it.
+// Only QOI's memory-to-memory half is used: pictures are stored in the
+// library, not in files of their own.
 #define QOI_NO_STDIO
 #define QOI_IMPLEMENTATION
 #include <qoi.h>
@@ -146,45 +141,30 @@ DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent) {
     return DownscaleToFit(source.pixelsRGBA.data(), source.width, source.height, maxExtent);
 }
 
-bool EncodeQoiToFile(FileSystem& fs, const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width,
-                     int height) {
+std::vector<uint8_t> EncodeQoi(const uint8_t* pixelsRGBA, int width, int height) {
     if (!pixelsRGBA || width <= 0 || height <= 0) {
-        return false;
+        return {};
     }
-
-    fs.CreateDirectories(path.parent_path());
-
     const qoi_desc desc{static_cast<unsigned int>(width), static_cast<unsigned int>(height),
                         /*channels=*/4, QOI_SRGB};
     int encodedSize = 0;
     void* encoded = qoi_encode(pixelsRGBA, &desc, &encodedSize);
     if (!encoded || encodedSize <= 0) {
         free(encoded);  // qoi_encode uses QOI_MALLOC, which is malloc by default
-        return false;
+        return {};
     }
-
-    // Written beside the destination and renamed onto it, the same
-    // discipline every record gets (see core/util/atomic_file.h): a file
-    // truncated in place leaves a window in which a crash - or a full disk
-    // - replaces the only copy on disk of a picture with the first half of
-    // it.
-    const bool ok = WriteFileAtomically(fs, path, encoded, static_cast<size_t>(encodedSize));
+    const auto* bytes = static_cast<const uint8_t*>(encoded);
+    std::vector<uint8_t> result(bytes, bytes + encodedSize);
     free(encoded);
-    return ok;
+    return result;
 }
 
-std::optional<DecodedImage> DecodeQoiFromFile(FileSystem& fs, const std::filesystem::path& path) {
-    const std::optional<std::string> fileBytes = fs.Read(path, kMaxImageFileBytes);
-    if (!fileBytes || fileBytes->empty()) {
-        return std::nullopt;
-    }
-    const auto* bytes = reinterpret_cast<const uint8_t*>(fileBytes->data());
-    const size_t size = fileBytes->size();
-
+std::optional<DecodedImage> DecodeQoi(const uint8_t* bytes, size_t size) {
     // The header first: "qoif", then width and height as big-endian 32-bit
     // integers. qoi_decode allocates width*height*4 on the strength of
     // those two numbers before it has looked at a single pixel.
-    if (size < QOI_HEADER_SIZE || std::memcmp(bytes, "qoif", 4) != 0 ||
+    if (bytes == nullptr || size < QOI_HEADER_SIZE || size > kMaxImageFileBytes ||
+        std::memcmp(bytes, "qoif", 4) != 0 ||
         !WithinPixelBudget(ReadBigEndian32(bytes + 4), ReadBigEndian32(bytes + 8))) {
         return std::nullopt;
     }
@@ -193,7 +173,6 @@ std::optional<DecodedImage> DecodeQoiFromFile(FileSystem& fs, const std::filesys
     if (!decoded) {
         return std::nullopt;
     }
-
     DecodedImage result;
     result.width = static_cast<int>(desc.width);
     result.height = static_cast<int>(desc.height);

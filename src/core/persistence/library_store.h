@@ -1,579 +1,188 @@
 #pragma once
 
-#include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <map>
 #include <optional>
-#include <set>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
-#include <vector>
 
 #include "core/canvas/canvas_manager.h"
 #include "core/persistence/image_codec.h"
-#include "core/util/file_system.h"
+
+struct sqlite3;
 
 namespace sz::core::persistence {
 
-// Reads and writes the on-disk library (folders/canvases/items/strokes,
-// plus each Shot item's captured screenshot pixels) under one root
-// directory - the sole persistence boundary for "everything" the overlay
-// shows: there's no explicit save/load anywhere else in the app (see
-// OverlayApp's debounced autosave, which is what actually calls Save()).
-// Every disk operation goes through a FileSystem (see util/file_system.h) -
-// the disk itself unless a test hands it another, which is how a test makes
-// a file fail to write, holds one open, or stops a save partway the way a
-// crash does. No OS-specific dependency, so (unlike the real screen-capture
-// code it complements) this is fully exercised by linux-tests.
+// The library - folders, canvases, snippets and their pictures - in one
+// SQLite file, and the sole persistence boundary for everything the overlay
+// shows: there is no save or load anywhere else in the app (see Session's
+// debounced autosave, which is what calls Save).
 //
-// Layout under `rootDir`:
-//   library.json                     - currentFolderId and currentCanvasId,
-//                                       and nothing else
-//   folders/order.json               - the folders' uids, in order
-//   folders/<folder>/folder.json     - that folder's id and name
-//   folders/<folder>/order.json      - its canvases' uids, in order
-//   folders/<folder>/<canvas>/canvas.json
-//                                     - that canvas's id and name
-//   folders/<folder>/<canvas>/order.json
-//                                     - its snippets' uids, back to
-//                                       front: snippet order is z-order
-//   folders/<folder>/<canvas>/<snippet>/item.json
-//                                     - the snippet's record
-//   folders/<folder>/<canvas>/<snippet>/<uid>.qoi
-//                                     - its captured pixels, and beside it
-//                                       <uid>.thumb.qoi for the Overview
-//   staging/                           - see kStagingDir
-//   retired/<folder>/<canvas>/<snippet>/
-//                                     - what a save found the library no
-//                                       longer holding, set aside whole at
-//                                       the path it had under folders/
-//                                       rather than deleted; see Save
-//   retired/staging/                   - pictures found in staging that no
-//                                       snippet named, set aside for the
-//                                       same reason; see Save's last pass
-//   pending.json                       - what was deleted for good and is
-//                                       not wholly gone from the disk
-//                                       yet, by uid; nothing of it is
-//                                       read, and every save tries again.
-//                                       With it, where anything moved out
-//                                       of it and still inside belongs.
-//                                       See Remove.
+// One file, and every write to it is a transaction: a save lands whole or
+// not at all, whatever stops it partway - a crash, a power cut, a disk
+// that fills up. There is no state in between for a later start to find
+// and reconcile, which is what the directory tree this replaces spent most
+// of its code on (see docs/ARCHITECTURE.md, "Persistence").
 //
-// Every id inside a record is spelled the way the directory names spell
-// it - six base36 characters, see util/uid.h - so a record and the
-// directory holding it can be matched by eye (see IdJson/ReadId).
+// Tables (see the .cpp for the schema):
+//   meta      - which folder and canvas are current
+//   folders   - id, place in the list, name, when made and deleted
+//   canvases  - the same, and which folder each is in
+//   items     - which canvas each snippet is on and where in its stack, its
+//               strokes as one packed blob, and everything else about it as
+//               a JSON record
+//   pictures  - a snippet's captured pixels as QOI, and a thumbnail of them
 //
-// A directory per folder, per canvas and per snippet, named
-// "<slug of its name>-<uid>"
-// (see MakeSlug). A tree rather than one file because one file is
-// rewritten whole on every save: 50 canvases of ordinary drawing is a 42 MB
-// document taking half a second to serialize, on the render thread, every
-// couple of seconds of quiet. What a save does is bounded by what moved -
-// see the block on folderDirs_/writtenItemHashes_ below, and docs/PERF.md.
+// Pictures are keyed by their snippet and live in the same file, so a
+// snippet and its picture cannot disagree about where either is, and
+// deleting the one deletes the other (a trigger does it).
 //
-// **The tree is the library, and every file in it describes itself.** There
-// is no index that says which canvas is in which folder - the directory it
-// sits in says that, and where a record disagrees with where it physically
-// is, the filesystem wins. That is the point rather than a side effect:
-// rearranging the library in a file manager while the app is closed is a
-// supported way to use it, so Load reconciles rather than validates:
-//
-//   - a directory with no folder.json/canvas.json in it is not ours, and is
-//     left alone rather than deleted or complained about
-//   - a symlink or junction is not ours either, whatever is behind it: not
-//     read, not written to, not retired, not deleted - wherever it sits,
-//     folders/ or staging/ or retired/ themselves included (see IsOurs)
-//   - an order file naming something that is gone simply skips it; anything
-//     present that it doesn't name goes to the end
-//   - a directory whose readable half was renamed by hand keeps its place,
-//     because the trailing uid is what identifies it
-//   - two directories claiming one id - which is what copying one in a file
-//     manager produces - is not corruption: the second gets a fresh id and
-//     is thereafter a canvas of its own
-//   - a currentCanvasId naming nothing falls back to a canvas that exists,
-//     rather than the whole library refusing to open
-//
-// The same reconciliation is what makes a half-finished save survivable: a
-// crash mid-write leaves the same kind of inconsistency a hand-edit does.
-//
-// Scope: the app owns the tree while it is running. Rearranging it under a
-// live instance is undefined until the next start - there is no watcher,
-// and promising live pickup would make every save path much harder.
-//
-// A snippet's pictures live in the snippet's own directory, so that moving
-// one snippet is moving one directory - record, capture and thumbnail
-// together, with no window in which the record has moved and the picture
-// has not. It also removes a whole mechanism: there is no longer a shared
-// image directory to scan for files whose item has gone, because deleting
-// the snippet deletes its bytes.
-//
-// Layer::imageFile still names a file rather than a path, deliberately: a
-// name with its location baked in would have to be rewritten every time its
-// snippet moved. FindImage is the one place that turns a name into a path,
-// and it needs the owning snippet to do it: the file is in that snippet's
-// directory, wherever the directory currently is.
-//
-// **What a save retires is exactly what it once read, and nothing else -
-// and retiring is setting aside, not deleting.** Load indexes every
-// directory whose record it could read, and Save moves those the library no
-// longer holds into retired/ - after placing everything it does hold, so a
-// snippet moved between canvases is moved and not retired on the way. A
-// directory Load skipped (no record, or one it could not read) is not in
-// the index and cannot be retired. A save deletes no directory at all:
-// deleting for good is Remove, at the moment it is asked for. See Save's
-// own comment.
-//
-// **A deleted thing is an ordinary record.** A delete marks a folder,
-// canvas or snippet with a deletedAt stamp and leaves it where it is (see
-// CanvasManager's class comment), so it is saved, loaded and moved about by
-// the same code as everything else, and a delete touches nothing on disk
-// but the stamp in its record.
+// No OS dependency; fully exercised by linux-tests.
 class LibraryStore {
 public:
-    explicit LibraryStore(std::filesystem::path rootDir, FileSystem& fs = DefaultFileSystem());
+    // `file` need not exist, nor its directory: both are made at the first
+    // Open.
+    explicit LibraryStore(std::filesystem::path file);
+    ~LibraryStore();
+    LibraryStore(const LibraryStore&) = delete;
+    LibraryStore& operator=(const LibraryStore&) = delete;
 
-    // The shape of the library this build reads and writes, stamped into
-    // library.json by every save. It goes up whenever a build writes
-    // something an older one would misread or drop - a new field in a
-    // record, a new kind of file - once per release, not per change: a
-    // version covers everything since the release before it, and what is
-    // added before the next release goes under the version already bumped
-    // for it.
-    // 2 (since 0.1.0): Item::keepAspect; pending.json.
-    static constexpr int kFormatVersion = 2;
-    // Whether library.json says a newer build wrote this library: a
-    // version above kFormatVersion. Such a library is not this build's to
-    // open - every record it rewrote would lose what the newer build put
-    // there - so once this has been seen, by this or by Load, the store
-    // writes nothing at all: Save, Remove, SaveImage and SaveThumbnail
-    // all fail. TrayController::Initialize asks before loading, and refuses to
-    // start. A library.json that is missing, is not JSON or has no version
-    // is not newer, and neither is a directory in its place or a file far
-    // larger than any record. A file that is there and cannot be read -
-    // held by another program, or not ours to read - is asked again for a
-    // moment, and then counted as newer: what cannot be read cannot be
-    // said to be this build's, and the first save would have written it
-    // back at this build's version whatever it said. VersionUnreadable
-    // tells that case apart. Asked once per store; the answer is kept.
-    bool WrittenByANewerVersion() const;
-    // Whether WrittenByANewerVersion said so because library.json could
-    // not be read, rather than because it named a newer version.
-    bool VersionUnreadable() const { return versionUnreadable_; }
+    // The shape of the library this build reads and writes, as the file's
+    // user_version. It goes up once per release that changes what is
+    // written - a field an older build would drop, a new table - and a
+    // version covers everything since the release before it.
+    // 1: the first library in a database.
+    static constexpr int kFormatVersion = 1;
 
-    // Where the library lives.
-    const std::filesystem::path& RootDir() const { return rootDir_; }
-    // Bumped by every write this store makes to the disk - a save, whatever
-    // it wrote or failed to write; a picture; a thumbnail; a file set aside
-    // on load - so that something mirroring the tree knows when to look
-    // again without every caller having to say so.
-    uint64_t WriteGeneration() const { return writeGeneration_; }
+    // The longest edge a thumbnail is stored at. A canvas tile in the
+    // Overview is 200x130 and an item inside one is smaller still; what this
+    // buys is a ~40 KB picture that decodes in well under a millisecond
+    // against the 8 MB a fullscreen capture decodes to.
+    static constexpr int kThumbnailMaxExtent = 256;
 
-    // Deletes the directories of the folders, canvases and snippets `uids`
-    // name, with everything of the library's inside them, for good and now
-    // - what "Delete permanently" is on disk, once the model no longer
-    // holds them. Now rather than at the next save, which would take a
-    // directory the model has lost for something gone missing, and set it
-    // aside. Only what the store writes goes (see RemoveOwnDirectory):
-    // anything someone else put beside a record stays, and the directory
-    // stands for it, holding no record - which nothing reads back.
-    //
-    // `uids` is the thing and everything the model held under it: a
-    // snippet moved into a canvas since the last save still has its
-    // directory under the canvas it came from, and only the model knows it
-    // went with this one. Whatever the index has inside the directories
-    // named, and the library no longer holds, goes too, named or not.
-    //
-    // The removal is recorded in pending.json before anything is deleted.
-    // A removal that stops partway - a crash, or a picture held open by
-    // another program, on Windows - is still recorded when the process
-    // starts again: Load reads nothing of it, and every save takes another
-    // run at it, until nothing of the library's is left. A pending.json that
-    // cannot be written deletes nothing, and the removal is owed in memory
-    // until it can be.
-    //
-    // True only once every directory named is gone. False if this store
-    // knows no directory for any of them - a thing never saved has none,
-    // and a capture of one still in staging goes here too (see
-    // stagedRemovals_) - or if a removal is still owed. The caller can tell the two falses
-    // apart with HasPendingRemoval.
-    //
-    // `remaining` is the library without them, which is what says whether
-    // anything under a directory has been moved out in the model and not
-    // yet on disk - a snippet moved to another canvas, a canvas out of a
-    // folder, before the save that moves its directory. Deleting the
-    // directory now would take that with it. The removal then waits, with
-    // nothing inside touched, and is recorded with where each such thing
-    // belongs - so that a restart meanwhile reads it from where it is and
-    // puts it there, rather than losing it with what was deleted. The next
-    // save, which places what was moved before it runs the removals owed,
-    // finishes it once nothing the library holds is left inside.
-    bool Remove(const std::vector<uint64_t>& uids, const LibraryView& remaining) const;
-    bool Remove(uint64_t uid, const LibraryView& remaining) const {
-        return Remove(std::vector<uint64_t>{uid}, remaining);
-    }
-    bool Remove(const std::vector<uint64_t>& uids, const CanvasManagerSnapshot& remaining) const {
-        return Remove(uids, LibraryView{remaining.folders, remaining.canvases, remaining.currentFolderId,
-                                        remaining.currentCanvasId});
-    }
-    bool Remove(uint64_t uid, const CanvasManagerSnapshot& remaining) const {
-        return Remove(std::vector<uint64_t>{uid}, remaining);
-    }
-    // Whether a Remove of `uid` is still owed: it was asked for and the
-    // directory is still there, whole or in part.
-    bool HasPendingRemoval(uint64_t uid) const { return pendingRemovals_.count(uid) > 0; }
-    // Whether any removal is still owed - what keeps a session's "unsaved
-    // changes" true until the disk agrees with the library about what is
-    // gone, so that the retry is asked for rather than waited on. A
-    // pending.json still naming something is one: a crash between the last
-    // removal and the rewrite of the file leaves it naming what is gone,
-    // and only a save brings it in line. What it names that this session
-    // could not look at is not (see unobservedPending_): no save can do
-    // anything about it.
-    bool HasPendingRemovals() const {
-        return !pendingRemovals_.empty() || !stagedRemovals_.empty() || writtenPending_ != unobservedPending_;
-    }
+    // What opening the file found. Everything below opens it on first use,
+    // so this only needs calling to hear the answer - see
+    // TrayController::Initialize, which refuses to start on either of the
+    // last two.
+    enum class OpenResult {
+        Opened,
+        // user_version is above kFormatVersion. Such a library is not this
+        // build's to open - every row it rewrote would lose what the newer
+        // build put there - so the store reads and writes nothing.
+        WrittenByANewerVersion,
+        // The file is there and could not be opened or read: another
+        // program holding it, or not ours to read. Nothing is read or
+        // written, so that a start over it cannot write an empty library
+        // where it was.
+        Unreadable,
+    };
+    OpenResult Open();
+    const std::filesystem::path& File() const { return file_; }
+    // Where a file that was not a library this store could read - not a
+    // SQLite database, a damaged one, or someone else's - was set aside
+    // when Open found it, so that a new library could start in its place
+    // without losing it. Empty when nothing was.
+    const std::filesystem::path& SetAsideAs() const { return setAsideAs_; }
 
-    // Loads the on-disk library, or returns nullopt only if `rootDir` has
-    // none at all - no library.json *and* no folders/ tree - which is a
-    // first run (see TrayController::Initialize, which falls back to
-    // CanvasManager's own freshly-constructed default state). Or if a newer
-    // build wrote it (see WrittenByANewerVersion), which reads nothing and
-    // leaves the store writing nothing, so that a fresh start over it
-    // cannot save over the tree.
-    //
-    // The tree is the library; library.json is a pointer file beside it.
-    // So a library.json that is missing or not JSON costs the pointers it
-    // held and nothing else: the tree is
-    // read as usual and the pointers are repaired from it. Reporting the
-    // library absent over its pointer file would start the app fresh, and
-    // a fresh library saved over a tree is how a tree gets retired.
-    //
-    // Nothing in the *content* of the files can make this throw - the same
-    // "bad input means defaults" rule AppConfig::ParseConfig keeps; every
-    // filesystem call takes an error_code. Running out of memory can, as
-    // it can anywhere, which is what the size budgets on what is read are
-    // for (see the .cpp). A field of the wrong
-    // type in library.json reads as its default; a folder, canvas or
-    // snippet record that cannot be read is skipped, and skipped is all
-    // it is (see the class comment on what Save may retire). Everything
-    // dangling is repaired rather than refused - see the .cpp.
-    std::optional<CanvasManagerSnapshot> Load() const;
+    // The library, or nullopt when there is none to load: the file was made
+    // by this Open (a first run), or could not be read. A library someone
+    // emptied loads as an empty snapshot, which is not a first run. A value
+    // a row carries that cannot be used - a coordinate that is not finite,
+    // a stroke blob cut short - is repaired rather than refused, and the
+    // repaired row is written back by the next save.
+    std::optional<CanvasManagerSnapshot> Load();
 
-    // Writes the library to the tree - every record whose content changed
-    // since this store last wrote it, each via a temp-file-then-rename so a
-    // reader never observes a half-written file (see WriteFileAtomically) -
-    // then sets aside, into retired/, the directories of whatever the
-    // library no longer holds, and moves freshly captured pictures out of
-    // staging into their snippets' directories. The .cpp's comment on Save
-    // is the plan.
-    //
-    // Returns true only if every record the library holds is on disk as
-    // written: library.json, every folder, canvas and snippet record, and
-    // every order file. A false means something is not, and the caller must
-    // not treat the snapshot as saved - the next Save retries exactly what
-    // failed. Moving a picture and retiring a directory are best-effort and
-    // outside the result: a picture not yet moved is still readable where
-    // it is, a directory not yet retired costs disk space, and the next save
-    // takes another run at both.
-    bool Save(const LibraryView& view) const;
-    // The snippets the last Save could not write because their record
-    // would be larger than Load reads (see kMaxRecordBytes) - so that a UI
-    // can say why the save failed. Empty after a save that had none.
-    const std::set<uint64_t>& OversizedRecords() const { return oversizedRecords_; }
-    bool Save(const CanvasManagerSnapshot& snapshot) const {
+    // Writes what changed since this store last read or wrote the library,
+    // in one transaction: every folder and canvas that differs, every
+    // snippet whose content or place differs, and the removal of everything
+    // the library no longer holds (with its picture). True when it landed;
+    // false when it did not, and then nothing did, and the next Save tries
+    // all of it again.
+    bool Save(const LibraryView& view);
+    bool Save(const CanvasManagerSnapshot& snapshot) {
         return Save(LibraryView{snapshot.folders, snapshot.canvases, snapshot.currentFolderId,
                                 snapshot.currentCanvasId});
     }
 
-    // Encodes `pixelsRGBA` (width*height*4 bytes RGBA8, row-major,
-    // top-left origin) as "<itemId>.qoi" in the snippet's own directory -
-    // or in staging, if the snippet has never been saved and has no
-    // directory yet (see ImageHome) - and returns the filename to store in
-    // Layer::imageFile, or nullopt on failure. Called synchronously right
-    // after a successful capture (see Session::CaptureShotItem),
-    // independent of Save() itself - so a captured screenshot survives
-    // even a crash that never reaches the next debounced metadata save.
-    // Synchronously is also why the format matters: this runs on the
-    // render thread while the user waits, and QOI encodes the same pixels
-    // in a twentieth of the time PNG took (see EncodeQoiToFile).
-    std::optional<std::string> SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int width, int height) const;
+    // How many snippet rows the last Save that landed wrote - for a test to
+    // see that an unchanged snippet is not written again.
+    size_t ItemsWrittenByLastSave() const { return itemsWrittenByLastSave_; }
 
-    // Decodes a previously-saved picture of snippet `itemId` (see
-    // SaveImage/Layer::imageFile) back into raw pixels, for reloading its
-    // texture when its canvas becomes current. Returns nullopt for an
-    // empty filename or if the file is missing/undecodable. The snippet is
-    // what says where to look - see FindImage.
-    std::optional<DecodedImage> LoadImage(uint64_t itemId, const std::string& filename) const;
+    // Stores `pixelsRGBA` (width*height*4 bytes, RGBA8, row-major, top-left
+    // origin) as snippet `itemId`'s picture, with a thumbnail, replacing
+    // any it had. At once rather than with the next save: a screenshot is
+    // the one thing in the library that cannot be made again (see
+    // Session::CaptureShotItem). A picture whose snippet is never saved is
+    // removed at the next Load.
+    bool SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int width, int height);
+    // Gives `toItemId` a copy of `fromItemId`'s picture, as stored - no
+    // decoding. False when there is none to copy.
+    bool CopyImage(uint64_t fromItemId, uint64_t toItemId);
+    // A snippet's picture, decoded; nullopt when it has none or it cannot
+    // be read.
+    std::optional<DecodedImage> LoadImage(uint64_t itemId);
+    std::optional<DecodedImage> LoadThumbnail(uint64_t itemId);
+    // Whether the library holds a picture for `itemId`, without reading it.
+    bool HasImage(uint64_t itemId);
 
-    // The longest edge a thumbnail is written at. A canvas tile in the
-    // Overview is 200x130 and an item inside one is smaller still, so this
-    // is already generous; what it buys is the difference between a ~40 KB
-    // file that decodes in well under a millisecond and the 8 MB a
-    // fullscreen capture decodes to.
-    static constexpr int kThumbnailMaxExtent = 256;
-
-    // "<stem>.thumb.qoi" for an image named "<stem>.qoi". Public because Save()'s
-    // own GC has to recognize these, and because it is the one thing a test
-    // needs to look at the file directly.
-    static std::string ThumbnailFilename(const std::string& imageFilename);
-
-    // Writes a thumbnail beside `imageFilename`, downscaling `image` to
-    // kThumbnailMaxExtent first if it is bigger. Best-effort: a thumbnail
-    // that can't be written costs a slow first look at the Overview, not
-    // correctness, so nothing that saves an image cares whether this
-    // succeeded.
-    //
-    // Called for every picture written (see WritePicture), and from the
-    // Overview for a picture whose thumbnail is missing - which puts it
-    // back, one visit at a time.
-    bool SaveThumbnail(uint64_t itemId, const std::string& imageFilename, const DecodedImage& image) const;
-
-    // The thumbnail for snippet `itemId`'s `imageFilename`, or nullopt if
-    // there isn't one - which is not an error: the caller falls back to
-    // decoding the full image, and writes the thumbnail on the way.
-    std::optional<DecodedImage> LoadThumbnail(uint64_t itemId, const std::string& imageFilename) const;
+    // Copies the library as it is in the file to `file`, which must not
+    // exist - the start of a recovery copy (see Session::WriteRecoveryCopy).
+    bool WriteCopyTo(const std::filesystem::path& file);
 
 private:
-    // Where a snippet's pictures go and where they are found. A snippet's
-    // pictures live in its own directory, which is what lets one be moved
-    // by moving one directory - but Layer::imageFile names a file, not a
-    // path, and deliberately so: an image that had its location baked into
-    // its name would have to be rewritten every time its snippet moved. So
-    // the snippet's id is the other half of every lookup: its directory
-    // (itemDirs_) is where its pictures are, and staging is where they wait
-    // while it has no directory yet.
-    std::filesystem::path ImageHome(uint64_t itemId) const;
-    std::filesystem::path FindImage(uint64_t itemId, const std::string& filename) const;
-    // Behind SaveImage: encodes into the snippet's home
-    // under `filename`, with a thumbnail beside it.
-    std::optional<std::string> WritePicture(uint64_t itemId, const std::string& filename, const uint8_t* pixelsRGBA,
-                                             int width, int height) const;
-
-    // Whether `path` names something inside rootDir_, lexically. Every path
-    // this store deletes is checked against it first - a tripwire, since
-    // every path it could delete was built under the root to begin with.
-    bool WithinRoot(const std::filesystem::path& path) const;
-    // Whether `path` is a place this store may write into, move or delete:
-    // under the root, and with no link or junction anywhere on the way
-    // down from the root to it. The one check every write, move and
-    // delete goes through - the top-level directories included (folders/,
-    // staging/, retired/), which a user can replace with a junction as
-    // easily as any other. The library root itself is not checked: a root
-    // that is a junction is how a library is moved to another drive, and
-    // is supported. A path that does not exist yet passes if its existing
-    // ancestors do, which is what a directory about to be created needs.
-    // See the .cpp on links.
-    bool IsOurs(const std::filesystem::path& path) const;
-    // Drops every index entry that points under `dir` - what a removed or
-    // retired directory takes with it.
-    // Entries whose id is in `keep` stay.
-    void ForgetUnder(const std::filesystem::path& dir, const std::unordered_set<uint64_t>& keep = {}) const;
-    // Whether a directory of anything in `ids` is indexed under `dir`.
-    bool HoldsAnyOf(const std::filesystem::path& dir, const std::unordered_set<uint64_t>& ids) const;
-    // Where the folder directories are: folders/ under the root.
-    std::filesystem::path FoldersRoot() const;
-    // The one way this store deletes a directory: what the store itself
-    // writes, recursively through the directories that hold its records or
-    // whose uid is in `erased` - one deleted for good along with it, which
-    // may have lost its record already to an earlier run at it - and only
-    // if it IsOurs, so that nothing outside the library is ever
-    // emptied through something pointing at it. A directory goes once it
-    // is empty; one that someone else's files keep stays for them. True
-    // once nothing of the library's is left under `path`.
-    bool RemoveOwnDirectory(const std::filesystem::path& path, const std::set<uint64_t>& erased) const;
-    // Whether `dir` was deleted for good - pending.json names the uid its
-    // name ends in, or it carries the `.removed` mark an older build left
-    // - and so is owed and not to be read. Anything inside it deleted for
-    // good too is noted with it.
-    bool NotePendingRemoval(const std::filesystem::path& dir) const;
-    // Adds to stagedRemovals_ those of `uids` with a picture waiting - all
-    // of them, if where they wait cannot be listed.
-    void OweStagedPictures(const std::vector<uint64_t>& uids) const;
-    // Deletes the pictures in staging that stagedRemovals_ owns and
-    // pending.json records, and keeps owing those that are left.
-    void RunStagedRemovals() const;
-    // Where pictures without a directory wait: staging/, and retired/staging/.
-    std::vector<std::filesystem::path> StagedPictureDirs() const;
-    // What pending.json says: the uids deleted for good, and where each
-    // thing moved out of one of them belongs - a canvas's folder, a
-    // snippet's canvas - while its directory is still inside.
-    struct PendingRecord {
-        std::set<uint64_t> erased;
-        std::map<uint64_t, uint64_t> moves;
-        bool operator==(const PendingRecord&) const = default;
+    // What was last written for a folder, canvas or snippet - what Save
+    // compares against to know whether a row needs writing.
+    struct FolderRow {
+        int64_t position = 0;
+        std::string name;
+        int64_t createdAt = 0;
+        int64_t deletedAt = 0;
+        bool operator==(const FolderRow&) const = default;
     };
-    // Reads pending.json into writtenPending_, or finds it unreadable -
-    // held, since one whose content is not a record is set aside.
-    void ReadPendingFile() const;
-    // Another try at a pending.json that could not be read, before each
-    // run at the removals: what the file names that this session loaded
-    // is kept, and the rest carried as it says (see the .cpp).
-    void RereadPendingFile() const;
-    // What pending.json's `text` says, or nullopt if it is not a record.
-    static std::optional<PendingRecord> ParsePendingRecord(const std::string& text);
-    // Moves a pending.json that is not a record out of the way, beside it
-    // as pending-unreadable-<time>.json. True once it is.
-    bool SetAsideUnreadablePendingFile() const;
-    // Puts pending.json on disk saying exactly `record` - removed when it
-    // says nothing. True once it does.
-    bool WritePendingFile(const PendingRecord& record) const;
-    // What pending.json should say for the removals owed, with `library`
-    // saying where what was moved out of them belongs.
-    PendingRecord PendingFor(const LibraryView& library) const;
-    // Whether `dir` holds, up to two levels down, a directory that
-    // unobservedPending_ says was moved out of something deleted for good:
-    // one the rescue could not read, which keeps what it is in standing
-    // as anything the library holds would. True as well when `dir` cannot
-    // be listed.
-    bool HoldsUnrescued(const std::filesystem::path& dir, int depth = 0) const;
-    // The subdirectories of `dir` (see SortedSubdirectories in the .cpp),
-    // for the walk of Load: one that cannot be listed makes it one that did
-    // not see everything.
-    std::vector<std::filesystem::path> WalkInto(const std::filesystem::path& dir) const;
-    // After a walk: sets unobservedPending_ from what pending.json says,
-    // the removals the walk found owed, and `seen`, everything it read -
-    // nothing, when `sawEverything` says the walk left nothing out.
-    void NoteUnobservedPending(const std::unordered_set<uint64_t>& seen, bool sawEverything) const;
-    // Another run at every removal owed: recorded in pending.json first,
-    // then each whose directory holds nothing of `library` any more is
-    // removed, then the file brought in line with what is left. False when
-    // the record could not be written, and nothing new was removed.
-    bool RunPendingRemovals(const LibraryView& library) const;
-
-    // The tree walk behind Load: every folder, canvas and snippet under
-    // `foldersRoot`, into `out`, indexing each directory and noting each
-    // record that came back exactly as a save would write it.
-    void ReadTree(const std::filesystem::path& foldersRoot, CanvasManagerSnapshot& out) const;
-    // Rebuilds folderDirs_/canvasDirs_/itemDirs_ by reading the tree - what
-    // every save used to do, now only done when there is no index to trust
-    // (a store that has never loaded, i.e. a first run). Save keeps only
-    // the entries for what it is about to write: a store that never read a
-    // directory has no standing to retire it - see Save.
-    void IndexTreeFromDisk(const std::filesystem::path& foldersRoot) const;
-
-    // ===== What makes a save incremental =====
-    //
-    // A save used to cost the whole library however little had changed, and
-    // measured on a 12-canvas library that was a full second on the render
-    // thread. It went three ways, in roughly these proportions: a third
-    // re-reading and re-parsing every file on disk to find out which
-    // directory held which id, half re-serializing every record, and the
-    // rest actually writing them. All three are avoided below, and all three
-    // had to be, since fixing any one alone leaves most of the second.
-    //
-    // Where each thing lives, so a save doesn't have to go and look. Filled
-    // in by Load, which walks the whole tree anyway, and maintained by Save
-    // as it places, renames and collects directories.
-    //
-    // `treeIndexed_` false means there are none yet - a store that has never
-    // loaded, a first run - and the next Save builds them from disk the slow
-    // way. A save that fails partway leaves them true: each entry changes
-    // with the rename that moves its directory, and only once that rename
-    // has happened (see placeDirectory in Save). Being wrong is
-    // survivable rather than corrupting: a directory the index has lost is
-    // written afresh under its proper name, and the stale one - which Load
-    // reads at the next start as a copy, and gives an id of its own - stays
-    // where it is rather than being deleted.
-    mutable std::map<uint64_t, std::filesystem::path> folderDirs_;
-    mutable std::map<uint64_t, std::filesystem::path> canvasDirs_;
-    mutable std::map<uint64_t, std::filesystem::path> itemDirs_;
-    mutable bool treeIndexed_ = false;
-    // Where each directory Load found and could not read sat in its order
-    // file - a record another program held for a moment, say. Not loaded,
-    // it is not in the library this session, and an order file written
-    // from the library alone left it out: read again at the next start, it
-    // came back on top of its canvas, or last among its folder's canvases,
-    // for good. Kept by order-file key ("order:root", "order:folder:<id>",
-    // "order:canvas:<id>"), and put back in its old place by every save
-    // (see KeepUnreadPlaces).
-    struct UnreadPlaces {
-        std::vector<std::string> order;  // the order file as Load read it
-        std::set<std::string> unread;    // the names in it Load could not read
+    struct CanvasRow {
+        uint64_t folderId = 0;
+        int64_t position = 0;
+        std::string name;
+        int64_t createdAt = 0;
+        int64_t deletedAt = 0;
+        bool operator==(const CanvasRow&) const = default;
     };
-    mutable std::map<std::string, UnreadPlaces> unreadPlaces_;
-    // What Remove was asked to delete and could not, wholly, and where it
-    // is - see Remove. Each save tries again. Not in the index, so that
-    // nothing under it is placed, retired or read meanwhile: it was
-    // deleted, not lost.
-    mutable std::map<uint64_t, std::filesystem::path> pendingRemovals_;
-    // The same for pictures in staging: those of a snippet deleted for
-    // good before any save gave it a directory. Owed by uid until none of
-    // them is left, recorded in pending.json meanwhile, and never set aside
-    // by the staging pass - which could not tell them from what a crash
-    // leaves, and put them in retired/.
-    mutable std::set<uint64_t> stagedRemovals_;
-    // What pending.json says as it is on disk: what a removal may be run
-    // for, since only what is recorded survives a crash partway.
-    mutable PendingRecord writtenPending_;
-    // What pending.json says that the last walk of the tree did not see for
-    // itself, and cannot show to be gone: a removal owed inside a directory
-    // that could not be listed, something moved out of what was deleted for
-    // good that the rescue could not read. Rebuilding the file from what this
-    // session saw dropped them - and then the removal was forgotten, and
-    // what it named loaded again at the next start where it could be read;
-    // or the move was, and what was moved went with the directory it was
-    // still inside. So every rewrite keeps them (see PendingFor), until a
-    // walk that saw everything finds them gone, and a removal waits while
-    // what was moved out of it is still inside (see HoldsUnrescued).
-    mutable PendingRecord unobservedPending_;
-    // Whether the walk under way has looked into every directory it came
-    // to: false once one could not be listed, or was moved out of something
-    // deleted for good and could not be read. A folder or canvas whose own
-    // record cannot be read is looked into all the same, for what was
-    // deleted for good inside it (see ReadTree).
-    mutable bool walkedEverything_ = true;
-    // Whether the last load read every folder, canvas and snippet record
-    // it found. False while one was there and could not be read: what a
-    // picture in staging that nothing loaded names belongs to is then not
-    // known, and it is not set aside (see Save).
-    mutable bool readEverything_ = true;
-    // False while pending.json is there and cannot be read - held by
-    // another program past the half second a read waits. What it names is
-    // then unknown - those directories load as they are - and it is not
-    // written over until it has been read (see RereadPendingFile).
-    mutable bool pendingFileReadable_ = true;
-    // See OversizedRecords.
-    mutable std::set<uint64_t> oversizedRecords_;
-    // See WriteGeneration.
-    mutable uint64_t writeGeneration_ = 0;
-    // See WrittenByANewerVersion: set once a newer library has been seen,
-    // and never cleared.
-    mutable bool writtenByANewerVersion_ = false;
-    // Whether WrittenByANewerVersion has looked, and so has its answer.
-    mutable bool versionKnown_ = false;
-    // See VersionUnreadable.
-    mutable bool versionUnreadable_ = false;
+    struct ItemRow {
+        uint64_t canvasId = 0;
+        int64_t position = 0;
+        // See ItemContentHash in the .cpp. 0 for a row read back repaired,
+        // which no content hashes to, so that it is written again.
+        uint64_t hash = 0;
+        bool operator==(const ItemRow&) const = default;
+    };
 
-    // What was last written, so a save can tell what has actually changed.
-    //
-    // Items carry a content hash rather than their text: they are where all
-    // the bulk is (a stroke point is a JSON object, and an ordinary canvas
-    // has tens of thousands of them), so the whole point is to answer
-    // "changed?" *without* serializing. Everything else keeps the exact text
-    // it wrote, because those records are a handful of scalars - serializing
-    // one to compare it costs nothing, and an exact comparison has no
-    // question of coverage hanging over it.
-    //
-    // Load fills these in too, record by record, so the first save of a
-    // session costs what changed like every save after it. Each record that
-    // came back exactly as a save would write it is noted as written;
-    // anything the load had to repair - an id reassigned because two
-    // directories claimed it, an order file that disagreed with the
-    // directories beside it - is left out and therefore written. Making
-    // the first save a full one instead costs seconds on a large library
-    // for the sake of exactly those repaired records.
-    //
-    // Missing from these is never wrong, only slower: a record not noted is
-    // written. Present and stale would be wrong, which is why a failed
-    // write erases its entry and a retired record's entries go with it.
-    mutable std::unordered_map<uint64_t, uint64_t> writtenItemHashes_;
-    mutable std::unordered_map<std::string, std::string> writtenFileText_;
+    // Open, and whether the store may be used - opened, not a newer
+    // library, and not broken by a Load that failed.
+    bool Ready();
+    OpenResult TryOpen();
+    bool CreateSchema();
+    // Moves the file aside (see SetAsideAs) and opens a new one in its
+    // place.
+    OpenResult SetAsideAndStartOver();
+    void Close();
+    std::optional<DecodedImage> LoadPictureColumn(uint64_t itemId, const char* column);
 
-    std::filesystem::path rootDir_;
-    // Everything above is read from and written to through this.
-    FileSystem* fs_;
+    std::filesystem::path file_;
+    std::filesystem::path setAsideAs_;
+    sqlite3* db_ = nullptr;
+    std::optional<OpenResult> openResult_;
+    // Whether this Open made the schema, which makes Load a first run.
+    bool createdByOpen_ = false;
+    // A Load that failed partway: the file is not what this store knows it
+    // to be, so nothing is written over it.
+    bool broken_ = false;
+
+    std::optional<uint64_t> writtenCurrentFolderId_;
+    std::optional<uint64_t> writtenCurrentCanvasId_;
+    std::unordered_map<uint64_t, FolderRow> writtenFolders_;
+    std::unordered_map<uint64_t, CanvasRow> writtenCanvases_;
+    std::unordered_map<uint64_t, ItemRow> writtenItems_;
+    size_t itemsWrittenByLastSave_ = 0;
 };
 
 }  // namespace sz::core::persistence

@@ -8,7 +8,7 @@ namespace sz::core {
 // is called until someone renames it. A counted "Folder N" says nothing
 // about which is which a week later; when it was made at least narrows
 // that down. Two made in the same second share a name, which is allowed -
-// names are not identity here (see MakeSlug, which carries the id).
+// names are not identity here.
 std::string TimestampName();
 
 }  // namespace sz::core

@@ -11,9 +11,14 @@
 
 #include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
+#include "support/held_library.h"
+#include "support/removed_at_end.h"
 
 namespace sz::core {
 namespace {
+
+using test::HeldLibrary;
+using test::RemovedAtEnd;
 
 // The session with nothing attached - no window, no stores - is still a
 // whole model of what the app is working on: that is what lets a UI, or a
@@ -92,7 +97,7 @@ TEST(SessionTest, DeletingOrRestoringWhatIsNotThereDoesNothing) {
     Session session;
     EXPECT_FALSE(session.Delete(424242));
     EXPECT_FALSE(session.Restore(424242));
-    EXPECT_EQ(session.DeletePermanently(424242), Session::Removal::NotFound);
+    EXPECT_FALSE(session.DeletePermanently(424242));
     EXPECT_FALSE(session.Restore(session.Manager().CurrentCanvasId())) << "nothing deleted to restore";
 }
 
@@ -129,9 +134,10 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() / "spickzettel_session_test_erase_on_open_textures";
     std::filesystem::remove_all(dir);
+    const RemovedAtEnd cleanup(dir);
     ItemId shot = 0;
     {
-        persistence::LibraryStore store(dir);
+        persistence::LibraryStore store(dir / "library.db");
         test::FakeOverlayWindow window;
         window.captureReturnsHandle = 7;
         window.captureReturnsWidth = 1;
@@ -148,7 +154,7 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
         session.SetLibraryStore(nullptr);
     }
 
-    persistence::LibraryStore store(dir);
+    persistence::LibraryStore store(dir / "library.db");
     std::optional<CanvasManagerSnapshot> loaded = store.Load();
     ASSERT_TRUE(loaded.has_value());
     test::FakeOverlayWindow window;
@@ -166,7 +172,6 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
     EXPECT_EQ(item->ImageLayer()->textureHandle, 9u) << "not a placeholder until the canvas is switched";
 
     session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
 }
 
 // The retention period: what has been deleted since before the cutoff goes
@@ -203,11 +208,11 @@ TEST(SessionTest, ErasingAFoldersDeletedCanvasesLeavesTheFolderAndTheRest) {
     const CanvasId first = session.Manager().CurrentCanvasId();
     const CanvasId second = session.Manager().AddCanvas("Second");
     const CanvasId third = session.Manager().AddCanvas("Third");
-    EXPECT_EQ(session.DeleteMarkedCanvasesPermanently(folder), Session::Removal::NotFound) << "nothing deleted in it";
+    EXPECT_FALSE(session.DeleteMarkedCanvasesPermanently(folder)) << "nothing deleted in it";
     ASSERT_TRUE(session.Delete(first));
     ASSERT_TRUE(session.Delete(third));
 
-    EXPECT_EQ(session.DeleteMarkedCanvasesPermanently(folder), Session::Removal::Removed);
+    EXPECT_TRUE(session.DeleteMarkedCanvasesPermanently(folder));
     EXPECT_EQ(session.Manager().FindCanvas(first), nullptr);
     EXPECT_EQ(session.Manager().FindCanvas(third), nullptr);
     ASSERT_NE(session.Manager().FindFolder(folder), nullptr);
@@ -583,7 +588,7 @@ TEST(SessionTest, CapturingWithoutAWindowLeavesAPlaceholder) {
     session.CaptureShotItem(*item);
     ASSERT_NE(item->ImageLayer(), nullptr);
     EXPECT_EQ(item->ImageLayer()->textureHandle, 0u);
-    EXPECT_TRUE(item->ImageLayer()->imageFile.empty());
+    EXPECT_FALSE(item->ImageLayer()->stored);
     EXPECT_EQ(session.FrozenScreenTexture(), 0u);
 }
 
@@ -707,7 +712,7 @@ TEST(SessionTest, DeletingASnippetPermanentlyLeavesItsCanvasHistoryAlone) {
     DrawStrokeInto(session, kept);
     const ItemId gone = session.Manager().CreateItem(false, Rect{200, 0, 100, 100}, "Gone");
     ASSERT_TRUE(session.Delete(gone));
-    ASSERT_EQ(session.DeletePermanently(gone), Session::Removal::Removed);
+    ASSERT_TRUE(session.DeletePermanently(gone));
     EXPECT_EQ(ItemById(session.Manager(), gone), nullptr);
     EXPECT_TRUE(session.CanUndo());
 }
@@ -825,7 +830,7 @@ TEST(SessionTest, APasteWhoseSourceCanvasIsDeletedIsNotUndoneAndSaysSo) {
         session.RecordArrivals({*session.MoveItemHere(moved)}, /*duplicate=*/false);
         ASSERT_TRUE(session.Delete(first));
         if (forGood) {
-            ASSERT_EQ(session.DeletePermanently(first), Session::Removal::Removed);
+            ASSERT_TRUE(session.DeletePermanently(first));
         }
 
         const std::optional<Session::UndoStep> refused = session.Undo();
@@ -937,7 +942,8 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() / "spickzettel_session_test_frozen_cut";
     std::filesystem::remove_all(dir);
-    persistence::LibraryStore store(dir);
+    const RemovedAtEnd cleanup(dir);
+    persistence::LibraryStore store(dir / "library.db");
     test::FakeOverlayWindow window;
     window.captureReturnsHandle = 7;
     window.createTextureFromPixelsReturnsHandle = 8;
@@ -964,8 +970,8 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     EXPECT_EQ(window.captureCallCount, 1) << "cut from the frozen screen, not captured again";
     ASSERT_NE(shot->ImageLayer(), nullptr);
     EXPECT_EQ(shot->ImageLayer()->textureHandle, 8u) << "the cut's own upload";
-    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty());
-    const std::optional<persistence::DecodedImage> saved = store.LoadImage(id, shot->ImageLayer()->imageFile);
+    ASSERT_TRUE(shot->ImageLayer()->stored);
+    const std::optional<persistence::DecodedImage> saved = store.LoadImage(id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->width, 2);
     EXPECT_EQ(saved->height, 2);
@@ -974,20 +980,18 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
 
     // Without the upload the cut is still what is saved - the device lost,
     // say - rather than the live screen, which has moved on: the snippet
-    // gets its texture from the file once there is a device again.
+    // gets its texture from the library once there is a device again.
     window.createTextureFromPixelsReturnsHandle = 0;
     const ItemId again = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Again");
     Item* againShot = session.Manager().FindItemAnywhere(again);
     session.CaptureShotItem(*againShot);
     EXPECT_EQ(window.captureCallCount, 1);
     EXPECT_EQ(againShot->ImageLayer()->textureHandle, 0u);
-    const std::optional<persistence::DecodedImage> againSaved =
-        store.LoadImage(again, againShot->ImageLayer()->imageFile);
+    const std::optional<persistence::DecodedImage> againSaved = store.LoadImage(again);
     ASSERT_TRUE(againSaved.has_value());
     EXPECT_EQ(againSaved->pixelsRGBA, (std::vector<uint8_t>{0, 0, 0, 255}));
 
     session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
 }
 
 // A capture whose upload failed - the device lost while the overlay was
@@ -998,7 +1002,8 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() / "spickzettel_session_test_capture_no_device";
     std::filesystem::remove_all(dir);
-    persistence::LibraryStore store(dir);
+    const RemovedAtEnd cleanup(dir);
+    persistence::LibraryStore store(dir / "library.db");
     test::FakeOverlayWindow window;
     window.captureReturnsHandle = 0;
     window.captureReturnsWidth = 2;
@@ -1011,8 +1016,8 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     Item* shot = session.Manager().FindItemAnywhere(id);
     session.CaptureShotItem(*shot);
-    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty());
-    const std::optional<persistence::DecodedImage> saved = store.LoadImage(id, shot->ImageLayer()->imageFile);
+    ASSERT_TRUE(shot->ImageLayer()->stored);
+    const std::optional<persistence::DecodedImage> saved = store.LoadImage(id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
 
@@ -1022,7 +1027,7 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     Item* cutShot = session.Manager().FindItemAnywhere(cut);
     session.CaptureShotItem(*cutShot);
     EXPECT_EQ(window.captureCallCount, 2) << "cut from what was frozen";
-    const std::optional<persistence::DecodedImage> cutSaved = store.LoadImage(cut, cutShot->ImageLayer()->imageFile);
+    const std::optional<persistence::DecodedImage> cutSaved = store.LoadImage(cut);
     ASSERT_TRUE(cutSaved.has_value());
     EXPECT_EQ(cutSaved->pixelsRGBA, (std::vector<uint8_t>{40, 50, 60, 255}));
 
@@ -1031,7 +1036,6 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     EXPECT_EQ(session.FrozenScreenTexture(), 9u);
 
     session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
 }
 
 // A screenshot is the one thing in the library that cannot be remade, so
@@ -1042,9 +1046,10 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() / "spickzettel_session_test_pending_capture";
     std::filesystem::remove_all(dir);
-    std::filesystem::create_directories(dir);
-    std::ofstream(dir / "staging") << "a file where the staging directory wants to be";
-    persistence::LibraryStore store(dir);
+    const RemovedAtEnd cleanup(dir);
+    persistence::LibraryStore store(dir / "library.db");
+    ASSERT_EQ(store.Open(), persistence::LibraryStore::OpenResult::Opened);
+    HeldLibrary held(dir / "library.db", /*readers=*/false);
     test::FakeOverlayWindow window;
     window.captureReturnsHandle = 7;
     window.captureReturnsWidth = 2;
@@ -1058,22 +1063,22 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
     session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
     const Item* shot = session.Manager().FindItemAnywhere(id);
     EXPECT_EQ(shot->ImageLayer()->textureHandle, 7u) << "on screen as captured";
-    EXPECT_TRUE(shot->ImageLayer()->imageFile.empty()) << "but not on disk";
+    EXPECT_FALSE(shot->ImageLayer()->stored) << "but not in the library";
     EXPECT_TRUE(session.HasUnsavedChanges());
 
-    // The records land; the picture does not, so the save does not count.
+    // Nothing lands while the file is held, and the save does not count.
     EXPECT_FALSE(session.Flush());
     EXPECT_TRUE(session.HasUnsavedChanges());
     EXPECT_TRUE(session.LastSaveFailed());
 
-    // Now the snippet has a directory of its own to be written into.
+    held.Release();
     EXPECT_TRUE(session.Flush());
     EXPECT_FALSE(session.HasUnsavedChanges());
     EXPECT_FALSE(session.LastSaveFailed());
     shot = session.Manager().FindItemAnywhere(id);
-    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty());
+    ASSERT_TRUE(shot->ImageLayer()->stored);
 
-    persistence::LibraryStore reopened(dir);
+    persistence::LibraryStore reopened(dir / "library.db");
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
     ASSERT_TRUE(loaded.has_value());
     const Item* reloaded = nullptr;
@@ -1085,13 +1090,12 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
         }
     }
     ASSERT_NE(reloaded, nullptr);
-    EXPECT_EQ(reloaded->ImageLayer()->imageFile, shot->ImageLayer()->imageFile);
-    const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(id, reloaded->ImageLayer()->imageFile);
+    EXPECT_TRUE(reloaded->ImageLayer()->stored);
+    const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
 
     session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
 }
 
 // A recovery copy is a library that opens on its own: every picture a
@@ -1100,12 +1104,11 @@ TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
 // be made whole says so.
 TEST(SessionTest, ARecoveryCopyHoldsEveryPictureItsRecordsName) {
     const std::filesystem::path dir = std::filesystem::temp_directory_path() / "spickzettel_session_test_recovery";
-    const std::filesystem::path whole = dir.parent_path() / "spickzettel_session_test_recovery_whole";
-    const std::filesystem::path partial = dir.parent_path() / "spickzettel_session_test_recovery_partial";
-    for (const auto& path : {dir, whole, partial}) {
-        std::filesystem::remove_all(path);
-    }
-    persistence::LibraryStore store(dir);
+    const std::filesystem::path whole = dir / "whole.db";
+    const std::filesystem::path partial = dir / "partial.db";
+    std::filesystem::remove_all(dir);
+    const RemovedAtEnd cleanup(dir);
+    persistence::LibraryStore store(dir / "library.db");
     test::FakeOverlayWindow window;
     window.captureReturnsHandle = 7;
     window.captureReturnsWidth = 2;
@@ -1117,8 +1120,8 @@ TEST(SessionTest, ARecoveryCopyHoldsEveryPictureItsRecordsName) {
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
     ASSERT_TRUE(session.Flush());
-    const std::string onDisk = session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile;
-    ASSERT_FALSE(onDisk.empty()) << "on disk in the real library, not in memory";
+    ASSERT_TRUE(session.Manager().FindItemAnywhere(id)->ImageLayer()->stored)
+        << "in the real library, not in memory";
 
     EXPECT_TRUE(session.WriteRecoveryCopy(whole));
     persistence::LibraryStore recovered(whole);
@@ -1131,28 +1134,28 @@ TEST(SessionTest, ARecoveryCopyHoldsEveryPictureItsRecordsName) {
         }
     }
     ASSERT_NE(copy, nullptr);
-    const std::optional<persistence::DecodedImage> picture = recovered.LoadImage(copy->id, copy->ImageLayer()->imageFile);
-    ASSERT_TRUE(picture.has_value()) << "names a picture the copy does not hold";
+    EXPECT_TRUE(copy->ImageLayer()->stored);
+    const std::optional<persistence::DecodedImage> picture = recovered.LoadImage(copy->id);
+    ASSERT_TRUE(picture.has_value()) << "a snippet with a picture, and the copy does not hold it";
     EXPECT_EQ(picture->pixelsRGBA, window.captureReturnsPixelsRGBA);
-    EXPECT_TRUE(std::filesystem::is_regular_file(whole / "recovery.txt"));
+    EXPECT_TRUE(std::filesystem::is_regular_file(dir / "whole.db.txt"));
 
-    // The real library's picture gone: the copy cannot be whole, and says so.
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
-        if (entry.path().filename() == onDisk) {
-            std::filesystem::remove(entry.path());
-        }
-    }
-    EXPECT_FALSE(session.WriteRecoveryCopy(partial));
+    // The real library held by another program: the copy has the records
+    // from the session, but not the picture, and says so.
     {
-        std::ifstream note(partial / "recovery.txt");
+        HeldLibrary held(dir / "library.db", /*readers=*/false);
+        EXPECT_FALSE(session.WriteRecoveryCopy(partial));
+    }
+    {
+        std::ifstream note(dir / "partial.db.txt");
         const std::string text((std::istreambuf_iterator<char>(note)), std::istreambuf_iterator<char>());
         EXPECT_NE(text.find("Incomplete"), std::string::npos) << text;
     }
+    persistence::LibraryStore partialCopy(partial);
+    const std::optional<CanvasManagerSnapshot> partialLoaded = partialCopy.Load();
+    ASSERT_TRUE(partialLoaded.has_value()) << "the records are there all the same";
 
     session.SetLibraryStore(nullptr);
-    for (const auto& path : {dir, whole, partial}) {
-        std::filesystem::remove_all(path);
-    }
 }
 
 // A copy taken of a capture whose write has not landed has the session's
@@ -1161,9 +1164,10 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() / "spickzettel_session_test_copy_of_pending";
     std::filesystem::remove_all(dir);
-    std::filesystem::create_directories(dir);
-    std::ofstream(dir / "staging") << "a file where the staging directory wants to be";
-    persistence::LibraryStore store(dir);
+    const RemovedAtEnd cleanup(dir);
+    persistence::LibraryStore store(dir / "library.db");
+    ASSERT_EQ(store.Open(), persistence::LibraryStore::OpenResult::Opened);
+    HeldLibrary held(dir / "library.db", /*readers=*/false);
     test::FakeOverlayWindow window;
     window.captureReturnsHandle = 7;
     window.captureReturnsWidth = 2;
@@ -1176,24 +1180,24 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
 
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     session.CaptureShotItem(*session.Manager().FindItemAnywhere(id));
-    ASSERT_TRUE(session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile.empty()) << "not on disk";
+    ASSERT_FALSE(session.Manager().FindItemAnywhere(id)->ImageLayer()->stored) << "not in the library";
 
     const ItemId copyId = session.Manager().DuplicateItem(id);
     ASSERT_NE(copyId, 0u);
     EXPECT_TRUE(session.ClonePicturesForCopy(id, copyId)) << "the pixels are in the session";
     EXPECT_NE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->textureHandle, 0u) << "on screen at once";
 
-    EXPECT_FALSE(session.Flush()) << "staging is still blocked";
-    EXPECT_TRUE(session.Flush()) << "both snippets have directories of their own now";
-    persistence::LibraryStore reopened(dir);
+    EXPECT_FALSE(session.Flush()) << "the file is still held";
+    held.Release();
+    EXPECT_TRUE(session.Flush());
+    persistence::LibraryStore reopened(dir / "library.db");
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
     ASSERT_TRUE(loaded.has_value());
     size_t pictures = 0;
     for (const Canvas& canvas : loaded->canvases) {
         for (const Item& item : canvas.items) {
-            ASSERT_FALSE(item.ImageLayer()->imageFile.empty()) << "every copy names a picture";
-            const std::optional<persistence::DecodedImage> saved =
-                reopened.LoadImage(item.id, item.ImageLayer()->imageFile);
+            ASSERT_TRUE(item.ImageLayer()->stored) << "every copy has a picture";
+            const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(item.id);
             ASSERT_TRUE(saved.has_value());
             EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
             ++pictures;
@@ -1202,159 +1206,100 @@ TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
     EXPECT_EQ(pictures, 2u);
 
     session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
 }
 
-// A source whose picture is gone from the disk gives its copy nothing,
+// A source whose picture is gone from the library gives its copy nothing,
 // and says so, rather than quietly producing a copy that looks captured.
 TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() / "spickzettel_session_test_copy_unreadable";
     std::filesystem::remove_all(dir);
-    persistence::LibraryStore store(dir);
+    const RemovedAtEnd cleanup(dir);
+    persistence::LibraryStore store(dir / "library.db");
     Session session;
     session.SetLibraryStore(&store);
     const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile = "gone.qoi";
+    session.Manager().FindItemAnywhere(id)->ImageLayer()->stored = true;  // and yet there is none
 
     const ItemId copyId = session.Manager().DuplicateItem(id);
     ASSERT_NE(copyId, 0u);
     EXPECT_FALSE(session.ClonePicturesForCopy(id, copyId));
-    EXPECT_TRUE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->imageFile.empty());
+    EXPECT_FALSE(session.Manager().FindItemAnywhere(copyId)->ImageLayer()->stored);
 
     session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
 }
 
 // Move a captured snippet to another canvas and delete the canvas it left
-// for good, all before the autosave: the picture is still in the old
-// canvas's directory on disk, and must not go with it.
+// for good, all before the autosave: the picture must not go with the
+// canvas the snippet left.
 TEST(SessionTest, APermanentDeleteRightAfterAMoveKeepsWhatWasMoved) {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() / "spickzettel_session_test_delete_after_move";
     std::filesystem::remove_all(dir);
+    const RemovedAtEnd cleanup(dir);
     const std::vector<uint8_t> pixels = {10, 20, 30, 255, 40, 50, 60, 255};
     ItemId id = 0;
     {
-        persistence::LibraryStore store(dir);
+        persistence::LibraryStore store(dir / "library.db");
         Session session;
         session.SetLibraryStore(&store);
         const CanvasId left = session.Manager().CurrentCanvasId();
         id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-        const std::optional<std::string> file = store.SaveImage(id, pixels.data(), 2, 1);
-        ASSERT_TRUE(file.has_value());
-        session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile = *file;
+        ASSERT_TRUE(store.SaveImage(id, pixels.data(), 2, 1));
+        session.Manager().FindItemAnywhere(id)->ImageLayer()->stored = true;
         const CanvasId other = session.Manager().AddCanvas("Other");
         ASSERT_TRUE(session.Flush());
 
         ASSERT_NE(session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
         ASSERT_TRUE(session.Delete(left));
-        EXPECT_EQ(session.DeletePermanently(left), Session::Removal::Removed);
-        EXPECT_TRUE(session.Flush());
+        EXPECT_TRUE(session.DeletePermanently(left));
+        EXPECT_FALSE(session.HasUnsavedChanges()) << "saved with the delete";
         session.SetLibraryStore(nullptr);
     }
-    persistence::LibraryStore reopened(dir);
+    persistence::LibraryStore reopened(dir / "library.db");
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
     ASSERT_TRUE(loaded.has_value());
     ASSERT_EQ(loaded->canvases.size(), 1u);
     ASSERT_EQ(loaded->canvases[0].items.size(), 1u);
     const Item& item = loaded->canvases[0].items[0];
     ASSERT_EQ(item.id, id);
-    const std::optional<persistence::DecodedImage> image = reopened.LoadImage(id, item.ImageLayer()->imageFile);
+    const std::optional<persistence::DecodedImage> image = reopened.LoadImage(id);
     ASSERT_TRUE(image.has_value()) << "the picture went with the canvas the snippet left";
     EXPECT_EQ(image->pixelsRGBA, pixels);
-    std::filesystem::remove_all(dir);
 }
 
 // The other way round: a captured snippet moved into a canvas, and that
-// canvas deleted for good, before the autosave. The snippet's directory is
-// still under the canvas it came from, and goes with the one it went to -
-// deleted, not set aside in retired/ as something the library lost.
+// canvas deleted for good, before the autosave. The snippet goes with the
+// canvas it went to, picture and all.
 TEST(SessionTest, APermanentDeleteRightAfterAMoveIntoTheCanvasTakesWhatWasMovedIn) {
     const std::filesystem::path dir =
         std::filesystem::temp_directory_path() / "spickzettel_session_test_delete_after_move_in";
     std::filesystem::remove_all(dir);
+    const RemovedAtEnd cleanup(dir);
     const std::vector<uint8_t> pixels = {10, 20, 30, 255, 40, 50, 60, 255};
+    ItemId id = 0;
     {
-        persistence::LibraryStore store(dir);
+        persistence::LibraryStore store(dir / "library.db");
         Session session;
         session.SetLibraryStore(&store);
-        const ItemId id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-        const std::optional<std::string> file = store.SaveImage(id, pixels.data(), 2, 1);
-        ASSERT_TRUE(file.has_value());
-        session.Manager().FindItemAnywhere(id)->ImageLayer()->imageFile = *file;
+        id = session.Manager().CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+        ASSERT_TRUE(store.SaveImage(id, pixels.data(), 2, 1));
+        session.Manager().FindItemAnywhere(id)->ImageLayer()->stored = true;
         const CanvasId other = session.Manager().AddCanvas("Other");
         ASSERT_TRUE(session.Flush());
 
         ASSERT_NE(session.Manager().PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
         ASSERT_TRUE(session.Delete(other));
-        EXPECT_EQ(session.DeletePermanently(other), Session::Removal::Removed);
-        EXPECT_TRUE(session.Flush());
+        EXPECT_TRUE(session.DeletePermanently(other));
         session.SetLibraryStore(nullptr);
     }
-    persistence::LibraryStore reopened(dir);
+    persistence::LibraryStore reopened(dir / "library.db");
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
     ASSERT_TRUE(loaded.has_value());
     ASSERT_EQ(loaded->canvases.size(), 1u);
     EXPECT_TRUE(loaded->canvases[0].items.empty());
-    EXPECT_FALSE(std::filesystem::exists(dir / "retired")) << "set aside rather than deleted";
-    EXPECT_FALSE(std::filesystem::exists(dir / "pending.json")) << "nothing is owed";
-    std::filesystem::remove_all(dir);
+    EXPECT_FALSE(reopened.HasImage(id));
 }
-
-#if defined(_WIN32)
-// Windows refuses to delete a file another handle holds open without
-// delete sharing - which is what a picture viewer looking at a capture
-// does. A permanent delete that meets one must not report a clean delete.
-TEST(SessionTest, APermanentDeleteThatLeavesFilesBehindSaysSoAndFinishesLater) {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_files_remain";
-    std::filesystem::remove_all(dir);
-    persistence::LibraryStore store(dir);
-    Session session;
-    session.SetLibraryStore(&store);
-    const ItemId gone = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
-    session.Flush();
-
-    std::filesystem::path record;
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(dir)) {
-        if (entry.path().filename() == "item.json") {
-            record = entry.path();
-        }
-    }
-    ASSERT_FALSE(record.empty());
-    {
-        std::ifstream held(record);  // held open, no delete sharing
-        ASSERT_TRUE(held.is_open());
-        EXPECT_EQ(session.DeletePermanently(gone), Session::Removal::FilesRemain);
-        EXPECT_EQ(ItemById(session.Manager(), gone), nullptr) << "gone from the library all the same";
-        EXPECT_TRUE(std::filesystem::exists(record));
-
-        // A save meanwhile counts - the records and the intent are on disk -
-        // but the removal stays owed, so the autosave keeps asking.
-        EXPECT_TRUE(session.Flush());
-        EXPECT_TRUE(session.HasUnsavedChanges()) << "a removal is still owed";
-        EXPECT_TRUE(std::filesystem::exists(record));
-
-        // ...on a clock of its own, not every frame: two seconds of frames
-        // while the file is still held are not two seconds of saves.
-        const uint64_t writesBefore = store.WriteGeneration();
-        for (int frame = 0; frame < 120; ++frame) {
-            session.Tick(1.0f / 60.0f);
-        }
-        EXPECT_EQ(store.WriteGeneration(), writesBefore) << "retried on every frame";
-    }
-    // Let go, the removal's own clock finishes the delete with no edit to
-    // prompt it - and sets nothing aside.
-    session.Tick(10.0f);
-    EXPECT_FALSE(session.HasUnsavedChanges());
-    EXPECT_FALSE(std::filesystem::exists(record.parent_path()));
-    EXPECT_FALSE(std::filesystem::exists(dir / "retired"));
-
-    session.SetLibraryStore(nullptr);
-    std::filesystem::remove_all(dir);
-}
-#endif
 
 }  // namespace
 }  // namespace sz::core

@@ -13,7 +13,7 @@ actually leaves; a hundred short straight lines with the same total ink cost
 a fraction as much, so a generator that produced those would flatter the app.
 
     cmake --build build/windows-release --target perf_library
-    build/windows-release/tools/perf_library/perf_library.exe --out %TEMP%/libs/medium \
+    build/windows-release/tools/perf_library/perf_library.exe --out %TEMP%/libs/medium.db \
         --canvases 1 --items 11 --strokes 13 --points 130 --width 1920 --height 1080
 
 The scenarios used below, all laid out for 1920x1080:
@@ -36,9 +36,9 @@ a similar-sounding one.
 ## Instrument 1: the headless frame benchmark (use this one)
 
 `PerfBench.OneFrameAgainstAGeneratedLibrary` in `tests/core/perf_bench_test.cpp`.
-Opt-in - it skips unless `SZ_PERF_LIBRARY` names a library directory:
+Opt-in - it skips unless `SZ_PERF_LIBRARY` names a library file:
 
-    set SZ_PERF_LIBRARY=%TEMP%\libs\medium
+    set SZ_PERF_LIBRARY=%TEMP%\libs\medium.db
     set SZ_PERF_MODE=tessellated          # or polyline, rasterized
     build\windows-release\tests\sz_core_tests.exe --gtest_filter=PerfBench.*
 
@@ -60,7 +60,7 @@ Measure that mode with instrument 2.
 library in an isolated `APPDATA`, so it can neither touch nor be perturbed by
 the real one.
 
-    .\tools\perf_library\measure.ps1 -Exe <path-to-exe> -LibrarySource %TEMP%\libs\heavy `
+    .\tools\perf_library\measure.ps1 -Exe <path-to-exe> -LibrarySource %TEMP%\libs\heavy.db `
         -Mode tessellated -Seconds 5 -Repeat 3 -ShowFpsHud -Screenshot heavy.png
 
 `-ShowFpsHud` turns on the **input-options HUD**, whose first line is the
@@ -122,6 +122,9 @@ far more repeatable, which is the trade.
 
 ## Results: what incremental saving bought
 
+These numbers are from the library as a directory tree, before it moved into
+a database; see the next section for what the database costs.
+
 `PerfBench.SavingTheWholeLibrary` measures one autosave. Before, a save cost
 the whole library however little had changed, and it runs on the render
 thread:
@@ -171,6 +174,28 @@ save writes the rest: a copied directory's fresh id, a corrected `folderId`,
 an order file that disagreed with its directories, a record in an older
 shape. The bench reports it as "first after load"; on a clean tree it is the
 nothing-changed cost.
+
+## Results: saving into the database
+
+The same bench after the library moved into one SQLite file (see
+ARCHITECTURE.md, "Persistence"), release build, same machine:
+
+| scenario  | file    | nothing changed | one snippet changed |
+| --------- | ------- | --------------- | ------------------- |
+| `light`   | 100 KB  | 0.52 ms | 9.89 ms  |
+| `medium`  | 228 KB  | 0.98 ms | 10.22 ms |
+| `heavy`   | 692 KB  | 2.06 ms | 12.12 ms |
+| `extreme` | 2668 KB | 4.61 ms | 16.86 ms |
+| `gallery` | 1204 KB | 3.45 ms | 13.25 ms |
+
+"Nothing changed" is now serializing every snippet to compare it with what
+was written - a record and a stroke blob each, hashed - where the tree hashed
+fields directly; it grows with the library and is a few milliseconds at the
+top. "One snippet changed" has a floor of about 9 ms whatever the library
+holds: that is the commit making itself durable, the journal and the file
+each flushed to the disk (`synchronous=FULL`). The tree's writes were not
+flushed at all, which is also why a power cut could leave half of one. The
+first save after a load costs what a nothing-changed one does.
 
 ## Where the floor is
 

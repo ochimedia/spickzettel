@@ -13,9 +13,7 @@ using CanvasId = uint64_t;
 using FolderId = uint64_t;
 
 // A named group of canvases - one per game, or per set of levels within a
-// game. Folders don't nest: this is a flat list. No slug is stored: the
-// directory a folder lives in is named from `name` and `id` afresh on
-// every save (see util/slug.h).
+// game. Folders don't nest: this is a flat list.
 struct Folder {
     FolderId id = 0;
     std::string name;
@@ -25,6 +23,8 @@ struct Folder {
     // restoring it clears the mark (see CanvasManager::MarkDeleted).
     int64_t createdAt = 0;
     int64_t deletedAt = 0;
+
+    bool operator==(const Folder&) const = default;
 };
 
 // An independent collection of items. `items` order is paint order:
@@ -32,8 +32,7 @@ struct Folder {
 struct Canvas {
     CanvasId id = 0;
     std::string name;
-    // Which folder this canvas is in. In memory only: on disk the directory
-    // it sits in says so - see LibraryStore.
+    // Which folder this canvas is in.
     FolderId folderId = 0;
     // See Folder::createdAt/deletedAt.
     int64_t createdAt = 0;

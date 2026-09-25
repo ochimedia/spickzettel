@@ -1,7 +1,7 @@
 include(FetchContent)
 
-# QOI, a single-header lossless RGBA codec, for captured screenshots and
-# painted layers. Measured on this app's own captures against stb's PNG:
+# QOI, a single-header lossless RGBA codec, for captured screenshots.
+# Measured on this app's own captures against stb's PNG:
 # decode 6-8x faster, encode 22x faster, files ~30% smaller. The repo's
 # tags stop at the format freeze, so the pin is a commit.
 FetchContent_Declare(

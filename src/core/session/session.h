@@ -69,20 +69,15 @@ public:
     // CanvasManager::Restore. False if nothing was deleted.
     bool Restore(uint64_t id);
     // Erases `id` for good: out of the model, its textures released, its
-    // history forgotten, and its directory deleted at once (see
-    // LibraryStore::Remove). NotFound, doing nothing, if there is no such
-    // thing. FilesRemain when the model has let go of it but its directory
-    // could not be wholly removed - a picture in it held open by another
-    // program, say - so that a UI can say so rather than report a delete
-    // that left files behind; the store retries at every save.
-    enum class Removal { NotFound, Removed, FilesRemain };
-    Removal DeletePermanently(uint64_t id);
+    // history forgotten, and the library saved at once. False, doing
+    // nothing, if there is no such thing.
+    bool DeletePermanently(uint64_t id);
     // DeletePermanently for every canvas in `folderId` that carries a mark
     // of its own (see CanvasManager::MarkedCanvasesIn) - what a folder's
     // "Delete permanently" is while the folder itself is not deleted: what
-    // is deleted in it goes, and the folder and the rest stay. FilesRemain
-    // if any of them left files behind; NotFound if there was none.
-    Removal DeleteMarkedCanvasesPermanently(FolderId folderId);
+    // is deleted in it goes, and the folder and the rest stay. False if
+    // there was none.
+    bool DeleteMarkedCanvasesPermanently(FolderId folderId);
     // Deletes for good every folder and canvas deleted before `cutoff`
     // (seconds since the epoch) - see CanvasManager::MarkedBefore for which
     // those are - and returns how many went. The retention period
@@ -104,28 +99,23 @@ public:
     // tries again.
     bool Flush();
     // Whether anything is owed to the disk: a change since the last save
-    // that landed, a capture whose picture could not be written yet (see
-    // CaptureShotItem), or a permanent delete whose directory could not
-    // be wholly removed yet (see DeletePermanently). What the autosave and
-    // Flush act on, and what a UI can show. The removal keeps this true across a Flush that returned
-    // true: the intent is on disk and the save counted, but the autosave's
-    // clock keeps asking until the directory is gone, rather than waiting
-    // for an unrelated edit.
+    // that landed, or a capture whose picture could not be written yet
+    // (see CaptureShotItem). What the autosave and Flush act on, and what a
+    // UI can show.
     bool HasUnsavedChanges() const;
     // Whether the most recent save attempt failed and is waiting to be
     // retried - for a UI to say so. Cleared by the save that lands.
     bool LastSaveFailed() const { return library_.saveRetryBackoffSeconds > 0.0f; }
-    // Writes what is in memory to a fresh, whole library at `dir`: every
-    // record, and every picture every record names - from this session
-    // where it holds the pixels (a capture whose write has not landed), and
-    // re-encoded from the real library otherwise, so
-    // that the copy opens on its own. A `recovery.txt` beside the tree
+    // Writes what is in memory to a new library at `file`, pictures
+    // included - from this session where it holds the pixels (a capture
+    // whose write has not landed), and from the real library otherwise, so
+    // that the copy opens on its own. A note beside it (`file` plus ".txt")
     // says where it came from and whether it is whole. For the moment the
     // app has to go - exit, the OS ending the session - and the library it
     // was working in cannot be written: the alternative is losing the
-    // changes silently. True if the copy is whole; false if a record in it
-    // names a picture that could not be copied.
-    bool WriteRecoveryCopy(const std::filesystem::path& dir);
+    // changes silently. True if the copy is whole; false if a picture could
+    // not be copied, or the copy itself not written.
+    bool WriteRecoveryCopy(const std::filesystem::path& file);
 
     // Brings GPU shot textures in line with whichever canvas is current:
     // loads the ones it needs, frees every other canvas's (see
@@ -356,10 +346,6 @@ private:
         // - which is why they cannot double as a retry delay.
         float saveRetryCountdownSeconds = 0.0f;
         float saveRetryBackoffSeconds = 0.0f;
-        // A removal still owed after a save that counted (see
-        // LibraryStore::HasPendingRemovals) is tried again on this clock,
-        // not every frame - see UpdateAutosave.
-        float removalRetryCountdownSeconds = 0.0f;
     };
 
     // A capture's pixels whose write failed at capture time, kept so the
@@ -425,10 +411,10 @@ private:
     // left there that could ever want these. A canvas merely deleted keeps
     // its history for when it is restored.
     void DropHistoryOfCanvas(CanvasId canvasId);
-    // DeletePermanently without the texture sync that follows it: the
-    // thing, its textures, its history and its files. What ImportLibrary
+    // DeletePermanently without the texture sync and the save that follow
+    // it: the thing, its textures and its history. What ImportLibrary
     // erases with, before there is a device to sync against.
-    Removal Erase(uint64_t id);
+    bool Erase(uint64_t id);
     // Starts following `itemId`'s strokes through an erase gesture: keeps
     // the list as it is now, and notes that every stroke is still its own
     // original - see eraseGestureStartSnapshot_.

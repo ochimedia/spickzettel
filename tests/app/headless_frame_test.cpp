@@ -14,6 +14,7 @@
 #include "core/canvas/item_geometry.h"  // kItemMinWidth/kItemMinHeight, for the group-resize floor
 #include "core/persistence/library_store.h"
 #include "core/util/uid.h"
+#include "support/held_library.h"
 #include "ui/overlay_app_internal.h"
 
 #include <imgui_internal.h>
@@ -3468,8 +3469,8 @@ TEST_F(HeadlessAppTest, WhatTheRetentionPeriodDeletedIsSaidOnTheNextShow) {
     snapshot.canvases.push_back(old);
     snapshot.currentFolderId = 1;
     snapshot.currentCanvasId = 2;
-    ASSERT_TRUE(persistence::LibraryStore(dir).Save(snapshot));
-    host_.dataDirectoryPath = dir;
+    ASSERT_TRUE(persistence::LibraryStore(dir / "library.db").Save(snapshot));
+    host_.libraryPath = dir / "library.db";
 
     StartWith(DefaultConfig());
     EXPECT_EQ(Canvases().FindCanvas(3), nullptr);
@@ -3586,8 +3587,7 @@ TEST_F(TextBoxResizeTest, ASnippetSetNotToKeepItsShapeResizesFreely) {
 // ===== What a save that could not finish does next =====
 //
 // Driven through real frames against a real store in a temp directory,
-// with the disk made to fail in the two ways the app has to survive: a
-// record that cannot be written, and a picture that cannot.
+// with the file held by another program so that nothing can be written.
 class HeadlessSaveTest : public HeadlessAppTest {
 protected:
     void SetUp() override {
@@ -3603,6 +3603,7 @@ protected:
             controller_->GetSession().SetLibraryStore(nullptr);
         }
         HeadlessAppTest::TearDown();
+        store_.reset();  // the file is open until it goes
         std::filesystem::remove_all(root_);
     }
 
@@ -3615,11 +3616,15 @@ protected:
         ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     }
 
-    // A store in the temp directory, as TrayController attaches its own.
+    // A store in the temp directory, as TrayController attaches its own -
+    // opened, so that a hold taken after it stops saves rather than the
+    // store opening at all.
     void AttachStore() {
-        store_ = std::make_unique<persistence::LibraryStore>(root_);
+        store_ = std::make_unique<persistence::LibraryStore>(Library());
+        ASSERT_EQ(store_->Open(), persistence::LibraryStore::OpenResult::Opened);
         controller_->GetSession().SetLibraryStore(store_.get());
     }
+    std::filesystem::path Library() const { return root_ / "library.db"; }
 
     std::filesystem::path root_;
     std::unique_ptr<persistence::LibraryStore> store_;
@@ -3630,27 +3635,21 @@ protected:
 // and every frame after, a full synchronous rewrite each time.
 TEST_F(HeadlessSaveTest, AFailedSaveIsRetriedOnItsOwnClockNotEveryFrame) {
     PlaceADrawing();
-    // A directory where library.json wants to be: the temp file is written
-    // fine and the rename onto it fails, which is a save that fails late.
-    std::filesystem::create_directories(root_ / "library.json");
     AttachStore();
+    test::HeldLibrary held(Library(), /*readers=*/true);
 
-    // Past the quiet period: exactly one attempt, which failed - and left
-    // no temporary behind to show for it (see WriteFileAtomically), so the
-    // session's own account of it is the evidence.
+    // Past the quiet period: an attempt, which failed.
     StepFrames(130);
     ASSERT_TRUE(controller_->GetSession().LastSaveFailed()) << "no attempt was made";
-    ASSERT_FALSE(std::filesystem::exists(root_ / "library.json.tmp")) << "nothing half-written left beside it";
-    ASSERT_TRUE(std::filesystem::is_directory(root_ / "library.json"));
 
-    // The obstruction goes away. Retried every frame, the next frame would
-    // write the file; on its own clock, the retry is still most of two
-    // seconds out.
-    std::filesystem::remove_all(root_ / "library.json");
+    // The hold goes away. Retried every frame, the next frame would save;
+    // on its own clock, the retry is still most of two seconds out.
+    held.Release();
     StepFrames(30);
-    EXPECT_FALSE(std::filesystem::exists(root_ / "library.json")) << "retried too eagerly";
+    EXPECT_TRUE(controller_->GetSession().LastSaveFailed()) << "retried too eagerly";
     StepFrames(120);
-    EXPECT_TRUE(std::filesystem::is_regular_file(root_ / "library.json")) << "never retried";
+    EXPECT_FALSE(controller_->GetSession().LastSaveFailed()) << "never retried";
+    EXPECT_FALSE(controller_->GetSession().HasUnsavedChanges());
 }
 
 // Escape with the button still held, halfway through a stroke on a snippet
@@ -3691,7 +3690,7 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
 
     EXPECT_TRUE(session.HasUnsavedChanges());
     ASSERT_TRUE(session.Flush());
-    persistence::LibraryStore reopened(root_);
+    persistence::LibraryStore reopened(Library());
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
     ASSERT_TRUE(loaded.has_value());
     size_t strokesOnDisk = 0;
@@ -3709,58 +3708,28 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
 // what is drawn looks saved whether or not it is.
 TEST_F(HeadlessSaveTest, AFailedSaveIsSaidOnScreenUntilItLands) {
     PlaceADrawing();
-    std::filesystem::create_directories(root_ / "library.json");
     AttachStore();
+    test::HeldLibrary held(Library(), /*readers=*/true);
     EXPECT_TRUE(App().PersistenceWarning().empty()) << "nothing has failed yet";
 
     StepFrames(130);  // past the quiet period: one attempt, which failed
     const std::string warning = App().PersistenceWarning();
-    EXPECT_NE(warning.find(root_.string()), std::string::npos) << warning;
+    EXPECT_NE(warning.find(Library().string()), std::string::npos) << warning;
 
-    std::filesystem::remove_all(root_ / "library.json");
+    held.Release();
     StepFrames(160);  // past the retry's own clock
     EXPECT_TRUE(App().PersistenceWarning().empty()) << "gone with the save that landed";
 }
 
-// A snippet too large to save is said as such: "retried" would promise a
-// save that no retry can make.
-TEST_F(HeadlessSaveTest, ASnippetTooLargeToSaveIsSaidAsSuch) {
-    PlaceADrawing();
-    controller_->GetSession().Manager().CurrentOrNull()->items[0].noteText.assign(std::size_t{65} << 20, 'a');
-    controller_->GetSession().Manager().MarkChanged();
-    AttachStore();
-    StepFrames(130);  // past the quiet period: one attempt, which failed
-    EXPECT_EQ(App().PersistenceWarning(), std::string(strings::kStatusRecordTooLarge));
-}
-
 // ===== Deleted things, on the screen =====
 
-namespace {
-// Whether a directory named for `id` (see MakeSlug: "<name>-<uid>") exists
-// anywhere under `root` - where a folder, canvas or snippet is on disk.
-bool DirectoryFor(const std::filesystem::path& root, uint64_t id) {
-    const std::string suffix = "-" + FormatUid(id);
-    std::error_code ec;
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(root, ec)) {
-        const std::string name = entry.path().filename().string();
-        if (entry.is_directory(ec) && name.size() > suffix.size() &&
-            name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-}  // namespace
-
-// Deleting a snippet marks it deleted where it is - off the screen, its
-// directory staying put with the stamp in its record - and Undo brings it
-// back.
+// Deleting a snippet marks it deleted where it is - off the screen, and
+// saved with the stamp on it - and Undo brings it back.
 TEST_F(HeadlessSaveTest, DeletingASnippetHidesItInPlaceAndUndoBringsItBack) {
     PlaceADrawing();
     AttachStore();
     controller_->GetSession().Flush();
     const Item drawing = Canvases().CurrentOrNull()->items[0];
-    ASSERT_TRUE(DirectoryFor(root_ / "folders", drawing.id));
 
     // Selected, and the Delete key.
     PressKey(ImGuiKey_Escape);
@@ -3770,9 +3739,13 @@ TEST_F(HeadlessSaveTest, DeletingASnippetHidesItInPlaceAndUndoBringsItBack) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "off the screen";
     ASSERT_EQ(Canvases().CurrentOrNull()->items.size(), 1u) << "but still in the library";
     EXPECT_NE(Canvases().CurrentOrNull()->items[0].deletedAt, 0);
-    controller_->GetSession().Flush();
-    EXPECT_TRUE(DirectoryFor(root_ / "folders", drawing.id)) << "its directory stays where it is";
-    EXPECT_FALSE(std::filesystem::exists(root_ / "retired"));
+    ASSERT_TRUE(controller_->GetSession().Flush());
+    {
+        const std::optional<CanvasManagerSnapshot> saved = persistence::LibraryStore(Library()).Load();
+        ASSERT_TRUE(saved.has_value());
+        ASSERT_EQ(saved->canvases[0].items.size(), 1u) << "saved, stamp and all";
+        EXPECT_NE(saved->canvases[0].items[0].deletedAt, 0);
+    }
 
     // Undo, by key.
     PressCtrlKey(ImGuiKey_Z);

@@ -9,15 +9,11 @@
 #include <string>
 
 #include <gtest/gtest.h>
-
-#ifdef _WIN32
-#include <fcntl.h>
-#include <io.h>
-#include <share.h>
-#endif
+#include <sqlite3.h>
 
 #include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
+#include "support/held_library.h"
 
 namespace sz::test {
 
@@ -524,6 +520,7 @@ protected:
     void SetUp() override {
         dir_ = std::filesystem::temp_directory_path() / (std::string("spickzettel_tray_app_persistence_test_") + ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(dir_);
+        library_ = dir_ / "library.db";
     }
     void TearDown() override { std::filesystem::remove_all(dir_); }
 
@@ -535,6 +532,7 @@ protected:
     }
 
     std::filesystem::path dir_;
+    std::filesystem::path library_;
 };
 
 // A deleted canvas is loaded with the rest, hidden - and a library saved
@@ -565,10 +563,10 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsDeletedCanvasesHiddenAndEra
     snapshot.canvases.push_back(deleted);
     snapshot.currentFolderId = 1;
     snapshot.currentCanvasId = 4;
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(snapshot));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(snapshot));
 
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     TrayController controller(host, DefaultConfig());
     ASSERT_TRUE(controller.Initialize());
 
@@ -607,12 +605,12 @@ TEST_F(TrayControllerPersistenceTest, InitializeErasesWhatWasDeletedLongerAgoTha
 
     for (const bool purge : {false, true}) {
         std::filesystem::remove_all(dir_);
-        ASSERT_TRUE(persistence::LibraryStore(dir_).Save(snapshot));
+        ASSERT_TRUE(persistence::LibraryStore(library_).Save(snapshot));
         AppConfig config = DefaultConfig();
         config.purgeDeleted = purge;
         config.purgeDeletedAfterDays = 30;
         test::FakePlatformHost host;
-        host.dataDirectoryPath = dir_;
+        host.libraryPath = library_;
         TrayController controller(host, config);
         ASSERT_TRUE(controller.Initialize());
 
@@ -645,11 +643,11 @@ TEST_F(TrayControllerPersistenceTest, StandInSettingsEraseNothingAndLeaveTheFile
     snapshot.canvases.push_back(old);
     snapshot.currentFolderId = 1;
     snapshot.currentCanvasId = 2;
-    ASSERT_TRUE(persistence::LibraryStore(dir_ / "library").Save(snapshot));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(snapshot));
     std::ofstream(dir_ / "config.json") << "not settings";
 
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_ / "library";
+    host.libraryPath = library_;
     host.configFilePath = dir_ / "config.json";
     AppConfig config = DefaultConfig();
     ASSERT_TRUE(config.purgeDeleted);
@@ -678,39 +676,53 @@ TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryWrittenByANewerVe
     snapshot.canvases.push_back(canvas);
     snapshot.currentFolderId = 1;
     snapshot.currentCanvasId = 2;
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(snapshot));
-    const std::string newer =
-        "{\"version\":" + std::to_string(persistence::LibraryStore::kFormatVersion + 1) + "}";
-    std::ofstream(dir_ / "library.json") << newer;
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(snapshot));
+    {
+        sqlite3* db = nullptr;
+        const std::u8string name = library_.u8string();
+        sqlite3_open(std::string(name.begin(), name.end()).c_str(), &db);
+        const std::string newer =
+            "PRAGMA user_version = " + std::to_string(persistence::LibraryStore::kFormatVersion + 1);
+        ASSERT_EQ(sqlite3_exec(db, newer.c_str(), nullptr, nullptr, nullptr), SQLITE_OK);
+        sqlite3_close(db);
+    }
+    const std::string before = ReadFile(library_);
 
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     TrayController controller(host, DefaultConfig());
     EXPECT_FALSE(controller.Initialize());
     EXPECT_TRUE(controller.RefusedANewerLibrary());
+    EXPECT_FALSE(controller.RefusedAnUnreadableLibrary());
     EXPECT_FALSE(host.trayIconShown);
-    EXPECT_EQ(ReadFile(dir_ / "library.json"), newer);
+    EXPECT_EQ(ReadFile(library_), before);
 }
 
-// A library.json that cannot be read - held by a program that shares it
-// with nobody - refuses the start as well, and is told apart: trying again
+// A library that cannot be read - held by a program that shares it with
+// nobody - refuses the start as well, and is told apart: trying again
 // later may work.
 TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryFileItCannotRead) {
-#ifdef _WIN32
-    std::filesystem::create_directories(dir_);
-    std::ofstream(dir_ / "library.json") << "{\"version\": 2}";
-    int held = -1;
-    ASSERT_EQ(_wsopen_s(&held, (dir_ / "library.json").c_str(), _O_RDONLY, _SH_DENYRW, 0), 0);
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
+    HeldLibrary held(library_, /*readers=*/false);
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     TrayController controller(host, DefaultConfig());
     EXPECT_FALSE(controller.Initialize());
     EXPECT_TRUE(controller.RefusedAnUnreadableLibrary());
     EXPECT_FALSE(host.trayIconShown);
-    _close(held);
-#else
-    GTEST_SKIP() << "no way to hold a file against reading here";
-#endif
+}
+
+// A file that is not a library at all is kept beside it, and the app
+// starts on an empty one - with the caller told where the file went.
+TEST_F(TrayControllerPersistenceTest, InitializeSetsAsideAFileThatIsNotALibrary) {
+    std::filesystem::create_directories(dir_);
+    std::ofstream(library_) << "not a library";
+    test::FakePlatformHost host;
+    host.libraryPath = library_;
+    TrayController controller(host, DefaultConfig());
+    ASSERT_TRUE(controller.Initialize());
+    ASSERT_FALSE(controller.LibrarySetAsideAs().empty());
+    EXPECT_EQ(ReadFile(controller.LibrarySetAsideAs()), "not a library");
 }
 
 TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {
@@ -726,10 +738,10 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {
     snapshot.canvases.push_back(canvas);
     snapshot.currentFolderId = 1;
     snapshot.currentCanvasId = 2;
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(snapshot));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(snapshot));
 
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     TrayController controller(host, DefaultConfig());
 
     ASSERT_TRUE(controller.Initialize());
@@ -744,7 +756,7 @@ TEST_F(TrayControllerPersistenceTest, InitializeLoadsAPreviouslySavedLibrary) {
 // nothing to save, and every other test here is content with that.
 TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImage) {
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     host.overlayWindow.captureReturnsHandle = 7;
     host.overlayWindow.captureReturnsWidth = 4;
     host.overlayWindow.captureReturnsHeight = 3;
@@ -761,9 +773,8 @@ TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImag
     const Item& shot = canvas->items.front();
     ASSERT_NE(shot.ImageLayer(), nullptr);
     EXPECT_EQ(shot.ImageLayer()->textureHandle, 7u);
-    ASSERT_FALSE(shot.ImageLayer()->imageFile.empty()) << "the pixels went to the library";
-    const std::optional<persistence::DecodedImage> saved =
-        persistence::LibraryStore(dir_).LoadImage(shot.id, shot.ImageLayer()->imageFile);
+    ASSERT_TRUE(shot.ImageLayer()->stored) << "the pixels went to the library";
+    const std::optional<persistence::DecodedImage> saved = persistence::LibraryStore(library_).LoadImage(shot.id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->width, 4);
     EXPECT_EQ(saved->height, 3);
@@ -771,15 +782,15 @@ TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImag
 }
 
 // A silent capture while the overlay is hidden, with notices off, shows
-// nothing - so no frame runs the autosave. The record naming the picture
-// has to be written all the same, or a crash before the next show loses
-// the capture and the next save sets its picture aside as an orphan.
+// nothing - so no frame runs the autosave. The snippet has to be written
+// all the same, or a crash before the next show loses the capture and the
+// next save drops its picture as nobody's.
 TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAFrame) {
     // A library on disk already, so this is not a first run - which would
     // show the overlay with its welcome note rather than start hidden.
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     host.overlayWindow.captureReturnsHandle = 7;
     host.overlayWindow.captureReturnsWidth = 2;
     host.overlayWindow.captureReturnsHeight = 1;
@@ -794,7 +805,7 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAF
     EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
     EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "nothing left to retry";
 
-    persistence::LibraryStore reopened(dir_);
+    persistence::LibraryStore reopened(library_);
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
     ASSERT_TRUE(loaded.has_value());
     const Item* shot = nullptr;
@@ -804,20 +815,20 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAF
         }
     }
     ASSERT_NE(shot, nullptr);
-    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty());
-    const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(shot->id, shot->ImageLayer()->imageFile);
+    ASSERT_TRUE(shot->ImageLayer()->stored);
+    const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(shot->id);
     ASSERT_TRUE(saved.has_value());
     EXPECT_EQ(saved->pixelsRGBA, host.overlayWindow.captureReturnsPixelsRGBA);
 }
 
 TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromTheBackgroundTimer) {
     // A library on disk, so the app starts hidden - and then, once it has
-    // started, a directory where library.json wants to be: the save fails
-    // late, at the rename, and keeps failing until it is gone. (Before the
-    // start, it would refuse it: see InitializeRefusesALibraryFileItCannotRead.)
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    // started, another program writing to it: the save fails, and keeps
+    // failing until it lets go. (Before the start, it would refuse it: see
+    // InitializeRefusesALibraryFileItCannotRead.)
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     host.overlayWindow.captureReturnsHandle = 7;
     host.overlayWindow.captureReturnsWidth = 1;
     host.overlayWindow.captureReturnsHeight = 1;
@@ -826,8 +837,7 @@ TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromThe
     config.showToastsWhileHidden = false;
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
-    std::filesystem::remove(dir_ / "library.json");
-    std::filesystem::create_directories(dir_ / "library.json");
+    HeldLibrary held(library_, /*readers=*/true);
 
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
     EXPECT_TRUE(controller.GetSession().HasUnsavedChanges());
@@ -837,11 +847,11 @@ TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromThe
     EXPECT_TRUE(controller.GetSession().HasUnsavedChanges()) << "still in the way";
     EXPECT_GT(host.backgroundTimerIntervalMs, 0) << "so still scheduled";
 
-    std::filesystem::remove(dir_ / "library.json");
+    held.Release();
     host.FireBackgroundTimer();
     EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
     EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "done, and stopped";
-    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(dir_).Load();
+    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(library_).Load();
     ASSERT_TRUE(loaded.has_value());
     size_t items = 0;
     for (const Canvas& canvas : loaded->canvases) {
@@ -855,9 +865,9 @@ TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromThe
 // Exit is the one flush with no retry after it. What cannot go into the
 // library goes into a copy beside it, rather than nowhere.
 TEST_F(TrayControllerPersistenceTest, ExitWritesARecoveryCopyWhenTheLibraryCannotBeSaved) {
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     host.overlayWindow.captureReturnsHandle = 7;
     host.overlayWindow.captureReturnsWidth = 1;
     host.overlayWindow.captureReturnsHeight = 1;
@@ -867,17 +877,17 @@ TEST_F(TrayControllerPersistenceTest, ExitWritesARecoveryCopyWhenTheLibraryCanno
     ASSERT_TRUE(controller.Initialize());
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
     ASSERT_TRUE(controller.GetSession().HasUnsavedChanges());
-    // The library stops being writable before the exit.
-    std::filesystem::remove(dir_ / "library.json");
-    std::filesystem::create_directories(dir_ / "library.json");
+    // The library stops being writable before the exit: another program
+    // is writing to it.
+    HeldLibrary held(library_, /*readers=*/true);
 
     host.TriggerTrayCommand(platform::TrayCommand::Exit);
     EXPECT_TRUE(host.quitCalled) << "an exit is an exit";
 
     std::filesystem::path recovery;
-    const std::string prefix = dir_.filename().string() + "-recovery-";
-    for (const auto& entry : std::filesystem::directory_iterator(dir_.parent_path())) {
-        if (entry.path().filename().string().rfind(prefix, 0) == 0) {
+    for (const auto& entry : std::filesystem::directory_iterator(dir_)) {
+        const std::string name = entry.path().filename().string();
+        if (name.rfind("library-recovery-", 0) == 0 && entry.path().extension() == ".db") {
             recovery = entry.path();
         }
     }
@@ -889,55 +899,24 @@ TEST_F(TrayControllerPersistenceTest, ExitWritesARecoveryCopyWhenTheLibraryCanno
     for (const Canvas& canvas : loaded->canvases) {
         for (const Item& item : canvas.items) {
             ++items;
-            ASSERT_FALSE(item.ImageLayer()->imageFile.empty()) << "the record names its picture";
-            // The picture was on disk in the real library, not in memory;
-            // the copy has to hold it all the same, or it does not open on
-            // its own.
-            const std::optional<persistence::DecodedImage> picture =
-                recovered.LoadImage(item.id, item.ImageLayer()->imageFile);
-            ASSERT_TRUE(picture.has_value()) << "the copy names a picture it does not hold";
+            ASSERT_TRUE(item.ImageLayer()->stored) << "the snippet has its picture";
+            // The picture was in the real library, not in memory; the copy
+            // has to hold it all the same, or it does not open on its own.
+            const std::optional<persistence::DecodedImage> picture = recovered.LoadImage(item.id);
+            ASSERT_TRUE(picture.has_value());
             EXPECT_EQ(picture->pixelsRGBA, host.overlayWindow.captureReturnsPixelsRGBA);
         }
     }
     EXPECT_EQ(items, 1u);
-    EXPECT_TRUE(std::filesystem::is_regular_file(recovery / "recovery.txt")) << "says what it is";
-    std::filesystem::remove_all(recovery);
-}
-
-// The accepted outcome, pinned down so that it stays a decision: when the
-// library cannot be written and the recovery copy beside it cannot be
-// written either, an exit is still an exit, and what was in memory goes
-// with the process. See TrayController::FlushForShutdown.
-TEST_F(TrayControllerPersistenceTest, ExitStillExitsWhenNeitherTheLibraryNorARecoveryCopyCanBeWritten) {
-    // A file where the library's parent directory would be: nothing under
-    // it can be created - not the library, not a recovery copy beside it.
-    std::filesystem::create_directories(dir_);
-    std::ofstream(dir_ / "blocker") << "not a directory";
-    test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_ / "blocker" / "library";
-    host.overlayWindow.captureReturnsHandle = 7;
-    const AppConfig config = DefaultConfig();
-    TrayController controller(host, config);
-    ASSERT_TRUE(controller.Initialize());
-    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
-    ASSERT_TRUE(controller.GetSession().HasUnsavedChanges());
-
-    host.TriggerTrayCommand(platform::TrayCommand::Exit);
-    EXPECT_TRUE(host.quitCalled) << "an exit is an exit";
-    EXPECT_TRUE(controller.GetSession().HasUnsavedChanges()) << "nothing landed anywhere";
-    EXPECT_TRUE(std::filesystem::is_regular_file(dir_ / "blocker")) << "and nothing was forced";
-    size_t entries = 0;
-    for (const auto& entry : std::filesystem::directory_iterator(dir_)) {
-        (void)entry;
-        ++entries;
-    }
-    EXPECT_EQ(entries, 1u) << "no recovery copy appeared anywhere else";
+    std::filesystem::path note = recovery;
+    note += ".txt";
+    EXPECT_TRUE(std::filesystem::is_regular_file(note)) << "says what it is";
 }
 
 TEST_F(TrayControllerPersistenceTest, TheOSEndingTheSessionFlushesTheLibrary) {
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     host.overlayWindow.captureReturnsHandle = 7;
     const AppConfig config = DefaultConfig();
     TrayController controller(host, config);
@@ -947,7 +926,7 @@ TEST_F(TrayControllerPersistenceTest, TheOSEndingTheSessionFlushesTheLibrary) {
 
     host.TriggerSessionEnd();  // logoff, with no frame between the capture and it
     EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
-    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(dir_).Load();
+    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(library_).Load();
     ASSERT_TRUE(loaded.has_value());
     size_t items = 0;
     for (const Canvas& canvas : loaded->canvases) {
@@ -1009,7 +988,7 @@ TEST_F(TrayControllerPersistenceTest, TheStandInForASettingsFileSetAsideIsWritte
 // saved while locked, not at the unlock.
 TEST_F(TrayControllerPersistenceTest, AnEditIsSavedWhileFramesAreSkipped) {
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     const AppConfig config = DefaultConfig();
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
@@ -1025,7 +1004,7 @@ TEST_F(TrayControllerPersistenceTest, AnEditIsSavedWhileFramesAreSkipped) {
         host.overlayWindow.skippedFrameCallback(0.1f);
     }
 
-    const std::optional<CanvasManagerSnapshot> saved = persistence::LibraryStore(dir_).Load();
+    const std::optional<CanvasManagerSnapshot> saved = persistence::LibraryStore(library_).Load();
     ASSERT_TRUE(saved.has_value());
     bool found = false;
     for (const Canvas& canvas : saved->canvases) {
@@ -1079,10 +1058,10 @@ TEST_F(TrayControllerPersistenceTest, InitializeLeavesItemRectsUntouchedUntilThe
     snapshot.canvases.push_back(canvas);
     snapshot.currentFolderId = 1;
     snapshot.currentCanvasId = 2;
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(snapshot));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(snapshot));
 
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     // Nothing at Initialize acts on the display size; items are laid out
     // against it on the first frame instead.
     host.displays.front().width = 2000;
@@ -1097,7 +1076,7 @@ TEST_F(TrayControllerPersistenceTest, InitializeLeavesItemRectsUntouchedUntilThe
 
 TEST_F(TrayControllerPersistenceTest, InitializeLeavesDefaultStateWhenNothingSavedYet) {
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;  // exists (SetUp doesn't create it) but has no library.json
+    host.libraryPath = library_;  // not there yet
     TrayController controller(host, DefaultConfig());
 
     ASSERT_TRUE(controller.Initialize());
@@ -1113,11 +1092,11 @@ TEST_F(TrayControllerPersistenceTest, InitializeLeavesDefaultStateWhenNothingSav
 
 TEST_F(TrayControllerPersistenceTest, HidingTheOverlayFlushesAPendingChangeToDisk) {
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     const AppConfig config = DefaultConfig();
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
-    ASSERT_FALSE(std::filesystem::exists(dir_ / "library.json"));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Load()->folders.empty()) << "nothing written yet";
 
     // QuickCapture creates an item (a real CanvasManager mutation) purely
     // through plain data/platform calls - no ImGui context needed, unlike
@@ -1135,8 +1114,7 @@ TEST_F(TrayControllerPersistenceTest, HidingTheOverlayFlushesAPendingChangeToDis
     host.TriggerHotkey(editId);
     ASSERT_FALSE(host.overlayWindow.IsVisible());
 
-    ASSERT_TRUE(std::filesystem::exists(dir_ / "library.json"));
-    const std::optional<CanvasManagerSnapshot> reloaded = persistence::LibraryStore(dir_).Load();
+    const std::optional<CanvasManagerSnapshot> reloaded = persistence::LibraryStore(library_).Load();
     ASSERT_TRUE(reloaded.has_value());
     // The capture made a canvas of its own, at the end of the folder - so
     // two now, and the shot is on the second (see OverlayApp::QuickCapture).
@@ -1153,7 +1131,7 @@ TEST_F(TrayControllerPersistenceTest, HidingTheOverlayFlushesAPendingChangeToDis
 
 TEST_F(TrayControllerPersistenceTest, TrayExitFlushesAPendingChangeToDisk) {
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     const AppConfig config = DefaultConfig();
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
@@ -1164,15 +1142,14 @@ TEST_F(TrayControllerPersistenceTest, TrayExitFlushesAPendingChangeToDisk) {
     host.TriggerTrayCommand(platform::TrayCommand::Exit);
 
     EXPECT_TRUE(host.quitCalled);
-    ASSERT_TRUE(std::filesystem::exists(dir_ / "library.json"));
-    const std::optional<CanvasManagerSnapshot> reloaded = persistence::LibraryStore(dir_).Load();
+    const std::optional<CanvasManagerSnapshot> reloaded = persistence::LibraryStore(library_).Load();
     ASSERT_TRUE(reloaded.has_value());
     ASSERT_EQ(reloaded->canvases.size(), 2u);  // the capture's own canvas - see QuickCapture
     EXPECT_EQ(reloaded->canvases[1].items.size(), 1u);
 }
 
-TEST_F(TrayControllerPersistenceTest, NothingIsWrittenWhenDataDirectoryPathIsEmpty) {
-    test::FakePlatformHost host;  // dataDirectoryPath left empty - see its own doc comment
+TEST_F(TrayControllerPersistenceTest, NothingIsWrittenWhenTheLibraryPathIsEmpty) {
+    test::FakePlatformHost host;  // libraryPath left empty - see its own doc comment
     const AppConfig config = DefaultConfig();
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
@@ -1531,9 +1508,9 @@ TEST(TrayControllerPinnedTest, ASilentCaptureInThePinnedViewKeepsThePinnedCanvas
 // canvas switch - which the frame's own sync, gated on a change of
 // current canvas, would never see here.
 TEST_F(TrayControllerPersistenceTest, ASilentCaptureInThePinnedViewGivesItsTextureBack) {
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(CanvasManager().ExportSnapshot()));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     host.overlayWindow.captureReturnsHandle = 7;
     host.overlayWindow.captureReturnsWidth = 2;
     host.overlayWindow.captureReturnsHeight = 1;
@@ -1562,7 +1539,7 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureInThePinnedViewGivesItsTextu
         }
     }
     ASSERT_NE(shot, nullptr);
-    ASSERT_FALSE(shot->ImageLayer()->imageFile.empty()) << "on disk, so the texture is not the only copy";
+    ASSERT_TRUE(shot->ImageLayer()->stored) << "in the library, so the texture is not the only copy";
     EXPECT_EQ(shot->ImageLayer()->textureHandle, 0u) << "not resident on a canvas nobody is looking at";
     EXPECT_EQ(host.overlayWindow.releaseTextureCallCount, releasedBefore + 1);
 }
@@ -1586,10 +1563,10 @@ TEST_F(TrayControllerPersistenceTest, PinnedSnippetsAreOnScreenFromTheStart) {
     snapshot.canvases.push_back(canvas);
     snapshot.currentFolderId = 1;
     snapshot.currentCanvasId = 2;
-    ASSERT_TRUE(persistence::LibraryStore(dir_).Save(snapshot));
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(snapshot));
 
     test::FakePlatformHost host;
-    host.dataDirectoryPath = dir_;
+    host.libraryPath = library_;
     TrayController controller(host, DefaultConfig());
     ASSERT_TRUE(controller.Initialize());
 

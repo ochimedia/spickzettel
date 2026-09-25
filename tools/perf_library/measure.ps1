@@ -89,7 +89,7 @@ Start-Sleep -Milliseconds 600
 $sandbox = Join-Path ([System.IO.Path]::GetTempPath()) ("sz_measure_" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Force -Path (Join-Path $sandbox 'Spickzettel') | Out-Null
 if ($LibrarySource -and (Test-Path $LibrarySource)) {
-    Copy-Item $LibrarySource (Join-Path $sandbox 'Spickzettel\library') -Recurse -Force
+    Copy-Item $LibrarySource (Join-Path $sandbox 'Spickzettel\library.db') -Force
 }
 New-MeasurementConfig -Path (Join-Path $sandbox 'Spickzettel\config.json') -Mode $Mode -Hud ([bool]$ShowFpsHud)
 

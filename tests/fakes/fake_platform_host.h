@@ -243,9 +243,9 @@ public:
 
     // Empty by default: TrayController treats this as "no persistence"
     // (see its own Initialize) unless a test explicitly points it at a
-    // real (typically temporary) directory.
-    std::filesystem::path GetDataDirectoryPath() const override { return dataDirectoryPath; }
-    std::filesystem::path dataDirectoryPath;
+    // real (typically temporary) file.
+    std::filesystem::path GetLibraryPath() const override { return libraryPath; }
+    std::filesystem::path libraryPath;
 
     // Recorded rather than run: a test fires it with FireBackgroundTimer,
     // standing for the interval having passed. 0 means none is set.

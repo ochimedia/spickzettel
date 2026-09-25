@@ -42,9 +42,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
+## SQLite 3.53.4
+
+Holds the library - every folder, canvas and snippet, and their pictures.
+https://www.sqlite.org
+
+The SQLite source code is in the public domain. Its authors disclaim
+copyright, and no notice is required; it is listed here so that this file
+names everything the binary holds. The blessing that stands in place of a
+license, from the source:
+
+    May you do good and not evil.
+    May you find forgiveness for yourself and forgive others.
+    May you share freely, never taking more than you give.
+
+
 ## nlohmann/json 3.11.3
 
-Reads and writes the library file and the settings.
+Reads and writes the settings, and each snippet's record in the library.
 https://github.com/nlohmann/json
 
 MIT License
