@@ -5,19 +5,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
-#include <iterator>
-#include <string>
-#include <system_error>
-
-// Only PNG is needed of stb. The library itself is QOI throughout; PNG is
-// kept for importing and exporting pictures, which nothing does yet.
-#define STBI_ONLY_PNG
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb_image_write.h>
 
 // Only QOI's memory-to-memory half is used: pictures are stored in the
 // library, not in files of their own.
@@ -28,40 +15,6 @@
 namespace sz::core::persistence {
 
 namespace {
-
-// Routes stb_image_write's output through std::ofstream (which respects
-// std::filesystem::path's native/wide representation on Windows) instead
-// of the library's own fopen(narrow char*)-based file writer, which would
-// mangle a data directory containing non-ASCII characters (e.g. a Windows
-// username with accented/CJK characters in it - not unusual, and
-// %APPDATA% sits under the user's profile directory).
-void WriteCallback(void* context, void* data, int size) {
-    auto* out = static_cast<std::ofstream*>(context);
-    out->write(static_cast<const char*>(data), size);
-}
-
-// The whole file as bytes, or empty on any failure - shared by both
-// decoders, which each want the file in memory before handing it to a
-// memory-to-memory codec. The size is asked first and refused past the
-// budget, so a stray multi-gigabyte file in a snippet's directory is not
-// read into memory to find out what it is.
-std::vector<uint8_t> ReadFileBytes(const std::filesystem::path& path) {
-    std::error_code ec;
-    const uintmax_t size = std::filesystem::file_size(path, ec);
-    if (ec || size == 0 || size > kMaxImageFileBytes) {
-        return {};
-    }
-    std::ifstream in(path, std::ios::binary);
-    if (!in) {
-        return {};
-    }
-    std::vector<uint8_t> bytes(static_cast<size_t>(size));
-    in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-    if (static_cast<uintmax_t>(in.gcount()) != size) {
-        return {};
-    }
-    return bytes;
-}
 
 // Whether a picture of this size is one this app will decode - see
 // kMaxImageExtent. Checked against the header, before the decoder is
@@ -179,54 +132,6 @@ std::optional<DecodedImage> DecodeQoi(const uint8_t* bytes, size_t size) {
     const auto* pixels = static_cast<const uint8_t*>(decoded);
     result.pixelsRGBA.assign(pixels, pixels + (static_cast<size_t>(desc.width) * desc.height * 4));
     free(decoded);
-    return result;
-}
-
-bool EncodePngToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height) {
-    if (!pixelsRGBA || width <= 0 || height <= 0) {
-        return false;
-    }
-
-    std::error_code ec;
-    std::filesystem::create_directories(path.parent_path(), ec);
-
-    std::ofstream out(path, std::ios::binary);
-    if (!out) {
-        return false;
-    }
-    const int ok = stbi_write_png_to_func(&WriteCallback, &out, width, height, /*channels=*/4, pixelsRGBA,
-                                           /*strideBytes=*/width * 4);
-    out.flush();
-    return ok != 0 && out.good();
-}
-
-std::optional<DecodedImage> DecodePngFromFile(const std::filesystem::path& path) {
-    const std::vector<uint8_t> fileBytes = ReadFileBytes(path);
-    if (fileBytes.empty()) {
-        return std::nullopt;
-    }
-
-    int width = 0;
-    int height = 0;
-    int sourceChannels = 0;
-    // The header first, for the same reason as QOI's: the dimensions are
-    // what the decoder allocates from.
-    if (!stbi_info_from_memory(fileBytes.data(), static_cast<int>(fileBytes.size()), &width, &height,
-                               &sourceChannels) ||
-        !WithinPixelBudget(static_cast<uint64_t>(std::max(width, 0)), static_cast<uint64_t>(std::max(height, 0)))) {
-        return std::nullopt;
-    }
-    uint8_t* decoded = stbi_load_from_memory(fileBytes.data(), static_cast<int>(fileBytes.size()), &width, &height,
-                                              &sourceChannels, /*desiredChannels=*/4);
-    if (!decoded) {
-        return std::nullopt;
-    }
-
-    DecodedImage result;
-    result.width = width;
-    result.height = height;
-    result.pixelsRGBA.assign(decoded, decoded + (static_cast<size_t>(width) * static_cast<size_t>(height) * 4));
-    stbi_image_free(decoded);
     return result;
 }
 

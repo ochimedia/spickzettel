@@ -206,8 +206,6 @@ What is in a release binary, and why each is allowed in a paid,
 closed-source one:
 
 - **Dear ImGui**, **nlohmann/json**, **QOI**: MIT. Reproduce the notice.
-- **stb_image / stb_image_write**: dual MIT or public domain; the notices
-  file takes the MIT branch and says so.
 - **SQLite**: public domain. Nothing is required; the notices file names
   it all the same, so that what the binary holds is all in one place.
 - **Manrope**: SIL OFL 1.1, which permits bundling and selling a font
@@ -766,7 +764,8 @@ Decoding is what a canvas switch pays; encoding is what every screenshot
 pays, synchronously, while the user waits. Both are lossless, and QOI
 comes out ~30% smaller because stb's encoder is a weak one. Raw pixels
 were measured too and are a trap: reading 8 MB costs more than reading
-1.6 MB and decoding it. A 256px thumbnail is stored with every picture,
+1.6 MB and decoding it. stb's PNG codec stayed for a while for importing
+and exporting pictures, and went unused; see "Dead ends". A 256px thumbnail is stored with every picture,
 so the Overview never decodes a fullscreen capture to draw a 200px tile.
 
 In the file rather than beside it, because nearly every bug of the tree
@@ -2599,7 +2598,9 @@ one twice.
   their fields, which had to be kept in step with the serializer by
   hand; the database store hashes the row it would write instead.
 - **PNG for captures.** Six to twenty times slower than QOI on this
-  app's own screenshots.
+  app's own screenshots. The PNG codec (stb) was kept for importing and
+  exporting pictures that nothing ever imported or exported, and went
+  with the move to a database.
 - **Painting pixels** (`AppConfig::paintPixelsInsteadOfStrokes`): the pen
   and the erasers writing into a pixel layer of each snippet's own
   instead of making strokes. It made pictures mutable, and so needed a

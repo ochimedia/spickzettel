@@ -465,7 +465,7 @@ TEST_F(UiTest, TheThirdPartyLicensesAreReachableFromAbout) {
 
     // Every component that ends up inside the binary names itself in there.
     const std::string_view notices = build::NoticesText();
-    for (const char* component : {"Dear ImGui", "nlohmann/json", "stb_image", "QOI", "Manrope", "Lucide"}) {
+    for (const char* component : {"Dear ImGui", "SQLite", "nlohmann/json", "QOI", "Manrope", "Lucide"}) {
         EXPECT_NE(notices.find(component), std::string_view::npos)
             << component << " is compiled in but is not in THIRD-PARTY-NOTICES.md";
     }

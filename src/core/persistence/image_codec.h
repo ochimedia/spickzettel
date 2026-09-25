@@ -2,7 +2,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <optional>
 #include <vector>
 
@@ -43,19 +42,12 @@ DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent);
 // smaller than stb's PNG besides.
 std::vector<uint8_t> EncodeQoi(const uint8_t* pixelsRGBA, int width, int height);
 
-// Encodes `pixelsRGBA` as a PNG and writes it to `path`, creating parent
-// directories as needed. False on any failure rather than throwing.
-// Nothing in the app writes PNG today; it is the format anything else can
-// open, and an export path is the obvious use for it.
-bool EncodePngToFile(const std::filesystem::path& path, const uint8_t* pixelsRGBA, int width, int height);
-
 // What a picture may be before this reads it, checked before anything is
-// allocated for it: the file's size before it is read, the dimensions in
-// its header before it is decoded. A header claiming 100000x100000 pixels
+// allocated for it: its size, and the dimensions in its header before it
+// is decoded. A header claiming 100000x100000 pixels
 // asked for a 40 GB allocation before these existed. 16384 on a side and 64
 // million pixels (an 8K display is 33 million) is well past any capture
-// this app takes; 256 MB of file is past any picture those dimensions
-// encode to.
+// this app takes; 256 MB is past any picture those dimensions encode to.
 constexpr int kMaxImageExtent = 16384;
 constexpr uint64_t kMaxImagePixels = uint64_t{64} << 20;
 constexpr uint64_t kMaxImageFileBytes = uint64_t{256} << 20;
@@ -64,10 +56,5 @@ constexpr uint64_t kMaxImageFileBytes = uint64_t{256} << 20;
 // for its GPU texture (see IOverlayWindow::CreateTextureFromPixels).
 // Nullopt if it isn't QOI or is outside the budgets above - never throws.
 std::optional<DecodedImage> DecodeQoi(const uint8_t* bytes, size_t size);
-
-// Reads and decodes a PNG file, under the same budgets. The library holds
-// none; like EncodePngToFile, it is here for importing pictures from
-// elsewhere.
-std::optional<DecodedImage> DecodePngFromFile(const std::filesystem::path& path);
 
 }  // namespace sz::core::persistence

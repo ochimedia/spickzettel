@@ -1,9 +1,7 @@
 #include "core/persistence/image_codec.h"
 
-#include <filesystem>
-#include <fstream>
-
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -24,35 +22,10 @@ std::vector<uint8_t> SamplePixels() {
     };
 }
 
-class ImageCodecTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        dir_ = std::filesystem::temp_directory_path() / (std::string("spickzettel_image_codec_test_") + ::testing::UnitTest::GetInstance()->current_test_info()->name());
-        std::filesystem::remove_all(dir_);
-    }
-    void TearDown() override { std::filesystem::remove_all(dir_); }
-
-    std::filesystem::path dir_;
-};
-
-TEST_F(ImageCodecTest, EncodeThenDecodeRoundTripsPixelsExactly) {
-    const std::vector<uint8_t> pixels = SamplePixels();
-    const std::filesystem::path path = dir_ / "sample.png";
-
-    ASSERT_TRUE(EncodePngToFile(path, pixels.data(), /*width=*/3, /*height=*/2));
-    ASSERT_TRUE(std::filesystem::exists(path));
-
-    const std::optional<DecodedImage> decoded = DecodePngFromFile(path);
-    ASSERT_TRUE(decoded.has_value());
-    EXPECT_EQ(decoded->width, 3);
-    EXPECT_EQ(decoded->height, 2);
-    EXPECT_EQ(decoded->pixelsRGBA, pixels);
-}
-
 // Lossless is the whole reason QOI was picked over anything cheaper: the
 // pixels that come back have to be the ones that went in, alpha included
 // (SamplePixels carries two translucent pixels for exactly this).
-TEST_F(ImageCodecTest, QoiEncodeThenDecodeRoundTripsPixelsExactly) {
+TEST(ImageCodecTest, QoiEncodeThenDecodeRoundTripsPixelsExactly) {
     const std::vector<uint8_t> pixels = SamplePixels();
     const std::vector<uint8_t> encoded = EncodeQoi(pixels.data(), /*width=*/3, /*height=*/2);
     ASSERT_FALSE(encoded.empty());
@@ -67,7 +40,7 @@ TEST_F(ImageCodecTest, QoiEncodeThenDecodeRoundTripsPixelsExactly) {
 // A run of identical pixels takes QOI's run op, a repeat takes its index
 // op, and a small step takes its diff op - so an image made only of the
 // 3x2 sample would never exercise them. This one is wide enough to.
-TEST_F(ImageCodecTest, QoiRoundTripsRunsAndRepeatsExactly) {
+TEST(ImageCodecTest, QoiRoundTripsRunsAndRepeatsExactly) {
     std::vector<uint8_t> pixels;
     for (int i = 0; i < 64; ++i) {
         const uint8_t v = static_cast<uint8_t>((i / 8) * 3);  // eight-long runs, one small step apart
@@ -79,67 +52,27 @@ TEST_F(ImageCodecTest, QoiRoundTripsRunsAndRepeatsExactly) {
     EXPECT_EQ(decoded->pixelsRGBA, pixels);
 }
 
-TEST_F(ImageCodecTest, QoiDecodeReturnsNulloptForUnknownContent) {
+TEST(ImageCodecTest, QoiDecodeReturnsNulloptForUnknownContent) {
     const std::string garbage = "not a qoi, just some bytes";
     EXPECT_FALSE(DecodeQoi(reinterpret_cast<const uint8_t*>(garbage.data()), garbage.size()).has_value());
     EXPECT_FALSE(DecodeQoi(nullptr, 0).has_value());
 }
 
-TEST_F(ImageCodecTest, QoiEncodeRejectsInvalidDimensions) {
+TEST(ImageCodecTest, QoiEncodeRejectsInvalidDimensions) {
     const std::vector<uint8_t> pixels = SamplePixels();
     EXPECT_TRUE(EncodeQoi(pixels.data(), 0, 2).empty());
     EXPECT_TRUE(EncodeQoi(pixels.data(), 3, -1).empty());
     EXPECT_TRUE(EncodeQoi(nullptr, 3, 2).empty());
 }
 
-TEST_F(ImageCodecTest, EncodeCreatesParentDirectories) {
-    const std::vector<uint8_t> pixels = SamplePixels();
-    const std::filesystem::path path = dir_ / "nested" / "deeper" / "sample.png";
-
-    EXPECT_TRUE(EncodePngToFile(path, pixels.data(), 3, 2));
-    EXPECT_TRUE(std::filesystem::exists(path));
-}
-
-TEST_F(ImageCodecTest, EncodeRejectsInvalidDimensions) {
-    const std::vector<uint8_t> pixels = SamplePixels();
-    EXPECT_FALSE(EncodePngToFile(dir_ / "bad.png", pixels.data(), 0, 2));
-    EXPECT_FALSE(EncodePngToFile(dir_ / "bad.png", pixels.data(), 3, -1));
-    EXPECT_FALSE(EncodePngToFile(dir_ / "bad.png", nullptr, 3, 2));
-}
-
 // A header is a claim, and the decoder allocates on the strength of it.
 // One claiming more than any capture could be is refused before that.
-TEST_F(ImageCodecTest, DecodeRefusesAHeaderClaimingMoreThanTheBudget) {
+TEST(ImageCodecTest, DecodeRefusesAHeaderClaimingMoreThanTheBudget) {
     std::vector<uint8_t> huge = {'q', 'o', 'i', 'f', 0x00, 0x01, 0x86, 0xA0,  // 100000 wide
                                  0x00, 0x01, 0x86, 0xA0,                       // 100000 high
                                  4,    0};
     huge.resize(huge.size() + 64, 0);
     EXPECT_FALSE(DecodeQoi(huge.data(), huge.size()).has_value());
-
-    // ...and a PNG making the same claim.
-    const std::filesystem::path png = dir_ / "huge.png";
-    {
-        std::ofstream out(png, std::ios::binary);
-        const uint8_t bytes[] = {0x89, 'P',  'N',  'G',  0x0D, 0x0A, 0x1A, 0x0A,  // signature
-                                 0x00, 0x00, 0x00, 0x0D, 'I',  'H',  'D',  'R',   // IHDR, 13 bytes
-                                 0x00, 0x01, 0x86, 0xA0, 0x00, 0x01, 0x86, 0xA0,  // 100000 x 100000
-                                 8,    6,    0,    0,    0,                        // 8-bit RGBA
-                                 0x00, 0x00, 0x00, 0x00};                          // crc, unchecked
-        out.write(reinterpret_cast<const char*>(bytes), sizeof(bytes));
-    }
-    EXPECT_FALSE(DecodePngFromFile(png).has_value());
-}
-
-TEST_F(ImageCodecTest, DecodeReturnsNulloptForMissingFile) {
-    EXPECT_FALSE(DecodePngFromFile(dir_ / "does_not_exist.png").has_value());
-}
-
-TEST_F(ImageCodecTest, DecodeReturnsNulloptForGarbageContent) {
-    std::filesystem::create_directories(dir_);
-    const std::filesystem::path path = dir_ / "garbage.png";
-    std::ofstream(path, std::ios::binary) << "not a png file, just some bytes";
-
-    EXPECT_FALSE(DecodePngFromFile(path).has_value());
 }
 
 // ===== DownscaleToFit =====
