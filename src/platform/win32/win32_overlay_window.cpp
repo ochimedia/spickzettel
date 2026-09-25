@@ -236,19 +236,25 @@ bool Win32OverlayWindow::EnsureCreated(const DisplayInfo& display) {
 
 void Win32OverlayWindow::MoveToDisplay(const DisplayInfo& display) {
     const RECT target{display.x, display.y, display.x + display.width, display.y + display.height};
-    if (!hwnd_ || EqualRect(&target, &displayRect_)) {
+    if (!hwnd_) {
+        return;
+    }
+    // Where the window really is, not only where it was last put: Windows
+    // moves and resizes windows of its own accord - a display unplugged, or
+    // its resolution changed - and a window still recorded as placed would
+    // be left wherever that put it.
+    RECT actual{};
+    GetWindowRect(hwnd_, &actual);
+    if (EqualRect(&target, &displayRect_) && EqualRect(&target, &actual)) {
         return;
     }
     displayRect_ = target;
     Win32InputGrab::Instance().SetPointerBounds(displayRect_);
     // No SWP_SHOWWINDOW, so a hidden window stays hidden: the tray
     // controller places it before showing it, and before a capture taken
-    // while it is hidden.
+    // while it is hidden. The swap chain follows the size in WM_SIZE.
     SetWindowPos(hwnd_, nullptr, display.x, display.y, display.width, display.height,
                  SWP_NOZORDER | SWP_NOACTIVATE);
-    if (renderer_) {
-        renderer_->HandleResize();
-    }
 }
 
 void Win32OverlayWindow::SetDisplaysChangedCallback(std::function<void()> callback) {
@@ -1326,6 +1332,14 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
             }
             return 0;
         }
+        case WM_SIZE:
+            // Whoever resized the window - MoveToDisplay, or Windows itself
+            // - the swap chain is resized with it, or the frame is drawn at
+            // the old size and stretched.
+            if (renderer_ && wParam != SIZE_MINIMIZED) {
+                renderer_->HandleResize();
+            }
+            return 0;
         case WM_DPICHANGED:
             // Sent when the window lands on a display with a different
             // scale, suggesting the old size scaled to match. The window is
