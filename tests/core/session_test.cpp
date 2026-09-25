@@ -720,6 +720,18 @@ TEST(SessionTest, AShapeCanChangeWhileItIsDragged) {
     EXPECT_EQ(baked->strokes[0].points.size(), 2u);
 }
 
+// A rectangle dragged flat is the line it looks like, not an outline that
+// goes out and back over itself.
+TEST(SessionTest, AFlatRectangleIsALine) {
+    Session session;
+    const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    session.BeginShape(item, Session::Shape::Rectangle, 10.0f, 40.0f, 0xFF0000FFu, 3.0f, false);
+    session.EndShape(80.0f, 40.0f);
+    const Item* baked = ItemById(session.Manager(), item);
+    ASSERT_EQ(baked->strokes.size(), 1u);
+    EXPECT_EQ(baked->strokes[0].points.size(), 2u);
+}
+
 TEST(SessionTest, AShapeTooShortToBeMeantLeavesNothing) {
     Session session;
     const ItemId item = session.Manager().CreateItem(false, Rect{0, 0, 100, 100}, "A");

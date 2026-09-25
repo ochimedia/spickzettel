@@ -349,9 +349,12 @@ void Session::EndPaint() { PushPaintedTilesUndo(EndPaintStroke()); }
 
 namespace {
 // A straight segment, or a rectangle's outline closed back on its first
-// corner.
+// corner. A rectangle with no height or no width is the line it looks
+// like: as an outline it went out and back over itself, closed, with a
+// zero-length side the joins pinched on - and ink laid twice, darker along
+// its whole length where it was translucent.
 std::vector<StrokePoint> ShapePoints(Session::Shape shape, float startX, float startY, float endX, float endY) {
-    if (shape == Session::Shape::Rectangle) {
+    if (shape == Session::Shape::Rectangle && startX != endX && startY != endY) {
         return {
             StrokePoint{startX, startY},
             StrokePoint{endX, startY},
