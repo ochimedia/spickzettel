@@ -378,7 +378,8 @@ TEST_F(UiTest, DeletingAProfileKeepsTheEditsOnTheProfilePicked) {
         ctx->ItemClick("**/###sectionbehavior");
         ctx->SetRef(body(ctx));
         ctx->ItemClick("##edittarget");
-        ctx->ItemClick("**/B");
+        ctx->SetRef("//$FOCUSED");
+        ctx->ItemClick("$$1/##target");  // B
     });
 
     deleteThenToggle(0);
@@ -392,6 +393,35 @@ TEST_F(UiTest, DeletingAProfileKeepsTheEditsOnTheProfilePicked) {
     ASSERT_EQ(AppSettings().Profiles().size(), 1u);
     EXPECT_TRUE(AppSettings().Profiles()[0].overrides.Empty()) << "C was not edited";
     EXPECT_NE(AppSettings().Base().freezeScreen, freezeBefore) << "the defaults were";
+}
+
+// The profile to edit is picked by its place in the list, not by its
+// name: two names that end in the same "###" once gave both rows one id,
+// and the second could not be picked at all.
+TEST_F(UiTest, TwoProfilesWhoseNamesEndAlikeCanEachBePicked) {
+    AppConfig config = DefaultConfig();
+    for (const char* name : {"First###same", "Second###same"}) {
+        Profile profile;
+        profile.name = name;
+        config.profiles.push_back(profile);
+    }
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("edit the second, and change a setting", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionbehavior");
+        ctx->SetRef(ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID);
+        ctx->ItemClick("##edittarget");
+        ctx->SetRef("//$FOCUSED");
+        ctx->ItemClick("$$1/##target");
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###freezescreen");
+    });
+    EXPECT_TRUE(AppSettings().Profiles()[0].overrides.Empty());
+    EXPECT_FALSE(AppSettings().Profiles()[1].overrides.Empty()) << "the second was edited";
 }
 
 TEST_F(UiTest, MakingAProfileForWhatIsUnderneathTakesOneClick) {

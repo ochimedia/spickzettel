@@ -2210,7 +2210,12 @@ void OverlayApp::RenderEditTargetPicker(ProfileGroup group) {
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kProfilesShowing);
     ImGui::SameLine(Px(90.0f));
     ImGui::SetNextItemWidth(Px(280.0f));
-    if (ImGui::BeginCombo("##edittarget", nameOf(editProfile_).c_str())) {
+    // A profile's name is drawn as text, never passed as a label: ImGui
+    // reads "##" in a label as the start of an id, so a name holding one
+    // was cut short where it showed and, with "###", shared its id with any
+    // other name ending the same way. Rows are told apart by index, which
+    // two profiles of one name do not share either.
+    if (ImGui::BeginCombo("##edittarget", nullptr, ImGuiComboFlags_CustomPreview)) {
         // Same reason as the Profiles section's own dropdown: a popup
         // nested inside a window that re-asserts itself to the front every
         // frame has to do the same, or it opens behind the panel.
@@ -2219,11 +2224,23 @@ void OverlayApp::RenderEditTargetPicker(ProfileGroup group) {
             editProfile_.reset();
         }
         for (size_t i = 0; i < settings_.Profiles().size(); ++i) {
-            if (ImGui::Selectable(nameOf(i).c_str(), editProfile_ && *editProfile_ == i)) {
+            ImGui::PushID(static_cast<int>(i));
+            const ImVec2 at = ImGui::GetCursorPos();
+            if (ImGui::Selectable("##target", editProfile_ && *editProfile_ == i)) {
                 editProfile_ = i;
             }
+            ImGui::SetCursorPos(at);
+            ImGui::TextUnformatted(nameOf(i).c_str());
+            ImGui::PopID();
         }
         ImGui::EndCombo();
+    }
+    // After the combo, open or not: asked between BeginCombo and the list,
+    // it found the popup's item rather than the combo's while the list was
+    // open, and the box showed nothing.
+    if (ImGui::BeginComboPreview()) {
+        ImGui::TextUnformatted(nameOf(editProfile_).c_str());
+        ImGui::EndComboPreview();
     }
 
     // One line: whether what is on screen is also what is running, and how
