@@ -398,6 +398,18 @@ bool OverlayApp::KeyReaches(CommandId id) const {
     return false;  // unreachable: the switch names every command
 }
 
+bool OverlayApp::Pressed(const platform::KeyCombo& key, bool repeats) const {
+    if (const std::optional<ImGuiMouseButton> button = ImGuiMouseButtonForCombo(key)) {
+        // A mouse button pressed over one of ImGui's windows is the
+        // window's, as any press is; and one pressed while a gesture is in
+        // flight is the gesture's own mouse, which waits for it to end
+        // rather than settling it (see Hand::ignoredButton).
+        return ImGui::IsMouseClicked(*button, false) && !ImGui::GetIO().WantCaptureMouse && !GestureInFlight();
+    }
+    const ImGuiKey imguiKey = ImGuiKeyForCombo(key);
+    return imguiKey != ImGuiKey_None && ImGui::IsKeyPressed(imguiKey, repeats);
+}
+
 void OverlayApp::HandleCommandKeys() {
     const ImGuiIO& io = ImGui::GetIO();
     // An open popover takes Escape before any command sees it, and closes.
@@ -415,8 +427,7 @@ void OverlayApp::HandleCommandKeys() {
             continue;  // the OS hands those to the tray, not to this window
         }
         for (const platform::KeyCombo& key : KeysFor(info.id, Cfg(), shortcuts)) {
-            const ImGuiKey imguiKey = ImGuiKeyForCombo(key);
-            if (imguiKey == ImGuiKey_None || !ImGui::IsKeyPressed(imguiKey, info.repeats)) {
+            if (!Pressed(key, info.repeats)) {
                 continue;
             }
             // Exactly the modifiers the binding names, so a bare "P" does

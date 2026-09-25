@@ -45,7 +45,7 @@ struct MouseEvent {
 // digit - the same value as the character, which is also its virtual-key
 // code on every platform's native hotkey API - or a function key F1-F24 as
 // kFunctionKeyBase + n, since those share no such convenient encoding; or
-// one of the named keys below. One int rather than several fields so
+// one of the named keys or mouse buttons below. One int rather than several fields so
 // there is no way to represent "two set".
 // 0 means no key, i.e. unbound. No modifier is required: a bare function
 // key is a legitimate hotkey.
@@ -70,10 +70,19 @@ struct KeyCombo {
     static constexpr int kUpArrow = kNamedKeyBase + 6;
     static constexpr int kDownArrow = kNamedKeyBase + 7;
 
+    // The mouse's buttons besides the two a gesture is made with, which a
+    // key a person chooses (see core::ShortcutAction) may be instead: never
+    // a global hotkey, which Windows registers for keys only (see IsValid).
+    static constexpr int kMouseButtonBase = 3000;
+    static constexpr int kMiddleButton = kMouseButtonBase + 1;
+    static constexpr int kX1Button = kMouseButtonBase + 2;  // "back", on most mice
+    static constexpr int kX2Button = kMouseButtonBase + 3;  // "forward"
+
     bool IsFunctionKey() const { return key > kFunctionKeyBase && key <= kFunctionKeyBase + 24; }
     // Only meaningful when IsFunctionKey().
     int FunctionKeyNumber() const { return key - kFunctionKeyBase; }
     bool IsNamedKey() const { return key > kNamedKeyBase && key <= kDownArrow; }
+    bool IsMouseButton() const { return key > kMouseButtonBase && key <= kX2Button; }
 
     bool IsValid() const {
         return (key >= 'A' && key <= 'Z') || (key >= '0' && key <= '9') || IsFunctionKey();

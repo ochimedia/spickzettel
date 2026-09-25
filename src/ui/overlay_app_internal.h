@@ -184,6 +184,12 @@ ShortcutAction ShortcutForClipboardAction(ClipboardAction action);
 std::optional<platform::KeyCombo> ComboForImGuiKey(ImGuiKey key, bool ctrl, bool alt, bool shift);
 // ImGuiKey_None for a combo holding no key, or one outside that set.
 ImGuiKey ImGuiKeyForCombo(const platform::KeyCombo& combo);
+// The same for the mouse buttons a shortcut may be - the middle button and
+// the two side buttons, never the left or the right, which are what
+// gestures are made with.
+std::optional<platform::KeyCombo> ComboForImGuiMouseButton(ImGuiMouseButton button, bool ctrl, bool alt,
+                                                          bool shift);
+std::optional<ImGuiMouseButton> ImGuiMouseButtonForCombo(const platform::KeyCombo& combo);
 // "Ctrl+Alt+O" / "F9" / "(none)" - what a key editor's button reads while
 // it isn't capturing.
 std::string FormatKeyComboLabel(const platform::KeyCombo& combo);

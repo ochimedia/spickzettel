@@ -867,6 +867,16 @@ The two chords are safe to ship where a letter would not be, since a
 chord cannot fire from ordinary typing - `Ctrl+D` sits beside the plain
 `D` that makes a drawing, and the exact-modifier match keeps them apart.
 
+A shortcut can be a mouse button instead of a key: the middle one or a
+side one, with modifiers or without, pressed at the row in Settings like
+a key. Config spells them `Mouse3`, `Mouse4` and `Mouse5`, the way games
+number them. Not the left or the right, which are what every gesture is
+made with; and not as a global hotkey, which Windows registers for keys
+only - one written into the file by hand is read as nothing said. A
+bound button pressed over one of the overlay's panels is the panel's,
+and one pressed while a gesture is in flight waits for it, as the wheel
+does (see "The hand").
+
 Duplicate is Copy and Paste in one step and deliberately does not go
 through the clipboard: duplicating something is not a reason to lose what
 was copied earlier. `Ctrl+Shift+N` moves the selected snippets to the
@@ -1752,9 +1762,10 @@ button - things nobody asked for, over a canvas they had not clicked on.
 The pointer's own device is the exception: input from the mouse holding
 the gesture is ignored until it ends rather than ending it. A second
 button pressed on top is ignored until its own release (a touch screen's
-press-and-hold injects exactly that), and the wheel does nothing while a
-gesture is in flight - a notch mid-stroke would have switched the canvas
-under it, and one mid-drag would have been filed inside the drag. An
+press-and-hold injects exactly that). The wheel, and a mouse button bound
+to a command, do nothing while a gesture is in flight: a notch mid-stroke
+would have switched the canvas under it, and one mid-drag would have been
+filed inside the drag. An
 arrow key is a command like any other: mid-drag it ends the drag where
 it is and nudges after it, two undo steps.
 

@@ -2141,19 +2141,23 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
             shortcutCaptureAction_.reset();
             SetToolShortcut(action, platform::KeyCombo{});
         } else {
-            for (int k = ImGuiKey_0; k <= ImGuiKey_F24; ++k) {
+            std::optional<platform::KeyCombo> edited;
+            for (int k = ImGuiKey_0; k <= ImGuiKey_F24 && !edited.has_value(); ++k) {
                 const auto imguiKey = static_cast<ImGuiKey>(k);
-                if (!ImGui::IsKeyPressed(imguiKey, false)) {
-                    continue;
+                if (ImGui::IsKeyPressed(imguiKey, false)) {
+                    edited = ComboForImGuiKey(imguiKey, io.KeyCtrl, io.KeyAlt, io.KeyShift);
                 }
-                const std::optional<platform::KeyCombo> edited =
-                    ComboForImGuiKey(imguiKey, io.KeyCtrl, io.KeyAlt, io.KeyShift);
-                if (!edited.has_value()) {
-                    continue;
+            }
+            // Or a mouse button: the middle one or a side one, which the
+            // row takes as readily as a key (see KeyCombo::IsMouseButton).
+            for (int b = ImGuiMouseButton_Middle; b < ImGuiMouseButton_COUNT && !edited.has_value(); ++b) {
+                if (ImGui::IsMouseClicked(b, false)) {
+                    edited = ComboForImGuiMouseButton(b, io.KeyCtrl, io.KeyAlt, io.KeyShift);
                 }
+            }
+            if (edited.has_value()) {
                 shortcutCaptureAction_.reset();
                 SetToolShortcut(action, *edited);
-                break;
             }
         }
     }

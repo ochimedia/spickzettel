@@ -335,6 +335,27 @@ TEST(AppConfigTest, ParsesBareFunctionKeyHotkeyWithNoModifier) {
     EXPECT_EQ(config.hotkeyQuickCapture.FunctionKeyNumber(), 9);
 }
 
+// A shortcut may be a mouse button - the middle one or a side one - and
+// keeps it across a round trip; a global hotkey may not, since Windows
+// registers keys only, and one written by hand is read as nothing said.
+TEST(AppConfigTest, AShortcutMayBeAMouseButtonAndAHotkeyMayNot) {
+    AppConfig config = DefaultConfig();
+    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)] =
+        platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button};
+    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Erase)] =
+        platform::KeyCombo{true, false, false, platform::KeyCombo::kMiddleButton};
+    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
+        platform::KeyCombo{false, false, true, platform::KeyCombo::kX2Button};
+    const std::string text = SerializeConfig(config);
+    EXPECT_NE(text.find(R"("Mouse4")"), std::string::npos) << text;
+    EXPECT_NE(text.find(R"("Ctrl+Mouse3")"), std::string::npos) << text;
+    EXPECT_NE(text.find(R"("Shift+Mouse5")"), std::string::npos) << text;
+    EXPECT_EQ(ParseConfig(text), config);
+
+    EXPECT_EQ(ParseConfig(One("hotkeys", "editMode", R"("Mouse4")")).hotkeyEditMode,
+              DefaultConfig().hotkeyEditMode);
+}
+
 TEST(AppConfigTest, ParsesFunctionKeyHotkeyWithModifiers) {
     const AppConfig config = ParseConfig(One("hotkeys", "editMode", R"("Ctrl+Shift+F24")"));
     EXPECT_TRUE(config.hotkeyEditMode.ctrl);

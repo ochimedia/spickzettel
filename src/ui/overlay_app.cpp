@@ -426,6 +426,38 @@ ImGuiKey ImGuiKeyForCombo(const platform::KeyCombo& combo) {
     }
 }
 
+std::optional<platform::KeyCombo> ComboForImGuiMouseButton(ImGuiMouseButton button, bool ctrl, bool alt,
+                                                          bool shift) {
+    int key = 0;
+    switch (button) {
+        case ImGuiMouseButton_Middle:
+            key = platform::KeyCombo::kMiddleButton;
+            break;
+        case 3:
+            key = platform::KeyCombo::kX1Button;
+            break;
+        case 4:
+            key = platform::KeyCombo::kX2Button;
+            break;
+        default:
+            return std::nullopt;  // the left and the right are the gestures'
+    }
+    return platform::KeyCombo{ctrl, alt, shift, key};
+}
+
+std::optional<ImGuiMouseButton> ImGuiMouseButtonForCombo(const platform::KeyCombo& combo) {
+    switch (combo.key) {
+        case platform::KeyCombo::kMiddleButton:
+            return ImGuiMouseButton_Middle;
+        case platform::KeyCombo::kX1Button:
+            return 3;  // ImGui names no constant for the side buttons
+        case platform::KeyCombo::kX2Button:
+            return 4;
+        default:
+            return std::nullopt;
+    }
+}
+
 std::string FormatKeyComboLabel(const platform::KeyCombo& combo) {
     std::string result;
     if (combo.ctrl) {
@@ -442,6 +474,10 @@ std::string FormatKeyComboLabel(const platform::KeyCombo& combo) {
     } else if (combo.IsFunctionKey()) {
         result += "F";
         result += std::to_string(combo.FunctionKeyNumber());
+    } else if (combo.IsMouseButton()) {
+        result += combo.key == platform::KeyCombo::kMiddleButton ? strings::kHotkeyMiddleButton
+                  : combo.key == platform::KeyCombo::kX1Button   ? strings::kHotkeyX1Button
+                                                                 : strings::kHotkeyX2Button;
     } else if (combo.IsNamedKey()) {
         switch (combo.key) {
             case platform::KeyCombo::kEscape:

@@ -60,7 +60,9 @@ std::string ToUpper(std::string s) {
 
 // "Ctrl+Alt+O" -> KeyCombo{ctrl=true, alt=true, shift=false, key='O'}; "F9"
 // (no modifier tokens at all) -> KeyCombo{key=kFunctionKeyBase+9} - see
-// KeyCombo's own doc comment on why bare function keys are allowed. Returns
+// KeyCombo's own doc comment on why bare function keys are allowed.
+// "Mouse3", "Mouse4" and "Mouse5" are the middle button and the two side
+// buttons, which only a shortcut may be (see ReadHotkey). Returns
 // std::nullopt if the text doesn't parse to a valid combo.
 std::optional<platform::KeyCombo> ParseHotkey(std::string_view text) {
     platform::KeyCombo combo;
@@ -89,6 +91,12 @@ std::optional<platform::KeyCombo> ParseHotkey(std::string_view text) {
                 return std::nullopt;
             }
             combo.key = platform::KeyCombo::kFunctionKeyBase + n;
+        } else if (token == "MOUSE3") {
+            combo.key = platform::KeyCombo::kMiddleButton;
+        } else if (token == "MOUSE4") {
+            combo.key = platform::KeyCombo::kX1Button;
+        } else if (token == "MOUSE5") {
+            combo.key = platform::KeyCombo::kX2Button;
         } else {
             return std::nullopt;
         }
@@ -97,14 +105,14 @@ std::optional<platform::KeyCombo> ParseHotkey(std::string_view text) {
         }
         pos = plus + 1;
     }
-    if (!combo.IsValid()) {
+    if (!combo.IsValid() && !combo.IsMouseButton()) {
         return std::nullopt;
     }
     return combo;
 }
 
 std::string FormatHotkey(const platform::KeyCombo& combo) {
-    if (!combo.IsValid()) {
+    if (!combo.IsValid() && !combo.IsMouseButton()) {
         return std::string();  // unbound: nothing to spell (the file says null - see HotkeyJson)
     }
     std::string result;
@@ -120,6 +128,9 @@ std::string FormatHotkey(const platform::KeyCombo& combo) {
     if (combo.IsFunctionKey()) {
         result += "F";
         result += std::to_string(combo.FunctionKeyNumber());
+    } else if (combo.IsMouseButton()) {
+        result += "Mouse";
+        result += std::to_string(combo.key - platform::KeyCombo::kMouseButtonBase + 2);
     } else {
         result += static_cast<char>(combo.key);
     }
@@ -370,7 +381,9 @@ void ReadHotkey(const json& j, const char* key, platform::KeyCombo& out) {
     if (it->is_null()) {
         out = platform::KeyCombo{};
     } else if (it->is_string()) {
-        if (const auto combo = ParseHotkey(it->get<std::string>())) {
+        // A key: a mouse button is no global hotkey, and one written here
+        // by hand is read as if the file had said nothing.
+        if (const auto combo = ParseHotkey(it->get<std::string>()); combo.has_value() && combo->IsValid()) {
             out = *combo;
         }
     }

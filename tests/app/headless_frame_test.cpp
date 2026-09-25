@@ -159,6 +159,78 @@ TEST_F(HeadlessAppTest, AShortcutKeyPicksItsTool) {
     EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(Canvases().CurrentOrNull()->items[0].id));
 }
 
+// A shortcut can be a mouse button: here the pen on the first side button,
+// and Select on the middle one.
+AppConfig WithMouseButtonShortcuts() {
+    AppConfig config = DefaultConfig();
+    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)] =
+        platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button};
+    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Select)] =
+        platform::KeyCombo{false, false, false, platform::KeyCombo::kMiddleButton};
+    return config;
+}
+
+TEST_F(HeadlessAppTest, AMouseButtonRunsTheCommandItIsBoundTo) {
+    // A click of ImGui's button `button`, where the pointer is - the side
+    // buttons are 3 and 4, which ImGui names no constant for.
+    const auto click = [this](int button) {
+        ImGui::GetIO().AddMouseButtonEvent(button, true);
+        StepFrame();
+        ImGui::GetIO().AddMouseButtonEvent(button, false);
+        StepFrame();
+    };
+    StartWith(WithMouseButtonShortcuts());
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 500.0f, 400.0f);  // a screenshot, selected as it is made
+    ASSERT_EQ(App().Selection().size(), 1u);
+    MoveTo(900.0f, 650.0f);
+    StepFrame();
+
+    click(3);
+    EXPECT_EQ(App().ActiveTool(), Tool::Draw) << "the pen, for the selected snippet";
+    ASSERT_TRUE(App().DrawingItem().has_value());
+    click(ImGuiMouseButton_Middle);
+    EXPECT_EQ(App().ActiveTool(), Tool::Select);
+    EXPECT_FALSE(App().DrawingItem().has_value());
+}
+
+// The side button is on the mouse that is drawing the stroke: pressed
+// mid-stroke it waits for the stroke to end rather than ending it, as the
+// other button and the wheel do - and works again once it has.
+TEST_F(HeadlessAppTest, AMouseButtonWaitsForTheGestureInFlight) {
+    // A click of ImGui's button `button`, where the pointer is - the side
+    // buttons are 3 and 4, which ImGui names no constant for.
+    const auto click = [this](int button) {
+        ImGui::GetIO().AddMouseButtonEvent(button, true);
+        StepFrame();
+        ImGui::GetIO().AddMouseButtonEvent(button, false);
+        StepFrame();
+    };
+    StartWith(WithMouseButtonShortcuts());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
+    ASSERT_TRUE(App().DrawingItem().has_value());
+
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(350.0f, 350.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    click(ImGuiMouseButton_Middle);
+    EXPECT_TRUE(AppSession().LiveLayer().ActiveStroke().has_value()) << "still drawing";
+    EXPECT_EQ(App().ActiveTool(), Tool::Draw);
+    RawMouse(500.0f, 420.0f, platform::MouseEventKind::Move);
+    RawMouse(500.0f, 420.0f, platform::MouseEventKind::Up);
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrame();
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u);
+
+    click(ImGuiMouseButton_Middle);
+    EXPECT_EQ(App().ActiveTool(), Tool::Select);
+}
+
 TEST_F(HeadlessAppTest, AnUnboundKeyPicksNothing) {
     ShowEditMode();
     StepFrame();

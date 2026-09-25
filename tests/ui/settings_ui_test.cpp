@@ -261,6 +261,24 @@ TEST_F(UiTest, StrokeRenderingIsChosenInThePenGroup) {
     EXPECT_EQ(AppSettings().Stored().strokeRenderMode, StrokeRenderMode::Polyline);
 }
 
+// A shortcut row takes a mouse button - here the first side button - as
+// readily as a key.
+TEST_F(UiTest, AShortcutRowTakesAMouseButton) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("open the hotkeys", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionhotkeys");
+    });
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    RunUi("press the side button", [](ImGuiTestContext* ctx) { ctx->MouseClick(3); });
+    EXPECT_FALSE(App().IsCapturingShortcut());
+    EXPECT_EQ(AppSettings().Stored().toolShortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
+              (platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button}));
+}
+
 // The retention period's row: the days are there but disabled while the
 // switch is off, and once it is on they step a day at a time - both saved
 // as settings are.

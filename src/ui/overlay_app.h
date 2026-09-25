@@ -997,6 +997,9 @@ private:
     // (see KeysFor) - for those a key reaches from where it is pressed (see
     // KeyReaches). Runs only while the overlay is showing edit mode.
     void HandleCommandKeys();
+    // Whether `key` - a key, or a mouse button a shortcut may be - went down
+    // this frame, again as it repeats for one that `repeats`.
+    bool Pressed(const platform::KeyCombo& key, bool repeats) const;
     // Whether a key for `id` gets through to it from here: not while text
     // is being typed, and not through a panel, a popup or drawing mode
     // where the command is not theirs. docs/INTERACTIONS.md, section 7,
