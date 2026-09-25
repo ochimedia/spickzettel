@@ -41,7 +41,7 @@ public:
     // in HandleMessage. The host's own exit, which it sets.
     void SetCloseRequestedCallback(std::function<void()> callback) { closeRequestedCallback_ = std::move(callback); }
     void Show() override;
-    void ShowWithoutActivating() override;
+    void ShowClickThrough() override;
     void Hide() override;
     bool IsVisible() const override;
     int ScalePercent() const override;

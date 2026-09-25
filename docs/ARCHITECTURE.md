@@ -2117,9 +2117,11 @@ canvas left out, so the only thing on screen is a message. It exists for
 the silent capture hotkey, which acts while the overlay is hidden and
 still has to say what it did. Three things about it were found by
 watching it fail on the real thing: showing a window activates it
-(`SW_SHOW` takes focus by itself, hence `ShowWithoutActivating`); a
+(`SW_SHOW` takes focus by itself, hence `ShowClickThrough`); a
 window given `WS_EX_LAYERED` before its first show draws nothing, so the
-order is show first, click-through second; and ImGui's clock is not the
+order is show first, click-through styles second - with the window
+already counted click-through for the input grab, which a show in edit
+mode starts and the passthrough a moment later took down again; and ImGui's clock is not the
 app's clock, so the first frame after an hour in the tray carries an
 hour's delta and puts every expiry set while hidden in the past - the
 renderer caps the delta at 0.1 s.

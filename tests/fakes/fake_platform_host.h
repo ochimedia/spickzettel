@@ -43,8 +43,9 @@ public:
         visible = true;
     }
 
-    void ShowWithoutActivating() override {
-        ++showWithoutActivatingCallCount;
+    void ShowClickThrough() override {
+        ++showClickThroughCallCount;
+        inputPassthrough = true;
         Show();
     }
 
@@ -158,7 +159,7 @@ public:
     // Counted separately, though it shows the same way here: which of the
     // two a caller used is the whole difference between taking focus and
     // leaving it alone on the real thing.
-    int showWithoutActivatingCallCount = 0;
+    int showClickThroughCallCount = 0;
     int hideCallCount = 0;
     // The display the window covers: the one it was created on, until moved.
     platform::DisplayInfo onDisplay{};

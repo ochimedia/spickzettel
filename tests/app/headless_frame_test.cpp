@@ -1938,7 +1938,7 @@ TEST_F(HeadlessAppTest, ASilentCaptureShowsAMessageWithoutOpeningTheOverlay) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), before + 1);
     EXPECT_TRUE(host_.overlayWindow.visible);
     EXPECT_TRUE(host_.overlayWindow.inputPassthrough) << "a notice must let every click through";
-    EXPECT_EQ(host_.overlayWindow.showWithoutActivatingCallCount, 1)
+    EXPECT_EQ(host_.overlayWindow.showClickThroughCallCount, 1)
         << "and must not take focus from whatever the user is typing in";
     EXPECT_EQ(host_.overlayWindow.showCallCount, 1) << "which is the *only* way it may be shown";
     EXPECT_TRUE(App().IsNoticeOnly());

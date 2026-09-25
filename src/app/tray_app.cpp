@@ -276,25 +276,17 @@ void TrayController::ShowNotice() {
     }
     overlayApp_.SetViewOnly(true);
     overlayApp_.SetNoticeOnly(true);
-    // Shown first, click-through second - the same order view-only mode
-    // uses, and it is not a free choice. Turning passthrough on adds
-    // WS_EX_LAYERED, and a window that gets that style before it has ever
-    // been shown draws nothing at all: it comes up, stays up for its two
-    // seconds and goes away again, with no message on it. Found exactly
-    // that way round.
-    //
-    // Which leaves focus, the thing the other order was for: showing a
-    // window activates it on Windows, so a plain Show would take focus
-    // from whatever the user is typing in. Hence the separate
-    // ShowWithoutActivating - and no focus handoff is needed afterwards,
-    // since the focus never moved.
+    // Click-through, and without taking focus: showing a window activates
+    // it on Windows, so a plain Show would take focus from whatever the
+    // user is typing in. Hence ShowClickThrough - which also keeps the
+    // order a notice has to be shown in (see there) - and no focus handoff
+    // is needed afterwards, since the focus never moved.
     //
     // No ApplyProfileForCurrentApplication either: a notice is not a
     // session with the application underneath, it draws one message and
     // leaves, so there is nothing for a profile's input settings to apply
     // to - and swapping them would tear input hooks up and down for it.
-    window.ShowWithoutActivating();
-    window.SetInputPassthrough(true);
+    window.ShowClickThrough();
     profileAppliedThisShowing_ = false;
 }
 
@@ -493,10 +485,8 @@ bool TrayController::ShowPinnedView() {
     overlayApp_.SetNoticeOnly(false);
     overlayApp_.SetViewOnly(true);
     overlayApp_.SetPinnedOnly(true);
-    // Shown first, click-through second, and without taking focus - the
-    // order and the call a notice uses, for the reasons given there.
-    window.ShowWithoutActivating();
-    window.SetInputPassthrough(true);
+    // Click-through and without taking focus, as a notice is shown.
+    window.ShowClickThrough();
     profileAppliedThisShowing_ = false;
     return true;
 }

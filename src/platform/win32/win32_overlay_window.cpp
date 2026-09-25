@@ -255,7 +255,16 @@ void Win32OverlayWindow::SetDisplaysChangedCallback(std::function<void()> callba
 
 void Win32OverlayWindow::Show() { ShowInternal(/*activate=*/true); }
 
-void Win32OverlayWindow::ShowWithoutActivating() { ShowInternal(/*activate=*/false); }
+void Win32OverlayWindow::ShowClickThrough() {
+    // Click-through as far as the grab is concerned before the show, which
+    // starts it for a window that is not (see RefreshEditModeInput). The
+    // styles themselves only after it: a window that has WS_EX_LAYERED
+    // before its first show draws nothing at all - a notice came up, stayed
+    // its two seconds and went, with no message on it.
+    inputPassthrough_ = true;
+    ShowInternal(/*activate=*/false);
+    SetInputPassthrough(true);
+}
 
 void Win32OverlayWindow::ShowInternal(bool activate) {
     if (!hwnd_ || visible_) {
@@ -271,7 +280,7 @@ void Win32OverlayWindow::ShowInternal(bool activate) {
     // Ordinarily that is wanted; where it isn't, WS_EX_NOACTIVATE (see
     // SetEditModeNoActivate) makes it impossible anyway - and where a
     // caller wants no focus regardless of that setting, it says so (see
-    // ShowWithoutActivating).
+    // ShowClickThrough).
     ShowWindow(hwnd_, activate ? SW_SHOW : SW_SHOWNOACTIVATE);
     if (activate && !noActivate_) {
         SetForegroundWindow(hwnd_);

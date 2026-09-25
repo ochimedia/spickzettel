@@ -55,11 +55,14 @@ public:
     // Shows the window and gives it focus, unless SetEditModeNoActivate(true)
     // is in effect.
     virtual void Show() = 0;
-    // Shows it without ever taking focus, whatever that setting says. On
-    // Windows showing a window is what activates it, so this has to be a
-    // distinct operation. For a window only there to be looked at - see
-    // app::TrayController::ShowNotice.
-    virtual void ShowWithoutActivating() = 0;
+    // Shows it click-through (see SetInputPassthrough) and without ever
+    // taking focus, whatever that setting says. On Windows showing a window
+    // is what activates it, so this has to be a distinct operation; and the
+    // window is click-through from its first moment, where a show followed
+    // by SetInputPassthrough(true) was in edit mode in between - long
+    // enough to start the input grab and take it down again. For a window
+    // only there to be looked at - see app::TrayController::ShowNotice.
+    virtual void ShowClickThrough() = 0;
     // Hides the window and restores focus to whatever previously had it, if
     // this window still holds it.
     virtual void Hide() = 0;

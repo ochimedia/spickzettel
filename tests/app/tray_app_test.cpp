@@ -1332,7 +1332,7 @@ TEST(TrayControllerPinnedTest, PuttingTheOverlayAwayLeavesThePinnedSnippetsUp) {
     EXPECT_TRUE(controller.Overlay().IsPinnedOnly());
     EXPECT_TRUE(controller.Overlay().IsViewOnly());
     EXPECT_TRUE(host.overlayWindow.inputPassthrough);
-    EXPECT_EQ(host.overlayWindow.showWithoutActivatingCallCount, 1) << "the pinned view never takes focus";
+    EXPECT_EQ(host.overlayWindow.showClickThroughCallCount, 1) << "the pinned view never takes focus";
 }
 
 TEST(TrayControllerPinnedTest, UnpinningIsHowThePinnedViewGoes) {
