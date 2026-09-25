@@ -1528,12 +1528,19 @@ void OverlayApp::OnOverlayShown() {
     // by clearing - a modifier still physically held is re-sent on every
     // frame by the platform (see Win32OverlayWindow::RenderFrame).
     //
+    // The mouse too, which ClearInputKeys leaves alone. A button held on a
+    // scrollbar or a panel as the overlay went away never has its release
+    // seen - under the grab, with no activation, not even as a focus loss -
+    // so it came back held: the first click was taken as the release, and
+    // an ImGui drag went on with no button down.
+    //
     // Guarded like ShowActionToast's: the overlay can be shown by a hotkey
     // pressed before a single frame has ever been drawn.
     if (ImGui::GetCurrentContext() != nullptr) {
         ImGuiIO& io = ImGui::GetIO();
         io.ClearEventsQueue();
         io.ClearInputKeys();
+        io.ClearInputMouse();
     }
 }
 

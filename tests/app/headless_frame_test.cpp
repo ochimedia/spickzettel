@@ -1692,6 +1692,22 @@ TEST_F(HeadlessAppTest, AModifierHeldWhenTheOverlayWentAwayDoesNotOutliveIt) {
     EXPECT_EQ(App().ActiveTool(), Tool::NewScreenshot) << "a bare S, not Ctrl+S";
 }
 
+// The mouse the same: a button held as the overlay went away has its
+// release go to whatever is underneath, and ImGui must not bring it back
+// still down.
+TEST_F(HeadlessAppTest, AButtonHeldWhenTheOverlayWentAwayIsNotHeldOnTheWayBack) {
+    ShowEditMode();
+    ImGui::GetIO().AddMousePosEvent(200.0f, 200.0f);
+    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    StepFrame();
+    ASSERT_TRUE(ImGui::IsMouseDown(ImGuiMouseButton_Left));
+
+    ShowEditMode();  // away, with the button still down as far as ImGui knows
+    ShowEditMode();  // and back
+    StepFrame();
+    EXPECT_FALSE(ImGui::IsMouseDown(ImGuiMouseButton_Left));
+}
+
 // Long enough for a message to have faded: it lasts 2.2 seconds, and a
 // frame here is a sixtieth of one.
 constexpr int kFramesPastAToast = 200;
