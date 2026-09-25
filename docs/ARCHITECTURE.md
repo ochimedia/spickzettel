@@ -942,6 +942,32 @@ restart would still find what was moved. It found it in the old place,
 with the deleted canvas loaded back around it. Retention later erased
 that canvas again, and took the snippet with it.
 
+What a load could not see is carried forward, not taken for gone.
+Every save rewrites `pending.json` from what the session knows, and a
+session knows only what its load could look at. Two things escaped it:
+
+- a removal owed inside a directory that could not be listed;
+- something moved out that the rescue could not read, because another
+  program held its record for a moment.
+
+The first save dropped both. A forgotten removal loaded again at the
+next start where its directory could be read. A forgotten move let the
+removal finish, and what was moved went with the directory it was
+still inside: unreadable became deleted. So the store keeps every
+entry of the file that its load did not see, until a load that saw
+everything finds it gone. A removal also waits while something moved
+out of it that could not be read is still inside, the way it waits for
+anything the library holds. Neither counts as owed: no save could do
+anything about them, and counting them kept the autosave retrying.
+
+A folder or canvas whose own record cannot be read is still looked
+into, for what was deleted for good inside it, and does not make the
+load count as incomplete. A directory without a record is an ordinary
+sight after a save that stopped before its record landed, and counting
+it kept `pending.json` from ever emptying. For the same reason, a
+moved-out directory with no record at all has nothing to rescue, and
+goes with what it is in.
+
 A snippet's directory is swept for pictures its layers no longer name
 only after the record that stopped naming them is on disk. Until then
 the old record is what a restart reloads, and the pictures it names have

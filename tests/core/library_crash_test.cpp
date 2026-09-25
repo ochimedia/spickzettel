@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <set>
@@ -254,6 +255,18 @@ bool IsOf(const std::filesystem::path& path, uint64_t uid) {
         }
     }
     return false;
+}
+
+// A matcher for `file` - a record - in the directory of `uid`.
+std::function<bool(const std::filesystem::path&)> RecordOf(uint64_t uid, const char* file) {
+    return [uid, file](const std::filesystem::path& path) {
+        return path.filename() == file && path.parent_path().filename().string().ends_with("-" + FormatUid(uid));
+    };
+}
+
+// A matcher for the directory of `uid` itself.
+std::function<bool(const std::filesystem::path&)> DirectoryOf(uint64_t uid) {
+    return [uid](const std::filesystem::path& path) { return path.filename().string().ends_with("-" + FormatUid(uid)); };
 }
 
 // Nothing of what was deleted for good is anywhere in the library - not in
@@ -594,6 +607,104 @@ TEST(LibraryFaultTest, ARescueWithNowhereToGoGetsAFolderOfItsOwn) {
                 again.LoadImage(kShot, reloaded->canvases[0].items[1].ImageLayer()->imageFile).has_value());
 }
 
+// A snippet moved out of a canvas that is then deleted for good, the
+// process gone before the save that moves it - and at the restart, its
+// record cannot be read for a moment, or the canvas it is still in cannot
+// be listed (`op` failing on what `fault` matches). It is not rescued that
+// start, and not deleted with the canvas either: unreadable is never
+// deleted. The first start where it can be read puts it where it was moved
+// to, and finishes the removal.
+void CheckWhatWasMovedOutIsKeptWhileItCannotBeRead(FaultyFileSystem::Op op,
+                                                  const std::function<bool(const std::filesystem::path&)>& fault) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    FaultyFileSystem fs(disk);
+    {
+        LibraryStore store(Root(), fs);
+        CanvasManagerSnapshot library = *store.Load();
+        std::vector<Item>& onA = FindCanvas(library, kCanvasA)->items;
+        FindCanvas(library, kCanvasB)->items.push_back(onA[0]);
+        library.canvases.erase(library.canvases.begin());
+        EXPECT_FALSE(store.Remove({kCanvasA, kDrawing}, library)) << "waits for the move";
+    }  // gone before the save
+    fs.FailWhen(op, fault);
+    {
+        LibraryStore restarted(Root(), fs);
+        const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(LayoutOf(*loaded).count(kShot), 0u) << "not read this start";
+        fs.ClearFailures();  // the other program lets go
+        restarted.Save(*loaded);
+        EXPECT_FALSE(PictureOf(disk, kShot).empty()) << "deleted with the canvas it was moved out of";
+    }
+    LibraryStore again(Root(), fs);
+    const std::optional<CanvasManagerSnapshot> reloaded = again.Load();
+    ASSERT_TRUE(reloaded.has_value());
+    const Layout layout = LayoutOf(*reloaded);
+    ASSERT_EQ(layout.count(kShot), 1u);
+    EXPECT_EQ(layout.at(kShot).parent, kCanvasB);
+    EXPECT_TRUE(again.Save(*reloaded));
+    EXPECT_FALSE(again.HasPendingRemovals());
+    ExpectNothingLeftOf(disk, {kCanvasA, kDrawing}, 0);
+}
+
+TEST(LibraryFaultTest, WhatWasMovedOutOfSomethingDeletedForGoodIsKeptWhileItsRecordCannotBeRead) {
+    CheckWhatWasMovedOutIsKeptWhileItCannotBeRead(FaultyFileSystem::Op::Read, RecordOf(kShot, "item.json"));
+}
+
+TEST(LibraryFaultTest, WhatWasMovedOutOfSomethingDeletedForGoodIsKeptWhileWhatItIsInCannotBeListed) {
+    CheckWhatWasMovedOutIsKeptWhileItCannotBeRead(FaultyFileSystem::Op::List, DirectoryOf(kCanvasA));
+}
+
+// A snippet deleted for good, recorded, and the process stopped before
+// anything was removed - and at the restart, the record of the canvas it is
+// in cannot be read for a moment, or the canvas cannot be listed (`op`
+// failing on what `fault` matches). The first save does not forget the
+// removal: the next start where the canvas reads does not load the snippet
+// back, and nothing of it is left once a save has run with nothing in the
+// way.
+void CheckARemovalUnderADirectoryThatCouldNotBeReadIsNotForgotten(
+    FaultyFileSystem::Op op, const std::function<bool(const std::filesystem::path&)>& fault) {
+    MemoryFileSystem disk;
+    SetUpLibrary(disk);
+    FaultyFileSystem fs(disk);
+    {
+        LibraryStore store(Root(), fs);
+        CanvasManagerSnapshot library = *store.Load();
+        std::vector<Item>& onA = FindCanvas(library, kCanvasA)->items;
+        onA.erase(onA.begin());
+        fs.CrashAfter(2);  // pending.json's temporary and its rename, then nothing
+        store.Remove({kShot}, library);
+    }
+    fs.ClearCrash();
+    ASSERT_FALSE(PictureOf(disk, kShot).empty());
+    fs.FailWhen(op, fault);
+    {
+        LibraryStore restarted(Root(), fs);
+        const std::optional<CanvasManagerSnapshot> loaded = restarted.Load();
+        ASSERT_TRUE(loaded.has_value());
+        restarted.Save(*loaded);
+    }
+    fs.ClearFailures();
+    LibraryStore again(Root(), fs);
+    const std::optional<CanvasManagerSnapshot> reloaded = again.Load();
+    ASSERT_TRUE(reloaded.has_value());
+    EXPECT_EQ(LayoutOf(*reloaded).count(kShot), 0u) << "deleted for good, and back";
+    EXPECT_TRUE(again.Save(*reloaded));
+    EXPECT_FALSE(again.HasPendingRemovals());
+    ExpectNothingLeftOf(disk, {kShot}, 0);
+}
+
+TEST(LibraryFaultTest, ARemovalUnderARecordThatCouldNotBeReadIsNotForgotten) {
+    CheckARemovalUnderADirectoryThatCouldNotBeReadIsNotForgotten(FaultyFileSystem::Op::Read,
+                                                                 RecordOf(kCanvasA, "canvas.json"));
+}
+
+TEST(LibraryFaultTest, ARemovalUnderADirectoryThatCouldNotBeListedIsNotForgotten) {
+    CheckARemovalUnderADirectoryThatCouldNotBeReadIsNotForgotten(FaultyFileSystem::Op::List,
+                                                                 DirectoryOf(kCanvasA));
+}
+
 // A saved snippet moved into a canvas just made, and the save that would
 // write both cannot write the canvas's record. The snippet is not moved
 // into a directory Load would not read - it waits where it was, and a
@@ -721,14 +832,6 @@ TEST(LibraryCrashTest, WhatALoadCouldNotReadKeepsItsPlace) {
     MemoryFileSystem memory;
     SetUpLibrary(memory);
     FaultyFileSystem disk(memory);
-    const auto recordOf = [](uint64_t uid, const char* file) {
-        return [uid, file](const std::filesystem::path& path) {
-            const std::string dir = path.parent_path().filename().string();
-            const std::string name = FormatUid(uid);
-            return path.filename() == file && dir.size() >= name.size() &&
-                   dir.compare(dir.size() - name.size(), name.size(), name) == 0;
-        };
-    };
     // One start with `unreadable` failing to read, something else changed
     // and saved - and the next start's load.
     const auto startWithout = [&](const std::function<bool(const std::filesystem::path&)>& unreadable) {
@@ -746,14 +849,14 @@ TEST(LibraryCrashTest, WhatALoadCouldNotReadKeepsItsPlace) {
         return LibraryStore(Root(), disk).Load();
     };
 
-    std::optional<CanvasManagerSnapshot> library = startWithout(recordOf(kShot, "item.json"));
+    std::optional<CanvasManagerSnapshot> library = startWithout(RecordOf(kShot, "item.json"));
     ASSERT_TRUE(library.has_value());
     const Canvas* canvasA = FindCanvas(*library, kCanvasA);
     ASSERT_NE(canvasA, nullptr);
     ASSERT_EQ(canvasA->items.size(), 2u);
     EXPECT_EQ(canvasA->items[0].id, kShot) << "at the back of its canvas, as it was";
 
-    library = startWithout(recordOf(kCanvasA, "canvas.json"));
+    library = startWithout(RecordOf(kCanvasA, "canvas.json"));
     ASSERT_TRUE(library.has_value());
     ASSERT_EQ(library->canvases.size(), 2u);
     EXPECT_EQ(library->canvases[0].id, kCanvasA) << "first in its folder, as it was";

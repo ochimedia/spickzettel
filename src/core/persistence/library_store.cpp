@@ -795,12 +795,22 @@ bool RemoveOwnContents(FileSystem& fs, const std::filesystem::path& dir, const s
 // running. Enumeration order is not specified by the filesystem, and an
 // unlisted member's position (see ApplyOrder) would otherwise wander.
 // Real directories only: a linked one is not part of the tree, see above.
-std::vector<std::filesystem::path> SortedSubdirectories(FileSystem& fs, const std::filesystem::path& dir) {
+// `listed`, when given, goes false if `dir` could not be listed - which is
+// not the same as it holding nothing.
+std::vector<std::filesystem::path> SortedSubdirectories(FileSystem& fs, const std::filesystem::path& dir,
+                                                        bool* listed = nullptr) {
     std::vector<std::filesystem::path> out;
     if (IsLink(fs, dir)) {
         return out;  // nothing behind a link is read - folders/ itself included
     }
-    for (const FileSystem::Entry& entry : Listing(fs, dir)) {
+    const std::optional<std::vector<FileSystem::Entry>> entries = ListNamed(fs, dir);
+    if (!entries) {
+        if (listed != nullptr && fs.LinkStatus(dir) != FileSystem::Kind::None) {
+            *listed = false;
+        }
+        return out;
+    }
+    for (const FileSystem::Entry& entry : *entries) {
         if (entry.kind == FileSystem::Kind::Directory) {
             out.push_back(dir / entry.name);
         }
@@ -1172,16 +1182,62 @@ LibraryStore::PendingRecord LibraryStore::PendingFor(const LibraryView& library)
         // Anything the library still holds directly inside - moved out in
         // the model, not yet on disk - and where it belongs. What is inside
         // that goes with it, so only the directory directly inside is named.
+        // Named by the uid its directory's name ends in, which is what the
+        // rescue at the next start looks for: the two differ for a copy
+        // made by hand, which Load gave an id of its own.
         for (const auto* index : {&canvasDirs_, &itemDirs_}) {
             for (const auto& [id, path] : *index) {
                 const auto parent = parentOf.find(id);
                 if (parent != parentOf.end() && path.parent_path() == dir) {
-                    record.moves[id] = parent->second;
+                    record.moves[UidFromDirectoryName(path.filename().string()).value_or(id)] = parent->second;
                 }
             }
         }
     }
+    // ...and what the file said that this session could not look at.
+    record.erased.insert(unobservedPending_.erased.begin(), unobservedPending_.erased.end());
+    record.moves.insert(unobservedPending_.moves.begin(), unobservedPending_.moves.end());
     return record;
+}
+
+bool LibraryStore::HoldsUnrescued(const std::filesystem::path& dir, int depth) const {
+    if (unobservedPending_.moves.empty()) {
+        return false;
+    }
+    bool listed = true;
+    for (const std::filesystem::path& inside : SortedSubdirectories(*fs_, dir, &listed)) {
+        const std::optional<uint64_t> uid = UidFromDirectoryName(inside.filename().string());
+        if ((uid && unobservedPending_.moves.count(*uid) > 0) || (depth < 1 && HoldsUnrescued(inside, depth + 1))) {
+            return true;
+        }
+    }
+    return !listed;
+}
+
+std::vector<std::filesystem::path> LibraryStore::WalkInto(const std::filesystem::path& dir) const {
+    bool listed = true;
+    std::vector<std::filesystem::path> inside = SortedSubdirectories(*fs_, dir, &listed);
+    walkedEverything_ = walkedEverything_ && listed;
+    return inside;
+}
+
+void LibraryStore::NoteUnobservedPending(const std::unordered_set<uint64_t>& seen, bool sawEverything) const {
+    unobservedPending_ = {};
+    // A walk that saw everything and did not find it shows it gone - by
+    // hand, or by a removal that finished before the file was rewritten.
+    if (sawEverything) {
+        return;
+    }
+    for (const uint64_t uid : writtenPending_.erased) {
+        if (pendingRemovals_.count(uid) == 0) {
+            unobservedPending_.erased.insert(uid);
+        }
+    }
+    for (const auto& [uid, parent] : writtenPending_.moves) {
+        if (seen.count(uid) == 0) {
+            unobservedPending_.moves.emplace(uid, parent);
+        }
+    }
 }
 
 bool LibraryStore::RunPendingRemovals(const LibraryView& library) const {
@@ -1199,7 +1255,8 @@ bool LibraryStore::RunPendingRemovals(const LibraryView& library) const {
     // holds something waits for the save that moves it out.
     const std::unordered_set<uint64_t> live = IdsIn(library);
     for (auto it = pendingRemovals_.begin(); it != pendingRemovals_.end();) {
-        const bool ready = writtenPending_.erased.count(it->first) > 0 && !HoldsAnyOf(it->second, live);
+        const bool ready = writtenPending_.erased.count(it->first) > 0 && !HoldsAnyOf(it->second, live) &&
+                           !HoldsUnrescued(it->second);
         if (ready && RemoveOwnDirectory(it->second, erased)) {
             ForgetUnder(it->second);
             it = pendingRemovals_.erase(it);
@@ -1224,7 +1281,7 @@ bool LibraryStore::WritePendingFile(const PendingRecord& record) const {
     if (!IsOurs(file)) {
         return false;
     }
-    const bool written = record.erased.empty()
+    const bool written = record.erased.empty() && record.moves.empty()
                              ? fs_->Remove(file)
                              : WriteFileAtomically(*fs_, file, PendingJson(record.erased, record.moves).dump(2));
     if (written) {
@@ -1284,7 +1341,7 @@ bool LibraryStore::NotePendingRemoval(const std::filesystem::path& dir) const {
         // only once nothing moved out of it was left inside, so whatever
         // is inside went with it.
         writtenPending_.erased.insert(*uid);
-        for (const std::filesystem::path& inside : SortedSubdirectories(*fs_, dir)) {
+        for (const std::filesystem::path& inside : WalkInto(dir)) {
             if (const std::optional<uint64_t> insideUid = UidFromDirectoryName(inside.filename().string())) {
                 writtenPending_.erased.insert(*insideUid);
             }
@@ -1295,7 +1352,7 @@ bool LibraryStore::NotePendingRemoval(const std::filesystem::path& dir) const {
     pendingRemovals_[*uid] = dir;
     // ...and whatever inside it was deleted for good along with it, which
     // may have lost its own record to an earlier run at it.
-    for (const std::filesystem::path& inside : SortedSubdirectories(*fs_, dir)) {
+    for (const std::filesystem::path& inside : WalkInto(dir)) {
         const std::optional<uint64_t> insideUid = UidFromDirectoryName(inside.filename().string());
         if (insideUid && writtenPending_.erased.count(*insideUid) > 0) {
             NotePendingRemoval(inside);
@@ -1376,20 +1433,33 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
         return uid ? FormatUid(*uid) : std::string();
     };
 
+    // What was deleted for good inside a folder or canvas whose record
+    // cannot be read - by another program, for a moment - is owed all the
+    // same, `levels` down. Not looked for, it was not in the next
+    // pending.json, and loaded again at the first start where the record
+    // could be read.
+    const std::function<void(const std::filesystem::path&, int)> noteRemovalsInside =
+        [&](const std::filesystem::path& dir, int levels) {
+            for (const std::filesystem::path& inside : WalkInto(dir)) {
+                if (!NotePendingRemoval(inside) && levels > 1) {
+                    noteRemovalsInside(inside, levels - 1);
+                }
+            }
+        };
+
     std::vector<std::pair<std::string, Folder>> foundFolders;
     std::set<std::string> foldersNotRead;
-    for (const std::filesystem::path& folderDir : SortedSubdirectories(*fs_, foldersRoot)) {
+    for (const std::filesystem::path& folderDir : WalkInto(foldersRoot)) {
         if (NotePendingRemoval(folderDir)) {
             continue;  // deleted for good; a removal still owed, not a folder
         }
         const std::optional<json> folderDoc = ReadJsonFile(*fs_, folderDir / kFolderFile);
-        if (!folderDoc) {
-            foldersNotRead.insert(uidNameOf(folderDir));
-            continue;  // not a folder of ours; left alone rather than guessed at
-        }
         Folder folder;
-        if (!ReadRecord(*folderDoc, folder)) {
+        if (!folderDoc || !ReadRecord(*folderDoc, folder)) {
+            // Not a folder of ours, or not one that can be read right now:
+            // left alone rather than guessed at.
             foldersNotRead.insert(uidNameOf(folderDir));
+            noteRemovalsInside(folderDir, 2);
             continue;
         }
         const uint64_t recordedFolderId = folder.id;
@@ -1487,7 +1557,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
         // ...and the same, one level down, for the snippets inside it.
         std::vector<std::pair<std::string, Item>> foundItems;
         std::set<std::string> itemsNotRead;
-        for (const std::filesystem::path& itemDir : SortedSubdirectories(*fs_, canvasDir)) {
+        for (const std::filesystem::path& itemDir : WalkInto(canvasDir)) {
             if (NotePendingRemoval(itemDir)) {
                 continue;
             }
@@ -1516,7 +1586,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
         const std::filesystem::path folderDir = foldersRoot / folderDirName;
         std::vector<std::pair<std::string, Canvas>> foundCanvases;
         std::set<std::string> canvasesNotRead;
-        for (const std::filesystem::path& canvasDir : SortedSubdirectories(*fs_, folderDir)) {
+        for (const std::filesystem::path& canvasDir : WalkInto(folderDir)) {
             if (NotePendingRemoval(canvasDir)) {
                 continue;
             }
@@ -1524,6 +1594,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                 foundCanvases.emplace_back(canvasDir.filename().string(), std::move(*canvas));
             } else {
                 canvasesNotRead.insert(uidNameOf(canvasDir));
+                noteRemovalsInside(canvasDir, 1);
             }
         }
         const OrderFile canvasOrderFile = ReadOrderFile(*fs_, folderDir / kOrderFile, "canvases");
@@ -1552,6 +1623,13 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
     // folder it was in. Only what the record names: it is written, moves
     // and all, before the removal starts, so anything else inside went with
     // what was deleted.
+    //
+    // One whose record is there and cannot be read now stays where it is,
+    // and the walk counts as one that did not see everything - so that the
+    // record keeps its move, and the removal waits for it (see
+    // unobservedPending_). One with no record at all - a save stopped
+    // before it landed - has nothing to rescue, and goes with what it is
+    // in.
     const auto someFolder = [&]() -> FolderId {
         if (out.folders.empty()) {
             Folder folder;
@@ -1581,7 +1659,7 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
         if (depth != 1 && depth != 2) {
             continue;  // a snippet's directory holds no others
         }
-        for (const std::filesystem::path& inside : SortedSubdirectories(*fs_, erasedDir)) {
+        for (const std::filesystem::path& inside : WalkInto(erasedDir)) {
             const std::optional<uint64_t> uid = UidFromDirectoryName(inside.filename().string());
             if (!uid || writtenPending_.erased.count(*uid) > 0) {
                 continue;
@@ -1597,12 +1675,16 @@ void LibraryStore::ReadTree(const std::filesystem::path& foldersRoot, CanvasMana
                 const FolderId folderId = folder != out.folders.end() ? folder->id : someFolder();
                 if (std::optional<Canvas> canvas = readCanvas(inside, folderId)) {
                     out.canvases.push_back(std::move(*canvas));
+                } else if (fs_->LinkStatus(inside / kCanvasFile) != FileSystem::Kind::None) {
+                    walkedEverything_ = false;
                 }
             } else if (std::optional<Item> item = readItem(inside)) {
                 const auto canvas = std::find_if(out.canvases.begin(), out.canvases.end(),
                                                  [target](const Canvas& c) { return c.id == target; });
                 Canvas& home = canvas != out.canvases.end() ? *canvas : someCanvas();
                 home.items.push_back(std::move(*item));  // in front, like anything unlisted
+            } else if (fs_->LinkStatus(inside / kItemFile) != FileSystem::Kind::None) {
+                walkedEverything_ = false;
             }
         }
     }
@@ -1666,7 +1748,9 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() const {
     snapshot.currentCanvasId = ReadId(doc, "currentCanvasId");
     // Anything else in the file is ignored and left out by the next save.
 
+    walkedEverything_ = true;
     ReadTree(foldersRoot, snapshot);
+    NoteUnobservedPending(IdsIn(LibraryView{snapshot.folders, snapshot.canvases, 0, 0}), walkedEverything_);
 
     // Dangling means "repair", not "refuse". A tree that people are invited
     // to rearrange is routinely a little out of date, and refusing to open a library
@@ -1709,7 +1793,8 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
     // What was deleted for good is not to be indexed - and pending.json is
     // not to be written over by a store that has not read it.
     ReadPendingFile();
-    for (const std::filesystem::path& folderDir : SortedSubdirectories(*fs_, foldersRoot)) {
+    walkedEverything_ = true;
+    for (const std::filesystem::path& folderDir : WalkInto(foldersRoot)) {
         if (NotePendingRemoval(folderDir)) {
             continue;
         }
@@ -1718,7 +1803,7 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
                 folderDirs_.emplace(id, folderDir);
             }
         }
-        for (const std::filesystem::path& canvasDir : SortedSubdirectories(*fs_, folderDir)) {
+        for (const std::filesystem::path& canvasDir : WalkInto(folderDir)) {
             if (NotePendingRemoval(canvasDir)) {
                 continue;
             }
@@ -1731,7 +1816,7 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
             // only this one: moving a snippet to another canvas is a move
             // of its directory, and finding where it currently is is what
             // makes that a move rather than a copy plus an orphan.
-            for (const std::filesystem::path& itemDir : SortedSubdirectories(*fs_, canvasDir)) {
+            for (const std::filesystem::path& itemDir : WalkInto(canvasDir)) {
                 if (NotePendingRemoval(itemDir)) {
                     continue;
                 }
@@ -1744,6 +1829,16 @@ void LibraryStore::IndexTreeFromDisk(const std::filesystem::path& foldersRoot) c
         }
     }
     treeIndexed_ = true;
+    // Nothing moved out of what was deleted for good is rescued here, with
+    // no library to rescue it into: it is kept, and keeps the directory it
+    // is in standing, as a store that never read the tree must leave it.
+    std::unordered_set<uint64_t> seen;
+    for (const auto* index : {&folderDirs_, &canvasDirs_, &itemDirs_}) {
+        for (const auto& [id, path] : *index) {
+            seen.insert(id);
+        }
+    }
+    NoteUnobservedPending(seen, /*sawEverything=*/false);
 }
 
 // A save is a plan in three parts, and the order of the parts is the whole

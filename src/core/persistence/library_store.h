@@ -224,8 +224,10 @@ public:
     // gone, so that the retry is asked for rather than waited on. A
     // pending.json still naming something is one: a crash between the last
     // removal and the rewrite of the file leaves it naming what is gone,
-    // and only a save brings it in line.
-    bool HasPendingRemovals() const { return !pendingRemovals_.empty() || !writtenPending_.erased.empty(); }
+    // and only a save brings it in line. What it names that this session
+    // could not look at is not (see unobservedPending_): no save can do
+    // anything about it.
+    bool HasPendingRemovals() const { return !pendingRemovals_.empty() || writtenPending_ != unobservedPending_; }
 
     // Loads the on-disk library, or returns nullopt only if `rootDir` has
     // none at all - no library.json *and* no folders/ tree - which is a
@@ -408,6 +410,20 @@ private:
     // What pending.json should say for the removals owed, with `library`
     // saying where what was moved out of them belongs.
     PendingRecord PendingFor(const LibraryView& library) const;
+    // Whether `dir` holds, up to two levels down, a directory that
+    // unobservedPending_ says was moved out of something deleted for good:
+    // one the rescue could not read, which keeps what it is in standing
+    // as anything the library holds would. True as well when `dir` cannot
+    // be listed.
+    bool HoldsUnrescued(const std::filesystem::path& dir, int depth = 0) const;
+    // The subdirectories of `dir` (see SortedSubdirectories in the .cpp),
+    // for the walk of Load: one that cannot be listed makes it one that did
+    // not see everything.
+    std::vector<std::filesystem::path> WalkInto(const std::filesystem::path& dir) const;
+    // After a walk: sets unobservedPending_ from what pending.json says,
+    // the removals the walk found owed, and `seen`, everything it read -
+    // nothing, when `sawEverything` says the walk left nothing out.
+    void NoteUnobservedPending(const std::unordered_set<uint64_t>& seen, bool sawEverything) const;
     // Another run at every removal owed: recorded in pending.json first,
     // then each whose directory holds nothing of `library` any more is
     // removed, then the file brought in line with what is left. False when
@@ -472,6 +488,23 @@ private:
     // What pending.json says as it is on disk: what a removal may be run
     // for, since only what is recorded survives a crash partway.
     mutable PendingRecord writtenPending_;
+    // What pending.json says that the last walk of the tree did not see for
+    // itself, and cannot show to be gone: a removal owed inside a directory
+    // that could not be listed, something moved out of what was deleted for
+    // good that the rescue could not read. Rebuilding the file from what this
+    // session saw dropped them - and then the removal was forgotten, and
+    // what it named loaded again at the next start where it could be read;
+    // or the move was, and what was moved went with the directory it was
+    // still inside. So every rewrite keeps them (see PendingFor), until a
+    // walk that saw everything finds them gone, and a removal waits while
+    // what was moved out of it is still inside (see HoldsUnrescued).
+    mutable PendingRecord unobservedPending_;
+    // Whether the walk under way has looked into every directory it came
+    // to: false once one could not be listed, or was moved out of something
+    // deleted for good and could not be read. A folder or canvas whose own
+    // record cannot be read is looked into all the same, for what was
+    // deleted for good inside it (see ReadTree).
+    mutable bool walkedEverything_ = true;
     // False when pending.json is there and cannot be read. What it names
     // is then unknown - those directories load as they are - and it is not
     // written over this session, so that it keeps naming them.
