@@ -465,6 +465,20 @@ bool Win32Dx11Renderer::UpdateTextureRegionRGBA(ID3D11ShaderResourceView* srv, c
     if (!resource) {
         return false;
     }
+    // Inside the texture, and inside the rows it is read from: a box past
+    // the texture's edge is undefined behavior in UpdateSubresource, and a
+    // window past the source's edge reads beyond the caller's buffer.
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture;
+    if (FAILED(resource.As(&texture))) {
+        return false;
+    }
+    D3D11_TEXTURE2D_DESC desc{};
+    texture->GetDesc(&desc);
+    const int64_t right = static_cast<int64_t>(x) + w;
+    const int64_t bottom = static_cast<int64_t>(y) + h;
+    if (right > desc.Width || bottom > desc.Height || right > sourceWidth) {
+        return false;
+    }
     // The destination box, and a source pointer at the box's own first
     // pixel with the *full* row stride - UpdateSubresource walks the source
     // by that stride, so the caller hands over the whole image and this

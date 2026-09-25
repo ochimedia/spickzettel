@@ -236,6 +236,19 @@ TEST_F(Win32Dx11RendererTest, WithItsDeviceInPlaceTheRendererIsReadyAsItWas) {
     EXPECT_EQ(renderer_.DeviceGeneration(), 0u);
 }
 
+// A rectangle past the texture's edge, or past the edge of the rows it is
+// read from, is refused rather than handed to D3D.
+TEST_F(Win32Dx11RendererTest, ARegionOutsideTheTextureIsRefused) {
+    const std::vector<uint8_t> stripes = Stripes(48, 2);
+    ID3D11ShaderResourceView* texture = renderer_.CreateTextureFromRGBA(stripes.data(), 48, 2);
+    ASSERT_NE(texture, nullptr);
+    EXPECT_TRUE(renderer_.UpdateTextureRegionRGBA(texture, stripes.data(), 48, 40, 1, 8, 1));
+    EXPECT_FALSE(renderer_.UpdateTextureRegionRGBA(texture, stripes.data(), 48, 41, 0, 8, 1)) << "past the right";
+    EXPECT_FALSE(renderer_.UpdateTextureRegionRGBA(texture, stripes.data(), 48, 0, 1, 8, 2)) << "past the bottom";
+    EXPECT_FALSE(renderer_.UpdateTextureRegionRGBA(texture, stripes.data(), 16, 10, 0, 8, 1)) << "past the source";
+    renderer_.ReleaseTexture(texture);
+}
+
 // A device the driver took away is replaced, and drawing goes on on the new
 // one - ImGui's own objects and the filter shaders with it. A texture from
 // before is refused an update, since the new context cannot write it, and
