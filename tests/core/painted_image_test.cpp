@@ -1,6 +1,7 @@
 #include "core/drawing/painted_image.h"
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <vector>
 
@@ -122,6 +123,25 @@ TEST(PaintedImageTest, ALongDiagonalSavesOnlyTheTilesItCrosses) {
     const int allTiles = image.TilesAcross() * image.TilesDown();
     EXPECT_LT(saved.size(), static_cast<size_t>(3 * (image.TilesAcross() + image.TilesDown())));
     EXPECT_LT(saved.size() * 4, static_cast<size_t>(allTiles));
+
+    // And nothing of the line is left out: every pixel whose center is
+    // well inside the brush has ink. Asked of the geometry, not of another
+    // stroke - which would rule out the same tiles by the same mistake. A
+    // tile left out is a gap in the line.
+    const auto distanceToLine = [](float px, float py) {
+        const float dx = 1919.0f;
+        const float dy = 1079.0f;
+        const float t = std::clamp((px * dx + py * dy) / (dx * dx + dy * dy), 0.0f, 1.0f);
+        return std::hypot(px - t * dx, py - t * dy);
+    };
+    for (int y = 0; y < image.Height(); ++y) {
+        for (int x = 0; x < image.Width(); ++x) {
+            if (distanceToLine(static_cast<float>(x) + 0.5f, static_cast<float>(y) + 0.5f) <= 2.0f) {
+                ASSERT_NE(image.PixelsRGBA()[(static_cast<size_t>(y) * image.Width() + x) * 4 + 3], 0)
+                    << "a gap at " << x << "," << y << ": a tile the line crosses left out";
+            }
+        }
+    }
 
     // Every painted pixel is in a saved tile, so undo takes all of it back.
     std::set<int> savedIndices;
