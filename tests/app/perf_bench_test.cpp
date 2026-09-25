@@ -194,11 +194,12 @@ TEST_F(PerfBench, WritingACommand) {
             live.push_back(&canvas);
         }
     }
-    ASSERT_GE(live.size(), 2u) << "a library of one canvas";
+    ASSERT_FALSE(live.empty());
     std::sort(live.begin(), live.end(), [](const Canvas* a, const Canvas* b) { return a->items.size() > b->items.size(); });
     ASSERT_FALSE(live[0]->items.empty());
     const CanvasId busiest = live[0]->id;
-    const CanvasId other = live[1]->id;
+    // A library of one canvas is given another, empty, to switch to.
+    const CanvasId other = live.size() > 1 ? live[1]->id : session.AddCanvas("Other");
     session.SwitchToCanvas(busiest);
     const ItemId target = session.Manager().CurrentOrNull()->items.front().id;
 

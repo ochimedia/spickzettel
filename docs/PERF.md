@@ -125,7 +125,8 @@ far more repeatable, which is the trade.
 These numbers are from the library as a directory tree, before it moved into
 a database; see the next section for what the database costs.
 
-`PerfBench.SavingTheWholeLibrary` measures one autosave. Before, a save cost
+`PerfBench.SavingTheWholeLibrary` (since replaced by `WritingACommand`, see
+below) measured one autosave. Before, a save cost
 the whole library however little had changed, and it runs on the render
 thread:
 
@@ -196,6 +197,34 @@ holds: that is the commit making itself durable, the journal and the file
 each flushed to the disk (`synchronous=FULL`). The tree's writes were not
 flushed at all, which is also why a power cut could leave half of one. The
 first save after a load costs what a nothing-changed one does.
+
+## Results: writing each command
+
+Since every command is written as it is made (see ARCHITECTURE.md, "Every
+command is written as it is made"), there is no save to measure; what a
+command costs to write is. `PerfBench.WritingACommand` measures it end to end
+through the session - the checkpoint before the command, the change, working
+out what changed, and the write - on the render thread, release build, same
+machine:
+
+| scenario  | file    | a stroke | a canvas switch | the whole library |
+| --------- | ------- | -------- | --------------- | ----------------- |
+| `light`   | 100 KB  | 10.21 ms | 8.27 ms | 36.07 ms |
+| `medium`  | 228 KB  | 10.17 ms | 8.15 ms | 48.33 ms |
+| `heavy`   | 692 KB  | 10.30 ms | 8.71 ms | 42.05 ms |
+| `extreme` | 2668 KB | 15.07 ms | 8.66 ms | 67.81 ms |
+| `gallery` | 1204 KB | 10.15 ms | 8.75 ms | 42.98 ms |
+
+A stroke is the heaviest ordinary command - the snippet's record and all of
+its strokes are written, with its canvas's order - and a canvas switch the
+lightest, one meta row. Both sit on the floor the durable commit sets
+(`synchronous=FULL`, the journal and the file each flushed): about 8 ms,
+whatever the library holds, and the rest is what the snippet weighs - 5 ms
+more for an `extreme` snippet of forty strokes of two hundred points. The
+autosave's "one snippet changed" cost the same, once per two seconds of
+quiet rather than once per command; its "nothing changed" pass, a few
+milliseconds of serializing and hashing every snippet, is gone. Writing the
+whole library is what a first run does, once.
 
 ## Where the floor is
 
