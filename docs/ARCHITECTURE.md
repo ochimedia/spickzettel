@@ -1758,6 +1758,13 @@ under it, and one mid-drag would have been filed inside the drag. An
 arrow key is a command like any other: mid-drag it ends the drag where
 it is and nudges after it, two undo steps.
 
+Where this is going is `docs/INTERACTIONS.md`: every input through one
+state machine - a stack of interactions, each offered every event first -
+in which every pair of state and event has a written answer. That
+structure is a decision in its own right. A new input behavior is added
+through its tables, commands and interactions; a change to the structure
+itself needs a well-founded reason, argued there first.
+
 `HeadlessAppTest.EveryCommandSettlesTheHandWhateverItInterrupts` holds
 this: random presses with either button, moves, releases (a quarter of
 them lost), modifiers, the wheel and holds, with drawing mode entered and
