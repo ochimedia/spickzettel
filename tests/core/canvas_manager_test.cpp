@@ -1235,7 +1235,7 @@ TEST(CanvasManagerTest, BakeStrokeToNativeScalesWhenItemIsShrunkOnScreen) {
     EXPECT_FLOAT_EQ(native.width, 4.0f);
 }
 
-// ================= Generation() / MarkChanged() (drives autosave) =================
+// ================= Generation() / MarkChanged() (drives the draw caches) =================
 
 TEST(CanvasManagerTest, GenerationStartsAtZeroForAFreshlyConstructedManager) {
     CanvasManager manager;
@@ -1330,8 +1330,7 @@ TEST(CanvasManagerTest, ImportSnapshotDoesNotBumpGeneration) {
     loaded.ImportSnapshot(snapshot);
 
     // A fresh load isn't itself a user change - matches the constructor's
-    // own "generation starts at 0" behavior, so the very first autosave
-    // check after loading correctly sees nothing pending.
+    // own "generation starts at 0" behavior.
     EXPECT_EQ(loaded.Generation(), 0u);
 }
 

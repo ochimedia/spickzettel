@@ -923,9 +923,6 @@ OverlayApp::OverlayApp(Settings& settings, Session& session)
 void OverlayApp::AttachTo(platform::IOverlayWindow& window) {
     window_ = &window;
     window.SetFrameCallback([this](float dt) { OnFrame(dt); });
-    // A frame the window cannot draw - the screen locked, the device lost -
-    // still counts toward the autosave, which runs in OnFrame otherwise.
-    window.SetSkippedFrameCallback([this](float dt) { session_.Tick(dt); });
     window.SetMouseCallback([this](const platform::MouseEvent& ev) { OnMouse(ev); });
 }
 
@@ -990,8 +987,9 @@ void OverlayApp::QuickCapture(float displayW, float displayH) {
     // on is hard to tell apart later, where one capture per canvas is a
     // strip of tiles you can read at a glance in the Overview.
     session_.SwitchToCanvas(CreateCanvasBesideCurrent());
-    CreateFullscreenItem(ItemCreationKind::Screenshot, displayW, displayH);
-    ShowActionToast(strings::kToastCapturedScreenshot);
+    const ItemId made = CreateFullscreenItem(ItemCreationKind::Screenshot, displayW, displayH);
+    // Not made when it could not be written - see Session::Land.
+    ShowActionToast(made != 0 ? strings::kToastCapturedScreenshot : strings::kToastNotWritten);
 }
 
 void OverlayApp::SettleForPersistence() {
@@ -1124,7 +1122,7 @@ void OverlayApp::HandleMouseWheel() {
     }
 }
 
-void OverlayApp::OnFrame(float deltaSeconds) {
+void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // Function scope, so every path out of here - including view-only mode's
     // own early return - closes the frame out.
     const MeshCacheFrame meshCacheFrame(strokeMeshCache_, previewMeshCache_);
@@ -1234,12 +1232,6 @@ void OverlayApp::OnFrame(float deltaSeconds) {
         ReleaseStrokeRasters();
     }
     session_.EnsureTexturesForCurrentCanvas();
-    // Runs regardless of view-only/edit mode, and before either mode's
-    // own early-return below - content can change right up until the
-    // moment edit mode is left (e.g. a stroke finishing), and view-only
-    // mode is a perfectly normal state to be sitting in for a while
-    // afterward, so autosave can't be scoped to edit-mode frames only.
-    session_.Tick(deltaSeconds);
 
     const ImGuiIO& io = ImGui::GetIO();
     const float displayW = io.DisplaySize.x;

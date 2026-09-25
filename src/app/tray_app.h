@@ -68,9 +68,8 @@ public:
     // if that path is empty - see FakePlatformHost's own doc comment - or
     // if nothing's been saved there yet, in which case OverlayApp just
     // keeps the fresh default state CanvasManager already starts with).
-    // Also attaches the library store so the Session's debounced autosave
-    // (see Session::SetLibraryStore) and CaptureShotItem's synchronous image
-    // writes actually persist anything from here on. Returns false if the
+    // Also attaches the library store, which every command is written to
+    // from here on (see Session). Returns false if the
     // tray icon cannot be registered, another copy is running, or the
     // library cannot be opened (see LibraryStore::Open). A hotkey another
     // application owns is not one of those - see UnregisteredHotkeys.
@@ -172,41 +171,26 @@ private:
     // screen, since a real mode entered meanwhile has taken the overlay
     // over and must keep it.
     void HideNoticeIfDone();
-    // What a mode's own hotkey does to it: flush, drop the frozen screen,
-    // and go - to the pinned view when the current canvas has pinned
+    // What a mode's own hotkey does to it: finish what the hand is doing,
+    // drop the frozen screen, and go - to the pinned view when the current canvas has pinned
     // snippets (in place from view-only, which it already is), to hidden
     // otherwise.
     void PutAway();
-    // The flush for a moment after which no frame follows: the overlay
-    // going away, or a capture taken while it is away. What it cannot
-    // write now it arranges to try again from the host's background
-    // timer, since the autosave's own retry clock runs on frames and there
-    // are none while hidden - see OnBackgroundTimer.
-    void FlushOrRetryLater();
-    // The flush for the moment the app has to go - Exit from the tray, or
-    // the OS ending the session - after which there is no retry. What
-    // cannot be written to the library is written to a recovery copy
-    // beside it (see Session::WriteRecoveryCopy and RecoveryCopyPath), so
-    // that the changes exist somewhere rather than nowhere. True when one
-    // of the two landed whole. False - the library and the copy both
-    // unwritable - is an accepted outcome, and the caller exits anyway;
-    // see the .cpp.
-    bool FlushForShutdown();
+    // For the moment the app has to go - Exit from the tray, or the OS
+    // ending the session: what the hand is in the middle of is finished,
+    // and so written, and a settings file still owed is tried once more.
+    // The library owes nothing: every change is written as it is made.
+    void SettleForExit();
     // Wired to IPlatformHost::SetSessionEndCallback in Initialize().
     void OnSessionEnding();
-    // Where a recovery copy goes: a sibling of the library, named after it
-    // and the moment. Nullopt without a library on disk.
-    std::optional<std::filesystem::path> RecoveryCopyPath() const;
     // The one way the settings file is written, so that a write that
     // fails is reported to the overlay once, and cleared when one lands -
     // and remembered as owed (configWriteOwed_), so that it is tried again
     // from the background timer and before the app goes, rather than only
     // when the next settings edit happens to write the file.
     void PersistConfig();
-    // The background timer's tick: another attempt at whatever is owed to
-    // the disk - the library while the overlay is hidden (frames retry it
-    // while it is up), the settings file either way - and the timer is
-    // stopped once nothing is.
+    // The background timer's tick: another attempt at the settings file,
+    // and the timer stopped once it is written.
     void OnBackgroundTimer();
     // Puts the pinned view up - view-only, click-through, never focused,
     // drawing the current canvas's pinned snippets - if the overlay is

@@ -3132,8 +3132,8 @@ void OverlayApp::RenderActionToast() {
 std::string OverlayApp::PersistenceWarning() const {
     std::string warning;
     char line[1024];
-    if (session_.LastSaveFailed() && session_.Store() != nullptr) {
-        std::snprintf(line, sizeof(line), strings::kStatusSaveFailed, session_.Store()->File().string().c_str());
+    if (session_.LastWriteFailed() && session_.Store() != nullptr) {
+        std::snprintf(line, sizeof(line), strings::kStatusWriteFailed, session_.Store()->File().string().c_str());
         warning = line;
     }
     if (configWriteFailedPath_.has_value()) {

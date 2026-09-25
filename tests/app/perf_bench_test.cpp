@@ -152,89 +152,84 @@ TEST_F(PerfBench, OneFrameAgainstAGeneratedLibrary) {
                 timing.p95Ms, timing.maxMs, timing.vertices, timing.indices / 3);
 }
 
-// What one autosave costs. Same opt-in as the frame benchmark, and the same
-// generated libraries.
+// What a command costs to write. Same opt-in as the frame benchmark, and the
+// same generated libraries.
 //
-// Reported as two numbers, because they answer different questions and can
-// move independently: what a save costs when nothing changed (the autosave
-// that fires because something *somewhere* moved), and what it costs when one
-// snippet did (a save two seconds after drawing a stroke). ExportSnapshot is
-// timed apart from the write for the same reason.
-//
-// The save runs on the render thread - see Session::SaveLibraryNow - so
-// these milliseconds are frames, not background work.
-TEST_F(PerfBench, SavingTheWholeLibrary) {
+// Every change is written as it is made, on the render thread (see
+// Session::Land), so these milliseconds are the frame the command lands
+// in. Measured end to end through the session - the checkpoint taken before
+// the command, the change, working out what changed, and the write - for a
+// stroke added to a snippet (the heaviest ordinary command: the snippet's
+// record and all of its strokes are written) and a canvas switch (the
+// lightest: which canvas is current). Writing the whole library, which only
+// a first run does, is reported beside them for scale.
+TEST_F(PerfBench, WritingACommand) {
     const char* root = std::getenv("SZ_PERF_LIBRARY");
     if (root == nullptr || *root == '\0') {
         GTEST_SKIP() << "set SZ_PERF_LIBRARY to a library file (see tools/perf_library)";
     }
     persistence::LibraryStore source{std::filesystem::path(root)};
-    const std::optional<CanvasManagerSnapshot> loaded = source.Load();
+    std::optional<CanvasManagerSnapshot> loaded = source.Load();
     ASSERT_TRUE(loaded.has_value()) << "no library at " << root;
 
-    CanvasManager manager;
-    manager.ImportSnapshot(*loaded);
-
-    // Written somewhere of its own, so the scenario library stays as it was
-    // and the first save has the same work to do as the tenth.
+    // Written somewhere of its own, so the scenario library stays as it was.
     const std::filesystem::path out =
-        std::filesystem::temp_directory_path() / "sz_save_bench" / std::filesystem::path(root).filename();
+        std::filesystem::temp_directory_path() / "sz_write_bench" / std::filesystem::path(root).filename();
     std::error_code ec;
     std::filesystem::remove(out, ec);
     persistence::LibraryStore store{out};
-    ASSERT_TRUE(store.Save(manager.ExportSnapshot()));
+    const auto wholeStart = std::chrono::steady_clock::now();
+    ASSERT_TRUE(store.Save(*loaded));
+    const double wholeMs =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - wholeStart).count();
 
-    // The first save of a session: a store that has only loaded, saving
-    // what it loaded. It costs what the load repaired, which for a library
-    // that needed no repair is nothing.
-    persistence::LibraryStore reopened{out};
-    ASSERT_TRUE(reopened.Load().has_value());
-    const auto firstStart = std::chrono::steady_clock::now();
-    ASSERT_TRUE(reopened.Save(manager.ExportSnapshot()));
-    const double firstSaveMs =
-        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - firstStart).count();
+    core::Session session;
+    session.SetLibraryStore(&store);
+    session.ImportLibrary(std::move(*loaded));
+    session.SyncItemsToDisplaySize(1920.0f, 1080.0f);
+    // The canvas with the most snippets, current, and another to switch to.
+    std::vector<const Canvas*> live;
+    for (const Canvas& canvas : session.Manager().Canvases()) {
+        if (!session.Manager().IsDeleted(canvas)) {
+            live.push_back(&canvas);
+        }
+    }
+    ASSERT_GE(live.size(), 2u) << "a library of one canvas";
+    std::sort(live.begin(), live.end(), [](const Canvas* a, const Canvas* b) { return a->items.size() > b->items.size(); });
+    ASSERT_FALSE(live[0]->items.empty());
+    const CanvasId busiest = live[0]->id;
+    const CanvasId other = live[1]->id;
+    session.SwitchToCanvas(busiest);
+    const ItemId target = session.Manager().CurrentOrNull()->items.front().id;
 
     constexpr int kRuns = 15;
-    std::vector<double> exportMs;
-    std::vector<double> idleMs;
-    std::vector<double> oneItemMs;
+    std::vector<double> strokeMs;
+    std::vector<double> switchMs;
     for (int i = 0; i < kRuns; ++i) {
-        // Nothing changed - the autosave that fires because something
-        // somewhere moved, on a library where most of it did not.
+        const Rect rect = session.Manager().FindItemAnywhere(target)->rect;
+        session.LiveLayer().BeginStroke(StrokePoint{rect.x + 2.0f, rect.y + 2.0f}, 0xFF0000FFu, 3.0f);
+        session.LiveLayer().ExtendStroke(StrokePoint{rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f});
+        session.LiveLayer().EndStroke();
         auto start = std::chrono::steady_clock::now();
-        const CanvasManagerSnapshot snapshot = manager.ExportSnapshot();
-        auto mid = std::chrono::steady_clock::now();
-        ASSERT_TRUE(store.Save(snapshot));
+        session.CommitLiveStroke(target);
         auto end = std::chrono::steady_clock::now();
-        exportMs.push_back(std::chrono::duration<double, std::milli>(mid - start).count());
-        idleMs.push_back(std::chrono::duration<double, std::milli>(end - mid).count());
+        ASSERT_FALSE(session.LastWriteFailed());
+        strokeMs.push_back(std::chrono::duration<double, std::milli>(end - start).count());
 
-        // ...and the ordinary case: one stroke added to one snippet, which is
-        // what a save two seconds after drawing actually has to record.
-        Canvas* canvas = manager.CurrentOrNull();
-        ASSERT_NE(canvas, nullptr);
-        ASSERT_FALSE(canvas->items.empty());
-        Stroke stroke;
-        stroke.points = {StrokePoint{1.0f, 2.0f}, StrokePoint{3.0f, 4.0f}};
-        canvas->items.front().strokes.push_back(stroke);
         start = std::chrono::steady_clock::now();
-        ASSERT_TRUE(store.Save(manager.ExportSnapshot()));
+        session.SwitchToCanvas(other);
         end = std::chrono::steady_clock::now();
-        oneItemMs.push_back(std::chrono::duration<double, std::milli>(end - start).count());
+        switchMs.push_back(std::chrono::duration<double, std::milli>(end - start).count());
+        session.SwitchToCanvas(busiest);
     }
-    std::sort(exportMs.begin(), exportMs.end());
-    std::sort(idleMs.begin(), idleMs.end());
-    std::sort(oneItemMs.begin(), oneItemMs.end());
-    const std::vector<double>& saveMs = idleMs;
-
+    std::sort(strokeMs.begin(), strokeMs.end());
+    std::sort(switchMs.begin(), switchMs.end());
     const uintmax_t bytes = std::filesystem::file_size(out, ec);
 
-    std::printf("%-10s %.0f KB | ExportSnapshot %.2f ms | Save: first after load %.2f ms, "
-                "nothing changed %.2f ms, one snippet changed %.2f ms\n",
-                std::filesystem::path(root).filename().string().c_str(), static_cast<double>(bytes) / 1024.0,
-                exportMs[exportMs.size() / 2], firstSaveMs, idleMs[idleMs.size() / 2],
-                oneItemMs[oneItemMs.size() / 2]);
-    (void)saveMs;
+    std::printf("%-10s %.0f KB | whole library %.2f ms | a stroke %.2f ms | a canvas switch %.2f ms\n",
+                std::filesystem::path(root).filename().string().c_str(), static_cast<double>(bytes) / 1024.0, wholeMs,
+                strokeMs[strokeMs.size() / 2], switchMs[switchMs.size() / 2]);
+    session.SetLibraryStore(nullptr);
     std::filesystem::remove(out, ec);
 }
 

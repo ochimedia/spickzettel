@@ -4,7 +4,8 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "core/canvas/canvas_manager.h"
 #include "core/persistence/image_codec.h"
@@ -15,14 +16,15 @@ namespace sz::core::persistence {
 
 // The library - folders, canvases, snippets and their pictures - in one
 // SQLite file, and the sole persistence boundary for everything the overlay
-// shows: there is no save or load anywhere else in the app (see Session's
-// debounced autosave, which is what calls Save).
+// shows: there is no save or load anywhere else in the app. Every change
+// the session makes is written here as it is made, in one transaction (see
+// Write), so the file always holds what the app holds.
 //
-// One file, and every write to it is a transaction: a save lands whole or
-// not at all, whatever stops it partway - a crash, a power cut, a disk
-// that fills up. There is no state in between for a later start to find
-// and reconcile, which is what the directory tree this replaces spent most
-// of its code on (see docs/ARCHITECTURE.md, "Persistence").
+// Every write lands whole or not at all, whatever stops it partway - a
+// crash, a power cut, a disk that fills up. There is no state in between
+// for a later start to find and reconcile, which is what the directory
+// tree this replaces spent most of its code on (see docs/ARCHITECTURE.md,
+// "Persistence").
 //
 // Tables (see the .cpp for the schema):
 //   meta      - which folder and canvas are current
@@ -89,35 +91,41 @@ public:
     // emptied loads as an empty snapshot, which is not a first run. A value
     // a row carries that cannot be used - a coordinate that is not finite,
     // a stroke blob cut short - is repaired rather than refused, and the
-    // repaired row is written back by the next save.
+    // repaired row is written back as it now reads.
     std::optional<CanvasManagerSnapshot> Load();
 
-    // Writes what changed since this store last read or wrote the library,
-    // in one transaction: every folder and canvas that differs, every
-    // snippet whose content or place differs, and the removal of everything
-    // the library no longer holds (with its picture). True when it landed;
-    // false when it did not, and then nothing did, and the next Save tries
-    // all of it again.
+    // Pictures written with a change: a screenshot's pixels (width*height*4
+    // bytes, RGBA8, row-major, top-left origin), stored with a thumbnail,
+    // and a copy's picture copied from its source's as stored.
+    struct NewPicture {
+        uint64_t itemId = 0;
+        const uint8_t* pixelsRGBA = nullptr;
+        int width = 0;
+        int height = 0;
+    };
+    struct PictureWrites {
+        std::vector<NewPicture> captured;
+        std::vector<std::pair<uint64_t, uint64_t>> copies;  // from, to
+        bool Empty() const { return captured.empty() && copies.empty(); }
+    };
+
+    // Writes one change to the library, in one transaction: the rows
+    // `changes` names, read from `view`, and `pictures`. True when it
+    // landed; false when it did not, and then nothing did - the caller puts
+    // its model back (see CanvasManager::RollBack). Nothing to write is a
+    // write that landed.
+    bool Write(const LibraryView& view, const LibraryChanges& changes, const PictureWrites& pictures = {});
+    // Writes the whole library: every row, and every one it does not hold
+    // taken out. For a library made rather than changed - a test's.
     bool Save(const LibraryView& view);
     bool Save(const CanvasManagerSnapshot& snapshot) {
         return Save(LibraryView{snapshot.folders, snapshot.canvases, snapshot.currentFolderId,
                                 snapshot.currentCanvasId});
     }
 
-    // How many snippet rows the last Save that landed wrote - for a test to
-    // see that an unchanged snippet is not written again.
-    size_t ItemsWrittenByLastSave() const { return itemsWrittenByLastSave_; }
-
-    // Stores `pixelsRGBA` (width*height*4 bytes, RGBA8, row-major, top-left
-    // origin) as snippet `itemId`'s picture, with a thumbnail, replacing
-    // any it had. At once rather than with the next save: a screenshot is
-    // the one thing in the library that cannot be made again (see
-    // Session::CaptureShotItem). A picture whose snippet is never saved is
-    // removed at the next Load.
+    // Stores a picture for `itemId` on its own - see NewPicture - replacing
+    // any it had.
     bool SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int width, int height);
-    // Gives `toItemId` a copy of `fromItemId`'s picture, as stored - no
-    // decoding. False when there is none to copy.
-    bool CopyImage(uint64_t fromItemId, uint64_t toItemId);
     // A snippet's picture, decoded; nullopt when it has none or it cannot
     // be read.
     std::optional<DecodedImage> LoadImage(uint64_t itemId);
@@ -125,36 +133,10 @@ public:
     // Whether the library holds a picture for `itemId`, without reading it.
     bool HasImage(uint64_t itemId);
 
-    // Copies the library as it is in the file to `file`, which must not
-    // exist - the start of a recovery copy (see Session::WriteRecoveryCopy).
-    bool WriteCopyTo(const std::filesystem::path& file);
-
 private:
-    // What was last written for a folder, canvas or snippet - what Save
-    // compares against to know whether a row needs writing.
-    struct FolderRow {
-        int64_t position = 0;
-        std::string name;
-        int64_t createdAt = 0;
-        int64_t deletedAt = 0;
-        bool operator==(const FolderRow&) const = default;
-    };
-    struct CanvasRow {
-        uint64_t folderId = 0;
-        int64_t position = 0;
-        std::string name;
-        int64_t createdAt = 0;
-        int64_t deletedAt = 0;
-        bool operator==(const CanvasRow&) const = default;
-    };
-    struct ItemRow {
-        uint64_t canvasId = 0;
-        int64_t position = 0;
-        // See ItemContentHash in the .cpp. 0 for a row read back repaired,
-        // which no content hashes to, so that it is written again.
-        uint64_t hash = 0;
-        bool operator==(const ItemRow&) const = default;
-    };
+    // The rows of one Write, inside its transaction. False at the first
+    // statement that fails.
+    bool WriteRows(const LibraryView& view, const LibraryChanges& changes, const PictureWrites& pictures);
 
     // Open, and whether the store may be used - opened, not a newer
     // library, and not broken by a Load that failed.
@@ -176,13 +158,6 @@ private:
     // A Load that failed partway: the file is not what this store knows it
     // to be, so nothing is written over it.
     bool broken_ = false;
-
-    std::optional<uint64_t> writtenCurrentFolderId_;
-    std::optional<uint64_t> writtenCurrentCanvasId_;
-    std::unordered_map<uint64_t, FolderRow> writtenFolders_;
-    std::unordered_map<uint64_t, CanvasRow> writtenCanvases_;
-    std::unordered_map<uint64_t, ItemRow> writtenItems_;
-    size_t itemsWrittenByLastSave_ = 0;
 };
 
 }  // namespace sz::core::persistence

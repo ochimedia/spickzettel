@@ -782,9 +782,8 @@ TEST_F(TrayControllerPersistenceTest, ACaptureWithPixelsIsSavedAsTheSnippetsImag
 }
 
 // A silent capture while the overlay is hidden, with notices off, shows
-// nothing - so no frame runs the autosave. The snippet has to be written
-// all the same, or a crash before the next show loses the capture and the
-// next save drops its picture as nobody's.
+// nothing - and no frame follows it. It is in the library all the same,
+// picture and all, written as it was made.
 TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAFrame) {
     // A library on disk already, so this is not a first run - which would
     // show the overlay with its welcome note rather than start hidden.
@@ -802,8 +801,7 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAF
 
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
     EXPECT_FALSE(host.overlayWindow.IsVisible());
-    EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
-    EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "nothing left to retry";
+    EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "nothing to retry";
 
     persistence::LibraryStore reopened(library_);
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
@@ -821,11 +819,12 @@ TEST_F(TrayControllerPersistenceTest, ASilentCaptureWhileHiddenIsOnDiskWithoutAF
     EXPECT_EQ(saved->pixelsRGBA, host.overlayWindow.captureReturnsPixelsRGBA);
 }
 
-TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromTheBackgroundTimer) {
-    // A library on disk, so the app starts hidden - and then, once it has
-    // started, another program writing to it: the save fails, and keeps
-    // failing until it lets go. (Before the start, it would refuse it: see
-    // InitializeRefusesALibraryFileItCannotRead.)
+// ===== When the library cannot be written =====
+
+// A capture while hidden whose write fails is not made - nothing that looks
+// captured and is not in the library - and the overlay says so when it is
+// next up. Nothing is left to retry: the file holds what the app holds.
+TEST_F(TrayControllerPersistenceTest, ACaptureWhileHiddenThatCannotBeWrittenIsNotMade) {
     ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
     host.libraryPath = library_;
@@ -837,83 +836,23 @@ TEST_F(TrayControllerPersistenceTest, AFlushThatFailsWhileHiddenIsRetriedFromThe
     config.showToastsWhileHidden = false;
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
-    HeldLibrary held(library_, /*readers=*/true);
-
-    host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
-    EXPECT_TRUE(controller.GetSession().HasUnsavedChanges());
-    ASSERT_GT(host.backgroundTimerIntervalMs, 0) << "no frame will come; something else has to";
-
-    host.FireBackgroundTimer();
-    EXPECT_TRUE(controller.GetSession().HasUnsavedChanges()) << "still in the way";
-    EXPECT_GT(host.backgroundTimerIntervalMs, 0) << "so still scheduled";
-
-    held.Release();
-    host.FireBackgroundTimer();
-    EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
-    EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "done, and stopped";
-    const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(library_).Load();
-    ASSERT_TRUE(loaded.has_value());
+    {
+        HeldLibrary held(library_, /*readers=*/true);
+        host.TriggerHotkey(FindHotkeyId(host, config.hotkeySilentCapture));
+    }
     size_t items = 0;
-    for (const Canvas& canvas : loaded->canvases) {
+    for (const Canvas& canvas : controller.GetSession().Manager().Canvases()) {
         items += canvas.items.size();
     }
-    EXPECT_EQ(items, 1u);
+    EXPECT_EQ(items, 0u) << "not made";
+    EXPECT_TRUE(controller.GetSession().LastWriteFailed());
+    EXPECT_FALSE(controller.Overlay().PersistenceWarning().empty());
+    EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "nothing owed";
 }
 
-// ===== When the library cannot be written =====
-
-// Exit is the one flush with no retry after it. What cannot go into the
-// library goes into a copy beside it, rather than nowhere.
-TEST_F(TrayControllerPersistenceTest, ExitWritesARecoveryCopyWhenTheLibraryCannotBeSaved) {
-    ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
-    test::FakePlatformHost host;
-    host.libraryPath = library_;
-    host.overlayWindow.captureReturnsHandle = 7;
-    host.overlayWindow.captureReturnsWidth = 1;
-    host.overlayWindow.captureReturnsHeight = 1;
-    host.overlayWindow.captureReturnsPixelsRGBA = {9, 9, 9, 255};
-    const AppConfig config = DefaultConfig();
-    TrayController controller(host, config);
-    ASSERT_TRUE(controller.Initialize());
-    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
-    ASSERT_TRUE(controller.GetSession().HasUnsavedChanges());
-    // The library stops being writable before the exit: another program
-    // is writing to it.
-    HeldLibrary held(library_, /*readers=*/true);
-
-    host.TriggerTrayCommand(platform::TrayCommand::Exit);
-    EXPECT_TRUE(host.quitCalled) << "an exit is an exit";
-
-    std::filesystem::path recovery;
-    for (const auto& entry : std::filesystem::directory_iterator(dir_)) {
-        const std::string name = entry.path().filename().string();
-        if (name.rfind("library-recovery-", 0) == 0 && entry.path().extension() == ".db") {
-            recovery = entry.path();
-        }
-    }
-    ASSERT_FALSE(recovery.empty()) << "no recovery copy beside the library";
-    persistence::LibraryStore recovered(recovery);
-    const std::optional<CanvasManagerSnapshot> loaded = recovered.Load();
-    ASSERT_TRUE(loaded.has_value());
-    size_t items = 0;
-    for (const Canvas& canvas : loaded->canvases) {
-        for (const Item& item : canvas.items) {
-            ++items;
-            ASSERT_TRUE(item.picture.stored) << "the snippet has its picture";
-            // The picture was in the real library, not in memory; the copy
-            // has to hold it all the same, or it does not open on its own.
-            const std::optional<persistence::DecodedImage> picture = recovered.LoadImage(item.id);
-            ASSERT_TRUE(picture.has_value());
-            EXPECT_EQ(picture->pixelsRGBA, host.overlayWindow.captureReturnsPixelsRGBA);
-        }
-    }
-    EXPECT_EQ(items, 1u);
-    std::filesystem::path note = recovery;
-    note += ".txt";
-    EXPECT_TRUE(std::filesystem::is_regular_file(note)) << "says what it is";
-}
-
-TEST_F(TrayControllerPersistenceTest, TheOSEndingTheSessionFlushesTheLibrary) {
+// A capture is on disk as it is made; the OS ending the session finds
+// nothing owed.
+TEST_F(TrayControllerPersistenceTest, TheOSEndingTheSessionFindsTheLibraryWritten) {
     ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
     test::FakePlatformHost host;
     host.libraryPath = library_;
@@ -922,10 +861,8 @@ TEST_F(TrayControllerPersistenceTest, TheOSEndingTheSessionFlushesTheLibrary) {
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
-    ASSERT_TRUE(controller.GetSession().HasUnsavedChanges());
 
     host.TriggerSessionEnd();  // logoff, with no frame between the capture and it
-    EXPECT_FALSE(controller.GetSession().HasUnsavedChanges());
     const std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(library_).Load();
     ASSERT_TRUE(loaded.has_value());
     size_t items = 0;
@@ -981,38 +918,6 @@ TEST_F(TrayControllerPersistenceTest, TheStandInForASettingsFileSetAsideIsWritte
     host.FireBackgroundTimer();
     ASSERT_TRUE(std::filesystem::is_regular_file(dir_ / "config.json"));
     EXPECT_FALSE(ParseConfig(ReadFile(dir_ / "config.json")).purgeDeleted);
-}
-
-// A frame the window cannot draw - the screen locked, the device lost -
-// still counts toward the autosave: an edit made just before Win+L is
-// saved while locked, not at the unlock.
-TEST_F(TrayControllerPersistenceTest, AnEditIsSavedWhileFramesAreSkipped) {
-    test::FakePlatformHost host;
-    host.libraryPath = library_;
-    const AppConfig config = DefaultConfig();
-    TrayController controller(host, config);
-    ASSERT_TRUE(controller.Initialize());
-    if (!host.overlayWindow.IsVisible()) {  // a first run comes up in edit mode by itself
-        host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
-    }
-    ASSERT_TRUE(host.overlayWindow.IsVisible());
-    CanvasManager& manager = test::Model(controller.GetSession());
-    const ItemId id = manager.CreateItem(false, Rect{100, 100, 300, 200}, "Just before the lock");
-    ASSERT_FALSE(host.overlayWindow.skippedFrameCallback == nullptr);
-
-    for (int frame = 0; frame < 40; ++frame) {
-        host.overlayWindow.skippedFrameCallback(0.1f);
-    }
-
-    const std::optional<CanvasManagerSnapshot> saved = persistence::LibraryStore(library_).Load();
-    ASSERT_TRUE(saved.has_value());
-    bool found = false;
-    for (const Canvas& canvas : saved->canvases) {
-        for (const Item& item : canvas.items) {
-            found = found || item.id == id;
-        }
-    }
-    EXPECT_TRUE(found);
 }
 
 TEST_F(TrayControllerPersistenceTest, ExitWritesASettingsFileStillOwed) {
@@ -1090,13 +995,15 @@ TEST_F(TrayControllerPersistenceTest, InitializeLeavesDefaultStateWhenNothingSav
     EXPECT_EQ(name[10], ' ') << name;
 }
 
-TEST_F(TrayControllerPersistenceTest, HidingTheOverlayFlushesAPendingChangeToDisk) {
+// A first run writes the library it begins with, and every change after
+// is in the file as it is made - a capture before the overlay is hidden.
+TEST_F(TrayControllerPersistenceTest, AFirstRunsLibraryAndACaptureAreOnDiskAsTheyAreMade) {
     test::FakePlatformHost host;
     host.libraryPath = library_;
     const AppConfig config = DefaultConfig();
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
-    ASSERT_TRUE(persistence::LibraryStore(library_).Load()->folders.empty()) << "nothing written yet";
+    ASSERT_EQ(persistence::LibraryStore(library_).Load()->canvases.size(), 1u) << "the library it began with";
 
     // QuickCapture creates an item (a real CanvasManager mutation) purely
     // through plain data/platform calls - no ImGui context needed, unlike
@@ -1106,13 +1013,6 @@ TEST_F(TrayControllerPersistenceTest, HidingTheOverlayFlushesAPendingChangeToDis
     const int captureId = FindHotkeyId(host, config.hotkeyQuickCapture);
     host.TriggerHotkey(captureId);
     ASSERT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->items.size(), 1u);
-
-    // QuickCapture itself already lands in edit mode (see its own test
-    // above) - toggle the edit hotkey again to hide, which is one of the
-    // two explicit flush points (see TrayController::ToggleMode).
-    const int editId = FindHotkeyId(host, config.hotkeyEditMode);
-    host.TriggerHotkey(editId);
-    ASSERT_FALSE(host.overlayWindow.IsVisible());
 
     const std::optional<CanvasManagerSnapshot> reloaded = persistence::LibraryStore(library_).Load();
     ASSERT_TRUE(reloaded.has_value());
@@ -1129,7 +1029,7 @@ TEST_F(TrayControllerPersistenceTest, HidingTheOverlayFlushesAPendingChangeToDis
     EXPECT_NE(reloaded->canvases[1].id, reloaded->canvases[0].id);
 }
 
-TEST_F(TrayControllerPersistenceTest, TrayExitFlushesAPendingChangeToDisk) {
+TEST_F(TrayControllerPersistenceTest, TrayExitLeavesTheLibraryWritten) {
     test::FakePlatformHost host;
     host.libraryPath = library_;
     const AppConfig config = DefaultConfig();

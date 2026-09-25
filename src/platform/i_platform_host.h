@@ -52,11 +52,9 @@ public:
     virtual std::filesystem::path GetLibraryPath() const = 0;
 
     // Calls `callback` on the app thread every `intervalMs`, until called
-    // again with 0. The one clock the app has while the overlay is hidden:
-    // frames stop with the window, and the debounced autosave runs on
-    // frames, so a save that failed on the way to hidden - or a capture
-    // taken there - would otherwise wait for the next show to be retried.
-    // See TrayController::OnBackgroundTimer.
+    // again with 0. The one clock the app has while the overlay is hidden,
+    // when frames stop with the window: what retries a settings file that
+    // could not be written. See TrayController::OnBackgroundTimer.
     virtual void SetBackgroundTimer(int intervalMs, std::function<void()> callback) = 0;
 
     // Called on the app thread when the OS is ending the user's session -

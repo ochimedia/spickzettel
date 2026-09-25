@@ -129,8 +129,8 @@ bool TrayController::Initialize() {
 
     // Empty path means "this host has nowhere to persist to" (e.g. a
     // FakePlatformHost in a test that hasn't opted in) - leave the
-    // session without a library store entirely, matching how it
-    // behaves before this feature existed (no autosave, no image writes).
+    // session without a library store entirely: nothing is written, and
+    // everything else works the same.
     bool freshInstall = false;
     if (!host_.GetLibraryPath().empty()) {
         session_.SetLibraryStore(&libraryStore_);
@@ -151,8 +151,10 @@ bool TrayController::Initialize() {
             // empty one - that person has already met the app and shouldn't
             // be greeted again. Load() also returns nothing for a file it
             // set aside, where showing the welcome note is the right call
-            // anyway.
+            // anyway. What the app starts with - a folder and a canvas - is
+            // written now, for every command after to write into.
             freshInstall = true;
+            session_.WriteWholeLibrary();
         }
         // No eager display-size reconciliation here anymore - OverlayApp::OnFrame
         // now does that live, every frame, against ImGui's own DisplaySize (see
@@ -259,13 +261,9 @@ void TrayController::OnSilentCaptureHotkey() {
         // saying so costs nothing at all.
         return;
     }
-    // Hidden, and staying hidden unless a notice goes up for two seconds:
-    // the picture is on disk (see Session::CaptureShotItem) but the record
-    // that names it is not, and no frame is coming to run the autosave.
-    // Written now, so a crash before the overlay is next shown does not
-    // lose the capture - or, worse, leave the picture as an orphan the
-    // next save sets aside.
-    FlushOrRetryLater();
+    // Hidden, and staying hidden unless a notice goes up for two seconds.
+    // The capture is in the library already, written with the command that
+    // made it (see Session::CreateItem).
     if (!settings_.Stored().showToastsWhileHidden) {
         // Nothing will ever draw it, so drop it rather than leave it
         // queued for whenever the overlay next comes up - see
@@ -305,10 +303,6 @@ void TrayController::HideNoticeIfDone() {
         return;  // a real mode took over while the message was up
     }
     overlayApp_.SetNoticeOnly(false);
-    // The capture that caused this notice is a library change, and frames
-    // stop the moment the window goes - so the same explicit flush every
-    // other way out of the overlay does (see ToggleMode).
-    FlushOrRetryLater();
     // Called from inside OverlayApp::OnFrame, which is inside the frame
     // callback: safe, because the renderer ends the ImGui frame after that
     // callback returns whether or not the window is still visible.
@@ -387,13 +381,9 @@ void TrayController::EnsureMode(bool viewOnly, bool keepProfileContext) {
 }
 
 void TrayController::PutAway() {
-    // OnFrame (and so the debounced autosave check inside it) only runs
-    // while visible - and in the pinned view nothing is edited - so going
-    // away is a safe point that needs its own explicit flush: the next
-    // debounce window might otherwise never arrive. Settled first, so the
-    // flush has what was being typed or drawn - see SettleForPersistence.
+    // What was being typed or drawn is finished where it stands, and so
+    // written - see SettleForPersistence.
     overlayApp_.SettleForPersistence();
-    FlushOrRetryLater();
     session_.ReleaseFrozenScreen();
     if (overlayApp_.IsViewOnly() && session_.Manager().CurrentCanvasHasPinnedItems()) {
         // Already click-through and unfocused: only what is drawn changes.
@@ -408,78 +398,28 @@ void TrayController::PutAway() {
 }
 
 namespace {
-// How long between attempts at a save that failed while the overlay is
-// hidden. Generous: a disk that is full or a file that is held open does
+// How long between attempts at writing a settings file that could not be
+// written. Generous: a disk that is full or a file that is held open does
 // not clear itself in a hurry, and each attempt is a synchronous write on
 // the app thread.
-constexpr int kHiddenSaveRetryMs = 10000;
+constexpr int kConfigRetryMs = 10000;
 }  // namespace
 
-void TrayController::FlushOrRetryLater() {
-    // Landed and nothing owed - a settings file that could not be written
-    // is owed too - or scheduled again.
-    if (session_.Flush() && !session_.HasUnsavedChanges() && !configWriteOwed_) {
-        host_.SetBackgroundTimer(0, nullptr);
-        return;
-    }
-    host_.SetBackgroundTimer(kHiddenSaveRetryMs, [this] { OnBackgroundTimer(); });
-}
-
-bool TrayController::FlushForShutdown() {
+void TrayController::SettleForExit() {
+    // What was being typed or drawn is finished, and so written: every
+    // change is written as it is made (see Session), so nothing else is
+    // owed to the library. The settings file may be.
     overlayApp_.SettleForPersistence();
     if (configWriteOwed_) {
-        PersistConfig();  // owed since a settings edit; the last chance for it too
+        PersistConfig();  // owed since a settings edit; the last chance for it
     }
-    // Twice: a lock another program held a moment ago may be gone, and a
-    // second attempt is cheap against what the alternative costs.
-    if (session_.Flush() || session_.Flush()) {
-        return true;
-    }
-    const std::optional<std::filesystem::path> recovery = RecoveryCopyPath();
-    const bool recovered = recovery.has_value() && session_.WriteRecoveryCopy(*recovery);
-    // ACCEPTED OUTCOME: when the library cannot be written twice over and
-    // the recovery copy beside it cannot be written either - a full
-    // volume, an unwritable parent - what is in memory is lost when the
-    // caller goes on to quit. That is a decision, not an oversight: the
-    // exit was asked for, the OS's session end cannot be held up, the
-    // tray has no window of its own to ask in, and holding a process open
-    // against an explicit exit was judged worse than losing what three
-    // attempts at two destinations could not write. The result is
-    // returned so a caller can say so where it has somewhere to say it.
-    return recovered;
-}
-
-void TrayController::OnSessionEnding() { FlushForShutdown(); }
-
-std::optional<std::filesystem::path> TrayController::RecoveryCopyPath() const {
-    const std::filesystem::path library = host_.GetLibraryPath();
-    if (library.empty()) {
-        return std::nullopt;
-    }
-    // "library-recovery-2026-09-19-22-36-14.db", beside "library.db": the
-    // same place, which is where someone looking for their work will look,
-    // and spelled so that it sorts after the library and reads as what it
-    // is.
-    std::string stamp = TimestampName();
-    for (char& c : stamp) {
-        if (c == ' ' || c == ':') {
-            c = '-';
-        }
-    }
-    return library.parent_path() / (library.stem().string() + "-recovery-" + stamp + library.extension().string());
-}
+}void TrayController::OnSessionEnding() { SettleForExit(); }
 
 void TrayController::OnBackgroundTimer() {
     if (configWriteOwed_) {
         PersistConfig();
     }
-    // The library only while hidden: up again, frames are running and the
-    // autosave's own clock, with its backoff, is the one to use.
-    const bool visible = host_.GetOverlayWindow().IsVisible();
-    if (!visible && session_.HasUnsavedChanges()) {
-        session_.Flush();
-    }
-    if (!configWriteOwed_ && (visible || !session_.HasUnsavedChanges())) {
+    if (!configWriteOwed_) {
         host_.SetBackgroundTimer(0, nullptr);
     }
 }
@@ -590,10 +530,9 @@ void TrayController::RestartOverlay() {
         return;
     }
     // Same teardown a deliberate hide does - the frozen image belongs to
-    // the session being ended, and hiding is the safe point autosave needs.
+    // the session being ended, and what the hand is doing ends with it.
     const bool viewOnly = overlayApp_.IsViewOnly();
     overlayApp_.SettleForPersistence();
-    session_.Flush();
     session_.ReleaseFrozenScreen();
     window.Hide();
     // The one show that isn't one: same session, same profile, and
@@ -640,7 +579,7 @@ void TrayController::PersistConfig() {
     overlayApp_.SetConfigWriteFailed(written ? std::nullopt : std::optional<std::string>(path.string()));
     configWriteOwed_ = !written;
     if (configWriteOwed_) {
-        host_.SetBackgroundTimer(kHiddenSaveRetryMs, [this] { OnBackgroundTimer(); });
+        host_.SetBackgroundTimer(kConfigRetryMs, [this] { OnBackgroundTimer(); });
     }
 }
 
@@ -740,7 +679,7 @@ void TrayController::OnTrayCommand(platform::TrayCommand command) {
             ToggleMode(/*viewOnly=*/false);
             break;
         case platform::TrayCommand::Exit:
-            FlushForShutdown();
+            SettleForExit();
             host_.Quit(0);
             break;
     }

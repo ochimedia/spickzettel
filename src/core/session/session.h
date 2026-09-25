@@ -4,7 +4,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -25,6 +24,11 @@ namespace sz::core {
 // history, the disk and the GPU in one place, and none can be made past
 // them. The model is handed out read-only for that reason.
 //
+// Every command is written to the library as it is made, in one
+// transaction (see Land): the file holds what the model holds at every
+// moment but in the middle of a gesture. A command whose write fails is
+// not made - the model is put back as it was, and LastWriteFailed says so.
+//
 // No ImGui here, and nothing about gestures, popovers or panels. The window
 // it is attached to is the platform's, for the two things the session needs
 // from it: textures, and screen captures.
@@ -42,8 +46,8 @@ public:
     void AttachWindow(platform::IOverlayWindow* window) { window_ = window; }
     // Where the library is read from and written to. Left null, it is never
     // persisted, and everything else works the same.
-    void SetLibraryStore(persistence::LibraryStore* store) { library_.store = store; }
-    persistence::LibraryStore* Store() const { return library_.store; }
+    void SetLibraryStore(persistence::LibraryStore* store) { store_ = store; }
+    persistence::LibraryStore* Store() const { return store_; }
 
     // Wholesale-replaces the library with a previously-saved one - see
     // CanvasManager::ImportSnapshot. Called once, right after startup.
@@ -54,7 +58,17 @@ public:
 
     // The library, to read: what every gesture, the Overview and the
     // texture sync look at. Changed only through the commands below.
-    const CanvasManager& Manager() const { return library_.manager; }
+    const CanvasManager& Manager() const { return manager_; }
+
+    // Whether the last command's write failed - so that command was not
+    // made - with none landing since: for a UI to say so, and keep saying
+    // so until one does.
+    bool LastWriteFailed() const { return lastWriteFailed_; }
+    // Writes the whole library as it is: for one begun in memory - a first
+    // run's, a folder and a canvas - before its first command, which writes
+    // only what it changes and would find what holds it missing. True
+    // when it landed, and always without a store.
+    bool WriteWholeLibrary();
 
     // ===== Changes that are not undone =====
     //
@@ -121,37 +135,7 @@ public:
     // DeletePermanently's texture sync, like ImportLibrary's own erasing and
     // for the same reason; and nothing deleted has a texture to give back.
     size_t EraseDeletedBefore(int64_t cutoff);
-    // ===== Keeping the disk and the GPU in step =====
-
-    // The debounced autosave - see kAutosaveQuietSeconds for the policy.
-    // Call once per frame.
-    void Tick(float deltaSeconds);
-    // Writes the library right now if anything's changed since its last
-    // save, bypassing the debounce - for a safe point where no frame will
-    // come soon enough to catch it (hiding the overlay, exiting). True
-    // when everything is on disk afterwards - nothing was pending, or the
-    // save landed whole. False means something is not, and stays owed:
-    // the caller decides what to tell the user, the next Tick or Flush
-    // tries again.
-    bool Flush();
-    // Whether anything is owed to the disk: a change since the last save
-    // that landed, or a capture whose picture could not be written yet
-    // (see CaptureShotItem). What the autosave and Flush act on, and what a
-    // UI can show.
-    bool HasUnsavedChanges() const;
-    // Whether the most recent save attempt failed and is waiting to be
-    // retried - for a UI to say so. Cleared by the save that lands.
-    bool LastSaveFailed() const { return library_.saveRetryBackoffSeconds > 0.0f; }
-    // Writes what is in memory to a new library at `file`, pictures
-    // included - from this session where it holds the pixels (a capture
-    // whose write has not landed), and from the real library otherwise, so
-    // that the copy opens on its own. A note beside it (`file` plus ".txt")
-    // says where it came from and whether it is whole. For the moment the
-    // app has to go - exit, the OS ending the session - and the library it
-    // was working in cannot be written: the alternative is losing the
-    // changes silently. True if the copy is whole; false if a picture could
-    // not be copied, or the copy itself not written.
-    bool WriteRecoveryCopy(const std::filesystem::path& file);
+    // ===== Keeping the GPU in step =====
 
     // Brings GPU shot textures in line with whichever canvas is current:
     // loads the ones it needs, frees every other canvas's (see
@@ -185,9 +169,8 @@ public:
     // Every texture this handed out is lost - the GPU device was replaced
     // (see IOverlayWindow::TextureGeneration). Each is let go of, and made
     // again from what it showed: the current canvas's pictures on the next
-    // EnsureTexturesForCurrentCanvas, from the library, a picture
-    // not written yet from the pixels kept for it, and the frozen screen
-    // from the pixels kept for cropping.
+    // EnsureTexturesForCurrentCanvas, from the library, and the frozen
+    // screen from the pixels kept for cropping.
     void ReplaceLostTextures();
 
     // ===== Undo =====
@@ -384,21 +367,45 @@ private:
     // What the tests reach the model through, to set up a library without
     // going command by command - see tests/support/session_test_access.h.
     friend struct SessionTestAccess;
-    CanvasManager& Model() { return library_.manager; }
-    const CanvasManager& Model() const { return library_.manager; }
+    CanvasManager& Model() { return manager_; }
+    const CanvasManager& Model() const { return manager_; }
 
-    // Captures what is under `item` into its picture - cropped out of
-    // the frozen screen while one is held, live otherwise - uploads it, and
-    // writes it to disk at once rather than waiting for the autosave (see
-    // LibraryStore::SaveImage).
+    // ----- Writing -----
+
+    // What a command could change, before it runs - see
+    // CanvasManager::TakeCheckpoint. `items` are the snippets whose content
+    // it may change; the rest of the library it may only reorder, add to or
+    // take from.
+    using Checkpoint = CanvasManager::Checkpoint;
+    Checkpoint Before(const std::vector<ItemId>& items) const { return Model().TakeCheckpoint(items); }
+    // Writes everything that changed since `before`, with the pictures the
+    // command made (see captured_), in one transaction. When the write
+    // fails, the model is put back as `before` has it - the command is not
+    // made - and LastWriteFailed says so. True when it landed, and always
+    // without a store.
+    bool Land(const Checkpoint& before);
+    // Land, then file `step` on `canvas`'s history - folded into the step on
+    // top with `merge` (see history::History::MergeIntoTop) - and let the
+    // histories of the snippets the command moved follow them (see
+    // migrations_). False when the write failed, and then nothing is
+    // filed.
+    bool Commit(const Checkpoint& before, CanvasId canvas, history::Step step, bool merge = false);
+    // Erases what `ids` name for good - folders, canvases or snippets - as
+    // one command: out of the model and the library, their textures
+    // released and their history forgotten once it has landed. How many
+    // went; none when the write failed.
+    size_t EraseForGood(const std::vector<uint64_t>& ids);
+
+    // Captures what is under `item` into its picture - cropped out of the
+    // frozen screen while one is held, live otherwise - and uploads it. The
+    // pixels are written with the command that made the snippet (see
+    // captured_).
     void CaptureShotItem(Item& item);
     // Gives the copy `copyId` a picture of its own when `sourceId` has one
-    // - a copy must never share a file or a texture with its source. The
-    // pixels come from this session when the source's capture is still
-    // waiting to be written (see PendingPicture) and from disk otherwise,
-    // and are written under the copy's own name at once (a write that
-    // fails waits the same way). False when the source names a picture
-    // that could not be read, so the copy lacks it.
+    // - a copy must never share a picture or a texture with its source -
+    // copied as stored, with the command that made the copy. False when
+    // the source's picture cannot be found in the library, so the copy
+    // lacks it.
     bool ClonePicturesForCopy(ItemId sourceId, ItemId copyId);
     // Ends whatever gesture is open - a text edit (as it stands), a
     // placement, a style edit, an erase or a shape - and files it, so that
@@ -407,78 +414,26 @@ private:
     // gesture at a time is what keeps a step from being filed in the middle
     // of another's changes, where undoing it would undo part of those.
     void EndOpenGesture();
-    // Files `step` on `canvas`'s history - folded into the step on top
-    // with `merge` (see history::History::MergeIntoTop). False for a step
-    // with nothing in it.
-    bool Record(CanvasId canvas, history::Step step, bool merge = false);
     // Where each of these snippets is now. Ids that name nothing are left
     // out.
     using Placements = std::vector<std::pair<ItemId, history::Placement>>;
     Placements PlacementsOf(const std::vector<ItemId>& ids) const;
-    // Files the change from `before` to how those snippets are placed now
+    // Commits the change from `before` to how those snippets are placed now
     // as one step - see EndPlacement.
-    bool RecordPlacements(const Placements& before, bool merge = false);
+    bool CommitPlacements(const Checkpoint& checkpoint, const Placements& before, bool merge = false);
     // A cut's paste or a send of one snippet: moves `itemId` from the
-    // canvas holding it onto `target`, on top, and its history with it (see
-    // history::History::Migrate). The change for the step that files it,
-    // or nullopt, moving nothing, for no such snippet, one deleted, or one
-    // already there.
+    // canvas holding it onto `target`, on top; its history follows once the
+    // command lands (see migrations_). The change for the step that files
+    // it, or nullopt, moving nothing, for no such snippet, one deleted, or
+    // one already there.
     std::optional<history::Change> MoveItemTo(ItemId itemId, CanvasId target);
     // Moves a copy just made off its source, far enough to see that there
     // are two, and re-anchors it there.
     void OffsetCopy(ItemId copyId);
     // Applies the step on top of one of the current canvas's stacks.
     std::optional<UndoStep> StepHistory(bool undo);
-    // A library, as the session holds one: the records, where they are
-    // written, and the debounced autosave between the two.
-    struct LibraryInstance {
-        CanvasManager manager;
-        persistence::LibraryStore* store = nullptr;
-        // lastSavedGeneration starts at 0, matching
-        // CanvasManager::Generation()'s own starting value, so a freshly
-        // loaded/started library (nothing changed yet) correctly reads as
-        // "nothing pending" from the very first frame.
-        uint64_t lastObservedGeneration = 0;
-        uint64_t lastSavedGeneration = 0;
-        float secondsSinceLastChange = 0.0f;
-        float secondsSinceFirstUnsavedChange = 0.0f;
-        // After a failed save: how long until the next attempt, and how
-        // long the wait after *that* would be, doubling per failure up to
-        // a ceiling (see kAutosaveRetryMaxSeconds). Zero when the last save
-        // succeeded. The quiet-period timers above are the content's;
-        // these are the disk's, and a failure resets neither of the former
-        // - which is why they cannot double as a retry delay.
-        float saveRetryCountdownSeconds = 0.0f;
-        float saveRetryBackoffSeconds = 0.0f;
-    };
-
-    // A capture's pixels whose write failed at capture time, kept so the
-    // write can be tried again - see CaptureShotItem. A screenshot is the
-    // one thing in the library that cannot be remade, so its pixels are
-    // not let go of until they are on disk.
-    struct PendingPicture {
-        std::vector<uint8_t> pixelsRGBA;
-        int width = 0;
-        int height = 0;
-    };
-    // Tries again to write every pending picture, recording the filename
-    // on its item's picture as it lands. Called before the records
-    // are written, and part of the same all-or-nothing answer. A picture
-    // whose item has since gone for good is dropped.
-    bool SavePendingPictures(LibraryInstance& instance);
-    void UpdateAutosave(LibraryInstance& instance, float deltaSeconds);
-    // The actual write. True means everything the current generation covers
-    // is on disk: every pending picture and every record. False means
-    // it is not, nothing is acknowledged, and a retry is scheduled on its
-    // own backoff.
-    bool SaveLibraryNow(LibraryInstance& instance);
-    bool FlushIfDirty(LibraryInstance& instance);
     std::optional<platform::CaptureResult> CropFrozenScreen(const Rect& rect) const;
 
-    // DeletePermanently without the texture sync and the save that follow
-    // it: the thing, its textures and its history. What ImportLibrary
-    // erases with, before there is a device to sync against.
-    bool Erase(uint64_t id);
     // Starts following `itemId`'s strokes through an erase gesture: keeps
     // the list as it is now, and notes that every stroke is still its own
     // original - see eraseGestureStartSnapshot_.
@@ -493,12 +448,25 @@ private:
     void RecordEraseGesture(ItemId itemId);
 
     platform::IOverlayWindow* window_ = nullptr;
-    // A library as the session holds one - see LibraryInstance. The shape
-    // is kept for a second one (an archive, say) should the app ever look
-    // at two.
-    LibraryInstance library_;
-    // See PendingPicture.
-    std::unordered_map<ItemId, PendingPicture> pendingPictures_;
+    CanvasManager manager_;
+    persistence::LibraryStore* store_ = nullptr;
+    // See LastWriteFailed.
+    bool lastWriteFailed_ = false;
+    // What the command in progress has for Land to write besides rows: the
+    // pixels of the screenshots it captured, and the pictures its copies
+    // take from their sources. Emptied by every Land, landed or not.
+    struct Captured {
+        ItemId item = 0;
+        std::vector<uint8_t> pixelsRGBA;
+        int width = 0;
+        int height = 0;
+    };
+    std::vector<Captured> captured_;
+    std::vector<std::pair<ItemId, ItemId>> pictureCopies_;
+    // The snippets the command in progress moved between canvases, and
+    // where to: their histories follow them once it has landed, and not
+    // before - a command whose write fails has moved nothing.
+    std::vector<std::pair<ItemId, CanvasId>> migrations_;
     // Which canvas's shot textures are currently resident on the GPU, or
     // nullopt before the first sync has run. Compared against the current
     // canvas by EnsureTexturesForCurrentCanvas; a mismatch is what triggers
@@ -520,19 +488,32 @@ private:
     std::vector<Stroke> eraseGestureStartSnapshot_;
     std::vector<size_t> eraseOrigins_;
     std::vector<bool> eraseReplaced_;
-    // The item the circular eraser gesture in progress is erasing, if any.
+    // The item the circular eraser gesture in progress is erasing, if any,
+    // and the library as it was when the gesture began.
     std::optional<ItemId> eraseItemId_;
+    Checkpoint eraseCheckpoint_;
     // The placement gesture in progress: where its snippets were when it
-    // began - see BeginPlacement.
-    std::optional<Placements> placementBefore_;
-    // The style edit in progress: which snippet, and its style when the
-    // edit began - see PreviewStyle.
-    std::optional<std::pair<ItemId, ItemStyle>> styleEditBefore_;
+    // began - see BeginPlacement - and the library as it was then.
+    struct PlacementGesture {
+        Placements before;
+        Checkpoint checkpoint;
+    };
+    std::optional<PlacementGesture> placement_;
+    // The style edit in progress: which snippet, its style when the edit
+    // began - see PreviewStyle - and the library as it was then.
+    struct StyleEdit {
+        ItemId item = 0;
+        ItemStyle before;
+        Checkpoint checkpoint;
+    };
+    std::optional<StyleEdit> styleEdit_;
     // See LiveLayer.
     CanvasState liveLayer_;
-    // The text edit in progress, and the note as it was when it began.
+    // The text edit in progress, the note as it was when it began, and the
+    // library as it was then.
     std::optional<ItemId> textEditItemId_;
     std::string textEditOriginal_;
+    Checkpoint textEditCheckpoint_;
     // Drops the shape in progress without leaving anything - what EndShape
     // does with a drag too short to be meant.
     void CancelShape();

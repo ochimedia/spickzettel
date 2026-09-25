@@ -219,38 +219,66 @@ TEST_F(LibraryStoreTest, OrderIsKeptWhenThingsAreRearranged) {
     std::swap(snapshot.canvases[0], snapshot.canvases[1]);
     std::swap(snapshot.canvases[1].items[0], snapshot.canvases[1].items[1]);
     ASSERT_TRUE(store.Save(snapshot));
-    EXPECT_EQ(store.ItemsWrittenByLastSave(), 0u) << "only their places changed";
 
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
     ASSERT_TRUE(loaded.has_value());
     ExpectSameLibrary(snapshot, *loaded);
 }
 
-// ===== Saving what changed =====
+// ===== Writing a change =====
 
-TEST_F(LibraryStoreTest, AnUnchangedSnippetIsNotWrittenAgain) {
+LibraryView ViewOf(const CanvasManagerSnapshot& snapshot) {
+    return LibraryView{snapshot.folders, snapshot.canvases, snapshot.currentFolderId, snapshot.currentCanvasId};
+}
+
+// A write writes the rows it is told to and no others: a snippet changed
+// in the view but not named stays in the file as it was.
+TEST_F(LibraryStoreTest, AWriteWritesTheRowsItNamesAndNoOthers) {
     CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
     LibraryStore store(file_);
     ASSERT_TRUE(store.Save(snapshot));
-    EXPECT_EQ(store.ItemsWrittenByLastSave(), 2u);
 
-    ASSERT_TRUE(store.Save(snapshot));
-    EXPECT_EQ(store.ItemsWrittenByLastSave(), 0u);
+    snapshot.canvases[0].items[0].name = "Written";
+    snapshot.canvases[0].items[1].name = "Not written";
+    LibraryChanges changes;
+    changes.items = {3};
+    ASSERT_TRUE(store.Write(ViewOf(snapshot), changes));
 
-    snapshot.canvases[0].items[1].rect.x += 1.0f;
-    ASSERT_TRUE(store.Save(snapshot));
-    EXPECT_EQ(store.ItemsWrittenByLastSave(), 1u);
-
-    // ...and a store that has only read the library knows what it read.
-    LibraryStore reopened(file_);
-    ASSERT_TRUE(reopened.Load().has_value());
-    ASSERT_TRUE(reopened.Save(snapshot));
-    EXPECT_EQ(reopened.ItemsWrittenByLastSave(), 0u);
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].items[0].name, "Written");
+    EXPECT_EQ(loaded->canvases[0].items[1].name, "Shot 1");
+    EXPECT_TRUE(store.Write(ViewOf(snapshot), LibraryChanges{})) << "nothing to write lands";
 }
 
-// Every field of a snippet is part of what is compared, so a change to any
-// of them is written - the worst bug a store that skips unchanged rows can
-// have is an edit it thinks it already wrote.
+// A snippet written with its canvas's order: taken out of the middle of a
+// stack and one put in at the bottom, the stack reads back as it is,
+// rather than with the new one beside a stale place.
+TEST_F(LibraryStoreTest, ASnippetIsWrittenWithItsCanvasesOrder) {
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    Item third = snapshot.canvases[0].items[0];
+    third.id = 9;
+    snapshot.canvases[0].items.push_back(third);
+    LibraryStore store(file_);
+    ASSERT_TRUE(store.Save(snapshot));
+
+    snapshot.canvases[0].items.erase(snapshot.canvases[0].items.begin() + 1);  // 4, from the middle
+    LibraryChanges erased;
+    erased.erasedItems = {4};
+    ASSERT_TRUE(store.Write(ViewOf(snapshot), erased));
+    Item bottom = third;
+    bottom.id = 8;
+    snapshot.canvases[0].items.insert(snapshot.canvases[0].items.begin(), bottom);
+    LibraryChanges made;
+    made.items = {8};
+    ASSERT_TRUE(store.Write(ViewOf(snapshot), made));
+
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    ExpectSameLibrary(snapshot, *loaded);
+}
+
+// Every field of a snippet is written with it, and comes back.
 TEST_F(LibraryStoreTest, EveryFieldOfASnippetIsSaved) {
     const std::vector<std::function<void(Item&)>> changes = {
         [](Item& i) { i.name += "x"; },
@@ -286,8 +314,9 @@ TEST_F(LibraryStoreTest, EveryFieldOfASnippetIsSaved) {
     ASSERT_TRUE(store.Save(snapshot));
     for (size_t n = 0; n < changes.size(); ++n) {
         changes[n](snapshot.canvases[0].items[0]);
-        ASSERT_TRUE(store.Save(snapshot));
-        EXPECT_EQ(store.ItemsWrittenByLastSave(), 1u) << "change " << n;
+        LibraryChanges written;
+        written.items = {3};
+        ASSERT_TRUE(store.Write(ViewOf(snapshot), written));
         const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
         ASSERT_TRUE(loaded.has_value());
         EXPECT_EQ(loaded->canvases[0].items[0], snapshot.canvases[0].items[0]) << "change " << n;
@@ -349,7 +378,6 @@ TEST_F(LibraryStoreTest, ASnippetMovedOffACanvasThatGoesIsKept) {
     snapshot.canvases.erase(snapshot.canvases.begin());
     snapshot.currentCanvasId = 6;
     ASSERT_TRUE(store.Save(snapshot));
-    EXPECT_EQ(store.ItemsWrittenByLastSave(), 0u) << "moved, not rewritten";
 
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
     ASSERT_TRUE(loaded.has_value());
@@ -395,36 +423,51 @@ TEST_F(LibraryStoreTest, ASnippetWithAStoredPictureLoadsKnowingIt) {
     EXPECT_TRUE(loaded->canvases[0].items[1].picture.stored);
 }
 
-TEST_F(LibraryStoreTest, APictureIsCopiedAsStored) {
+// A snippet's picture is written with it - captured pixels, or a copy of
+// another's as stored - in the same write.
+TEST_F(LibraryStoreTest, PicturesAreWrittenWithTheirSnippets) {
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
     LibraryStore store(file_);
+    ASSERT_TRUE(store.Save(snapshot));
+    Item copy = snapshot.canvases[0].items[1];
+    copy.id = 7;
+    snapshot.canvases[0].items.push_back(copy);
     const std::vector<uint8_t> pixels = Checkerboard(32, 32);
-    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 32, 32));
-    ASSERT_TRUE(store.CopyImage(4, 7));
-    const std::optional<DecodedImage> copy = store.LoadImage(7);
-    ASSERT_TRUE(copy.has_value());
-    EXPECT_EQ(copy->pixelsRGBA, pixels);
+    LibraryChanges changes;
+    changes.items = {7};
+    LibraryStore::PictureWrites pictures;
+    pictures.captured.push_back({4, pixels.data(), 32, 32});
+    pictures.copies.emplace_back(4, 7);
+    ASSERT_TRUE(store.Write(ViewOf(snapshot), changes, pictures));
+
+    const std::optional<DecodedImage> copied = store.LoadImage(7);
+    ASSERT_TRUE(copied.has_value());
+    EXPECT_EQ(copied->pixelsRGBA, pixels);
     EXPECT_TRUE(store.LoadThumbnail(7).has_value());
-    EXPECT_FALSE(store.CopyImage(99, 8)) << "nothing to copy";
 }
 
-// A capture is stored before the save that writes its snippet, and one
-// whose snippet is never saved - the process stopped in between, or the
-// snippet went first - is nobody's, and goes with the next save.
-TEST_F(LibraryStoreTest, APictureWithNoSnippetGoesWithTheNextSave) {
+// A picture whose snippet is not in the library - which only a library
+// written before every change was one transaction could hold - goes at the
+// next Load.
+TEST_F(LibraryStoreTest, APictureWithNoSnippetGoesAtTheNextLoad) {
+    {
+        LibraryStore store(file_);
+        const std::vector<uint8_t> pixels = Checkerboard(8, 8);
+        ASSERT_TRUE(store.SaveImage(4, pixels.data(), 8, 8));
+        ASSERT_TRUE(store.SaveImage(99, pixels.data(), 8, 8));
+        ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+    }
     LibraryStore store(file_);
-    const std::vector<uint8_t> pixels = Checkerboard(8, 8);
-    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 8, 8));
-    ASSERT_TRUE(store.SaveImage(99, pixels.data(), 8, 8));
-    ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+    ASSERT_TRUE(store.Load().has_value());
     EXPECT_TRUE(store.LoadImage(4).has_value());
     EXPECT_FALSE(store.LoadImage(99).has_value());
 }
 
 // ===== When the file says no =====
 
-// Another program holding the file mid-write: the save fails and changes
+// Another program holding the file mid-write: the write fails and changes
 // nothing, and the next one writes everything the failed one would have.
-TEST_F(LibraryStoreTest, ASaveThatCannotGetTheFileChangesNothingAndIsRetriedWhole) {
+TEST_F(LibraryStoreTest, AWriteThatCannotGetTheFileChangesNothing) {
     CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
     LibraryStore store(file_);
     ASSERT_TRUE(store.Save(snapshot));
@@ -443,15 +486,14 @@ TEST_F(LibraryStoreTest, ASaveThatCannotGetTheFileChangesNothingAndIsRetriedWhol
         ExpectSameLibrary(MakeSampleSnapshot(), *unchanged);
     }
     ASSERT_TRUE(store.Save(snapshot));
-    EXPECT_EQ(store.ItemsWrittenByLastSave(), 1u);
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
     ASSERT_TRUE(loaded.has_value());
     ExpectSameLibrary(snapshot, *loaded);
 }
 
-// A save that fails partway leaves none of itself behind: what it wrote
-// before the failure is rolled back with it, and written by the next.
-TEST_F(LibraryStoreTest, ASaveThatFailsPartwayLeavesNoneOfItself) {
+// A write that fails partway leaves none of itself behind: what it wrote
+// before the failure is rolled back with it.
+TEST_F(LibraryStoreTest, AWriteThatFailsPartwayLeavesNoneOfItself) {
     CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
     LibraryStore store(file_);
     ASSERT_TRUE(store.Save(snapshot));
@@ -542,7 +584,7 @@ TEST_F(LibraryStoreTest, SomeoneElsesDatabaseIsSetAside) {
 // ===== Rows that cannot be used as they are =====
 
 // A value that cannot be used is the field's default, the rest of the row
-// is kept, and the repaired row is written back by the next save.
+// is kept, and the repaired row is written back as it now reads.
 TEST_F(LibraryStoreTest, ARowThatCannotBeUsedAsItIsIsRepairedAndWrittenBack) {
     ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
     {
@@ -578,8 +620,10 @@ TEST_F(LibraryStoreTest, ARowThatCannotBeUsedAsItIsIsRepairedAndWrittenBack) {
     EXPECT_FLOAT_EQ(item.strokes[0].width, 3.0f);
     EXPECT_EQ(item.strokes[0].points, (std::vector<StrokePoint>{{1.0f, 2.0f}}));
 
-    ASSERT_TRUE(store.Save(*loaded));
-    EXPECT_EQ(store.ItemsWrittenByLastSave(), 1u) << "the repaired row, and only it";
+    RawConnection raw(file_);
+    EXPECT_EQ(raw.Int("SELECT json_extract(record, '$.foregroundOpacity') FROM items WHERE id = 3"), 1)
+        << "written back";
+    EXPECT_EQ(raw.Int("SELECT length(strokes) FROM items WHERE id = 3"), 1 + 4 + 12 + 8) << "one stroke, whole";
 }
 
 // Current pointers naming nothing open on something that exists.
@@ -592,26 +636,6 @@ TEST_F(LibraryStoreTest, ACurrentCanvasNamingNothingFallsBackToOneThatExists) {
     ASSERT_TRUE(loaded.has_value());
     EXPECT_EQ(loaded->currentCanvasId, 2u);
     EXPECT_EQ(loaded->currentFolderId, 1u);
-}
-
-// ===== A copy =====
-
-TEST_F(LibraryStoreTest, ACopyOfTheFileIsAWholeLibrary) {
-    LibraryStore store(file_);
-    const std::vector<uint8_t> pixels = Checkerboard(8, 8);
-    ASSERT_TRUE(store.SaveImage(4, pixels.data(), 8, 8));
-    ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
-    const std::filesystem::path copyFile = dir_ / "copy.db";
-    ASSERT_TRUE(store.WriteCopyTo(copyFile));
-    EXPECT_FALSE(store.WriteCopyTo(copyFile)) << "never over a file already there";
-
-    LibraryStore copy(copyFile);
-    const std::optional<CanvasManagerSnapshot> loaded = copy.Load();
-    ASSERT_TRUE(loaded.has_value());
-    CanvasManagerSnapshot expected = MakeSampleSnapshot();
-    expected.canvases[0].items[1].picture.stored = true;
-    ExpectSameLibrary(expected, *loaded);
-    EXPECT_TRUE(copy.LoadImage(4).has_value());
 }
 
 // A path with characters outside every code page: %APPDATA% is under the

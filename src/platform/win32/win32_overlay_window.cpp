@@ -835,8 +835,8 @@ namespace {
 // An idle overlay still draws four times a second: the same cadence as the
 // check that it is still the front topmost window (see RenderFrame), which
 // matters most exactly when it sits over a game - and often enough that
-// anything else done per frame, the autosave's debounce or following a
-// change of display size, is never far behind.
+// anything else done per frame, following a change of display size say, is
+// never far behind.
 constexpr LONGLONG kIdleFrameIntervalMs = 250;
 }  // namespace
 
@@ -1014,14 +1014,8 @@ void Win32OverlayWindow::RenderFrame() {
     };
     if (!renderer_->ReadyToRender()) {
         MsgWaitForMultipleObjectsEx(0, nullptr, kNoDeviceRetryMs, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-        // What must not stop with the frames goes on: without them, the
-        // edits made just before the screen was locked waited for the
-        // unlock to be saved, and a crash or a power cut meanwhile lost
-        // them.
-        const float skippedSeconds = secondsSinceLastFrame();
-        if (skippedFrameCallback_) {
-            skippedFrameCallback_(skippedSeconds);
-        }
+        // A skipped frame's time is its own, not the next drawn frame's.
+        secondsSinceLastFrame();
         return;
     }
 

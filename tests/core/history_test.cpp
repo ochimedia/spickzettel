@@ -1,13 +1,18 @@
 #include "core/session/history.h"
 
 #include <algorithm>
+#include <filesystem>
+#include <optional>
 #include <random>
 #include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <sqlite3.h>
 
+#include "core/persistence/library_store.h"
 #include "core/session/session.h"
+#include "support/removed_at_end.h"
 #include "support/session_test_access.h"
 
 namespace sz::core {
@@ -96,14 +101,18 @@ std::string Difference(const LibraryState& a, const LibraryState& b) {
     return "nothing";
 }
 
-LibraryState StateOf(const Session& session) {
+LibraryState StateOf(const std::vector<Folder>& folders, const std::vector<Canvas>& canvases, CanvasId current) {
     LibraryState state;
-    state.folders = session.Manager().Folders();
-    for (const Canvas& canvas : session.Manager().Canvases()) {
+    state.folders = folders;
+    for (const Canvas& canvas : canvases) {
         state.canvases.push_back(CanvasState{canvas.id, canvas.name, canvas.folderId, canvas.deletedAt, canvas.items});
     }
-    state.current = session.Manager().CurrentCanvasId();
+    state.current = current;
     return state;
+}
+
+LibraryState StateOf(const Session& session) {
+    return StateOf(session.Manager().Folders(), session.Manager().Canvases(), session.Manager().CurrentCanvasId());
 }
 
 class RandomSession {
@@ -115,6 +124,14 @@ public:
     }
 
     Session& Get() { return session_; }
+
+    // Writes every command from here on to `store`, starting with the
+    // library as it is.
+    void Attach(persistence::LibraryStore& store) {
+        session_.SetLibraryStore(&store);
+        ASSERT_TRUE(session_.WriteWholeLibrary());
+    }
+    void Detach() { session_.SetLibraryStore(nullptr); }
 
     // One command, or one part of a gesture, chosen at random.
     void Step() {
@@ -512,6 +529,86 @@ TEST(HistoryTest, EveryStepAppliesWhateverHappensInBetween) {
                 ASSERT_NO_FATAL_FAILURE(ExpectTheHistoryRoundTrips(random.Get())) << "op " << op;
             }
         }
+    }
+}
+
+// ===== The file holds what the model holds =====
+//
+// The same random session, written to a library as it goes, with some of
+// its writes made to fail: every command is written as it is made, and one
+// whose write fails is not made - so at every moment but the middle of a
+// gesture, the file holds exactly what the model holds, and the history's
+// rules still hold of what was made.
+
+// Every write to the library fails while `failing` holds a row: a trigger
+// on every table the library writes aborts the statement, and with it the
+// write's transaction. Instant, where a lock held elsewhere would cost the
+// store's busy timeout each time.
+class Failures {
+public:
+    explicit Failures(const std::filesystem::path& file) {
+        const std::u8string name = file.u8string();
+        sqlite3_open(std::string(name.begin(), name.end()).c_str(), &db_);
+        std::string sql = "CREATE TABLE failing (x INTEGER);";
+        for (const char* table : {"folders", "canvases", "items", "pictures", "meta"}) {
+            for (const char* change : {"INSERT", "UPDATE", "DELETE"}) {
+                sql += std::string("CREATE TRIGGER fail_") + change + "_" + table + " BEFORE " + change + " ON " +
+                       table + " WHEN EXISTS (SELECT 1 FROM failing) BEGIN SELECT RAISE(ABORT, 'failing'); END;";
+            }
+        }
+        Exec(sql);
+    }
+    ~Failures() { sqlite3_close(db_); }
+    void Set(bool on) { Exec(on ? "INSERT INTO failing VALUES (1)" : "DELETE FROM failing"); }
+
+private:
+    void Exec(const std::string& sql) {
+        ASSERT_EQ(sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, nullptr), SQLITE_OK) << sqlite3_errmsg(db_);
+    }
+    sqlite3* db_ = nullptr;
+};
+
+void ExpectTheFileHoldsTheModel(const Session& session, const std::filesystem::path& file) {
+    std::optional<CanvasManagerSnapshot> disk = persistence::LibraryStore(file).Load();
+    ASSERT_TRUE(disk.has_value());
+    const LibraryState onDisk = StateOf(disk->folders, disk->canvases, disk->currentCanvasId);
+    const LibraryState inMemory = StateOf(session);
+    ASSERT_TRUE(onDisk == inMemory) << "the file differs in " << Difference(onDisk, inMemory);
+}
+
+TEST(HistoryTest, TheFileHoldsWhatTheModelHoldsWhateverFailsToBeWritten) {
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "spickzettel_history_test_written";
+    for (uint32_t seed = 1; seed <= 6; ++seed) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+        std::filesystem::remove_all(dir);
+        const test::RemovedAtEnd cleanup(dir);
+        const std::filesystem::path file = dir / "library.db";
+        std::optional<persistence::LibraryStore> store(file);
+        ASSERT_EQ(store->Open(), persistence::LibraryStore::OpenResult::Opened);
+        RandomSession random(seed);
+        ASSERT_NO_FATAL_FAILURE(random.Attach(*store));
+        Failures failures(file);
+        std::mt19937 fail(seed * 7919u);
+        size_t failed = 0;
+        for (int op = 0; op < 120; ++op) {
+            const bool failing = std::uniform_int_distribution<int>(0, 5)(fail) == 0;
+            failures.Set(failing);
+            random.Step();
+            failures.Set(false);
+            failed += failing && random.Get().LastWriteFailed() ? 1 : 0;
+            ASSERT_NO_FATAL_FAILURE(ExpectEveryUndoChangeIsOnItsSnippetsCanvas(random.Get())) << "op " << op;
+            if (op % 5 == 4) {
+                random.EndGestures();
+                ASSERT_NO_FATAL_FAILURE(ExpectTheFileHoldsTheModel(random.Get(), file)) << "op " << op;
+            }
+            if (op % 25 == 24) {
+                ASSERT_NO_FATAL_FAILURE(ExpectTheHistoryRoundTrips(random.Get())) << "op " << op;
+                ASSERT_NO_FATAL_FAILURE(ExpectTheFileHoldsTheModel(random.Get(), file)) << "op " << op;
+            }
+        }
+        EXPECT_GT(failed, 0u) << "no write failed: the test tested nothing of that";
+        random.Detach();
+        store.reset();
     }
 }
 

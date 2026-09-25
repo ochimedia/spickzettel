@@ -276,6 +276,11 @@ void History::Redone(CanvasId canvas, Step step) {
     ++revision_;
 }
 
+void History::PutBack(CanvasId canvas, Step step, bool undo) {
+    Stacks& stacks = stacks_[canvas];
+    (undo ? stacks.undo : stacks.redo).push_back(std::move(step));
+}
+
 void History::Migrate(ItemId item, CanvasId canvas) {
     // Every part of every step about `item`, from every other canvas: a step
     // about several snippets leaves the rest where they are.

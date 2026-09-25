@@ -96,10 +96,6 @@ public:
     void ReleaseTextInput() override { ++releaseTextInputCallCount; }
 
     void SetFrameCallback(platform::FrameCallback callback) override { frameCallback = std::move(callback); }
-    void SetSkippedFrameCallback(platform::FrameCallback callback) override {
-        skippedFrameCallback = std::move(callback);
-    }
-    platform::FrameCallback skippedFrameCallback;
     void SetFramePacing(platform::FramePacing pacing) override { framePacing = pacing; }
     platform::FramePacing framePacing = platform::FramePacing::EveryFrame;
     void SetMouseCallback(platform::MouseCallback callback) override { mouseCallback = std::move(callback); }

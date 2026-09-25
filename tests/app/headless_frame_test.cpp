@@ -3620,12 +3620,14 @@ protected:
     }
 
     // A store in the temp directory, as TrayController attaches its own -
-    // opened, so that a hold taken after it stops saves rather than the
-    // store opening at all.
+    // opened, so that a hold taken after it stops writes rather than the
+    // store opening at all - with the library as it is written into it,
+    // as a first run's is.
     void AttachStore() {
         store_ = std::make_unique<persistence::LibraryStore>(Library());
         ASSERT_EQ(store_->Open(), persistence::LibraryStore::OpenResult::Opened);
         controller_->GetSession().SetLibraryStore(store_.get());
+        ASSERT_TRUE(controller_->GetSession().WriteWholeLibrary());
     }
     std::filesystem::path Library() const { return root_ / "library.db"; }
 
@@ -3633,31 +3635,9 @@ protected:
     std::unique_ptr<persistence::LibraryStore> store_;
 };
 
-// A failed save that fell through to the quiet-period check, which a
-// failure does nothing to reset, would be retried on the very next frame
-// and every frame after, a full synchronous rewrite each time.
-TEST_F(HeadlessSaveTest, AFailedSaveIsRetriedOnItsOwnClockNotEveryFrame) {
-    PlaceADrawing();
-    AttachStore();
-    test::HeldLibrary held(Library(), /*readers=*/true);
-
-    // Past the quiet period: an attempt, which failed.
-    StepFrames(130);
-    ASSERT_TRUE(controller_->GetSession().LastSaveFailed()) << "no attempt was made";
-
-    // The hold goes away. Retried every frame, the next frame would save;
-    // on its own clock, the retry is still most of two seconds out.
-    held.Release();
-    StepFrames(30);
-    EXPECT_TRUE(controller_->GetSession().LastSaveFailed()) << "retried too eagerly";
-    StepFrames(120);
-    EXPECT_FALSE(controller_->GetSession().LastSaveFailed()) << "never retried";
-    EXPECT_FALSE(controller_->GetSession().HasUnsavedChanges());
-}
-
 // Escape with the button still held, halfway through a stroke on a snippet
-// whose earlier strokes are saved: the stroke is ended there as a release
-// would end it - one undo step, and a change the next save writes.
+// whose earlier strokes are written: the stroke is ended there as a release
+// would end it - one undo step, and written as it ends.
 TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     AttachStore();
     PlaceADrawing();
@@ -3674,8 +3654,6 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     RawMouse(400.0f, 300.0f, platform::MouseEventKind::Up);
     ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrame();
-    ASSERT_TRUE(session.Flush());
-    ASSERT_FALSE(session.HasUnsavedChanges());
     ASSERT_EQ(strokeCount(), 1u);
 
     // A second, left mid-way.
@@ -3691,8 +3669,6 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     StepFrames(2);
     ASSERT_EQ(strokeCount(), 2u);
 
-    EXPECT_TRUE(session.HasUnsavedChanges());
-    ASSERT_TRUE(session.Flush());
     persistence::LibraryStore reopened(Library());
     const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
     ASSERT_TRUE(loaded.has_value());
@@ -3707,21 +3683,25 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     EXPECT_EQ(strokeCount(), 1u);
 }
 
-// A save that fails is said on screen for as long as it stays failed -
-// what is drawn looks saved whether or not it is.
-TEST_F(HeadlessSaveTest, AFailedSaveIsSaidOnScreenUntilItLands) {
+// A change whose write fails is not made, and that is said on screen until
+// a write lands - what is drawn is what the library holds, and the line
+// says why the change is not there.
+TEST_F(HeadlessSaveTest, AWriteThatFailsIsSaidOnScreenUntilOneLands) {
     PlaceADrawing();
     AttachStore();
-    test::HeldLibrary held(Library(), /*readers=*/true);
     EXPECT_TRUE(App().PersistenceWarning().empty()) << "nothing has failed yet";
-
-    StepFrames(130);  // past the quiet period: one attempt, which failed
+    const size_t strokes = StrokeCountOnCurrentCanvas();
+    {
+        test::HeldLibrary held(Library(), /*readers=*/true);
+        Drag(300.0f, 300.0f, 500.0f, 400.0f);  // a stroke, in drawing mode
+    }
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), strokes) << "not made";
     const std::string warning = App().PersistenceWarning();
     EXPECT_NE(warning.find(Library().string()), std::string::npos) << warning;
 
-    held.Release();
-    StepFrames(160);  // past the retry's own clock
-    EXPECT_TRUE(App().PersistenceWarning().empty()) << "gone with the save that landed";
+    Drag(300.0f, 300.0f, 500.0f, 400.0f);
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), strokes + 1);
+    EXPECT_TRUE(App().PersistenceWarning().empty()) << "gone with the write that landed";
 }
 
 // ===== Deleted things, on the screen =====
@@ -3731,7 +3711,6 @@ TEST_F(HeadlessSaveTest, AFailedSaveIsSaidOnScreenUntilItLands) {
 TEST_F(HeadlessSaveTest, DeletingASnippetHidesItInPlaceAndUndoBringsItBack) {
     PlaceADrawing();
     AttachStore();
-    controller_->GetSession().Flush();
     const Item drawing = Canvases().CurrentOrNull()->items[0];
 
     // Selected, and the Delete key.
@@ -3742,7 +3721,6 @@ TEST_F(HeadlessSaveTest, DeletingASnippetHidesItInPlaceAndUndoBringsItBack) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "off the screen";
     ASSERT_EQ(Canvases().CurrentOrNull()->items.size(), 1u) << "but still in the library";
     EXPECT_NE(Canvases().CurrentOrNull()->items[0].deletedAt, 0);
-    ASSERT_TRUE(controller_->GetSession().Flush());
     {
         const std::optional<CanvasManagerSnapshot> saved = persistence::LibraryStore(Library()).Load();
         ASSERT_TRUE(saved.has_value());
@@ -3958,7 +3936,6 @@ TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn)
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     StepFrame();
     Session& session = controller_->GetSession();
-    ASSERT_TRUE(session.Flush());
     ASSERT_EQ(Canvases().CurrentOrNull()->items[0].picture.textureHandle, 9u);
     ASSERT_EQ(session.FrozenScreenTexture(), 7u);
 

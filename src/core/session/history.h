@@ -190,6 +190,10 @@ public:
     Step TakeRedo(CanvasId canvas);
     void Undone(CanvasId canvas, Step step);
     void Redone(CanvasId canvas, Step step);
+    // Puts a step taken with TakeUndo (`undo`) or TakeRedo back on top of
+    // the stack it came from, as it was - one whose write failed, so that
+    // it was not applied after all.
+    void PutBack(CanvasId canvas, Step step, bool undo);
 
     // `item` is on `canvas` now: its undo changes on any other canvas's
     // stack follow it there.

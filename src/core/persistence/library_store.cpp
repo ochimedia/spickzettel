@@ -26,18 +26,15 @@ using nlohmann::json;
 constexpr int64_t kApplicationId = 0x537A746C;
 
 // How long a statement waits for a lock another program holds on the file
-// before it gives up - a backup tool reading it, say. Short, because saves
-// run on the render thread; a save that gives up is tried again.
+// before it gives up - a backup tool reading it, say. Short, because writes
+// run on the render thread; a change whose write gives up is not made.
 constexpr int kBusyTimeoutMs = 250;
 
 // The whole schema. See the class comment for what each table is.
 //
 // Foreign keys, so that a canvas is always in a folder and a snippet on a
-// canvas; a save writes what holds a thing before the thing, and takes a
-// thing out before what held it. The trigger is what takes a snippet's
-// picture with it, however the snippet goes - pictures has no foreign key
-// because a capture is stored before the save that first writes its
-// snippet (see SaveImage).
+// canvas; a write puts what holds a thing in before the thing. The trigger
+// is what takes a snippet's picture with it, however the snippet goes.
 constexpr const char* kSchema = R"(
 CREATE TABLE meta (
     key TEXT PRIMARY KEY,
@@ -412,30 +409,6 @@ std::vector<Stroke> ReadStrokes(const std::vector<uint8_t>& blob, bool& repaired
     return strokes;
 }
 
-// Whether a snippet's row would come out different: a hash of exactly the
-// two things written for it. Compared only against another hash from this
-// same function in this same process, so 64 bits of FNV-1a over 8-byte
-// words is far more than the job needs.
-uint64_t HashRow(std::string_view record, const std::vector<uint8_t>& strokes) {
-    uint64_t hash = 1469598103934665603ull;
-    const auto mix = [&hash](const uint8_t* data, size_t size) {
-        size_t at = 0;
-        for (; at + 8 <= size; at += 8) {
-            uint64_t word = 0;
-            std::memcpy(&word, data + at, 8);
-            hash = (hash ^ word) * 1099511628211ull;
-            hash ^= hash >> 32;
-        }
-        for (; at < size; ++at) {
-            hash = (hash ^ data[at]) * 1099511628211ull;
-        }
-        hash = (hash ^ size) * 1099511628211ull;
-    };
-    mix(reinterpret_cast<const uint8_t*>(record.data()), record.size());
-    mix(strokes.data(), strokes.size());
-    return hash == 0 ? 1 : hash;  // 0 is kept for a row that must be written again
-}
-
 }  // namespace
 
 // ================= Opening =================
@@ -569,9 +542,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
         return std::nullopt;
     }
     CanvasManagerSnapshot snapshot;
-    std::unordered_map<uint64_t, FolderRow> folders;
-    std::unordered_map<uint64_t, CanvasRow> canvases;
-    std::unordered_map<uint64_t, ItemRow> items;
+    LibraryChanges repairs;
     std::optional<uint64_t> currentFolder;
     std::optional<uint64_t> currentCanvas;
 
@@ -587,7 +558,6 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
                 folder.name = statement.Text(2);
                 folder.createdAt = statement.Int(3);
                 folder.deletedAt = statement.Int(4);
-                folders[folder.id] = FolderRow{statement.Int(1), folder.name, folder.createdAt, folder.deletedAt};
                 snapshot.folders.push_back(std::move(folder));
             }
             if (rc != SQLITE_DONE) {
@@ -606,8 +576,6 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
                 canvas.name = statement.Text(3);
                 canvas.createdAt = statement.Int(4);
                 canvas.deletedAt = statement.Int(5);
-                canvases[canvas.id] =
-                    CanvasRow{canvas.folderId, statement.Int(2), canvas.name, canvas.createdAt, canvas.deletedAt};
                 canvasIndex[canvas.id] = snapshot.canvases.size();
                 snapshot.canvases.push_back(std::move(canvas));
             }
@@ -635,7 +603,9 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
                 ReadItemRecord(record, item, repaired);
                 item.strokes = ReadStrokes(strokes, repaired);
                 item.picture.stored = statement.Int(5) != 0;
-                items[item.id] = ItemRow{canvasId, statement.Int(2), repaired ? 0 : HashRow(record, strokes)};
+                if (repaired) {
+                    repairs.items.push_back(item.id);
+                }
                 snapshot.canvases[canvas->second].items.push_back(std::move(item));
             }
             if (rc != SQLITE_DONE) {
@@ -672,8 +642,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
 
     // Which folder and canvas are current, as far as they still name one -
     // a pointer naming nothing opens on something that exists rather than
-    // on nothing. The rows as read are what was written, so a pointer
-    // repaired here is written back by the next save.
+    // on nothing, and is written back so.
     snapshot.currentCanvasId = currentCanvas.value_or(0);
     const bool canvasExists = std::any_of(snapshot.canvases.begin(), snapshot.canvases.end(),
                                           [&](const Canvas& c) { return c.id == snapshot.currentCanvasId; });
@@ -691,162 +660,238 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
                                                                      : snapshot.folders.front().id;
     }
 
-    writtenFolders_ = std::move(folders);
-    writtenCanvases_ = std::move(canvases);
-    writtenItems_ = std::move(items);
-    writtenCurrentFolderId_ = currentFolder;
-    writtenCurrentCanvasId_ = currentCanvas;
+    repairs.current = currentFolder != snapshot.currentFolderId || currentCanvas != snapshot.currentCanvasId;
 
-    // The pages deleted rows left, given back to the file system -
-    // housekeeping, and a failure costs only space.
+    // What was repaired, written back as it now reads - best effort: a
+    // write that fails leaves a row that is repaired again next time.
+    Write(LibraryView{snapshot.folders, snapshot.canvases, snapshot.currentFolderId, snapshot.currentCanvasId},
+          repairs);
+    // Housekeeping, and a failure costs only space: a picture whose snippet
+    // is not in the library - which only a library written before every
+    // change was one transaction could hold - and the pages deleted rows
+    // left, given back to the file system.
+    Exec(db_, "DELETE FROM pictures WHERE item_id NOT IN (SELECT id FROM items)");
     Exec(db_, "PRAGMA incremental_vacuum");
     return snapshot;
 }
 
-// ================= Saving =================
+// ================= Writing =================
 
-bool LibraryStore::Save(const LibraryView& view) {
+bool LibraryStore::Write(const LibraryView& view, const LibraryChanges& changes, const PictureWrites& pictures) {
+    if (changes.Empty() && pictures.Empty()) {
+        return true;
+    }
     if (!Ready() || !Exec(db_, "BEGIN IMMEDIATE")) {
         return false;
     }
-    std::unordered_map<uint64_t, FolderRow> folders;
-    std::unordered_map<uint64_t, CanvasRow> canvases;
-    std::unordered_map<uint64_t, ItemRow> items;
-    size_t itemsWritten = 0;
-    bool ok = true;
-
-    // What holds a thing before the thing: a canvas's folder has to be there
-    // for the canvas to be written, and a snippet's canvas for the snippet.
-    {
-        Statement upsert(db_, "INSERT INTO folders (id, position, name, created_at, deleted_at) "
-                              "VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (id) DO UPDATE SET "
-                              "position = excluded.position, name = excluded.name, "
-                              "created_at = excluded.created_at, deleted_at = excluded.deleted_at");
-        for (size_t i = 0; i < view.folders.size() && ok; ++i) {
-            const Folder& folder = view.folders[i];
-            const FolderRow row{static_cast<int64_t>(i), folder.name, folder.createdAt, folder.deletedAt};
-            if (const auto it = writtenFolders_.find(folder.id); it == writtenFolders_.end() || it->second != row) {
-                upsert.Bind(1, folder.id);
-                upsert.Bind(2, row.position);
-                upsert.Bind(3, row.name);
-                upsert.Bind(4, row.createdAt);
-                upsert.Bind(5, row.deletedAt);
-                ok = upsert.Run();
-            }
-            folders[folder.id] = row;
-        }
-    }
-    {
-        Statement upsert(db_, "INSERT INTO canvases (id, folder_id, position, name, created_at, deleted_at) "
-                              "VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (id) DO UPDATE SET "
-                              "folder_id = excluded.folder_id, position = excluded.position, "
-                              "name = excluded.name, created_at = excluded.created_at, "
-                              "deleted_at = excluded.deleted_at");
-        for (size_t i = 0; i < view.canvases.size() && ok; ++i) {
-            const Canvas& canvas = view.canvases[i];
-            const CanvasRow row{canvas.folderId, static_cast<int64_t>(i), canvas.name, canvas.createdAt,
-                                canvas.deletedAt};
-            if (const auto it = writtenCanvases_.find(canvas.id);
-                it == writtenCanvases_.end() || it->second != row) {
-                upsert.Bind(1, canvas.id);
-                upsert.Bind(2, row.folderId);
-                upsert.Bind(3, row.position);
-                upsert.Bind(4, row.name);
-                upsert.Bind(5, row.createdAt);
-                upsert.Bind(6, row.deletedAt);
-                ok = upsert.Run();
-            }
-            canvases[canvas.id] = row;
-        }
-    }
-    {
-        // Every snippet is serialized to see whether it changed - a record
-        // of a few hundred bytes and its strokes copied into a blob - and
-        // only one that did is written. One that only moved, to another
-        // place in its stack or another canvas, has just its place written.
-        Statement upsert(db_, "INSERT INTO items (id, canvas_id, position, record, strokes) "
-                              "VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (id) DO UPDATE SET "
-                              "canvas_id = excluded.canvas_id, position = excluded.position, "
-                              "record = excluded.record, strokes = excluded.strokes");
-        Statement move(db_, "UPDATE items SET canvas_id = ?2, position = ?3 WHERE id = ?1");
-        for (const Canvas& canvas : view.canvases) {
-            for (size_t i = 0; i < canvas.items.size() && ok; ++i) {
-                const Item& item = canvas.items[i];
-                const std::string record = ItemRecord(item);
-                const std::vector<uint8_t> strokes = StrokesBlob(item.strokes);
-                const ItemRow row{canvas.id, static_cast<int64_t>(i), HashRow(record, strokes)};
-                const auto it = writtenItems_.find(item.id);
-                if (it != writtenItems_.end() && it->second == row) {
-                    // As written.
-                } else if (it != writtenItems_.end() && it->second.hash == row.hash) {
-                    move.Bind(1, item.id);
-                    move.Bind(2, row.canvasId);
-                    move.Bind(3, row.position);
-                    ok = move.Run();
-                } else {
-                    upsert.Bind(1, item.id);
-                    upsert.Bind(2, row.canvasId);
-                    upsert.Bind(3, row.position);
-                    upsert.Bind(4, record);
-                    upsert.BindBlob(5, strokes.data(), strokes.size());
-                    ok = upsert.Run();
-                    ++itemsWritten;
-                }
-                items[item.id] = row;
-            }
-        }
-    }
-    // What the library no longer holds, a thing before what held it. A
-    // snippet takes its picture with it (see the trigger in kSchema).
-    const auto removeAbsent = [&](const char* sql, const auto& written, const auto& now) {
-        Statement remove(db_, sql);
-        for (const auto& [id, row] : written) {
-            (void)row;
-            if (ok && now.count(id) == 0) {
-                remove.Bind(1, id);
-                ok = remove.Run();
-            }
-        }
-    };
-    removeAbsent("DELETE FROM items WHERE id = ?1", writtenItems_, items);
-    removeAbsent("DELETE FROM canvases WHERE id = ?1", writtenCanvases_, canvases);
-    removeAbsent("DELETE FROM folders WHERE id = ?1", writtenFolders_, folders);
-    // A capture is stored before the save that writes its snippet (see
-    // SaveImage), and one whose snippet was never written - the process
-    // stopped in between, or the snippet went first - is nobody's. Every
-    // snippet the library holds is written by now.
-    ok = ok && Exec(db_, "DELETE FROM pictures WHERE item_id NOT IN (SELECT id FROM items)");
-    {
-        Statement upsert(db_, "INSERT INTO meta (key, value) VALUES (?1, ?2) "
-                              "ON CONFLICT (key) DO UPDATE SET value = excluded.value");
-        if (ok && writtenCurrentFolderId_ != view.currentFolderId) {
-            upsert.Bind(1, std::string_view("current_folder"));
-            upsert.Bind(2, view.currentFolderId);
-            ok = upsert.Run();
-        }
-        if (ok && writtenCurrentCanvasId_ != view.currentCanvasId) {
-            upsert.Bind(1, std::string_view("current_canvas"));
-            upsert.Bind(2, view.currentCanvasId);
-            ok = upsert.Run();
-        }
-    }
-
-    if (!ok || !Exec(db_, "COMMIT")) {
+    if (!WriteRows(view, changes, pictures) || !Exec(db_, "COMMIT")) {
         Exec(db_, "ROLLBACK");
         return false;
     }
-    writtenFolders_ = std::move(folders);
-    writtenCanvases_ = std::move(canvases);
-    writtenItems_ = std::move(items);
-    writtenCurrentFolderId_ = view.currentFolderId;
-    writtenCurrentCanvasId_ = view.currentCanvasId;
-    itemsWrittenByLastSave_ = itemsWritten;
     // What this store wrote is a library now, and a Load of it is not a
     // first run.
     createdByOpen_ = false;
     return true;
 }
 
+bool LibraryStore::Save(const LibraryView& view) {
+    LibraryChanges everything;
+    everything.everything = true;
+    return Write(view, everything);
+}
+
+bool LibraryStore::WriteRows(const LibraryView& view, const LibraryChanges& changes, const PictureWrites& pictures) {
+    const bool all = changes.everything;
+    // The rows the library has, by id - what a row absent from the view is
+    // found among.
+    const auto idsIn = [this](const char* sql) {
+        std::unordered_set<uint64_t> ids;
+        Statement select(db_, sql);
+        while (select.Step() == SQLITE_ROW) {
+            ids.insert(static_cast<uint64_t>(select.Int(0)));
+        }
+        return ids;
+    };
+    const auto removeAbsent = [this](const char* sql, std::unordered_set<uint64_t> absent) {
+        Statement remove(db_, sql);
+        for (const uint64_t id : absent) {
+            remove.Bind(1, id);
+            if (!remove.Run()) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    // What holds a thing before the thing: a canvas's folder has to be there
+    // for the canvas to be written, and a snippet's canvas for the snippet.
+    // What is gone goes last, after every snippet has been written where it
+    // is now: a canvas taken out takes what is still on it with it, which a
+    // snippet moved off it in the same write must not be.
+    const bool layout = all || changes.foldersAndCanvases;
+    std::unordered_set<uint64_t> absentFolders;
+    std::unordered_set<uint64_t> absentCanvases;
+    if (layout) {
+        absentFolders = idsIn("SELECT id FROM folders");
+        absentCanvases = idsIn("SELECT id FROM canvases");
+        Statement folder(db_, "INSERT INTO folders (id, position, name, created_at, deleted_at) "
+                              "VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (id) DO UPDATE SET "
+                              "position = excluded.position, name = excluded.name, "
+                              "created_at = excluded.created_at, deleted_at = excluded.deleted_at");
+        for (size_t i = 0; i < view.folders.size(); ++i) {
+            const Folder& f = view.folders[i];
+            folder.Bind(1, f.id);
+            folder.Bind(2, static_cast<int64_t>(i));
+            folder.Bind(3, f.name);
+            folder.Bind(4, f.createdAt);
+            folder.Bind(5, f.deletedAt);
+            if (!folder.Run()) {
+                return false;
+            }
+            absentFolders.erase(f.id);
+        }
+        Statement canvas(db_, "INSERT INTO canvases (id, folder_id, position, name, created_at, deleted_at) "
+                              "VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT (id) DO UPDATE SET "
+                              "folder_id = excluded.folder_id, position = excluded.position, "
+                              "name = excluded.name, created_at = excluded.created_at, "
+                              "deleted_at = excluded.deleted_at");
+        for (size_t i = 0; i < view.canvases.size(); ++i) {
+            const Canvas& c = view.canvases[i];
+            canvas.Bind(1, c.id);
+            canvas.Bind(2, c.folderId);
+            canvas.Bind(3, static_cast<int64_t>(i));
+            canvas.Bind(4, c.name);
+            canvas.Bind(5, c.createdAt);
+            canvas.Bind(6, c.deletedAt);
+            if (!canvas.Run()) {
+                return false;
+            }
+            absentCanvases.erase(c.id);
+        }
+    }
+
+    // Where every snippet is in the view, to write it from.
+    struct Place {
+        const Canvas* canvas = nullptr;
+        size_t index = 0;
+    };
+    std::unordered_map<uint64_t, Place> places;
+    for (const Canvas& c : view.canvases) {
+        for (size_t i = 0; i < c.items.size(); ++i) {
+            places.emplace(c.items[i].id, Place{&c, i});
+        }
+    }
+    {
+        Statement remove(db_, "DELETE FROM items WHERE id = ?1");
+        for (const uint64_t id : changes.erasedItems) {
+            remove.Bind(1, id);
+            if (!remove.Run()) {
+                return false;
+            }
+        }
+    }
+    // The snippets written whole, and the order of every canvas one of them
+    // is on: a place written alone could land beside a stale one, where an
+    // earlier write took a snippet out from between them.
+    std::unordered_set<uint64_t> orders(changes.itemOrders.begin(), changes.itemOrders.end());
+    {
+        Statement upsert(db_, "INSERT INTO items (id, canvas_id, position, record, strokes) "
+                              "VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (id) DO UPDATE SET "
+                              "canvas_id = excluded.canvas_id, position = excluded.position, "
+                              "record = excluded.record, strokes = excluded.strokes");
+        const auto write = [&](const Item& item, const Place& place) {
+            const std::string record = ItemRecord(item);
+            const std::vector<uint8_t> strokes = StrokesBlob(item.strokes);
+            upsert.Bind(1, item.id);
+            upsert.Bind(2, place.canvas->id);
+            upsert.Bind(3, static_cast<int64_t>(place.index));
+            upsert.Bind(4, record);
+            upsert.BindBlob(5, strokes.data(), strokes.size());
+            orders.insert(place.canvas->id);
+            return upsert.Run();
+        };
+        if (all) {
+            for (const auto& [id, place] : places) {
+                if (!write(place.canvas->items[place.index], place)) {
+                    return false;
+                }
+            }
+        } else {
+            for (const uint64_t id : changes.items) {
+                const auto place = places.find(id);
+                if (place != places.end() && !write(place->second.canvas->items[place->second.index], place->second)) {
+                    return false;
+                }
+            }
+        }
+    }
+    {
+        Statement move(db_, "UPDATE items SET canvas_id = ?2, position = ?3 WHERE id = ?1");
+        for (const Canvas& c : view.canvases) {
+            if (orders.count(c.id) == 0) {
+                continue;
+            }
+            for (size_t i = 0; i < c.items.size(); ++i) {
+                move.Bind(1, c.items[i].id);
+                move.Bind(2, c.id);
+                move.Bind(3, static_cast<int64_t>(i));
+                if (!move.Run()) {
+                    return false;
+                }
+            }
+        }
+    }
+    if (all) {
+        std::unordered_set<uint64_t> absent = idsIn("SELECT id FROM items");
+        for (const auto& [id, place] : places) {
+            absent.erase(id);
+        }
+        if (!removeAbsent("DELETE FROM items WHERE id = ?1", std::move(absent))) {
+            return false;
+        }
+    }
+    // What the library no longer holds, with what is still on it: the
+    // foreign keys take a canvas's snippets, and the trigger their pictures.
+    if (layout && (!removeAbsent("DELETE FROM canvases WHERE id = ?1", std::move(absentCanvases)) ||
+                   !removeAbsent("DELETE FROM folders WHERE id = ?1", std::move(absentFolders)))) {
+        return false;
+    }
+
+    for (const NewPicture& picture : pictures.captured) {
+        if (!SaveImage(picture.itemId, picture.pixelsRGBA, picture.width, picture.height)) {
+            return false;
+        }
+    }
+    {
+        Statement copy(db_, "INSERT OR REPLACE INTO pictures (item_id, width, height, pixels, thumbnail) "
+                            "SELECT ?2, width, height, pixels, thumbnail FROM pictures WHERE item_id = ?1");
+        for (const auto& [from, to] : pictures.copies) {
+            copy.Bind(1, from);
+            copy.Bind(2, to);
+            if (!copy.Run()) {
+                return false;
+            }
+        }
+    }
+
+    if (all || changes.current) {
+        Statement upsert(db_, "INSERT INTO meta (key, value) VALUES (?1, ?2) "
+                              "ON CONFLICT (key) DO UPDATE SET value = excluded.value");
+        upsert.Bind(1, std::string_view("current_folder"));
+        upsert.Bind(2, view.currentFolderId);
+        if (!upsert.Run()) {
+            return false;
+        }
+        upsert.Bind(1, std::string_view("current_canvas"));
+        upsert.Bind(2, view.currentCanvasId);
+        if (!upsert.Run()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// ================= Pictures =================
 // ================= Pictures =================
 
 bool LibraryStore::SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int width, int height) {
@@ -873,17 +918,6 @@ bool LibraryStore::SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int wid
         insert.BindBlob(5, thumbnail.data(), thumbnail.size());  // unbound, it is NULL
     }
     return insert.Run();
-}
-
-bool LibraryStore::CopyImage(uint64_t fromItemId, uint64_t toItemId) {
-    if (!Ready()) {
-        return false;
-    }
-    Statement copy(db_, "INSERT OR REPLACE INTO pictures (item_id, width, height, pixels, thumbnail) "
-                        "SELECT ?2, width, height, pixels, thumbnail FROM pictures WHERE item_id = ?1");
-    copy.Bind(1, fromItemId);
-    copy.Bind(2, toItemId);
-    return copy.Run() && sqlite3_changes(db_) == 1;
 }
 
 std::optional<DecodedImage> LibraryStore::LoadPictureColumn(uint64_t itemId, const char* column) {
@@ -913,15 +947,6 @@ bool LibraryStore::HasImage(uint64_t itemId) {
     Statement select(db_, "SELECT 1 FROM pictures WHERE item_id = ?1");
     select.Bind(1, itemId);
     return select.Step() == SQLITE_ROW;
-}
-
-bool LibraryStore::WriteCopyTo(const std::filesystem::path& file) {
-    if (!Ready()) {
-        return false;
-    }
-    Statement vacuum(db_, "VACUUM INTO ?1");
-    vacuum.Bind(1, Utf8(file));
-    return vacuum.Run();
 }
 
 }  // namespace sz::core::persistence

@@ -44,17 +44,6 @@ bool Session::CanUndo() const { return history_.CanUndo(Model().CurrentCanvasId(
 
 bool Session::CanRedo() const { return history_.CanRedo(Model().CurrentCanvasId()); }
 
-bool Session::Record(CanvasId canvas, Step step, bool merge) {
-    if (step.changes.empty()) {
-        return false;
-    }
-    if (merge && history_.MergeIntoTop(canvas, step)) {
-        return true;
-    }
-    history_.Record(canvas, std::move(step));
-    return true;
-}
-
 void Session::EndOpenGesture() {
     EndTextEdit();
     EndPlacement();
@@ -80,11 +69,19 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     // front of every step below it, and loud in a debug build.
     const bool applies = std::all_of(next->changes.begin(), next->changes.end(),
                                      [&](const Change& change) { return history::CanApply(Model(), change, undo); });
+    std::vector<ItemId> items;
+    for (const Change& change : next->changes) {
+        items.push_back(change.item);
+    }
+    const Checkpoint before = Before(items);
     Step step = undo ? history_.TakeUndo(canvas) : history_.TakeRedo(canvas);
     if (!applies) {
         assert(false && "a step on the history no longer applies");
         return std::nullopt;
     }
+    // As it is, to be put back should the write fail: applying a step turns
+    // it into what the opposite direction needs.
+    const Step taken = step;
     // Undone last first, redone first to last.
     if (undo) {
         for (auto change = step.changes.rbegin(); change != step.changes.rend(); ++change) {
@@ -96,6 +93,10 @@ std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
         }
     }
     Model().MarkChanged();
+    if (!Land(before)) {
+        history_.PutBack(canvas, taken, undo);
+        return std::nullopt;
+    }
 
     UndoStep result{step.what, undo};
     // Where each snippet it moved is now, for its history to follow it
@@ -135,6 +136,7 @@ std::optional<Session::UndoStep> Session::Redo() { return StepHistory(/*undo=*/f
 
 void Session::CommitLiveStroke(ItemId itemId) {
     EndOpenGesture();
+    const Checkpoint before = Before({itemId});
     Canvas* canvasPtr = Model().CurrentOrNull();
     if (!canvasPtr || liveLayer_.Strokes().empty()) {
         liveLayer_.Clear();
@@ -152,11 +154,12 @@ void Session::CommitLiveStroke(ItemId itemId) {
     liveLayer_.Clear();
     Model().MarkChanged();
     // The value, not only the id: redo pushes it back.
-    Record(canvas.id, Step{0, What::Stroke, {Change{itemId, history::StrokeAdded{itemIt->strokes.back()}}}});
+    Commit(before, canvas.id, Step{0, What::Stroke, {Change{itemId, history::StrokeAdded{itemIt->strokes.back()}}}});
 }
 
 bool Session::ClearDrawing(ItemId itemId) {
     EndOpenGesture();
+    const Checkpoint before = Before({itemId});
     Item* item = Model().FindItemAnywhere(itemId);
     if (!item || item->strokes.empty()) {
         return false;
@@ -172,8 +175,8 @@ bool Session::ClearDrawing(ItemId itemId) {
     }
     item->strokes.clear();
     Model().MarkChanged();
-    Record(Model().CanvasHoldingItem(itemId).value_or(0), Step{0, What::Erase, {Change{itemId, std::move(erased)}}});
-    return true;
+    const CanvasId canvas = Model().CanvasHoldingItem(itemId).value_or(0);
+    return Commit(before, canvas, Step{0, What::Erase, {Change{itemId, std::move(erased)}}});
 }
 
 // ================= Deleting and making =================
@@ -192,6 +195,7 @@ size_t Session::DeleteItems(const std::vector<ItemId>& itemIds) {
         return 0;
     }
     const CanvasId canvasId = canvas->id;
+    const Checkpoint before = Before(itemIds);
     Step step{0, What::Delete, {}};
     for (const ItemId id : itemIds) {
         if (Model().CanvasHoldingItem(id) == canvasId && Model().MarkDeleted(id, DeletionStampNow())) {
@@ -199,16 +203,17 @@ size_t Session::DeleteItems(const std::vector<ItemId>& itemIds) {
         }
     }
     const size_t deleted = step.changes.size();
-    if (deleted > 0) {
-        // Hidden now, and what leaves the screen gives its pictures back.
-        SyncTexturesToCurrentCanvas();
-        Record(canvasId, std::move(step));
+    if (deleted == 0 || !Commit(before, canvasId, std::move(step))) {
+        return 0;
     }
+    // Hidden now, and what leaves the screen gives its pictures back.
+    SyncTexturesToCurrentCanvas();
     return deleted;
 }
 
 ItemId Session::CreateItem(Item prototype, bool undoable) {
     EndOpenGesture();
+    const Checkpoint before = Before({});
     const ItemId itemId = Model().CreateItem(std::move(prototype));
     if (itemId == 0) {
         return 0;
@@ -216,13 +221,13 @@ ItemId Session::CreateItem(Item prototype, bool undoable) {
     if (Item* item = Model().FindItemAnywhere(itemId); item != nullptr && item->hasBackground) {
         CaptureShotItem(*item);
     }
+    // Undone, it is marked deleted - where a capture taken by mistake can
+    // still be found - and redone, unmarked.
+    Step step{0, What::Create, {}};
     if (undoable) {
-        // Undone, it is marked deleted - where a capture taken by mistake
-        // can still be found - and redone, unmarked.
-        Record(Model().CurrentCanvasId(),
-               Step{0, What::Create, {Change{itemId, history::DeletionChanged{DeletionStampNow()}}}});
+        step.changes.push_back(Change{itemId, history::DeletionChanged{DeletionStampNow()}});
     }
-    return itemId;
+    return Commit(before, Model().CurrentCanvasId(), std::move(step)) ? itemId : 0;
 }
 
 ItemId Session::CreateItem(bool hasBackground, Rect rect, std::string name) {
@@ -261,7 +266,7 @@ Session::Placements Session::PlacementsOf(const std::vector<ItemId>& ids) const 
     return placements;
 }
 
-bool Session::RecordPlacements(const Placements& before, bool merge) {
+bool Session::CommitPlacements(const Checkpoint& checkpoint, const Placements& before, bool merge) {
     // Compared against now: a gesture that ends where it began - a click, a
     // drag back to the start - files nothing. When anything moved, every
     // snippet the gesture held is in the step, so that the next notch of a
@@ -277,15 +282,16 @@ bool Session::RecordPlacements(const Placements& before, bool merge) {
         step.changes.push_back(Change{id, history::PlacementChanged{placement}});
     }
     if (!changed) {
+        Land(checkpoint);  // nothing to file, and nothing, or next to it, to write
         return false;
     }
     const CanvasId canvas = Model().CanvasHoldingItem(step.changes.front().item).value_or(0);
-    return Record(canvas, std::move(step), merge);
+    return Commit(checkpoint, canvas, std::move(step), merge);
 }
 
 void Session::BeginPlacement(const std::vector<ItemId>& ids) {
     EndOpenGesture();
-    placementBefore_ = PlacementsOf(ids);
+    placement_ = PlacementGesture{PlacementsOf(ids), Before(ids)};
 }
 
 namespace {
@@ -296,7 +302,7 @@ bool Places(const std::vector<std::pair<ItemId, history::Placement>>& placements
 
 void Session::PreviewRect(ItemId id, Rect rect) {
     Item* item = Model().FindItemAnywhere(id);
-    if (!placementBefore_.has_value() || !Places(*placementBefore_, id) || item == nullptr) {
+    if (!placement_.has_value() || !Places(placement_->before, id) || item == nullptr) {
         return;
     }
     item->rect = rect;
@@ -306,19 +312,19 @@ void Session::PreviewRect(ItemId id, Rect rect) {
 
 void Session::PreviewLeaveFullscreen(ItemId id) {
     const Item* item = Model().FindItemAnywhere(id);
-    if (!placementBefore_.has_value() || !Places(*placementBefore_, id) || item == nullptr || !item->isFullscreen) {
+    if (!placement_.has_value() || !Places(placement_->before, id) || item == nullptr || !item->isFullscreen) {
         return;
     }
     Model().ToggleFullscreen(id, Model().DisplayWidth(), Model().DisplayHeight());
 }
 
 bool Session::EndPlacement(bool merge) {
-    if (!placementBefore_.has_value()) {
+    if (!placement_.has_value()) {
         return false;
     }
-    const Placements before = std::move(*placementBefore_);
-    placementBefore_.reset();
-    return RecordPlacements(before, merge);
+    const PlacementGesture gesture = std::move(*placement_);
+    placement_.reset();
+    return CommitPlacements(gesture.checkpoint, gesture.before, merge);
 }
 
 bool Session::SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool merge) {
@@ -335,53 +341,62 @@ bool Session::SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool m
 
 void Session::ToggleFullscreen(ItemId id, bool stretch) {
     EndOpenGesture();
+    const Checkpoint checkpoint = Before({id});
     const Placements before = PlacementsOf({id});
     Model().ToggleFullscreen(id, Model().DisplayWidth(), Model().DisplayHeight(), stretch);
-    RecordPlacements(before);
+    CommitPlacements(checkpoint, before);
 }
 
 void Session::ResetItemToNativeSize(ItemId id) {
     EndOpenGesture();
+    const Checkpoint checkpoint = Before({id});
     const Placements before = PlacementsOf({id});
     Model().ResetItemToNativeSize(id);
-    RecordPlacements(before);
+    CommitPlacements(checkpoint, before);
 }
 
 // ================= How snippets look =================
 
 void Session::PreviewStyle(ItemId id, const ItemStyle& style) {
-    if (styleEditBefore_.has_value() && styleEditBefore_->first != id) {
+    if (styleEdit_.has_value() && styleEdit_->item != id) {
         EndStyleEdit();
     }
-    if (!styleEditBefore_.has_value()) {
+    if (!styleEdit_.has_value()) {
         EndOpenGesture();
     }
     Item* item = Model().FindItemAnywhere(id);
     if (item == nullptr) {
         return;
     }
-    if (!styleEditBefore_.has_value()) {
-        styleEditBefore_ = std::make_pair(id, ItemStyle::Of(*item));
+    if (!styleEdit_.has_value()) {
+        styleEdit_ = StyleEdit{id, ItemStyle::Of(*item), Before({id})};
     }
     style.ApplyTo(*item);
     Model().MarkChanged();
 }
 
 void Session::EndStyleEdit() {
-    if (!styleEditBefore_.has_value()) {
+    if (!styleEdit_.has_value()) {
         return;
     }
-    const auto [id, before] = *styleEditBefore_;
-    styleEditBefore_.reset();
-    const Item* item = Model().FindItemAnywhere(id);
-    if (item == nullptr || ItemStyle::Of(*item) == before) {
+    const StyleEdit edit = std::move(*styleEdit_);
+    styleEdit_.reset();
+    const Item* item = Model().FindItemAnywhere(edit.item);
+    if (item == nullptr || ItemStyle::Of(*item) == edit.before) {
+        Land(edit.checkpoint);  // nothing to file
         return;
     }
-    Record(Model().CanvasHoldingItem(id).value_or(0), Step{0, What::Style, {Change{id, history::StyleChanged{before}}}});
+    const CanvasId canvas = Model().CanvasHoldingItem(edit.item).value_or(0);
+    Commit(edit.checkpoint, canvas, Step{0, What::Style, {Change{edit.item, history::StyleChanged{edit.before}}}});
 }
 
 bool Session::SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge) {
     EndOpenGesture();
+    std::vector<ItemId> ids;
+    for (const auto& [id, style] : styles) {
+        ids.push_back(id);
+    }
+    const Checkpoint checkpoint = Before(ids);
     // Every snippet named in the step when any changed - see
     // RecordPlacements, for the same reason.
     bool changed = false;
@@ -401,7 +416,7 @@ bool Session::SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles,
     }
     Model().MarkChanged();
     const CanvasId canvas = Model().CanvasHoldingItem(step.changes.front().item).value_or(0);
-    return Record(canvas, std::move(step), merge);
+    return Commit(checkpoint, canvas, std::move(step), merge);
 }
 
 // ================= Copying and moving snippets =================
@@ -430,7 +445,7 @@ std::optional<Change> Session::MoveItemTo(ItemId itemId, CanvasId target) {
     if (!Model().MoveItem(itemId, target, std::nullopt)) {
         return std::nullopt;
     }
-    history_.Migrate(itemId, target);
+    migrations_.emplace_back(itemId, target);
     return Change{itemId, history::Moved{*from, index, target}};
 }
 
@@ -441,6 +456,7 @@ Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
         return placed;
     }
     const CanvasId here = Model().CurrentCanvasId();
+    const Checkpoint before = Before({});
     Step step{0, What::Paste, {}};
     bool fromThisCanvas = false;
     for (const ItemId id : ids) {
@@ -476,7 +492,9 @@ Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
             OffsetCopy(id);
         }
     }
-    Record(here, std::move(step));
+    if (!Commit(before, here, std::move(step))) {
+        return Placed{};
+    }
     // Whatever arrived needs a texture now: this is the current canvas.
     SyncTexturesToCurrentCanvas();
     return placed;
@@ -485,6 +503,7 @@ Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
 Session::Placed Session::Duplicate(const std::vector<ItemId>& ids) {
     EndOpenGesture();
     Placed placed;
+    const Checkpoint before = Before({});
     Step step{0, What::Duplicate, {}};
     for (const ItemId id : ids) {
         if (Model().IsItemDeleted(id)) {
@@ -502,7 +521,9 @@ Session::Placed Session::Duplicate(const std::vector<ItemId>& ids) {
     if (placed.items.empty()) {
         return placed;
     }
-    Record(Model().CurrentCanvasId(), std::move(step));
+    if (!Commit(before, Model().CurrentCanvasId(), std::move(step))) {
+        return Placed{};
+    }
     SyncTexturesToCurrentCanvas();
     return placed;
 }
@@ -517,6 +538,7 @@ Session::Placed Session::SendItemsTo(const std::vector<ItemId>& ids, CanvasId ta
     }
     // Filed on the canvas they went to: that is where they are, and where
     // an undo can reach them.
+    const Checkpoint before = Before({});
     Step step{0, copy ? What::CopyTo : What::Move, {}};
     for (const ItemId id : ids) {
         if (Model().CanvasHoldingItem(id) != source || Model().IsItemDeleted(id)) {
@@ -535,7 +557,9 @@ Session::Placed Session::SendItemsTo(const std::vector<ItemId>& ids, CanvasId ta
             placed.items.push_back(id);
         }
     }
-    Record(target, std::move(step));
+    if (!Commit(before, target, std::move(step))) {
+        return Placed{};
+    }
     if (!placed.items.empty()) {
         // What went is on a canvas nobody is looking at, and gives its
         // textures back now rather than at the next switch.
@@ -554,6 +578,7 @@ void Session::BeginTextEdit(ItemId itemId) {
     }
     textEditItemId_ = itemId;
     textEditOriginal_ = item->noteText;
+    textEditCheckpoint_ = Before({itemId});
 }
 
 void Session::PreviewText(std::string text) {
@@ -581,8 +606,8 @@ void Session::EndTextEdit(std::optional<std::string> text) {
     if (!item || item->noteText == textEditOriginal_) {
         return;
     }
-    Record(Model().CanvasHoldingItem(itemId).value_or(0),
-           Step{0, What::TextEdit, {Change{itemId, history::TextChanged{textEditOriginal_}}}});
+    const CanvasId canvas = Model().CanvasHoldingItem(itemId).value_or(0);
+    Commit(textEditCheckpoint_, canvas, Step{0, What::TextEdit, {Change{itemId, history::TextChanged{textEditOriginal_}}}});
 }
 
 // ================= Erasing =================
@@ -633,6 +658,7 @@ void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widt
     // The item's whole stroke list as the gesture starts, followed through
     // every call to one step for the whole gesture - see
     // eraseGestureStartSnapshot_.
+    eraseCheckpoint_ = Before({itemId});
     SnapshotStrokesForErase(itemId);
     eraseItemId_ = itemId;
     NoteEraseOutcome(Model().EraseAt(itemId, screenX, screenY, widthScreenPx * 0.5f));
@@ -661,6 +687,7 @@ void Session::EraseRect(ItemId itemId, float minX, float minY, float maxX, float
     // A whole gesture in one call: nothing changes the item between the
     // press that started the rectangle and the release that ends it, so the
     // snapshot taken here is the one the press would have taken.
+    eraseCheckpoint_ = Before({itemId});
     SnapshotStrokesForErase(itemId);
     NoteEraseOutcome(Model().EraseRectAt(itemId, minX, minY, maxX, maxY));
     RecordEraseGesture(itemId);
@@ -712,9 +739,11 @@ void Session::RecordEraseGesture(ItemId itemId) {
         }
     }
     if (erased.replacements.empty()) {
-        return;  // the gesture touched nothing
+        Land(eraseCheckpoint_);  // the gesture touched nothing
+        return;
     }
-    Record(Model().CanvasHoldingItem(itemId).value_or(0), Step{0, What::Erase, {Change{itemId, std::move(erased)}}});
+    const CanvasId canvas = Model().CanvasHoldingItem(itemId).value_or(0);
+    Commit(eraseCheckpoint_, canvas, Step{0, What::Erase, {Change{itemId, std::move(erased)}}});
 }
 
 }  // namespace sz::core

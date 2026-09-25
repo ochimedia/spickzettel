@@ -700,47 +700,43 @@ starts in its place. The app says so once, naming the file kept. A load
 that finds damage partway does the same.
 
 Statements wait 250 ms for a lock another program holds - short,
-because saves run on the render thread, and a save that gives up is
-tried again.
+because writes run on the render thread, and a command whose write gives
+up is simply not made (see "Every command is written as it is made").
 
-### A save
+### A write
 
-`LibraryStore::Save` writes what changed since the store last read or
-wrote the library, in one transaction:
+`LibraryStore::Write(view, changes, pictures)` writes one command's
+change in one transaction - the rows `changes` names (see
+`LibraryChanges`, which the session works out from a checkpoint), read
+from the model's view:
 
-1. every folder and canvas whose row differs from what was written;
-2. every snippet whose row differs. Each is serialized - its record and
-   its stroke blob - and hashed, and only one whose hash moved is
-   written. One that only moved, in its stack or to another canvas, has
-   just its place updated;
-3. the removal of whatever the library no longer holds, a thing before
-   what held it - after the writes, so that a snippet moved off a canvas
-   that is deleted in the same save goes with the move;
-4. the pictures no written snippet owns: a capture whose snippet was
-   deleted before its first save, or one a crash left without its
-   snippet;
-5. the current folder and canvas.
+1. every folder and canvas row, when any of them changed - a few hundred
+   rows at most, and rare;
+2. the snippets taken out;
+3. every snippet written whole - its record and its stroke blob - and
+   the canvas and place of every snippet on each canvas one of them is
+   on, or whose order changed;
+4. the folders and canvases the library no longer holds, with what is
+   still on them - after the snippets, so that one moved off a canvas
+   deleted in the same write goes with the move;
+5. the pictures the command made: a capture's pixels, a copy's picture
+   copied from its source's as stored;
+6. the current folder and canvas.
 
-What the store remembers of the rows is updated only once the commit has
-landed. A save that fails - a lock another program holds, a full disk -
-rolls back whole, and the next one writes everything the failed one
-would have.
-
-Serializing every snippet to compare costs a few milliseconds for a
-large library every time the autosave fires. It is the price of keeping
-`Save(view)` as the interface while the rest of the app still describes
-changes by snapshot; see "Dead ends" for the tree's field-by-field hash
-it replaced.
-
-Deleting for good (`Session::DeletePermanently`) is a save at once
-rather than at the next autosave, so that nothing deleted for good comes
-back after a crash in between. There is nothing else to it: no pending
-removals, nothing owed, no files that could stay behind.
+The store remembers nothing of what it wrote: which rows a command
+touched is the command's to say, through its checkpoint, and nothing is
+compared at write time. `Save(view)` is the same write with everything
+named - every row, and every one the model does not hold taken out - for
+a library made rather than changed: a first run's, a test's. The store
+used to diff every row against what it had last written, serializing
+and hashing every snippet on every save to find the one that changed;
+see "Dead ends" for the tree's field-by-field hash before that.
 
 ### Reading what cannot be used
 
 A value a row carries that cannot be used is repaired rather than
-refused, and the repaired row is written back by the next save. A float
+refused, and the repaired row is written back by the load itself, as it
+now reads. A float
 that is not finite reads as its default - JSON has no infinity, but
 1e100 becomes one the moment it is read as a float, and one infinite
 coordinate poisons every bounding box it meets - and one with a range
@@ -773,25 +769,22 @@ that was hard to find was a record and a picture file disagreeing. A
 blob is a few milliseconds slower to read than a file, once per canvas
 switch.
 
-A capture's pixels are stored at once (`SaveImage`), not with the
-debounced save: a screenshot lost to a crash can never be recaptured,
-where a few seconds of strokes can be redrawn. A picture is never changed
-after that. A copy of a snippet gets a copy of the row as stored
-(`CopyImage`), without decoding it.
-
-The recovery copy an exit writes when the library cannot be saved (see
-"When the disk says no") starts as `VACUUM INTO` of the library - the
-file as last saved, pictures and all, when it can still be read - with
-what the session holds saved over it.
+A capture's pixels are written in the same transaction as the snippet
+they belong to, so neither is ever in the file without the other. A
+picture is never changed after that. A copy of a snippet gets a copy of
+the row as stored, in the copy's own write, without decoding it.
 
 ### Testing
 
 `library_store_test.cpp` runs against real files. What would fail a
 write is another program holding the file, done with a second SQLite
-connection (`tests/support/held_library.h`): a write lock stops saves
-and leaves reads, an exclusive one stops both. A save that fails partway
-is a trigger the test adds that aborts on one row, which shows the
-writes before it rolled back with it.
+connection (`tests/support/held_library.h`): a write lock stops writes
+and leaves reads, an exclusive one stops both. A write that fails
+partway is a trigger the test adds that aborts on one row, which shows
+the rows before it rolled back with it. The randomized test in
+`history_test.cpp` fails writes the same way, with triggers on every
+table that abort while a flag row exists - instant, where a held lock
+costs the busy timeout each time.
 
 ## Configuration
 
@@ -988,9 +981,9 @@ assigned, so there is no path by which what runs and what is stored can
 disagree.
 
 **`Session`** is what is being worked on, independent of how it is
-shown: the library and deleting and restoring in it; the debounced
-autosave and the texture sync that keeps the GPU in step with the current
-canvas; screen capture (the frozen screen, a snippet's capture, the
+shown: the library and deleting and restoring in it; every command
+written to the library as it is made, and the texture sync that keeps
+the GPU in step with the current canvas; screen capture (the frozen screen, a snippet's capture, the
 picture a copy gets); and the per-canvas undo history with every edit
 that goes on it, offered as commands (`DeleteItem`, `ClearDrawing`,
 `CommitLiveStroke`, text edits) and as gestures in screen space (erase,
@@ -1028,48 +1021,71 @@ scratch, not content, and dropped on a canvas switch.
 The tests set a library up directly through `SessionTestAccess`, which is
 a friend of the session; nothing in `src` can reach it.
 
-### Autosave
+### Every command is written as it is made
 
-`Session::Tick` runs every frame and compares the model's generation
-counter against what was true last frame and what was last saved. A
-write fires once the generation has been unchanged for 2 s, coalescing a
-burst of edits into one write, or after 15 s regardless, so a long
-uninterrupted session is still persisted. `Flush` is called where
-content stops being editable with no frame to follow - hiding the
-overlay, restarting it for a setting, exiting - and every one of those
-first settles what the hand is in the middle of
-(`OverlayApp::SettleForPersistence`): the gesture under a held button
-ends, and a note being typed is committed to its item. A note lives in
-the editor's buffer until it is committed, and a flush that ran before
-the commit wrote the note as it was when the editor opened; typing that
-had been on screen for a minute was gone at the next start. A flush at
-one of those points, or after a silent capture taken while hidden, that
-does not land arranges its own retry: the autosave's clock runs on
-frames and there are none while hidden, so the tray asks the platform
-host for a background timer (a `WM_TIMER` on the host window) and
-tries again every ten seconds until the save lands or the overlay is up
-again and frames take over. Before that, a silent capture with notices
-off created its canvas and snippet and returned to hidden without a
-save; the picture was on disk and the snippet it belongs to was not, for
-as long as the overlay stayed hidden. A failed write (disk full, the file
-held by another program) is retried
-on a clock of its own, doubling up to 30 s; falling through to the quiet
-check, which a failed save does nothing to reset, retried on every frame
-and turned a full disk into a synchronous rewrite per frame. A save is
-acknowledged only when *all* of it landed, pictures included, so a
-picture whose write failed is retried rather than waiting for an
-unrelated edit. A capture whose picture could not be written at capture
-time keeps its pixels in the session and is written by the next save
-that can, and no save counts until it has. A screenshot is the one thing in the
-library that cannot be remade; the first version let the pixels go with
-the capture result, so a picture that failed to write stayed on screen,
-looking captured, and was gone at the next restart.
+Each command the session runs is written to the library before it
+returns, in one transaction: the file holds what the model holds at
+every moment but the middle of a gesture, and there is nothing to save.
+This replaced a debounced autosave (2 s of quiet, 15 s at most), with a
+flush at every point no frame followed, a retry clock of its own for a
+failed save, a background timer for the retries while hidden, pixels
+kept in memory for a capture whose picture could not be written, and a
+recovery copy written beside the library at exit when it still could
+not be - and the store's diffing of every row against what it had last
+written, to find what a save had to write. All of it existed to carry
+changes that were in memory and not yet on disk; there are none.
+
+**What a command writes** is worked out, not said: before it runs, the
+session takes a checkpoint (`CanvasManager::TakeCheckpoint`) - every
+folder, every canvas with the ids of its snippets in order, which folder
+and canvas are current, and copies of the snippets the command names,
+the only ones whose content it may change - and afterwards
+`ChangesSince` compares: snippets that came, went or moved, canvases
+whose order changed, folder and canvas rows that differ, and the named
+snippets whose content did. The checkpoint is ids and a few snippets,
+cheap to take on every command; a command that forgot to name a snippet
+it changed would leave that change out of the file, which is what
+`HistoryTest.TheFileHoldsWhatTheModelHoldsWhateverFailsToBeWritten`
+exists to catch - random commands against a real file, with the file
+read back and compared with the model throughout. A snippet written is
+written with its canvas's whole order, so that a place never lands
+beside a stale one; a screenshot's pixels and a copy's picture are
+written in the same transaction as the snippet they belong to.
+
+**A command whose write fails is not made.** The model goes back to the
+checkpoint (`CanvasManager::RollBack`) - a capture's texture released, a
+moved snippet back where it was, a snippet deleted for good back with
+its history - and a line along the bottom of the screen says the
+library could not be written and the last change was not made, drawn
+from `Session::LastWriteFailed` until a write lands. Nothing is filed on
+the history for it, and an undo or redo whose write fails puts its step
+back on its stack as it was. A disk that is full or a file another
+program holds loses the change being made, visibly, and nothing else: a
+screenshot that cannot be written is not taken, rather than kept in
+memory looking captured. Before, the same failure kept every change
+since in memory, and an exit while it lasted lost all of them unless the
+recovery copy could be written somewhere else.
+
+A gesture - a drag, a slider, a note being typed, the eraser - is
+previewed in the model and written once, as the command it ends in; its
+checkpoint is taken when it begins. A crash in the middle of one loses
+that gesture and nothing before it. A first run writes the library it
+begins with (`Session::WriteWholeLibrary`) before the first command,
+which writes only what it changes and would find what holds it missing.
+
+What each costs is in docs/PERF.md: a stroke, the heaviest ordinary
+command, is one transaction of the snippet's record and strokes; with
+`synchronous=FULL` it is bound by the disk's flush, around ten
+milliseconds on a local SSD, paid on the frame the command lands in.
 
 Leaving drawing mode - Escape or the view-only hotkey while the button
 is held - ends a stroke in flight as a release would, so it is kept, is
-its own undo step, and is saved like any other.
+its own undo step, and is written like any other. Hiding the overlay,
+restarting it for a setting, exiting and the OS ending the session all
+settle what the hand is in the middle of first
+(`OverlayApp::SettleForPersistence`), which writes it.
 
-**One writer per library.** Two copies of the app would each save the
+**One writer per library.** Two copies of the app would each write the
 library from a stale picture of it.
 The tray claims a per-user named mutex before it does anything else,
 and a second copy exits with the app's one message box instead of
@@ -1079,64 +1095,30 @@ holds nothing. A hotkey collision is not a lock: with a hand-edited
 config the two copies could have different hotkeys and never notice
 each other.
 
-**When the disk says no.** A save that fails is said on screen for as
-long as it stays failed: a line along the bottom naming the library,
-drawn from `Session::LastSaveFailed`, in edit and view-only mode alike,
-rather than a toast that fades while the problem does not. A settings
-file that could not be written is reported on the same line by the
-tray, which is the only writer of it, and remembered as owed: the
-background timer tries it again every ten seconds, whether or not the
-overlay is up, and the shutdown flush tries it once more before the app
-goes. A settings edit is rare, and a failed write used to stay
-unwritten until the next one. Before this, both results were
-discarded: a full disk lost every outstanding edit on an ordinary exit
-without a word, and a setting that appeared applied was back to its old
-value at the next start.
+**The settings file** is written by the tray, which is the only writer
+of it; one that could not be written is said on the same line along the
+bottom, and remembered as owed: the background timer (a `WM_TIMER` on
+the host window, the one clock the app has while hidden) tries it again
+every ten seconds, whether or not the overlay is up, and exit tries it
+once more before the app goes.
 
 Exit and the OS ending the session (`WM_QUERYENDSESSION`, answered TRUE
-after the flush, and `WM_ENDSESSION` again for good measure) are the two
-flushes with no retry after them. Those two messages are a broadcast to
-every *top-level* window, and Windows leaves message-only
-(`HWND_MESSAGE`) windows off that list - which the host window was when
-the handling was first written, so no logoff could have reached it. It
-is now an ordinary hidden top-level window, and the test finds it with
-`FindWindow`, which likewise sees only top-level windows, and sends it
-the query. Being top-level, it also receives `WM_CLOSE` - `taskkill`
-without `/f` posts it - which `DefWindowProc` answered by destroying the
-window and nothing else: the process ran on with no tray icon and no
-hotkeys, still holding the single-instance mutex. A close from outside,
-and the Restart Manager's `ENDSESSION_CLOSEAPP`, now take the tray menu's
-Exit. A close-app runs no session-end flush before the exit's own: with
-the query's, that was three runs, and three recovery copies against the
-Restart Manager's clock when the library could not be written. So does
-a `WM_CLOSE` sent to the overlay take the Exit, which is where `taskkill`
-sends it while the overlay is up - it closes the windows it can see, and
-the host window is hidden. Alt+F4 over the overlay arrives as `SC_CLOSE`
-instead, and stays swallowed. Exit and a session end both settle the
-hand's work, try the save twice - a lock another program held a moment
-ago may be gone - and, if the library still cannot be written, write a
-**recovery copy** beside it: `library-recovery-<timestamp>.db`, the
-library as last saved (see "Pictures: QOI, in the file") with what the
-session holds saved over it and every picture a snippet in it has -
-from the session where it holds the pixels (a capture whose write never
-landed), and from the real library otherwise - with a note beside it
-(`.db.txt`) saying where it came from and whether it is whole. The copy
-has to open on its own: the first version copied only what was in
-memory, so its snippets named screenshots that were still in the real
-library and the copy opened with placeholders where they should have
-been. A copy that could not be made whole (the real library could not
-be read for its pictures) is reported as such, in the return and in the
-note. Exit still exits, and this is an **accepted outcome**: when the
-library cannot be written twice over and the recovery copy beside it
-cannot be written either - a full volume, an unwritable parent - what
-is in memory is lost when the process goes. Holding the app open
-against the user's explicit request was judged worse than a copy they
-have to go and find; the OS's session end cannot be held up at all; and
-the tray has no window of its own to ask in. A retry loop at exit, an
-alternate destination to ask for, or a message box naming the copy were
-each considered and not done - a save that has failed at two places
-three times is a disk problem, not one more attempt away from working,
-and the on-screen warning while the app ran was the time to say so.
+after settling, and `WM_ENDSESSION` again for good measure) reach the
+app as a broadcast to every *top-level* window, and Windows leaves
+message-only (`HWND_MESSAGE`) windows off that list - which the host
+window was when the handling was first written, so no logoff could have
+reached it. It is now an ordinary hidden top-level window, and the test
+finds it with `FindWindow`, which likewise sees only top-level windows,
+and sends it the query. Being top-level, it also receives `WM_CLOSE` -
+`taskkill` without `/f` posts it - which `DefWindowProc` answered by
+destroying the window and nothing else: the process ran on with no tray
+icon and no hotkeys, still holding the single-instance mutex. A close
+from outside, and the Restart Manager's `ENDSESSION_CLOSEAPP`, now take
+the tray menu's Exit, and a close-app runs no session-end settling
+before the exit's own. So does a `WM_CLOSE` sent to the overlay take the
+Exit, which is where `taskkill` sends it while the overlay is up - it
+closes the windows it can see, and the host window is hidden. Alt+F4
+over the overlay arrives as `SC_CLOSE` instead, and stays swallowed.
 
 ### GPU textures are per canvas
 
@@ -1177,8 +1159,7 @@ holds cannot be carried over: every texture was made on the old device.
 So the window's `TextureGeneration` moves on, and at the start of the
 next frame, before anything draws, the app lets go of each texture and
 makes it again. The session remakes the current canvas's pictures from
-the library, a picture not written yet from its pending pixels,
-and the frozen screen from the pixels it keeps for cropping. The
+the library and the frozen screen from the pixels it keeps for cropping. The
 Overview's previews and the stroke rasters rebuild as they are next
 wanted. A stray old texture handed to `UpdateTextureRegionRGBA` is
 refused, not written with the new device's context.
@@ -1201,21 +1182,13 @@ used a whole core until unlock. Once a present has said so, each frame
 first asks with `DXGI_PRESENT_TEST`, which draws nothing, and waits
 while the answer is still occluded.
 
-A skipped frame still runs the autosave's clock, through a callback of
-its own (`SetSkippedFrameCallback`). The autosave runs in the frame, and
-the background timer leaves the library alone while the overlay is up.
-So with frames skipped, nothing was saved: an edit made just before
-Win+L waited for the unlock, and a crash or power cut meanwhile lost
-it.
-
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
 copy made from them (paste, duplicate, copy to another canvas) must
 share neither a picture nor a texture with its source. `CanvasManager`
 starts the copy with neither; `Session::ClonePicturesForCopy` then gives
-it its picture at once - the source's row copied as stored, or the
-session's own pending pixels for a capture not written yet. The UI says
-so when the source's picture cannot be copied, rather than showing a
-copy that looks whole.
+it its picture - the source's row copied as stored, in the write that
+makes the copy. The UI says so when the source's picture cannot be
+found, rather than showing a copy that looks whole.
 
 ### Undo is per canvas
 
@@ -2036,10 +2009,6 @@ like anything else, and they show how the app works. Being deletable is
 also why the About text repeats both warnings. They sit in a row with
 the welcome, or in a column on a screen too narrow for that, so that
 none of them covers another.
-
-`Flush` is called before hiding and before exiting, the two places
-content stops being editable and no frame will come soon enough to catch
-the debounce.
 
 ## The Windows backend
 

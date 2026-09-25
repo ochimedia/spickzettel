@@ -130,11 +130,6 @@ public:
     // Invoked once per rendered frame while visible; the UI issues its draw
     // calls from within it.
     virtual void SetFrameCallback(FrameCallback callback) = 0;
-    // Invoked instead, once per frame skipped while visible - nothing to
-    // draw with, the device lost, or nowhere to be seen, the screen locked
-    // - with the seconds since the last frame, drawn or skipped. For what
-    // has to go on while nothing is drawn: the autosave's clock.
-    virtual void SetSkippedFrameCallback(FrameCallback callback) = 0;
     // Invoked for mouse button and move events received while visible.
     virtual void SetMouseCallback(MouseCallback callback) = 0;
 

@@ -115,6 +115,7 @@
   "toast.pasted": "Pasted",
   "toast.duplicated": "Duplicated",
   "toast.nothingToPaste": "Nothing left to paste",
+  "toast.notWritten": "Not done - the library could not be written",
   "toast.sentToDeletedCanvasPrefix": "Undid paste - back on its deleted canvas, found under Show deleted: ",
   "toast.copiedToPrefix": "Copied to ",
   "toast.movedToPrefix": "Moved to ",
@@ -246,7 +247,7 @@
   "demo.subtitle": "Demo Version",
 
   "_status": "The warning along the bottom while the disk cannot be written to - see OverlayApp::RenderPersistenceWarning. %s is a path.",
-  "status.saveFailed": "Could not save the library to %s - your changes are kept in memory and saving is retried",
+  "status.writeFailed": "Could not write to the library at %s, so the last change was not made - it is back as it was",
   "status.configWriteFailed": "Could not write the settings to %s",
   "_startup": "The message boxes shown when the app cannot start at all, before there is a tray icon to say so.",
   "startup.failed": "Spickzettel could not start. Another copy may already be running.",

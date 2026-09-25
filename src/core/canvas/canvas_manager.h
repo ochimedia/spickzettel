@@ -25,16 +25,44 @@ struct CanvasManagerSnapshot {
     CanvasId currentCanvasId = 0;
 };
 
-// The same four things, borrowed rather than copied - what a save reads.
-// A snapshot copies every stroke point in the library, and a save runs
-// every two seconds of quiet; the copy was the largest single cost of a
-// save that otherwise writes only what changed. Valid only while the
-// manager it came from is not mutated - see CanvasManager::View.
+// The same four things, borrowed rather than copied - what a write reads.
+// A snapshot copies every stroke point in the library, and a write needs
+// only the rows it writes. Valid only while the manager it came from is not
+// mutated - see CanvasManager::View.
 struct LibraryView {
     const std::vector<Folder>& folders;
     const std::vector<Canvas>& canvases;
     FolderId currentFolderId = 0;
     CanvasId currentCanvasId = 0;
+};
+
+// What one change to the library touched, as rows of the library file:
+// what a write has to write for the file to hold what the model holds (see
+// LibraryStore::Write). Worked out from a checkpoint taken before the
+// change - see CanvasManager::ChangesSince - rather than said by each
+// command, so that no command can forget a row.
+struct LibraryChanges {
+    // Every folder and canvas row is written, in the order they are now,
+    // and those gone are taken out with what they held.
+    bool foldersAndCanvases = false;
+    // Which folder and canvas are current.
+    bool current = false;
+    // Snippets written whole - their record and their strokes - and the
+    // order of the canvas each is on with them.
+    std::vector<ItemId> items;
+    // Snippets taken out, with their pictures.
+    std::vector<ItemId> erasedItems;
+    // Canvases whose every snippet has its canvas and place written: the
+    // order they are in, or what came and went.
+    std::vector<CanvasId> itemOrders;
+    // All of it: every row written, and every one the model does not hold
+    // taken out - a library written whole (see LibraryStore::Save).
+    bool everything = false;
+
+    bool Empty() const {
+        return !foldersAndCanvases && !current && items.empty() && erasedItems.empty() && itemOrders.empty() &&
+               !everything;
+    }
 };
 
 // Owns the folders and canvases, which folder is browsed and which canvas
@@ -334,8 +362,9 @@ public:
     // for the content mutations made directly on a reference this class
     // handed out (a drag, an opacity slider, a baked stroke). Never
     // persisted and never reset by ImportSnapshot, since a load isn't a
-    // user change. The autosave compares it frame to frame, and the mesh
-    // caches gate their invalidation checks on it.
+    // user change. The mesh caches gate their invalidation checks on it;
+    // what is written to the library is worked out from a checkpoint
+    // instead (see ChangesSince).
     uint64_t Generation() const { return generation_; }
     // Call after mutating a Canvas or Item through a reference, whenever
     // that mutation isn't already one of this class's own methods.
@@ -358,6 +387,38 @@ public:
     // SettleOffDeleted), but leaves Generation() untouched: loading isn't a
     // user change.
     void ImportSnapshot(CanvasManagerSnapshot snapshot);
+
+    // ===== Before a change =====
+    //
+    // What a command could change, as it was before the command ran: every
+    // folder, every canvas with the order of its snippets, which folder and
+    // canvas are current, and copies of the snippets the command names -
+    // the only snippets whose content it may change. The rest of the
+    // library it can only reorder, add to or take from, which the layout
+    // records whole. Cheap to take: the layout is ids, and the copies are
+    // the few snippets a command is about.
+    struct Checkpoint {
+        struct CanvasLayout {
+            Canvas canvas;  // without its items
+            std::vector<ItemId> items;
+        };
+        std::vector<Folder> folders;
+        std::vector<CanvasLayout> canvases;
+        FolderId currentFolderId = 0;
+        CanvasId currentCanvasId = 0;
+        std::vector<Item> items;
+    };
+    Checkpoint TakeCheckpoint(const std::vector<ItemId>& items) const;
+    // What changed since `checkpoint`, as rows - see LibraryChanges. A
+    // snippet whose content changed is found only among the checkpoint's
+    // copies; one that came, went or moved, anywhere.
+    LibraryChanges ChangesSince(const Checkpoint& checkpoint) const;
+    // Puts the library back as `checkpoint` has it: what a change whose
+    // write failed is undone with, so that the model never holds what the
+    // file does not. A snippet keeps the texture it has now, which is GPU
+    // state and not content; one made since goes, and its texture is
+    // returned for the caller to release.
+    std::vector<uint64_t> RollBack(const Checkpoint& checkpoint);
 
     // Keeps every item's `rect` correct for the display it is shown on
     // right now. Called every frame with the display size, so a resolution

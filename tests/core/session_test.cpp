@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -144,10 +145,10 @@ TEST(SessionTest, ErasingDeletedSnippetsOnOpenLeavesTheCanvasToLoadItsPicturesLa
         Session session;
         session.AttachWindow(&window);
         session.SetLibraryStore(&store);
+        ASSERT_TRUE(session.WriteWholeLibrary());
         shot = session.CreateItem(true, Rect{0.0f, 0.0f, 1.0f, 1.0f}, "Shot");
-        const ItemId gone = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
+        const ItemId gone = session.CreateItem(false, Rect{0, 0, 100, 100}, "Gone");
         ASSERT_TRUE(session.DeleteItem(gone));
-        ASSERT_TRUE(session.Flush());
         session.SetLibraryStore(nullptr);
     }
 
@@ -766,6 +767,7 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     Session session;
     session.AttachWindow(&window);
     session.SetLibraryStore(&store);
+    ASSERT_TRUE(session.WriteWholeLibrary());
     session.FreezeScreen(platform::DisplayInfo{"d", "D", 0, 0, 4, 3, true, 60, 100});
     ASSERT_EQ(window.captureCallCount, 1);
     ASSERT_EQ(session.FrozenScreenTexture(), 7u);
@@ -818,6 +820,7 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     Session session;
     session.AttachWindow(&window);
     session.SetLibraryStore(&store);
+    ASSERT_TRUE(session.WriteWholeLibrary());
 
     const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     Item* shot = Model(session).FindItemAnywhere(id);
@@ -841,174 +844,6 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     session.SetLibraryStore(nullptr);
 }
 
-// A screenshot is the one thing in the library that cannot be remade, so
-// a capture whose picture could not be written at capture time keeps its
-// pixels and is written by the next save that can - and no save counts as
-// landed until it has.
-TEST(SessionTest, ACaptureWhosePictureCouldNotBeWrittenIsWrittenByTheNextSave) {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_pending_capture";
-    std::filesystem::remove_all(dir);
-    const RemovedAtEnd cleanup(dir);
-    persistence::LibraryStore store(dir / "library.db");
-    ASSERT_EQ(store.Open(), persistence::LibraryStore::OpenResult::Opened);
-    HeldLibrary held(dir / "library.db", /*readers=*/false);
-    test::FakeOverlayWindow window;
-    window.captureReturnsHandle = 7;
-    window.captureReturnsWidth = 2;
-    window.captureReturnsHeight = 1;
-    window.captureReturnsPixelsRGBA = {10, 20, 30, 255, 40, 50, 60, 255};
-    Session session;
-    session.AttachWindow(&window);
-    session.SetLibraryStore(&store);
-
-    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    const Item* shot = Model(session).FindItemAnywhere(id);
-    EXPECT_EQ(shot->picture.textureHandle, 7u) << "on screen as captured";
-    EXPECT_FALSE(shot->picture.stored) << "but not in the library";
-    EXPECT_TRUE(session.HasUnsavedChanges());
-
-    // Nothing lands while the file is held, and the save does not count.
-    EXPECT_FALSE(session.Flush());
-    EXPECT_TRUE(session.HasUnsavedChanges());
-    EXPECT_TRUE(session.LastSaveFailed());
-
-    held.Release();
-    EXPECT_TRUE(session.Flush());
-    EXPECT_FALSE(session.HasUnsavedChanges());
-    EXPECT_FALSE(session.LastSaveFailed());
-    shot = Model(session).FindItemAnywhere(id);
-    ASSERT_TRUE(shot->picture.stored);
-
-    persistence::LibraryStore reopened(dir / "library.db");
-    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
-    ASSERT_TRUE(loaded.has_value());
-    const Item* reloaded = nullptr;
-    for (const Canvas& canvas : loaded->canvases) {
-        for (const Item& item : canvas.items) {
-            if (item.id == id) {
-                reloaded = &item;
-            }
-        }
-    }
-    ASSERT_NE(reloaded, nullptr);
-    EXPECT_TRUE(reloaded->picture.stored);
-    const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(id);
-    ASSERT_TRUE(saved.has_value());
-    EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
-
-    session.SetLibraryStore(nullptr);
-}
-
-// A recovery copy is a library that opens on its own: every picture a
-// record in it names is in it, whether the session still held the pixels
-// or had to read them back from the real library - and one that could not
-// be made whole says so.
-TEST(SessionTest, ARecoveryCopyHoldsEveryPictureItsRecordsName) {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "spickzettel_session_test_recovery";
-    const std::filesystem::path whole = dir / "whole.db";
-    const std::filesystem::path partial = dir / "partial.db";
-    std::filesystem::remove_all(dir);
-    const RemovedAtEnd cleanup(dir);
-    persistence::LibraryStore store(dir / "library.db");
-    test::FakeOverlayWindow window;
-    window.captureReturnsHandle = 7;
-    window.captureReturnsWidth = 2;
-    window.captureReturnsHeight = 1;
-    window.captureReturnsPixelsRGBA = {10, 20, 30, 255, 40, 50, 60, 255};
-    Session session;
-    session.AttachWindow(&window);
-    session.SetLibraryStore(&store);
-    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    ASSERT_TRUE(session.Flush());
-    ASSERT_TRUE(Model(session).FindItemAnywhere(id)->picture.stored)
-        << "in the real library, not in memory";
-
-    EXPECT_TRUE(session.WriteRecoveryCopy(whole));
-    persistence::LibraryStore recovered(whole);
-    const std::optional<CanvasManagerSnapshot> loaded = recovered.Load();
-    ASSERT_TRUE(loaded.has_value());
-    const Item* copy = nullptr;
-    for (const Canvas& canvas : loaded->canvases) {
-        for (const Item& item : canvas.items) {
-            copy = &item;
-        }
-    }
-    ASSERT_NE(copy, nullptr);
-    EXPECT_TRUE(copy->picture.stored);
-    const std::optional<persistence::DecodedImage> picture = recovered.LoadImage(copy->id);
-    ASSERT_TRUE(picture.has_value()) << "a snippet with a picture, and the copy does not hold it";
-    EXPECT_EQ(picture->pixelsRGBA, window.captureReturnsPixelsRGBA);
-    EXPECT_TRUE(std::filesystem::is_regular_file(dir / "whole.db.txt"));
-
-    // The real library held by another program: the copy has the records
-    // from the session, but not the picture, and says so.
-    {
-        HeldLibrary held(dir / "library.db", /*readers=*/false);
-        EXPECT_FALSE(session.WriteRecoveryCopy(partial));
-    }
-    {
-        std::ifstream note(dir / "partial.db.txt");
-        const std::string text((std::istreambuf_iterator<char>(note)), std::istreambuf_iterator<char>());
-        EXPECT_NE(text.find("Incomplete"), std::string::npos) << text;
-    }
-    persistence::LibraryStore partialCopy(partial);
-    const std::optional<CanvasManagerSnapshot> partialLoaded = partialCopy.Load();
-    ASSERT_TRUE(partialLoaded.has_value()) << "the records are there all the same";
-
-    session.SetLibraryStore(nullptr);
-}
-
-// A copy taken of a capture whose write has not landed has the session's
-// pixels to copy from, not a file - and must not come out pictureless.
-TEST(SessionTest, ACopyOfACaptureStillWaitingToBeWrittenGetsItsOwnPicture) {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_copy_of_pending";
-    std::filesystem::remove_all(dir);
-    const RemovedAtEnd cleanup(dir);
-    persistence::LibraryStore store(dir / "library.db");
-    ASSERT_EQ(store.Open(), persistence::LibraryStore::OpenResult::Opened);
-    HeldLibrary held(dir / "library.db", /*readers=*/false);
-    test::FakeOverlayWindow window;
-    window.captureReturnsHandle = 7;
-    window.captureReturnsWidth = 2;
-    window.captureReturnsHeight = 1;
-    window.captureReturnsPixelsRGBA = {10, 20, 30, 255, 40, 50, 60, 255};
-    window.createTextureFromPixelsReturnsHandle = 9;
-    Session session;
-    session.AttachWindow(&window);
-    session.SetLibraryStore(&store);
-
-    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-    ASSERT_FALSE(Model(session).FindItemAnywhere(id)->picture.stored) << "not in the library";
-
-    const Session::Placed made = session.Duplicate({id});
-    ASSERT_EQ(made.items.size(), 1u);
-    const ItemId copyId = made.items[0];
-    EXPECT_FALSE(made.pictureLost) << "the pixels are in the session";
-    EXPECT_NE(Model(session).FindItemAnywhere(copyId)->picture.textureHandle, 0u) << "on screen at once";
-
-    EXPECT_FALSE(session.Flush()) << "the file is still held";
-    held.Release();
-    EXPECT_TRUE(session.Flush());
-    persistence::LibraryStore reopened(dir / "library.db");
-    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
-    ASSERT_TRUE(loaded.has_value());
-    size_t pictures = 0;
-    for (const Canvas& canvas : loaded->canvases) {
-        for (const Item& item : canvas.items) {
-            ASSERT_TRUE(item.picture.stored) << "every copy has a picture";
-            const std::optional<persistence::DecodedImage> saved = reopened.LoadImage(item.id);
-            ASSERT_TRUE(saved.has_value());
-            EXPECT_EQ(saved->pixelsRGBA, window.captureReturnsPixelsRGBA);
-            ++pictures;
-        }
-    }
-    EXPECT_EQ(pictures, 2u);
-
-    session.SetLibraryStore(nullptr);
-}
-
 // A source whose picture is gone from the library gives its copy nothing,
 // and says so, rather than quietly producing a copy that looks captured.
 TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
@@ -1019,6 +854,7 @@ TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
     persistence::LibraryStore store(dir / "library.db");
     Session session;
     session.SetLibraryStore(&store);
+    ASSERT_TRUE(session.WriteWholeLibrary());
     const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     Model(session).FindItemAnywhere(id)->picture.stored = true;  // and yet there is none
 
@@ -1031,76 +867,181 @@ TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
     session.SetLibraryStore(nullptr);
 }
 
-// Move a captured snippet to another canvas and delete the canvas it left
-// for good, all before the autosave: the picture must not go with the
-// canvas the snippet left.
-TEST(SessionTest, APermanentDeleteRightAfterAMoveKeepsWhatWasMoved) {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_delete_after_move";
-    std::filesystem::remove_all(dir);
-    const RemovedAtEnd cleanup(dir);
-    const std::vector<uint8_t> pixels = {10, 20, 30, 255, 40, 50, 60, 255};
-    ItemId id = 0;
-    {
-        persistence::LibraryStore store(dir / "library.db");
-        Session session;
-        session.SetLibraryStore(&store);
-        const CanvasId left = Model(session).CurrentCanvasId();
-        id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-        ASSERT_TRUE(store.SaveImage(id, pixels.data(), 2, 1));
-        Model(session).FindItemAnywhere(id)->picture.stored = true;
-        const CanvasId other = Model(session).AddCanvas("Other");
-        ASSERT_TRUE(session.Flush());
+// ===== Every command written as it is made =====
 
-        ASSERT_NE(Model(session).PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
-        ASSERT_TRUE(session.Delete(left));
-        EXPECT_TRUE(session.DeletePermanently(left));
-        EXPECT_FALSE(session.HasUnsavedChanges()) << "saved with the delete";
-        session.SetLibraryStore(nullptr);
+// A library in a temporary directory, taken away at the end, and a window
+// whose captures are one 2x1 picture.
+class WrittenSessionTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        dir_ = std::filesystem::temp_directory_path() /
+               (std::string("spickzettel_session_written_") +
+                ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        std::filesystem::remove_all(dir_);
+        cleanup_.emplace(dir_);
+        store_.emplace(File());
+        ASSERT_EQ(store_->Open(), persistence::LibraryStore::OpenResult::Opened);
+        window_.captureReturnsHandle = 7;
+        window_.captureReturnsWidth = 2;
+        window_.captureReturnsHeight = 1;
+        window_.captureReturnsPixelsRGBA = kPixels;
+        window_.createTextureFromPixelsReturnsHandle = 9;
+        session_.AttachWindow(&window_);
+        session_.SetLibraryStore(&*store_);
+        ASSERT_TRUE(session_.WriteWholeLibrary());
     }
-    persistence::LibraryStore reopened(dir / "library.db");
-    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
-    ASSERT_TRUE(loaded.has_value());
-    ASSERT_EQ(loaded->canvases.size(), 1u);
-    ASSERT_EQ(loaded->canvases[0].items.size(), 1u);
-    const Item& item = loaded->canvases[0].items[0];
-    ASSERT_EQ(item.id, id);
-    const std::optional<persistence::DecodedImage> image = reopened.LoadImage(id);
-    ASSERT_TRUE(image.has_value()) << "the picture went with the canvas the snippet left";
-    EXPECT_EQ(image->pixelsRGBA, pixels);
+    void TearDown() override {
+        session_.SetLibraryStore(nullptr);
+        store_.reset();
+    }
+
+    std::filesystem::path File() const { return dir_ / "library.db"; }
+    // The library as the file holds it now.
+    CanvasManagerSnapshot OnDisk() const {
+        std::optional<CanvasManagerSnapshot> loaded = persistence::LibraryStore(File()).Load();
+        EXPECT_TRUE(loaded.has_value());
+        return loaded.value_or(CanvasManagerSnapshot{});
+    }
+    static size_t ItemsIn(const CanvasManagerSnapshot& snapshot) {
+        size_t items = 0;
+        for (const Canvas& canvas : snapshot.canvases) {
+            items += canvas.items.size();
+        }
+        return items;
+    }
+
+    inline static const std::vector<uint8_t> kPixels = {10, 20, 30, 255, 40, 50, 60, 255};
+    std::filesystem::path dir_;
+    std::optional<RemovedAtEnd> cleanup_;
+    std::optional<persistence::LibraryStore> store_;
+    test::FakeOverlayWindow window_;
+    Session session_;
+};
+
+// A screenshot is in the file, picture and all, the moment it is made.
+TEST_F(WrittenSessionTest, ACaptureIsWrittenWithItsPictureAsItIsMade) {
+    const ItemId id = session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    ASSERT_NE(id, 0u);
+    EXPECT_TRUE(session_.Manager().FindItemAnywhere(id)->picture.stored);
+    const CanvasManagerSnapshot disk = OnDisk();
+    ASSERT_EQ(ItemsIn(disk), 1u);
+    EXPECT_TRUE(disk.canvases[0].items[0].picture.stored);
+    const std::optional<persistence::DecodedImage> picture = store_->LoadImage(id);
+    ASSERT_TRUE(picture.has_value());
+    EXPECT_EQ(picture->pixelsRGBA, kPixels);
 }
 
-// The other way round: a captured snippet moved into a canvas, and that
-// canvas deleted for good, before the autosave. The snippet goes with the
-// canvas it went to, picture and all.
-TEST(SessionTest, APermanentDeleteRightAfterAMoveIntoTheCanvasTakesWhatWasMovedIn) {
-    const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_delete_after_move_in";
-    std::filesystem::remove_all(dir);
-    const RemovedAtEnd cleanup(dir);
-    const std::vector<uint8_t> pixels = {10, 20, 30, 255, 40, 50, 60, 255};
-    ItemId id = 0;
+// A capture whose write fails is not made: nothing on screen that looks
+// captured and is not in the library, nothing on the history, and the
+// texture it had given back. The next one, once the file is free, is.
+TEST_F(WrittenSessionTest, ACaptureThatCannotBeWrittenIsNotMade) {
+    const size_t before = session_.Manager().CurrentOrNull()->items.size();
+    const int released = window_.releaseTextureCallCount;
     {
-        persistence::LibraryStore store(dir / "library.db");
-        Session session;
-        session.SetLibraryStore(&store);
-        id = session.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
-        ASSERT_TRUE(store.SaveImage(id, pixels.data(), 2, 1));
-        Model(session).FindItemAnywhere(id)->picture.stored = true;
-        const CanvasId other = Model(session).AddCanvas("Other");
-        ASSERT_TRUE(session.Flush());
-
-        ASSERT_NE(Model(session).PlaceItemOnCanvas(id, other, /*copy=*/false), 0u);
-        ASSERT_TRUE(session.Delete(other));
-        EXPECT_TRUE(session.DeletePermanently(other));
-        session.SetLibraryStore(nullptr);
+        HeldLibrary held(File(), /*readers=*/false);
+        EXPECT_EQ(session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot"), 0u);
     }
-    persistence::LibraryStore reopened(dir / "library.db");
-    const std::optional<CanvasManagerSnapshot> loaded = reopened.Load();
-    ASSERT_TRUE(loaded.has_value());
-    ASSERT_EQ(loaded->canvases.size(), 1u);
-    EXPECT_TRUE(loaded->canvases[0].items.empty());
-    EXPECT_FALSE(reopened.HasImage(id));
+    EXPECT_EQ(session_.Manager().CurrentOrNull()->items.size(), before);
+    EXPECT_TRUE(session_.LastWriteFailed());
+    EXPECT_FALSE(session_.CanUndo());
+    EXPECT_EQ(window_.releaseTextureCallCount, released + 1) << "its texture";
+
+    const ItemId id = session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    ASSERT_NE(id, 0u);
+    EXPECT_FALSE(session_.LastWriteFailed());
+    EXPECT_EQ(ItemsIn(OnDisk()), 1u);
+}
+
+// Any command whose write fails is not made, and nothing of it is filed;
+// an undo whose write fails is put back where it was, to be taken again.
+TEST_F(WrittenSessionTest, ACommandOrAnUndoThatCannotBeWrittenIsNotMade) {
+    const ItemId item = session_.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawStrokeInto(session_, item);
+    ASSERT_EQ(OnDisk().canvases[0].items[0].strokes.size(), 1u);
+    {
+        HeldLibrary held(File(), /*readers=*/false);
+        DrawStrokeInto(session_, item);
+        EXPECT_EQ(ItemById(session_.Manager(), item)->strokes.size(), 1u) << "not made";
+        EXPECT_FALSE(session_.Undo().has_value());
+        EXPECT_EQ(ItemById(session_.Manager(), item)->strokes.size(), 1u) << "not undone";
+        EXPECT_TRUE(session_.LastWriteFailed());
+    }
+    const std::optional<Session::UndoStep> undone = session_.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke) << "the stroke's step, still there";
+    EXPECT_TRUE(OnDisk().canvases[0].items[0].strokes.empty());
+}
+
+// A copy's picture is written with the copy; a copy whose write fails is
+// not made.
+TEST_F(WrittenSessionTest, ACopysPictureIsWrittenWithTheCopy) {
+    const ItemId id = session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    {
+        HeldLibrary held(File(), /*readers=*/false);
+        EXPECT_TRUE(session_.Duplicate({id}).items.empty());
+    }
+    const Session::Placed made = session_.Duplicate({id});
+    ASSERT_EQ(made.items.size(), 1u);
+    EXPECT_FALSE(made.pictureLost);
+    const CanvasManagerSnapshot disk = OnDisk();
+    ASSERT_EQ(ItemsIn(disk), 2u);
+    for (const Item& item : disk.canvases[0].items) {
+        const std::optional<persistence::DecodedImage> picture = store_->LoadImage(item.id);
+        ASSERT_TRUE(picture.has_value());
+        EXPECT_EQ(picture->pixelsRGBA, kPixels);
+    }
+}
+
+// A snippet sent to another canvas, and the canvas it left then deleted for
+// good: it is where it was sent, picture and all.
+TEST_F(WrittenSessionTest, ACanvasDeletedForGoodAfterASnippetLeftItKeepsTheSnippet) {
+    const CanvasId left = session_.Manager().CurrentCanvasId();
+    const ItemId id = session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    const CanvasId other = session_.AddCanvas("Other");
+    ASSERT_EQ(session_.SendItemsTo({id}, other, /*copy=*/false).items.size(), 1u);
+    ASSERT_TRUE(session_.Delete(left));
+    ASSERT_TRUE(session_.DeletePermanently(left));
+
+    const CanvasManagerSnapshot disk = OnDisk();
+    ASSERT_EQ(disk.canvases.size(), 1u);
+    ASSERT_EQ(disk.canvases[0].items.size(), 1u);
+    EXPECT_EQ(disk.canvases[0].items[0].id, id);
+    EXPECT_TRUE(store_->LoadImage(id).has_value());
+}
+
+// The other way round: sent into a canvas deleted for good after, it goes
+// with the canvas, picture and all.
+TEST_F(WrittenSessionTest, ACanvasDeletedForGoodTakesWhatWasSentIntoIt) {
+    const ItemId id = session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    const CanvasId other = session_.AddCanvas("Other");
+    ASSERT_EQ(session_.SendItemsTo({id}, other, /*copy=*/false).items.size(), 1u);
+    ASSERT_TRUE(session_.Delete(other));
+    ASSERT_TRUE(session_.DeletePermanently(other));
+
+    const CanvasManagerSnapshot disk = OnDisk();
+    ASSERT_EQ(disk.canvases.size(), 1u);
+    EXPECT_TRUE(disk.canvases[0].items.empty());
+    EXPECT_FALSE(store_->HasImage(id));
+}
+
+// Deleting for good that cannot be written deletes nothing: the canvas and
+// what is on it stay, with their history.
+TEST_F(WrittenSessionTest, ADeleteForGoodThatCannotBeWrittenKeepsEverything) {
+    const CanvasId first = session_.Manager().CurrentCanvasId();
+    const ItemId id = session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
+    const CanvasId other = session_.AddCanvas("Other");
+    session_.SwitchToCanvas(other);
+    ASSERT_TRUE(session_.Delete(first));
+    {
+        HeldLibrary held(File(), /*readers=*/false);
+        EXPECT_FALSE(session_.DeletePermanently(first));
+    }
+    ASSERT_NE(session_.Manager().FindCanvas(first), nullptr);
+    ASSERT_NE(session_.Manager().FindItemAnywhere(id), nullptr);
+    ASSERT_TRUE(session_.Restore(first));
+    session_.SwitchToCanvas(first);
+    EXPECT_TRUE(session_.CanUndo()) << "its history too";
+    EXPECT_EQ(ItemsIn(OnDisk()), 1u);
 }
 
 // ===== History that follows its snippets =====

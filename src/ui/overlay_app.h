@@ -388,16 +388,14 @@ public:
     // Overview that can be told apart at a glance. The user's own call.
     void QuickCapture(float displayW, float displayH);
 
-    // Brings everything the hand is in the middle of into the model, so
-    // that a save taken right after it has all of it: the gesture under a
-    // held button ends where the pointer is (a stroke is committed, a drag
+    // Brings everything the hand is in the middle of into the library -
+    // written, as every finished command is: the gesture under a held
+    // button ends where the pointer is (a stroke is committed, a drag
     // lands), and a note being typed is committed to its item. What every
     // canvas switch settles first (see SwitchToCanvasSettled), done for the
-    // saves that happen with no frame to follow - hiding, restarting,
-    // exiting, the OS ending the session. A flush that ran without this
-    // wrote the note as it was when the editor opened, and typing that had
-    // been visible for a minute was gone at the next start. A drawing
-    // nothing went into is discarded here too - see SettleUntouchedDrawing.
+    // moments no frame follows - hiding, restarting, exiting, the OS ending
+    // the session. A drawing nothing went into is discarded here too - see
+    // SettleUntouchedDrawing.
     void SettleForPersistence();
     // The settling itself: the gesture in flight ends as a release where
     // the pointer is would end it (see ReleaseGesture), and a note being
@@ -1057,8 +1055,8 @@ private:
     // Places the first-run notes, centered as a group: the welcome, and the
     // two warnings beside it - see RequestWelcomeNote.
     // Ordinary items, deliberately: each can be moved, edited, or closed
-    // like anything else, and they autosave, so they stay until the user is
-    // done with them and then they stop existing for good. A modal dialog would
+    // like anything else, and they are in the library, so they stay until
+    // the user is done with them and then they stop existing for good. A modal dialog would
     // have to be dismissed before the app could be touched at all, and
     // would teach nothing about how the app actually works.
     void PlaceWelcomeNotes(float displayW, float displayH);
@@ -1401,10 +1399,9 @@ private:
     //
     // Leaning on the generation counter rather than on a new
     // "remember to invalidate" rule at each mutation site is deliberate:
-    // it is already load-bearing for autosave, so a mutation that forgot to
-    // bump it would be losing the edit outright, which is a louder failure
-    // than a stale picture. nullopt means "check regardless" - a fresh
-    // start, or the mode having just been switched on.
+    // every change goes through the session's commands, which bump it, so
+    // there is one place to get it right. nullopt means "check regardless"
+    // - a fresh start, or the mode having just been switched on.
     std::optional<uint64_t> strokeRasterGeneration_;
     // The tessellated shape of each stroke, kept between frames - see
     // StrokeMeshCache for what that saves and what invalidates an entry.

@@ -1,6 +1,9 @@
 #include "core/canvas/canvas_manager.h"
 
 #include <algorithm>
+#include <cassert>
+#include <unordered_map>
+#include <unordered_set>
 
 #include "core/canvas/item_geometry.h"
 #include "core/drawing/stroke_clip.h"
@@ -34,8 +37,7 @@ CanvasManager::CanvasManager(std::string initialCanvasName) {
     AddCanvas(initialCanvasName.empty() ? TimestampName() : std::move(initialCanvasName));
     // AddCanvas() above bumps this, same as it would for a genuine
     // user-driven canvas creation - but constructing a fresh manager
-    // isn't itself a user change, so there's nothing to autosave yet.
-    // See Generation()'s own doc comment.
+    // isn't itself a change. See Generation()'s own doc comment.
     generation_ = 0;
 }
 
@@ -759,10 +761,9 @@ std::vector<size_t> ClipStrokesInPlace(Item& item, const Clip& clip) {
 
 std::vector<size_t> CanvasManager::EraseAt(ItemId id, float screenX, float screenY, float radiusScreenPx) {
     // Marked changed whether or not anything came away: simpler than
-    // threading a \"did this actually change anything\" result out just to
-    // decide whether to mark, and a spurious bump costs nothing (see
-    // Generation()'s own doc comment: it only resets the autosave's
-    // debounce timer).
+    // threading a "did this actually change anything" result out just to
+    // decide whether to mark, and a spurious bump costs a cache a look (see
+    // Generation()'s own doc comment).
     MarkChanged();
     Item* item = FindInCurrent(id);
     if (!item) {
@@ -801,6 +802,155 @@ Stroke CanvasManager::BakeStrokeToNative(const Item& item, const Stroke& screenS
     }
     nativeStroke.width = screenSpaceStroke.width * scale;
     return nativeStroke;
+}
+
+// ================= Before a change =================
+
+namespace {
+
+// The same row: everything of a canvas the canvases table holds but its
+// place, which the order of the list is.
+bool SameCanvasRow(const Canvas& a, const Canvas& b) {
+    return a.id == b.id && a.name == b.name && a.folderId == b.folderId && a.createdAt == b.createdAt &&
+           a.deletedAt == b.deletedAt;
+}
+
+// The same content: every field but the texture, which is GPU state.
+bool SameContent(const Item& a, const Item& b) {
+    if (a.picture.textureHandle == b.picture.textureHandle) {
+        return a == b;
+    }
+    Item copy = a;
+    copy.picture.textureHandle = b.picture.textureHandle;
+    return copy == b;
+}
+
+}  // namespace
+
+CanvasManager::Checkpoint CanvasManager::TakeCheckpoint(const std::vector<ItemId>& items) const {
+    Checkpoint checkpoint;
+    checkpoint.folders = folders_;
+    checkpoint.canvases.reserve(canvases_.size());
+    for (const Canvas& canvas : canvases_) {
+        Checkpoint::CanvasLayout layout;
+        layout.canvas.id = canvas.id;
+        layout.canvas.name = canvas.name;
+        layout.canvas.folderId = canvas.folderId;
+        layout.canvas.createdAt = canvas.createdAt;
+        layout.canvas.deletedAt = canvas.deletedAt;
+        layout.items.reserve(canvas.items.size());
+        for (const Item& item : canvas.items) {
+            layout.items.push_back(item.id);
+        }
+        checkpoint.canvases.push_back(std::move(layout));
+    }
+    checkpoint.currentFolderId = currentFolderId_;
+    checkpoint.currentCanvasId = currentCanvasId_;
+    for (const ItemId id : items) {
+        const Item* item = FindItemAnywhere(id);
+        const bool copied = std::any_of(checkpoint.items.begin(), checkpoint.items.end(),
+                                        [id](const Item& copy) { return copy.id == id; });
+        if (item != nullptr && !copied) {
+            checkpoint.items.push_back(*item);
+        }
+    }
+    return checkpoint;
+}
+
+LibraryChanges CanvasManager::ChangesSince(const Checkpoint& checkpoint) const {
+    LibraryChanges changes;
+    bool sameCanvases = folders_ == checkpoint.folders && canvases_.size() == checkpoint.canvases.size();
+    for (size_t i = 0; sameCanvases && i < canvases_.size(); ++i) {
+        sameCanvases = SameCanvasRow(canvases_[i], checkpoint.canvases[i].canvas);
+    }
+    changes.foldersAndCanvases = !sameCanvases;
+    changes.current =
+        currentFolderId_ != checkpoint.currentFolderId || currentCanvasId_ != checkpoint.currentCanvasId;
+
+    // Where every snippet was, and each canvas's order.
+    std::unordered_set<ItemId> was;
+    std::unordered_map<CanvasId, const std::vector<ItemId>*> orders;
+    for (const Checkpoint::CanvasLayout& layout : checkpoint.canvases) {
+        orders.emplace(layout.canvas.id, &layout.items);
+        was.insert(layout.items.begin(), layout.items.end());
+    }
+    std::unordered_set<ItemId> is;
+    for (const Canvas& canvas : canvases_) {
+        const auto before = orders.find(canvas.id);
+        bool sameOrder = before != orders.end() && before->second->size() == canvas.items.size();
+        for (size_t i = 0; i < canvas.items.size(); ++i) {
+            const ItemId id = canvas.items[i].id;
+            is.insert(id);
+            sameOrder = sameOrder && (*before->second)[i] == id;
+            if (was.count(id) == 0) {
+                changes.items.push_back(id);  // made since
+            }
+        }
+        if (!sameOrder) {
+            changes.itemOrders.push_back(canvas.id);
+        }
+    }
+    for (const ItemId id : was) {
+        if (is.count(id) == 0) {
+            changes.erasedItems.push_back(id);
+        }
+    }
+    for (const Item& copy : checkpoint.items) {
+        const Item* item = FindItemAnywhere(copy.id);
+        if (item != nullptr && !SameContent(*item, copy)) {
+            changes.items.push_back(copy.id);
+        }
+    }
+    return changes;
+}
+
+std::vector<uint64_t> CanvasManager::RollBack(const Checkpoint& checkpoint) {
+    std::unordered_map<ItemId, Item> pool;
+    for (Canvas& canvas : canvases_) {
+        for (Item& item : canvas.items) {
+            const ItemId id = item.id;
+            pool.emplace(id, std::move(item));
+        }
+    }
+    for (const Item& copy : checkpoint.items) {
+        const auto it = pool.find(copy.id);
+        if (it == pool.end()) {
+            pool.emplace(copy.id, copy);  // gone since: back as it was, texture and all
+            continue;
+        }
+        const uint64_t texture = it->second.picture.textureHandle;
+        it->second = copy;
+        it->second.picture.textureHandle = texture;
+    }
+    std::vector<Canvas> canvases;
+    canvases.reserve(checkpoint.canvases.size());
+    for (const Checkpoint::CanvasLayout& layout : checkpoint.canvases) {
+        Canvas canvas = layout.canvas;
+        canvas.items.reserve(layout.items.size());
+        for (const ItemId id : layout.items) {
+            const auto it = pool.find(id);
+            // A snippet a change took out has to be among its checkpoint's
+            // copies to be put back.
+            assert(it != pool.end() && "a snippet gone since the checkpoint was not copied into it");
+            if (it != pool.end()) {
+                canvas.items.push_back(std::move(it->second));
+                pool.erase(it);
+            }
+        }
+        canvases.push_back(std::move(canvas));
+    }
+    std::vector<uint64_t> released;
+    for (const auto& [id, item] : pool) {
+        if (item.picture.textureHandle != 0) {
+            released.push_back(item.picture.textureHandle);  // made since, and not kept
+        }
+    }
+    canvases_ = std::move(canvases);
+    folders_ = checkpoint.folders;
+    currentFolderId_ = checkpoint.currentFolderId;
+    currentCanvasId_ = checkpoint.currentCanvasId;
+    MarkChanged();
+    return released;
 }
 
 CanvasManagerSnapshot CanvasManager::ExportSnapshot() const {

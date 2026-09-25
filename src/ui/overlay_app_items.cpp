@@ -303,7 +303,9 @@ void OverlayApp::PasteFromClipboard() {
     const bool cut = clipboardIsCut_;
     const Session::Placed pasted = session_.Paste(clipboard_, cut);
     if (pasted.items.empty()) {
-        ShowActionToast(strings::kToastNothingToPaste);
+        // Nothing left to paste - or a paste whose write failed, which the
+        // line along the bottom says more of (see PersistenceWarning).
+        ShowActionToast(session_.LastWriteFailed() ? strings::kToastNotWritten : strings::kToastNothingToPaste);
         return;
     }
     // What was pasted is what is selected, so it can be moved straight

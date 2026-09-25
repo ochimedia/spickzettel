@@ -416,11 +416,10 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
             }
             // The Restart Manager - an installer or updater making room -
             // closes an application with the same pair of messages, and
-            // then waits for it to go: an exit, whose own flush is the one
-            // this needs. Both ran, and with the query's that was three
-            // runs - three recovery copies of the whole library, against
-            // the Restart Manager's clock, when the library could not be
-            // written. A logoff ends the process itself.
+            // then waits for it to go: an exit, whose own settling is the
+            // one this needs. Both ran, and with the query's that was three
+            // runs against the Restart Manager's clock. A logoff ends the
+            // process itself.
             if (lParam & ENDSESSION_CLOSEAPP) {
                 Exit();
             } else if (sessionEndCallback_) {
