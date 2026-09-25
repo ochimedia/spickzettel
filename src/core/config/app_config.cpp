@@ -899,12 +899,14 @@ LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_v
     const auto size = ec ? 0 : std::filesystem::file_size(path, ec);
     if (ec) {
         loaded.source = ConfigSource::Unreadable;
+        loaded.config.purgeDeleted = false;
         return loaded;
     }
     if (size <= kMaxConfigFileBytes) {
         std::ifstream in(path, std::ios::binary);
         if (!in) {
             loaded.source = ConfigSource::Unreadable;
+            loaded.config.purgeDeleted = false;
             return loaded;
         }
         std::string text(static_cast<size_t>(size), '\0');
@@ -924,6 +926,11 @@ LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_v
     std::filesystem::rename(path, aside, ec);
     if (!ec) {
         loaded.setAsideAs = aside;
+        // The stand-in goes where the file was at once, with retention
+        // off: whether it was on is what could not be read, and a missing
+        // file or the defaults at the next start would turn it back on.
+        loaded.config.purgeDeleted = false;
+        WriteConfigFile(path, loaded.config);
     }
     return loaded;
 }

@@ -1026,7 +1026,12 @@ next settings change, and a stray comma cost every hotkey and profile.
 instead, and one that cannot be opened is left where it is and not
 written over for that run. Either way the app starts on the defaults,
 says so in a message box, and skips the retention period for that start,
-since whether it was on is what could not be read. The file is written
+since whether it was on is what could not be read. Skipping it for one
+start was not enough: the next start found no file, or the defaults a
+settings change had written, and both turn a 14-day retention back on
+over a library whose owner may have switched it off. So a file set aside
+is replaced at once by the defaults with retention switched off, and it
+stays off until switched on again. The file is written
 through temp-then-rename, since truncating it in place leaves a window
 in which every setting is a half-written file.
 

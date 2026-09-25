@@ -251,7 +251,7 @@
   "status.recordTooLarge": "A snippet has grown too large to save - its last saved version stays on disk. Erasing some of its strokes lets it save again",
   "_startup": "The message boxes shown when the app cannot start at all, before there is a tray icon to say so.",
   "startup.failed": "Spickzettel could not start. Another copy may already be running.",
-  "startup.configSetAside": "Spickzettel could not read its settings file, %s, and started with the default settings.\n\nThe file was kept beside it as %s, so nothing in it is lost. Nothing deleted was erased for good at this start.",
+  "startup.configSetAside": "Spickzettel could not read its settings file, %s, and started with the default settings.\n\nThe file was kept beside it as %s, so nothing in it is lost. Deleting deleted folders and canvases permanently is switched off until it is switched on again in Settings > Behavior.",
   "startup.configUnreadable": "Spickzettel could not read its settings file, %s, and started with the default settings.\n\nThe file was left as it is, and settings changed until the next start will not be saved. Nothing deleted was erased for good at this start.",
   "startup.hotkeysTaken": "Spickzettel started, but these hotkeys are already used by another application and do nothing:\n%s\n\nThe tray icon's menu opens the overlay without them, and Settings > Hotkeys can give them other keys.",
   "startup.newerLibrary": "Spickzettel could not start: your library was saved by a newer version of Spickzettel. This version would lose what the newer one saved, so it leaves the library alone. Please use the newer version.",

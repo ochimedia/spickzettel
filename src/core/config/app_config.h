@@ -476,7 +476,9 @@ struct LoadedConfig {
 // it, taking every hotkey and profile with it. It is renamed out of the
 // way instead, to config-unreadable-<stamp>.json beside it, and one that
 // cannot be read at all is left alone; either way the app starts on the
-// defaults, and the caller says so. See main_win32.cpp.
+// defaults, and the caller says so. See main_win32.cpp. A file set aside is
+// replaced at once by the defaults with retention off (purgeDeleted), so
+// that no later start erases what the unread file may have kept.
 LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_view stamp);
 
 // The widest stroke a settings file can ask for, in pixels: past this a

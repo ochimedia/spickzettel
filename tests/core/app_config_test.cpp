@@ -776,10 +776,26 @@ TEST_F(WriteConfigFileTest, AFileThatIsNotSettingsIsSetAsideNotWrittenOver) {
 
     const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "2026-09-24-15-00-00");
     EXPECT_EQ(loaded.source, ConfigSource::SetAside);
-    EXPECT_EQ(loaded.config, DefaultConfig());
     EXPECT_EQ(loaded.setAsideAs, dir_ / "config-unreadable-2026-09-24-15-00-00.json");
     EXPECT_EQ(ReadFile(loaded.setAsideAs), broken);
-    EXPECT_FALSE(std::filesystem::exists(dir_ / "config.json")) << "nothing written in its place yet";
+}
+
+// Whether retention was on is what could not be read. The defaults put in
+// the set-aside file's place have it off, so the next start - which reads
+// them, not the file set aside - erases nothing either.
+TEST_F(WriteConfigFileTest, WhatStandsInForAFileSetAsideKeepsRetentionOff) {
+    std::filesystem::create_directories(dir_);
+    std::ofstream(dir_ / "config.json", std::ios::binary) << R"({"deleted": {"afterDays": 3650},})";
+
+    AppConfig expected = DefaultConfig();
+    expected.purgeDeleted = false;
+    const LoadedConfig first = LoadOrCreateConfig(dir_ / "config.json", "first");
+    ASSERT_EQ(first.source, ConfigSource::SetAside);
+    EXPECT_EQ(first.config, expected);
+
+    const LoadedConfig second = LoadOrCreateConfig(dir_ / "config.json", "second");
+    EXPECT_EQ(second.source, ConfigSource::Read);
+    EXPECT_EQ(second.config, expected);
 }
 
 // A settings file is a few kilobytes. Whatever a file of megabytes at that
