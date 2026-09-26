@@ -694,23 +694,6 @@ std::optional<platform::ImageFilter> FilterDrawnWith(uint64_t texture) {
     return std::nullopt;
 }
 
-// Every texture the last frame drew with, the font atlas's aside - read from
-// the windows, as FilterDrawnWith is.
-std::vector<uint64_t> TexturesDrawn() {
-    std::vector<uint64_t> drawn;
-    for (const ImGuiWindow* window : GImGui->Windows) {
-        if (!window->Active) {
-            continue;
-        }
-        for (const ImDrawCmd& cmd : window->DrawList->CmdBuffer) {
-            if (cmd.UserCallback == nullptr && cmd.TexRef._TexData == nullptr && cmd.TexRef._TexID != 0) {
-                drawn.push_back(static_cast<uint64_t>(cmd.TexRef._TexID));
-            }
-        }
-    }
-    return drawn;
-}
-
 // The texture `item`'s picture has this frame, 0 for none.
 uint64_t PictureTextureOf(Session& session, ItemId item) {
     return session.Textures().Find(TextureKey{TextureKey::Kind::Picture, item}).value_or(0);

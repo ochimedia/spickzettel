@@ -24,12 +24,16 @@
 // them.
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "app/tray_app.h"
 #include "fakes/fake_platform_host.h"
@@ -149,6 +153,9 @@ protected:
             host_.overlayWindow.frameCallback(ImGui::GetIO().DeltaTime);
         }
         ImGui::Render();
+        if (afterRender_) {
+            afterRender_();
+        }
         // What the frame asked to happen after it - see IPlatformHost::Post.
         host_.RunPostedTasks();
     }
@@ -446,6 +453,24 @@ protected:
         return strokes;
     }
 
+    // Every texture the last frame drew with, the font atlas's aside - read
+    // from the windows rather than ImGui::GetDrawData, which with no renderer
+    // behind it lists none of them.
+    static std::vector<uint64_t> TexturesDrawn() {
+        std::vector<uint64_t> drawn;
+        for (const ImGuiWindow* window : GImGui->Windows) {
+            if (!window->Active) {
+                continue;
+            }
+            for (const ImDrawCmd& cmd : window->DrawList->CmdBuffer) {
+                if (cmd.UserCallback == nullptr && cmd.TexRef._TexData == nullptr && cmd.TexRef._TexID != 0) {
+                    drawn.push_back(static_cast<uint64_t>(cmd.TexRef._TexID));
+                }
+            }
+        }
+        return drawn;
+    }
+
     static constexpr float kDisplayWidth = 1280.0f;
     static constexpr float kDisplayHeight = 768.0f;
 
@@ -458,6 +483,9 @@ protected:
     AppConfig config_;
     std::unique_ptr<TrayController> controller_;
     ImGuiContext* context_ = nullptr;
+    // Run by StepFrame once the frame is rendered and before what it posted
+    // runs: its draw lists are then what the window would present.
+    std::function<void()> afterRender_;
 };
 
 }  // namespace sz::test
