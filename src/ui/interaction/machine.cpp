@@ -117,11 +117,9 @@ void Machine::Route(const Event& event) {
                     editor_.Dispatch(*answer.command);
                 }
                 if (answer.push != nullptr) {
-                    // Section 4.2: what the answering level has above it
-                    // ends first.
-                    for (size_t above = kLevelCount; above-- > index + 1;) {
-                        InterruptAt(above);
-                    }
+                    // Section 4.2: what is on the new interaction's level and
+                    // above it ends first - see Push. The levels between it
+                    // and the one that started it passed the event, and stay.
                     Push(std::move(answer.push), event);
                 }
                 return;

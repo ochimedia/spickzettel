@@ -152,7 +152,13 @@ reaches anything that would clear the selection.
 ### 4.2 Starting something ends what is above it
 
 When a level starts a command or pushes an interaction, the interactions
-above it are ended first, top down. How each ends is its own answer:
+above what it starts are ended first, top down: for a new interaction,
+whatever is on its own level and above; for a command, what its scope
+covers (below). The levels between the one that started it and the new
+interaction passed the event, and stay - a stroke started by the Canvas
+level on the snippet in drawing mode leaves drawing mode where it is.
+(Found while building phase 3: read as "above the level that starts it",
+that stroke ended drawing mode.) How each ends is its own answer:
 **interrupted** - kept as far as it got - unless it says otherwise. This
 is `SettleHand`, generalized: Ctrl+Z claimed at the Canvas level ends the
 stroke above it (kept), then undoes it.

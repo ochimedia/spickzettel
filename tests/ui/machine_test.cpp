@@ -102,21 +102,25 @@ TEST_F(MachineTest, FinishAndCancelPopWhatAnswered) {
     EXPECT_EQ(Stack().At(Level::Gesture), nullptr);
 }
 
-// Starting something ends what the starting level has above it, top down,
-// and then begins the new interaction with the event - section 4.2.
+// Starting something ends what is above it, top down, and then begins it
+// with the event - section 4.2: what is on its level and above. The levels
+// between it and the one that started it passed the event, and stay.
 TEST_F(MachineTest, StartingSomethingEndsWhatIsAboveIt) {
-    Stack().Push(Make(Level::Popup, "Popup"), Event{});
+    Stack().Push(Make(Level::Mode, "Mode"), Event{});
     Stack().Push(Make(Level::Text, "Text"), Event{});
+    Stack().Push(Make(Level::Gesture, "Spent"), Event{});
     rootAnswer_ = [this] { return Answer::Start(std::nullopt, Make(Level::Gesture, "Pending")); };
     log_.clear();
     Stack().Offer(Key('A'));
-    EXPECT_EQ(log_, (std::vector<std::string>{"Text offered", "Popup offered", "Canvas offered", "Text interrupted",
-                                              "Popup interrupted", "Pending begun"}));
-    EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / - / Pending");
+    EXPECT_EQ(log_, (std::vector<std::string>{"Spent offered", "Text offered", "Mode offered", "Canvas offered",
+                                              "Spent interrupted", "Pending begun"}));
+    EXPECT_EQ(Stack().Describe(), "Canvas / Mode / - / - / Text / Pending");
 
-    // What takes a level ends what was there, and everything above it.
-    Stack().Push(Make(Level::Text, "Text"), Event{});
-    EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / Text / -");
+    // What takes a lower level ends what was there, and everything above it.
+    log_.clear();
+    Stack().Push(Make(Level::Popup, "Popup"), Event{});
+    EXPECT_EQ(Stack().Describe(), "Canvas / Mode / - / Popup / - / -");
+    EXPECT_EQ(log_, (std::vector<std::string>{"Pending interrupted", "Text interrupted", "Popup begun"}));
 }
 
 // A command's scope says what it ends first: the hand's commands the

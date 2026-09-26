@@ -53,8 +53,8 @@ struct Answer {
     // what it does to the stack, through Editor::Dispatch - which ends what
     // its scope covers first.
     std::optional<Command> command;
-    // For Start: pushed after the command, above everything the answering
-    // level has above it - which is ended first.
+    // For Start: pushed after the command, ending what is on its level and
+    // above it first (see Machine::Push).
     std::unique_ptr<Interaction> push;
 
     static Answer Claim() { return Answer{Kind::Claim}; }
