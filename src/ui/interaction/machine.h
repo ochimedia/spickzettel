@@ -81,6 +81,10 @@ public:
     virtual Level level() const = 0;
     // A stable name, for tests and logs.
     virtual const char* Name() const = 0;
+    // Which interaction this is, of every one made while the app runs - for
+    // a test or a log to tell one from the next of the same kind, which may
+    // well be made where the last one was.
+    uint64_t Serial() const { return serial_; }
     // Once pushed, with the event that began it.
     virtual void Begin(const Event& /*event*/, Editor& /*editor*/) {}
     // The event, and what it means here: a switch over the event kinds
@@ -92,6 +96,13 @@ public:
     virtual void Interrupt(Editor& editor) = 0;
     // Ended by the user, through a Cancel answer: leave no trace.
     virtual void Cancel(Editor& editor) = 0;
+
+private:
+    static uint64_t NextSerial() {
+        static uint64_t next = 0;
+        return ++next;
+    }
+    const uint64_t serial_ = NextSerial();
 };
 
 class Machine {

@@ -1863,6 +1863,19 @@ press, Spent - or open on the session, and a stroke it interrupted is on
 its snippet (or, after an undo, taken back). It counts the strokes it checked that way, and fails for a command
 that never ran, so neither check can quietly stop running.
 
+`InteractionRandomTest.AnythingAnywhereEscapeIncluded`
+(`tests/ui/interaction_cases_test.cpp`) runs the same kind of input
+against the machine and `Editor` alone - no `OverlayApp`, no ImGui
+frame - which makes it fast enough for 2000 seeds of 150 events, and
+adds Escape anywhere. Whenever Escape cancels a move, a resize or a
+mark, every snippet is exactly as that gesture found it and the live
+layer is empty; it counts those checks too. A gesture that took over
+from another in the same event (a press that ended a stroke and began
+the next) is not checked that way: it found the library with the
+other's work in it, which the test has no snapshot of. Beside it, each
+row of the cases table in `docs/INTERACTIONS.md` is a scripted test in
+the same file.
+
 ### Commands
 
 Everything the app can be told to do in one step is a `Command`, and all

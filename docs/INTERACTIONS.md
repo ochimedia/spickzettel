@@ -615,6 +615,10 @@ goes is never moved: what survives of `OverlayApp`'s input side goes into
     against the machine and `Editor` alone, and the randomized test run
     there with Escape anywhere, for thousands of seeds.
 
+Phase 3 was done on 2026-09-26, in these steps; what building it found
+wrong in the tables above is recorded where it was corrected ("Found
+while building phase 3").
+
 ## 12. Decisions
 
 Settled on review (2026-09-26):
