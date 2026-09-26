@@ -2352,6 +2352,12 @@ in: "hidden vs visible" is the window's `IsVisible()`, "edit vs view" is
 the overlay's `IsViewOnly()`, both ground truth something else maintains,
 so no `mode_` member can go stale.
 
+Where this is going is `docs/OVERLAY_STATES.md`: the five states the
+overlay really has - hidden, the pinned view, a notice, view and edit -
+as one machine, in which every pair of state and request has a written
+answer and the window is told what to be rather than which calls to
+make.
+
 **Pinned snippets.** Whenever the current canvas has a pinned snippet,
 "hidden" is the pinned view instead: view-only with every other snippet
 left out, click-through, never focused, put up the way a notice is. It
