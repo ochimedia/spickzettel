@@ -120,7 +120,7 @@ public:
     // remembers about state the OS owns is stale at that moment - the
     // installed pointer shape, since while the overlay was hidden the
     // application underneath owned the cursor, and which buttons and keys
-    // are down (see SettleHand). Distinct from SetViewOnly,
+    // are down (see Editor::ForgetTheHand). Distinct from SetViewOnly,
     // which no-ops when the mode is unchanged and so never fires on a plain
     // hide-then-show.
     void OnOverlayShown();
@@ -269,16 +269,12 @@ public:
     // Overview that can be told apart at a glance. The user's own call.
     void QuickCapture(float displayW, float displayH) { editor_.QuickCapture(displayW, displayH); }
 
-    // SettleHand, for the moments no frame follows - hiding, restarting,
-    // exiting, the OS ending the session - where a drawing nothing went
-    // into is discarded too (see Editor::SettleUntouchedDrawing).
-    void SettleForPersistence();
-    // What every command does first as far as the hand goes, for the
-    // moments no command follows - the overlay going away, view-only mode:
-    // the gesture in flight ends where it stands, keeping what it did, and
-    // a note being typed is committed - see Editor::SettleHand and
-    // docs/ARCHITECTURE.md, "The hand".
-    void SettleHand() { editor_.SettleHand(); }
+    // The overlay going away - hidden, restarted, the app exiting, the OS
+    // ending the session: offered to the input machine, and then what a
+    // command's Hand scope ends is ended (see Editor::Settle and
+    // docs/ARCHITECTURE.md, "The hand"), and a drawing nothing went into is
+    // discarded (see Editor::SettleUntouchedDrawing).
+    void SettleForPersistence(Lifecycle why = Lifecycle::Hidden);
 
     // ===== Commands =====
     //
@@ -410,6 +406,10 @@ private:
     // The machine's Canvas level - see its definition.
     class CanvasRoot;
     void InstallCanvasRoot();
+    // The overlay shown or put away, view-only mode entered or left: an
+    // event every level is offered before the scope it calls for is ended
+    // (see SetViewOnly, SettleForPersistence and OnOverlayShown).
+    void OfferLifecycle(Lifecycle which);
 
     void RenderCanvasLayer(float displayW, float displayH);  // live layer + armed-item overlay + debug text
     // The layers that sit over the canvas and under the Overview: the

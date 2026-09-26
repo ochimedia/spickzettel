@@ -125,7 +125,7 @@ TEST_F(MachineTest, StartingSomethingEndsWhatIsAboveIt) {
 
 // A command's scope says what it ends first: the hand's commands the
 // gesture and the text, the canvas's the popup as well - never the mode or
-// a panel.
+// a panel - and All, view-only mode's, everything above the canvas.
 TEST_F(MachineTest, AScopeEndsWhatItCovers) {
     const auto fill = [&] {
         for (const auto& [level, name] : {std::pair{Level::Mode, "Mode"}, std::pair{Level::Panel, "Panel"},
@@ -145,6 +145,10 @@ TEST_F(MachineTest, AScopeEndsWhatItCovers) {
     EXPECT_EQ(Stack().Describe(), "Canvas / Mode / Panel / - / - / -");
     EXPECT_EQ(log_, (std::vector<std::string>{"Gesture interrupted", "Text interrupted", "Popup interrupted"}))
         << "top down";
+
+    fill();
+    Stack().EndFor(Scope::All);
+    EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / - / -") << "everything above the canvas";
 
     // Dispatch ends a command's scope before it runs it.
     fill();

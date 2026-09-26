@@ -958,6 +958,7 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
         return;
     }
     viewOnly_ = viewOnly;
+    OfferLifecycle(viewOnly_ ? Lifecycle::ViewOnly : Lifecycle::EditMode);
     if (!viewOnly_) {
         // A notice is only ever a kind of view-only (see SetNoticeOnly), so
         // it cannot outlive it. TrayController clears it explicitly on the
@@ -968,24 +969,20 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
         pinnedOnly_ = false;
     }
     if (viewOnly_) {
-        // Nothing should stay "in progress" while merely viewing: the hand
-        // is settled first, while drawing mode still says which snippet a
-        // stroke in flight belongs to - and a note being typed with it,
-        // whose editor is not drawn in view-only mode and so would never
-        // hear that it closed. Then the creation tool is put down and every
-        // transient edit-mode surface closed, so re-entering edit mode
-        // later starts clean rather than resuming whatever popover happened
-        // to be up.
-        SettleHand();
-        editor_.PutDownCreationTool();
-        editor_.ExitDrawingMode();
+        // Nothing should stay "in progress" while merely viewing, so the
+        // All scope ends everything above the canvas, top down: the
+        // gesture, while drawing mode still says which snippet a stroke in
+        // flight belongs to; a note being typed, whose editor is not drawn
+        // in view-only mode and so would never hear that it closed; a
+        // popup, a panel; drawing mode, or the creation tool in hand. Edit
+        // mode starts clean later rather than resuming whatever happened
+        // to be up. The effects first: a popup ended asks for itself to be
+        // closed once edit mode draws again (see Popup::Interrupt).
+        effects_.clear();
+        editor_.Settle(Scope::All);
         editor_.SettleUntouchedDrawing();
-        CloseOverview();
         itemPropertiesPopoverItemId_.reset();
         confirmDeleteTarget_.reset();
-        effects_.clear();
-        // Asked to close once edit mode draws again (see Popup::Interrupt).
-        editor_.Input().End(Level::Popup);
         // Normally cleared at the top of every RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle
@@ -995,8 +992,21 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
     }
 }
 
-void OverlayApp::SettleForPersistence() {
-    SettleHand();
+void OverlayApp::OfferLifecycle(Lifecycle which) {
+    Event event;
+    event.kind = EventKind::Lifecycle;
+    event.lifecycle = which;
+    event.modifiers = editor_.Held();
+    editor_.Input().Offer(event);
+}
+
+void OverlayApp::SettleForPersistence(Lifecycle why) {
+    // Put away, what a command's Hand scope ends: the gesture, kept, and a
+    // note being typed, committed - drawing mode, a panel and a popup are
+    // still up at the next showing, as they were left. Ending for good,
+    // everything above the canvas.
+    OfferLifecycle(why);
+    editor_.Settle(why == Lifecycle::SessionEnding ? Scope::All : Scope::Hand);
     // Going away is moving on too, as the next showing would say (see
     // OnOverlayShown) - but exit has no next showing, and a restart loads
     // the drawing as an ordinary snippet: a fullscreen empty one, over the
@@ -1440,7 +1450,8 @@ void OverlayApp::OnOverlayShown() {
     // Nothing is in the hand as the overlay comes up: what went down before
     // it was hidden has come up since, wherever that release went. Settled
     // already when it was put away, unless it went some other way.
-    SettleHand();
+    OfferLifecycle(Lifecycle::Shown);
+    editor_.Settle(Scope::Hand);
     editor_.ForgetTheHand();
     // The panels docked against the edges come out for a moment, so they
     // are seen where they are - asked for here, done on the first frame.

@@ -407,7 +407,7 @@ void TrayController::SettleForExit() {
     // What was being typed or drawn is finished, and so written: every
     // change is written as it is made (see Session), so nothing else is
     // owed to the library. The settings file may be.
-    overlayApp_.SettleForPersistence();
+    overlayApp_.SettleForPersistence(ui::Lifecycle::SessionEnding);
     if (configWriteOwed_) {
         PersistConfig();  // owed since a settings edit; the last chance for it
     }

@@ -1808,6 +1808,16 @@ for canvas switches and hiding; it made a region being framed and fired a
 held bar button - things nobody asked for, over a canvas they had not
 clicked on.
 
+What ends is said in one place, the scope (`Editor::Settle`), for the
+commands and for the moments no command follows. The overlay put away -
+hidden, restarted - ends what a command's Hand scope does, and drawing
+mode, a panel and a popup are still up at the next showing; the overlay
+coming up ends it again, for whatever went some other way, and forgets
+which buttons were down (`Machine::Forget`); view-only mode, and the app
+exiting, end everything above the canvas. Each is offered to the stack
+first, as a `Lifecycle` event. These were four hand-written functions,
+each with its own list of what to reset.
+
 Escape is not such a command while a gesture is in flight: the gesture
 sees it first and is *cancelled* - a stroke, a shape or an erase leaves
 nothing and files nothing, a move or resize puts every snippet back where

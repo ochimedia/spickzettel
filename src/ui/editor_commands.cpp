@@ -19,7 +19,7 @@ bool Editor::Dispatch(const Command& command) {
         return false;
     }
     // What the scope covers ends first - see Scope.
-    machine_.EndFor(InfoFor(command.id).scope);
+    Settle(InfoFor(command.id).scope);
     ++commandsRun_;
     lastCommand_ = command.id;
     Run(command);

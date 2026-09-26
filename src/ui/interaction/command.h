@@ -89,8 +89,8 @@ enum class CommandId {
 // What a command ends before it runs - see Machine::EndFor, and
 // docs/INTERACTIONS.md, section 4.2: Hand the gesture and a note being
 // typed; Canvas, the scope of whatever switches or empties the canvas, a
-// popup as well.
-enum class Scope { Hand, Canvas };
+// popup as well; All, everything above the canvas - view-only mode.
+enum class Scope { Hand, Canvas, All };
 
 // Who asked for a snippet to be made: a menu row or a key, the creation
 // tool in hand, or a press on empty canvas - which decides what happens

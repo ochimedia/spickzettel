@@ -269,8 +269,8 @@ bool Editor::TakeDoubleClick(const Event& press) {
     return std::sqrt(dx * dx + dy * dy) <= kDoubleClickPx;
 }
 
-void Editor::SettleHand() {
-    machine_.EndFor(Scope::Hand);
+void Editor::Settle(Scope scope) {
+    machine_.EndFor(scope);
     CommitNoteBeingEdited();
 }
 
@@ -661,7 +661,7 @@ void Editor::CreateAndSwitchToNewCanvas() {
     // Nothing to settle when the new canvas is already current - the
     // library had none, and the press that asked for a snippet is what is
     // in flight (see EnsureCanvasForNewItem).
-    SwitchToCanvasSettled(CreateCanvasBesideCurrent());
+    SwitchCanvas(CreateCanvasBesideCurrent());
 }
 
 // A new canvas that the selected snippets come along to - "these belong
@@ -678,12 +678,11 @@ void Editor::CreateAndSwitchToNewCanvas() {
 // way, and leaving the app on the old one would make the shortcut look
 // like it had done nothing.
 //
-// The hand is settled before the moves rather than at the switch: a
-// shortcut can land mid-gesture, and a stroke or a drag in flight on a
-// selected snippet has to end on the canvas it started on, before the
-// snippet leaves it.
+// The hand is settled before the moves rather than at the switch - by the
+// command's Canvas scope: a shortcut can land mid-gesture, and a stroke or
+// a drag in flight on a selected snippet has to end on the canvas it
+// started on, before the snippet leaves it.
 void Editor::MoveSelectionToNewCanvas() {
-    SettleHand();
     const CanvasId target = CreateCanvasBesideCurrent();
     const std::vector<ItemId> moved = session_.SendItemsTo(selection_, target, /*copy=*/false).items;
     session_.SwitchToCanvas(target);
@@ -696,7 +695,7 @@ void Editor::MoveSelectionToNewCanvas() {
     }
 }
 
-void Editor::SwitchToCanvasSettled(CanvasId id) {
+void Editor::SwitchCanvas(CanvasId id) {
     if (Manager().CurrentCanvasId() == id) {
         return;
     }
@@ -704,7 +703,7 @@ void Editor::SwitchToCanvasSettled(CanvasId id) {
     // on, and a note being typed is committed to the item it belongs to -
     // only the current canvas is drawn, so an editor left open across the
     // switch would strand what was typed.
-    SettleHand();
+    Settle(Scope::Canvas);
     session_.SwitchToCanvas(id);
 }
 
@@ -747,7 +746,7 @@ void Editor::SwitchCanvasByOffset(int delta) {
         std::clamp(static_cast<long long>(index) + delta, static_cast<long long>(0), lastIndex));
 
     if (siblings[target] != current->id) {
-        SwitchToCanvasSettled(siblings[target]);
+        SwitchCanvas(siblings[target]);
         current = Manager().CurrentOrNull();
     }
 
@@ -767,8 +766,9 @@ void Editor::QuickCapture(float displayW, float displayH) {
     // Whatever the hand is in the middle of ends on the canvas it started
     // on, as before any other canvas switch. A capture hotkey can arrive
     // mid-stroke: it is global, and nothing about holding the mouse down
-    // stops it.
-    SettleHand();
+    // stops it. Its command's scope has ended it already; this is for the
+    // tray, which can capture without one.
+    Settle(Scope::Canvas);
     // A canvas of its own, beside the one being worked on - a capture is
     // about where you are, not where you were last looking - and we go to
     // it: a screen full of captures piled on the canvas you were drawing

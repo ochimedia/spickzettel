@@ -221,10 +221,10 @@ public:
     // a double is never the first half of the next one.
     void RememberClick(const Event& press);
     bool TakeDoubleClick(const Event& press);
-    // The gesture in flight ended, kept, and a note being typed committed
-    // - for the moments no command follows: the overlay going away,
-    // view-only mode.
-    void SettleHand();
+    // Ends what `scope` covers - see Machine::EndFor - and commits a note
+    // being typed, whatever ended it: what a command does first, and what
+    // the overlay going away, coming up and going view-only do.
+    void Settle(Scope scope);
     // The overlay has just come up: nothing is in the hand, whatever was
     // held when it went away - see Machine::Forget - and no click is
     // remembered.
@@ -406,10 +406,10 @@ public:
     void CreateAndSwitchToNewCanvas();
     // That, taking the selected snippets along.
     void MoveSelectionToNewCanvas();
-    // Switches canvas, first ending whatever the hand is doing and
-    // committing a note being typed - what every way of switching from the
-    // canvas itself has to do.
-    void SwitchToCanvasSettled(CanvasId id);
+    // Switches canvas, first ending what the Canvas scope covers - the hand,
+    // a note being typed, a popup - which is what every way of switching
+    // from the canvas itself has to do.
+    void SwitchCanvas(CanvasId id);
     // Steps `delta` canvases along the folder the current canvas lives in,
     // without wrapping, and says where it landed.
     void SwitchCanvasByOffset(int delta);

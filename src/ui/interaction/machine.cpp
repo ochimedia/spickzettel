@@ -150,6 +150,13 @@ void Machine::EndFor(Scope scope) {
             End(Level::Text);
             End(Level::Popup);
             return;
+        case Scope::All:
+            End(Level::Gesture);
+            End(Level::Text);
+            End(Level::Popup);
+            End(Level::Panel);
+            End(Level::Mode);
+            return;
     }
 }
 

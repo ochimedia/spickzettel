@@ -1305,7 +1305,7 @@ TEST_F(HeadlessAppTest, AnIgnoredButtonPressedAgainIsNotIgnoredStill) {
 // click, with releases lost and the other button pressed on top - every
 // command in the table (see ui/interaction/command.h), by its key, its
 // hotkey, or dispatched as a menu row or a bar button would, ends it first
-// (see OverlayApp::SettleHand): straight after one that ran, nothing is in
+// (see Editor::Settle): straight after one that ran, nothing is in
 // flight in the app or open on the session, and a stroke it interrupted
 // is kept. In between, nothing is left open on the session that the hand
 // has let go of. Once every button has been pressed and let go, the hand
@@ -2458,6 +2458,33 @@ TEST_F(HeadlessAppTest, ShortcutsAreIgnoredInViewOnlyMode) {
 // arrives after the last frame. Hidden, the app draws no frame at all, so
 // ImGui's queue holds the press until the next showing. Bound to the
 // screenshot tool, "S" came back armed to capture on the first click.
+// Put away and brought back, the overlay is as it was left - drawing mode,
+// a panel - with nothing in the hand; view-only mode ends everything above
+// the canvas (docs/INTERACTIONS.md, section 4.2).
+TEST_F(HeadlessAppTest, PutAwayKeepsWhatIsOpenAndViewOnlyEndsIt) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    Drag(350.0f, 400.0f, 650.0f, 400.0f);  // something in it, so it stays
+    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::CheatSheet}));
+    StepFrame();
+    ASSERT_EQ(App().InputStack(), "Canvas / DrawingMode / CheatSheet / - / - / -");
+
+    ShowEditMode();  // its own hotkey again: put away
+    StepFrame();
+    ASSERT_FALSE(host_.overlayWindow.visible);
+    ShowEditMode();
+    StepFrame();
+    EXPECT_EQ(App().InputStack(), "Canvas / DrawingMode / CheatSheet / - / - / -") << "as it was left";
+
+    ShowViewMode();
+    StepFrame();
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
+    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().IsCheatSheetOpen());
+}
+
 TEST_F(HeadlessAppTest, AKeyStrandedByHidingIsNotAPressOnTheWayBack) {
     ShowEditMode();
     StepFrame();
@@ -3661,7 +3688,7 @@ TEST_F(OverlappingItemsTest, TheWheelWaitsForADragToEnd) {
 }
 
 // An arrow key is a command, and a command ends the drag where it is (see
-// OverlayApp::SettleHand): the nudge is a step of its own after the drag,
+// Editor::Settle): the nudge is a step of its own after the drag,
 // and the rest of the drag moves nothing.
 TEST_F(OverlappingItemsTest, AnArrowKeyEndsADragAndNudgesAfterIt) {
     ShowEditMode();
@@ -4116,7 +4143,7 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
 
 // The key for Text pressed halfway through a stroke: a command, so the
 // stroke ends where the key found it and is kept (see
-// OverlayApp::SettleHand), and the rest of the drag draws nothing. Taken
+// Editor::Settle), and the rest of the drag draws nothing. Taken
 // by Text instead, it stayed in flight, and nothing could be pressed after
 // it.
 TEST_F(HeadlessAppTest, TextPickedMidStrokeEndsTheStrokeWhereItIs) {

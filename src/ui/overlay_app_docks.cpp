@@ -326,12 +326,12 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         session_.ReorderCanvas(reorder->first, reorder->second);
     }
     if (clicked.has_value()) {
-        editor_.SwitchToCanvasSettled(*clicked);
+        editor_.SwitchCanvas(*clicked);
     }
     if (makeNew) {
         // Into the folder the bar is showing - the current canvas's, which
         // need not be the one the Overview last browsed.
-        editor_.SwitchToCanvasSettled(editor_.CreateCanvasBesideCurrent());
+        editor_.SwitchCanvas(editor_.CreateCanvasBesideCurrent());
     }
     if (openOverview) {
         OpenOverview();
