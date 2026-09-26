@@ -161,8 +161,8 @@ struct BoxSelection {
 //    click or hold for fullscreen, drag for a region" item-creation
 //    gesture, and the selection's own gestures (a press on a snippet, on a
 //    selected snippet's handle, or on the selection bar - see
-//    HandleItemGesture) - is driven by the window's raw MouseCallback
-//    (WM_MOUSEMOVE-driven, decoupled from render/frame rate). What a press
+//    HandleItemGesture) - is driven by the window's input stream (see
+//    OnInput: as it arrives, decoupled from render/frame rate). What a press
 //    lands on is ResolvePointerTarget's answer: the app's own walk over
 //    the selection's furniture and then the items, asked of the event's
 //    own position. ImGui never hit-tests an item, a handle or the bar, so
@@ -181,7 +181,7 @@ public:
     // the models and the settings as they are.
     OverlayApp(Settings& settings, Session& session);
 
-    // Subscribes to the window's frame/mouse callbacks. The window is not
+    // Subscribes to the window's frame and input callbacks. The window is not
     // required to exist yet in the OS sense; callbacks simply won't fire
     // until the platform layer creates and shows it.
     void AttachTo(platform::IOverlayWindow& window);
@@ -447,6 +447,9 @@ public:
 
 private:
     void OnFrame(float deltaSeconds);
+    // Every input event, in the order they happened - see IOverlayWindow::
+    // SetInputCallback. The two gesture buttons go to OnMouse.
+    void OnInput(const platform::InputEvent& event);
     void OnMouse(const platform::MouseEvent& event);
     // Ends the gesture in flight where it stands without anything a release
     // would newly make or fire: what it has already done is kept and filed

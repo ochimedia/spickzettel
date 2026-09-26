@@ -84,6 +84,7 @@ if(WIN32)
         platform/win32_dx11_renderer_test.cpp
         platform/win32_input_grab_test.cpp
         platform/win32_integrity_test.cpp
+        platform/win32_overlay_window_test.cpp
         platform/win32_platform_host_test.cpp
         platform/win32_screen_capture_test.cpp
     )

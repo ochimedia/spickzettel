@@ -130,8 +130,11 @@ public:
     // Invoked once per rendered frame while visible; the UI issues its draw
     // calls from within it.
     virtual void SetFrameCallback(FrameCallback callback) = 0;
-    // Invoked for mouse button and move events received while visible.
-    virtual void SetMouseCallback(MouseCallback callback) = 0;
+    // Invoked for every input event received while visible - the pointer,
+    // the wheel, keys and the modifiers - one at a time, in the order they
+    // happened, as each arrives rather than at the next frame. What ImGui
+    // needs for its widgets it is fed separately, as before.
+    virtual void SetInputCallback(InputCallback callback) = 0;
 
     // ===== Textures and capture =====
 

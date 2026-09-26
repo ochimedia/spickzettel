@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <bitset>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -55,7 +56,7 @@ public:
     void ReleaseTextInput() override;
     void SetFrameCallback(FrameCallback callback) override;
     void SetFramePacing(FramePacing pacing) override;
-    void SetMouseCallback(MouseCallback callback) override;
+    void SetInputCallback(InputCallback callback) override;
     CaptureResult CaptureRegion(const Rect& rect) override;
     InputGrabDiagnostics GetInputGrabDiagnostics() const override;
     uint64_t CreateTextureFromPixels(const uint8_t* pixelsRGBA, int width, int height) override;
@@ -84,7 +85,18 @@ private:
     void ShowInternal(bool activate);
     static LRESULT CALLBACK WndProcThunk(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
-    void EmitMouseEvent(const Vec2& position, MouseButton button, MouseEventKind kind);
+    // Hands `event` to the input callback, stamped with the time and the
+    // modifiers held - after a Modifiers event of its own, if those
+    // changed since the last one. See SetInputCallback.
+    void Emit(InputEvent event);
+    void EmitPointer(InputEventKind kind, const Vec2& position, MouseButton button, uint8_t buttons = 0);
+    void EmitKey(WPARAM virtualKey, LPARAM lParam, bool down);
+    // A Modifiers event, if `held` is not what the last event carried.
+    void EmitModifiersIfChanged(const Modifiers& held, double seconds);
+    // The modifiers held right now, from the same two sources RenderFrame
+    // gives ImGui - see there.
+    static Modifiers HeldModifiers();
+    double NowSeconds() const;
     // Recomputes whether the input grab may run right now (visible, and in
     // edit mode rather than click-through view-only) and applies it.
     void RefreshEditModeInput();
@@ -147,7 +159,12 @@ private:
     // See SetFramePacing.
     FramePacing framePacing_ = FramePacing::EveryFrame;
     FrameCallback frameCallback_;
-    MouseCallback mouseCallback_;
+    InputCallback inputCallback_;
+    // The modifiers the last event carried - see Emit.
+    Modifiers emittedModifiers_;
+    // The keys whose down was delivered and whose up was not yet, so a
+    // down for one of them is its repeat - see EmitKey.
+    std::bitset<256> keysDown_;
     std::unique_ptr<Win32Dx11Renderer> renderer_;
     // The texture generations of renderers since destroyed, which took
     // every texture they made with them. See TextureGeneration.
@@ -155,5 +172,9 @@ private:
     LARGE_INTEGER lastFrameTime_{};
     LARGE_INTEGER perfFrequency_{};
 };
+
+// KeyCombo's encoding of a Win32 virtual key - a letter, digit, function
+// or named key - or 0 for one it has no name for.
+int KeyForVirtualKey(UINT virtualKey);
 
 }  // namespace sz::platform::win32

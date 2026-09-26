@@ -989,7 +989,7 @@ OverlayApp::OverlayApp(Settings& settings, Session& session)
 void OverlayApp::AttachTo(platform::IOverlayWindow& window) {
     window_ = &window;
     window.SetFrameCallback([this](float dt) { OnFrame(dt); });
-    window.SetMouseCallback([this](const platform::MouseEvent& ev) { OnMouse(ev); });
+    window.SetInputCallback([this](const platform::InputEvent& ev) { OnInput(ev); });
 }
 
 void OverlayApp::SetViewOnly(bool viewOnly) {

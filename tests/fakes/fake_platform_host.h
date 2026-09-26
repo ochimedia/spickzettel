@@ -98,7 +98,7 @@ public:
     void SetFrameCallback(platform::FrameCallback callback) override { frameCallback = std::move(callback); }
     void SetFramePacing(platform::FramePacing pacing) override { framePacing = pacing; }
     platform::FramePacing framePacing = platform::FramePacing::EveryFrame;
-    void SetMouseCallback(platform::MouseCallback callback) override { mouseCallback = std::move(callback); }
+    void SetInputCallback(platform::InputCallback callback) override { inputCallback = std::move(callback); }
 
     platform::InputGrabDiagnostics GetInputGrabDiagnostics() const override { return {}; }
 
@@ -191,7 +191,7 @@ public:
     // The display the window covers: the one it was created on, until moved.
     platform::DisplayInfo onDisplay{};
     platform::FrameCallback frameCallback;
-    platform::MouseCallback mouseCallback;
+    platform::InputCallback inputCallback;
 
     // What a capture comes back with. Nothing by default: a backend that
     // cannot capture, which is the ordinary "couldn't" every caller has to
@@ -317,7 +317,7 @@ public:
         registeredCombos.clear();
         trayCallback = nullptr;
         overlayWindow.frameCallback = nullptr;
-        overlayWindow.mouseCallback = nullptr;
+        overlayWindow.inputCallback = nullptr;
         overlayWindow.displaysChangedCallback = nullptr;
         backgroundTimerCallback = nullptr;
         backgroundTimerIntervalMs = 0;

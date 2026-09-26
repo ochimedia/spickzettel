@@ -1286,6 +1286,39 @@ void OverlayApp::SettleUntouchedDrawing() {
     session_.DiscardIfUntouched(id);
 }
 
+void OverlayApp::OnInput(const platform::InputEvent& event) {
+    using platform::InputEventKind;
+    using platform::MouseButton;
+    using platform::MouseEventKind;
+    const auto gestureButton = [](MouseButton button) {
+        return button == MouseButton::Left || button == MouseButton::Right;
+    };
+    switch (event.kind) {
+        case InputEventKind::PointerDown:
+        case InputEventKind::PointerUp:
+            if (gestureButton(event.button)) {
+                OnMouse(platform::MouseEvent{
+                    event.position, event.button,
+                    event.kind == InputEventKind::PointerDown ? MouseEventKind::Down : MouseEventKind::Up});
+            }
+            return;
+        case InputEventKind::PointerMove:
+            // A move is each held gesture button's - both, when both are
+            // down - and nobody's with neither.
+            for (const MouseButton button : {MouseButton::Left, MouseButton::Right}) {
+                if (event.buttons & platform::ButtonBit(button)) {
+                    OnMouse(platform::MouseEvent{event.position, button, MouseEventKind::Move});
+                }
+            }
+            return;
+        case InputEventKind::Wheel:
+        case InputEventKind::KeyDown:
+        case InputEventKind::KeyUp:
+        case InputEventKind::Modifiers:
+            return;  // read from ImGui, at the frame, for now
+    }
+}
+
 void OverlayApp::OnMouse(const platform::MouseEvent& event) {
     if (viewOnly_) {
         // Real OS-level click-through (see IOverlayWindow::SetInputPassthrough)

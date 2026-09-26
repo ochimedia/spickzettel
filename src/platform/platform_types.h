@@ -27,7 +27,12 @@ enum class MouseButton {
     Left,
     Right,
     Middle,
+    X1,  // "back", on most mice
+    X2,  // "forward"
 };
+
+// A set of mouse buttons, as InputEvent::buttons holds them.
+constexpr uint8_t ButtonBit(MouseButton button) { return static_cast<uint8_t>(1u << static_cast<unsigned>(button)); }
 
 enum class MouseEventKind {
     Down,
@@ -35,10 +40,56 @@ enum class MouseEventKind {
     Up,
 };
 
+// What the pointer handlers are given: one button's press, move or
+// release. See InputEvent, which these are taken from.
 struct MouseEvent {
     Vec2 position;
     MouseButton button = MouseButton::Left;
     MouseEventKind kind = MouseEventKind::Move;
+};
+
+// The modifier keys held, as the backend knows them: whoever has keyboard
+// focus, and whatever an input grab swallowed.
+struct Modifiers {
+    bool ctrl = false;
+    bool shift = false;
+    bool alt = false;
+    bool super = false;  // the Windows key
+
+    bool operator==(const Modifiers&) const = default;
+};
+
+enum class InputEventKind {
+    PointerDown,  // button, position
+    PointerMove,  // position, buttons: also with none held
+    PointerUp,    // button, position
+    Wheel,        // wheel, position
+    KeyDown,      // key, repeat
+    KeyUp,        // key
+    Modifiers,    // only when they change; every event carries them anyway
+};
+
+// One thing the hand did, in the order it did it - see IOverlayWindow::
+// SetInputCallback and docs/INTERACTIONS.md, section 3.
+struct InputEvent {
+    InputEventKind kind = InputEventKind::PointerMove;
+    // When it happened, in seconds on the backend's own steady clock:
+    // comparable with other events' times, nothing else.
+    double seconds = 0.0;
+    // As they were when it happened.
+    Modifiers modifiers;
+    Vec2 position;
+    MouseButton button = MouseButton::Left;
+    // The buttons held, for a PointerMove.
+    uint8_t buttons = 0;
+    // Notches, fractional on a fine-grained wheel; positive away from the
+    // user.
+    float wheel = 0.0f;
+    // KeyCombo's encoding of the key: a letter, digit, function or named
+    // key. Keys it has no name for are not delivered.
+    int key = 0;
+    // Held down and repeating, rather than just pressed.
+    bool repeat = false;
 };
 
 // A hotkey: modifiers plus one logical key. `key` is an uppercase letter or
@@ -326,7 +377,7 @@ enum class ImageFilter {
 };
 
 using FrameCallback = std::function<void(float deltaSeconds)>;
-using MouseCallback = std::function<void(const MouseEvent&)>;
+using InputCallback = std::function<void(const InputEvent&)>;
 using TrayCommandCallback = std::function<void(TrayCommand)>;
 using HotkeyCallback = std::function<void()>;
 

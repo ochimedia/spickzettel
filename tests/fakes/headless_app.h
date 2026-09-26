@@ -15,7 +15,7 @@
 // difference matters:
 //  - ImGui's own event queue (Move/Click/Key below) is what widgets see, and
 //    what decides io.WantCaptureMouse;
-//  - the platform mouse callback (Press/Release/DragTo) is the raw pipeline
+//  - the platform input stream (RawMouse and friends) is the raw pipeline
 //    that drawing and item placement run on, deliberately decoupled from
 //    the frame rate - see OverlayApp's class comment.
 // A gesture on the canvas needs both, in step, which is what Drag does.
@@ -186,8 +186,21 @@ protected:
     void RawMouse(float x, float y, platform::MouseEventKind kind,
                    platform::MouseButton button = platform::MouseButton::Left) {
         MoveTo(x, y);
-        if (host_.overlayWindow.mouseCallback) {
-            host_.overlayWindow.mouseCallback(platform::MouseEvent{platform::Vec2{x, y}, button, kind});
+        platform::InputEvent event;
+        event.kind = kind == platform::MouseEventKind::Down ? platform::InputEventKind::PointerDown
+                     : kind == platform::MouseEventKind::Up ? platform::InputEventKind::PointerUp
+                                                            : platform::InputEventKind::PointerMove;
+        event.position = platform::Vec2{x, y};
+        event.button = button;
+        event.buttons = kind == platform::MouseEventKind::Move ? platform::ButtonBit(button) : 0;
+        SendInput(event);
+    }
+
+    // Into the platform's input stream, stamped with ImGui's clock.
+    void SendInput(platform::InputEvent event) {
+        event.seconds = ImGui::GetTime();
+        if (host_.overlayWindow.inputCallback) {
+            host_.overlayWindow.inputCallback(event);
         }
     }
 

@@ -140,7 +140,55 @@ private:
     bool active_ = false;
 };
 
+// The buttons a mouse message's MK_ flags - or the input grab's
+// HeldButtons, which uses the same - say are held.
+uint8_t ButtonsFromKeyState(UINT flags) {
+    uint8_t buttons = 0;
+    const auto add = [&](UINT flag, MouseButton button) {
+        if (flags & flag) {
+            buttons |= ButtonBit(button);
+        }
+    };
+    add(MK_LBUTTON, MouseButton::Left);
+    add(MK_RBUTTON, MouseButton::Right);
+    add(MK_MBUTTON, MouseButton::Middle);
+    add(MK_XBUTTON1, MouseButton::X1);
+    add(MK_XBUTTON2, MouseButton::X2);
+    return buttons;
+}
+
+Vec2 ClientPosition(LPARAM lParam) {
+    return Vec2{static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
+}
+
 }  // namespace
+
+int KeyForVirtualKey(UINT virtualKey) {
+    if ((virtualKey >= 'A' && virtualKey <= 'Z') || (virtualKey >= '0' && virtualKey <= '9')) {
+        return static_cast<int>(virtualKey);
+    }
+    if (virtualKey >= VK_F1 && virtualKey <= VK_F24) {
+        return KeyCombo::kFunctionKeyBase + 1 + static_cast<int>(virtualKey - VK_F1);
+    }
+    switch (virtualKey) {
+        case VK_ESCAPE:
+            return KeyCombo::kEscape;
+        case VK_DELETE:
+            return KeyCombo::kDelete;
+        case VK_BACK:
+            return KeyCombo::kBackspace;
+        case VK_LEFT:
+            return KeyCombo::kLeftArrow;
+        case VK_RIGHT:
+            return KeyCombo::kRightArrow;
+        case VK_UP:
+            return KeyCombo::kUpArrow;
+        case VK_DOWN:
+            return KeyCombo::kDownArrow;
+        default:
+            return 0;
+    }
+}
 
 Win32OverlayWindow::Win32OverlayWindow() = default;
 Win32OverlayWindow::~Win32OverlayWindow() = default;
@@ -307,6 +355,8 @@ void Win32OverlayWindow::ShowInternal(bool activate) {
     visible_ = true;
     shownSeconds_ = 0.0f;
     seedPointerFromCursor_ = true;
+    // No key goes down unseen while hidden that goes up seen - see EmitKey.
+    keysDown_.reset();
     RefreshEditModeInput();
     QueryPerformanceCounter(&lastFrameTime_);  // avoid a large delta-time spike on the first frame
 }
@@ -854,7 +904,7 @@ DWORD Win32OverlayWindow::MillisecondsUntilIdleFrame() const {
     return elapsedMs >= kIdleFrameIntervalMs ? 0 : static_cast<DWORD>(kIdleFrameIntervalMs - elapsedMs);
 }
 
-void Win32OverlayWindow::SetMouseCallback(MouseCallback callback) { mouseCallback_ = std::move(callback); }
+void Win32OverlayWindow::SetInputCallback(InputCallback callback) { inputCallback_ = std::move(callback); }
 
 InputGrabDiagnostics Win32OverlayWindow::GetInputGrabDiagnostics() const {
     return Win32InputGrab::Instance().Diagnostics();
@@ -1042,22 +1092,12 @@ void Win32OverlayWindow::RenderFrame() {
 
     Win32InputGrab& grab = Win32InputGrab::Instance();
 
-    // Modifier state from two sources that between them cover every case.
-    // ImGui's backend learns Ctrl/Shift/Alt from key messages, which need
-    // keyboard focus - and dontStealFocus exists precisely to keep
-    // focus with the game, which is how Alt-drag stopped working under it.
-    // GetAsyncKeyState sees a key whoever has focus. What it cannot see is
-    // a key the keyboard grab swallowed, because a swallowed event updates
-    // no key state anywhere; the grab tracked those itself all along, so
-    // its record fills that gap. Whichever source has focus or the hook,
-    // the other reads false, and the OR is simply the truth.
-    const auto asyncDown = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
-    bool grabCtrl = false;
-    bool grabShift = false;
-    bool grabAlt = false;
-    grab.HeldModifiers(grabCtrl, grabShift, grabAlt);
-    renderer_->SetModifierOverride(asyncDown(VK_CONTROL) || grabCtrl, asyncDown(VK_SHIFT) || grabShift,
-                                   asyncDown(VK_MENU) || grabAlt);
+    // ImGui's modifiers, and the input stream's: a modifier pressed or let
+    // go without a key message reaching this window - no focus, and no
+    // keyboard grab - is only seen here, once a frame.
+    const Modifiers held = HeldModifiers();
+    renderer_->SetModifierOverride(held.ctrl, held.shift, held.alt);
+    EmitModifiersIfChanged(held, NowSeconds());
     grab.SampleFrameStep();
     grab.Heartbeat();
     renderer_->SetSoftwarePointerActive(grab.SoftwarePointerWanted());
@@ -1073,23 +1113,17 @@ void Win32OverlayWindow::RenderFrame() {
         ScreenToClient(hwnd_, &client);
         renderer_->SetMousePositionOverride(true, static_cast<float>(client.x), static_cast<float>(client.y));
 
-        // While a button is held, one Move event per frame, and only if the
-        // pointer actually moved - which is exactly what the OS delivers
-        // through WM_MOUSEMOVE when it isn't being swallowed. Emitted here
-        // rather than posted from the input thread: posting one per mouse
-        // report flooded the queue and laid down a stroke point per report,
-        // and gating that needed a flag the two threads had to share. The
-        // render thread already has the position; it just says so.
-        const UINT held = grab.HeldButtons();
+        // One Move event per frame, and only if the pointer actually moved -
+        // which is what the OS delivers through WM_MOUSEMOVE when it isn't
+        // being swallowed, coalesced. Emitted here rather than posted from
+        // the input thread: posting one per mouse report flooded the queue
+        // and laid down a stroke point per report, and gating that needed a
+        // flag the two threads had to share. The render thread already has
+        // the position; it just says so.
         const bool moved = client.x != lastEmittedMove_.x || client.y != lastEmittedMove_.y;
-        if (held != 0 && moved) {
-            const Vec2 pos{static_cast<float>(client.x), static_cast<float>(client.y)};
-            if (held & MK_LBUTTON) {
-                EmitMouseEvent(pos, MouseButton::Left, MouseEventKind::Move);
-            }
-            if (held & MK_RBUTTON) {
-                EmitMouseEvent(pos, MouseButton::Right, MouseEventKind::Move);
-            }
+        if (moved) {
+            EmitPointer(InputEventKind::PointerMove, Vec2{static_cast<float>(client.x), static_cast<float>(client.y)},
+                        MouseButton::Left, ButtonsFromKeyState(grab.HeldButtons()));
         }
         lastEmittedMove_ = client;
     } else if (POINT cursor{}; seedPointerFromCursor_ && GetCursorPos(&cursor) && ScreenToClient(hwnd_, &cursor)) {
@@ -1113,10 +1147,93 @@ void Win32OverlayWindow::RenderFrame() {
     renderer_->RenderAndPresent();
 }
 
-void Win32OverlayWindow::EmitMouseEvent(const Vec2& position, MouseButton button, MouseEventKind kind) {
-    if (mouseCallback_) {
-        mouseCallback_(MouseEvent{position, button, kind});
+// Modifier state from two sources that between them cover every case.
+// ImGui's backend learns Ctrl/Shift/Alt from key messages, which need
+// keyboard focus - and dontStealFocus exists precisely to keep focus with
+// the game, which is how Alt-drag stopped working under it.
+// GetAsyncKeyState sees a key whoever has focus. What it cannot see is a
+// key the keyboard grab swallowed, because a swallowed event updates no key
+// state anywhere; the grab tracked those itself all along, so its record
+// fills that gap. Whichever source has focus or the hook, the other reads
+// false, and the OR is simply the truth. (The Windows key the grab never
+// takes.)
+Modifiers Win32OverlayWindow::HeldModifiers() {
+    const auto asyncDown = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
+    bool grabCtrl = false;
+    bool grabShift = false;
+    bool grabAlt = false;
+    Win32InputGrab::Instance().HeldModifiers(grabCtrl, grabShift, grabAlt);
+    Modifiers held;
+    held.ctrl = asyncDown(VK_CONTROL) || grabCtrl;
+    held.shift = asyncDown(VK_SHIFT) || grabShift;
+    held.alt = asyncDown(VK_MENU) || grabAlt;
+    held.super = asyncDown(VK_LWIN) || asyncDown(VK_RWIN);
+    return held;
+}
+
+double Win32OverlayWindow::NowSeconds() const {
+    LARGE_INTEGER now{};
+    QueryPerformanceCounter(&now);
+    return perfFrequency_.QuadPart > 0
+               ? static_cast<double>(now.QuadPart) / static_cast<double>(perfFrequency_.QuadPart)
+               : 0.0;
+}
+
+void Win32OverlayWindow::EmitModifiersIfChanged(const Modifiers& held, double seconds) {
+    if (held == emittedModifiers_) {
+        return;
     }
+    emittedModifiers_ = held;
+    if (inputCallback_) {
+        InputEvent event;
+        event.kind = InputEventKind::Modifiers;
+        event.seconds = seconds;
+        event.modifiers = held;
+        inputCallback_(event);
+    }
+}
+
+void Win32OverlayWindow::Emit(InputEvent event) {
+    event.seconds = NowSeconds();
+    event.modifiers = HeldModifiers();
+    EmitModifiersIfChanged(event.modifiers, event.seconds);
+    if (inputCallback_) {
+        inputCallback_(event);
+    }
+}
+
+void Win32OverlayWindow::EmitPointer(InputEventKind kind, const Vec2& position, MouseButton button,
+                                     uint8_t buttons) {
+    InputEvent event;
+    event.kind = kind;
+    event.position = position;
+    event.button = button;
+    event.buttons = buttons;
+    Emit(event);
+}
+
+// A key's down or up, by the key's own name - the modifiers alone are not
+// keys here but what every event carries. A down for a key already down is
+// its repeat: said by the message itself when the OS sends it (bit 30, the
+// key's previous state), but not by the input grab, which posts every
+// repeat as a fresh down - so the downs delivered are counted here too.
+void Win32OverlayWindow::EmitKey(WPARAM virtualKey, LPARAM lParam, bool down) {
+    const int key = KeyForVirtualKey(static_cast<UINT>(virtualKey));
+    if (virtualKey >= keysDown_.size()) {
+        return;
+    }
+    const bool wasDown = keysDown_.test(virtualKey) || (lParam & (1LL << 30)) != 0;
+    keysDown_.set(virtualKey, down);
+    if (key == 0) {
+        // Nothing to deliver but what it did to the modifiers, if anything.
+        EmitModifiersIfChanged(HeldModifiers(), NowSeconds());
+        return;
+    }
+    InputEvent event;
+    event.kind = down ? InputEventKind::KeyDown : InputEventKind::KeyUp;
+    event.key = key;
+    event.repeat = down && wasDown;
+    Emit(event);
 }
 
 LRESULT CALLBACK Win32OverlayWindow::WndProcThunk(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -1196,12 +1313,10 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
         }
         case WM_TABLET_QUERYSYSTEMGESTURESTATUS:
             return static_cast<LRESULT>(kTabletGestureFlags);  // see its comment
-        case WM_LBUTTONDOWN: {
+        case WM_LBUTTONDOWN:
             SetCapture(hwnd);
-            const Vec2 pos{static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
-            EmitMouseEvent(pos, MouseButton::Left, MouseEventKind::Down);
+            EmitPointer(InputEventKind::PointerDown, ClientPosition(lParam), MouseButton::Left);
             return 0;
-        }
         case WM_MOUSEMOVE: {
             // While the grab owns the pointer these are our own doing: it
             // writes the position it keeps to the real cursor when that is
@@ -1213,25 +1328,14 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
             if (Win32InputGrab::Instance().VirtualCursorActive()) {
                 return 0;
             }
-            const Vec2 pos{static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
-            if (wParam & MK_LBUTTON) {
-                EmitMouseEvent(pos, MouseButton::Left, MouseEventKind::Move);
-            }
-            // Both buttons can be down at once (e.g. a right-drag started
-            // while a left drag/stroke is still in flight) - each gets its
-            // own Move event off the same wParam bitmask rather than an
-            // else-if, so neither one silently stops tracking mid-gesture.
-            if (wParam & MK_RBUTTON) {
-                EmitMouseEvent(pos, MouseButton::Right, MouseEventKind::Move);
-            }
+            EmitPointer(InputEventKind::PointerMove, ClientPosition(lParam), MouseButton::Left,
+                        ButtonsFromKeyState(static_cast<UINT>(wParam)));
             return 0;
         }
-        case WM_LBUTTONUP: {
+        case WM_LBUTTONUP:
             ReleaseCapture();
-            const Vec2 pos{static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
-            EmitMouseEvent(pos, MouseButton::Left, MouseEventKind::Up);
+            EmitPointer(InputEventKind::PointerUp, ClientPosition(lParam), MouseButton::Left);
             return 0;
-        }
         // Right button: the app's own right-button gestures (a resize from
         // a snippet's nearest edge, the eraser in drawing mode, framing a
         // drawing on empty canvas - see OverlayApp::OnMouse). Shares
@@ -1240,18 +1344,51 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
         // again if already captured, and ReleaseCapture here is safe even
         // if a left drag is still in progress since a genuine simultaneous
         // L+R drag is not a gesture this app gives any meaning to.
-        case WM_RBUTTONDOWN: {
+        case WM_RBUTTONDOWN:
             SetCapture(hwnd);
-            const Vec2 pos{static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
-            EmitMouseEvent(pos, MouseButton::Right, MouseEventKind::Down);
+            EmitPointer(InputEventKind::PointerDown, ClientPosition(lParam), MouseButton::Right);
             return 0;
-        }
-        case WM_RBUTTONUP: {
+        case WM_RBUTTONUP:
             ReleaseCapture();
-            const Vec2 pos{static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
-            EmitMouseEvent(pos, MouseButton::Right, MouseEventKind::Up);
+            EmitPointer(InputEventKind::PointerUp, ClientPosition(lParam), MouseButton::Right);
             return 0;
+        // The middle and side buttons, the wheel and the keys: into the
+        // stream as well, and then on to the default handling they had
+        // before there was one - Alt+F4 is a WM_SYSKEYDOWN before it is the
+        // WM_SYSCOMMAND below.
+        case WM_MBUTTONDOWN:
+        case WM_MBUTTONUP:
+            EmitPointer(msg == WM_MBUTTONDOWN ? InputEventKind::PointerDown : InputEventKind::PointerUp,
+                        ClientPosition(lParam), MouseButton::Middle);
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_XBUTTONDOWN:
+        case WM_XBUTTONUP:
+            EmitPointer(msg == WM_XBUTTONDOWN ? InputEventKind::PointerDown : InputEventKind::PointerUp,
+                        ClientPosition(lParam),
+                        GET_XBUTTON_WPARAM(wParam) == XBUTTON1 ? MouseButton::X1 : MouseButton::X2);
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_MOUSEWHEEL: {
+            // In screen coordinates, unlike the button messages.
+            POINT at{GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            ScreenToClient(hwnd, &at);
+            InputEvent event;
+            event.kind = InputEventKind::Wheel;
+            event.position = Vec2{static_cast<float>(at.x), static_cast<float>(at.y)};
+            event.wheel = static_cast<float>(GET_WHEEL_DELTA_WPARAM(wParam)) / static_cast<float>(WHEEL_DELTA);
+            Emit(event);
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
         }
+        case WM_KEYDOWN:
+        case WM_SYSKEYDOWN:
+        case WM_KEYUP:
+        case WM_SYSKEYUP:
+            EmitKey(wParam, lParam, msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
+        // Whatever was held goes up somewhere else now, unheard: a key
+        // pressed again after is a press, not a repeat - see EmitKey.
+        case WM_KILLFOCUS:
+            keysDown_.reset();
+            return DefWindowProcW(hwnd, msg, wParam, lParam);
         // This window has no title bar or system menu of its own, but
         // Alt+F4 (and, in principle, a WM_CLOSE from anywhere else) still
         // reaches it as long as it holds real keyboard focus - Windows
