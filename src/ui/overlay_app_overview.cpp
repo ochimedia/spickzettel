@@ -13,10 +13,11 @@
 
 #include "core/config/display_choice.h"
 #include "ui/icons_generated.h"
+#include "ui/settings_widgets.h"
 
 #include <imgui.h>
-// For ImGui::GetCurrentWindow, which is how HelpMarker asks how tall the
-// row it is joining already is - see its own comment.
+// For the combo preview the edit-target picker draws a profile's name in -
+// see RenderEditTargetPicker.
 #include <imgui_internal.h>
 
 namespace sz::ui {
@@ -91,115 +92,6 @@ bool TabButton(const char* id, const char* text, bool active) {
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(4);
     return pressed;
-}
-
-// The revert arrow that marks a settings row as set here rather than
-// inherited. Small and quiet enough to sit inside a checkbox row without
-// making it taller, and accent-colored because being marked is the point:
-// it is both the indicator and the button that undoes it.
-bool RevertButton(const char* strId) {
-    constexpr float kSize = 16.0f;
-    ImGui::InvisibleButton(strId, ImVec2(Px(kSize), Px(kSize)));
-    const bool pressed = ImGui::IsItemClicked();
-    const ImVec2 pMin = ImGui::GetItemRectMin();
-    const ImU32 color = ImGui::GetColorU32(ImGui::IsItemHovered() ? theme::AccentHover() : theme::Accent());
-    DrawIcon(ImGui::GetWindowDrawList(), icons::kUndo, pMin, Px(kSize), color);
-    return pressed;
-}
-
-// The "?" that carries a setting's explanation, so the panel can read as a
-// list of settings rather than as an essay with checkboxes in it. Clicking
-// opens the text in a popover beside the row; until then it takes one
-// glyph of space and says nothing.
-//
-// A click rather than a hover, because these are paragraphs: text that
-// appears because the pointer crossed it is text you can't read while
-// reaching for the box it describes, and it covers the rows below exactly
-// when you are trying to compare them.
-void HelpMarker(const char* id, const char* title, const char* text) {
-    // Wide enough for a paragraph to have a shape, narrow enough not to
-    // cover the panel it is explaining.
-    constexpr float kHelpWrapWidth = 380.0f;
-
-    // The ids come from `id`, never from the words: two of these in one
-    // window must not collide, a test needs a stable name to reach for,
-    // and neither may change because someone reworded the explanation.
-    char buttonId[192];
-    char popupId[192];
-    std::snprintf(buttonId, sizeof(buttonId), "##help_%s", id);
-    std::snprintf(popupId, sizeof(popupId), "##helppop_%s", id);
-
-    const float size = std::floor(ImGui::GetFontSize() + Px(2.0f));
-    // Centered on whatever else is already on this row, rather than on its
-    // top edge - this is always called after a SameLine, so the cursor is
-    // at the top of a line something else set the height of. Which one it
-    // is matters: a checkbox makes the row a frame tall, a plain heading
-    // only a line of text tall, and centering on the frame either way
-    // dropped every marker beside a heading visibly below its own words.
-    // DC.CurrLineSize.y is the tallest thing on the row so far, which is
-    // exactly the question; it is zero on a row with nothing on it yet,
-    // and then there is nothing to line up with.
-    //
-    // Never negative, and the marker is deliberately two pixels taller
-    // than a line of text, so beside a heading it sits on the row's top
-    // edge and overhangs below rather than being centered. Overhanging
-    // downward is free; upward is not - the first row of a settings tab
-    // starts at the top of a scrolling child, and a marker reaching a
-    // pixel above that is a pixel outside the clip rect, which shaved the
-    // top off the circles in Input, Hotkeys and Profiles.
-    const float rowHeight = ImGui::GetCurrentWindow()->DC.CurrLineSize.y;
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(0.0f, (rowHeight - size) * 0.5f));
-    ImGui::InvisibleButton(buttonId, ImVec2(size, size));
-    const bool clicked = ImGui::IsItemClicked();
-    // Lit while its own popover is up, so a reader can see which row the
-    // text on screen belongs to.
-    const bool open = ImGui::IsPopupOpen(popupId);
-    const ImU32 color =
-        ImGui::GetColorU32(open || ImGui::IsItemHovered() ? theme::Accent() : theme::kGraphite300);
-    const ImVec2 minPt = ImGui::GetItemRectMin();
-    const ImVec2 center(minPt.x + size * 0.5f, minPt.y + size * 0.5f);
-    ImDrawList* drawList = ImGui::GetWindowDrawList();
-    drawList->AddCircle(center, size * 0.5f, color, 0, Px(1.2f));
-    // Centered on the glyph's own ink, not on the line box CalcTextSize
-    // reports. A line box is the same height for every character in the
-    // font - it has to leave room for accents above and descenders below -
-    // and "?" uses neither, so centering the box left the question mark
-    // sitting low enough in its circle for the dot to touch the ring.
-    // ImFontGlyph's X0/Y0/X1/Y1 are the ink's own corners, in pixels,
-    // relative to where AddText would put the glyph; putting the middle of
-    // that where the middle of the circle is takes both axes at once.
-    ImFontGlyph* glyph = ImGui::GetFontBaked()->FindGlyph(static_cast<ImWchar>('?'));
-    drawList->AddText(ImVec2(center.x - (glyph->X0 + glyph->X1) * 0.5f,
-                              center.y - (glyph->Y0 + glyph->Y1) * 0.5f),
-                       color, "?");
-
-    if (clicked) {
-        ImGui::OpenPopup(popupId);
-    }
-    if (ImGui::BeginPopup(popupId)) {
-        // Same reason as every other popup nested in this panel: the
-        // Overview re-asserts itself to the front every frame, so anything
-        // opened inside it has to as well or it opens behind. See
-        // KeepPopoverInFront.
-        KeepPopoverInFront();
-        ImGui::PushTextWrapPos(Px(kHelpWrapWidth));
-        // The title repeated inside, because a popover can land over the
-        // row that opened it.
-        ImGui::TextColored(theme::Accent(), "%s", title);
-        ImGui::Spacing();
-        ImGui::TextUnformatted(text);
-        ImGui::PopTextWrapPos();
-        ImGui::EndPopup();
-    }
-}
-
-// A checkbox and its "?", for the settings that are not per-application
-// (OverlayApp::ProfileableCheckbox is the same row for the ones that are).
-bool CheckboxWithHelp(const char* id, const char* label, bool* value, const char* help) {
-    const bool changed = ImGui::Checkbox(Labeled(label, id), value);
-    ImGui::SameLine();
-    HelpMarker(id, label, help);
-    return changed;
 }
 
 // The label over a group of settings, with the explanation that covers the
@@ -298,52 +190,6 @@ void EndSettingsScope(SettingsScopeBox& box) {
     box.splitter.Merge(drawList);
     ImGui::Spacing();
     ImGui::Spacing();
-}
-
-// One row of what a left press on empty canvas makes: the kind, and which
-// press makes it. Choosing the press the other kind has swaps the two
-// rather than refusing - one press cannot make both, and a dropdown that
-// grays out the very choice wanted, with the reason in another row, is a
-// puzzle. See AppConfig::screenshotTrigger.
-bool CreationTriggerRow(const char* id, const char* label, CreationTrigger& trigger, CreationTrigger& other) {
-    struct Choice {
-        CreationTrigger trigger;
-        const char* label;
-    };
-    const Choice choices[] = {
-        {CreationTrigger::Plain, strings::kCreationTriggerPlain},
-        {CreationTrigger::Ctrl, strings::kCreationTriggerCtrl},
-        {CreationTrigger::Alt, strings::kCreationTriggerAlt},
-        {CreationTrigger::Off, strings::kCreationTriggerOff},
-    };
-    const char* preview = strings::kCreationTriggerPlain;
-    for (const Choice& choice : choices) {
-        if (choice.trigger == trigger) {
-            preview = choice.label;
-        }
-    }
-    constexpr float kLabelColumn = 110.0f;
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
-    ImGui::SameLine(Px(kLabelColumn));
-    ImGui::SetNextItemWidth(Px(220.0f));
-    bool changed = false;
-    if (ImGui::BeginCombo(Labeled("", id), preview)) {
-        // Same reason as every other popup in this panel - see
-        // KeepPopoverInFront.
-        KeepPopoverInFront();
-        for (const Choice& choice : choices) {
-            if (ImGui::Selectable(choice.label, choice.trigger == trigger) && choice.trigger != trigger) {
-                if (choice.trigger == other && other != CreationTrigger::Off) {
-                    other = trigger;
-                }
-                trigger = choice.trigger;
-                changed = true;
-            }
-        }
-        ImGui::EndCombo();
-    }
-    return changed;
 }
 
 // One branch of the dependency tree the input options are laid out as:
@@ -1299,52 +1145,37 @@ void OverlayApp::RenderOverviewSettingsPanel() {
     ImGui::BeginChild("##settings_body", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
     ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
 
-    // `anyChanged` batches every edit made in a single call into at most
-    // one Settings::Commit - simpler than threading a
-    // dozen individual "did this one control just change" call sites
-    // through to the same one-line callback, and harmless: nothing here
-    // reads a *stale* value in between (every widget below is bound
-    // straight to the member it edits, so the live/in-session behavior is
-    // already correct the instant ImGui writes to it - only the disk
-    // write waits for this function to finish). The hotkey editors are the
-    // one exception - see RenderHotkeyEditor/TryChangeHotkey's own doc
-    // comments for why those go through a separate request/response
-    // callback instead - as are the shortcut rows, which persist through
-    // Settings::SetShortcut.
-    bool anyChanged = false;
+    // Every row makes its own edit as it is changed (see settings_widgets.h),
+    // so nothing is collected here to commit afterwards.
     switch (settingsSection_) {
         case SettingsSection::Appearance:
-            RenderSettingsAppearance(anyChanged);
+            RenderSettingsAppearance();
             break;
         case SettingsSection::Interaction:
-            RenderSettingsInteraction(anyChanged);
+            RenderSettingsInteraction();
             break;
         case SettingsSection::Behavior:
-            RenderSettingsBehavior(anyChanged);
+            RenderSettingsBehavior();
             break;
         case SettingsSection::Defaults:
-            RenderSettingsDefaults(anyChanged);
+            RenderSettingsDefaults();
             break;
         case SettingsSection::Hotkeys:
-            RenderSettingsHotkeys(anyChanged);
+            RenderSettingsHotkeys();
             break;
         case SettingsSection::Profiles:
             RenderSettingsProfiles();
             break;
         case SettingsSection::Debug:
-            RenderSettingsDebug(anyChanged);
+            RenderSettingsDebug();
             break;
     }
 
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
-
-    if (anyChanged) {
-        settings_.Commit();
-    }
 }
 
-void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
+void OverlayApp::RenderSettingsAppearance() {
     SettingsHeading("appearancemonitorheading", strings::kAppearanceMonitorHeading, strings::kAppearanceMonitorHelp);
     {
         const auto describe = [](const platform::DisplayInfo& display) {
@@ -1440,8 +1271,7 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
         if (ImGui::BeginCombo("##uiscale", preview)) {
             KeepPopoverInFront();
             if (ImGui::Selectable(Labeled(autoText, "uiscaleauto"), Cfg().uiScalePercent == 0)) {
-                Cfg().uiScalePercent = 0;
-                anyChanged = true;
+                settings_.Set(setting::kUiScale, 0);
             }
             for (const int percent : kPresets) {
                 char text[16];
@@ -1449,8 +1279,7 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
                 char id[24];
                 std::snprintf(id, sizeof(id), "uiscale%d", percent);
                 if (ImGui::Selectable(Labeled(text, id), Cfg().uiScalePercent == percent)) {
-                    Cfg().uiScalePercent = percent;
-                    anyChanged = true;
+                    settings_.Set(setting::kUiScale, percent);
                 }
             }
             ImGui::EndCombo();
@@ -1461,24 +1290,17 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
 
     SettingsHeading("appearanceaccentheading", strings::kAppearanceAccentHeading, strings::kAppearanceAccentHelp);
     {
-        float rgb[3];
-        ColorRGBAToFloats(Cfg().accentColorRGBA, rgb);
-        // Written into the setting as it is dragged, which OnFrame turns into
-        // the theme on the next frame - so the panel this sits in, the tabs
-        // and this very swatch's own highlights all recolor live. Saved when
-        // the edit finishes, the same as every other color here.
-        if (ImGui::ColorEdit3("##accentcolor", rgb, ImGuiColorEditFlags_NoInputs)) {
-            Cfg().accentColorRGBA = FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF));
-        }
-        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-        ImGui::SameLine();
-        ImGui::TextUnformatted(strings::kAppearanceAccentColor);
+        // Previewed as it is dragged, which OnFrame turns into the theme on
+        // the next frame - so the panel this sits in, the tabs and this very
+        // swatch's own highlights all recolor live. Committed when the edit
+        // finishes, the same as every other color here.
+        SettingColor(settings_, setting::kAccentColor, "##accentcolor", strings::kAppearanceAccentColor,
+                     SwatchAlpha::None);
         const uint32_t defaultAccent = DefaultConfig().accentColorRGBA;
         if (Cfg().accentColorRGBA != defaultAccent) {
             ImGui::SameLine();
             if (ImGui::SmallButton(Labeled(strings::kAppearanceAccentReset, "accentreset"))) {
-                Cfg().accentColorRGBA = defaultAccent;
-                anyChanged = true;
+                settings_.Set(setting::kAccentColor, defaultAccent);
             }
         }
     }
@@ -1486,103 +1308,55 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
     SettingsGroupBreak();
 
     SettingsHeading("appearancedisplayheading", strings::kAppearanceDisplayHeading);
-    anyChanged |= CheckboxWithHelp("appearanceshowitemborders", strings::kAppearanceShowItemBorders, &Cfg().showItemBorders,
-                                    strings::kAppearanceShowItemBordersHelp);
+    SettingCheckbox(settings_, setting::kShowItemBorders, "appearanceshowitemborders",
+                    strings::kAppearanceShowItemBorders, strings::kAppearanceShowItemBordersHelp);
 
     SettingsGroupBreak();
 
     SettingsHeading("appearanceimagefilterheading", strings::kAppearanceImageFilterHeading,
                      strings::kAppearanceImageFilterHelp);
-    {
-        int filter = static_cast<int>(Cfg().imageFilter);
-        anyChanged |= ImGui::RadioButton(Labeled(strings::kAppearanceImageFilterBilinear, "imagefilterbilinear"),
-                                         &filter, static_cast<int>(platform::ImageFilter::Bilinear));
-        ImGui::SameLine();
-        anyChanged |= ImGui::RadioButton(Labeled(strings::kAppearanceImageFilterNearest, "imagefilternearest"),
-                                         &filter, static_cast<int>(platform::ImageFilter::Nearest));
-        ImGui::SameLine();
-        anyChanged |= ImGui::RadioButton(Labeled(strings::kAppearanceImageFilterBicubic, "imagefilterbicubic"),
-                                         &filter, static_cast<int>(platform::ImageFilter::Bicubic));
-        ImGui::SameLine();
-        anyChanged |= ImGui::RadioButton(Labeled(strings::kAppearanceImageFilterLanczos, "imagefilterlanczos"),
-                                         &filter, static_cast<int>(platform::ImageFilter::Lanczos));
-        Cfg().imageFilter = static_cast<platform::ImageFilter>(filter);
-    }
+    const ChoiceLabel<platform::ImageFilter> filters[] = {
+        {platform::ImageFilter::Bilinear, strings::kAppearanceImageFilterBilinear, "imagefilterbilinear"},
+        {platform::ImageFilter::Nearest, strings::kAppearanceImageFilterNearest, "imagefilternearest"},
+        {platform::ImageFilter::Bicubic, strings::kAppearanceImageFilterBicubic, "imagefilterbicubic"},
+        {platform::ImageFilter::Lanczos, strings::kAppearanceImageFilterLanczos, "imagefilterlanczos"},
+    };
+    SettingRadio(settings_, setting::kImageFilter, filters);
 
     SettingsGroupBreak();
 
     SettingsHeading("appearancesnippetcolorsheading", strings::kAppearanceSnippetColorsHeading,
                      strings::kAppearanceSnippetColorsHelp);
-    {
-        // ColorEdit4 rather than the ColorEdit3-plus-opacity-slider pair
-        // the edit-mode border uses: here the alpha *is* the setting half
-        // the time, and two widgets per color would make four rows into
-        // eight.
-        constexpr ImGuiColorEditFlags kSwatchFlags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar;
-        // The swatch takes an id-only label and the caption is written
-        // beside it, rather than handing ColorEdit4 "caption##id": that
-        // widget pushes its own label as an ID scope, so with the caption
-        // in there the scope - and every id under it - would move whenever
-        // the words changed. Which is the whole thing this is avoiding.
-        auto ColorRow = [&](const char* id, const char* caption, uint32_t& colorRGBA) {
-            float rgba[4];
-            ColorRGBAToFloats4(colorRGBA, rgba);
-            if (ImGui::ColorEdit4(id, rgba, kSwatchFlags)) {
-                colorRGBA = FloatsToColorRGBA4(rgba);
-            }
-            // Only when the edit finishes, not on every frame the value
-            // changes - a color picker reports a change per frame while it
-            // is being dragged, and `anyChanged` is what writes config.json.
-            // Same treatment as the sliders below; the live color is
-            // already correct the instant ImGui writes to it either way.
-            anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-            ImGui::SameLine();
-            ImGui::TextUnformatted(caption);
-        };
-        ColorRow("##snipcolfrontborder", strings::kAppearanceFrontmostBorder, Cfg().itemBorderColorFrontRGBA);
-        ColorRow("##snipcolotherborder", strings::kAppearanceOtherBorders, Cfg().itemBorderColorOtherRGBA);
-        ColorRow("##snipcolpinnedborder", strings::kAppearancePinnedBorder, Cfg().itemBorderColorPinnedRGBA);
-    }
+    // A swatch with its alpha rather than the swatch-plus-opacity-slider
+    // pair the edit-mode border uses: here the alpha *is* the setting half
+    // the time, and two widgets per color would make four rows into eight.
+    SettingColor(settings_, setting::kBorderFront, "##snipcolfrontborder", strings::kAppearanceFrontmostBorder,
+                 SwatchAlpha::Bar);
+    SettingColor(settings_, setting::kBorderOther, "##snipcolotherborder", strings::kAppearanceOtherBorders,
+                 SwatchAlpha::Bar);
+    SettingColor(settings_, setting::kBorderPinned, "##snipcolpinnedborder", strings::kAppearancePinnedBorder,
+                 SwatchAlpha::Bar);
 
     SettingsGroupBreak();
 
     SettingsHeading("appearanceeditborderheading", strings::kAppearanceEditBorderHeading);
-    anyChanged |= CheckboxWithHelp("appearanceshoweditborder", strings::kAppearanceShowEditBorder, &Cfg().showEditModeBorder,
-        strings::kAppearanceShowEditBorderHelp);
+    SettingCheckbox(settings_, setting::kShowEditModeBorder, "appearanceshoweditborder",
+                    strings::kAppearanceShowEditBorder, strings::kAppearanceShowEditBorderHelp);
     ImGui::BeginDisabled(!Cfg().showEditModeBorder);
-    {
-        float rgb[3];
-        ColorRGBAToFloats(Cfg().editModeBorderColorRGBA, rgb);
-        // Id-only label, caption beside it - see ColorRow above for why.
-        if (ImGui::ColorEdit3("##editbordercolor", rgb, ImGuiColorEditFlags_NoInputs)) {
-            Cfg().editModeBorderColorRGBA = FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF));
-        }
-        // On the edit finishing, not per frame of the drag - see ColorRow.
-        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-        ImGui::SameLine();
-        ImGui::TextUnformatted(strings::kAppearanceEditBorderColor);
-    }
-    ImGui::SetNextItemWidth(Px(160.0f));
-    int borderPct = static_cast<int>(std::round(Cfg().editModeBorderOpacity * 100.0f));
-    if (ImGui::SliderInt(Labeled(strings::kAppearanceEditBorderOpacity, "editborderopacity"), &borderPct, 0, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
-        Cfg().editModeBorderOpacity = static_cast<float>(borderPct) / 100.0f;
-    }
-    anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-    ImGui::SetNextItemWidth(Px(160.0f));
-    ImGui::SliderFloat(Labeled(strings::kAppearanceEditBorderWidth, "editborderwidth"), &Cfg().editModeBorderWidthPx, kEditModeBorderWidthMin,
-                        kEditModeBorderWidthMax, strings::kFormatPixels, ImGuiSliderFlags_AlwaysClamp);
-    anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-    anyChanged |= CheckboxWithHelp("appearanceeditborderemptyonly", strings::kAppearanceEditBorderEmptyOnly, &Cfg().editModeBorderOnlyWhenEmpty,
-        strings::kAppearanceEditBorderEmptyOnlyHelp);
+    SettingColor(settings_, setting::kEditModeBorderColor, "##editbordercolor", strings::kAppearanceEditBorderColor,
+                 SwatchAlpha::None);
+    SettingPercent(settings_, setting::kEditModeBorderOpacity, "editborderopacity",
+                   strings::kAppearanceEditBorderOpacity);
+    SettingPixels(settings_, setting::kEditModeBorderWidth, "editborderwidth", strings::kAppearanceEditBorderWidth);
+    SettingCheckbox(settings_, setting::kEditModeBorderOnlyWhenEmpty, "appearanceeditborderemptyonly",
+                    strings::kAppearanceEditBorderEmptyOnly, strings::kAppearanceEditBorderEmptyOnlyHelp);
     ImGui::EndDisabled();
 
     SettingsGroupBreak();
 
     SettingsHeading("appearancecanvasbarheading", strings::kAppearanceCanvasBarHeading);
-    if (CheckboxWithHelp("appearanceshowcanvasbar", strings::kAppearanceShowCanvasBar, &Cfg().showCanvasBar,
-                          strings::kAppearanceShowCanvasBarHelp)) {
-        anyChanged = true;
-    }
+    SettingCheckbox(settings_, setting::kShowCanvasBar, "appearanceshowcanvasbar", strings::kAppearanceShowCanvasBar,
+                    strings::kAppearanceShowCanvasBarHelp);
 }
 
 namespace {
@@ -1658,7 +1432,9 @@ constexpr float kBarRowTilesX = 90.0f;
 // its place in it instead of being moved off to a list of spares: the
 // question being asked of this row is "what does the bar look like", and
 // the answer reads better with the missing ones still in view, grayed.
-bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButtonList& buttons) {
+void OverlayApp::RenderBarButtonRow(const char* id, const char* label, const GlobalSetting<BarRule>& row) {
+    // Edited as a copy, set once below: the walk draws from the list.
+    BarButtonList buttons = settings_.Get(row);
     bool changed = false;
     ImGui::PushID(id);
     ImGui::AlignTextToFramePadding();
@@ -1729,7 +1505,7 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
     if (ImGui::SmallButton(Labeled(strings::kBarsReset, "resetbar"))) {
         // The way out of having switched everything off, which is allowed
         // - a bar with no buttons is drawn as no bar at all.
-        buttons = id == std::string("drawingbar") ? DefaultDrawingBar() : DefaultSnippetBar();
+        buttons = ValueIn(row, AppConfig{});
         changed = true;
     }
     if (ImGui::IsItemHovered()) {
@@ -1747,10 +1523,12 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
         changed = true;
     }
     ImGui::PopID();
-    return changed;
+    if (changed) {
+        settings_.Set(row, std::move(buttons));
+    }
 }
 
-void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
+void OverlayApp::RenderSettingsInteraction() {
     // How strokes are drawn.
     SettingsHeading("drawingpenheading", strings::kDrawingPenHeading);
     ImGui::AlignTextToFramePadding();
@@ -1759,129 +1537,108 @@ void OverlayApp::RenderSettingsInteraction(bool& anyChanged) {
     HelpMarker("drawingstrokerenderingheading", strings::kDrawingStrokeRenderingHeading,
                strings::kDrawingStrokeRenderingHelp);
     ImGui::SameLine();
-    int renderMode = static_cast<int>(Cfg().strokeRenderMode);
-    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingTessellated, "strokemodetess"), &renderMode, static_cast<int>(StrokeRenderMode::Tessellated));
-    ImGui::SameLine();
-    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingPolyline, "strokemodepoly"), &renderMode, static_cast<int>(StrokeRenderMode::Polyline));
-    ImGui::SameLine();
-    anyChanged |= ImGui::RadioButton(Labeled(strings::kDrawingRasterized, "strokemoderaster"), &renderMode, static_cast<int>(StrokeRenderMode::Rasterized));
-    Cfg().strokeRenderMode = static_cast<StrokeRenderMode>(renderMode);
+    const ChoiceLabel<StrokeRenderMode> modes[] = {
+        {StrokeRenderMode::Tessellated, strings::kDrawingTessellated, "strokemodetess"},
+        {StrokeRenderMode::Polyline, strings::kDrawingPolyline, "strokemodepoly"},
+        {StrokeRenderMode::Rasterized, strings::kDrawingRasterized, "strokemoderaster"},
+    };
+    SettingRadio(settings_, setting::kStrokeRenderMode, modes);
 
     SettingsGroupBreak();
 
     SettingsHeading("drawingsnippetsheading", strings::kDrawingSnippetsHeading);
-    anyChanged |= CheckboxWithHelp("drawingraiseselected", strings::kDrawingRaiseSelected, &Cfg().raiseSelectedSnippet,
-                                    strings::kDrawingRaiseSelectedHelp);
+    SettingCheckbox(settings_, setting::kRaiseSelected, "drawingraiseselected", strings::kDrawingRaiseSelected,
+                    strings::kDrawingRaiseSelectedHelp);
 
     SettingsGroupBreak();
 
+    // What a left press on empty canvas makes, by kind. Choosing the press
+    // the other kind has swaps the two rather than refusing (the edit
+    // repair - see Settings::Set): one press cannot make both, and a
+    // dropdown that grays out the very choice wanted, with the reason in
+    // another row, is a puzzle. See AppConfig::screenshotTrigger.
     SettingsHeading("creationheading", strings::kCreationHeading, strings::kCreationHelp);
-    anyChanged |= CreationTriggerRow("screenshottrigger", strings::kCreationScreenshot, Cfg().screenshotTrigger,
-                                     Cfg().drawingTrigger);
-    anyChanged |= CreationTriggerRow("drawingtrigger", strings::kCreationDrawing, Cfg().drawingTrigger,
-                                     Cfg().screenshotTrigger);
+    const ChoiceLabel<CreationTrigger> triggers[] = {
+        {CreationTrigger::Plain, strings::kCreationTriggerPlain, "triggerplain"},
+        {CreationTrigger::Ctrl, strings::kCreationTriggerCtrl, "triggerctrl"},
+        {CreationTrigger::Alt, strings::kCreationTriggerAlt, "triggeralt"},
+        {CreationTrigger::Off, strings::kCreationTriggerOff, "triggeroff"},
+    };
+    constexpr float kLabelColumn = 110.0f;
+    constexpr float kComboWidth = 220.0f;
+    SettingCombo(settings_, setting::kScreenshotTrigger, "screenshottrigger", strings::kCreationScreenshot, triggers,
+                 kLabelColumn, kComboWidth);
+    SettingCombo(settings_, setting::kDrawingTrigger, "drawingtrigger", strings::kCreationDrawing, triggers,
+                 kLabelColumn, kComboWidth);
 
     SettingsGroupBreak();
 
     SettingsHeading("barsheading", strings::kBarsHeading, strings::kBarsHelp);
-    anyChanged |= RenderBarButtonRow("snippetbar", strings::kBarsSnippetRow, Cfg().snippetBar);
-    anyChanged |= RenderBarButtonRow("drawingbar", strings::kBarsDrawingRow, Cfg().drawingBar);
+    RenderBarButtonRow("snippetbar", strings::kBarsSnippetRow, setting::kSnippetBar);
+    RenderBarButtonRow("drawingbar", strings::kBarsDrawingRow, setting::kDrawingBar);
 }
 
-// Two halves, like Hotkeys. On top what is global - what happens to
-// deleted folders and canvases, which reports through `anyChanged` like any
-// plain setting. Below the profile picker the rows a profile may state for
-// itself, every one a ProfileableCheckbox, which writes and persists
-// through the profile path on its own (see TrayController::
-// OnSettingsChanged, which deliberately copies no behavior setting).
-void OverlayApp::RenderSettingsDefaults(bool& anyChanged) {
+void OverlayApp::RenderSettingsDefaults() {
     // One kind's rows: its shape, and its two opacities as the popover
     // shows them - the same words and the same ranges, so a default reads
     // as the setting it is a default for.
-    const auto kindRows = [&anyChanged](const char* id, SnippetDefaults& kind) {
+    struct KindRows {
+        const GlobalSetting<BoolRule>& keepAspect;
+        const GlobalSetting<FloatRule>& foreground;
+        const GlobalSetting<FloatRule>& background;
+    };
+    const auto kindRows = [this](const char* id, const KindRows& rows) {
         ImGui::PushID(id);
-        anyChanged |= CheckboxWithHelp("keepaspect", strings::kDefaultsKeepAspect, &kind.keepAspect,
-                                       strings::kDefaultsKeepAspectHelp);
-        int foregroundPct = static_cast<int>(std::round(kind.foregroundOpacity * 100.0f));
-        ImGui::SetNextItemWidth(Px(160.0f));
-        if (ImGui::SliderInt(Labeled(strings::kDefaultsForeground, "foreground"), &foregroundPct, 10, 100,
-                             strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
-            kind.foregroundOpacity = static_cast<float>(foregroundPct) / 100.0f;
-        }
-        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-        int backgroundPct = static_cast<int>(std::round(kind.backgroundOpacity * 100.0f));
-        ImGui::SetNextItemWidth(Px(160.0f));
-        if (ImGui::SliderInt(Labeled(strings::kDefaultsBackground, "background"), &backgroundPct, 0, 100,
-                             strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
-            kind.backgroundOpacity = static_cast<float>(backgroundPct) / 100.0f;
-        }
-        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
+        SettingCheckbox(settings_, rows.keepAspect, "keepaspect", strings::kDefaultsKeepAspect,
+                        strings::kDefaultsKeepAspectHelp);
+        SettingPercent(settings_, rows.foreground, "foreground", strings::kDefaultsForeground);
+        SettingPercent(settings_, rows.background, "background", strings::kDefaultsBackground);
         ImGui::PopID();
     };
 
     SettingsHeading("defaultsscreenshotheading", strings::kDefaultsScreenshotHeading,
                     strings::kDefaultsScreenshotHelp);
-    kindRows("screenshot", Cfg().screenshotDefaults);
+    kindRows("screenshot", {setting::kScreenshotKeepAspect, setting::kScreenshotForegroundOpacity,
+                            setting::kScreenshotBackgroundOpacity});
 
     SettingsGroupBreak();
 
     SettingsHeading("defaultsdrawingheading", strings::kDefaultsDrawingHeading, strings::kDefaultsDrawingHelp);
-    kindRows("drawing", Cfg().drawingDefaults);
-    {
-        float rgb[3];
-        ColorRGBAToFloats(Cfg().drawingBackgroundColorRGBA, rgb);
-        if (ImGui::ColorEdit3("##drawingbackgroundcolor", rgb, ImGuiColorEditFlags_NoInputs)) {
-            Cfg().drawingBackgroundColorRGBA = FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF));
-        }
-        // On the edit finishing, not per frame of the drag - see ColorRow.
-        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-        ImGui::SameLine();
-        ImGui::TextUnformatted(strings::kDefaultsBackgroundColor);
-    }
+    kindRows("drawing",
+             {setting::kDrawingKeepAspect, setting::kDrawingForegroundOpacity, setting::kDrawingBackgroundOpacity});
+    SettingColor(settings_, setting::kDrawingBackgroundColor, "##drawingbackgroundcolor",
+                 strings::kDefaultsBackgroundColor, SwatchAlpha::None);
 
     SettingsGroupBreak();
 
     SettingsHeading("defaultstextheading", strings::kDefaultsTextHeading, strings::kDefaultsTextHelp);
-    {
-        // Decided on the first frame (see AppConfig::noteTextSizePx), so
-        // never still 0 by the time a panel can show it.
-        ImGui::SetNextItemWidth(Px(160.0f));
-        ImGui::SliderFloat(Labeled(strings::kDefaultsTextSize, "defaulttextsize"), &Cfg().noteTextSizePx,
-                           kNoteTextSizeMin, kNoteTextSizeMax, strings::kFormatPixels, ImGuiSliderFlags_AlwaysClamp);
-        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-        float rgba[4];
-        ColorRGBAToFloats4(Cfg().noteTextColorRGBA, rgba);
-        if (ImGui::ColorEdit4("##defaulttextcolor", rgba,
-                              ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar |
-                                  ImGuiColorEditFlags_AlphaPreview)) {
-            Cfg().noteTextColorRGBA = FloatsToColorRGBA4(rgba);
-        }
-        anyChanged |= ImGui::IsItemDeactivatedAfterEdit();
-        ImGui::SameLine();
-        ImGui::TextUnformatted(strings::kDefaultsTextColor);
-    }
+    // Decided on the first frame (see AppConfig::noteTextSizePx), so never
+    // still 0 by the time a panel can show it.
+    SettingPixels(settings_, setting::kNoteTextSize, "defaulttextsize", strings::kDefaultsTextSize);
+    SettingColor(settings_, setting::kNoteTextColor, "##defaulttextcolor", strings::kDefaultsTextColor,
+                 SwatchAlpha::BarAndPreview);
 }
 
-void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
+// Two halves, like Hotkeys. On top what is global - what happens to
+// deleted folders and canvases. Below the profile picker the rows a profile
+// may state for itself, each written into whichever of the defaults or a
+// profile the picker shows (editProfile_).
+void OverlayApp::RenderSettingsBehavior() {
     SettingsScopeBox globalBox;
     BeginSettingsScope(globalBox, SettingsScope::Global);
     // One row: the switch, the number of days, the unit. The days are
     // disabled while the switch is off but keep their value, so turning it
     // back on brings back the period chosen before.
     SettingsHeading("deletedheading", strings::kSettingsDeletedHeading, strings::kSettingsPurgeDeletedHelp);
-    anyChanged |= CheckboxWithHelp("confirmdelete", strings::kSettingsConfirmDelete, &Cfg().confirmDelete,
-                                   strings::kSettingsConfirmDeleteHelp);
-    anyChanged |= CheckboxWithHelp("confirmdeleteforgood", strings::kSettingsConfirmDeleteForGood,
-                                   &Cfg().confirmDeleteForGood, strings::kSettingsConfirmDeleteForGoodHelp);
-    anyChanged |= ImGui::Checkbox(Labeled(strings::kSettingsPurgeDeleted, "purgedeleted"), &Cfg().purgeDeleted);
+    SettingCheckbox(settings_, setting::kConfirmDelete, "confirmdelete", strings::kSettingsConfirmDelete,
+                    strings::kSettingsConfirmDeleteHelp);
+    SettingCheckbox(settings_, setting::kConfirmDeleteForGood, "confirmdeleteforgood",
+                    strings::kSettingsConfirmDeleteForGood, strings::kSettingsConfirmDeleteForGoodHelp);
+    SettingCheckbox(settings_, setting::kPurgeDeleted, "purgedeleted", strings::kSettingsPurgeDeleted, nullptr);
     ImGui::SameLine();
     ImGui::BeginDisabled(!Cfg().purgeDeleted);
     ImGui::SetNextItemWidth(Px(110.0f));
-    int days = Cfg().purgeDeletedAfterDays;
-    if (ImGui::InputInt("##purgedeleteddays", &days, 1, 7)) {
-        Cfg().purgeDeletedAfterDays = std::clamp(days, kPurgeDeletedAfterDaysMin, kPurgeDeletedAfterDaysMax);
-        anyChanged = true;
-    }
+    SettingNumber(settings_, setting::kPurgeDeletedAfterDays, "##purgedeleteddays", 1, 7);
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(strings::kSettingsPurgeDeletedDays);
@@ -1944,10 +1701,8 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
         edited.InputOptions().CounterRawMouseInputCanBeUsed(edited.dontStealFocus);
 
     ImVec2 rowPos = ImGui::GetCursorScreenPos();
-    ProfileableCheckbox(
-        "dontstealfocus", strings::kHudDontStealFocus,
-        {&ProfileableSettings::dontStealFocus, &ProfileOverrides::dontStealFocus},
-        strings::kInputDontStealFocusHelp);
+    SettingCheckbox(settings_, editProfile_, setting::kDontStealFocus, "dontstealfocus",
+                    strings::kHudDontStealFocus, strings::kInputDontStealFocusHelp);
     float focusTrunk = TrunkFrom(rowPos);
 
     ImGui::Indent(Px(kTreeIndent));
@@ -1955,37 +1710,26 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     // grayed out when that row is off for the same reason the others are:
     // with focus taken already there is nothing left for it to do.
     rowPos = ImGui::GetCursorScreenPos();
-    ProfileableCheckbox(
-        "takefocusoverelevated", strings::kInputTakeFocusOverElevatedLabel,
-        {&ProfileableSettings::takeFocusOverElevated, &ProfileOverrides::takeFocusOverElevated},
-        strings::kInputTakeFocusOverElevatedHelp,
-        !edited.dontStealFocus);
+    SettingCheckbox(settings_, editProfile_, setting::kTakeFocusOverElevated, "takefocusoverelevated",
+                    strings::kInputTakeFocusOverElevatedLabel, strings::kInputTakeFocusOverElevatedHelp,
+                    !edited.dontStealFocus);
     TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
 
     rowPos = ImGui::GetCursorScreenPos();
-    ProfileableCheckbox(
-        "dontforwardkeys", strings::kHudDontForwardKeystrokes,
-        {&ProfileableSettings::dontForwardKeystrokes, &ProfileOverrides::dontForwardKeystrokes},
-        strings::kInputDontForwardKeystrokesHelp,
-        !keystrokesAvailable);
+    SettingCheckbox(settings_, editProfile_, setting::kDontForwardKeystrokes, "dontforwardkeys",
+                    strings::kHudDontForwardKeystrokes, strings::kInputDontForwardKeystrokesHelp, !keystrokesAvailable);
     TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
 
     rowPos = ImGui::GetCursorScreenPos();
-    ProfileableCheckbox(
-        "rawmouse", strings::kHudUseRawMouseInput,
-        {&ProfileableSettings::rawMouseInput, &ProfileOverrides::rawMouseInput},
-        strings::kInputRawMouseHelp,
-        !rawAvailable);
+    SettingCheckbox(settings_, editProfile_, setting::kRawMouseInput, "rawmouse",
+                    strings::kHudUseRawMouseInput, strings::kInputRawMouseHelp, !rawAvailable);
     TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
     float rawTrunk = TrunkFrom(rowPos);
 
     ImGui::Indent(Px(kTreeIndent));
     rowPos = ImGui::GetCursorScreenPos();
-    ProfileableCheckbox(
-        "counterrawmouse", strings::kInputCounterRawMouseLabel,
-        {&ProfileableSettings::counterRawMouseInput, &ProfileOverrides::counterRawMouseInput},
-        strings::kInputCounterRawMouseHelp,
-        !counterAvailable);
+    SettingCheckbox(settings_, editProfile_, setting::kCounterRawMouseInput, "counterrawmouse",
+                    strings::kInputCounterRawMouseLabel, strings::kInputCounterRawMouseHelp, !counterAvailable);
     TreeBranch(rawTrunk, rowPos, Px(kTreeIndent));
     float counterTrunk = TrunkFrom(rowPos);
 
@@ -1993,11 +1737,9 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     // threshold for corrections that are not being made does nothing.
     ImGui::Indent(Px(kTreeIndent));
     rowPos = ImGui::GetCursorScreenPos();
-    ProfileableInt("counterthreshold", strings::kInputCounterThresholdLabel, strings::kInputCounterThresholdUnit,
-                   {&ProfileableSettings::counterThreshold, &ProfileOverrides::counterThreshold},
-                   platform::EditModeInputOptions::kCounterThresholdMin,
-                   platform::EditModeInputOptions::kCounterThresholdMax, 10, strings::kInputCounterThresholdHelp,
-                   !counterAvailable || !edited.counterRawMouseInput);
+    SettingNumber(settings_, editProfile_, setting::kCounterThreshold, "counterthreshold",
+                  strings::kInputCounterThresholdLabel, strings::kInputCounterThresholdUnit, 10,
+                  strings::kInputCounterThresholdHelp, !counterAvailable || !edited.counterRawMouseInput);
     TreeBranch(counterTrunk, rowPos, Px(kTreeIndent));
 
     ImGui::Unindent(Px(kTreeIndent) * 3.0f);
@@ -2007,15 +1749,11 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     // itself and that position exists with or without a grab, so this row
     // only picks which pointer is drawn from it - see
     // EditModeInputOptions::useSoftwarePointer.
-    ProfileableCheckbox(
-        "softwarepointer", strings::kHudUseSoftwarePointer,
-        {&ProfileableSettings::softwarePointer, &ProfileOverrides::softwarePointer},
-        strings::kInputSoftwarePointerHelp);
+    SettingCheckbox(settings_, editProfile_, setting::kSoftwarePointer, "softwarepointer",
+                    strings::kHudUseSoftwarePointer, strings::kInputSoftwarePointerHelp);
 
-    ProfileableCheckbox(
-        "freezescreen", strings::kHudFreezeScreenWhileEditing,
-        {&ProfileableSettings::freezeScreen, &ProfileOverrides::freezeScreen},
-        strings::kInputFreezeScreenHelp);
+    SettingCheckbox(settings_, editProfile_, setting::kFreezeScreen, "freezescreen",
+                    strings::kHudFreezeScreenWhileEditing, strings::kInputFreezeScreenHelp);
     // Switching it off can take effect immediately - there is nothing to
     // capture, only something to drop. Switching it on can't: capturing
     // means hiding this window and waiting for a composition pass, which is
@@ -2030,7 +1768,7 @@ void OverlayApp::RenderSettingsBehavior(bool& anyChanged) {
     EndSettingsScope(profileBox);
 }
 
-void OverlayApp::RenderSettingsDebug(bool& anyChanged) {
+void OverlayApp::RenderSettingsDebug() {
     // The section was called "Diagnostics", which reads like something the
     // application collects about you rather than something it draws for
     // you. Everything in here is the second thing, and every row already
@@ -2038,10 +1776,10 @@ void OverlayApp::RenderSettingsDebug(bool& anyChanged) {
     // carries no reassurance about where any of it goes - a denial invites
     // the question it answers.
     SettingsHeading("debugheading", strings::kDebugHeading);
-    anyChanged |= CheckboxWithHelp("debugshowdebugoverlay", strings::kDebugShowDebugOverlay, &Cfg().showDebugOverlay,
-                                    strings::kDebugShowDebugOverlayHelp);
-    anyChanged |= CheckboxWithHelp("debugshowinputhud", strings::kDebugShowInputHud, &Cfg().showInputOptionsHud,
-        strings::kDebugShowInputHudHelp);
+    SettingCheckbox(settings_, setting::kShowDebugOverlay, "debugshowdebugoverlay", strings::kDebugShowDebugOverlay,
+                    strings::kDebugShowDebugOverlayHelp);
+    SettingCheckbox(settings_, setting::kShowInputOptionsHud, "debugshowinputhud", strings::kDebugShowInputHud,
+                    strings::kDebugShowInputHudHelp);
 }
 
 
@@ -2191,114 +1929,6 @@ void OverlayApp::RenderEditTargetPicker(ProfileGroup group) {
         ImGui::TextColored(theme::Accent(), "%s", strings::kProfilesRunningNow);
     }
     SettingsGroupBreak();
-}
-
-// The revert arrow, shown only on a row this target states for itself -
-// borrowed wholesale from property editors that do the same (the row is
-// marked, and the mark is the button that undoes it).
-void OverlayApp::ProfileableCheckbox(const char* id, const char* label, const ProfileableField& field, const char* help,
-                                      bool disabled) {
-    const bool overridden = IsOverriddenHere(field);
-    bool value = EditedSettings().*field.value;
-
-    ImGui::PushID(id);
-    ImGui::BeginDisabled(disabled);
-    if (overridden) {
-        ImGui::PushStyleColor(ImGuiCol_Text, theme::Accent());
-    }
-    // A switched-on row whose preconditions aren't met draws a dash rather
-    // than a check mark. It keeps its stored value - that is the point of not
-    // clearing it - but a check mark would claim the option is doing something,
-    // and "the stored value of an option that cannot take effect is not
-    // evidence of anything" (see EditModeInputOptions).
-    //
-    // Drawn here rather than through ImGuiItemFlags_MixedValue, which
-    // renders its third state as a filled inner rect - and with this
-    // theme's frame rounding that comes out as a blob that reads as a
-    // heavier check mark rather than as a lesser one.
-    const bool storedButNotInEffect = disabled && value;
-    bool shown = value && !storedButNotInEffect;
-    if (ImGui::Checkbox(Labeled(label, id), &shown)) {
-        SetProfileableValue(field, shown);
-    }
-    if (storedButNotInEffect) {
-        const ImVec2 boxMin = ImGui::GetItemRectMin();
-        const float box = ImGui::GetFrameHeight();
-        const float inset = std::floor(box * 0.3f);
-        const float centerY = boxMin.y + box * 0.5f;
-        ImGui::GetWindowDrawList()->AddLine(ImVec2(boxMin.x + inset, centerY),
-                                             ImVec2(boxMin.x + box - inset, centerY),
-                                             ImGui::GetColorU32(ImGuiCol_CheckMark), PxWhole(2.0f));
-    }
-    if (overridden) {
-        ImGui::PopStyleColor();
-    }
-    ImGui::EndDisabled();
-
-    // Outside the disabled scope, and before the revert arrow so it keeps
-    // the same place whether or not the row is marked: a row you can't
-    // switch on yet is exactly one whose explanation you want to read.
-    if (help != nullptr) {
-        ImGui::SameLine();
-        HelpMarker(id, label, help);
-    }
-
-    if (overridden) {
-        ImGui::SameLine();
-        // Not disabled with the row: a setting whose precondition has
-        // since been switched off is exactly one you want to be able to
-        // hand back to the defaults.
-        if (RevertButton("##revert")) {
-            ClearProfileableOverride(field);
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(strings::kHotkeysComboSetHere,
-                               (settings_.Base().*field.value) ? strings::kHotkeysOn : strings::kHotkeysOff);
-        }
-    }
-    ImGui::PopID();
-}
-
-void OverlayApp::ProfileableInt(const char* id, const char* label, const char* unit,
-                                 const ProfileableIntField& field, int min, int max, int step, const char* help,
-                                 bool disabled) {
-    const bool overridden = IsOverriddenHere(field);
-    int value = EditedSettings().*field.value;
-
-    ImGui::PushID(id);
-    ImGui::BeginDisabled(disabled);
-    ImGui::AlignTextToFramePadding();
-    if (overridden) {
-        ImGui::TextColored(theme::Accent(), "%s", label);
-    } else {
-        ImGui::TextUnformatted(label);
-    }
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(Px(110.0f));
-    // Written on every edit, as the checkbox is on every click: a profile
-    // that has been typed into states the value for itself.
-    if (ImGui::InputInt("##value", &value, step, step * 5)) {
-        SetProfileableValue(field, std::clamp(value, min, max));
-    }
-    ImGui::SameLine();
-    ImGui::TextUnformatted(unit);
-    ImGui::EndDisabled();
-
-    if (help != nullptr) {
-        ImGui::SameLine();
-        HelpMarker(id, label, help);
-    }
-
-    if (overridden) {
-        ImGui::SameLine();
-        if (RevertButton("##revert")) {
-            ClearProfileableOverride(field);
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(strings::kHotkeysComboSetHere, std::to_string(settings_.Base().*field.value).c_str());
-        }
-    }
-    ImGui::PopID();
 }
 
 namespace {
@@ -2602,7 +2232,7 @@ float OverlayApp::KeyButtonColumn() const {
     return widest + Px(kGap);
 }
 
-void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
+void OverlayApp::RenderSettingsHotkeys() {
     // Above the picker, and that position is the whole point of moving them
     // here: these are global, and while they sat under a picker that said
     // "Showing: Defaults / some profile" they read as more rows that
@@ -2617,8 +2247,8 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
     RenderHotkeyEditor("hkview", strings::kHotkeysViewMode, HotkeySlot::ViewMode, buttonX);
     RenderHotkeyEditor("hkquick", strings::kHotkeysQuickCapture, HotkeySlot::QuickCapture, buttonX);
     RenderHotkeyEditor("hksilent", strings::kHotkeysSilentCapture, HotkeySlot::SilentCapture, buttonX);
-    anyChanged |= CheckboxWithHelp("hotkeyssaywhenhidden", strings::kHotkeysSayWhenHidden, &Cfg().showToastsWhileHidden,
-        strings::kHotkeysSayWhenHiddenHelp);
+    SettingCheckbox(settings_, setting::kShowToastsWhileHidden, "hotkeyssaywhenhidden", strings::kHotkeysSayWhenHidden,
+                    strings::kHotkeysSayWhenHiddenHelp);
     EndSettingsScope(globalBox);
 
     SettingsScopeBox profileBox;
@@ -2954,8 +2584,8 @@ void OverlayApp::BeginRenaming(std::optional<FolderId> folder, std::optional<Can
 }
 
 // See SetHotkeyChangeCallback's own doc comment for why this is "ask
-// first, commit after" rather than the anyChanged/Settings::Commit shape
-// every other setting in this file uses: a hotkey has a real way to
+// first, store after" rather than the plain Settings::Set every other
+// setting in this file is: a hotkey has a real way to
 // fail (already taken) that only the OS - reached only through
 // TrayController, which OverlayApp has no direct access to - can tell you
 // about.

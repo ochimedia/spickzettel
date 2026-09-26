@@ -27,6 +27,7 @@ add_library(sz_ui STATIC
     overlay_app_popovers.cpp
     overlay_app_rasters.cpp
     selection_layout.cpp
+    settings_widgets.cpp
     ui_scale.cpp
 )
 

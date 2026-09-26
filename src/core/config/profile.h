@@ -170,22 +170,6 @@ struct ProfileableSettings {
     bool operator==(const ProfileableSettings&) const = default;
 };
 
-// The pair of pointers that names one overridable boolean: where its
-// concrete value lives, and where a profile's answer about it lives. Held
-// together so a caller can't accidentally pair "freeze screen" with
-// "software pointer". The same pair as a ProfileSetting row's, which the
-// code that treats every setting alike walks (settings_catalog.h).
-struct ProfileableField {
-    bool ProfileableSettings::*value;
-    std::optional<bool> ProfileOverrides::*override;
-};
-
-// The same pair for a number.
-struct ProfileableIntField {
-    int ProfileableSettings::*value;
-    std::optional<int> ProfileOverrides::*override;
-};
-
 struct Profile {
     // What it is called. Free text, and the handle a person uses - which is
     // why matching is on the fields below rather than on this.

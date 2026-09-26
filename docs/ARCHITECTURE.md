@@ -1050,14 +1050,29 @@ and view-only.
 
 **`Settings`** is the one copy of every setting. `Stored()` is what
 `config.json` holds; `Live()` is the profileable group resolved against
-the profile that matched what the overlay came up over. The UI reads
-plain fields through `Stored()`, edits them in place through `Mutable()`
-and `Commit()`s once an edit is finished; profileable fields go through
-setters that say whether the defaults or a profile is meant. A commit
-re-resolves and calls the controller back, which applies what changed to
-the window and writes the file. The live values are derived, never
-assigned, so there is no path by which what runs and what is stored can
-disagree.
+the profile that matched what the overlay came up over. Every change to
+the stored settings is an edit through it: `Set` names the setting's row
+in the catalog (and, for an overridable one, whether the defaults or a
+profile is meant), holds the value to the row's rule, applies the edit
+repair of any invariant it touches, and commits. A slider or a color
+being dragged is a `Preview` - stored, so everything drawn shows it, but
+committed only when the drag ends. A commit re-resolves and calls the
+controller back, which applies what changed to the window and writes the
+file. The live values are derived, never assigned, so there is no path
+by which what runs and what is stored can disagree.
+
+There used to be three ways in: plain fields were written in place
+through `Mutable()` and committed, overridable ones through setters, and
+hotkeys by the tray, which wrote the field and the file itself while the
+overlay wrote the same field again. `Mutable()` also reached the
+overridable fields, around the profile path, and nothing held what it
+wrote to a rule: the Settings panel restated each band beside its widget.
+One edit path means the rule is asked in one place, the file is written
+by one commit, and a new setting needs no code of its own to be edited:
+the Settings panel's widgets take a row (`ui/settings_widgets.h`). A
+summon hotkey is still registered with the OS first, since a combination
+another application owns must not be stored; the tray then makes the
+edit, and `HotkeySetting` is the one table from a hotkey to its row.
 
 **`Session`** is what is being worked on, independent of how it is
 shown: the library and deleting and restoring in it; every command

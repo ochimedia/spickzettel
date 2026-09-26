@@ -655,27 +655,23 @@ private:
     // target is the canvas the snippet is already on.
     void SendPickedItemTo(CanvasId target);
     // The Overview's "Settings" tab body (see overviewTab_'s own doc
-    // comment) - checkboxes/radio/slider bound directly to the settings'
-    // own fields (see Cfg), so a widget's current value and the app's own
-    // live behavior can never disagree. Commits the settings once per
-    // completed edit (not every frame a slider is merely being dragged),
-    // which is what persists the change to disk.
+    // comment): the section list, and the section picked. Every row in it is
+    // bound to its setting's row in the catalog and makes its own edit as it
+    // is changed - see settings_widgets.h.
     void RenderOverviewSettingsPanel();
     // The Settings tab's own bodies, one per section in its list - see
     // RenderOverviewSettingsPanel for what decides which settings live
-    // where. `anyChanged` is the shared "something was edited, persist it"
-    // flag; the shortcuts section has none because its rows persist
-    // themselves through Settings::SetShortcut.
-    void RenderSettingsAppearance(bool& anyChanged);
-    void RenderSettingsInteraction(bool& anyChanged);
+    // where.
+    void RenderSettingsAppearance();
+    void RenderSettingsInteraction();
     // One bar's buttons as a row to arrange: each is a tile that switches
     // it on or off when clicked and can be dragged onto another to move it
-    // there. True when the row changed anything.
-    bool RenderBarButtonRow(const char* id, const char* label, BarButtonList& buttons);
-    void RenderSettingsBehavior(bool& anyChanged);
+    // there.
+    void RenderBarButtonRow(const char* id, const char* label, const GlobalSetting<BarRule>& row);
+    void RenderSettingsBehavior();
     // What a new snippet starts with - see AppConfig::screenshotDefaults.
-    void RenderSettingsDefaults(bool& anyChanged);
-    void RenderSettingsDebug(bool& anyChanged);
+    void RenderSettingsDefaults();
+    void RenderSettingsDebug();
     // The list of profiles, and what the overlay is up over. Edits are
     // collected into a copy and handed to Settings::SetProfiles once, at
     // the end - the codebase's usual
@@ -693,20 +689,6 @@ private:
     // are on screen - the defaults, the profile that matched, or any other
     // one - plus what it inherits and how much of it is set here.
     void RenderEditTargetPicker(ProfileGroup group);
-    // One overridable checkbox: the effective value, an accent label and a
-    // revert arrow when this target states it for itself, and nothing but
-    // the value when it inherits. `help` is the row's explanation, reached
-    // through the "?" beside it rather than printed underneath (see
-    // HelpMarker). `disabled` grays the control without touching the
-    // override state, for the rows whose preconditions aren't met - such a
-    // row draws a dash instead of a check mark when it is switched on, since its
-    // stored value is not in effect.
-    void ProfileableCheckbox(const char* id, const char* label, const ProfileableField& field, const char* help,
-                              bool disabled = false);
-    // The same for a number: a step field between `min` and `max` with
-    // `unit` after it, marked and revertible the way the checkbox is.
-    void ProfileableInt(const char* id, const char* label, const char* unit, const ProfileableIntField& field,
-                        int min, int max, int step, const char* help, bool disabled = false);
     // The Settings calls, aimed at whichever of the defaults or a profile
     // the panel is showing (editProfile_) - which is not necessarily the
     // profile in effect. What the section being edited currently resolves
@@ -714,20 +696,8 @@ private:
     // away is Settings::Base and needs no call: a profile inherits the
     // defaults and nothing else.
     ProfileableSettings EditedSettings() const { return settings_.ResolvedFor(editProfile_); }
-    // True when the target being edited states this field for itself.
-    bool IsOverriddenHere(const ProfileableField& field) const { return settings_.IsOverridden(editProfile_, field); }
-    bool IsOverriddenHere(const ProfileableIntField& field) const { return settings_.IsOverridden(editProfile_, field); }
-    // Writes one field into whatever is being edited, then re-derives the
-    // live values and persists.
-    void SetProfileableValue(const ProfileableField& field, bool value) {
-        settings_.SetProfileable(editProfile_, field, value);
-    }
-    void ClearProfileableOverride(const ProfileableField& field) { settings_.ClearOverride(editProfile_, field); }
-    void SetProfileableValue(const ProfileableIntField& field, int value) {
-        settings_.SetProfileable(editProfile_, field, value);
-    }
-    void ClearProfileableOverride(const ProfileableIntField& field) { settings_.ClearOverride(editProfile_, field); }
-    // The same two, for a shortcut binding.
+    // A shortcut binding's override in the target being edited: handed back
+    // to the defaults, and whether there is one.
     void ClearShortcutOverride(ShortcutAction action) { settings_.ClearShortcutOverride(action, editProfile_); }
     bool IsShortcutOverriddenHere(ShortcutAction action) const {
         return settings_.IsShortcutOverridden(action, editProfile_);
@@ -787,13 +757,9 @@ private:
     // each with the key it answers to. A section of its own rather than
     // rows appended to another one - eleven key editors would be most of
     // whatever panel they were put in, and "what is bound to what" is a
-    // question people come to answer on its own.
-    // Takes `anyChanged` like every other section, though the key editors
-    // in it report nothing through it: a rebind goes to the OS and to disk
-    // through TryChangeHotkey rather than through the settings-changed
-    // callback. The one ordinary setting here - whether a hidden overlay
-    // may say what it just did - is what needs it.
-    void RenderSettingsHotkeys(bool& anyChanged);
+    // question people come to answer on its own. A summon hotkey goes to
+    // the OS before it is stored - see TryChangeHotkey.
+    void RenderSettingsHotkeys();
     // One row of it. A row waiting takes the next key pressed, or Escape,
     // Backspace or Delete for none - see KeyCapture.
     void RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label, float buttonX);
@@ -969,10 +935,10 @@ private:
     persistence::LibraryStore* Store() const { return session_.Store(); }
 
     // Every setting, stored and resolved - owned by TrayController, which
-    // also persists it. Plain fields are read and edited through Cfg();
-    // the profileable ones through settings_.Live() and the helpers above.
+    // also persists it. Plain fields are read through Cfg(), the
+    // profileable ones through settings_.Live(), and every change is an
+    // edit through settings_ (Settings::Set).
     Settings& settings_;
-    AppConfig& Cfg() { return settings_.Mutable(); }
     const AppConfig& Cfg() const { return settings_.Stored(); }
 
     // The last count handed to IOverlayWindow::SetInputOptionsHudDigits, so
