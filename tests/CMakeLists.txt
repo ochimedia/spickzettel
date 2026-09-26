@@ -2,6 +2,7 @@
 # Runs on Windows and, through the linux-tests preset, on Linux.
 add_executable(sz_core_tests
     app/headless_frame_test.cpp
+    app/overlay_states_test.cpp
     app/perf_bench_test.cpp
     app/tray_app_test.cpp
     core/build_info_test.cpp

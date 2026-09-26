@@ -16,7 +16,17 @@ namespace sz::test {
 // anything OS-specific, so core logic can be tested without a real window.
 class FakeOverlayWindow final : public platform::IOverlayWindow {
 public:
+    // The calls that bring the window up, take it down and decide how it
+    // takes input, in the order they were made - see docs/OVERLAY_STATES.md,
+    // section 6. The order is what a count cannot tell: a show followed by
+    // passthrough is edit mode in between. Frame-by-frame calls (pacing, the
+    // cursor, textures) are left out. A test clears it before the request
+    // it looks at. Mutable because UnderlyingApplication, a const call, is
+    // logged too.
+    mutable std::vector<std::string> calls;
+
     bool EnsureCreated(const platform::DisplayInfo& display) override {
+        calls.push_back("EnsureCreated");
         ++ensureCreatedCallCount;
         if (createSucceeds && !created) {
             created = true;
@@ -27,6 +37,7 @@ public:
 
     // Like the real thing, only a created window has anywhere to move.
     void MoveToDisplay(const platform::DisplayInfo& display) override {
+        calls.push_back("MoveToDisplay");
         if (created) {
             onDisplay = display;
         }
@@ -39,17 +50,21 @@ public:
     std::function<void()> displaysChangedCallback;
 
     void Show() override {
+        calls.push_back("Show");
         ++showCallCount;
         visible = true;
     }
 
     void ShowClickThrough() override {
+        calls.push_back("ShowClickThrough");
         ++showClickThroughCallCount;
+        ++showCallCount;
         inputPassthrough = true;
-        Show();
+        visible = true;
     }
 
     void Hide() override {
+        calls.push_back("Hide");
         ++hideCallCount;
         visible = false;
         if (forgetUnderlyingAppOnHide) {
@@ -71,16 +86,24 @@ public:
     // Settable, so a test can say what the overlay is up over - see
     // ForegroundApp.
     platform::ForegroundApp underlyingApp;
-    platform::ForegroundApp UnderlyingApplication() const override { return underlyingApp; }
+    platform::ForegroundApp UnderlyingApplication() const override {
+        calls.push_back("UnderlyingApplication");
+        return underlyingApp;
+    }
 
-    void SetInputPassthrough(bool enabled) override { inputPassthrough = enabled; }
+    void SetInputPassthrough(bool enabled) override {
+        calls.push_back(enabled ? "Passthrough(on)" : "Passthrough(off)");
+        inputPassthrough = enabled;
+    }
 
     void SetEditModeNoActivate(bool enabled) override {
+        calls.push_back(enabled ? "NoActivate(on)" : "NoActivate(off)");
         ++setEditModeNoActivateCallCount;
         editModeNoActivate = enabled;
     }
 
     void SetEditModeInput(const platform::EditModeInputOptions& options) override {
+        calls.push_back("EditModeInput");
         ++setEditModeInputCallCount;
         editModeInput = options;
     }
@@ -103,6 +126,7 @@ public:
     platform::InputGrabDiagnostics GetInputGrabDiagnostics() const override { return {}; }
 
     platform::CaptureResult CaptureRegion(const platform::Rect& rect) override {
+        calls.push_back("Capture");
         ++captureCallCount;
         lastCaptureRect = rect;
         platform::CaptureResult result;
@@ -159,6 +183,7 @@ public:
     platform::DrawCallback ImageFilterCallback() const override { return &FakeImageFilterCallback; }
 
     void Destroy() override {
+        calls.push_back("Destroy");
         created = false;
         visible = false;
     }

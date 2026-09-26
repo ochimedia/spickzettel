@@ -17,6 +17,9 @@ struct SessionTestAccess {
         return session.placement_.has_value() || session.eraseItemId_.has_value() ||
                session.shapeItemId_.has_value() || session.textEditItemId_.has_value();
     }
+    // Whether a frozen screen is held - see Session::FreezeScreen. Only
+    // ever in edit mode (docs/OVERLAY_STATES.md, section 3).
+    static bool HoldsFrozenScreen(const Session& session) { return !session.frozenScreenPixels_.empty(); }
 };
 
 }  // namespace sz::core
@@ -25,5 +28,8 @@ namespace sz::test {
 
 inline core::CanvasManager& Model(core::Session& session) { return core::SessionTestAccess::Model(session); }
 inline bool HandGestureOpen(const core::Session& session) { return core::SessionTestAccess::HandGestureOpen(session); }
+inline bool HoldsFrozenScreen(const core::Session& session) {
+    return core::SessionTestAccess::HoldsFrozenScreen(session);
+}
 
 }  // namespace sz::test
