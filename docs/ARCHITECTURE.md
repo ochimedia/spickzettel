@@ -1624,6 +1624,11 @@ ImGui's own input state, which the platform backends feed; a UI not
 built on ImGui would need a key callback on `IOverlayWindow` in its
 place.
 
+Where this is going is `docs/VIEW_LAYER.md`: one list of what is on
+screen, whose order is the stack; a frame in named stages, in which
+nothing is changed by being drawn; one way for a widget to act, done
+after the draw; and `OverlayApp` split into owners, one per surface.
+
 ### Making a snippet
 
 Making a snippet is the thing done most often, so it is a press on empty
