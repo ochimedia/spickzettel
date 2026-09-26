@@ -15,10 +15,12 @@ src/
 │               # <d3d11.h> is included.
 ├── core/       # Model, persistence, settings and the session. No OS
 │               # headers, no Dear ImGui. Builds and tests on any platform.
-├── ui/         # OverlayApp: the overlay as drawn with Dear ImGui. A view
-│               # of the session.
+├── ui/         # The overlay: the Editor and its input machine
+│               # (interaction/), which hold what the hand works on, and
+│               # OverlayApp with its surfaces (view/), drawn with Dear
+│               # ImGui - a view of the session.
 ├── app/        # TrayController: owns settings, session and overlay, and
-│               # moves the window between hidden, edit and view-only.
+│               # moves the overlay between its five states.
 └── app_main/   # The composition root: main_win32.cpp.
 ```
 
@@ -269,10 +271,11 @@ the Win32 cursor bitmap are built from, so the two pens are the same pen.
 
 ## Drawing model
 
-`Stroke` is a polyline with a color and a width; `CanvasState` holds a
-list of finished strokes plus at most one in progress. Both are dumb on
-purpose: they record what they are given, so a shape tool can hand them
-exact corners and a test exact points.
+`Stroke` is a polyline with a color and a width; `CanvasState` - the
+session's live layer, where a stroke is drawn before it is committed to
+its snippet - holds a list of finished strokes plus at most one in
+progress. Both are dumb on purpose: they record what they are given, so
+a shape tool can hand them exact corners and a test exact points.
 
 ### From a hand to a mark: input, fitting, tessellation
 
@@ -518,8 +521,8 @@ kept), so nothing already made starts behaving differently.
 Settings > Defaults holds the starting values for a new snippet, by kind:
 its shape, its two opacities, and a drawing's background color - plus
 the style of text typed into it later. They are applied in
-`OverlayApp::ApplyCreationDefaults`, which every way of making a snippet
-passes through, and they are only ever a starting point: each is the
+`Editor::PrototypeForKind`, which every way of making a snippet passes
+through, and they are only ever a starting point: each is the
 snippet's own property from then on, and changing a default touches no
 snippet already made. There is no background color for a screenshot,
 where it would only tint the capture.
@@ -600,7 +603,7 @@ A folder or canvas nobody has named is called for the moment it was
 made, "2026-09-07 22:36:14": a counted "Folder 2, Folder 5" says nothing
 about which is which a week later. Items keep numbered names
 ("Screenshot 3"), which is all an item name is asked to carry. Names are
-not identity; the slug a directory is named by carries the id.
+not identity, and two may be alike; the id is what tells them apart.
 
 ## Persistence: the library file
 
@@ -1045,12 +1048,8 @@ primary stands in until it returns.
 
 ## Session and settings
 
-The layers above the platform are three libraries, and the build keeps
-them apart: `sz_core` holds the model, the persistence, the settings and
-the session and does not link Dear ImGui; `sz_ui` is the overlay as it is
-drawn, a view of the session; `sz_app` is the tray controller that owns
-settings, session and overlay and moves the window between hidden, edit
-and view-only.
+The layers above the platform are three libraries, `sz_core`, `sz_ui`
+and `sz_app`, the `core`, `ui` and `app` of the module layout above.
 
 **`Settings`** is the one copy of every setting. `Stored()` is what
 `config.json` holds; `Live()` is the profileable group resolved against
@@ -1259,7 +1258,7 @@ from, a snippet deleted or sent elsewhere, a panel closed, a capture
 whose write failed - each gives its textures back without anyone saying
 so. What must stay while it is not drawn is asked for all the same:
 each frame begins by asking for the textures of every snippet on the
-current canvas (`OverlayApp::KeepCurrentCanvasTextures`), minimized ones
+current canvas (`CanvasView::KeepCurrentCanvasTextures`), minimized ones
 and those the pinned view leaves out included. That is the budget there
 was before: only the current canvas is on the GPU, since a library of
 fifty 4K captures would otherwise pin ~1.6 GB of VRAM behind a game. The
@@ -1435,8 +1434,8 @@ deleted. Either confirmation - for a delete that can be restored, and for
 one that is for good - can be switched off in Settings > Behavior
 (`AppConfig::confirmDelete`, `confirmDeleteForGood`), for everything at
 once rather than per profile, since what a delete asks is about the
-library. The request is still deferred to where the popover is drawn,
-and done there without asking, since a button that deleted on the spot
+library. A delete that does not ask is an action, done once the frame is
+drawn (see "The overlay UI"), since a button that deleted on the spot
 would change the Overview while it is still being drawn from it. None of
 these changes anything a step reads, so none can make one stale.
 `Session::Delete` and `Restore` refuse a snippet for the same reason: its
@@ -1508,7 +1507,7 @@ made in Windows while the overlay is up lands on the next frame), or by
 It is one number for the whole frame, `UiScale()`, set at the start of
 `OnFrame` and nowhere else. Two things carry it:
 
-- **The ImGui style.** `ApplySpickzettelStyle` builds the style from a
+- **The ImGui style.** `theme::ApplyStyle` builds the style from a
   fresh `ImGuiStyle` on every change and then calls `ScaleAllSizes`, and
   sets `FontScaleDpi`, which ImGui 1.92 multiplies into every font size.
   From a fresh one because `ScaleAllSizes` multiplies what is there:
@@ -1642,10 +1641,9 @@ so what is hit is what is drawn.
 Panels - popovers, the canvas bar, the dock, the note editor, the
 Overview - are ordinary ImGui windows and widgets. Items and the
 selection's furniture are painted into full-screen `NoInputs` layers and
-hit-tested by the app itself. Keyboard input reaches the UI through
-ImGui's own input state, which the platform backends feed; a UI not
-built on ImGui would need a key callback on `IOverlayWindow` in its
-place.
+hit-tested by the app itself. Input reaches the editor as the window's
+own stream of events (see "Input, in order"); ImGui is fed the same
+input by its backend, for its widgets.
 
 A frame is the stages of `docs/VIEW_LAYER.md`, section 5, one function
 each, called in order by `OnFrame`: Prepare, the canvas, the effect
@@ -2187,7 +2185,7 @@ a press Spent, and what the overlay coming up forgets
 (`Machine::Forget`).
 
 What only a frame can do - opening a popup, closing the top one on
-Escape - is queued as an effect (`OverlayApp::Effect`) and done in the
+Escape - is queued as an effect (`Popups::Effect`) and done in the
 next frame, just before the popups are drawn, where every popup's id is
 hashed at the top level. That replaced a request flag per popup. Done at
 the very start of the frame instead, the canvas bar's menu was closed
@@ -2198,7 +2196,7 @@ drew last.
 Every popup the app opens - the three context menus, the Properties
 popover, the color chooser, the delete confirmation - is an interaction
 on the machine's Popup level (`Popup`, `ui/interaction/levels.*`), put
-there as it is asked for (`OverlayApp::OpenPopup`). It is the machine's
+there as it is asked for (`Popups::Open`). It is the machine's
 record of what ImGui draws: the pointer is the popup's, since a press in
 it is its widgets' and one outside closes it and does nothing else, which
 ImGui does; so is every key but a global hotkey. It finishes on the first
@@ -2217,7 +2215,7 @@ and whether a frame has drawn it - set as it is asked for, let go of as
 it closes (`docs/VIEW_LAYER.md`, section 4). The machine allows one popup
 at a time, so one record is enough; there used to be a copy per kind,
 each under a name of its own, and `PopupShowing` read six of them. What
-closing a popup does (`PopupClosed`) is done once, however it closes: by
+closing a popup does (`Popups::Closed`) is done once, however it closes: by
 the draw that finds ImGui without a popup the record says was drawn, or
 at once when the machine ends it from outside. Before, only the draw
 noticing did it, so a popup ended while nothing drew it closed late or
@@ -2372,9 +2370,9 @@ Hotkeys are the one setting that cannot just be written: an OS
 registration can fail, so the editor asks the controller and commits only
 if it accepts. A combo one of the app's own other hotkeys has is taken
 from it rather than refused. While a row waits for a key, a press of one
-of the app's own combos never reaches the capture loop as a key - Windows
-hands it to its hotkey - so the hotkey handlers ask first, and while a
-row is armed the hotkey firing *is* the press.
+of the app's own combos never reaches it as a key - Windows hands it to
+its hotkey - so the hotkey event is what the waiting row takes (see
+"Input, in order").
 
 ### The cheat sheet
 
@@ -2398,11 +2396,10 @@ same way. When the sheet's key is unbound, the note sends you to the
 menu instead.
 
 The sheet is a panel over a dimmed canvas, like the Overview, and shares
-its backdrop. `PanelOpen()` is the one condition the canvas's keys,
-wheel and pointer defer to for both panels. While the sheet is up its
-own key is the only shortcut that runs, and Escape closes it and does
-nothing else. A tool picked up under a panel that hides the canvas
-would be a change nobody saw happen. Its own key is a `ShortcutAction`
+its backdrop, and it is on the machine's Panel level as the Overview is:
+while it is up its own key is the only shortcut that reaches a command,
+and Escape closes it and does nothing else. A tool picked up under a
+panel that hides the canvas would be a change nobody saw happen. Its own key is a `ShortcutAction`
 like the tools, so it is rebound in Settings > Hotkeys and a profile can
 override it. The panel sizes itself to its text and fits up to three
 columns within the Overview's margins. Its six groups are split across
@@ -2685,10 +2682,11 @@ exit.
 
 Every string in the app is UTF-8, but on Windows the narrow side of a
 `std::filesystem::path` is the process's ANSI code page, and MSVC's
-`path::string()` throws on a character that page cannot spell. A canvas
-directory renamed by hand to Japanese on an English Windows, or a file
-named with an emoji dropped beside a snippet, crashed every load or every
-save that listed it. Rather than convert at each of those places, every
+`path::string()` throws on a character that page cannot spell - a user
+name in Japanese on an English Windows puts one in every path under
+`%APPDATA%`. When the library was a directory tree, a canvas directory
+renamed by hand was enough to crash every load. Rather than convert at
+each place a path becomes a string, every
 executable, the tests included, carries a manifest
 (`src/platform/win32/resources/utf8.manifest`) that makes UTF-8 the
 process's code page (Windows 10 1903 and later): `path::string()` and
@@ -2737,15 +2735,18 @@ which is required alongside it to take effect reliably. `WS_EX_LAYERED`'s
 bit is borrowed only for what it does to hit-testing; neither
 `SetLayeredWindowAttributes` nor `UpdateLayeredWindow` is ever called,
 since those are how the rejected techniques fed a window's alpha and
-would fight blur-behind. Toggling passthrough also hands keyboard focus
-back to what had it, since click-through alone only stops mouse routing
-and the overlay would otherwise keep eating the game's keys.
+would fight blur-behind. Going click-through also hands keyboard focus
+back to what had it (the `HandFocusBack` step of `PresentationSteps`),
+since click-through alone only stops mouse routing and the overlay would
+otherwise keep eating the game's keys.
 
-`Hide` restores focus only if this window still holds it: once view-only
-has handed focus off, the user may have clicked into other windows
-through the click-through overlay, and forcing a stale memory over what
-`GetForegroundWindow` already points at can only make things worse.
-Alt+F4 and `WM_CLOSE` are swallowed: `DefWindowProc` would destroy the
+Focus is handed back, going click-through or hidden, only if this window
+held it when the change began: once view-only has handed focus off, the
+user may have clicked into other windows through the click-through
+overlay, and forcing a stale memory over what `GetForegroundWindow`
+already points at can only make things worse.
+Alt+F4 is swallowed, and `WM_CLOSE` is the app's Exit (see "Every
+command is written as it is made"): `DefWindowProc` would destroy the
 window and nothing resets the handle, so `EnsureCreated` would report
 success against a dead window forever.
 
@@ -3268,7 +3269,7 @@ one twice.
   SQLite file, whose transactions have no "between" (see "Why a
   database"). It compared snippets to what it had written by a hash of
   their fields, which had to be kept in step with the serializer by
-  hand; the database store hashes the row it would write instead.
+  hand; each command now says which rows it changed (see "A write").
 - **PNG for captures.** Six to twenty times slower than QOI on this
   app's own screenshots. The PNG codec (stb) was kept for importing and
   exporting pictures that nothing ever imported or exported, and went
