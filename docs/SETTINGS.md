@@ -1,9 +1,13 @@
 # Settings
 
-Status: **agreed** (2026-09-26); phases 1 to 5 of section 12 are built.
-Every behavior below is either what the app does today (unmarked, or
-said so) or a change (marked **Change**). "Today" means the app as of
-`654fff5`. The questions it was reviewed with, and their answers, are in section 13.
+Status: **built** (2026-09-26), in the phases of section 12: the
+reference for how settings are held, edited and written, as
+`docs/OVERLAY_STATES.md` is for the overlay's states. Every behavior
+below is either what the app did before it (unmarked, or said so) or a
+change (marked **Change**) that it made. All eleven were made; what the
+building found is noted under each phase. "Today" means the app as of
+`654fff5`, before the work. The questions it was reviewed with, and
+their answers, are in section 13.
 
 ## The principle
 
@@ -736,10 +740,16 @@ throughout, and the file's text does not change until a phase says so.
    - The outdated comment of finding 1 went with the code it explained.
      Switching the frozen screen on in Settings still waits for the next
      entry into edit mode; section 7's two answers stand.
-6. **The docs.** Set this document's status to built, update
+6. **The docs** (done). Set this document's status to built, update
    `docs/ARCHITECTURE.md` ("Configuration", "Session and settings", the
    Settings paragraph) including finding 6, and correct the comments
    that name `Mutable()`.
+
+   *Found while building it:* the comments that named `Mutable()` had
+   already gone with it in phase 4, and the "Configuration" and "Session
+   and settings" sections had been kept up phase by phase. What was left
+   was finding 6 and the Overview's Settings paragraph, which still said
+   its rows bound ImGui widgets straight to the fields.
 
 A guard against a new field that has no row: C++ cannot list a struct's
 fields, so the per-row test cannot see one that is missing. Built in

@@ -798,7 +798,7 @@ overridable ones twice more, and each choice had a pair of functions
 spelling its names both ways: one setting was named in up to seven
 files, and nothing failed when a copy was missed. A rule's `Hold` is the
 one answer to what a setting keeps given a value - held to a band, or
-rejected - and the parser asks it, as edits will. So a number past a
+rejected - and the parser asks it, as every edit does. So a number past a
 float's range is rejected by every float, where the banded ones used to
 read it as their maximum and the others as nothing.
 
@@ -827,7 +827,8 @@ in the binary for the library.
 Three things about the file are deliberate:
 
 - **Groups, not a flat namespace** (`hotkeys`, `drawing`, `appearance`,
-  `bars`, `overview`, `display`, `behavior`, `shortcuts`, `diagnostics`).
+  `bars`, `overview`, `defaults`, `deleted`, `display`, `behavior`,
+  `shortcuts`, `diagnostics`).
   Where each setting is in them is said by its row in the catalog. The
   grouping is not cosmetic: `behavior` and `shortcuts` are
   exactly the settings a per-application profile may override, so a
@@ -917,9 +918,8 @@ must go on reading as the config it was written from, because once a
 build is out, a renamed key is a setting that goes back to its default
 for everyone who upgrades, and nothing else would notice. What this build
 writes is kept beside them and must come out byte for byte, so a change
-to the file is a diff to review. `docs/SETTINGS.md` is the plan these
-serve: one catalog of settings, read and written from it, with migrations
-between versions.
+to the file is a diff to review. `docs/SETTINGS.md` is the design this
+section summarizes, with what each change was for.
 
 `KeyCombo` represents a hotkey as modifiers plus one logical key rather
 than an OS virtual-key code, and no modifier is required: a bare
@@ -2269,19 +2269,23 @@ gradient, which would read as thumbnails being wrong and then correcting
 themselves.
 
 Settings is a list of sections down the left, not one long scroll.
-Appearance, Drawing and Debug are about *you* and always global; Behavior
-and Hotkeys are about *whatever is underneath* and are what a profile may
-override, which makes the section boundary the rule. Hotkeys holds the
-three global summon keys above its profile picker and the rebindable tool
-keys below it, since a control that governs what is below it must have
-nothing above it that it does not govern. Behavior does the same with
+Appearance, Interaction, Defaults and Debug are about *you* and always
+global; Behavior and Hotkeys are about *whatever is underneath* and are
+what a profile may override, which makes the section boundary the rule.
+Hotkeys holds the four global summon keys above its profile picker and
+the rebindable tool keys below it, since a control that governs what is
+below it must have nothing above it that it does not govern. Behavior
+does the same with
 deleted-item retention. In both sections each half sits in its own box,
 badged Global or Per profile, and the per-profile box carries the accent
 down its edge. A heading alone read as one more group of the list,
-rather than as the line past which a profile changes things. Most rows bind ImGui widgets
-straight to the settings' fields and commit on a finished edit; color
-swatches commit on deactivation rather than on every frame of a drag,
-which wrote the file sixty times a second.
+rather than as the line past which a profile changes things. The layout
+is written by hand, but each row's widget takes its row in the catalog
+(`ui/settings_widgets.h`) and edits through `Settings`, so the band a
+slider offers is the rule's and no row restates it. A slider or a color
+swatch previews while it is dragged and commits when the drag ends,
+rather than on every frame of it, which wrote the file sixty times a
+second.
 
 Hotkeys are the one setting that cannot just be written: an OS
 registration can fail, so the editor asks the controller and commits only
