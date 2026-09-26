@@ -75,6 +75,11 @@ struct Model {
                     holdsFocus = false;
                 }
                 break;
+            case S::ClaimCursor:
+                if (!visible || countsClickThrough || !grab) {
+                    broken.push_back("the cursor claimed before the window takes input");
+                }
+                break;
             case S::ClaimFront:
             case S::ForgetKeys:
             case S::PlacePointer:
@@ -190,15 +195,19 @@ TEST(PresentationStepsTest, FocusIsTakenOnlyInteractiveAndNeverUnderNoActivate) 
     }
 }
 
-// Every way into interactive starts from no keys held and the pointer where
-// the cursor is - switching from view mode in place included, where a first
-// click used to hover nothing (C4). Every way up claims the front.
+// Every way into interactive starts from no keys held, the pointer where
+// the cursor is, and the cursor the window's - switching from view mode in
+// place included, where a first click used to hover nothing (C4). Every
+// way up claims the front.
 TEST(PresentationStepsTest, EveryWayIntoInteractiveForgetsKeysAndPlacesThePointer) {
     for (const Presentation from : {Presentation::Hidden, Presentation::ClickThrough}) {
         for (const bool noActivate : {false, true}) {
             const std::vector<S> steps = PresentationSteps(from, Presentation::Interactive, noActivate);
             EXPECT_TRUE(Has(steps, S::ForgetKeys)) << Name(from);
             EXPECT_TRUE(Has(steps, S::PlacePointer)) << Name(from);
+            // And the OS cursor is the window's, to hide under the software
+            // pointer: switching in place from view mode left it showing.
+            EXPECT_TRUE(Has(steps, S::ClaimCursor)) << Name(from);
         }
     }
     for (const Presentation to : {Presentation::ClickThrough, Presentation::Interactive}) {

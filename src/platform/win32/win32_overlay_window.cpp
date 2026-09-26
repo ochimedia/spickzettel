@@ -432,6 +432,21 @@ void Win32OverlayWindow::Carry(PresentationStep step, bool heldFocus) {
         case PresentationStep::PlacePointer:
             seedPointerFromCursor_ = true;
             return;
+        case PresentationStep::ClaimCursor: {
+            // Put where it already is, which moves nothing - no input, so
+            // nothing for the grab or the game - but has Windows send the
+            // window under it a mouse message, and with it WM_SETCURSOR,
+            // which hides the OS cursor under the software pointer (see
+            // HandleMessage). After the grab is on, which is what decides
+            // that. Without it, view mode to edit mode in place left the
+            // arrow of whatever was underneath on screen beside the drawn
+            // pointer until the first click.
+            POINT cursor{};
+            if (GetCursorPos(&cursor)) {
+                SetCursorPos(cursor.x, cursor.y);
+            }
+            return;
+        }
         case PresentationStep::RefreshGrab:
             RefreshEditModeInput();
             return;

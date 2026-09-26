@@ -51,6 +51,12 @@ enum class PresentationStep {
     // ImGui's pointer is put where the cursor is on the next frame: a window
     // without focus hears of the cursor only once it moves.
     PlacePointer,
+    // The OS cursor made this window's, so that what the window says about
+    // it - hidden, under the software pointer - is what shows. Windows hands
+    // the cursor to a window on the next mouse message over it, and under
+    // the input grab none comes; a window shown under the cursor gets one,
+    // one that stops being click-through does not.
+    ClaimCursor,
     // The input grab on or off, for whether the window is now visible and
     // not click-through.
     RefreshGrab,
@@ -77,7 +83,7 @@ inline std::vector<PresentationStep> PresentationSteps(Presentation from, Presen
         if (!noActivate) {
             steps.push_back(S::TakeFocus);
         }
-        steps.insert(steps.end(), {S::ClaimFront, S::ForgetKeys, S::PlacePointer, S::RefreshGrab});
+        steps.insert(steps.end(), {S::ClaimFront, S::ForgetKeys, S::PlacePointer, S::RefreshGrab, S::ClaimCursor});
         return steps;
     }
     if (to == Presentation::ClickThrough) {
@@ -88,7 +94,7 @@ inline std::vector<PresentationStep> PresentationSteps(Presentation from, Presen
     if (!noActivate) {
         steps.push_back(S::TakeFocus);
     }
-    steps.insert(steps.end(), {S::ForgetKeys, S::PlacePointer, S::RefreshGrab});
+    steps.insert(steps.end(), {S::ForgetKeys, S::PlacePointer, S::RefreshGrab, S::ClaimCursor});
     return steps;
 }
 

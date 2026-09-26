@@ -292,10 +292,10 @@ The steps for each pair:
 
 | From → to | Steps |
 |---|---|
-| Hidden → Interactive | count as interactive, styles off; show; take focus unless no-activate; claim the front; forget keys, place the pointer; grab on |
+| Hidden → Interactive | count as interactive, styles off; show; take focus unless no-activate; claim the front; forget keys, place the pointer; grab on; claim the cursor |
 | Hidden → ClickThrough | count as click-through; show; click-through styles; claim the front; forget keys; grab off |
 | Interactive → ClickThrough | settle the camera; count as click-through, styles on; grab off; hand focus back if held |
-| ClickThrough → Interactive | count as interactive, styles off; take focus unless no-activate; forget keys, place the pointer; grab on |
+| ClickThrough → Interactive | count as interactive, styles off; take focus unless no-activate; forget keys, place the pointer; grab on; claim the cursor |
 | up → Hidden | settle the camera; put back a borrowed no-activate bit; hide; grab off; hand focus back if held |
 | same → same | nothing |
 
@@ -326,6 +326,16 @@ in place does neither. A window with no focus hears of the cursor only
 once it moves (the reason `RenderFrame` seeds the pointer after a show),
 so a click before any movement hovered nothing. Found by reading, and
 not confirmed by hand: what ImGui hovers is not visible from outside.
+
+Found after phase 3, by hand: with the software pointer, switching from
+view to edit mode in place left the Windows arrow on screen beside the
+drawn pointer until the first click. The OS cursor is hidden by the
+window answering `WM_SETCURSOR`, which Windows sends on a mouse message
+over the window; a window shown under the cursor gets one, a window that
+stops being click-through does not, and the grab lets no movement
+through to cause one. The last step into interactive claims the cursor:
+it is set to where it already is, which moves nothing and sends that
+message.
 
 The steps are planned by a pure function in `platform/presentation.h`,
 with no OS headers: `PresentationSteps(from, to, noActivate)`. The Win32
