@@ -1,11 +1,11 @@
 # Overlay states
 
-Status: **proposed**, for review (2026-09-26). Nothing here is built yet.
+Status: **agreed** (2026-09-26), being built in the phases of section 11.
 Every behavior below is either what the app does today (unmarked, or
 said so) or a change (marked **Change**). "Today" means the app as of
-`fa49b05`. Once agreed, it is built in the phases of section 11, and
-becomes the reference for how the overlay comes and goes, as
-`docs/INTERACTIONS.md` is for input.
+`fa49b05`. Once built, it is the reference for how the overlay comes and
+goes, as `docs/INTERACTIONS.md` is for input. The questions it was
+reviewed with, and their answers, are in section 12.
 
 ## The principle
 
@@ -147,9 +147,10 @@ means the request does nothing in that state.
    from Hidden. A View entered from Pinned or a Notice has no profile, so
    Edit from it goes through hidden to get one. With C3, every View has
    one.
-2. Edit to Hidden is down. Edit to Pinned goes through hidden, as today
-   (question 2). View to Pinned is in place: only what is drawn changes.
-   View to Hidden is down.
+2. Edit to Hidden is down. View to Pinned is in place: only what is
+   drawn changes. View to Hidden is down. Edit to Pinned is in place too,
+   a **Change** (C7): today it goes through hidden, and the pinned
+   snippets blink.
 3. **Change** (C1): the window comes up click-through. Today it comes up
    as edit mode and is made click-through afterwards (section 1).
 4. **Change** (C3): a session starts in place, with the profile resolved
@@ -158,7 +159,7 @@ means the request does nothing in that state.
    to whatever had it when the pinned view or the notice came up,
    however long ago that was.
 5. The frozen screen is taken again, as today: `EnsureMode` releases it
-   and freezes again on every call (question 3).
+   and freezes again on every call (decided, section 12).
 6. Only when "Say so when the overlay is hidden" is on. Otherwise the overlay
    stays Hidden and the message is dropped, never to be shown later.
 7. The capture gets a canvas of its own, but the pinned view stays on the
@@ -207,7 +208,8 @@ the same order unless said otherwise.
 1. **Settle.**
    - Leaving a session for Away, or for a restart: the Hidden lifecycle
      event and the Hand scope, and the untouched drawing settled
-     (`SettleForPersistence`).
+     (`SettleForPersistence`). Away is Pinned as well as Hidden, and
+     entering Pinned or a Notice offers nothing more (**Change**, C6).
    - Leaving Edit for View: this is done by the mode in step 5 (the
      ViewOnly lifecycle event, All scope).
 2. **Release the frozen screen**, when leaving Edit - for any state,
@@ -222,8 +224,8 @@ the same order unless said otherwise.
    window that is up already exists.
 5. **Tell the overlay its mode** (`OverlayApp::SetMode`): what it draws,
    and which lifecycle event the input machine is offered - ViewOnly on
-   entering View, EditMode on entering Edit. For Pinned and Notice, see
-   question 1.
+   entering View, EditMode on entering Edit, and nothing on entering
+   Pinned or a Notice (C6).
 6. **Start the session**, when entering View or Edit from a state without
    one:
    - ask what is underneath, and match a profile;
@@ -360,6 +362,8 @@ synchronous: its caller needs the answer.
 | C3 | Every View has a session: from Pinned or a Notice, the profile is resolved in place | Edit from such a View hides and reshows (the pinned snippets blink); `profileAppliedThisShowing_` goes | the view hotkey in the pinned view, then the edit hotkey |
 | C4 | ClickThrough to Interactive places the pointer and forgets keys | a first click that hovers nothing | View to Edit, clicking before moving |
 | C5 | Requests from a frame are applied after it | transitions inside a frame | a notice fading; a HUD restart |
+| C6 | Pinned and Notice are away: entering them settles the hand, not everything | drawing mode, a panel or a popup ended by being put away when something is pinned, and kept when nothing is | edit mode put away with a snippet pinned; a silent capture after edit mode was put away |
+| C7 | Edit to Pinned is in place | the pinned snippets blink off and on | the edit hotkey in edit mode, with a snippet pinned |
 
 C3 relies on C2. After Pinned → View → Edit in place, the focus taken in
 Edit has to be given back to the window it was taken from, not to the
@@ -372,7 +376,7 @@ then, rather than at the next edit mode that comes up from Hidden.
 
 ## 10. Found while writing this
 
-**Kept as today, pending the questions in section 12:**
+**Each decided in section 12:**
 
 1. Putting the overlay away into the pinned view from Edit ends what
    edit mode left up - drawing mode, a panel, a popup. So does a notice
@@ -381,11 +385,11 @@ then, rather than at the next edit mode that comes up from Hidden.
    away into Hidden keeps them (`docs/INTERACTIONS.md`, decision 3). So
    whether drawing mode survives being put away depends on whether the
    canvas has a pinned snippet, or whether a silent capture happened
-   since.
+   since. Changed: C6.
 2. Edit to Pinned goes through hidden, so the pinned snippets blink off
-   and on. It could be in place, like Edit to View.
+   and on. It could be in place, like Edit to View. Changed: C7.
 3. A quick capture in Edit takes the frozen screen again, so the
-   background under the user jumps to what the game shows now.
+   background under the user jumps to what the game shows now. Kept.
 4. The restart exists because "Don't steal focus" and "Freeze screen
    while editing" are read on entry. With the reconciliation of section
    5, both could
@@ -394,7 +398,8 @@ then, rather than at the next edit mode that comes up from Hidden.
    and the HUD's wait for its key to come up, would then go. This is not
    proposed now: releasing a frozen screen in place reveals the game, and
    that needs the camera settled first, which is the input grab's timing.
-   It would be a later change, measured as the grab's changes are.
+   It would be a later change, measured as the grab's changes are. Left
+   for later.
 
 **Documentation that is wrong today, corrected in phase 1:**
 
@@ -440,7 +445,8 @@ each:
    gets the care that input phase 2 got: the grab's own tests unchanged,
    then checked by hand in a game with the grab and countering on, and
    the focus faults of C2 and C4 reproduced before and after.
-4. **Sessions** (C3).
+4. **Sessions and away** (C3, C6, C7). C6 starts with a headless test
+   that a panel and a popup survive frames that do not draw them.
 5. **Between frames** (C5).
 
 Tests grow with it:
@@ -454,25 +460,25 @@ Tests grow with it:
 - the 71 tray tests and the headless tests, unchanged except where a
   Change says otherwise.
 
-## 12. Questions for review
+## 12. Questions for review, and the answers
 
-1. **Are Pinned and Notice "away"?** I recommend yes. Entering them
+1. **Are Pinned and Notice "away"?** Recommended yes: entering them
    would offer what hiding offers (the Hand scope), not what view mode
-   offers (All). Drawing mode, a panel or a popup would then survive
-   being put away whether or not something is pinned, as decision 3 of
+   offers (All), so drawing mode, a panel or a popup survive being put
+   away whether or not something is pinned, as decision 3 of
    `docs/INTERACTIONS.md` says. The machine gets no events in either
    state (`OverlayApp::OnInput` drops everything while view-only), just
-   as in Hidden. The one thing to check first is that ImGui keeps a popup
-   or panel that frames stop drawing. A headless test settles that. If
-   ImGui does not keep it, today's behavior stays and is written down as
-   a rule.
-2. **Edit to Pinned in place** (finding 2)? I recommend yes, as a cell
-   change in phase 4. It is the same window steps as Edit to View, and
-   it removes the blink.
+   as in Hidden. First a headless test has to show that ImGui keeps a
+   popup or panel that frames stop drawing; if it does not, today's
+   behavior stays and is written down as a rule.
+   **Answer: yes, as recommended** - C6, in phase 4.
+2. **Edit to Pinned in place** (finding 2)? Recommended yes: the same
+   window steps as Edit to View, and no blink.
+   **Answer: in place** - C7, in phase 4.
 3. **Quick capture in Edit**: take the frozen screen again (today), or
-   leave it (make it no transition)? A capture while the screen is frozen
-   is cut from the frozen picture, so taking it again gives the next
-   quick capture a fresh picture, and leaving it keeps the background
-   steady. No recommendation: this is a matter of taste.
-4. **Restart** (finding 4): is it all right to leave it for a later,
-   measured change?
+   leave it? A capture while the screen is frozen is cut from the frozen
+   picture, so taking it again gives the next quick capture a fresh
+   picture, and leaving it keeps the background steady.
+   **Answer: take it again**, as today.
+4. **Restart** (finding 4): leave it for a later, measured change?
+   **Answer: yes, later.**
