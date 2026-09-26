@@ -923,22 +923,15 @@ void OverlayApp::AttachTo(platform::IOverlayWindow& window) {
     window.SetInputCallback([this](const platform::InputEvent& ev) { OnInput(ev); });
 }
 
-void OverlayApp::SetViewOnly(bool viewOnly) {
-    if (viewOnly == viewOnly_) {
+void OverlayApp::SetMode(OverlayMode mode) {
+    const bool wasViewOnly = IsViewOnly();
+    mode_ = mode;
+    noticeFinishedReported_ = false;  // a notice entered now is reported when its own message fades
+    if (IsViewOnly() == wasViewOnly) {
         return;
     }
-    viewOnly_ = viewOnly;
-    OfferLifecycle(viewOnly_ ? Lifecycle::ViewOnly : Lifecycle::EditMode);
-    if (!viewOnly_) {
-        // A notice is only ever a kind of view-only (see SetNoticeOnly), so
-        // it cannot outlive it. TrayController clears it explicitly on the
-        // way into any mode as well, which is what covers entering
-        // view-only *from* a notice - that case never reaches here, since
-        // the mode is already what is being asked for.
-        noticeOnly_ = false;
-        pinnedOnly_ = false;
-    }
-    if (viewOnly_) {
+    OfferLifecycle(IsViewOnly() ? Lifecycle::ViewOnly : Lifecycle::EditMode);
+    if (IsViewOnly()) {
         // Nothing should stay "in progress" while merely viewing, so the
         // All scope ends everything above the canvas, top down: the
         // gesture, while drawing mode still says which snippet a stroke in
@@ -1103,7 +1096,7 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // is the exception, since it follows the pointer.
     {
         const bool toastShowing = !actionToastText_.empty() && ImGui::GetTime() < actionToastExpireAtSeconds_;
-        const platform::FramePacing pacing = viewOnly_ && !noticeOnly_ && !toastShowing && !Cfg().showDebugOverlay
+        const platform::FramePacing pacing = IsViewOnly() && !IsNoticeOnly() && !toastShowing && !Cfg().showDebugOverlay
                                                  ? platform::FramePacing::Idle
                                                  : platform::FramePacing::EveryFrame;
         if (window_ != nullptr && appliedFramePacing_ != pacing) {
@@ -1137,11 +1130,11 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         PlaceWelcomeNotes(displayW, displayH);
     }
 
-    if (viewOnly_) {
+    if (IsViewOnly()) {
         // A notice is this same click-through mode with the canvas left
         // out: nothing of the library on screen, only the message. See
-        // SetNoticeOnly.
-        if (!noticeOnly_) {
+        // OverlayMode::Notice.
+        if (!IsNoticeOnly()) {
             RenderViewOnly(displayW, displayH);
         }
         // Drawn in view-only too, not just in edit mode where it started.
@@ -1155,7 +1148,7 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         // the message is - faded, or never set at all, which is the same
         // condition RenderActionToast draws nothing on. Reported once (see
         // noticeFinishedReported_); the window goes away on the other end.
-        if (noticeOnly_ && !noticeFinishedReported_ &&
+        if (IsNoticeOnly() && !noticeFinishedReported_ &&
             (actionToastText_.empty() || ImGui::GetTime() >= actionToastExpireAtSeconds_)) {
             noticeFinishedReported_ = true;
             if (noticeFinishedCallback_) {
@@ -1688,7 +1681,7 @@ void OverlayApp::UpdateInputOptionsHud() {
     // while it is visible, and the platform needs to know so it can stop
     // holding a keyboard hook open on the HUD's behalf. Pushed only on a
     // change - installing or removing a hook is not a per-frame ask.
-    const bool hudActive = Cfg().showInputOptionsHud && !viewOnly_;
+    const bool hudActive = Cfg().showInputOptionsHud && !IsViewOnly();
     const int hudDigits = hudActive ? static_cast<int>(std::size(kInputOptionRows)) : 0;
     if (window_ && hudDigits != appliedInputOptionsHudDigits_) {
         window_->SetInputOptionsHudDigits(hudDigits);
@@ -1726,7 +1719,7 @@ void OverlayApp::UpdateInputOptionsHud() {
 // Reaches here as the Canvas level's (see CanvasLevel), so never while text
 // is being typed or a panel or a popup is up: each of those takes every key.
 bool OverlayApp::HandleInputOptionsHudKey(const Event& event) {
-    if (!Cfg().showInputOptionsHud || viewOnly_ || event.repeat) {
+    if (!Cfg().showInputOptionsHud || IsViewOnly() || event.repeat) {
         return false;
     }
     for (int i = 0; i < static_cast<int>(std::size(kInputOptionRows)); ++i) {
@@ -1996,7 +1989,7 @@ void OverlayApp::RenderViewOnly(float displayW, float displayH) {
             // A minimized snippet is drawn nowhere but its dock chip, and
             // view-only has no dock. The pinned view draws the pinned ones
             // and nothing else.
-            if (Manager().IsDeleted(*canvas, item) || item.minimized || (pinnedOnly_ && !item.pinned)) {
+            if (Manager().IsDeleted(*canvas, item) || item.minimized || (IsPinnedOnly() && !item.pinned)) {
                 continue;
             }
             const ImVec2 pMin(item.rect.x, item.rect.y);

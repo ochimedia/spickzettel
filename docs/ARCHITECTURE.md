@@ -2353,13 +2353,18 @@ current canvas has a pinned snippet, and hidden otherwise. Every request
 in every state, and what the window is told on the way, is
 `docs/OVERLAY_STATES.md`, section 5, pinned by `overlay_states_test.cpp`.
 
-The controller keeps no state of its own: it reads the window's
-`IsVisible()` and the overlay's view-only, notice and pinned flags, so
-that no `mode_` member could go stale. That held for three states; with
-five, the flags are what goes stale. `docs/OVERLAY_STATES.md` makes them
-one machine, in which every pair of state and request has a written
-answer and the window is told what to be rather than which calls to
-make. (Found while writing it: this section said two hotkeys drive three
+The controller holds the state, and changes it in one place:
+`Apply(Next(state, request, facts))`, where `Next` (`app/overlay_states`)
+is the table and `Apply` carries a transition out in the one order the
+document gives. It used to keep no state of its own, reading the
+window's `IsVisible()` and the overlay's view-only flag instead, so that
+no `mode_` member could go stale. That held for three states; with five,
+the flags - view-only, notice, pinned, and whether the showing had a
+profile - were what went stale, and every caller combined them its own
+way. The overlay's flags are one `OverlayMode` now, which the controller
+sets, and a debug build checks after every transition that it, the
+window and the session agree with the state. (Found while writing
+`docs/OVERLAY_STATES.md`: this section said two hotkeys drive three
 states, which stopped being true when the pinned view and the notice
 came.)
 

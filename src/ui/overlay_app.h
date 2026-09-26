@@ -37,6 +37,23 @@ namespace sz::ui {
 // here rather than every type named twice.
 using namespace ::sz::core;
 
+// What the overlay draws, and whether it takes input: one of the states of
+// docs/OVERLAY_STATES.md that are up. Hidden is not a mode - nothing is
+// drawn then - so the overlay keeps the last one. See OverlayApp::SetMode.
+enum class OverlayMode {
+    // Everything, interactive.
+    Edit,
+    // The current canvas, read-only.
+    View,
+    // The current canvas's pinned snippets (Item::pinned) and nothing else
+    // - what is left on screen when the overlay is put away with any there.
+    Pinned,
+    // Only the message a hotkey just set (see ShowActionToast), for a
+    // hotkey that acts while the overlay is hidden. Over when the message
+    // is - see SetNoticeFinishedCallback.
+    Notice,
+};
+
 // How a snippet's pictures are resampled: the setting (AppConfig::
 // imageFilter) and the renderer's callback that applies it, which is null
 // where nothing renders. See overlay_detail::DrawPicture.
@@ -107,48 +124,29 @@ public:
     // until the platform layer creates and shows it.
     void AttachTo(platform::IOverlayWindow& window);
 
-    // Switches between the full interactive editor and a read-only display
-    // of the current canvas (no selection, no drawing, no Overview) -
-    // driven by TrayController's edit/view-mode hotkeys, see
-    // its own doc comment for the state table this participates in.
-    // Entering view-only mode (true) disarms/closes anything mid-flight
-    // (an armed item, an open popover/Overview/picker) so edit mode
-    // resumes from a clean state later rather than wherever it was left
-    // off. A no-op if already in the requested mode.
-    void SetViewOnly(bool viewOnly);
+    // Sets what is drawn and whether input is taken - TrayController's, as
+    // it moves the overlay between its states (docs/OVERLAY_STATES.md,
+    // section 6, step 5). Leaving Edit for any other mode offers the
+    // ViewOnly lifecycle event and ends everything above the canvas (an
+    // armed item, a note being typed, a popup, a panel, drawing mode), so
+    // edit mode later starts clean rather than wherever it was left off;
+    // entering Edit offers EditMode. The other modes are all read-only,
+    // take no input, and switch among themselves without either.
+    void SetMode(OverlayMode mode);
+    OverlayMode Mode() const { return mode_; }
 
     // The overlay has just been put back on screen. Anything this class
     // remembers about state the OS owns is stale at that moment - the
     // installed pointer shape, since while the overlay was hidden the
     // application underneath owned the cursor, and which buttons and keys
-    // are down (see Editor::ForgetTheHand). Distinct from SetViewOnly,
-    // which no-ops when the mode is unchanged and so never fires on a plain
+    // are down (see Editor::ForgetTheHand). Distinct from SetMode, which
+    // offers nothing when the mode is unchanged and so nothing on a plain
     // hide-then-show.
     void OnOverlayShown();
-    bool IsViewOnly() const { return viewOnly_; }
-    // A notice: view-only mode with the canvas left out, so the only thing
-    // on screen is whatever ShowActionToast last put there. What a hotkey
-    // that acts while the overlay is hidden shows for a moment instead of
-    // opening the whole overlay - see TrayController::ShowNotice, which
-    // pairs it with a click-through, never-focused window.
-    //
-    // Set alongside view-only, never instead of it: a notice must not take
-    // input either, and everything SetViewOnly stands down is equally
-    // unwanted here. Cleared when any real mode is entered, so a hotkey
-    // pressed while a notice is up leaves the overlay in the mode that
-    // hotkey asked for rather than hiding it two seconds later.
-    void SetNoticeOnly(bool noticeOnly) {
-        noticeOnly_ = noticeOnly;
-        noticeFinishedReported_ = false;
-    }
-    bool IsNoticeOnly() const { return noticeOnly_; }
-    // The pinned view: view-only mode drawing only the current canvas's
-    // pinned snippets (Item::pinned) - what the overlay leaves on screen
-    // when it is put away with any of them there. See
-    // TrayController::ShowPinnedView. Like a notice, only ever set
-    // alongside view-only, and cleared when view-only is.
-    void SetPinnedOnly(bool pinnedOnly) { pinnedOnly_ = pinnedOnly; }
-    bool IsPinnedOnly() const { return pinnedOnly_; }
+    // Every mode but Edit: read-only, taking no input.
+    bool IsViewOnly() const { return mode_ != OverlayMode::Edit; }
+    bool IsNoticeOnly() const { return mode_ == OverlayMode::Notice; }
+    bool IsPinnedOnly() const { return mode_ == OverlayMode::Pinned; }
     // Called once, from the frame in which a notice's message has faded,
     // to say there is nothing left to show. TrayController hides the
     // window from it - safe mid-frame, since the renderer still ends the
@@ -409,7 +407,7 @@ private:
     void OnInput(const platform::InputEvent& event);
     // The overlay shown or put away, view-only mode entered or left: an
     // event every level is offered before the scope it calls for is ended
-    // (see SetViewOnly, SettleForPersistence and OnOverlayShown).
+    // (see SetMode, SettleForPersistence and OnOverlayShown).
     void OfferLifecycle(Lifecycle which);
 
     void RenderCanvasLayer(float displayW, float displayH);  // live layer + armed-item overlay + debug text
@@ -966,12 +964,8 @@ private:
     // comment for why this couldn't just run from AttachTo).
     bool styleApplied_ = false;
 
-    // See SetViewOnly's doc comment.
-    bool viewOnly_ = false;
-    // See SetNoticeOnly's doc comment. Only ever true alongside viewOnly_.
-    bool noticeOnly_ = false;
-    // See SetPinnedOnly's doc comment. Only ever true alongside viewOnly_.
-    bool pinnedOnly_ = false;
+    // See SetMode.
+    OverlayMode mode_ = OverlayMode::Edit;
     // Fired once when a notice's message has faded - see
     // SetNoticeFinishedCallback. Guarded by this, so a notice that stays up
     // (because the window could not be hidden, say) does not call it on

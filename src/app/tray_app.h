@@ -2,6 +2,7 @@
 
 #include <optional>
 
+#include "app/overlay_states.h"
 #include "ui/overlay_app.h"
 #include "core/config/app_config.h"
 #include "core/persistence/library_store.h"
@@ -17,53 +18,25 @@ using ::sz::ui::CommandForHotkey;
 using ::sz::ui::CommandId;
 using ::sz::ui::HotkeyCombo;
 using ::sz::ui::OverlayApp;
+using ::sz::ui::OverlayMode;
 
 // Top-level application logic: wires tray/hotkey events from IPlatformHost
-// to the overlay's show/hide/mode behavior. This is the only place that
-// knows "what a hotkey does" — everything else is either pure drawing
-// logic (OverlayApp and the Session) or pure OS glue (the platform
-// backend).
+// to the overlay's states. This is the only place that knows "what a
+// hotkey does" - everything else is either pure drawing logic (OverlayApp
+// and the Session) or pure OS glue (the platform backend).
 //
-// Two hotkeys drive three states - hidden, edit (the full interactive
-// canvas), and view-only (the current canvas
-// displayed read-only, click-through to whatever's underneath):
+// The overlay is in one of five states - hidden, the pinned view, a
+// notice, view and edit - and moves between them as one machine:
+// docs/OVERLAY_STATES.md. Its table is Next (overlay_states.h), and this
+// holds the state and carries out a transition (Apply), in the one order
+// that document's section 6 gives. Every request that moves the overlay
+// is Apply(Next(state, request, facts)).
 //
-//   hidden    --edit hotkey--> edit
-//   hidden    --view hotkey--> view
-//   edit      --edit hotkey--> hidden
-//   edit      --view hotkey--> view      (no hide/reshow - stays visible)
-//   view      --view hotkey--> hidden
-//   view      --edit hotkey--> edit      (no hide/reshow - stays visible)
-//
-// i.e. each hotkey toggles its own mode off (back to hidden) when that
-// mode is already active, and switches straight to its mode otherwise -
-// including directly between edit and view, without hiding in between.
-//
-// "Hidden" is the pinned view instead whenever the current canvas has a
-// pinned snippet (Item::pinned): putting the overlay away leaves those
-// snippets on screen, click-through, and nothing else. It stands in for
-// hidden everywhere in the table above - either hotkey leaves it for its
-// own mode - and there is deliberately no hotkey that hides it: unpinning
-// is how pinned snippets go. See PutAway and ShowPinnedView.
-//
-// A third hotkey, independent of the state machine above, captures a
-// fullscreen screenshot onto a canvas of its own - see
-// OverlayApp::QuickCapture's own doc comment for why (a fallback for
-// grabbing a shot of the game before entering edit mode might cost it a
-// frame or two, and a canvas each so the shots can be told apart later) -
-// and then always switches to edit mode afterward
-// (showing it if hidden, switching in place if it was in view-only mode,
-// a no-op if already there), so the capture is never silent. The capture
-// itself happens first, before that switch, so it's never a screenshot of
-// the overlay's own edit-mode UI.
-//
-// Deliberately stateless about which of the three states it's in: there's
-// no `mode_` member to go stale. "Hidden vs. visible" comes from
-// `window.IsVisible()`, and "edit vs. view" (only meaningful while
-// visible) comes from `overlayApp_.IsViewOnly()` - both already the
-// actual ground truth the platform layer and OverlayApp maintain for
-// their own reasons, so this can't desync from it if something else ever
-// shows the window directly.
+// A capture hotkey takes its capture first, so that it is never a
+// screenshot of the overlay's own edit mode: the quick capture then asks
+// for edit mode (up, or in place), and the silent one for a notice when
+// the overlay is hidden. See OverlayApp::QuickCapture for why a capture
+// gets a canvas of its own.
 class TrayController {
 public:
     TrayController(platform::IPlatformHost& host, AppConfig config);
@@ -115,6 +88,9 @@ public:
         configFileKept_ = keepFile;
     }
 
+    // Which of the five the overlay is in - see docs/OVERLAY_STATES.md.
+    OverlayState State() const { return state_; }
+
     const OverlayApp& Overlay() const { return overlayApp_; }
     // Non-const for the tests that have to *arrange* a world before driving
     // it - an empty library, a canvas full of items. Deliberately not for
@@ -160,30 +136,26 @@ private:
     // the capture is noticed - AppConfig::hotkeyQuickCapture.
     void QuickCaptureAndShow();
     // The same capture, without the overlay coming up for it - see
-    // AppConfig::hotkeySilentCapture. Followed by a notice (ShowNotice)
-    // when the overlay is hidden and messages are allowed there; when it
-    // is already up, in either mode, the message simply appears in the
-    // frames it is already drawing and nothing else happens.
+    // AppConfig::hotkeySilentCapture. Followed by a notice when the overlay
+    // is hidden and messages are allowed there; when it is already up, the
+    // message simply appears in the frames it is already drawing.
     void SilentCapture();
-    // Puts the overlay up carrying nothing but the message a hotkey just
-    // set, click-through and without taking focus, and takes it away again
-    // when that message fades (OverlayApp::SetNoticeFinishedCallback). A
-    // no-op if the overlay is already visible, which needs none of this.
-    //
-    // Deliberately not EnsureMode: that path freezes the screen when the
-    // setting asks for it, which for a two-second message would mean a
-    // full-screen still of the desktop flashing up behind it.
-    void ShowNotice();
-    // The other end of ShowNotice, called by OverlayApp when the message
-    // has faded. Does nothing unless a notice is actually what is on
-    // screen, since a real mode entered meanwhile has taken the overlay
-    // over and must keep it.
-    void HideNoticeIfDone();
-    // What a mode's own hotkey does to it: finish what the hand is doing,
-    // drop the frozen screen, and go - to the pinned view when the current canvas has pinned
-    // snippets (in place from view-only, which it already is), to hidden
-    // otherwise.
-    void PutAway();
+
+    // ===== The overlay's states (docs/OVERLAY_STATES.md) =====
+
+    // A request, carried out: Apply(Next(...)) with the facts as they are.
+    void Request(OverlayRequest request);
+    // What the table needs besides the state and the request.
+    OverlayFacts Facts() const;
+    // Section 6: one transition, every step in its order. A Stay does
+    // nothing.
+    void Apply(const OverlayTransition& transition);
+    // Section 6's step 7 as the window can be told it today, call by call.
+    void PresentWindow(const OverlayTransition& transition);
+    // Section 3's invariants, checked after every transition in a debug
+    // build.
+    void CheckInvariants() const;
+
     // For the moment the app has to go - Exit from the tray, or the OS
     // ending the session: what the hand is in the middle of is finished,
     // and so written, and a settings file still owed is tried once more.
@@ -200,23 +172,6 @@ private:
     // The background timer's tick: another attempt at the settings file,
     // and the timer stopped once it is written.
     void OnBackgroundTimer();
-    // Puts the pinned view up - view-only, click-through, never focused,
-    // drawing the current canvas's pinned snippets - if the overlay is
-    // hidden and there are any. False if it did not. The same way up as a
-    // notice, for the same reasons (see ShowNotice): it is not a session
-    // with the application underneath, so no profile, no focus.
-    bool ShowPinnedView();
-    // Shared by both mode hotkey handlers: shows (creating the window first
-    // if needed) in the given mode, or - if already shown in that exact
-    // mode - hides instead.
-    void ToggleMode(bool viewOnly);
-    // The "show/switch in place" half of ToggleMode, without the toggle-
-    // off-if-already-there check - used where landing in a specific mode
-    // must never hide the overlay, e.g. after a quick capture.
-    // `keepProfileContext` is for the one caller that is not a new show at
-    // all: a restart the overlay does to itself, which has to stay in the
-    // profile it was already in - see ApplyProfileForCurrentApplication.
-    void EnsureMode(bool viewOnly, bool keepProfileContext = false);
     void OnTrayCommand(platform::TrayCommand command);
     // Wired to Settings::SetChangedCallback in Initialize(). Applies to the
     // window whatever of the settings it acts on actually changed, then
@@ -234,12 +189,12 @@ private:
     // it, so the Settings row keeps showing their answer rather than
     // silently rewriting itself for one application.
     //
-    // Asked once, on the way up, and deliberately not per mode. View-only
-    // needs none of that input and would rather leave the foreground
-    // alone, but EnsureMode switches it and edit mode in place without
-    // coming up from hidden - so a decision made for view-only is the one
-    // edit mode inherits, and scoping this to edit mode would leave the
-    // overlay deaf in exactly the case it exists to fix.
+    // Asked once, as the session starts, and deliberately not per mode.
+    // View-only needs none of that input and would rather leave the
+    // foreground alone, but view and edit mode switch in place within one
+    // session - so a decision made for view-only is the one edit mode
+    // inherits, and scoping this to edit mode would leave the overlay deaf
+    // in exactly the case it exists to fix.
     bool MustTakeFocusFrom(const platform::ForegroundApp& app) const;
     // Whether edit mode is shown without taking focus: the setting, unless
     // the application underneath is one MustTakeFocusFrom. One expression
@@ -247,13 +202,9 @@ private:
     // the setting alone, so any setting saved while the overlay was up over
     // an elevated application gave that application its focus back.
     bool WantedEditModeNoActivate() const;
-    // Hides the overlay and immediately shows it again in the same mode,
-    // for settings that are only read on the way in - see
-    // OverlayApp::SetRestartOverlayCallback. No-op while hidden.
-    void RestartOverlay();
     // Asks what the overlay is about to be shown over, picks the profile
     // that matches, and applies the resolved settings to both OverlayApp
-    // and the window. Called on the way up, once per show.
+    // and the window. Called as a session starts, and at a restart.
     //
     // `keepPrevious` re-uses the answer this showing already had rather than
     // asking again - see sessionApp_.
@@ -271,13 +222,17 @@ private:
     // Puts the overlay on `display`, taking the frozen screen again if it
     // was showing one - that is a picture of the display it has just left.
     void MoveOverlayTo(const platform::DisplayInfo& display);
+    // Which of docs/OVERLAY_STATES.md's five states the overlay is in.
+    // Changed by Apply and nowhere else.
+    OverlayState state_ = OverlayState::Hidden;
     // The display the overlay is on. Decided when it comes up from hidden,
     // and kept while it is up: switching between edit and view, or a capture
     // hotkey pressed while it is showing, happens where the overlay already
     // is. Changed while up only when the displays themselves change.
     platform::DisplayInfo overlayDisplay_;
-    // What the overlay decided it was up over when it came up, kept for as
-    // long as that showing lasts and forgotten when it is hidden for real.
+    // What the session came up over: held exactly while there is a session
+    // (docs/OVERLAY_STATES.md, section 2) - in Edit, and in a View that
+    // came up from hidden - and forgotten when it ends.
     //
     // A restart is not a new show. The overlay hides and shows itself to
     // apply a setting that is only read on the way in, and asking again in
@@ -306,10 +261,6 @@ private:
     std::vector<std::pair<HotkeySlot, platform::KeyCombo>> unregisteredHotkeys_;
     // See StartOnStandInSettings.
     bool skipRetentionThisStart_ = false;
-    // Whether the window, while up, came up through EnsureMode and so with
-    // the profile for what is underneath - not as a notice or the pinned
-    // view, which apply none. See EnsureMode.
-    bool profileAppliedThisShowing_ = false;
     bool configFileKept_ = false;
     // Constructed up front (from host.GetLibraryPath(), possibly empty) but
     // only ever used - Load()'d from, attached to overlayApp_ - when that

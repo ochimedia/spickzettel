@@ -272,6 +272,7 @@ protected:
     void ExpectInvariants() {
         const State state = Observed();
         SCOPED_TRACE(Name(state));
+        EXPECT_STREQ(app::Name(controller_->State()), Name(state)) << "the controller's state is what is on screen";
         if (state != State::Hidden) {
             EXPECT_EQ(host_.overlayWindow.inputPassthrough, state != State::Edit)
                 << "click-through exactly in the pinned view, a notice and view mode";
@@ -502,6 +503,37 @@ TEST_F(OverlayStatesTest, SettingsDisplaysAndTheSessionEndingChangeNoState) {
         }
         ExpectInvariants();
     }
+}
+
+// The mode is set before the window comes up and the overlay is told it
+// was shown, where it used to be set after both (section 6). The two
+// settles involved end in the same place in either order: coming up into
+// view mode ends everything edit mode left up, and coming up into edit
+// mode keeps it.
+TEST_F(OverlayStatesTest, TheModeBeforeTheShowingEndsWhereTheShowingBeforeTheModeDid) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    Drag(350.0f, 400.0f, 650.0f, 400.0f);  // something in it, so it stays
+    ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::CheatSheet}));
+    StepFrame();
+    ASSERT_EQ(App().InputStack(), "Canvas / DrawingMode / CheatSheet / - / - / -");
+    ShowEditMode();  // put away
+    StepFrame();
+    ASSERT_EQ(Observed(), State::Hidden);
+
+    ShowViewMode();  // up into view mode
+    StepFrame();
+
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
+    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().IsCheatSheetOpen());
+
+    ShowViewMode();  // put away, and up into edit mode: nothing is left to end
+    StepFrame();
+    ShowEditMode();
+    StepFrame();
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
 }
 
 // Any order of requests keeps section 3's invariants - the way the input

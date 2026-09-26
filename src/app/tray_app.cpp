@@ -1,5 +1,6 @@
 #include "app/tray_app.h"
 
+#include <cassert>
 #include <cstdint>
 #include <ctime>
 #include <iterator>
@@ -124,9 +125,9 @@ bool TrayController::Initialize() {
     overlayApp_.SetHotkeyChangeCallback([this](HotkeySlot slot, platform::KeyCombo combo) {
         return ChangeHotkey(slot, combo);
     });
-    overlayApp_.SetRestartOverlayCallback([this] { RestartOverlay(); });
+    overlayApp_.SetRestartOverlayCallback([this] { Request(OverlayRequest::Restart); });
     overlayApp_.SetDisplayListCallback([this] { return host_.ListDisplays(); });
-    overlayApp_.SetNoticeFinishedCallback([this] { HideNoticeIfDone(); });
+    overlayApp_.SetNoticeFinishedCallback([this] { Request(OverlayRequest::NoticeFaded); });
     overlayApp_.SetAppCommandCallback([this](CommandId id) { RunAppCommand(id); });
 
     // Empty path means "this host has nowhere to persist to" (e.g. a
@@ -166,21 +167,21 @@ bool TrayController::Initialize() {
         // ever be visible.
     }
 
+    // A first run shows the overlay rather than waiting to be summoned.
+    // Every other start is a deliberate hotkey press, but on a first run
+    // nobody knows the hotkey yet - an app that installs a tray icon and
+    // then sits there invisibly, waiting for a chord it never mentioned, is
+    // indistinguishable from one that didn't start. Edit mode specifically,
+    // not view-only: the note explains how to interact, so interaction has
+    // to be possible. Any other start is Away: pinned snippets are on
+    // screen whenever the overlay is away, and having just started is one
+    // of those times.
     if (freshInstall) {
-        // Show ourselves rather than waiting to be summoned. Every other
-        // start is a deliberate hotkey press, but on a first run nobody
-        // knows the hotkey yet - an app that installs a tray icon and then
-        // sits there invisibly, waiting for a chord it never mentioned, is
-        // indistinguishable from one that didn't start. Edit mode
-        // specifically, not view-only: the note explains how to interact,
-        // so interaction has to be possible.
         overlayApp_.RequestWelcomeNote();
-        EnsureMode(/*viewOnly=*/false);
-    } else {
-        // Pinned snippets are on screen whenever the overlay is away, and
-        // having just started is one of those times.
-        ShowPinnedView();
     }
+    OverlayFacts facts = Facts();
+    facts.firstRun = freshInstall;
+    Apply(Next(state_, OverlayRequest::Start, facts));
 
     return true;
 }
@@ -198,10 +199,10 @@ void TrayController::OnHotkey(HotkeySlot slot) {
 void TrayController::RunAppCommand(CommandId id) {
     switch (id) {
         case CommandId::ToggleEditMode:
-            ToggleMode(/*viewOnly=*/false);
+            Request(OverlayRequest::Edit);
             return;
         case CommandId::ToggleViewMode:
-            ToggleMode(/*viewOnly=*/true);
+            Request(OverlayRequest::View);
             return;
         case CommandId::QuickCapture:
             QuickCaptureAndShow();
@@ -225,174 +226,182 @@ void TrayController::QuickCaptureAndShow() {
     }
     overlayApp_.QuickCapture(static_cast<float>(overlayDisplay_.width), static_cast<float>(overlayDisplay_.height));
     // So the user actually notices the capture happened - always lands in
-    // edit mode (never toggles it off, unlike the edit hotkey itself).
-    // Hardcoded for now; could become configurable later if silent
-    // capture is wanted sometimes too.
-    EnsureMode(/*viewOnly=*/false);
+    // edit mode (never puts it away, unlike the edit hotkey itself).
+    Request(OverlayRequest::QuickCapture);
 }
 
 void TrayController::SilentCapture() {
-    platform::IOverlayWindow& window = host_.GetOverlayWindow();
     // Same first step as the loud capture: create the window if it has
     // never been created, without showing it, so the capture below is of
     // whatever was on screen and never of us.
     if (!PrepareWindow()) {
         return;
     }
-    const bool wasVisible = window.IsVisible();
     // The capture goes onto a canvas of its own as always, but in the
     // pinned view the overlay stays on the canvas it was showing: that
     // canvas's pinned snippets are what is on screen, and switching to the
     // new one - which has none - would take them away in the middle of
     // whatever they were pinned for.
-    const std::optional<CanvasId> stayOn = overlayApp_.IsPinnedOnly()
+    const std::optional<CanvasId> stayOn = state_ == OverlayState::Pinned
                                                ? std::optional<CanvasId>(session_.Manager().CurrentCanvasId())
                                                : std::nullopt;
     overlayApp_.QuickCapture(static_cast<float>(overlayDisplay_.width), static_cast<float>(overlayDisplay_.height));
     if (stayOn.has_value()) {
         session_.SwitchToCanvas(*stayOn);
     }
-    if (wasVisible) {
-        // Already on screen, in either mode: the message lands in the next
-        // frame it was going to draw anyway, and nothing about the mode or
-        // the window changes. Notably this is the view-only case, where
-        // saying so costs nothing at all.
-        return;
-    }
-    // Hidden, and staying hidden unless a notice goes up for two seconds.
-    // The capture is in the library already, written with the command that
-    // made it (see Session::CreateItem).
-    if (!settings_.Stored().showToastsWhileHidden) {
-        // Nothing will ever draw it, so drop it rather than leave it
-        // queued for whenever the overlay next comes up - see
+    // Already on screen, in any state: the message lands in the next frame
+    // it was going to draw anyway, and nothing about the state changes -
+    // notably in view mode, where saying so costs nothing at all. Hidden,
+    // it stays hidden unless a notice goes up for two seconds. The capture
+    // is in the library already, written with the command that made it
+    // (see Session::CreateItem).
+    const OverlayTransition transition = Next(state_, OverlayRequest::SilentCapture, Facts());
+    if (state_ == OverlayState::Hidden && transition.route == Route::Stay) {
+        // Nothing will ever draw the message, so drop it rather than leave
+        // it queued for whenever the overlay next comes up - see
         // DismissActionToast.
         overlayApp_.DismissActionToast();
         return;
     }
-    ShowNotice();
+    Apply(transition);
 }
 
-void TrayController::ShowNotice() {
-    platform::IOverlayWindow& window = host_.GetOverlayWindow();
-    if (window.IsVisible()) {
+// ================= The overlay's states =================
+//
+// docs/OVERLAY_STATES.md. Next is the table; this is the rest.
+
+void TrayController::Request(OverlayRequest request) { Apply(Next(state_, request, Facts())); }
+
+OverlayFacts TrayController::Facts() const {
+    OverlayFacts facts;
+    facts.pinnedHere = session_.Manager().CurrentCanvasHasPinnedItems();
+    facts.messagesWhileHidden = settings_.Stored().showToastsWhileHidden;
+    facts.viewHasSession = sessionApp_.has_value();
+    return facts;
+}
+
+namespace {
+OverlayMode ModeFor(OverlayState state) {
+    switch (state) {
+        case OverlayState::Pinned:
+            return OverlayMode::Pinned;
+        case OverlayState::Notice:
+            return OverlayMode::Notice;
+        case OverlayState::View:
+            return OverlayMode::View;
+        case OverlayState::Hidden:
+        case OverlayState::Edit:
+            break;
+    }
+    return OverlayMode::Edit;
+}
+
+bool IsSessionState(OverlayState state) { return state == OverlayState::View || state == OverlayState::Edit; }
+}  // namespace
+
+void TrayController::Apply(const OverlayTransition& transition) {
+    if (transition.route == Route::Stay) {
         return;
     }
-    if (!PrepareWindow()) {
+    const OverlayState from = state_;
+    const OverlayState to = transition.to;
+    const bool comingUp = transition.route == Route::Up || transition.route == Route::ThroughHidden;
+
+    // 1. Settle. Put away, what the hand holds is finished where it stands,
+    // and so written - see SettleForPersistence; the same for a restart,
+    // which ends the showing it is part of. Edit to View settles through
+    // the mode, in step 5.
+    const bool away = to == OverlayState::Hidden || to == OverlayState::Pinned;
+    if ((IsSessionState(from) && away) || transition.restart) {
+        overlayApp_.SettleForPersistence();
+    }
+    // 2. The frozen screen belongs to the edit mode it was taken for -
+    // including one entered again, which takes it again.
+    if (from == OverlayState::Edit) {
+        session_.ReleaseFrozenScreen();
+    }
+    // 3. The session ends: what it came up over is forgotten.
+    if (transition.endsSession) {
+        sessionApp_.reset();
+    }
+    // Through hidden: down first, then up as from Hidden.
+    if (transition.route == Route::ThroughHidden) {
+        host_.GetOverlayWindow().Hide();
+    }
+    // 4. The display, and the window, when coming up. A window that cannot
+    // be made leaves the overlay hidden.
+    if (comingUp && !PrepareWindow()) {
+        state_ = OverlayState::Hidden;
+        sessionApp_.reset();
+        CheckInvariants();
         return;
     }
-    overlayApp_.SetViewOnly(true);
-    overlayApp_.SetNoticeOnly(true);
-    // Click-through, and without taking focus: showing a window activates
-    // it on Windows, so a plain Show would take focus from whatever the
-    // user is typing in. Hence ShowClickThrough - which also keeps the
-    // order a notice has to be shown in (see there) - and no focus handoff
-    // is needed afterwards, since the focus never moved.
-    //
-    // No ApplyProfileForCurrentApplication either: a notice is not a
-    // session with the application underneath, it draws one message and
-    // leaves, so there is nothing for a profile's input settings to apply
-    // to - and swapping them would tear input hooks up and down for it.
-    window.ShowClickThrough();
-    profileAppliedThisShowing_ = false;
-}
-
-void TrayController::HideNoticeIfDone() {
-    if (!overlayApp_.IsNoticeOnly()) {
-        return;  // a real mode took over while the message was up
+    // 5. The mode. Hidden keeps the last one - except that a notice going
+    // down is over, and leaves the plain view-only mode it was a kind of.
+    if (to != OverlayState::Hidden) {
+        overlayApp_.SetMode(ModeFor(to));
+    } else if (from == OverlayState::Notice) {
+        overlayApp_.SetMode(OverlayMode::View);
     }
-    overlayApp_.SetNoticeOnly(false);
-    // Called from inside OverlayApp::OnFrame, which is inside the frame
-    // callback: safe, because the renderer ends the ImGui frame after that
-    // callback returns whether or not the window is still visible.
-    host_.GetOverlayWindow().Hide();
-}
-
-void TrayController::ToggleMode(bool viewOnly) {
-    platform::IOverlayWindow& window = host_.GetOverlayWindow();
-
-    // Already showing in exactly the requested mode - that mode's own
-    // hotkey puts it away, per the state table in the header.
-    //
-    // A notice does not count as being in view-only mode for this, though
-    // it is one underneath (see OverlayApp::SetNoticeOnly): pressing the
-    // view hotkey while a message happens to be up asks for view mode, and
-    // getting the overlay hidden instead - because a two-second window the
-    // user never asked for was on screen - would be nonsense. The pinned
-    // view doesn't count either: it is the overlay put away already.
-    if (window.IsVisible() && !overlayApp_.IsNoticeOnly() && !overlayApp_.IsPinnedOnly() &&
-        overlayApp_.IsViewOnly() == viewOnly) {
-        PutAway();
-        return;
+    // 6. The session starts: what is underneath is asked before the window
+    // comes up to be the answer, and the profile that matches decides how
+    // it comes up. A restart keeps what its session came up over.
+    if (transition.startsSession || transition.restart) {
+        ApplyProfileForCurrentApplication(/*keepPrevious=*/transition.restart);
     }
-    EnsureMode(viewOnly);
-}
-
-void TrayController::EnsureMode(bool viewOnly, bool keepProfileContext) {
-    platform::IOverlayWindow& window = host_.GetOverlayWindow();
-    // Whatever brought us here supersedes a notice that happens to be up -
-    // otherwise its own "the message has faded" would hide the overlay a
-    // moment after someone deliberately opened it. Cleared before Show
-    // below, so the frames this mode draws are never notice frames.
-    overlayApp_.SetNoticeOnly(false);
-    // The pinned view already is view-only and click-through, and has only
-    // to start drawing the rest of the canvas to be the view mode.
-    if (overlayApp_.IsPinnedOnly()) {
-        overlayApp_.SetPinnedOnly(false);
-    }
-    // Edit mode runs under the profile for what is underneath - its input
-    // options, its freeze, the focus decision over an elevated application
-    // - and those are settled as the window comes up from hidden. A window
-    // that came up without one - a notice, the pinned view, or the view
-    // mode either was switched to in place - is taken down and brought up
-    // again, as from hidden, rather than switched in place. Switched in
-    // place, edit mode ran on whatever the showing before had left.
-    if (!viewOnly && window.IsVisible() && !profileAppliedThisShowing_) {
-        window.Hide();
-    }
-    if (!window.IsVisible()) {
-        if (!PrepareWindow()) {
-            return;
-        }
-        ApplyProfileForCurrentApplication(keepProfileContext);
-        profileAppliedThisShowing_ = true;
-        window.Show();
-        // Only on the branch that actually brought it back from hidden - the
-        // other one is already on screen and has lost nothing. See
-        // OverlayApp::OnOverlayShown.
+    // 7. The window.
+    PresentWindow(transition);
+    state_ = to;
+    // 8. Anything the overlay remembers about state the OS owns is stale
+    // once it has been away - see OnOverlayShown.
+    if (comingUp && IsSessionState(to)) {
         overlayApp_.OnOverlayShown();
     }
-    // Otherwise already visible in the *other* mode (or already the
-    // requested one) - switch/stay in place, no hide/reshow (avoids the
-    // flicker and refocus that would cause).
-    overlayApp_.SetViewOnly(viewOnly);
-    window.SetInputPassthrough(viewOnly);
-    // After SetViewOnly, which decides whether freezing applies at all, and
-    // after Show, so the capture leaves out the overlay as it is going to
-    // be (see CaptureScreen). The still picture edit mode shows instead of the live application -
-    // see AppConfig::freezeScreenInEditMode. Re-captured on every entry, so
-    // it is never stale; never in view-only mode, which is click-through
-    // and has to show what is really underneath.
-    session_.ReleaseFrozenScreen();
-    if (settings_.Live().freezeScreen && !viewOnly) {
+    // 9. The still picture edit mode shows instead of the live application
+    // - see AppConfig::freezeScreenInEditMode. After the window is up, so
+    // the capture leaves out the overlay as it is going to be (see
+    // CaptureScreen), and taken on every entry, so it is never stale.
+    if (to == OverlayState::Edit && settings_.Live().freezeScreen) {
         session_.FreezeScreen(overlayDisplay_);
     }
+    CheckInvariants();
 }
 
-void TrayController::PutAway() {
-    // What was being typed or drawn is finished where it stands, and so
-    // written - see SettleForPersistence.
-    overlayApp_.SettleForPersistence();
-    session_.ReleaseFrozenScreen();
-    if (overlayApp_.IsViewOnly() && session_.Manager().CurrentCanvasHasPinnedItems()) {
-        // Already click-through and unfocused: only what is drawn changes.
-        // It is the pinned view from here on, which carries no profile -
-        // edit mode from it comes up afresh, for what is underneath then.
-        overlayApp_.SetPinnedOnly(true);
-        profileAppliedThisShowing_ = false;
+void TrayController::PresentWindow(const OverlayTransition& transition) {
+    platform::IOverlayWindow& window = host_.GetOverlayWindow();
+    const OverlayState to = transition.to;
+    if (to == OverlayState::Hidden) {
+        window.Hide();
         return;
     }
-    host_.GetOverlayWindow().Hide();
-    ShowPinnedView();
+    const bool session = IsSessionState(to);
+    if (transition.route == Route::InPlace) {
+        // The pinned view, from view mode, is already click-through and
+        // unfocused: only what is drawn changes.
+        if (session) {
+            window.SetInputPassthrough(to == OverlayState::View);
+        }
+        return;
+    }
+    if (!session) {
+        // The pinned view and a notice are only there to be looked at:
+        // click-through from the first moment, and never focused - see
+        // IOverlayWindow::ShowClickThrough.
+        window.ShowClickThrough();
+        return;
+    }
+    window.Show();
+    window.SetInputPassthrough(to == OverlayState::View);
+}
+
+void TrayController::CheckInvariants() const {
+#ifndef NDEBUG
+    const bool up = state_ != OverlayState::Hidden;
+    assert(host_.GetOverlayWindow().IsVisible() == up && "the window is visible exactly when the overlay is up");
+    assert((!sessionApp_.has_value() || IsSessionState(state_)) && "a session only in view or edit mode");
+    assert((state_ != OverlayState::Edit || sessionApp_.has_value()) && "edit mode is always a session");
+    assert((!up || overlayApp_.Mode() == ModeFor(state_)) && "the overlay's mode is the state");
+#endif
 }
 
 namespace {
@@ -411,7 +420,9 @@ void TrayController::SettleForExit() {
     if (configWriteOwed_) {
         PersistConfig();  // owed since a settings edit; the last chance for it
     }
-}void TrayController::OnSessionEnding() { SettleForExit(); }
+}
+
+void TrayController::OnSessionEnding() { SettleForExit(); }
 
 void TrayController::OnBackgroundTimer() {
     if (configWriteOwed_) {
@@ -420,23 +431,6 @@ void TrayController::OnBackgroundTimer() {
     if (!configWriteOwed_) {
         host_.SetBackgroundTimer(0, nullptr);
     }
-}
-
-bool TrayController::ShowPinnedView() {
-    platform::IOverlayWindow& window = host_.GetOverlayWindow();
-    if (window.IsVisible() || !session_.Manager().CurrentCanvasHasPinnedItems()) {
-        return false;
-    }
-    if (!PrepareWindow()) {
-        return false;
-    }
-    overlayApp_.SetNoticeOnly(false);
-    overlayApp_.SetViewOnly(true);
-    overlayApp_.SetPinnedOnly(true);
-    // Click-through and without taking focus, as a notice is shown.
-    window.ShowClickThrough();
-    profileAppliedThisShowing_ = false;
-    return true;
 }
 
 platform::DisplayInfo TrayController::OverlayDisplay() const {
@@ -474,9 +468,8 @@ void TrayController::MoveOverlayTo(const platform::DisplayInfo& display) {
     platform::IOverlayWindow& window = host_.GetOverlayWindow();
     overlayDisplay_ = display;
     window.MoveToDisplay(display);
-    // The same conditions EnsureMode freezes under.
-    if (window.IsVisible() && !overlayApp_.IsNoticeOnly() && !overlayApp_.IsViewOnly() &&
-        settings_.Live().freezeScreen) {
+    // The same conditions a transition freezes under.
+    if (state_ == OverlayState::Edit && settings_.Live().freezeScreen) {
         session_.FreezeScreen(display);
     }
 }
@@ -522,22 +515,6 @@ void TrayController::ApplyProfileForCurrentApplication(bool keepPrevious) {
     window.SetEditModeInput(liveEditModeInput_);
 }
 
-void TrayController::RestartOverlay() {
-    platform::IOverlayWindow& window = host_.GetOverlayWindow();
-    if (!window.IsVisible()) {
-        return;
-    }
-    // Same teardown a deliberate hide does - the frozen image belongs to
-    // the session being ended, and what the hand is doing ends with it.
-    const bool viewOnly = overlayApp_.IsViewOnly();
-    overlayApp_.SettleForPersistence();
-    session_.ReleaseFrozenScreen();
-    window.Hide();
-    // The one show that isn't one: same session, same profile, and
-    // deliberately no second look at what is underneath - see sessionApp_.
-    EnsureMode(viewOnly, /*keepProfileContext=*/true);
-}
-
 void TrayController::OnSettingsChanged() {
     // The two runtime side effects, gated on an actual change so toggling
     // some unrelated setting doesn't re-poke the window or tear the input
@@ -557,7 +534,7 @@ void TrayController::OnSettingsChanged() {
     // overlay is always up when that happens, since its own Settings panel is
     // where the choice is made. For every other setting the display this
     // resolves to is the one the overlay is already on, and nothing moves.
-    if (window.IsVisible()) {
+    if (state_ != OverlayState::Hidden) {
         MoveOverlayTo(OverlayDisplay());
     }
     PersistConfig();

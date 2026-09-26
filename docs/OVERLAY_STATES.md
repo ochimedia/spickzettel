@@ -206,7 +206,7 @@ One procedure for every cell. Where today does the same work, it is in
 the same order unless said otherwise.
 
 1. **Settle.**
-   - Leaving a session for Away, or for a restart: the Hidden lifecycle
+   - Leaving View or Edit for Away, or for a restart: the Hidden lifecycle
      event and the Hand scope, and the untouched drawing settled
      (`SettleForPersistence`). Away is Pinned as well as Hidden, and
      entering Pinned or a Notice offers nothing more (**Change**, C6).
@@ -219,13 +219,16 @@ the same order unless said otherwise.
    **Change**, in bookkeeping only: today `sessionApp_` is kept until the
    next show replaces it, and nothing reads it in between.
 4. **Choose the display, and make sure the window exists**, when coming
-   up from Hidden. If the window cannot be made, the transition stops
-   here and the state stays Hidden. Only coming up can fail, since a
+   up from Hidden. Through hidden, the window goes down first, and comes
+   up from here as from Hidden. If the window cannot be made, the
+   transition stops here and the state is Hidden. Only coming up can fail, since a
    window that is up already exists.
 5. **Tell the overlay its mode** (`OverlayApp::SetMode`): what it draws,
    and which lifecycle event the input machine is offered - ViewOnly on
    entering View, EditMode on entering Edit, and nothing on entering
-   Pinned or a Notice (C6).
+   Pinned or a Notice (C6). Down, the mode stays as it was, except that a
+   notice going down leaves plain View, as today: a notice's mode is what
+   reports its fade.
 6. **Start the session**, when entering View or Edit from a state without
    one:
    - ask what is underneath, and match a profile;

@@ -143,7 +143,7 @@ void OverlayApp::OnInput(const platform::InputEvent& event) {
     // Real OS-level click-through (see IOverlayWindow::SetInputPassthrough)
     // means view-only mode receives no input on Windows; guarded here too so
     // it is read-only on every backend, not just the real one.
-    if (viewOnly_) {
+    if (IsViewOnly()) {
         return;
     }
     editor_.SetHeld(event.modifiers);
