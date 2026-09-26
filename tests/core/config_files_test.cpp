@@ -142,6 +142,9 @@ TEST(ConfigFilesTest, TheDefaultsAreWrittenAsTheyAlwaysHaveBeen) {
 TEST(ConfigFilesTest, EverySettingChangedIsWrittenAsItAlwaysHasBeen) {
     ExpectWrittenAs("current-everything.json", Everything());
     EXPECT_EQ(ParseConfig(ReadFixture("current-everything.json")), Everything());
+    // Nothing to migrate or repair in what this build writes, or every
+    // start would write it back.
+    EXPECT_FALSE(TryParseConfig(ReadFixture("current-everything.json"))->changed);
 }
 
 TEST(ConfigFilesTest, TheFileTheFirstReleaseWroteReadsAsTheDefaults) {

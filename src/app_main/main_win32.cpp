@@ -20,6 +20,8 @@ namespace {
 // they are defaults standing in for a file that could not be read, a word
 // about it before anything else comes up: settings that silently went back
 // to the defaults are the kind of thing nobody connects to a stray comma.
+// The same for a file a newer build wrote, whose changes this run will not
+// save.
 sz::core::LoadedConfig LoadConfig(const std::filesystem::path& path) {
     std::string stamp = sz::core::TimestampName();
     for (char& c : stamp) {
@@ -28,9 +30,12 @@ sz::core::LoadedConfig LoadConfig(const std::filesystem::path& path) {
         }
     }
     sz::core::LoadedConfig loaded = sz::core::LoadOrCreateConfig(path, stamp);
-    if (loaded.source == sz::core::ConfigSource::SetAside || loaded.source == sz::core::ConfigSource::Unreadable) {
+    if (loaded.source == sz::core::ConfigSource::SetAside || loaded.source == sz::core::ConfigSource::Unreadable ||
+        loaded.source == sz::core::ConfigSource::Newer) {
         char body[1024];
-        if (!loaded.setAsideAs.empty()) {
+        if (loaded.source == sz::core::ConfigSource::Newer) {
+            std::snprintf(body, sizeof(body), sz::strings::kStartupConfigNewer, path.string().c_str());
+        } else if (!loaded.setAsideAs.empty()) {
             std::snprintf(body, sizeof(body), sz::strings::kStartupConfigSetAside, path.string().c_str(),
                           loaded.setAsideAs.filename().string().c_str());
         } else {
@@ -90,7 +95,11 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     }
 
     sz::app::TrayController trayController(*host, config.config);
-    if (config.source == sz::core::ConfigSource::SetAside || config.source == sz::core::ConfigSource::Unreadable) {
+    // Kept, and the retention period skipped, for a file that could not be
+    // read and for one a newer build wrote: whether retention is on, and
+    // for how long, is what this build cannot be sure it read.
+    if (config.source == sz::core::ConfigSource::SetAside || config.source == sz::core::ConfigSource::Unreadable ||
+        config.source == sz::core::ConfigSource::Newer) {
         trayController.StartOnStandInSettings(/*keepFile=*/config.setAsideAs.empty());
     }
     if (config.writeBack) {

@@ -8,6 +8,7 @@ add_library(sz_core STATIC
     canvas/item_geometry.cpp
     config/app_config.cpp
     config/bar_layout.cpp
+    config/config_migrations.cpp
     config/display_choice.cpp
     config/profile.cpp
     config/shortcut_action.cpp

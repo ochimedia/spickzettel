@@ -1,6 +1,6 @@
 # Settings
 
-Status: **agreed** (2026-09-26); nothing here is built yet.
+Status: **agreed** (2026-09-26); phases 1 to 3 of section 12 are built.
 Every behavior below is either what the app does today (unmarked, or
 said so) or a change (marked **Change**). "Today" means the app as of
 `654fff5`. The questions it was reviewed with, and their answers, are in section 13.
@@ -689,7 +689,16 @@ throughout, and the file's text does not change until a phase says so.
    as 75, the bottom of the band, not as "auto": the file spells that
    `"auto"`, and 0 is only how the setting holds it. Kept as it was.
 3. **The version (C10, C11), the repairs in one place, and writing them
-   back (C4).** The hotkey repair moves out of `Initialize`.
+   back (C4)** (done). The hotkey repair moves out of `Initialize`.
+
+   *Found while building it:* a `version` that cannot be one (a string,
+   a fraction, 0 or below) reads as 1, as a missing one does. A newer
+   file still has the load repairs applied, since this build has to run
+   on it, and is not written back all the same. The loader does not
+   write a repaired file itself: the tray does, as it starts, so that a
+   write that fails is said and retried like any other. With no step yet,
+   a migrated file cannot be tested through the reader; the chain is
+   tested with steps of its own.
 4. **One edit path (C5, C6, C3, C7).** `Settings::Set`, `Preview` and
    `Commit`; the bound widgets; the HUD's rows; hotkeys through `Set`.
    C7 starts with the test that shows the lost drag.

@@ -9,6 +9,7 @@ add_executable(sz_core_tests
     core/app_config_test.cpp
     core/atomic_file_test.cpp
     core/config_files_test.cpp
+    core/config_migrations_test.cpp
     core/canvas_manager_test.cpp
     core/canvas_state_test.cpp
     core/display_choice_test.cpp

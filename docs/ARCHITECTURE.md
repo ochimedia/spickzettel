@@ -890,6 +890,26 @@ then the file said one thing and the app did another. A value held to
 its rule is not a repair: out of range or missing, it reads the same at
 every start, and the next settings change writes it anyway.
 
+The file's version is read (`config_migrations.h`). An older file is
+brought up to this build's version before anything in it is read, by a
+chain of steps that each take version n to n+1, and is then written back
+at start like a repair. A chain rather than a conversion from each old
+version straight to the current one: those would all be rewritten at
+every new version, against shapes nobody had looked at in a while, where
+a step is written once, between two shapes that are both fresh. A step
+works on the JSON with its keys spelled out and calls nothing of the
+current build's, which changes under it; and once a build writing its
+target version is out, it is never edited. Adding or dropping a key is
+not a version, since an absent key reads as its default and an unknown
+one is ignored. A file a newer build wrote is read as well as this build
+can, and not written over for the run: the first settings change used to
+write it over and lose whatever the newer build had stored. It is the
+arrangement a file that cannot be read already had, message and skipped
+retention period included - a newer build may have moved the retention
+keys, and read as defaults they turn a 14-day purge back on. Refusing to
+start, as for a newer library, would have cost the whole app over
+settings, which unlike a library can be read in part.
+
 The files a release wrote are kept as test fixtures
 (`tests/core/config_files/`): `v0.1.0`'s with the defaults and with every
 setting it had changed, produced by that release's own serializer. Each

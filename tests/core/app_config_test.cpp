@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -10,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include "core/canvas/item.h"  // kNoteTextSizeMax
+#include "core/config/config_migrations.h"
 
 namespace sz::core {
 namespace {
@@ -647,6 +649,27 @@ TEST(AppConfigTest, CreationTriggersDefaultParseAndNeverCoincide) {
     EXPECT_EQ(bothOff.drawingTrigger, CreationTrigger::Off);
 }
 
+// The version is what the file says; anything that cannot be a version is
+// read as 1, what every build so far has written. A file from a newer build
+// is read as well as this one can, and is not a repair.
+TEST(AppConfigTest, TheVersionIsReadAndIsOneWhenTheFileSaysNothingUsable) {
+    const auto version = [](const std::string& text) { return TryParseConfig(text)->version; };
+    EXPECT_EQ(version("{}"), 1);
+    EXPECT_EQ(version(R"({"version": 1})"), 1);
+    EXPECT_EQ(version(R"({"version": 7})"), 7);
+    EXPECT_EQ(version(R"({"version": 18446744073709551615})"), std::numeric_limits<int>::max());
+    for (const char* unusable : {R"("2")", "-3", "0", "2.5", "null", "[2]"}) {
+        SCOPED_TRACE(unusable);
+        EXPECT_EQ(version(std::string(R"({"version": )") + unusable + "}"), 1);
+    }
+
+    const std::optional<ParsedConfig> newer =
+        TryParseConfig(R"({"version": 99, "drawing": {"strokeWidth": 9, "somethingNewer": true}})");
+    ASSERT_TRUE(newer);
+    EXPECT_FLOAT_EQ(newer->config.strokeWidth, 9.0f);
+    EXPECT_FALSE(newer->changed);
+}
+
 // One combination cannot summon two things: a file that gives it to two
 // hotkeys has the later one unbound as it is read, and the earlier keeps
 // it. Two unbound hotkeys share nothing.
@@ -823,6 +846,23 @@ TEST_F(WriteConfigFileTest, AFileReadingRepairedIsToBeWrittenBack) {
     EXPECT_TRUE(loaded.writeBack);
     EXPECT_FALSE(loaded.config.hotkeyViewMode.IsValid());
     EXPECT_EQ(ReadFile(dir_ / "config.json"), clash);
+}
+
+// A file a newer build wrote is read as well as this build can, and left as
+// it is - not written back even where reading repaired it, since the newer
+// build may have stored more than this one can see.
+TEST_F(WriteConfigFileTest, AFileANewerBuildWroteIsReadAndNotToBeWrittenBack) {
+    std::filesystem::create_directories(dir_);
+    const std::string newer = R"({"version": )" + std::to_string(kConfigVersion + 1) +
+                              R"(, "drawing": {"strokeWidth": 9}, "hotkeys": {"editMode": "Ctrl+Alt+V"}})";
+    std::ofstream(dir_ / "config.json", std::ios::binary) << newer;
+
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
+    EXPECT_EQ(loaded.source, ConfigSource::Newer);
+    EXPECT_FLOAT_EQ(loaded.config.strokeWidth, 9.0f);
+    EXPECT_FALSE(loaded.config.hotkeyViewMode.IsValid()) << "repaired to run on, all the same";
+    EXPECT_FALSE(loaded.writeBack);
+    EXPECT_EQ(ReadFile(dir_ / "config.json"), newer);
 }
 
 TEST_F(WriteConfigFileTest, WithoutAFileLoadingIsAFirstRunAndWritesTheDefaults) {

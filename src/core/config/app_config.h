@@ -341,13 +341,17 @@ AppConfig DefaultConfig();
 // app on startup. Running out of memory can, as it can anywhere.
 AppConfig ParseConfig(std::string_view text);
 // What reading a settings file gave, and whether reading changed what the
-// file says: a load repair, such as a hotkey unbound for having another's
-// combination (docs/SETTINGS.md, section 5). Holding one value to its rule
-// does not count - a value out of range, a missing key - since the file
-// does not say something the app cannot run with.
+// file says: it was migrated from an older version, or needed a load
+// repair, such as a hotkey unbound for having another's combination
+// (docs/SETTINGS.md, sections 5 and 8). Holding one value to its rule does
+// not count - a value out of range, a missing key - since the file does not
+// say something the app cannot run with.
 struct ParsedConfig {
     AppConfig config;
     bool changed = false;
+    // The version the file said it was, 1 when it said nothing usable - see
+    // kConfigVersion (config_migrations.h).
+    int version = 1;
 };
 // The same as ParseConfig, but nullopt for text that is not a JSON object
 // at all - which a settings file that is only missing some keys never is.
@@ -371,6 +375,8 @@ enum class ConfigSource {
     SetAside,    // not a settings file - not JSON, or past kMaxConfigFileBytes -
                  // renamed out of the way (to setAsideAs, if that worked)
     Unreadable,  // a file that could not be read, left where it is
+    Newer,       // a settings file a newer build wrote, read as well as this
+                 // build can and not to be written over
 };
 struct LoadedConfig {
     AppConfig config;
@@ -392,6 +398,10 @@ struct LoadedConfig {
 // defaults, and the caller says so. See main_win32.cpp. A file set aside is
 // replaced at once by the defaults with retention off (purgeDeleted), so
 // that no later start erases what the unread file may have kept.
+//
+// A file a newer build wrote is read, as well as this build can, and left
+// as it is: written over, it would lose whatever the newer build stored
+// that this one does not know, and saying so is the caller's too.
 LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_view stamp);
 
 // The widest stroke a settings file can ask for, in pixels: past this a

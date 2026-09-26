@@ -7,12 +7,14 @@
 #include <cmath>
 #include <cstdio>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <system_error>
 
 #include <nlohmann/json.hpp>
 
+#include "core/config/config_migrations.h"
 #include "core/config/settings_catalog.h"
 #include "core/util/atomic_file.h"
 
@@ -73,10 +75,17 @@ static_assert(FieldCount<ProfileOverrides>() == kProfileRows,
 static_assert(FieldCount<AppConfig>() == 43, "an AppConfig field added: give it a row in settings_catalog.h, "
                                               "then count it here");
 
-// Bumped when a future version needs to tell an older file's shape from its
-// own. Written by every save, read by nothing yet - the point of having it
-// from the start is that the first migration doesn't have to guess.
-constexpr int kConfigVersion = 1;
+// The version a file says it is. 1 when it says nothing a version can be -
+// missing, which no build wrote but a hand edit can leave, or not a whole
+// number from 1 up - since that is what every build before the first
+// migration wrote.
+int FileVersion(const json& doc) {
+    const auto it = doc.find("version");
+    if (it == doc.end() || !it->is_number_unsigned()) {
+        return 1;
+    }
+    return static_cast<int>(std::clamp<uint64_t>(it->get<uint64_t>(), 1, std::numeric_limits<int>::max()));
+}
 
 std::string Trim(std::string_view s) {
     size_t begin = 0;
@@ -585,9 +594,20 @@ std::optional<ParsedConfig> TryParseConfig(std::string_view text) {
 
     // No exceptions, no callback: a hand-edited or truncated file is a
     // discarded value here.
-    const json doc = json::parse(text, nullptr, /*allow_exceptions=*/false);
+    json doc = json::parse(text, nullptr, /*allow_exceptions=*/false);
     if (!doc.is_object()) {
         return std::nullopt;
+    }
+
+    // Brought up to this build's version before anything is read, so that
+    // the reading below knows one shape only. A newer file is read as it
+    // is: a key a newer build moved, or gave another meaning, is read
+    // wrong or not at all, which is why it is not written over
+    // (ConfigSource::Newer).
+    parsed.version = FileVersion(doc);
+    if (parsed.version < kConfigVersion) {
+        MigrateConfig(doc, parsed.version);
+        parsed.changed = true;
     }
 
     ForEachSetting([&](const auto& row) { ReadRow(doc, row, config); });
@@ -609,7 +629,7 @@ std::optional<ParsedConfig> TryParseConfig(std::string_view text) {
         }
     }
 
-    parsed.changed = RepairOnLoad(config);
+    parsed.changed = RepairOnLoad(config) || parsed.changed;
     return parsed;
 }
 
@@ -668,6 +688,10 @@ LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_v
         text.resize(static_cast<size_t>(in.gcount()));
         if (std::optional<ParsedConfig> parsed = TryParseConfig(text)) {
             loaded.config = std::move(parsed->config);
+            if (parsed->version > kConfigVersion) {
+                loaded.source = ConfigSource::Newer;
+                return loaded;
+            }
             loaded.source = ConfigSource::Read;
             loaded.writeBack = parsed->changed;
             return loaded;
