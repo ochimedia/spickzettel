@@ -12,6 +12,7 @@
 #include "core/canvas/item_geometry.h"
 #include "core/util/timestamp_name.h"
 #include "generated/ui_strings.h"
+#include "ui/interaction/canvas.h"
 #include "ui/interaction/gestures.h"
 #include "ui/ui_scale.h"
 
@@ -101,7 +102,23 @@ public:
     void ClosePopup(PopupKind /*kind*/) override {}
     void CloseInnermostPopup() override {}
     void ClosePanel(PanelKind /*kind*/) override {}
+    void ToolSized(bool /*pen*/) override {}
+    bool InputOptionsKey(const Event& /*event*/) override { return false; }
 };
+
+// Whole wheel notches out of `remainder`, which the caller keeps across
+// events. Returns however many complete notches `wheelDelta` brings the
+// running total to - 3 on a fast spin that lands three at once, 0 partway
+// through a high-resolution wheel's own sub-notch reports - and leaves the
+// sub-notch fraction behind for next time.
+int TakeWheelSteps(float& remainder, float wheelDelta) {
+    remainder += wheelDelta;
+    // Truncation toward zero, not floor: a remainder of -0.4 has to stay
+    // -0.4 rather than becoming a whole step downward it never earned.
+    const float whole = std::trunc(remainder);
+    remainder -= whole;
+    return static_cast<int>(whole);
+}
 }  // namespace
 
 EditorViews& Editor::Views() const {
@@ -114,7 +131,9 @@ Editor::Editor(Settings& settings, Session& session)
       session_(session),
       drawTool_(settings.Stored().strokeColorRGBA, settings.Stored().strokeWidth),
       drawColorRGBA_(settings.Stored().strokeColorRGBA),
-      drawWidth_(settings.Stored().strokeWidth) {}
+      drawWidth_(settings.Stored().strokeWidth) {
+    machine_.SetRoot(std::make_unique<CanvasLevel>());
+}
 
 void Editor::Say(std::string text) {
     if (views_ != nullptr) {
@@ -932,6 +951,75 @@ void Editor::StepSelectionOpacity(int steps, bool background) {
     std::snprintf(text, sizeof(text), background ? strings::kToastBackgroundOpacity : strings::kToastForegroundOpacity,
                   static_cast<int>(std::round(*shown * 100.0f)));
     Say(text);
+}
+
+// What the wheel does is told apart by a modifier, and without one by the
+// mode. It reaches here only with nothing above the canvas that takes it:
+// a panel has its own scroll, a popup its own widgets, and a gesture in
+// flight is on the mouse the wheel is on - a notch mid-stroke would switch
+// the canvas under it, and one mid-drag would be filed inside the drag.
+//
+// Alt held: step between the canvases of the current canvas's own folder
+// - Alt being the modifier that already means "pick up, whatever tool is
+// in hand" for a press. This one deliberately does not yield to an ImGui
+// widget under the pointer, matching an Alt press; everything below does.
+//
+// Ctrl or Shift held: the selection's background or foreground opacity, in
+// either mode - in drawing mode the selection is the snippet being drawn
+// on.
+//
+// Nothing held: in drawing mode, stroke/eraser size, the near-universal
+// convention in drawing tools and the one tool "option" reached for
+// *during* work rather than while configuring - which is why there is no
+// width slider anywhere. Outside it, the selection's size. The mode is
+// what decides, not whether something happens to be selected: in drawing
+// mode something always is, and the wheel must not start scaling the
+// snippet under the pen.
+void Editor::Wheel(float notches) {
+    if (notches == 0.0f) {
+        return;
+    }
+    if (held_.alt) {
+        // Wheel up goes back through the list, wheel down forward - the
+        // direction a page scrolls, applied to canvases.
+        if (const int steps = TakeWheelSteps(canvasWheelRemainder_, notches); steps != 0) {
+            SwitchCanvasByOffset(-steps);
+        }
+    } else if (PointerOverView()) {
+        // A widget under the pointer has the wheel.
+    } else if (held_.ctrl != held_.shift) {
+        if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
+            StepSelectionOpacity(steps, /*background=*/held_.ctrl);
+        }
+    } else if (held_.ctrl) {
+        // Both held: neither opacity is meant more than the other.
+    } else if (!DrawingItem().has_value()) {
+        if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
+            ScaleSelectionByWheel(steps);
+        }
+    } else if (const int steps = TakeWheelSteps(sizeWheelRemainder_, notches); steps != 0) {
+        // Nothing whole out of the accumulator yet - a high-resolution wheel
+        // mid-notch - is no size change, and nothing to show either.
+        const auto step = static_cast<float>(steps);
+        switch (ActiveTool()) {
+            case Tool::Draw:
+                SetDrawWidth(std::clamp(drawWidth_ + step, 1.0f, 24.0f));
+                // Said even when the value was already at its clamp:
+                // "you're at the maximum" is feedback too, and a wheel step
+                // that showed nothing would read as the wheel not working.
+                Views().ToolSized(/*pen=*/true);
+                break;
+            case Tool::Erase:
+                SetEraserWidth(std::clamp(eraserWidth_ + step * 2.0f, 8.0f, 64.0f));
+                Views().ToolSized(/*pen=*/false);
+                break;
+            case Tool::Text:
+            case Tool::Select:
+            case Tool::NewDrawing:
+            case Tool::NewScreenshot:
+                break;  // none of these has a size of its own - see the Tool enum
+        }
+    }
 }
 
 void Editor::DeleteSelection() {

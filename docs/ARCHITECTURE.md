@@ -1964,10 +1964,13 @@ since the interactions work on the editor; nothing in it knows ImGui.
 Its routing is tested alone, with interactions that do nothing but
 answer (`tests/ui/machine_test.cpp`). A command's scope is ended through
 it before the command runs (`Machine::EndFor`). The Canvas level
-(`OverlayApp::CanvasRoot`) hands a press to the recognizer (see "One
-gesture engine"), a key or a bound mouse button to its command, and the
-wheel to `HandleMouseWheel`, until phase 4 makes the wheel's bursts
-interactions. The machine also keeps which buttons are down, from
+(`CanvasLevel`, `ui/interaction/canvas.*`) hands a press to the
+recognizer (see "One gesture engine"), a key or a bound mouse button to
+its command, and the wheel to `Editor::Wheel`, until phase 4 makes the
+wheel's bursts interactions. The whole machine - every level, the
+recognizer, the commands - is the editor's, with nothing of the view in
+it: what it asks of ImGui goes through `EditorViews`, which a test of the
+machine alone leaves out. The machine also keeps which buttons are down, from
 the presses and releases it is offered: that is what leaves the rest of
 a press Spent, and what the overlay coming up forgets
 (`Machine::Forget`).

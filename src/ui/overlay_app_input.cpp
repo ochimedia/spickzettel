@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "core/canvas/item_geometry.h"
-#include "ui/interaction/recognizer.h"
 
 #include <imgui.h>
 
@@ -130,69 +129,6 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
         place(warningSize, name, body, Px(22.0f), kWarningTextRGBA);
     }
 }
-
-// The Canvas level: a press is what the recognizer says it is (see
-// RecognizePress), and what the Gesture level above does not claim of the
-// rest of a press is nobody's - a hover, or a button the gesture ignores.
-// Keys and the wheel go to the handlers that took them before the
-// machine, until the levels above take them over - see
-// docs/INTERACTIONS.md, "Phase 3, in steps".
-class OverlayApp::CanvasRoot : public Interaction {
-public:
-    explicit CanvasRoot(OverlayApp& app) : app_(app) {}
-    Level level() const override { return Level::Canvas; }
-    const char* Name() const override { return "Canvas"; }
-    Answer Offer(const Event& event, Editor& editor) override {
-        switch (event.kind) {
-            case EventKind::PointerDown:
-                if (event.button == platform::MouseButton::Left || event.button == platform::MouseButton::Right) {
-                    return RecognizePress(event, editor);
-                }
-                // A shortcut the button may be - never while a gesture is in
-                // flight, which the Gesture level above sees to.
-                return Bound(ComboKeyForMouseButton(event.button), event, editor);
-            case EventKind::PointerMove:
-            case EventKind::PointerUp:
-                return Answer::Claim();  // dropped
-            case EventKind::Wheel:
-                app_.HandleMouseWheel(event.wheel);
-                return Answer::Claim();
-            case EventKind::KeyDown:
-                if (app_.HandleInputOptionsHudKey(event)) {
-                    return Answer::Claim();
-                }
-                return Bound(event.key, event, editor);
-            case EventKind::KeyUp:
-            case EventKind::Modifiers:
-            case EventKind::Tick:
-                return Answer::Claim();  // nothing waits on these here
-            case EventKind::Hotkey:
-                return Answer::Start(Command{event.command});
-            case EventKind::Lifecycle:
-                return Answer::Claim();  // the tray still tells the app directly
-        }
-        return Answer::Claim();
-    }
-    // The root is never ended.
-    void Interrupt(Editor& /*editor*/) override {}
-    void Cancel(Editor& /*editor*/) override {}
-
-private:
-    // The command `key` is bound to, started - or nothing, for a key bound
-    // to none. Every level above has passed it, which is what reaching the
-    // command means (docs/INTERACTIONS.md, section 7).
-    static Answer Bound(int key, const Event& event, Editor& editor) {
-        const std::optional<CommandId> id = editor.CommandForKey(key, event.modifiers, event.repeat);
-        if (!id.has_value()) {
-            return Answer::Claim();
-        }
-        return Answer::Start(Command{*id});
-    }
-
-    OverlayApp& app_;
-};
-
-void OverlayApp::InstallCanvasRoot() { editor_.Input().SetRoot(std::make_unique<CanvasRoot>(*this)); }
 
 void OverlayApp::OnHotkey(CommandId command, const platform::KeyCombo& combo) {
     Event event;

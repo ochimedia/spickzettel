@@ -94,22 +94,6 @@ namespace {
 constexpr double kSizePreviewHoldSeconds = 1.1;
 constexpr double kSizePreviewFadeSeconds = 0.35;
 
-// Whole wheel notches out of `remainder`, which the caller keeps across
-// frames (see OverlayApp's own sizeWheelRemainder_/canvasWheelRemainder_
-// for why the leftover has to persist rather than being truncated per
-// frame). Returns however many complete notches `wheelDelta` brings the
-// running total to - 3 on a fast spin that lands three in one frame, 0
-// partway through a high-resolution wheel's own sub-notch reports - and
-// leaves the sub-notch fraction behind for next time.
-int TakeWheelSteps(float& remainder, float wheelDelta) {
-    remainder += wheelDelta;
-    // Truncation toward zero, not floor: a remainder of -0.4 has to stay
-    // -0.4 rather than becoming a whole step downward it never earned.
-    const float whole = std::trunc(remainder);
-    remainder -= whole;
-    return static_cast<int>(whole);
-}
-
 // The style colors that are the accent, from whatever theme::Accent() is
 // now. Separate from ApplySpickzettelStyle because the accent is a setting
 // and these are applied again whenever it changes - see OnFrame.
@@ -943,7 +927,6 @@ void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 OverlayApp::OverlayApp(Settings& settings, Session& session)
     : editor_(settings, session), session_(session), settings_(settings) {
     editor_.SetViews(this);
-    InstallCanvasRoot();
 }
 
 void OverlayApp::AttachTo(platform::IOverlayWindow& window) {
@@ -1044,93 +1027,13 @@ struct OverlayApp::MeshCacheFrame {
     MeshCacheFrame& operator=(const MeshCacheFrame&) = delete;
 };
 
-void OverlayApp::HandleMouseWheel(float notches) {
-    // What the wheel does is told apart by a modifier, and without one by
-    // the mode. All of it is suppressed while the Overview is up: it has
-    // its own canvas navigation and its own scroll, and having the wheel
-    // quietly change something underneath it would be a surprise.
-    //
-    // Alt held: step between the canvases of the current canvas's own
-    // folder - Alt being the modifier that already means "select, whatever
-    // tool is in hand" for a press (see HandleItemGesture). This one
-    // deliberately does not yield to an ImGui widget, matching an Alt
-    // press; everything below does.
-    //
-    // Ctrl or Shift held: the selection's background or foreground
-    // opacity, in either mode - in drawing mode the selection is the
-    // snippet being drawn on.
-    //
-    // Nothing held: in drawing mode, stroke/eraser size, the near-universal
-    // convention in drawing tools and the one tool "option" reached for
-    // *during* work rather than while configuring - which is why there is
-    // no width slider anywhere. Outside it, the selection's size. The mode
-    // is what decides, not whether something happens to be selected: in
-    // drawing mode something always is, and the wheel must not start
-    // scaling the snippet under the pen.
-    //
-    // None of it while a gesture is in flight: the wheel is on the mouse
-    // that is holding the gesture, and input from the gesture's own device
-    // waits for it to end rather than settling it, as a second button's
-    // does (see Hand::ignoredButton) - a notch nudged in the middle of a
-    // stroke would switch the canvas under it, and one mid-drag would be
-    // filed inside the drag, undone to a size the drag then wrote over.
-    if (notches == 0.0f || PanelOpen()) {
-        return;
+void OverlayApp::ToolSized(bool pen) {
+    // Kept as AppConfig::strokeWidth once the preview has faded, so a burst
+    // of notches is one write (see RenderBrushSizePreview).
+    if (pen) {
+        drawWidthDirty_ = true;
     }
-    {
-        const platform::Modifiers& held = editor_.Held();
-        if (held.alt) {
-            // Wheel up goes back through the list, wheel down forward -
-            // the direction a page scrolls, applied to canvases.
-            if (const int steps = TakeWheelSteps(canvasWheelRemainder_, notches); steps != 0) {
-                editor_.SwitchCanvasByOffset(-steps);
-            }
-        } else if (ImGui::GetIO().WantCaptureMouse) {
-            // A widget under the pointer has the wheel.
-        } else if (held.ctrl != held.shift) {
-            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
-                editor_.StepSelectionOpacity(steps, /*background=*/held.ctrl);
-            }
-        } else if (held.ctrl) {
-            // Both held: neither opacity is meant more than the other.
-        } else if (!editor_.DrawingItem().has_value()) {
-            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
-                editor_.ScaleSelectionByWheel(steps);
-            }
-        } else {
-            const int steps = TakeWheelSteps(sizeWheelRemainder_, notches);
-            if (steps == 0) {
-                // Nothing whole came out of the accumulator yet (a
-                // high-resolution wheel mid-notch) - not a size change,
-                // so nothing to show either.
-            } else {
-                const auto step = static_cast<float>(steps);
-                bool sizeChanged = true;
-                switch (editor_.ActiveTool()) {
-                    case Tool::Draw:
-                        editor_.SetDrawWidth(std::clamp(editor_.DrawWidth() + step, 1.0f, 24.0f));
-                        drawWidthDirty_ = true;
-                        break;
-                    case Tool::Erase:
-                        editor_.SetEraserWidth(std::clamp(editor_.EraserWidth() + step * 2.0f, 8.0f, 64.0f));
-                        break;
-                    case Tool::Text:
-                    case Tool::Select:
-                    case Tool::NewDrawing:
-                    case Tool::NewScreenshot:
-                        sizeChanged = false;  // none of these has a size of its own - see the Tool enum
-                        break;
-                }
-                if (sizeChanged) {
-                    // Armed even when the value was already at its clamp:
-                    // "you're at the maximum" is feedback too, and a wheel
-                    // step that showed nothing at all would read as the
-                    // wheel not working.
-                    sizePreviewExpireAtSeconds_ = ImGui::GetTime() + kSizePreviewHoldSeconds;
-                }
-            }
-        }
-    }
+    sizePreviewExpireAtSeconds_ = ImGui::GetTime() + kSizePreviewHoldSeconds;
 }
 
 void OverlayApp::OnFrame(float /*deltaSeconds*/) {
@@ -1833,7 +1736,7 @@ void OverlayApp::UpdateInputOptionsHud() {
     }
 }
 
-// Reaches here as the Canvas level's (see CanvasRoot), so never while text
+// Reaches here as the Canvas level's (see CanvasLevel), so never while text
 // is being typed or a panel or a popup is up: each of those takes every key.
 bool OverlayApp::HandleInputOptionsHudKey(const Event& event) {
     if (!Cfg().showInputOptionsHud || viewOnly_ || event.repeat) {

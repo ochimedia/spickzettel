@@ -120,6 +120,13 @@ public:
     // A panel the machine ended - Escape, the overlay going away: the view
     // puts it away.
     virtual void ClosePanel(PanelKind kind) = 0;
+    // The size of the tool in hand changed by the wheel - the pen's width
+    // or the eraser's: the view shows it for a moment, and keeps the pen's
+    // once it has.
+    virtual void ToolSized(bool pen) = 0;
+    // A key the input options HUD takes, while it is up - a debugging aid
+    // of the view's. False for one it does not.
+    virtual bool InputOptionsKey(const Event& event) = 0;
 };
 
 class Editor {
@@ -437,6 +444,9 @@ public:
     // foreground opacity, kWheelOpacityStep per notch, within the ranges
     // the Properties popover's sliders have. Says the new value.
     void StepSelectionOpacity(int steps, bool background);
+    // The wheel, turned `notches`, as the Canvas level has it - see the
+    // definition for what each modifier makes of it.
+    void Wheel(float notches);
     // Deletes every selected snippet, undoably, as Close does.
     void DeleteSelection();
     // Delete on the snippets: one undoable delete of them all (see
@@ -590,6 +600,20 @@ private:
         platform::Vec2 at;
     };
     std::optional<Click> lastClick_;
+
+    // Leftover fractions of a wheel notch, carried across events so the
+    // wheel honors how far it was actually turned. Two things make this
+    // more than a plain sum: several notches can land in one event on a
+    // fast spin, and a high-resolution wheel or precision touchpad reports
+    // *fractions* of a notch, which truncating would round to nothing and
+    // leave the wheel feeling dead. Separate accumulators per use rather
+    // than one shared: a half-notch left over from sizing a brush must not
+    // count toward a canvas switch. The selection's scale and its two
+    // opacities share one, being one hand on one selection, told apart by a
+    // modifier held for the whole spin.
+    float sizeWheelRemainder_ = 0.0f;
+    float canvasWheelRemainder_ = 0.0f;
+    float selectionWheelRemainder_ = 0.0f;
 
     std::function<void(CommandId)> appCommandCallback_;
     uint64_t commandsRun_ = 0;

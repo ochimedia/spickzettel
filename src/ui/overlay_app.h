@@ -382,6 +382,8 @@ private:
         return panel != nullptr && panel->Kind() == kind;
     }
     void ClosePanel(PanelKind kind) override;
+    void ToolSized(bool pen) override;
+    bool InputOptionsKey(const Event& event) override { return HandleInputOptionsHudKey(event); }
     bool PopupOpen() const override;
     bool PopupShowing(PopupKind kind) const override;
     void ClosePopup(PopupKind kind) override;
@@ -403,9 +405,6 @@ private:
     // SetInputCallback - offered to the editor's machine (see Machine),
     // with the editor told the modifiers, the time and the display first.
     void OnInput(const platform::InputEvent& event);
-    // The machine's Canvas level - see its definition.
-    class CanvasRoot;
-    void InstallCanvasRoot();
     // The overlay shown or put away, view-only mode entered or left: an
     // event every level is offered before the scope it calls for is ended
     // (see SetViewOnly, SettleForPersistence and OnOverlayShown).
@@ -812,10 +811,6 @@ private:
     // themselves, and two rows claiming one key is a state where only one
     // of them can ever fire. Pass a default-constructed combo to unbind.
     void SetToolShortcut(ShortcutAction action, platform::KeyCombo combo);
-    // The wheel, turned `notches`: with Alt it steps between the canvases of
-    // the current canvas's folder, plain it sizes the tool in hand - see
-    // the definition.
-    void HandleMouseWheel(float notches);
     // Cancel/Delete confirmation for a canvas or folder Delete button
     // clicked in the Overview - see confirmDeleteTarget_'s own doc
     // comment for why canvas/folder deletion gets this extra step while
@@ -1342,21 +1337,6 @@ private:
     // the current value throughout rather than a snapshot of the first.
     double sizePreviewExpireAtSeconds_ = 0.0;
 
-    // Leftover fractions of a wheel notch, carried across frames so the
-    // wheel honors how far it was actually turned. Two things make this
-    // more than a plain `+= io.MouseWheel`: several notches can land in a
-    // single frame on a fast spin (taking one step per frame silently
-    // dropped the rest), and a high-resolution wheel or precision touchpad
-    // reports *fractions* of a notch, which truncating per-frame would
-    // round to nothing and leave the wheel feeling dead. Separate
-    // accumulators per gesture rather than one shared: a half-notch left
-    // over from resizing a brush must not count toward a canvas switch.
-    float sizeWheelRemainder_ = 0.0f;
-    float canvasWheelRemainder_ = 0.0f;
-    // For the selection: its scale, and its two opacities. One between the
-    // three, since they are one hand on one selection, told apart by a
-    // modifier held for the whole spin.
-    float selectionWheelRemainder_ = 0.0f;
 
 
     // See RequestWelcomeNote/PlaceWelcomeNotes. Cleared the moment the notes
