@@ -657,19 +657,6 @@ void KeepPopoverInFront() { ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWi
 // BeginPopupStack.Size onward in OpenPopupStack is exactly "still open, but
 // with no Begin call left this frame to reassert it" - reach into
 // imgui_internal.h and do that reassertion here instead.
-// See this function's own doc comment (overlay_app_internal.h). Closing to
-// "one fewer than are open" is ImGui's own way of saying "just the
-// innermost"; restore_focus_to_window_under_popup hands focus back to the
-// panel underneath, which is where it came from.
-bool CloseTopmostPopover() {
-    ImGuiContext& g = *ImGui::GetCurrentContext();
-    if (g.OpenPopupStack.Size == 0) {
-        return false;
-    }
-    ImGui::ClosePopupToLevel(g.OpenPopupStack.Size - 1, true);
-    return true;
-}
-
 void KeepChildPopupsInFront() {
     ImGuiContext& g = *ImGui::GetCurrentContext();
     for (int i = g.BeginPopupStack.Size; i < g.OpenPopupStack.Size; ++i) {

@@ -474,9 +474,20 @@ void OverlayApp::ApplyEffects() {
                 }
                 break;
             }
-            case Effect::Kind::CloseInnermostPopup:
-                CloseTopmostPopover();
+            case Effect::Kind::CloseInnermostPopup: {
+                // A help popover, a dropdown: Escape's, since ImGui closes
+                // its own popups on Escape only with keyboard nav on, which
+                // this app leaves off. From outside any popup's Begin/End,
+                // where ImGui::CloseCurrentPopup does nothing: closing to
+                // one fewer than are open is ImGui's way of saying "just the
+                // innermost", and focus goes back to the panel under it.
+                ImGuiContext& g = *ImGui::GetCurrentContext();
+                if (g.OpenPopupStack.Size > 0) {
+                    ImGui::ClosePopupToLevel(g.OpenPopupStack.Size - 1,
+                                             /*restore_focus_to_window_under_popup=*/true);
+                }
                 break;
+            }
             case Effect::Kind::LetGoOfWidget:
                 ImGui::ClearActiveID();
                 ImGui::ClearDragDrop();

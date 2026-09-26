@@ -289,15 +289,6 @@ void KeepPopoverInFront();
 // (overlay_app.cpp) for how it finds such a popup without knowing its name.
 void KeepChildPopupsInFront();
 
-// Closes the innermost open popup - a help popover, a dropdown - and says
-// whether there was one. For Escape, which otherwise reaches whatever is
-// underneath and closes that instead: ImGui only closes its own popups on
-// Escape when keyboard nav is enabled, which this app doesn't turn on.
-// ImGui::CloseCurrentPopup is the equivalent from *inside* a popup's own
-// Begin/End scope and does nothing outside it, which is exactly where this
-// has to be called from.
-bool CloseTopmostPopover();
-
 // Which stroke renderer to use - StrokeRenderMode, from
 // core/drawing/stroke_render_mode.h, so the config setting and the drawing
 // code name the same thing. An enum rather than a bool from the start,
