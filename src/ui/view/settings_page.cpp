@@ -621,8 +621,7 @@ void SettingsPage::RenderBarButtonRow(const char* id, const char* label, const G
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.4f);
         }
         // Both kinds of tile wear the same pill, lit or not - the color
-        // one through PillSwatchButton rather than the chooser's own
-        // PillColorButton, which has no pill to light.
+        // one through PillSwatchButton, a swatch where the icon would be.
         const bool pressed = entry.button == ChromeButton::Color
                                   ? PillSwatchButton(tileId, editor_.DrawColorRGBA(), entry.shown)
                                   : PillIconButton(tileId, BarButtonIcon(entry.button), entry.shown);

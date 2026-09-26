@@ -288,7 +288,6 @@ void Win32InputGrab::Refresh() {
     const bool virtualCursorDriving = WantPointerGrab() && overlay_ != nullptr;
     // The hot-path mirrors, written here and nowhere else - see their
     // declarations for why the hook reads these rather than the options.
-    pointerGrabbing_.store(virtualCursorDriving, std::memory_order_relaxed);
     const bool countering = WantCancellation() && overlay_ != nullptr;
     countering_.store(countering, std::memory_order_relaxed);
     const EditModeInputOptions options = OptionsSnapshot();

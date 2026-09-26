@@ -2,8 +2,6 @@
 
 #include <utility>
 
-#include "core/drawing/stroke_clip.h"
-
 namespace sz::core {
 
 void CanvasState::BeginStroke(StrokePoint point, uint32_t colorRGBA, float width) {
@@ -47,38 +45,6 @@ void CanvasState::EndStroke() {
 void CanvasState::Clear() {
     strokes_.clear();
     active_.reset();
-}
-
-void CanvasState::EraseNear(StrokePoint point, float radius) {
-    std::vector<Stroke> result;
-    result.reserve(strokes_.size());
-    for (Stroke& stroke : strokes_) {
-        std::optional<std::vector<Stroke>> clipped = ClipStrokeOutsideCircle(stroke, point, radius);
-        if (!clipped.has_value()) {
-            result.push_back(std::move(stroke));
-            continue;
-        }
-        for (Stroke& fragment : *clipped) {
-            result.push_back(std::move(fragment));
-        }
-    }
-    strokes_ = std::move(result);
-}
-
-void CanvasState::EraseRectNear(float minX, float minY, float maxX, float maxY) {
-    std::vector<Stroke> result;
-    result.reserve(strokes_.size());
-    for (Stroke& stroke : strokes_) {
-        std::optional<std::vector<Stroke>> clipped = ClipStrokeOutsideRect(stroke, minX, minY, maxX, maxY);
-        if (!clipped.has_value()) {
-            result.push_back(std::move(stroke));
-            continue;
-        }
-        for (Stroke& fragment : *clipped) {
-            result.push_back(std::move(fragment));
-        }
-    }
-    strokes_ = std::move(result);
 }
 
 }  // namespace sz::core

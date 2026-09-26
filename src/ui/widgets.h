@@ -50,13 +50,10 @@ inline constexpr float kPillButtonSize = 28.0f;
 // Pill-sized icon button (28x28, true circle, 13px icon) - the size the
 // selection bar's buttons and the dock's chips are.
 bool PillIconButton(const char* strId, const Icon& icon, bool active);
-// The same, for a slot that holds a color rather than an action - see its
-// definition.
-bool PillColorButton(const char* strId, uint32_t colorRGBA, bool highlighted);
 // The color button as a tile in a row of buttons: the same pill an icon
 // tile wears - accent while it is on, plain while it is off - with the
 // color as a swatch where the icon would be. See the definition for why
-// this is not PillColorButton with a flag.
+// the pill, and not a ring around the swatch, says it is on.
 bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active);
 // Same size as PillIconButton but danger-red instead of accent-on-active -
 // idle stays neutral, only hover/press go red.
@@ -102,12 +99,6 @@ void EndScreenLayer();
 std::optional<platform::KeyCombo> ComboForImGuiKey(ImGuiKey key, bool ctrl, bool alt, bool shift);
 // ImGuiKey_None for a combo holding no key, or one outside that set.
 ImGuiKey ImGuiKeyForCombo(const platform::KeyCombo& combo);
-// The same for the mouse buttons a shortcut may be - the middle button and
-// the two side buttons, never the left or the right, which are what
-// gestures are made with.
-std::optional<platform::KeyCombo> ComboForImGuiMouseButton(ImGuiMouseButton button, bool ctrl, bool alt,
-                                                          bool shift);
-std::optional<ImGuiMouseButton> ImGuiMouseButtonForCombo(const platform::KeyCombo& combo);
 // "Ctrl+Alt+O" / "F9" / "(none)" - what a key editor's button reads while
 // it isn't capturing.
 std::string FormatKeyComboLabel(const platform::KeyCombo& combo);

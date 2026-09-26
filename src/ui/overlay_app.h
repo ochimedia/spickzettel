@@ -37,7 +37,6 @@
 #include "core/drawing/stroke.h"
 #include "core/drawing/stroke_bitmap.h"
 #include "core/drawing/stroke_mesh_cache.h"
-#include "core/persistence/library_store.h"
 #include "core/session/actions.h"
 #include "core/session/settings.h"
 #include "core/session/session.h"
@@ -484,10 +483,9 @@ private:
     // keeps it in step with the disk and the GPU - see Session. Owned by
     // TrayController; this class is a view of it.
     Session& session_;
-    // The visible library's model and store, which is what nearly
-    // everything in this class means by "the library".
+    // The visible library's model, which is what nearly everything in this
+    // class means by "the library".
     const CanvasManager& Manager() const { return session_.Manager(); }
-    persistence::LibraryStore* Store() const { return session_.Store(); }
 
     // Every setting, stored and resolved - owned by TrayController, which
     // also persists it. Plain fields are read through Cfg(), the

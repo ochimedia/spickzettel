@@ -99,21 +99,6 @@ TEST(CanvasStateTest, CancelActiveStrokeWithoutBeginIsNoOp) {
     EXPECT_FALSE(canvas.ActiveStroke().has_value());
 }
 
-TEST(CanvasStateTest, EraseNearRemovesOnlyMatchingStrokes) {
-    CanvasState canvas;
-    canvas.BeginStroke(StrokePoint{0.0f, 0.0f}, 0xFF0000FF, 3.0f);
-    canvas.ExtendStroke(StrokePoint{5.0f, 5.0f});
-    canvas.EndStroke();
-    canvas.BeginStroke(StrokePoint{500.0f, 500.0f}, 0xFF0000FF, 3.0f);
-    canvas.ExtendStroke(StrokePoint{505.0f, 505.0f});
-    canvas.EndStroke();
-    ASSERT_EQ(canvas.Strokes().size(), 2u);
-
-    canvas.EraseNear(StrokePoint{1.0f, 1.0f}, 10.0f);
-
-    ASSERT_EQ(canvas.Strokes().size(), 1u);
-    EXPECT_FLOAT_EQ(canvas.Strokes().front().points.front().x, 500.0f);
-}
 
 TEST(CanvasStateTest, ClearRemovesEverything) {
     CanvasState canvas;

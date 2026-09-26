@@ -59,8 +59,9 @@ bool ColorSwatchButton(ImU32 fillColor, bool selected) {
     const ImVec2 center((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->AddCircleFilled(center, radius, fillColor);
-    // Same reasoning as PillColorButton's rim: black, and any dark custom
-    // color, needs an edge of its own to read as a swatch on a dark panel.
+    // A permanent hairline rim: black, and any dark custom color, needs an
+    // edge of its own to read as a swatch on a dark panel rather than as a
+    // hole in it.
     dl->AddCircle(center, radius, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0, 1.0f);
     if (selected) {
         dl->AddCircle(center, radius + Px(2.0f), ImGui::ColorConvertFloat4ToU32(theme::kWhite), 0, Px(1.5f));

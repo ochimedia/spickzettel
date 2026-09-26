@@ -33,7 +33,6 @@ enum class Level {
     Gesture,  // what a held button or key is doing
 };
 inline constexpr size_t kLevelCount = 6;
-const char* LevelName(Level level);
 
 class Interaction;
 

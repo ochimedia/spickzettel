@@ -11,36 +11,9 @@
 namespace sz::core {
 namespace {
 
-TEST(UidTest, RendersSixBase36CharactersZeroPadded) {
-    EXPECT_EQ(FormatUid(0), "000000");
-    EXPECT_EQ(FormatUid(1), "000001");
-    EXPECT_EQ(FormatUid(35), "00000z");
-    EXPECT_EQ(FormatUid(36), "000010");
-    EXPECT_EQ(FormatUid(kUidSpace - 1), "zzzzzz");
-}
-
-TEST(UidTest, ParsesBackToWhatWasRendered) {
-    for (const uint64_t id : {uint64_t{1}, uint64_t{35}, uint64_t{36}, uint64_t{123456},
-                               kUidSpace - 1}) {
-        const std::optional<uint64_t> parsed = ParseUid(FormatUid(id));
-        ASSERT_TRUE(parsed.has_value()) << FormatUid(id);
-        EXPECT_EQ(*parsed, id);
-    }
-}
-
-TEST(UidTest, RejectsAnythingThatIsNotSixBase36Characters) {
-    EXPECT_FALSE(ParseUid("").has_value());
-    EXPECT_FALSE(ParseUid("abc").has_value());          // too short
-    EXPECT_FALSE(ParseUid("abcdefg").has_value());      // too long
-    EXPECT_FALSE(ParseUid("abc-ef").has_value());       // not base36
-    // Uppercase is deliberately not accepted: it would round-trip in memory
-    // and collide on a case-insensitive filesystem - see uid.h.
-    EXPECT_FALSE(ParseUid("ABCDEF").has_value());
-}
-
 // The check is the point. A space this size makes a collision unlikely, and
-// "unlikely" is exactly the assumption that breaks once someone has copied a
-// directory by hand - so the retry path has to work, not merely exist.
+// "unlikely" is exactly the assumption that breaks the one time it matters
+// - so the retry path has to work, not merely exist.
 TEST(UidTest, RetriesUntilItFindsOneNothingHolds) {
     const std::set<uint64_t> taken = {11, 22, 33};
     // Hands back three ids that are already in use before offering a free
@@ -68,12 +41,11 @@ TEST(UidTest, GivesUpRatherThanSpinningWhenNothingIsFree) {
     EXPECT_EQ(MakeUid([](uint64_t) { return true; }), 0u);
 }
 
-TEST(UidTest, DefaultSourceStaysInsideTheRenderableRange) {
+TEST(UidTest, DefaultSourceStaysInsideTheSpace) {
     for (int i = 0; i < 1000; ++i) {
         const uint64_t id = MakeUid([](uint64_t) { return false; });
         ASSERT_NE(id, 0u);
         ASSERT_LT(id, kUidSpace);
-        EXPECT_EQ(FormatUid(id).size(), kUidLength);
     }
 }
 

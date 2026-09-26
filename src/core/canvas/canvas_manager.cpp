@@ -450,19 +450,6 @@ bool CanvasManager::CanMoveItemLayer(ItemId id, int direction) const {
     return index.has_value() && NearestOverlappingItem(*canvas, *index, direction).has_value();
 }
 
-void CanvasManager::BringItemToFront(ItemId id) {
-    Canvas* canvas = CurrentOrNull();
-    if (!canvas) {
-        return;
-    }
-    auto& items = canvas->items;
-    const auto it = std::find_if(items.begin(), items.end(), [id](const Item& i) { return i.id == id; });
-    if (it == items.end() || it + 1 == items.end()) {
-        return;  // not on the current canvas, or already at the top
-    }
-    std::rotate(it, it + 1, items.end());
-    MarkChanged();
-}
 
 void CanvasManager::BringItemsToFront(const std::vector<ItemId>& ids) {
     Canvas* canvas = CurrentOrNull();

@@ -187,7 +187,7 @@ TEST(CanvasManagerTest, ItemOperationsAreNoOpsWithNoCanvasAtAll) {
     EXPECT_EQ(manager.CreateItem(false, Rect{0, 0, 100, 100}, "D1"), 0u);
     manager.DeleteItem(1);
     manager.MoveItemLayer(1, 1);
-    manager.BringItemToFront(1);
+    manager.BringItemsToFront({1});
     EXPECT_EQ(manager.DuplicateItem(1), 0u);
     manager.EraseAt(1, 10.0f, 10.0f, 8.0f);
     manager.EraseRectAt(1, 0.0f, 0.0f, 50.0f, 50.0f);
@@ -773,7 +773,7 @@ TEST(CanvasManagerTest, PlaceItemOnCanvasFindsTheSnippetOnAnyCanvas) {
     EXPECT_EQ(manager.FindCanvas(second)->items.size(), 2u);
 }
 
-TEST(CanvasManagerTest, BringItemToFrontMovesItemToTopPreservingOtherOrder) {
+TEST(CanvasManagerTest, BringItemsToFrontMovesOneToTopPreservingOtherOrder) {
     CanvasManager manager;
     const ItemId a = manager.CreateItem(false, Rect{}, "A");
     const ItemId b = manager.CreateItem(false, Rect{}, "B");
@@ -782,7 +782,7 @@ TEST(CanvasManagerTest, BringItemToFrontMovesItemToTopPreservingOtherOrder) {
     ASSERT_EQ(manager.CurrentOrNull()->items[1].id, b);
     ASSERT_EQ(manager.CurrentOrNull()->items[2].id, c);
 
-    manager.BringItemToFront(a);
+    manager.BringItemsToFront({a});
 
     EXPECT_EQ(manager.CurrentOrNull()->items[0].id, b);
     EXPECT_EQ(manager.CurrentOrNull()->items[1].id, c);
@@ -815,25 +815,25 @@ TEST(CanvasManagerTest, BringItemsToFrontRaisesThemAsABlockInTheirOwnOrder) {
     EXPECT_EQ(manager.Generation(), before) << "on top already, or nothing of theirs here: no change";
 }
 
-TEST(CanvasManagerTest, BringItemToFrontOnAlreadyTopItemIsNoOp) {
+TEST(CanvasManagerTest, BringItemsToFrontOnAlreadyTopItemIsNoOp) {
     CanvasManager manager;
     const ItemId a = manager.CreateItem(false, Rect{}, "A");
     const ItemId b = manager.CreateItem(false, Rect{}, "B");
     const uint64_t before = manager.Generation();
 
-    manager.BringItemToFront(b);  // b is already at the top
+    manager.BringItemsToFront({b});  // b is already at the top
 
     EXPECT_EQ(manager.CurrentOrNull()->items[0].id, a);
     EXPECT_EQ(manager.CurrentOrNull()->items[1].id, b);
     EXPECT_EQ(manager.Generation(), before);
 }
 
-TEST(CanvasManagerTest, BringItemToFrontIgnoresUnknownId) {
+TEST(CanvasManagerTest, BringItemsToFrontIgnoresUnknownId) {
     CanvasManager manager;
     const ItemId a = manager.CreateItem(false, Rect{}, "A");
     const uint64_t before = manager.Generation();
 
-    manager.BringItemToFront(/*bogus id=*/999999);
+    manager.BringItemsToFront({/*bogus id=*/999999});
 
     EXPECT_EQ(manager.CurrentOrNull()->items[0].id, a);
     EXPECT_EQ(manager.Generation(), before);

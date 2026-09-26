@@ -28,19 +28,6 @@ public:
     void CancelActiveStroke();
     void Clear();
 
-    // The eraser tool's real effect: clips every completed stroke against
-    // the circle centered on `point` with the given `radius` (see
-    // ClipStrokeOutsideCircle for the geometry), replacing a stroke that's
-    // only partly within it with whatever fragment(s) survive outside it,
-    // dropping one entirely consumed by it, and leaving an untouched one
-    // exactly as it was.
-    void EraseNear(StrokePoint point, float radius);
-    // The rectangular-eraser equivalent of EraseNear - same contract,
-    // clipped against the axis-aligned rectangle
-    // [minX, maxX] x [minY, maxY] instead of a circle (see
-    // ClipStrokeOutsideRect for the geometry).
-    void EraseRectNear(float minX, float minY, float maxX, float maxY);
-
     const std::vector<Stroke>& Strokes() const { return strokes_; }
     const std::optional<Stroke>& ActiveStroke() const { return active_; }
 

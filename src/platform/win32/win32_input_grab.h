@@ -554,12 +554,10 @@ private:
     std::atomic<float> correctionLagMsMax_{0.0f};
     std::atomic<int> correctionsInjected_{0};
 
-    // What Refresh last decided, for the two hot paths that would otherwise
-    // take the state lock on every mouse event system-wide. Reading a stale
-    // value for one event is harmless - each of these only decides whether
-    // that event is swallowed or countered, and the transition itself is
-    // handled by Refresh.
-    std::atomic<bool> pointerGrabbing_{false};
+    // What Refresh last decided, for the hot path that would otherwise take
+    // the state lock on every mouse event system-wide. Reading a stale
+    // value for one event is harmless - it only decides whether that event
+    // is countered, and the transition itself is handled by Refresh.
     std::atomic<bool> countering_{false};
     // EditModeInputOptions::useSoftwarePointer, mirrored likewise: it
     // decides, per report, whether the position just computed is written to

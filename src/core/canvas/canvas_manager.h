@@ -237,18 +237,15 @@ public:
     bool CanMoveItemLayer(ItemId id, int direction) const;
 
     // Moves the item to the very top of the stack (painted and hit-tested
-    // last). A no-op, without MarkChanged(), if `id` isn't on the current
-    // canvas or is already at the top: the UI calls this at the start of
-    // every drag, and the common case - the frontmost item dragged again -
-    // must not dirty the library for no change.
-    void BringItemToFront(ItemId id);
-    // BringItemToFront for several at once: the ones among `ids` on the
-    // current canvas go to the top as a block, in the order they already
-    // had among themselves, and everything else keeps its order below
-    // them. What a multi-selection taken hold of does - raising only the
-    // snippet under the pointer would pull it out of the group. The same
-    // no-op, without MarkChanged(), when they are the top of the stack
-    // already.
+
+    // The ones among `ids` on the current canvas go to the top as a block,
+    // in the order they already had among themselves, and everything else
+    // keeps its order below them. What a selection taken hold of does -
+    // raising only the snippet under the pointer would pull it out of the
+    // group. A no-op, without MarkChanged(), when none of them is on the
+    // current canvas or they are the top of the stack already: every press
+    // on a snippet raises it, and the common case - the frontmost one taken
+    // hold of again - must not count as a change.
     void BringItemsToFront(const std::vector<ItemId>& ids);
 
     // Toggles fullscreen. Entering fits the item's own aspect ratio into the
@@ -309,9 +306,8 @@ public:
     // against that circle (see ClipStrokeOutsideCircle), in the item's
     // native space - the radius is scaled the same way BakeStrokeToNative
     // scales stroke width. A stroke only partly within the circle is
-    // shortened/split rather than removed outright - see
-    // CanvasState::EraseNear's own doc comment, which this shares the same
-    // clipping behavior with.
+    // shortened/split rather than removed outright (see
+    // ClipStrokeOutsideCircle for the geometry).
     //
     // Returns what became of each stroke, index for index against the list
     // as it was when the call began: kStrokeUntouched, or the number of

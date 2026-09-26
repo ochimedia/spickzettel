@@ -7,23 +7,6 @@
 
 namespace sz::ui {
 
-const char* LevelName(Level level) {
-    switch (level) {
-        case Level::Canvas:
-            return "Canvas";
-        case Level::Mode:
-            return "Mode";
-        case Level::Panel:
-            return "Panel";
-        case Level::Popup:
-            return "Popup";
-        case Level::Text:
-            return "Text";
-        case Level::Gesture:
-            return "Gesture";
-    }
-    return "?";
-}
 
 Event Event::FromInput(const platform::InputEvent& input) {
     Event event;

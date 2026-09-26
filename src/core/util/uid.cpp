@@ -6,23 +6,6 @@
 namespace sz::core {
 
 namespace {
-constexpr char kAlphabet[] = "0123456789abcdefghijklmnopqrstuvwxyz";
-constexpr uint64_t kBase = 36;
-
-// Lowercase only, and that is load-bearing rather than a style choice:
-// these render into directory names, and Windows and macOS filesystems are
-// case-insensitive, so "a7K2q9" and "a7k2q9" would be the same directory
-// while being different ids in memory.
-int ValueOfDigit(char ch) {
-    if (ch >= '0' && ch <= '9') {
-        return ch - '0';
-    }
-    if (ch >= 'a' && ch <= 'z') {
-        return ch - 'a' + 10;
-    }
-    return -1;
-}
-
 std::mt19937_64& Generator() {
     // Seeded once per thread. random_device is used only for the seed: on
     // some standard libraries it is deterministic, which would be a
@@ -43,33 +26,6 @@ uint64_t DefaultRandomBits() {
     return spread(Generator());
 }
 }  // namespace
-
-void SeedUidsForTesting(uint64_t seed) { Generator().seed(seed); }
-
-std::string FormatUid(uint64_t id) {
-    std::string out(kUidLength, '0');
-    uint64_t value = id % kUidSpace;
-    for (size_t i = kUidLength; i-- > 0;) {
-        out[i] = kAlphabet[value % kBase];
-        value /= kBase;
-    }
-    return out;
-}
-
-std::optional<uint64_t> ParseUid(std::string_view text) {
-    if (text.size() != kUidLength) {
-        return std::nullopt;
-    }
-    uint64_t value = 0;
-    for (const char ch : text) {
-        const int digit = ValueOfDigit(ch);
-        if (digit < 0) {
-            return std::nullopt;
-        }
-        value = value * kBase + static_cast<uint64_t>(digit);
-    }
-    return value;
-}
 
 uint64_t MakeUid(const std::function<bool(uint64_t)>& isTaken,
                   const std::function<uint64_t()>& randomBits) {

@@ -98,9 +98,9 @@ bool PillIconButton(const char* strId, const Icon& icon, bool active) {
 // with the color as a swatch where the icon would be. Used by the bar
 // rows in Settings > Interaction, where the row is read as "these buttons
 // are on the bar and these are not", and the swatch alone could not say
-// which it was: PillColorButton's ring is its hover/selected cue, and
-// against nine other tiles whose whole background answers the question, a
-// ring on one of them does not read as an answer at all.
+// which it was: against nine other tiles whose whole background answers
+// the question, a ring around one swatch does not read as an answer at
+// all.
 bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
     // The same three colors and the same Button underneath as IconButton,
     // so the two kinds of tile hover and press alike.
@@ -135,35 +135,6 @@ bool PillSwatchButton(const char* strId, uint32_t colorRGBA, bool active) {
     return pressed;
 }
 
-// The same button standing for a color instead of an action: a filled
-// circle, no glyph. Same 28x28 hit target as PillIconButton, so the two
-// drop into the same layout wherever a slot might hold either.
-// `highlighted`
-// mirrors PillIconButton's `active`, but as a ring around the swatch
-// rather than a filled background: the swatch's own fill already carries
-// the color, so there is no separate "on" background the way an icon
-// button has.
-bool PillColorButton(const char* strId, uint32_t colorRGBA, bool highlighted) {
-    const float size = Px(kPillButtonSize);
-    const bool pressed = ImGui::InvisibleButton(strId, ImVec2(size, size));
-    const ImVec2 minPt = ImGui::GetItemRectMin();
-    const ImVec2 maxPt = ImGui::GetItemRectMax();
-    const ImVec2 center((minPt.x + maxPt.x) * 0.5f, (minPt.y + maxPt.y) * 0.5f);
-    const auto r = static_cast<int>((colorRGBA >> 24) & 0xFF);
-    const auto g = static_cast<int>((colorRGBA >> 16) & 0xFF);
-    const auto b = static_cast<int>((colorRGBA >> 8) & 0xFF);
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddCircleFilled(center, size * 0.5f - Px(3.0f), IM_COL32(r, g, b, 255));
-    // A permanent hairline rim, not just the hover/selected ring below.
-    // Without it a dark swatch on a dark backing has no edge at all and
-    // reads as a hole rather than as a color - which is what black looked
-    // like the moment it was added to the palette.
-    dl->AddCircle(center, size * 0.5f - Px(3.0f), ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), 0, 1.0f);
-    if (highlighted || ImGui::IsItemHovered()) {
-        dl->AddCircle(center, size * 0.5f - Px(1.0f), ImGui::ColorConvertFloat4ToU32(theme::kWhite), 0, Px(1.5f));
-    }
-    return pressed;
-}
 
 // The pill's Del / Overview tile's delete button - same size as
 // PillIconButton but danger-red instead of accent-on-active, matching
@@ -346,37 +317,6 @@ ImGuiKey ImGuiKeyForCombo(const platform::KeyCombo& combo) {
     }
 }
 
-std::optional<platform::KeyCombo> ComboForImGuiMouseButton(ImGuiMouseButton button, bool ctrl, bool alt,
-                                                          bool shift) {
-    int key = 0;
-    switch (button) {
-        case ImGuiMouseButton_Middle:
-            key = platform::KeyCombo::kMiddleButton;
-            break;
-        case 3:
-            key = platform::KeyCombo::kX1Button;
-            break;
-        case 4:
-            key = platform::KeyCombo::kX2Button;
-            break;
-        default:
-            return std::nullopt;  // the left and the right are the gestures'
-    }
-    return platform::KeyCombo{ctrl, alt, shift, key};
-}
-
-std::optional<ImGuiMouseButton> ImGuiMouseButtonForCombo(const platform::KeyCombo& combo) {
-    switch (combo.key) {
-        case platform::KeyCombo::kMiddleButton:
-            return ImGuiMouseButton_Middle;
-        case platform::KeyCombo::kX1Button:
-            return 3;  // ImGui names no constant for the side buttons
-        case platform::KeyCombo::kX2Button:
-            return 4;
-        default:
-            return std::nullopt;
-    }
-}
 
 std::string FormatKeyComboLabel(const platform::KeyCombo& combo) {
     std::string result;

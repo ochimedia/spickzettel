@@ -2,35 +2,23 @@
 
 #include <cstdint>
 #include <functional>
-#include <optional>
-#include <string>
-#include <string_view>
 
 namespace sz::core {
 
-// Identity for folders, canvases and items: a random number rendered as six
-// base36 characters ("a7k2q9"), unique within a library.
+// Identity for folders, canvases and items: a random number, unique within
+// a library.
 //
 // Random rather than a counter: every counter-based library starts at 1,
 // so two libraries built independently collide on nearly every id, and
 // anything that ever moves things from one into the other would be a
 // guaranteed conflict. Random ids make that a non-event.
 //
-// Six characters is 36^6 = 2,176,782,336. That is not the reason collisions
-// don't happen, though - MakeUid checks. The size is what keeps the check
-// from ever having to retry in practice.
-constexpr size_t kUidLength = 6;
+// The space is 36^6 = 2,176,782,336, from when an id was also a
+// directory's six-character base36 name; every library already written
+// holds ids inside it. That is not the reason collisions don't happen,
+// though - MakeUid checks. The size is what keeps the check from ever
+// having to retry in practice.
 constexpr uint64_t kUidSpace = 2176782336ull;  // 36^6
-
-// Six base36 characters, zero-padded ("000001", "a7k2q9"). Values at or
-// above kUidSpace are wrapped rather than rejected: this is a rendering
-// function, and the only source of ids is MakeUid, which cannot produce one.
-std::string FormatUid(uint64_t id);
-
-// The inverse, or nullopt if `text` isn't exactly kUidLength base36
-// characters. Lowercase only - see the header comment on why the alphabet
-// has no uppercase in it.
-std::optional<uint64_t> ParseUid(std::string_view text);
 
 // A fresh id that `isTaken` says nothing holds yet, never 0 (which means
 // "no id" throughout this codebase).
@@ -43,9 +31,5 @@ std::optional<uint64_t> ParseUid(std::string_view text);
 // thread-local Mersenne twister seeded from std::random_device.
 uint64_t MakeUid(const std::function<bool(uint64_t)>& isTaken,
                   const std::function<uint64_t()>& randomBits = {});
-
-// Makes the default draws on this thread repeat from `seed` - for a test
-// that runs at random and has to be able to run the same way again.
-void SeedUidsForTesting(uint64_t seed);
 
 }  // namespace sz::core
