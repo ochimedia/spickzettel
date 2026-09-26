@@ -214,7 +214,8 @@ protected:
     // KeyCombo's name for an ImGui key, or 0 - the window's own
     // KeyForVirtualKey, from the other side.
     static int KeyForImGuiKey(ImGuiKey key) {
-        if (const std::optional<platform::KeyCombo> combo = overlay_detail::ComboForImGuiKey(key, false, false, false)) {
+        if (const std::optional<platform::KeyCombo> combo =
+                overlay_detail::ComboForImGuiKey(key, false, false, false)) {
             return combo->key;
         }
         switch (key) {
