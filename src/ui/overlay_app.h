@@ -14,6 +14,7 @@
 #include "ui/context_menu.h"
 #include "ui/editor.h"
 #include "ui/item_painting.h"
+#include "ui/view/cheat_sheet.h"
 #include "ui/view/overview_panel.h"
 #include "ui/view/settings_page.h"
 #include "ui/view/view_host.h"
@@ -631,11 +632,6 @@ private:
     // will draw (or erase) at, under the cursor, plus the number. See
     // sizePreviewExpireAtSeconds_ for why it's transient.
     void RenderBrushSizePreview();
-    // Every key and gesture, grouped, with the keys as they are bound - see
-    // BuildCheatSheet. A panel over a dimmed canvas like the Overview, but
-    // with nothing in it to click: Escape, its own key again, or a click
-    // outside it closes it.
-    void RenderCheatSheet(float displayW, float displayH);
 public:
     // A hotkey row armed, waiting for the combo the user wants, and the rest
     // of what a test asks of the Settings page's key rows - see SettingsPage.
@@ -1078,6 +1074,7 @@ private:
     // Last, so that everything they are handed is there before them.
     SettingsPage settingsPage_{settings_, editor_, *this};
     OverviewPanel overview_{session_, settings_, editor_, *this};
+    CheatSheet cheatSheet_{settings_, editor_, *this};
 };
 
 }  // namespace sz::ui

@@ -1,4 +1,4 @@
-#include "ui/overlay_app_internal.h"
+#include "ui/view/cheat_sheet.h"
 
 #include <gtest/gtest.h>
 
@@ -6,13 +6,10 @@
 #include <vector>
 
 #include "core/config/app_config.h"
+#include "generated/ui_strings.h"
 
 namespace sz::ui {
 namespace {
-
-using overlay_detail::BuildCheatSheet;
-using overlay_detail::CheatSheetRow;
-using overlay_detail::CheatSheetSection;
 
 // Every row, whichever group it is in.
 std::vector<CheatSheetRow> AllRows(const std::vector<CheatSheetSection>& sections) {

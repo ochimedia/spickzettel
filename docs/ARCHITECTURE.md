@@ -1597,7 +1597,7 @@ construction. It is being split into one owner per surface
 (`docs/VIEW_LAYER.md`, section 7), each a class in `ui/view/` that holds
 its surface's state, draws from what it is handed, and asks for anything
 beyond its own through `ViewHost`, which `OverlayApp` implements; no
-owner knows another. So far: the Overview (`OverviewPanel`) and its Settings tab (`SettingsPage`), which the Overview draws inside its body through a call `OverlayApp` hands it. What every surface shares is in
+owner knows another. So far: the Overview (`OverviewPanel`), its Settings tab (`SettingsPage`), which the Overview draws inside its body through a call `OverlayApp` hands it, and the cheat sheet (`CheatSheet`). What every surface shares is in
 files of its own: the palette, the accent and the style (`theme.*`), the
 buttons, the panel backdrop, the screen layers and the key names
 (`widgets.*`), and how a snippet is painted, on the canvas or in a

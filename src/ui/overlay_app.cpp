@@ -556,7 +556,7 @@ void OverlayApp::DrawOverCanvas(float displayW, float displayH) {
 
 void OverlayApp::DrawPanels(float displayW, float displayH) {
     overview_.Draw(displayW, displayH, [this] { settingsPage_.Draw(); });
-    RenderCheatSheet(displayW, displayH);
+    cheatSheet_.Draw(displayW, displayH);
     RenderConfirmDeletePopover();
 }
 

@@ -1,5 +1,4 @@
-#include "ui/overlay_app.h"
-#include "ui/overlay_app_internal.h"
+#include "ui/view/cheat_sheet.h"
 
 #include <algorithm>
 #include <cstddef>
@@ -10,11 +9,15 @@
 
 #include <imgui.h>
 
+#include "core/session/actions.h"
+#include "generated/ui_strings.h"
+#include "ui/interaction/levels.h"
+#include "ui/theme.h"
+#include "ui/widgets.h"
+
 namespace sz::ui {
 
-using namespace overlay_detail;
-
-namespace overlay_detail {
+using namespace ::sz::core;
 
 namespace {
 
@@ -133,7 +136,6 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
     return sections;
 }
 
-}  // namespace overlay_detail
 
 namespace {
 
@@ -176,17 +178,33 @@ std::vector<size_t> BalancedColumnStarts(const std::vector<float>& heights, size
 
 }  // namespace
 
-void OverlayApp::RenderCheatSheet(float displayW, float displayH) {
-    if (!IsCheatSheetOpen()) {
+CheatSheet::CheatSheet(Settings& settings, Editor& editor, ViewHost& host)
+    : settings_(settings), editor_(editor), host_(host) {}
+
+bool CheatSheet::IsOpen() const {
+    const Panel* panel = editor_.Input().As<Panel>(Level::Panel);
+    return panel != nullptr && panel->Kind() == PanelKind::CheatSheet;
+}
+
+void CheatSheet::Toggle() {
+    if (IsOpen()) {
+        editor_.Input().End(Level::Panel);
+    } else {
+        editor_.Input().Push(std::make_unique<Panel>(PanelKind::CheatSheet), Event{});
+    }
+}
+
+void CheatSheet::Draw(float displayW, float displayH) {
+    if (!IsOpen()) {
         return;
     }
     // Escape and its own key close it too, as its interaction's (see
     // Panel).
     if (PanelBackdrop("##cheat_sheet_backdrop", displayW, displayH)) {
-        Act(action::ClosePanel{PanelKind::CheatSheet});
+        host_.Act(action::ClosePanel{PanelKind::CheatSheet});
     }
 
-    const std::vector<CheatSheetSection> sections = BuildCheatSheet(Cfg(), settings_.Live().shortcuts);
+    const std::vector<CheatSheetSection> sections = BuildCheatSheet(settings_.Stored(), settings_.Live().shortcuts);
     const ImGuiStyle& style = ImGui::GetStyle();
     const float lineH = ImGui::GetTextLineHeightWithSpacing();
     const float sectionGap = lineH * 0.9f;

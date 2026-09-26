@@ -191,13 +191,7 @@ void OverlayApp::AskToDeleteCanvas(CanvasId canvas) {
 
 void OverlayApp::OpenPicker(ItemId itemId, bool isCopy) { overview_.OpenPicker(itemId, isCopy); }
 
-void OverlayApp::ToggleCheatSheet() {
-    if (IsCheatSheetOpen()) {
-        editor_.Input().End(Level::Panel);
-    } else {
-        editor_.Input().Push(std::make_unique<Panel>(PanelKind::CheatSheet), Event{});
-    }
-}
+void OverlayApp::ToggleCheatSheet() { cheatSheet_.Toggle(); }
 
 void OverlayApp::ClosePanel(PanelKind kind) {
     switch (kind) {

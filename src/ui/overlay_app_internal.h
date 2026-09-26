@@ -96,23 +96,6 @@ ShortcutAction ShortcutForTool(Tool tool);
 ShortcutAction ShortcutForCreateAction(CreateAction action);
 ShortcutAction ShortcutForClipboardAction(ClipboardAction action);
 
-// The cheat sheet's content (see OverlayApp::RenderCheatSheet), apart from
-// drawing it so the tests can read it: groups of rows, each what to press
-// and what it does. A row with no keys is a line of context for the rows
-// under it ("On empty canvas"). Built from the bindings as they are - the
-// global hotkeys, the tool shortcuts `shortcuts` resolves to, the creation
-// triggers - so a rebound key reads as bound, and an unbound one, or a
-// trigger set to Off, drops its row rather than promising nothing.
-struct CheatSheetRow {
-    std::string keys;
-    std::string what;
-};
-struct CheatSheetSection {
-    const char* title;
-    std::vector<CheatSheetRow> rows;
-};
-std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const ShortcutBindings& shortcuts);
-
 // How much of itself every snippet keeps while a new one is being made -
 // see OverlayApp::ItemsFadedForCreation. Enough to tell where things are,
 // little enough that what is being framed is what is seen.
