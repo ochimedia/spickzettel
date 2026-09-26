@@ -170,14 +170,19 @@ and some reach further, so each command states its **scope**:
 |---|---|---|
 | Hand | the Gesture and Text levels | most commands: undo, copy, a tool, a nudge |
 | Canvas | Gesture, Text, Popup | anything that switches or empties the canvas: a canvas switch, a capture, moving the selection to a new canvas |
-| Showing | everything above Mode | the overlay put away |
-| All | everything above Canvas | view-only mode; the session ending |
+| All | everything above Canvas | view-only mode; the app exiting, the session ending |
 
 The Hand scope ends a note being typed as well as the gesture: every
 command commits one today, and one can still run while a note is open -
 a key cannot reach it, but a press on the selection bar outside the field
 can. (Found while building phase 3; the table first had the Gesture level
 alone.)
+
+The overlay put away ends what the Hand scope does: drawing mode, a panel
+and a popup are still up at the next showing, as they are today. (Also
+found while building phase 3: the table first had a Showing scope for it,
+everything above Mode, which would have closed a panel or a popup on the
+way out.)
 
 Today these scopes exist as four hand-written functions (`SettleHand`,
 `SwitchToCanvasSettled`, `SettleForPersistence`, `SetViewOnly`); here they
@@ -446,7 +451,7 @@ Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.
 | Hotkey mid-anything | passed to the root | - | its command, after its scope ended what it covers | - | - |
 | Lost release | own button pressed again | - | interrupted; the press routed afresh | - | - |
 | Touch hold's injected right press | lands on Spent | - | swallowed | - | - |
-| Put away | Lifecycle: Hidden | - | Showing scope ends what is above Mode | - | - |
+| Put away | Lifecycle: Hidden | - | the Hand scope ends the gesture and the text; the rest stays for the next showing | - | - |
 | Shown | Lifecycle: Shown | - | the Gesture level cleared; the recognizer forgets | - | - |
 | View-only | Lifecycle: ViewOnly | - | All scope | - | - |
 
@@ -602,8 +607,8 @@ goes is never moved: what survives of `OverlayApp`'s input side goes into
    mode answers Escape, a popup, a note or a panel has to be there above
    it to claim Escape first, or Escape in a menu would leave drawing mode.
 9. **Lifecycle.** Shown, Hidden, ViewOnly and SessionEnding as events,
-   with the Showing and All scopes; `SettleHand`, `SwitchToCanvasSettled`,
-   `SettleForPersistence` and `SetViewOnly`'s settling go.
+   with the All scope; `SettleHand`, `SwitchToCanvasSettled` and
+   `SetViewOnly`'s settling go - one `Editor::Settle(scope)` in their place.
 10. **Widgets.** An ImGui drag as a Widget gesture: Escape clears it, and
     restores a slider's value.
 11. **The cases as tests.** Each row of section 9 as a scripted test
@@ -626,7 +631,7 @@ Settled on review (2026-09-26):
    key (Escape closes it). Delete and the arrows are refused under a
    popup already today.
 3. **Drawing mode survives being put away**, as today, and ends in
-   view-only mode. That is what the Showing and All scopes say.
+   view-only mode. That is what the Hand and All scopes say.
 4. **Mouse buttons are bindable.** The binding table takes the middle
    button and X1/X2, with modifiers, from phase 1, and Settings > Hotkeys
    offers them alongside keys - "press the key or button you want".
