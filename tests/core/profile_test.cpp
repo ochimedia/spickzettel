@@ -20,7 +20,7 @@ Profile GameProfile(std::string name, std::string executable) {
     return profile;
 }
 
-ProfileableSettings Defaults() { return ProfileableFrom(DefaultConfig()); }
+ProfileableSettings Defaults() { return DefaultConfig().profileable; }
 
 TEST(ProfileTest, MatchesOnExecutableNameWhateverItsCase) {
     Profile profile = GameProfile("Elden Ring", "EldenRing.exe");

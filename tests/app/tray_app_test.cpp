@@ -49,7 +49,7 @@ TEST(TrayControllerTest, InitializeShowsTrayAndRegistersAllConfiguredHotkeys) {
 TEST(TrayControllerTest, InitializeConfiguresEditModeNoActivateFromConfig) {
     test::FakePlatformHost host;
     AppConfig config = DefaultConfig();
-    config.editModeNoActivate = false;
+    config.profileable.dontStealFocus = false;
     TrayController controller(host, config);
 
     ASSERT_TRUE(controller.Initialize());
@@ -61,9 +61,9 @@ TEST(TrayControllerTest, InitializeConfiguresEditModeNoActivateFromConfig) {
 TEST(TrayControllerTest, InitializeConfiguresEditModeInputFromConfig) {
     test::FakePlatformHost host;
     AppConfig config = DefaultConfig();
-    config.editModeInput.useRawMouseInput = true;
-    config.editModeInput.counterRawMouseInput = true;
-    config.editModeInput.dontForwardKeystrokes = false;
+    config.profileable.rawMouseInput = true;
+    config.profileable.counterRawMouseInput = true;
+    config.profileable.dontForwardKeystrokes = false;
     TrayController controller(host, config);
 
     ASSERT_TRUE(controller.Initialize());
@@ -1069,8 +1069,8 @@ TEST_F(TrayControllerPersistenceTest, NothingIsWrittenWhenTheLibraryPathIsEmpty)
 namespace {
 AppConfig ConfigWithGameProfile() {
     AppConfig config = DefaultConfig();
-    config.editModeInput.counterRawMouseInput = true;
-    config.freezeScreenInEditMode = true;
+    config.profileable.counterRawMouseInput = true;
+    config.profileable.freezeScreen = true;
 
     Profile profile;
     profile.name = "The Game";
@@ -1224,7 +1224,7 @@ TEST(TrayControllerProfileTest, AnApplicationThatRefusesTheQuestionKeepsItsFocus
 TEST(TrayControllerProfileTest, TheSettingTurnedOffLeavesAnElevatedApplicationAlone) {
     test::FakePlatformHost host;
     AppConfig config = DefaultConfig();
-    config.takeFocusOverElevated = false;
+    config.profileable.takeFocusOverElevated = false;
     EXPECT_TRUE(ShowEditModeOver(host, config, AppAt("taskmgr.exe", platform::ForegroundIntegrity::Above)));
 }
 
@@ -1285,7 +1285,7 @@ TEST(TrayControllerProfileTest, TakingFocusDoesNotRewriteTheStoredSetting) {
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
 
     EXPECT_FALSE(host.overlayWindow.editModeNoActivate) << "focus taken for this showing";
-    EXPECT_TRUE(controller.GetSettings().Stored().editModeNoActivate) << "but not written down";
+    EXPECT_TRUE(controller.GetSettings().Stored().profileable.dontStealFocus) << "but not written down";
     EXPECT_TRUE(controller.GetSettings().Live().dontStealFocus);
 }
 
@@ -1593,7 +1593,7 @@ TEST(TrayControllerDisplayTest, WhenItsDisplayChangesTheOverlayFollows) {
 TEST(TrayControllerDisplayTest, AFrozenScreenIsTakenAgainWhenItsDisplayChanges) {
     test::FakePlatformHost host;
     AppConfig config = DefaultConfig();
-    config.freezeScreenInEditMode = true;
+    config.profileable.freezeScreen = true;
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
@@ -1610,7 +1610,7 @@ TEST(TrayControllerDisplayTest, AFrozenScreenIsTakenAgainWhenItsDisplayChanges) 
 TEST(TrayControllerDisplayTest, AChangeToAnotherDisplayLeavesAFrozenScreenAlone) {
     test::FakePlatformHost host;
     AppConfig config = DefaultConfig();
-    config.freezeScreenInEditMode = true;
+    config.profileable.freezeScreen = true;
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));

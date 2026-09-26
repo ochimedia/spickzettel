@@ -163,9 +163,9 @@ TEST_F(HeadlessAppTest, AShortcutKeyPicksItsTool) {
 // and Select on the middle one.
 AppConfig WithMouseButtonShortcuts() {
     AppConfig config = DefaultConfig();
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)] =
         platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button};
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Select)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Select)] =
         platform::KeyCombo{false, false, false, platform::KeyCombo::kMiddleButton};
     return config;
 }
@@ -237,7 +237,7 @@ TEST_F(HeadlessAppTest, AMouseButtonWaitsForTheGestureInFlight) {
 // is, the button that opened the sheet could not close it.
 TEST_F(HeadlessAppTest, AMouseButtonClosesThePanelItOpened) {
     AppConfig config = DefaultConfig();
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::CheatSheet)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::CheatSheet)] =
         platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button};
     StartWith(config);
     ShowEditMode();
@@ -721,7 +721,7 @@ uint64_t PictureTextureOf(Session& session, ItemId item) {
 TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
     AppConfig config = DefaultConfig();
     config.imageFilter = platform::ImageFilter::Lanczos;
-    config.freezeScreenInEditMode = true;  // the drag crops the frozen screen
+    config.profileable.freezeScreen = true;  // the drag crops the frozen screen
     StartWith(config);
     host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
     host_.overlayWindow.captureReturnsHeight = static_cast<int>(kDisplayHeight);
@@ -1599,7 +1599,7 @@ TEST_F(HeadlessAppTest, ThePointerAtTheBottomEdgeBringsTheCanvasBarOut) {
 
 TEST_F(HeadlessAppTest, AChangeOfCanvasBringsTheBarOutForAMoment) {
     AppConfig config = DefaultConfig();
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)] =
         platform::KeyCombo{/*ctrl=*/false, /*alt=*/false, /*shift=*/false, /*key=*/'C'};
     StartWith(std::move(config));
     ShowEditMode();
@@ -1687,12 +1687,12 @@ TEST_F(HeadlessAppTest, AWaitingRowTakesTheNextKeyAndEscapeStopsIt) {
     KeyEvent(ImGuiMod_Ctrl, false);
     StepFrame();
     EXPECT_FALSE(App().IsCapturingShortcut());
-    EXPECT_EQ(AppSettings().Stored().toolShortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
+    EXPECT_EQ(AppSettings().Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
               (platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, 'K'}));
 
     controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
     PressKey(ImGuiKey_Escape);
-    EXPECT_FALSE(AppSettings().Stored().toolShortcuts[ShortcutActionIndex(ShortcutAction::Copy)].IsValid())
+    EXPECT_FALSE(AppSettings().Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)].IsValid())
         << "Escape binds nothing";
     EXPECT_TRUE(App().IsOverviewOpen());
 
@@ -2839,7 +2839,7 @@ TEST_F(OverlappingItemsTest, ThePointerKeepsItsShapeCrossingAnOccludedBorder) {
     AppConfig config = DefaultConfig();
     // The app only asks the OS for a shape when it isn't drawing the
     // pointer itself, which is what makes the answer observable here.
-    config.editModeInput.useSoftwarePointer = false;
+    config.profileable.softwarePointer = false;
     StartWith(config);
     ShowEditMode();
     StepFrame();
@@ -2886,7 +2886,7 @@ TEST_F(OverlappingItemsTest, ThePointerKeepsItsShapeCrossingAnOccludedBorder) {
 // ApplyPointerShape's own comment rather than tested.
 TEST_F(OverlappingItemsTest, ThePenComesBackAfterHoveringAResizeHandle) {
     AppConfig config = DefaultConfig();
-    config.editModeInput.useSoftwarePointer = false;  // see the test above
+    config.profileable.softwarePointer = false;  // see the test above
     StartWith(config);
     ShowEditMode();
     StepFrame();
@@ -2923,7 +2923,7 @@ TEST_F(OverlappingItemsTest, ThePenComesBackAfterHoveringAResizeHandle) {
 // at ~57us of the ~82us an idle overlay's frame otherwise spends here.
 TEST_F(OverlappingItemsTest, AStillPointerStopsAskingTheOsForACursor) {
     AppConfig config = DefaultConfig();
-    config.editModeInput.useSoftwarePointer = false;
+    config.profileable.softwarePointer = false;
     StartWith(config);
     ShowEditMode();
     StepFrame();
@@ -4103,7 +4103,7 @@ TEST_F(HeadlessAppTest, CtrlWithEraseTakesOutARectangle) {
 
 AppConfig WithTextOnT() {
     AppConfig config = DefaultConfig();
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
         platform::KeyCombo{/*ctrl=*/false, /*alt=*/false, /*shift=*/false, /*key=*/'T'};
     return config;
 }
@@ -4729,7 +4729,7 @@ TEST_F(HeadlessAppTest, TheWelcomeIsMadeAtTheInterfaceScale) {
 // from the pixels kept, and a snippet's picture from the library.
 TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn) {
     AppConfig config = DefaultConfig();
-    config.freezeScreenInEditMode = true;  // the drag crops the frozen screen
+    config.profileable.freezeScreen = true;  // the drag crops the frozen screen
     StartWith(config);
     AttachStore();
     host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
@@ -4771,7 +4771,7 @@ TEST_F(HeadlessSaveTest, EveryTextureDrawnIsLiveWhateverHappens) {
     constexpr uint32_t kSeeds = 6;
     constexpr int kSteps = 120;
     AppConfig config = DefaultConfig();
-    config.freezeScreenInEditMode = true;
+    config.profileable.freezeScreen = true;
     config.showCanvasBar = true;
     config.overviewShowsBitmaps = true;
     FakeOverlayWindow& window = host_.overlayWindow;

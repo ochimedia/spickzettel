@@ -53,15 +53,15 @@ TEST(AppConfigTest, DefaultHotkeysAreAllDistinct) {
     EXPECT_NE(config.hotkeyViewMode, config.hotkeyQuickCapture);
 }
 
-TEST(AppConfigTest, EditModeNoActivateDefaultsToOn) { EXPECT_TRUE(DefaultConfig().editModeNoActivate); }
+TEST(AppConfigTest, EditModeNoActivateDefaultsToOn) { EXPECT_TRUE(DefaultConfig().profileable.dontStealFocus); }
 
 TEST(AppConfigTest, ParsesEditModeNoActivate) {
-    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", "true")).editModeNoActivate);
-    EXPECT_FALSE(ParseConfig(One("behavior", "dontStealFocus", "false")).editModeNoActivate);
+    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", "true")).profileable.dontStealFocus);
+    EXPECT_FALSE(ParseConfig(One("behavior", "dontStealFocus", "false")).profileable.dontStealFocus);
     // A value of the wrong type is a value the file failed to state, so the
     // default stands.
-    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", R"("yes")")).editModeNoActivate);
-    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", "1")).editModeNoActivate);
+    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", R"("yes")")).profileable.dontStealFocus);
+    EXPECT_TRUE(ParseConfig(One("behavior", "dontStealFocus", "1")).profileable.dontStealFocus);
 }
 
 // On by default, because over an elevated application every other input
@@ -69,17 +69,17 @@ TEST(AppConfigTest, ParsesEditModeNoActivate) {
 // application's input, so an overlay that keeps its hands off gets nothing
 // at all. Off is the deliberate choice to accept that.
 TEST(AppConfigTest, TakeFocusOverElevatedDefaultsToOn) {
-    EXPECT_TRUE(DefaultConfig().takeFocusOverElevated);
+    EXPECT_TRUE(DefaultConfig().profileable.takeFocusOverElevated);
 }
 
 TEST(AppConfigTest, ParsesTakeFocusOverElevated) {
-    EXPECT_TRUE(ParseConfig(One("behavior", "takeFocusOverElevated", "true")).takeFocusOverElevated);
-    EXPECT_FALSE(ParseConfig(One("behavior", "takeFocusOverElevated", "false")).takeFocusOverElevated);
-    EXPECT_TRUE(ParseConfig(One("behavior", "takeFocusOverElevated", R"("no")")).takeFocusOverElevated);
+    EXPECT_TRUE(ParseConfig(One("behavior", "takeFocusOverElevated", "true")).profileable.takeFocusOverElevated);
+    EXPECT_FALSE(ParseConfig(One("behavior", "takeFocusOverElevated", "false")).profileable.takeFocusOverElevated);
+    EXPECT_TRUE(ParseConfig(One("behavior", "takeFocusOverElevated", R"("no")")).profileable.takeFocusOverElevated);
 }
 
 TEST(AppConfigTest, EveryEditModeInputOptionButCounteringDefaultsToOn) {
-    const platform::EditModeInputOptions options = DefaultConfig().editModeInput;
+    const platform::EditModeInputOptions options = DefaultConfig().profileable.InputOptions();
     EXPECT_TRUE(options.useSoftwarePointer);
     EXPECT_TRUE(options.useRawMouseInput);
     EXPECT_TRUE(options.dontForwardKeystrokes);
@@ -155,17 +155,17 @@ TEST(AppConfigTest, LosingFocusDisablesTheWholePointerChain) {
 }
 
 TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
-    EXPECT_FALSE(ParseConfig(One("behavior", "softwarePointer", "false")).editModeInput.useSoftwarePointer);
-    EXPECT_FALSE(ParseConfig(One("behavior", "rawMouseInput", "false")).editModeInput.useRawMouseInput);
+    EXPECT_FALSE(ParseConfig(One("behavior", "softwarePointer", "false")).profileable.softwarePointer);
+    EXPECT_FALSE(ParseConfig(One("behavior", "rawMouseInput", "false")).profileable.rawMouseInput);
     EXPECT_FALSE(
-        ParseConfig(One("behavior", "dontForwardKeystrokes", "false")).editModeInput.dontForwardKeystrokes);
+        ParseConfig(One("behavior", "dontForwardKeystrokes", "false")).profileable.dontForwardKeystrokes);
     EXPECT_TRUE(
-        ParseConfig(One("behavior", "counterRawMouseInput", "true")).editModeInput.counterRawMouseInput);
+        ParseConfig(One("behavior", "counterRawMouseInput", "true")).profileable.counterRawMouseInput);
 
     // Disabling one leaves the others alone - they're separate experiments,
     // not one setting with four names.
     const platform::EditModeInputOptions onlyMouse =
-        ParseConfig(One("behavior", "rawMouseInput", "false")).editModeInput;
+        ParseConfig(One("behavior", "rawMouseInput", "false")).profileable.InputOptions();
     EXPECT_FALSE(onlyMouse.useRawMouseInput);
     EXPECT_TRUE(onlyMouse.useSoftwarePointer);
     EXPECT_TRUE(onlyMouse.dontForwardKeystrokes);
@@ -174,17 +174,17 @@ TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
 
 TEST(AppConfigTest, CounterThresholdIsReadClampedAndRoundTrips) {
     using platform::EditModeInputOptions;
-    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "42")).editModeInput.counterThreshold, 42);
-    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "0")).editModeInput.counterThreshold,
+    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "42")).profileable.counterThreshold, 42);
+    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "0")).profileable.counterThreshold,
               EditModeInputOptions::kCounterThresholdMin);
-    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "1000000")).editModeInput.counterThreshold,
+    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "1000000")).profileable.counterThreshold,
               EditModeInputOptions::kCounterThresholdMax);
-    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "\"lots\"")).editModeInput.counterThreshold,
+    EXPECT_EQ(ParseConfig(One("behavior", "counterThreshold", "\"lots\"")).profileable.counterThreshold,
               EditModeInputOptions{}.counterThreshold);
 
     AppConfig config = DefaultConfig();
-    config.editModeInput.counterThreshold = 123;
-    EXPECT_EQ(ParseConfig(SerializeConfig(config)).editModeInput.counterThreshold, 123);
+    config.profileable.counterThreshold = 123;
+    EXPECT_EQ(ParseConfig(SerializeConfig(config)).profileable.counterThreshold, 123);
 }
 
 TEST(AppConfigTest, InputOptionsHudDefaultsToOffAndRoundTrips) {
@@ -247,7 +247,7 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.strokeColorRGBA = 0x00FF00FF;
     config.strokeWidth = 6.5f;
     config.showDebugOverlay = true;
-    config.editModeNoActivate = false;
+    config.profileable.dontStealFocus = false;
     config.showItemBorders = false;
     config.strokeRenderMode = StrokeRenderMode::Rasterized;
     config.raiseSelectedSnippet = false;
@@ -264,12 +264,12 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.editModeBorderOpacity = 0.4f;
     config.editModeBorderWidthPx = 16.0f;
     config.editModeBorderOnlyWhenEmpty = true;
-    config.freezeScreenInEditMode = true;
+    config.profileable.freezeScreen = true;
     config.showInputOptionsHud = true;
-    config.editModeInput.useSoftwarePointer = false;
-    config.editModeInput.useRawMouseInput = true;
-    config.editModeInput.dontForwardKeystrokes = false;
-    config.editModeInput.counterRawMouseInput = true;  // off by default
+    config.profileable.softwarePointer = false;
+    config.profileable.rawMouseInput = true;
+    config.profileable.dontForwardKeystrokes = false;
+    config.profileable.counterRawMouseInput = true;  // off by default
 
     const std::string text = SerializeConfig(config);
     const AppConfig parsed = ParseConfig(text);
@@ -340,11 +340,11 @@ TEST(AppConfigTest, ParsesBareFunctionKeyHotkeyWithNoModifier) {
 // registers keys only, and one written by hand is read as nothing said.
 TEST(AppConfigTest, AShortcutMayBeAMouseButtonAndAHotkeyMayNot) {
     AppConfig config = DefaultConfig();
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)] =
         platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button};
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Erase)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Erase)] =
         platform::KeyCombo{true, false, false, platform::KeyCombo::kMiddleButton};
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
         platform::KeyCombo{false, false, true, platform::KeyCombo::kX2Button};
     const std::string text = SerializeConfig(config);
     EXPECT_NE(text.find(R"("Mouse4")"), std::string::npos) << text;
@@ -704,16 +704,16 @@ TEST(AppConfigTest, ParsesEditModeBorderSettings) {
 // Off by default: it turns the overlay from a sheet of glass into an opaque
 // page, which is for games and best switched on in their profiles.
 TEST(AppConfigTest, FreezeScreenInEditModeDefaultsToOff) {
-    EXPECT_FALSE(DefaultConfig().freezeScreenInEditMode);
+    EXPECT_FALSE(DefaultConfig().profileable.freezeScreen);
 }
 
 TEST(AppConfigTest, ParsesAndSerializesFreezeScreenInEditMode) {
-    EXPECT_TRUE(ParseConfig(One("behavior", "freezeScreen", "true")).freezeScreenInEditMode);
-    EXPECT_FALSE(ParseConfig(One("behavior", "freezeScreen", "false")).freezeScreenInEditMode);
+    EXPECT_TRUE(ParseConfig(One("behavior", "freezeScreen", "true")).profileable.freezeScreen);
+    EXPECT_FALSE(ParseConfig(One("behavior", "freezeScreen", "false")).profileable.freezeScreen);
 
     AppConfig config = DefaultConfig();
-    config.freezeScreenInEditMode = true;
-    EXPECT_TRUE(ParseConfig(SerializeConfig(config)).freezeScreenInEditMode);
+    config.profileable.freezeScreen = true;
+    EXPECT_TRUE(ParseConfig(SerializeConfig(config)).profileable.freezeScreen);
 }
 
 // Both are pulled into range rather than reverted to the default - see

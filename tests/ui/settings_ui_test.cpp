@@ -90,7 +90,7 @@ TEST_F(UiTest, TheEditTargetDropdownOpensInFrontOfThePanel) {
     });
 
     // Which is the defaults, not the profile that is otherwise current.
-    EXPECT_NE(AppSettings().Base().freezeScreen, DefaultConfig().freezeScreenInEditMode);
+    EXPECT_NE(AppSettings().Base().freezeScreen, DefaultConfig().profileable.freezeScreen);
     EXPECT_TRUE(AppSettings().Profiles()[0].overrides.Empty());
 }
 
@@ -192,8 +192,8 @@ TEST_F(UiTest, TogglingAnInputSettingWhileAProfileIsActiveLandsInTheProfile) {
     // the whole point of the override model.
     ASSERT_FALSE(AppSettings().Profiles()[0].overrides.Empty());
     ASSERT_TRUE(AppSettings().Profiles()[0].overrides.freezeScreen.has_value());
-    EXPECT_NE(*AppSettings().Profiles()[0].overrides.freezeScreen, DefaultConfig().freezeScreenInEditMode);
-    EXPECT_EQ(AppSettings().Base().freezeScreen, DefaultConfig().freezeScreenInEditMode);
+    EXPECT_NE(*AppSettings().Profiles()[0].overrides.freezeScreen, DefaultConfig().profileable.freezeScreen);
+    EXPECT_EQ(AppSettings().Base().freezeScreen, DefaultConfig().profileable.freezeScreen);
 }
 
 // The row of tiles in Settings > Interaction is the bar: clicking one
@@ -280,7 +280,7 @@ TEST_F(UiTest, AShortcutRowTakesAMouseButton) {
     MouseButtonEvent(3, false);
     StepFrame();
     EXPECT_FALSE(App().IsCapturingShortcut());
-    EXPECT_EQ(AppSettings().Stored().toolShortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
+    EXPECT_EQ(AppSettings().Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
               (platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button}));
 }
 

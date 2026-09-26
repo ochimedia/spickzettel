@@ -239,7 +239,7 @@ protected:
     // of its own in section 6, and the window is where it shows.
     static AppConfig Config() {
         AppConfig config = DefaultConfig();
-        config.freezeScreenInEditMode = true;
+        config.profileable.freezeScreen = true;
         return config;
     }
     void SetUp() override { Restart(Config()); }

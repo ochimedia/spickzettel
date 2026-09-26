@@ -379,7 +379,7 @@ void TrayController::Apply(const OverlayTransition& transition) {
         overlayApp_.OnOverlayShown();
     }
     // 9. The still picture edit mode shows instead of the live application
-    // - see AppConfig::freezeScreenInEditMode. After the window is up, so
+    // - see ProfileableSettings::freezeScreen. After the window is up, so
     // the capture leaves out the overlay as it is going to be (see
     // CaptureScreen), and taken on every entry, so it is never stale.
     if (to == OverlayState::Edit && settings_.Live().freezeScreen) {

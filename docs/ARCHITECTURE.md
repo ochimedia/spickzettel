@@ -788,6 +788,15 @@ costs the busy timeout each time.
 `config.json` by `ParseConfig`/`SerializeConfig`. Parsing is pure core
 logic; only *where* the file lives is platform-specific.
 
+The overridable settings are held once, as `AppConfig::profileable`, a
+`ProfileableSettings` named as the file names them. `AppConfig` used to
+keep its own copies under other names (`editModeNoActivate` for
+`dontStealFocus`), copied to and from the profile's struct on every read
+and edit, on the grounds that the file nests them differently. Where
+each is in the file is the reader's and the writer's to say, and they
+say it anyway; the second copy only added two functions to keep in step
+and a second name for each setting.
+
 The file is JSON rather than flat `key=value` lines because of
 profiles: a profile matches on a list of executable names and window
 titles, which are arbitrary strings holding `=`, `#`, commas and

@@ -59,11 +59,11 @@ AppConfig Everything() {
     c.hotkeyViewMode = platform::KeyCombo{false, false, false, platform::KeyCombo::kFunctionKeyBase + 9};
     c.hotkeyQuickCapture = platform::KeyCombo{true, true, true, 'S'};
     c.hotkeySilentCapture = platform::KeyCombo{};
-    c.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)] = platform::KeyCombo{false, false, true, 'Q'};
-    c.toolShortcuts[ShortcutActionIndex(ShortcutAction::Erase)] = platform::KeyCombo{};
-    c.toolShortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
+    c.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)] = platform::KeyCombo{false, false, true, 'Q'};
+    c.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Erase)] = platform::KeyCombo{};
+    c.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
         platform::KeyCombo{true, false, false, platform::KeyCombo::kMiddleButton};
-    c.toolShortcuts[ShortcutActionIndex(ShortcutAction::CheatSheet)] =
+    c.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::CheatSheet)] =
         platform::KeyCombo{false, false, false, platform::KeyCombo::kFunctionKeyBase + 1};
 
     Profile game;
@@ -89,13 +89,13 @@ AppConfig Everything() {
     c.strokeWidth = 6.5f;
     c.showDebugOverlay = true;
     c.showInputOptionsHud = true;
-    c.editModeNoActivate = false;
-    c.takeFocusOverElevated = false;
-    c.editModeInput.useSoftwarePointer = false;
-    c.editModeInput.useRawMouseInput = false;
-    c.editModeInput.dontForwardKeystrokes = false;
-    c.editModeInput.counterRawMouseInput = true;
-    c.editModeInput.counterThreshold = 40;
+    c.profileable.dontStealFocus = false;
+    c.profileable.takeFocusOverElevated = false;
+    c.profileable.softwarePointer = false;
+    c.profileable.rawMouseInput = false;
+    c.profileable.dontForwardKeystrokes = false;
+    c.profileable.counterRawMouseInput = true;
+    c.profileable.counterThreshold = 40;
     c.showItemBorders = false;
     c.showToastsWhileHidden = false;
     c.accentColorRGBA = 0x8040C0FFu;
@@ -119,7 +119,7 @@ AppConfig Everything() {
     c.editModeBorderOpacity = 0.4f;
     c.editModeBorderWidthPx = 16.0f;
     c.editModeBorderOnlyWhenEmpty = true;
-    c.freezeScreenInEditMode = true;
+    c.profileable.freezeScreen = true;
     c.purgeDeleted = false;
     c.purgeDeletedAfterDays = 21;
     c.confirmDelete = false;
@@ -155,8 +155,8 @@ TEST(ConfigFilesTest, TheFirstReleasesSettingsAreReadAsItWroteThem) {
     AppConfig expected = Everything();
     const AppConfig defaults = DefaultConfig();
     // No mouse button could be a shortcut yet.
-    expected.toolShortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
-        defaults.toolShortcuts[ShortcutActionIndex(ShortcutAction::Text)];
+    expected.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
+        defaults.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)];
     // Added since.
     expected.uiScalePercent = defaults.uiScalePercent;
     expected.screenshotDefaults = defaults.screenshotDefaults;

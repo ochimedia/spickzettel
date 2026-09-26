@@ -73,29 +73,92 @@ struct ProfileOverrides {
     bool operator==(const ProfileOverrides&) const = default;
 };
 
-// The same settings as concrete values: the defaults, or the result of
-// resolving a profile against them. Flat rather than mirroring AppConfig's
-// nesting so that a UI row can name its field once, as a pair of pointers
-// to member - `&ProfileableSettings::freezeScreen` alongside
-// `&ProfileOverrides::freezeScreen` - instead of a near-identical block of
-// plumbing per setting.
+// The same settings as concrete values: the defaults (AppConfig::
+// profileable), or the result of resolving a profile against them. Named
+// as config.json names them, and flat, so that a UI row can name its field
+// once, as a pair of pointers to member - `&ProfileableSettings::
+// freezeScreen` alongside `&ProfileOverrides::freezeScreen` - instead of a
+// near-identical block of plumbing per setting.
 struct ProfileableSettings {
+    // true (default): the overlay window never steals OS input focus just
+    // from being shown or clicked in edit mode (WS_EX_NOACTIVATE on
+    // Windows) - drawing/item interaction all work purely via
+    // mouse routing while the game underneath keeps keyboard focus and
+    // doesn't see a focus-loss event, so it won't pause/throttle the way it
+    // does on view-only mode's own hotkey otherwise. The one exception is
+    // typing into a rename field (see OverlayApp's folder/canvas rename),
+    // which briefly requests real focus for as long as that field is open,
+    // then hands it back.
+    //
+    // This is the fundamental decision the input options below exist to
+    // make good on. On its own it has a real, measured cost: since the game
+    // stays the OS foreground window, and most games gate raw/relative
+    // mouse input (the kind used for camera-look) on being foreground
+    // rather than on being covered or z-order, the game goes on receiving
+    // full mouse input at the same time as the overlay - a dragged stroke
+    // can simultaneously spin the camera. That is exactly what the input
+    // options take back, which is why they default on together; turning
+    // this off makes every one of them a no-op, since a game that has lost
+    // focus has already stopped receiving input.
+    //
+    // See IOverlayWindow::SetEditModeNoActivate for how a change reaches an
+    // already-created window live.
     bool dontStealFocus = true;
-    // Qualifies the one above, and only ever in the direction of taking
-    // focus: over an application at a higher integrity level nothing else
-    // in this struct can work, because Windows delivers that application's
-    // input to no lower-integrity process. Per-application because the one
-    // good reason to turn it off is per-application - an elevated game,
-    // where a dead overlay still shows pinned snippets and still captures,
-    // and where taking focus is the one thing that must not happen. See
+    // true (default): `dontStealFocus` is overruled, for one showing, when
+    // the application in front is at a higher integrity level than this
+    // process - something started as administrator, which on an account
+    // with admin rights includes Task Manager. Windows hands such an
+    // application's input to no lower-integrity process at all, so leaving
+    // it focused costs not just the grab but every shortcut the overlay
+    // has, and nothing else in this struct can work; taking focus is the
+    // only thing that restores either. Only a *positive* reading acts: a
+    // process that refuses the question is left alone, because a game
+    // behind an anti-cheat driver refuses it the same way and is the one
+    // thing that must keep focus. Per-application because the one good
+    // reason to turn it off is per-application - an elevated game, where a
+    // dead overlay still shows pinned snippets and still captures, and
+    // where taking focus is the one thing that must not happen. See
     // docs/ARCHITECTURE.md.
     bool takeFocusOverElevated = true;
+    // The input options: what edit mode does with physical input while
+    // `dontStealFocus` is leaving the game focused. They reach the window
+    // together as platform::EditModeInputOptions (InputOptions below),
+    // which documents each part and what it costs; docs/ARCHITECTURE.md
+    // has the measurements. Each stays individually switchable because
+    // which combination is right still depends on the game.
     bool softwarePointer = true;
     bool rawMouseInput = true;
     bool dontForwardKeystrokes = true;
     bool counterRawMouseInput = false;
+    // Freeze the screen while editing: on entering edit mode, grab what is
+    // on screen and draw that instead of letting the live application show
+    // through. For annotating over a game, this is the one thing that
+    // reliably works. The camera underneath still turns while you draw -
+    // nothing outside the game's process can stop that - but you no longer
+    // have to watch it happen, which was most of the problem. Pairs with
+    // counterRawMouseInput, whose job then becomes leaving the view roughly
+    // where you found it rather than holding it still on screen.
+    //
+    // Off by default: it changes what the overlay fundamentally is, from a
+    // sheet of glass into an opaque page, and most of what the overlay is
+    // up over is not a game that turns under the mouse. Worth switching on
+    // in a game's profile. A region capture taken while the screen is
+    // frozen crops the frozen image rather than re-capturing the live
+    // screen, so a snippet matches what you were looking at when you
+    // dragged it out - see Session::CaptureShotItem.
     bool freezeScreen = false;
     int counterThreshold = platform::EditModeInputOptions{}.counterThreshold;
+    // What each tool and create action is bound to while the overlay is up
+    // in edit mode - see ShortcutAction, and Settings > Hotkeys, which is
+    // where these are edited.
+    //
+    // Not OS-level hotkeys, and deliberately not stored alongside the
+    // summon hotkeys (AppConfig::hotkeyEditMode and the rest): these are
+    // plain keys the overlay reads from its own frame, they only do
+    // anything while it is showing and taking input, and nothing about
+    // them can fail the way registering a global hotkey can. That is also
+    // why they're allowed to be bare letters - "P" costs nothing outside
+    // edit mode.
     ShortcutBindings shortcuts = DefaultShortcuts();
 
     // The five that travel together as one platform type - see

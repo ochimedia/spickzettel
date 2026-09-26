@@ -104,24 +104,24 @@ TEST(ShortcutActionTest, DrawAndEraseAreStoredAsPenAndEraser) {
 TEST(ShortcutActionTest, UnknownShortcutNamesAreIgnored) {
     const AppConfig config = ParseConfig(
         R"({"shortcuts": {"wobble": "R", "zap": "L", "sparkle": "X", "doodle": "N", "pen": "Q"}})");
-    EXPECT_EQ(config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)], Plain('Q'));
-    EXPECT_EQ(config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Erase)], Plain('E'));
+    EXPECT_EQ(config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)], Plain('Q'));
+    EXPECT_EQ(config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Erase)], Plain('E'));
     for (const ShortcutAction action : kAllShortcutActions) {
-        EXPECT_NE(config.toolShortcuts[ShortcutActionIndex(action)], Plain('R'));
-        EXPECT_NE(config.toolShortcuts[ShortcutActionIndex(action)], Plain('N'));
+        EXPECT_NE(config.profileable.shortcuts[ShortcutActionIndex(action)], Plain('R'));
+        EXPECT_NE(config.profileable.shortcuts[ShortcutActionIndex(action)], Plain('N'));
     }
 }
 
 TEST(ShortcutActionTest, ConfigRoundTripsBindingsAndUnbindings) {
     AppConfig config = DefaultConfig();
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Select)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Select)] =
         platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/false, /*key=*/'M'};
     // The case a naive "skip empty values" parser gets wrong: an action
     // that ships bound, unbound on purpose, has to come back unbound.
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)] = platform::KeyCombo{};
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)] = platform::KeyCombo{};
 
     const AppConfig reparsed = ParseConfig(SerializeConfig(config));
-    EXPECT_EQ(reparsed.toolShortcuts, config.toolShortcuts);
+    EXPECT_EQ(reparsed.profileable.shortcuts, config.profileable.shortcuts);
     EXPECT_EQ(reparsed, config);
 }
 
@@ -130,27 +130,27 @@ TEST(ShortcutActionTest, ConfigWithNoShortcutsObjectKeepsTheDefaults) {
     // "everything unbound" - absent means inherit, and only an explicit
     // null means unset.
     const AppConfig config = ParseConfig(R"({"hotkeys": {"editMode": "F5"}})");
-    EXPECT_EQ(config.toolShortcuts, DefaultShortcuts());
+    EXPECT_EQ(config.profileable.shortcuts, DefaultShortcuts());
 
     const AppConfig partial = ParseConfig(R"({"shortcuts": {"text": "T"}})");
-    EXPECT_EQ(partial.toolShortcuts[ShortcutActionIndex(ShortcutAction::Text)], Plain('T'));
+    EXPECT_EQ(partial.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)], Plain('T'));
     // Untouched by a file that only mentioned one of them.
-    EXPECT_EQ(partial.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)], Plain('P'));
+    EXPECT_EQ(partial.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)], Plain('P'));
 }
 
 TEST(ShortcutActionTest, ExplicitNullIsUnbound) {
     const AppConfig config = ParseConfig(R"({"shortcuts": {"pen": null}})");
-    EXPECT_EQ(config.toolShortcuts[ShortcutActionIndex(ShortcutAction::Draw)].key, 0);
+    EXPECT_EQ(config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)].key, 0);
 }
 
 TEST(ShortcutActionTest, FunctionKeysAndModifiersSurviveTheFile) {
     AppConfig config = DefaultConfig();
-    config.toolShortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)] =
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)] =
         platform::KeyCombo{/*ctrl=*/false, /*alt=*/true, /*shift=*/true,
                            /*key=*/platform::KeyCombo::kFunctionKeyBase + 9};
     const AppConfig reparsed = ParseConfig(SerializeConfig(config));
-    EXPECT_EQ(reparsed.toolShortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)],
-               config.toolShortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)]);
+    EXPECT_EQ(reparsed.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)],
+               config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)]);
 }
 
 // Which shape a press makes, from the modifiers held as it starts - Ctrl

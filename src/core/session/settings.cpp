@@ -10,8 +10,7 @@ Settings::Settings(AppConfig stored) : stored_(std::move(stored)) { Resolve(); }
 void Settings::Resolve() {
     ++resolveCount_;
     activeProfile_ = FindMatchingProfile(stored_.profiles, underlyingApp_);
-    const ProfileableSettings base = Base();
-    live_ = activeProfile_ ? ResolveProfile(base, stored_.profiles, *activeProfile_) : base;
+    live_ = activeProfile_ ? ResolveProfile(Base(), stored_.profiles, *activeProfile_) : Base();
 }
 
 void Settings::Commit() {
@@ -53,9 +52,7 @@ void Settings::SetProfileableImpl(std::optional<size_t> target, const Field& fie
     if (IsProfile(target)) {
         stored_.profiles[*target].overrides.*field.override = value;
     } else {
-        ProfileableSettings base = Base();
-        base.*field.value = value;
-        ApplyProfileable(base, stored_);
+        stored_.profileable.*field.value = value;
     }
     Commit();
 }
@@ -89,9 +86,7 @@ void Settings::SetShortcut(std::optional<size_t> target, ShortcutAction action, 
     if (IsProfile(target)) {
         stored_.profiles[*target].overrides.shortcuts[ShortcutActionIndex(action)] = combo;
     } else {
-        ProfileableSettings base = Base();
-        base.shortcuts[ShortcutActionIndex(action)] = combo;
-        ApplyProfileable(base, stored_);
+        stored_.profileable.shortcuts[ShortcutActionIndex(action)] = combo;
     }
     Commit();
 }

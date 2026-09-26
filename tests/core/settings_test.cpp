@@ -12,7 +12,7 @@ AppConfig ConfigWithOneProfile() {
     Profile profile;
     profile.name = "Game";
     profile.match.executables.push_back("game.exe");
-    profile.overrides.dontStealFocus = !config.editModeNoActivate;
+    profile.overrides.dontStealFocus = !config.profileable.dontStealFocus;
     config.profiles.push_back(profile);
     return config;
 }
@@ -26,12 +26,12 @@ platform::ForegroundApp Game() {
 TEST(SettingsTest, LiveIsTheDefaultsUntilAProfileMatches) {
     Settings settings(ConfigWithOneProfile());
     EXPECT_FALSE(settings.ActiveProfile().has_value());
-    EXPECT_EQ(settings.Live().dontStealFocus, DefaultConfig().editModeNoActivate);
+    EXPECT_EQ(settings.Live().dontStealFocus, DefaultConfig().profileable.dontStealFocus);
 
     settings.SetUnderlyingApplication(Game());
     ASSERT_EQ(settings.ActiveProfile(), std::optional<size_t>(0));
-    EXPECT_NE(settings.Live().dontStealFocus, DefaultConfig().editModeNoActivate);
-    EXPECT_EQ(settings.Stored().editModeNoActivate, DefaultConfig().editModeNoActivate)
+    EXPECT_NE(settings.Live().dontStealFocus, DefaultConfig().profileable.dontStealFocus);
+    EXPECT_EQ(settings.Stored().profileable.dontStealFocus, DefaultConfig().profileable.dontStealFocus)
         << "matching a profile resolves; it writes nothing";
 }
 
@@ -39,11 +39,11 @@ TEST(SettingsTest, AnEditGoesWhereItIsAimed) {
     Settings settings(ConfigWithOneProfile());
     settings.SetUnderlyingApplication(Game());
     const ProfileableField freeze{&ProfileableSettings::freezeScreen, &ProfileOverrides::freezeScreen};
-    const bool defaultFreeze = DefaultConfig().freezeScreenInEditMode;
+    const bool defaultFreeze = DefaultConfig().profileable.freezeScreen;
 
     settings.SetProfileable(0u, freeze, !defaultFreeze);
     EXPECT_TRUE(settings.IsOverridden(0u, freeze));
-    EXPECT_EQ(settings.Stored().freezeScreenInEditMode, defaultFreeze) << "the defaults are untouched";
+    EXPECT_EQ(settings.Stored().profileable.freezeScreen, defaultFreeze) << "the defaults are untouched";
     EXPECT_EQ(settings.Live().freezeScreen, !defaultFreeze) << "and what runs is the profile's";
 
     settings.ClearOverride(0u, freeze);
@@ -51,7 +51,7 @@ TEST(SettingsTest, AnEditGoesWhereItIsAimed) {
     EXPECT_EQ(settings.Live().freezeScreen, defaultFreeze);
 
     settings.SetProfileable(std::nullopt, freeze, !defaultFreeze);
-    EXPECT_EQ(settings.Stored().freezeScreenInEditMode, !defaultFreeze) << "nullopt is the defaults";
+    EXPECT_EQ(settings.Stored().profileable.freezeScreen, !defaultFreeze) << "nullopt is the defaults";
     EXPECT_FALSE(settings.IsOverridden(std::nullopt, freeze)) << "which override nothing";
 }
 
@@ -59,11 +59,11 @@ TEST(SettingsTest, ANumberEditGoesWhereItIsAimed) {
     Settings settings(ConfigWithOneProfile());
     settings.SetUnderlyingApplication(Game());
     const ProfileableIntField threshold{&ProfileableSettings::counterThreshold, &ProfileOverrides::counterThreshold};
-    const int defaultThreshold = DefaultConfig().editModeInput.counterThreshold;
+    const int defaultThreshold = DefaultConfig().profileable.counterThreshold;
 
     settings.SetProfileable(0u, threshold, 40);
     EXPECT_TRUE(settings.IsOverridden(0u, threshold));
-    EXPECT_EQ(settings.Stored().editModeInput.counterThreshold, defaultThreshold);
+    EXPECT_EQ(settings.Stored().profileable.counterThreshold, defaultThreshold);
     EXPECT_EQ(settings.Live().counterThreshold, 40);
 
     settings.ClearOverride(0u, threshold);
@@ -71,7 +71,7 @@ TEST(SettingsTest, ANumberEditGoesWhereItIsAimed) {
     EXPECT_EQ(settings.Live().counterThreshold, defaultThreshold);
 
     settings.SetProfileable(std::nullopt, threshold, 90);
-    EXPECT_EQ(settings.Stored().editModeInput.counterThreshold, 90);
+    EXPECT_EQ(settings.Stored().profileable.counterThreshold, 90);
     EXPECT_EQ(settings.Live().counterThreshold, 90) << "a profile that says nothing inherits it";
 }
 
@@ -93,7 +93,7 @@ TEST(SettingsTest, EveryEditCommitsAndACommitResolvesAgain) {
     settings.SetProfiles(none);
     EXPECT_EQ(commits, 2);
     EXPECT_FALSE(settings.ActiveProfile().has_value());
-    EXPECT_EQ(settings.Live().dontStealFocus, settings.Stored().editModeNoActivate);
+    EXPECT_EQ(settings.Live().dontStealFocus, settings.Stored().profileable.dontStealFocus);
 }
 
 TEST(SettingsTest, AShortcutOverrideIsPerProfile) {

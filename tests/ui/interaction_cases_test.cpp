@@ -494,7 +494,7 @@ TEST_F(InteractionCasesTest, ATouchHoldsInjectedRightPressLandsOnSpent) {
 
 TEST_F(InteractionCasesTest, AMouseButtonWaitsForTheGestureInFlight) {
     const ItemId a = MakeSnippet(Rect{100, 100, 200, 150});
-    settings_.Mutable().toolShortcuts[ShortcutActionIndex(ShortcutAction::Duplicate)] =
+    settings_.Mutable().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Duplicate)] =
         KeyCombo{false, false, false, KeyCombo::kMiddleButton};
     settings_.Commit();
     Click(150.0f, 150.0f);

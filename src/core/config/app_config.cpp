@@ -528,24 +528,6 @@ json WriteShortcuts(const ShortcutBindings& bindings) {
 
 }  // namespace
 
-ProfileableSettings ProfileableFrom(const AppConfig& config) {
-    ProfileableSettings settings;
-    settings.dontStealFocus = config.editModeNoActivate;
-    settings.takeFocusOverElevated = config.takeFocusOverElevated;
-    settings.SetInputOptions(config.editModeInput);
-    settings.freezeScreen = config.freezeScreenInEditMode;
-    settings.shortcuts = config.toolShortcuts;
-    return settings;
-}
-
-void ApplyProfileable(const ProfileableSettings& settings, AppConfig& config) {
-    config.editModeNoActivate = settings.dontStealFocus;
-    config.takeFocusOverElevated = settings.takeFocusOverElevated;
-    config.editModeInput = settings.InputOptions();
-    config.freezeScreenInEditMode = settings.freezeScreen;
-    config.toolShortcuts = settings.shortcuts;
-}
-
 AppConfig DefaultConfig() { return AppConfig{}; }
 
 AppConfig ParseConfig(std::string_view text) { return TryParseConfig(text).value_or(DefaultConfig()); }
@@ -663,17 +645,17 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
     ReadString(display, "name", config.overlayDisplayName);
 
     const json& input = Group(doc, "behavior");
-    ReadBool(input, InputKeys::kDontStealFocus, config.editModeNoActivate);
-    ReadBool(input, InputKeys::kTakeFocusOverElevated, config.takeFocusOverElevated);
-    ReadBool(input, InputKeys::kSoftwarePointer, config.editModeInput.useSoftwarePointer);
-    ReadBool(input, InputKeys::kRawMouseInput, config.editModeInput.useRawMouseInput);
-    ReadBool(input, InputKeys::kDontForwardKeystrokes, config.editModeInput.dontForwardKeystrokes);
-    ReadBool(input, InputKeys::kCounterRawMouseInput, config.editModeInput.counterRawMouseInput);
-    ReadInt(input, InputKeys::kCounterThreshold, config.editModeInput.counterThreshold,
+    ReadBool(input, InputKeys::kDontStealFocus, config.profileable.dontStealFocus);
+    ReadBool(input, InputKeys::kTakeFocusOverElevated, config.profileable.takeFocusOverElevated);
+    ReadBool(input, InputKeys::kSoftwarePointer, config.profileable.softwarePointer);
+    ReadBool(input, InputKeys::kRawMouseInput, config.profileable.rawMouseInput);
+    ReadBool(input, InputKeys::kDontForwardKeystrokes, config.profileable.dontForwardKeystrokes);
+    ReadBool(input, InputKeys::kCounterRawMouseInput, config.profileable.counterRawMouseInput);
+    ReadInt(input, InputKeys::kCounterThreshold, config.profileable.counterThreshold,
             platform::EditModeInputOptions::kCounterThresholdMin, platform::EditModeInputOptions::kCounterThresholdMax);
-    ReadBool(input, InputKeys::kFreezeScreen, config.freezeScreenInEditMode);
+    ReadBool(input, InputKeys::kFreezeScreen, config.profileable.freezeScreen);
 
-    ReadShortcuts(Group(doc, "shortcuts"), config.toolShortcuts);
+    ReadShortcuts(Group(doc, "shortcuts"), config.profileable.shortcuts);
 
     const json& diagnostics = Group(doc, "diagnostics");
     ReadBool(diagnostics, "showDebugOverlay", config.showDebugOverlay);
@@ -843,17 +825,17 @@ std::string SerializeConfig(const AppConfig& config) {
     // doc comment on which settings are about the machine in front of you
     // rather than about you.
     doc["behavior"] = json{
-        {InputKeys::kDontStealFocus, config.editModeNoActivate},
-        {InputKeys::kTakeFocusOverElevated, config.takeFocusOverElevated},
-        {InputKeys::kSoftwarePointer, config.editModeInput.useSoftwarePointer},
-        {InputKeys::kRawMouseInput, config.editModeInput.useRawMouseInput},
-        {InputKeys::kDontForwardKeystrokes, config.editModeInput.dontForwardKeystrokes},
-        {InputKeys::kCounterRawMouseInput, config.editModeInput.counterRawMouseInput},
-        {InputKeys::kCounterThreshold, config.editModeInput.counterThreshold},
-        {InputKeys::kFreezeScreen, config.freezeScreenInEditMode},
+        {InputKeys::kDontStealFocus, config.profileable.dontStealFocus},
+        {InputKeys::kTakeFocusOverElevated, config.profileable.takeFocusOverElevated},
+        {InputKeys::kSoftwarePointer, config.profileable.softwarePointer},
+        {InputKeys::kRawMouseInput, config.profileable.rawMouseInput},
+        {InputKeys::kDontForwardKeystrokes, config.profileable.dontForwardKeystrokes},
+        {InputKeys::kCounterRawMouseInput, config.profileable.counterRawMouseInput},
+        {InputKeys::kCounterThreshold, config.profileable.counterThreshold},
+        {InputKeys::kFreezeScreen, config.profileable.freezeScreen},
     };
 
-    doc["shortcuts"] = WriteShortcuts(config.toolShortcuts);
+    doc["shortcuts"] = WriteShortcuts(config.profileable.shortcuts);
 
     doc["diagnostics"] = {
         {"showDebugOverlay", config.showDebugOverlay},

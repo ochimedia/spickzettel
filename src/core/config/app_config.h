@@ -37,13 +37,15 @@ struct SnippetDefaults {
 // SerializeConfig below). No dependency on any OS API — file I/O and path
 // resolution happen outside this type.
 //
-// The fields here are flat; the file groups them (`hotkeys`, `drawing`,
-// `appearance`, `bars`, `defaults`, `overview`, `deleted`, `behavior`, `shortcuts`,
-// `diagnostics`) and the mapping lives in one place, the serializer. The
-// grouping is not cosmetic: `behavior` and `shortcuts` are exactly the settings a
+// The file groups these (`hotkeys`, `drawing`, `appearance`, `bars`,
+// `overview`, `defaults`, `deleted`, `display`, `behavior`, `shortcuts`,
+// `diagnostics`), and the mapping lives in one place, the serializer. The
+// grouping is not
+// cosmetic: `behavior` and `shortcuts` are exactly the settings a
 // per-application profile may override - the ones that are about the
 // machine in front of you rather than about you - so a profile is the same
-// two objects again, sparse.
+// two objects again, sparse, and they are held here as one struct,
+// `profileable`.
 struct AppConfig {
     // Shows (or, pressed again in the same mode, hides) the overlay in
     // edit mode: the full interactive canvas. This
@@ -87,21 +89,13 @@ struct AppConfig {
     // another application already owns Ctrl+Alt+X should still get an app
     // that runs. Rebind it in Settings if that happens.
     platform::KeyCombo hotkeySilentCapture{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'X'};
-    // What each tool and create action is bound to while the overlay is up
-    // in edit mode - see ShortcutAction, and the Overview's own Shortcuts
-    // tab, which is where these are edited.
-    //
-    // Not OS-level hotkeys, and deliberately not stored alongside the three
-    // above: these are plain keys the overlay reads from its own frame,
-    // they only do anything while it is showing and taking input, and
-    // nothing about them can fail the way registering a global hotkey can.
-    // That is also why they're allowed to be bare letters - "P" costs
-    // nothing outside edit mode.
-    ShortcutBindings toolShortcuts = DefaultShortcuts();
-    // Per-application overrides for the two groups above (`behavior` and
-    // `toolShortcuts`) - see Profile. In list order, first match wins, and
-    // an empty list is the ordinary case: the settings here are then simply
-    // what runs, everywhere.
+    // The settings a per-application profile may override - the file's
+    // `behavior` and `shortcuts` groups - as the defaults have them. See
+    // ProfileableSettings for each.
+    ProfileableSettings profileable;
+    // Per-application overrides for the settings above - see Profile. In
+    // list order, first match wins, and an empty list is the ordinary case:
+    // the settings here are then simply what runs, everywhere.
     //
     // Deliberately part of AppConfig rather than a file of its own: they
     // are settings, they are edited in the same panel, and one file means
@@ -115,7 +109,7 @@ struct AppConfig {
     // input at all when bringing Spickzettel up on a new machine. Off by
     // default since it's a diagnostic aid, not part of the drawing surface.
     bool showDebugOverlay = false;
-    // Diagnostic aid for the `editModeInput` options below, off by default:
+    // Diagnostic aid for the input options (ProfileableSettings), off by default:
     // a panel listing every one of them with its current state, plus a
     // frame rate and the pointer's own step statistics, and a number key per
     // row to flip that option without leaving the game. Meant for standing
@@ -124,54 +118,10 @@ struct AppConfig {
     //
     // The number keys need the keyboard hook to reach a deliberately
     // focus-less overlay, so turning this on installs one even when
-    // `editModeInput.dontForwardKeystrokes` is off - which means digits go
+    // `dontForwardKeystrokes` is off - which means digits go
     // to the overlay instead of the game for as long as it's on. That is
     // the whole reason it isn't on all the time.
     bool showInputOptionsHud = false;
-    // true (default): the overlay window never steals OS input focus just
-    // from being shown or clicked in edit mode (WS_EX_NOACTIVATE on
-    // Windows) - drawing/item interaction all work purely via
-    // mouse routing while the game underneath keeps keyboard focus and
-    // doesn't see a focus-loss event, so it won't pause/throttle the way it
-    // does on view-only mode's own hotkey otherwise. The one exception is
-    // typing into a rename field (see OverlayApp's folder/canvas rename),
-    // which briefly requests real focus for as long as that field is open,
-    // then hands it back.
-    //
-    // This is the fundamental decision the whole `editModeInput` group
-    // below exists to make good on. On its own it has a real, measured
-    // cost: since the game stays the OS foreground window, and most games
-    // gate raw/relative mouse input (the kind used for camera-look) on
-    // being foreground rather than on being covered or z-order, the game
-    // goes on receiving full mouse input at the same time as the overlay -
-    // a dragged stroke can simultaneously spin the camera. That is exactly
-    // what `editModeInput` takes back, which is why the two default on
-    // together; turning this off makes every option in that group a no-op,
-    // since a game that has lost focus has already stopped receiving input.
-    //
-    // Editable at runtime from the Settings tab, same as the hotkeys above
-    // - see IOverlayWindow::SetEditModeNoActivate for how the change
-    // reaches an already-created window live.
-    bool editModeNoActivate = true;
-    // true (default): `editModeNoActivate` is overruled, for one showing,
-    // when the application in front is at a higher integrity level than
-    // this process - something started as administrator, which on an
-    // account with admin rights includes Task Manager. Windows hands such
-    // an application's input to no lower-integrity process at all, so
-    // leaving it focused costs not just the grab but every shortcut the
-    // overlay has; taking focus is the only thing that restores either.
-    // Only a *positive* reading acts: a process that refuses the question
-    // is left alone, because a game behind an anti-cheat driver refuses it
-    // the same way and is the one thing that must keep focus. See
-    // docs/ARCHITECTURE.md.
-    bool takeFocusOverElevated = true;
-    // What edit mode does with physical input while `editModeNoActivate` is
-    // leaving the game focused - see platform::EditModeInputOptions, which
-    // documents each part and what it costs, and docs/ARCHITECTURE.md for
-    // the measurements. All default to on, for the reason given above; each
-    // stays individually switchable because which combination is right
-    // still depends on the game.
-    platform::EditModeInputOptions editModeInput;
     // true (default): every item on the current canvas draws a subtle
     // border around its bounds at all times in edit mode, not just the one
     // currently hovered/dragged/resized (that one always gets it regardless
@@ -295,24 +245,6 @@ struct AppConfig {
     // to tell you. Turns the border from a permanent frame into a hint
     // that gets out of the way the moment it's redundant.
     bool editModeBorderOnlyWhenEmpty = false;
-    // Freeze the screen while editing: on entering edit mode, grab what is
-    // on screen and draw that instead of letting the live application show
-    // through. For annotating over a game, this is the one thing that
-    // reliably works. The camera underneath still turns while you draw -
-    // nothing outside the game's process can stop that - but you no longer
-    // have to watch it happen, which was most of the problem. Pairs with
-    // editModeInput.counterRawMouseInput, whose job then becomes leaving
-    // the view roughly where you found it rather than holding it still on
-    // screen.
-    //
-    // Off by default: it changes what the overlay fundamentally is, from a
-    // sheet of glass into an opaque page, and most of what the overlay is
-    // up over is not a game that turns under the mouse. Worth switching on
-    // in a game's profile. A region capture taken while the
-    // screen is frozen crops the frozen image rather than re-capturing the
-    // live screen, so a snippet matches what you were looking at when you
-    // dragged it out - see Session::CaptureShotItem.
-    bool freezeScreenInEditMode = false;
 
     // Whether a deleted folder or canvas is deleted for good once it has
     // been deleted for longer than purgeDeletedAfterDays - checked when the
@@ -398,15 +330,6 @@ inline constexpr int kPurgeDeletedAfterDaysMax = 3650;
 
 // Returns hardcoded defaults, matching the values a freshly-written config
 // file would contain.
-// The bridge between the file's own shape and what a profile talks about:
-// the overridable subset pulled out, and put back. Two functions rather
-// than storing a ProfileableSettings inside AppConfig, because the file
-// groups these settings differently from the way a profile addresses them
-// (`editModeInput` is one nested type there, four flat fields here) and
-// only one place should know that.
-ProfileableSettings ProfileableFrom(const AppConfig& config);
-void ApplyProfileable(const ProfileableSettings& settings, AppConfig& config);
-
 AppConfig DefaultConfig();
 
 // Parses config.json text. Every setting is optional: one that is missing,

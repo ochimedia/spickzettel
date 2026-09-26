@@ -87,7 +87,7 @@ TEST_F(PerfBench, OneFrameAgainstAGeneratedLibrary) {
     AppConfig config = DefaultConfig();
     bool restart = false;
     if (hardwarePointer != nullptr && std::string(hardwarePointer) == "1") {
-        config.editModeInput.useSoftwarePointer = false;
+        config.profileable.softwarePointer = false;
         restart = true;
     }
     if (modeName != nullptr) {

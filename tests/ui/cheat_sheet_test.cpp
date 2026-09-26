@@ -35,7 +35,7 @@ std::string KeysFor(const std::vector<CheatSheetSection>& sections, const char* 
 
 TEST(CheatSheetTest, ShowsTheKeysAsShipped) {
     const AppConfig config = DefaultConfig();
-    const auto sheet = BuildCheatSheet(config, config.toolShortcuts);
+    const auto sheet = BuildCheatSheet(config, config.profileable.shortcuts);
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetShowHide), "Ctrl+Alt+S");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetSilentCapture), "Ctrl+Alt+X");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetSelf), "Ctrl+H");
@@ -58,7 +58,7 @@ TEST(CheatSheetTest, FollowsTheBindingsAsTheyAre) {
                                                /*key=*/platform::KeyCombo::kFunctionKeyBase + 9};
     config.screenshotTrigger = CreationTrigger::Alt;
     config.drawingTrigger = CreationTrigger::Off;
-    ShortcutBindings shortcuts = config.toolShortcuts;
+    ShortcutBindings shortcuts = config.profileable.shortcuts;
     shortcuts[ShortcutActionIndex(ShortcutAction::Draw)] = platform::KeyCombo{false, false, false, 'Q'};
     shortcuts[ShortcutActionIndex(ShortcutAction::Copy)] = platform::KeyCombo{};
 
@@ -77,7 +77,7 @@ TEST(CheatSheetTest, FollowsTheBindingsAsTheyAre) {
 TEST(CheatSheetTest, EveryGroupHasATitleAndRows) {
     AppConfig config = DefaultConfig();
     ShortcutBindings none{};
-    for (const ShortcutBindings& shortcuts : {config.toolShortcuts, none}) {
+    for (const ShortcutBindings& shortcuts : {config.profileable.shortcuts, none}) {
         const auto sheet = BuildCheatSheet(config, shortcuts);
         ASSERT_EQ(sheet.size(), 6u);
         for (const CheatSheetSection& section : sheet) {

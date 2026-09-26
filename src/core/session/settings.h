@@ -54,7 +54,7 @@ public:
     std::optional<size_t> ActiveProfile() const { return activeProfile_; }
     const std::vector<Profile>& Profiles() const { return stored_.profiles; }
     // The profileable fields as the defaults have them.
-    ProfileableSettings Base() const { return ProfileableFrom(stored_); }
+    const ProfileableSettings& Base() const { return stored_.profileable; }
     // The profileable fields in effect: the defaults, resolved against the
     // active profile.
     const ProfileableSettings& Live() const { return live_; }
