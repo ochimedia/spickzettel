@@ -538,6 +538,51 @@ need anything inside the grab after all, that is a structural change in
 the sense of the principle above, measured before and after with the
 method its numbers came from.
 
+### Phase 3, in steps
+
+The order is chosen so that code that stays is moved once and code that
+goes is never moved: what survives of `OverlayApp`'s input side goes into
+`Editor` first, and the gesture code is replaced where it stands.
+
+1. **Cancel on the session side.** `CancelPlacement`, `CancelErase`,
+   `CancelStyleEdit`, `CancelShape` made public, and a freehand stroke
+   cleared from the live layer (section 8). Nothing calls them yet.
+2. **`Editor` split out.** The selection, the tool and its shapes, drawing
+   mode, the clipboard, the untouched drawing, making snippets, the hit
+   test and the commands move out of `OverlayApp` into `ui/editor`, with
+   no ImGui: the display size and the clock are handed in, and what only
+   a view can do - open a panel, show a message, ask for the keyboard -
+   goes through a small interface `OverlayApp` implements. No behavior
+   changes.
+3. **The machine.** Levels, the event kinds of section 3, the five
+   answers, routing, the scopes of 4.2 and the debug check, in
+   `ui/interaction/`, tested with toy interactions. The window emits a
+   `Tick` per frame on the stream's own clock. `OverlayApp` offers every
+   event to the machine; until the levels above take over, the Canvas
+   level hands them to today's handlers. No behavior changes.
+4. **The Gesture level.** The recognizer's rules, Pending, Spent and each
+   gesture of section 9 as an interaction. `Hand`, the gesture half of
+   `OnMouse` and `MatureHeldPress` go. Escape starts cancelling, and the
+   **Change**s of sections 6 and 9 land here.
+5. **The Mode level.** Drawing mode and a creation tool in hand; Escape's
+   stages come from passing down, and `PutDown`'s chain goes.
+6. **The Popup level.** Every popup is an interaction, closed through the
+   effect queue; `CloseTopmostPopover` goes, and a popup claims every key
+   but the global hotkeys (decision 2).
+7. **The Text level and hotkeys.** A note being typed, a name being
+   edited, a key being captured; global hotkeys arrive as `Hotkey`
+   events. `noteOpenAtPress` and `CompletesAHotkeyCapture` go.
+8. **The Panel level.** The Overview and the cheat sheet, with their own
+   keys; `KeyReaches` goes, since reaching is now the stack's answer.
+9. **Lifecycle.** Shown, Hidden, ViewOnly and SessionEnding as events,
+   with the Showing and All scopes; `SettleHand`, `SwitchToCanvasSettled`,
+   `SettleForPersistence` and `SetViewOnly`'s settling go.
+10. **Widgets.** An ImGui drag as a Widget gesture: Escape clears it, and
+    restores a slider's value.
+11. **The cases as tests.** Each row of section 9 as a scripted test
+    against the machine and `Editor` alone, and the randomized test run
+    there with Escape anywhere, for thousands of seeds.
+
 ## 12. Decisions
 
 Settled on review (2026-09-26):
@@ -559,10 +604,7 @@ Settled on review (2026-09-26):
    button and X1/X2, with modifiers, from phase 1, and Settings > Hotkeys
    offers them alongside keys - "press the key or button you want".
 
-Still open:
-
-5. **Phase 2 is the one with a platform change.** If a single stream turns
-   out to cost more than it looks - the input grab posts some events and
-   emits others per frame - the fallback is to stamp every event with its
-   time and order them within a frame. That keeps the design; it only
-   moves where the ordering happens.
+5. **Phase 2 is the one with a platform change.** The fallback kept in
+   reserve - stamping events and ordering them within a frame - was not
+   needed: the single stream went in without touching the input grab
+   (settled with phase 2).
