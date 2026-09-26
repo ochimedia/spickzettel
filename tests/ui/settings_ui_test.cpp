@@ -10,6 +10,7 @@
 #include "core/build_info/build_info.h"
 
 #include "fakes/ui_test.h"
+#include "support/session_test_access.h"
 
 namespace sz::test {
 namespace {
@@ -119,6 +120,44 @@ TEST_F(UiTest, PickingAMonitorPutsTheOverlayOnIt) {
     EXPECT_EQ(AppSettings().Stored().overlayDisplayId, "fake-left");
     EXPECT_EQ(AppSettings().Stored().overlayDisplayName, "Left Display");
     EXPECT_EQ(host_.overlayWindow.onDisplay.id, "fake-left");
+}
+
+// Switched off in Settings, the frozen screen is let go of after the frame
+// (docs/SETTINGS.md, C9) - not from inside the Settings panel's draw, after
+// the frame had queued it as its backdrop. On screen the D3D11 renderer
+// holds a release made mid-frame until the frame is submitted, so that was
+// never seen; the fake window lets go at once, which is what shows it here.
+TEST_F(UiTest, SwitchingTheFrozenScreenOffLetsGoOfItAfterTheFrame) {
+    AppConfig config = DefaultConfig();
+    config.profileable.freezeScreen = true;
+    StartWith(config);
+    host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
+    host_.overlayWindow.captureReturnsHeight = static_cast<int>(kDisplayHeight);
+    host_.overlayWindow.captureReturnsPixelsRGBA.assign(static_cast<size_t>(kDisplayWidth * kDisplayHeight) * 4, 255);
+    host_.overlayWindow.uploadsSucceed = true;
+    int undrawable = 0;
+    afterRender_ = [&] {
+        for (const uint64_t texture : TexturesDrawn()) {
+            undrawable += host_.overlayWindow.IsDrawable(texture) ? 0 : 1;
+        }
+    };
+    ShowEditMode();
+    StepFrame();
+    ASSERT_TRUE(HoldsFrozenScreen(AppSession()));
+    ASSERT_NE(controller_->GetSession().FrozenScreenTexture(), 0u);
+
+    OpenOverviewUi();
+    RunUi("switch the frozen screen off", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionbehavior");
+        ctx->ItemClick("**/###freezescreen");
+    });
+
+    EXPECT_FALSE(AppSettings().Live().freezeScreen);
+    EXPECT_FALSE(HoldsFrozenScreen(AppSession()));
+    EXPECT_EQ(undrawable, 0) << "a frame drew the frozen screen after letting go of it";
+    EXPECT_EQ(host_.overlayWindow.badTextureUses, 0);
 }
 
 // The interface size is a dropdown like the monitor's, and what is picked

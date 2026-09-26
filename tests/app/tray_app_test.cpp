@@ -1728,6 +1728,15 @@ TEST(TrayControllerDisplayTest, AChangeToAnotherDisplayLeavesAFrozenScreenAlone)
 // docs/SETTINGS.md, section 7: after the frame of the commit, compared with
 // what the window was last given.
 
+namespace {
+// A capture that gives pixels, so that a frozen screen is held.
+void CaptureGivesPixels(test::FakePlatformHost& host) {
+    host.overlayWindow.captureReturnsWidth = 64;
+    host.overlayWindow.captureReturnsHeight = 48;
+    host.overlayWindow.captureReturnsPixelsRGBA.assign(64u * 48u * 4u, 255);
+}
+}  // namespace
+
 TEST(TrayControllerSettingsEffectTest, AWindowSettingReachesTheWindowAfterTheFrame) {
     test::FakePlatformHost host;
     const AppConfig config = DefaultConfig();
@@ -1765,6 +1774,64 @@ TEST(TrayControllerSettingsEffectTest, AnEditThatChangesNothingRunningLeavesTheW
     host.RunPostedTasks();
 
     EXPECT_EQ(host.overlayWindow.setEditModeInputCallCount, inputCalls);
+}
+
+TEST(TrayControllerSettingsEffectTest, SwitchingTheFrozenScreenOffLetsGoOfItAfterTheFrame) {
+    test::FakePlatformHost host;
+    CaptureGivesPixels(host);
+    AppConfig config = DefaultConfig();
+    config.profileable.freezeScreen = true;
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    ASSERT_TRUE(HoldsFrozenScreen(controller.GetSession()));
+
+    controller.GetSettings().Set(setting::kFreezeScreen, false, std::nullopt);
+    EXPECT_TRUE(HoldsFrozenScreen(controller.GetSession())) << "the frame may still draw it";
+    host.RunPostedTasks();
+
+    EXPECT_FALSE(HoldsFrozenScreen(controller.GetSession()));
+}
+
+// Switched on, it waits for the next entry into edit mode, as the row's help
+// says - section 7's "two answers", which this does not settle.
+TEST(TrayControllerSettingsEffectTest, SwitchingTheFrozenScreenOnWaitsForTheNextEntry) {
+    test::FakePlatformHost host;
+    CaptureGivesPixels(host);
+    const AppConfig config = DefaultConfig();
+    ASSERT_FALSE(config.profileable.freezeScreen);
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    const int editId = FindHotkeyId(host, config.hotkeyEditMode);
+    host.TriggerHotkey(editId);
+
+    controller.GetSettings().Set(setting::kFreezeScreen, true, std::nullopt);
+    host.RunPostedTasks();
+    EXPECT_EQ(host.overlayWindow.captureCallCount, 0);
+    EXPECT_FALSE(HoldsFrozenScreen(controller.GetSession()));
+
+    host.TriggerHotkey(editId);
+    host.TriggerHotkey(editId);
+    EXPECT_TRUE(HoldsFrozenScreen(controller.GetSession()));
+}
+
+// Edited for a profile that is not the one running, it changes nothing the
+// overlay shows now.
+TEST(TrayControllerSettingsEffectTest, SwitchingTheFrozenScreenOffForAnotherProfileKeepsIt) {
+    test::FakePlatformHost host;
+    CaptureGivesPixels(host);
+    host.overlayWindow.underlyingApp = platform::ForegroundApp{"notepad.exe", "Untitled"};
+    const AppConfig config = ConfigWithGameProfile();
+    ASSERT_TRUE(config.profileable.freezeScreen);
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    ASSERT_TRUE(HoldsFrozenScreen(controller.GetSession()));
+
+    controller.GetSettings().Set(setting::kFreezeScreen, false, size_t{0});
+    host.RunPostedTasks();
+
+    EXPECT_TRUE(HoldsFrozenScreen(controller.GetSession()));
 }
 
 

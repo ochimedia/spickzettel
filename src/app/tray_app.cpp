@@ -505,6 +505,15 @@ void TrayController::ApplySettingsToWindow() {
         liveEditModeInput_ = settings_.Live().InputOptions();
         window.SetEditModeInput(liveEditModeInput_);
     }
+    // The frozen screen, let go of once the settings running no longer want
+    // one - here, after the frame, with the tray's other decisions about it,
+    // rather than as a side effect of drawing the Settings panel. Switching
+    // it on takes nothing here: it is taken at the next entry into edit
+    // mode, or again on a display move below, as Settings' help says; the
+    // HUD's row restarts the overlay instead (docs/SETTINGS.md, section 7).
+    if (!settings_.Live().freezeScreen) {
+        session_.ReleaseFrozenScreen();
+    }
     // A monitor chosen in Settings takes the overlay there at once - and the
     // overlay is always up when that happens, since its own Settings panel is
     // where the choice is made. For every other setting the display this

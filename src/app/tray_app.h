@@ -185,7 +185,8 @@ private:
     // Initialize()) - and has ApplySettingsToWindow run after the frame.
     void OnSettingsChanged();
     // Applies to the window whatever of the settings it acts on actually
-    // changed, and moves the overlay to the display they now choose.
+    // changed, lets go of a frozen screen they no longer want, and moves the
+    // overlay to the display they now choose.
     void ApplySettingsToWindow();
     // Whether this showing - the whole showing, not one mode of it - has
     // to take focus whatever the settings say

@@ -1754,17 +1754,8 @@ void OverlayApp::RenderSettingsBehavior() {
 
     SettingCheckbox(settings_, editProfile_, setting::kFreezeScreen, "freezescreen",
                     strings::kHudFreezeScreenWhileEditing, strings::kInputFreezeScreenHelp);
-    // Switching it off can take effect immediately - there is nothing to
-    // capture, only something to drop. Switching it on can't: capturing
-    // means hiding this window and waiting for a composition pass, which is
-    // not something to do halfway through drawing a frame. That direction
-    // waits for the next entry into edit mode, which the help text says out
-    // loud. Read from the *resolved* value rather than from what the
-    // checkbox just wrote, since the row may be editing a profile that
-    // isn't the one running.
-    if (!settings_.Live().freezeScreen) {
-        session_.ReleaseFrozenScreen();
-    }
+    // What it does to a frozen screen already held is the tray's, after the
+    // frame - see TrayController::ApplySettingsToWindow.
     EndSettingsScope(profileBox);
 }
 
