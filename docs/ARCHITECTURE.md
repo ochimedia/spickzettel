@@ -1597,7 +1597,7 @@ construction. It is being split into one owner per surface
 (`docs/VIEW_LAYER.md`, section 7), each a class in `ui/view/` that holds
 its surface's state, draws from what it is handed, and asks for anything
 beyond its own through `ViewHost`, which `OverlayApp` implements; no
-owner knows another. So far: the Overview (`OverviewPanel`), its Settings tab (`SettingsPage`), which the Overview draws inside its body through a call `OverlayApp` hands it, and the cheat sheet (`CheatSheet`). What every surface shares is in
+owner knows another. So far: the Overview (`OverviewPanel`), its Settings tab (`SettingsPage`), which the Overview draws inside its body through a call `OverlayApp` hands it, the cheat sheet (`CheatSheet`), and the app's popups with the effect queue (`Popups`). What every surface shares is in
 files of its own: the palette, the accent and the style (`theme.*`), the
 buttons, the panel backdrop, the screen layers and the key names
 (`widgets.*`), and how a snippet is painted, on the canvas or in a
@@ -2196,7 +2196,7 @@ may be one of ImGui's own inside it (a color picker in the Properties
 popover), and the popup finishes when it is itself gone.
 
 The view keeps one record of the popup that is up
-(`OverlayApp::PopupRecord`): its kind, what it is about, where it opens,
+(`Popups::PopupRecord`, `ui/view/popups.*`): its kind, what it is about, where it opens,
 and whether a frame has drawn it - set as it is asked for, let go of as
 it closes (`docs/VIEW_LAYER.md`, section 4). The machine allows one popup
 at a time, so one record is enough; there used to be a copy per kind,

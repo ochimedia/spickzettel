@@ -18,7 +18,6 @@ add_library(sz_ui STATIC
     interaction/machine.cpp
     interaction/recognizer.cpp
     overlay_app.cpp
-    overlay_app_commands.cpp
     overlay_app_docks.cpp
     overlay_app_input.cpp
     overlay_app_items.cpp
@@ -31,6 +30,7 @@ add_library(sz_ui STATIC
     ui_scale.cpp
     view/cheat_sheet.cpp
     view/overview_panel.cpp
+    view/popups.cpp
     view/settings_page.cpp
     widgets.cpp
 )

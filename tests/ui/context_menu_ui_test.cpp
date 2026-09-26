@@ -1,5 +1,5 @@
 // The snippet context menu, driven by row name - see ContextMenu and
-// OverlayApp::BuildItemContextMenuRows.
+// Popups::BuildItemContextMenuRows.
 //
 // The menu is opened the way a hand opens it: a right click on the
 // snippet, through the raw mouse pipeline, since that is where the press

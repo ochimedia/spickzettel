@@ -16,6 +16,7 @@
 #include "ui/item_painting.h"
 #include "ui/view/cheat_sheet.h"
 #include "ui/view/overview_panel.h"
+#include "ui/view/popups.h"
 #include "ui/view/settings_page.h"
 #include "ui/view/view_host.h"
 #include "ui/view_action.h"
@@ -76,11 +77,6 @@ struct EdgeReveal {
     void Update(bool wanted, double now, float deltaSeconds);
     void Flash(double now, double seconds) { holdUntil = std::max(holdUntil, now + seconds); }
 };
-
-// The context menus' ImGui popup ids - see ContextMenu.
-inline constexpr const char* kItemContextMenuId = "##item_context_menu";
-inline constexpr const char* kCanvasContextMenuId = "##canvas_context_menu";
-inline constexpr const char* kEmptyCanvasMenuId = "##empty_canvas_menu";
 
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
 // attached to via Dear ImGui. Contains no OS-specific code: rendering is
@@ -209,21 +205,16 @@ public:
     // level (see Panel).
     bool IsOverviewOpen() const { return PanelUp(PanelKind::Overview); }
     bool IsCheatSheetOpen() const { return PanelUp(PanelKind::CheatSheet); }
-    // Whether the color chooser is up - see RenderColorChooser.
-    bool IsColorChooserOpen() const { return PopupUp(PopupKind::ColorChooser); }
-    // Whether the snippet context menu is up, and over which snippet -
-    // see RenderItemContextMenu.
-    bool IsItemContextMenuOpen() const { return PopupUp(PopupKind::ItemMenu); }
-    std::optional<ItemId> ItemContextMenuItem() const {
-        return PopupUp(PopupKind::ItemMenu) ? std::optional<ItemId>(popup_->item) : std::nullopt;
-    }
-    // The same for the canvas bar's tiles - see RenderCanvasContextMenu.
-    bool IsCanvasContextMenuOpen() const { return PopupUp(PopupKind::CanvasMenu); }
-    std::optional<CanvasId> CanvasContextMenuCanvas() const {
-        return PopupUp(PopupKind::CanvasMenu) ? std::optional<CanvasId>(popup_->canvas) : std::nullopt;
-    }
-    // And for empty canvas - see RenderEmptyCanvasMenu.
-    bool IsEmptyCanvasMenuOpen() const { return PopupUp(PopupKind::EmptyCanvasMenu); }
+    // Whether the color chooser is up - see Popups.
+    bool IsColorChooserOpen() const { return popups_.Up(PopupKind::ColorChooser); }
+    // Whether the snippet context menu is up, and over which snippet.
+    bool IsItemContextMenuOpen() const { return popups_.Up(PopupKind::ItemMenu); }
+    std::optional<ItemId> ItemContextMenuItem() const { return popups_.ItemOf(PopupKind::ItemMenu); }
+    // The same for the canvas bar's tiles.
+    bool IsCanvasContextMenuOpen() const { return popups_.Up(PopupKind::CanvasMenu); }
+    std::optional<CanvasId> CanvasContextMenuCanvas() const { return popups_.CanvasOf(PopupKind::CanvasMenu); }
+    // And for empty canvas.
+    bool IsEmptyCanvasMenuOpen() const { return popups_.Up(PopupKind::EmptyCanvasMenu); }
     // How far out the canvas bar is, 0 to 1 - see EdgeReveal and
     // UpdateEdgePanels.
     float CanvasBarReveal() const { return canvasBarReveal_.amount; }
@@ -367,12 +358,14 @@ private:
     void OpenSettings() override;
     void OpenPicker(ItemId itemId, bool isCopy) override;
     void ToggleCheatSheet() override;
-    void OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) override;
-    void OpenColorChooser(platform::Vec2 at) override;
+    void OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) override {
+        popups_.OpenItemProperties(item, at);
+    }
+    void OpenColorChooser(platform::Vec2 at) override { popups_.OpenColorChooser(ImVec2(at.x, at.y)); }
     void AskToDeleteCanvas(CanvasId canvas) override;
     void CanvasMade(CanvasId canvas) override { overview_.ScrollToCanvas(canvas); }
-    void OpenItemMenu(ItemId item, platform::Vec2 at) override { OpenItemContextMenu(item, ImVec2(at.x, at.y)); }
-    void OpenEmptyCanvasMenu(platform::Vec2 at) override;
+    void OpenItemMenu(ItemId item, platform::Vec2 at) override { popups_.OpenItemMenu(item, ImVec2(at.x, at.y)); }
+    void OpenEmptyCanvasMenu(platform::Vec2 at) override { popups_.OpenEmptyCanvasMenu(ImVec2(at.x, at.y)); }
     bool PointerOverView() const override;
     // Whether a panel covering the canvas is up, which the canvas's own
     // keys, wheel and pointer then leave alone - the Overview or the cheat
@@ -385,11 +378,13 @@ private:
     void ClosePanel(PanelKind kind) override;
     void ToolSized(bool pen) override;
     bool InputOptionsKey(const Event& event) override { return HandleInputOptionsHudKey(event); }
-    void LetGoOfWidget() override { Queue(Effect{Effect::Kind::LetGoOfWidget}); }
+    void LetGoOfWidget() override { popups_.LetGoOfWidget(); }
     bool PopupOpen() const override;
-    bool PopupShowing(PopupKind kind) const override;
-    void ClosePopup(PopupKind kind) override;
-    void CloseInnermostPopup() override;
+    // Asked for, a popup is up - including the frames before one draws it,
+    // which is what the machine's Popup asks on every tick (see Popup::Offer).
+    bool PopupShowing(PopupKind kind) const override { return popups_.Up(kind); }
+    void ClosePopup(PopupKind kind) override { popups_.Close(kind); }
+    void CloseInnermostPopup() override { popups_.CloseInnermost(); }
 
     // The canvas as the hand works on it: the selection, the tool, drawing
     // mode, the clipboard, and every command - see Editor. What this class
@@ -409,7 +404,7 @@ private:
     void Prepare(float displayW, float displayH);
     // 2. The canvas, the snippets, the note editor, the dock, the canvas bar.
     void DrawCanvas(float displayW, float displayH);
-    // 3. Open: the effect queue (see ApplyEffects). 4. The popups over the
+    // 3. Open: the effect queue (see Popups::ApplyEffects). 4. The popups over the
     // canvas.
     void DrawPopups(float displayW, float displayH);
     // 5. What sits over the canvas and takes no input: the drag previews,
@@ -557,68 +552,10 @@ private:
     void RenderCanvasBar(float displayW, float displayH);
     // Those canvases, in the folder's order.
     std::vector<CanvasId> CanvasBarCanvases() const;
-    // The context menu a right-click on a canvas bar tile opens. Rendered
-    // at the top level of the frame rather than inside the bar's own
-    // window, like every other popup here; the bar is held out for as long
-    // as the menu is up (see UpdateEdgePanels), since a menu floating over
-    // the panel it belongs to having slid away would be a puzzle.
-    void OpenCanvasContextMenu(CanvasId canvasId, ImVec2 at);
-    void RenderCanvasContextMenu();
-    void BuildCanvasContextMenuRows(const Canvas& canvas, std::vector<ContextMenuEntry>& rows) const;
-    // The color chooser: one picker, and what it is set to is the color
-    // drawn with. Opened by the drawing bar's color button, next to
-    // `from`, the point it was pressed from; OpenColorChooser only asks,
-    // since the bar's buttons fire from the input stream outside any
-    // frame, and it opens on the next one (see Effect). What
-    // was picked is kept as AppConfig::strokeColorRGBA when the chooser
-    // closes.
-    void RenderColorChooser(float displayW, float displayH);
     // Beside the pointer while Draw or Erase is in hand over a snippet and
     // a modifier changes what a press would make - a line or a rectangle -
     // a small glyph of it, so the modifiers are not a secret.
     void RenderToolModifierBadge();
-
-    // Foreground/background opacity sliders, background color, fullscreen,
-    // copy, z-order, and move-to-canvas, for the item the selection bar's
-    // "More" button opened it on.
-    void RenderItemPropertiesPopover();
-    // Its sections, top to bottom, for the item it is open on: the two
-    // opacities, the background color, and the text's size and color.
-    // What is done *to* a snippet - fullscreen, copy, restack, move - is
-    // the context menu's (see below), not the popover's. Each widget
-    // previews its change through the session (see Session::PreviewStyle),
-    // and the edit ends as the hand lets go of it.
-    void RenderItemOpacity(const Item& item);
-    void RenderItemBackgroundColor(const Item& item);
-    void RenderItemTextStyle(const Item& item);
-
-    // The context menu a right-click on a snippet opens - the popover's
-    // actions as a list of named rows with their shortcuts beside them,
-    // plus the ones that only had a key until now. Asked for from the input
-    // stream, which is why opening is queued rather than done (see
-    // Effect).
-    void OpenItemContextMenu(ItemId itemId, ImVec2 at);
-    void RenderItemContextMenu();
-    // The rows, for the snippet the menu is open over. Rebuilt every frame
-    // it is up, so "nothing to clear" and "nothing behind it" are answered
-    // from the canvas as it is now rather than as it was when the menu
-    // opened.
-    void BuildItemContextMenuRows(const Item& item, std::vector<ContextMenuEntry>& rows);
-    // The context menu a right click on empty canvas opens: the ways to
-    // make a snippet, Paste, and the way to the Overview and Settings -
-    // what the canvas itself offers, with no snippet to act on. Asked for
-    // the same way as the snippet's.
-    void RenderEmptyCanvasMenu();
-    void BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) const;
-    // "Ctrl+D" for a command a key reaches, empty for one none does - what
-    // a menu row shows on its right. FormatKeyComboLabel's "(none)" is the
-    // right answer for a key editor and the wrong one here, where a row
-    // without a key should simply show nothing.
-    std::string MenuShortcutLabel(CommandId id) const;
-    // A context menu row for `command`: grayed out when it is not
-    // available (see Available), with its key beside it.
-    ContextMenuEntry MenuRow(const Command& command, const char* id, const Icon* icon, const char* label,
-                             bool separatorAbove = false) const;
 
     void RenderRegionCaptureOverlay();
     // RectEraser's own drag-preview overlay (see StrokeInFlight) -
@@ -642,11 +579,6 @@ public:
     bool IsCapturingShortcut() const { return settingsPage_.IsCapturingShortcut(); }
 
 private:
-    // Cancel/Delete confirmation for a canvas or folder Delete button
-    // clicked in the Overview - see confirmDeleteTarget_'s own doc
-    // comment for why canvas/folder deletion gets this extra step while
-    // item/stroke deletion (DeleteItemsWithToast) stays instant + undoable.
-    void RenderConfirmDeletePopover();
     void RenderActionToast();
     // See SetConfigWriteFailed.
     void RenderPersistenceWarning();
@@ -766,53 +698,12 @@ private:
     // instead (see Session::DeleteItem).
     void AskToDelete(DeleteTarget target) override;
 
-    // ===== The popup that is up (docs/VIEW_LAYER.md, section 4) =====
-    //
-    // The machine's Popup level says which of this class's popups is up,
-    // one at a time, and opening one ends the one that was there. So the
-    // view keeps one record of it, set when it is asked for and let go of
-    // when its closing is done.
-    struct PopupRecord {
-        PopupKind kind = PopupKind::ItemMenu;
-        // What it is about: the snippet menu's and Properties' snippet, the
-        // canvas tile menu's canvas, the delete confirmation's target.
-        ItemId item = 0;
-        CanvasId canvas = 0;
-        std::optional<DeleteTarget> deleteTarget;
-        // Where it opens.
-        ImVec2 at{0.0f, 0.0f};
-        // Whether a frame has drawn it - which tells "closed by itself"
-        // from "asked for and not opened yet" when a frame finds ImGui
-        // without it.
-        bool drawn = false;
-    };
-    std::optional<PopupRecord> popup_;
-    bool PopupUp(PopupKind kind) const { return popup_.has_value() && popup_->kind == kind; }
-    // Asks for `popup`: put on the machine's Popup level first (ending the
-    // one that was there, whose closing is done then), recorded, and opened
-    // at the next frame's Open (see Effect).
-    void OpenPopup(PopupRecord popup);
-    // What closing a popup of `kind` does, done once however it closes -
-    // by itself, or ended from outside (see ClosePopup) - and the record let
-    // go of. Nothing unless it is the popup up.
-    //
-    // The snippet menu, the canvas tile menu and the delete confirmation
-    // forget what they were about, which letting go of the record does;
-    // Properties ends the style edit; the color chooser keeps the pen's
-    // color (see KeepPenColor).
-    void PopupClosed(PopupKind kind);
-    // What each popup's draw says of it, every frame: whether ImGui drew it.
-    // A popup the record says was drawn and ImGui no longer has closed by
-    // itself - a row chosen, a click outside, Escape - and its closing is
-    // done here.
-    void PopupDrawn(PopupKind kind, bool drawn);
     // The pen's width and color, kept as AppConfig::strokeWidth and
     // strokeColorRGBA: the width the wheel left once its size preview has
-    // faded, and the color the chooser was left on when it closes - and
-    // both when the overlay settles, before either could come (see
-    // SettleForPersistence and SetMode).
+    // faded, and the color the chooser was left on when it closes (see
+    // Popups) - and both when the overlay settles, before either could come
+    // (see SettleForPersistence and SetMode).
     void KeepPenWidth();
-    void KeepPenColor();
     void KeepPen();
 
 
@@ -964,12 +855,6 @@ private:
     // faded, so a burst of notches is one write (see KeepPenWidth).
     bool drawWidthDirty_ = false;
 
-    // The three context menus: the snippet's, the canvas bar tile's, and
-    // empty canvas's. Whether one is up, and over what, is the popup
-    // record's (see popup_).
-    ContextMenu itemContextMenu_{kItemContextMenuId};
-    ContextMenu canvasContextMenu_{kCanvasContextMenuId};
-    ContextMenu emptyCanvasMenu_{kEmptyCanvasMenuId};
     // The canvas bar, docked against the bottom edge - see UpdateEdgePanels.
     // How far out it is, and where it was drawn this frame (none while it
     // is all the way in).
@@ -994,41 +879,6 @@ private:
     int64_t demoWatermarkMove_ = -1;
     int demoWatermarkCell_ = 0;
     ImVec2 demoWatermarkJitter_{0.5f, 0.5f};
-
-    // Something only a frame can do, asked for from wherever - between
-    // frames included - and done in the next frame, just before the popups
-    // are drawn: opening a popup. ImGui::OpenPopup scopes its id against the window being
-    // drawn, and between frames there is none - a bar button fires from
-    // the input stream, before the frame's NewFrame, and OpenPopup there
-    // dereferenced an empty id stack (a verified crash, not a hypothetical
-    // one). Asked for inside a frame, it waits too, which keeps every
-    // popup's id at the top level of the frame whatever nesting it was
-    // asked from. Not at the very start of the frame: opened there, the
-    // canvas bar's menu was closed again before it was drawn - ImGui wants
-    // a popup opened after the frame's other windows, shortly before it is
-    // begun. What it opens on - which snippet, which canvas - and where is
-    // the popup record's (see popup_). See docs/INTERACTIONS.md, section 3.
-    struct Effect {
-        enum class Kind {
-            // The popup the record holds opened, if it is still that one.
-            OpenPopup,
-            // A popup of the machine's closed from outside (see
-            // Popup::Interrupt), and the innermost popup open closed, as
-            // Escape does to it - which may be one of ImGui's own inside it.
-            ClosePopup,
-            CloseInnermostPopup,
-            // ImGui's active widget let go of, and a drag and drop dropped -
-            // see Widget.
-            LetGoOfWidget,
-        };
-        Kind kind = Kind::OpenPopup;
-        PopupKind popup = PopupKind::ItemMenu;  // which, to open or close
-    };
-    // Asked twice before a frame, done once - as asked the second time, and
-    // in its place: a popup closed and asked for again is up.
-    void Queue(const Effect& effect);
-    void ApplyEffects();
-    std::vector<Effect> effects_;
 
     // Small transient "Moved to X" / "Copied to X" banner after a
     // move/copy - text empty or ImGui::GetTime() past the expiry means
@@ -1075,6 +925,7 @@ private:
     SettingsPage settingsPage_{settings_, editor_, *this};
     OverviewPanel overview_{session_, settings_, editor_, *this};
     CheatSheet cheatSheet_{settings_, editor_, *this};
+    Popups popups_{session_, settings_, editor_, *this};
 };
 
 }  // namespace sz::ui

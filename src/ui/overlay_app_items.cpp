@@ -140,8 +140,8 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     std::optional<ItemId> stickyItemId;
     if (held != nullptr) {
         stickyItemId = held->Item();
-    } else if (PopupUp(PopupKind::ItemProperties)) {
-        stickyItemId = popup_->item;
+    } else {
+        stickyItemId = popups_.ItemOf(PopupKind::ItemProperties);
     }
     const std::optional<ItemId> highlightId =
         stickyItemId.has_value() ? stickyItemId : (itemsInteractive ? target.body : std::nullopt);

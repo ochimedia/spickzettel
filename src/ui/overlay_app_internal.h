@@ -43,14 +43,6 @@
 
 namespace sz::ui::overlay_detail {
 
-// The popups OverlayApp::ApplyEffects opens, by the ids their render
-// functions begin them with.
-inline constexpr const char* kItemPropertiesPopupId = "##item_properties_popover";
-inline constexpr const char* kColorChooserPopupId = "##color_chooser";
-inline constexpr const char* kConfirmDeletePopupId = "##confirm_delete_popover";
-// A popup's ImGui id, as its render function begins it.
-const char* PopupId(PopupKind kind);
-
 // The backing a text note gets by default (ApplyCreationDefaults, and the
 // first-run welcome note). Half-transparent black: note text defaults to
 // white, and white on a light backing is poor contrast wherever the overlay

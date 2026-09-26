@@ -178,7 +178,7 @@ void OverlayApp::SetMode(OverlayMode mode) {
         // mode starts clean later rather than resuming whatever happened
         // to be up. The effects first: a popup ended asks for itself to be
         // closed once edit mode draws again (see Popup::Interrupt).
-        effects_.clear();
+        popups_.ForgetEffects();
         editor_.Settle(Scope::All);
         editor_.SettleUntouchedDrawing();
         // A slider or swatch in the middle of a drag is not drawn again to
@@ -298,9 +298,9 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         return;
     }
     DrawCanvas(display.x, display.y);
-    // 3. Open: what was asked for that only a frame can do - see Effect -
+    // 3. Open: what was asked for that only a frame can do - see Popups::Effect -
     // just before the popups it opens are drawn.
-    ApplyEffects();
+    popups_.ApplyEffects();
     DrawPopups(display.x, display.y);
     DrawOverCanvas(display.x, display.y);
     DrawPanels(display.x, display.y);
@@ -525,24 +525,7 @@ void OverlayApp::DrawCanvas(float displayW, float displayH) {
     RenderCanvasBar(displayW, displayH);
 }
 
-void OverlayApp::DrawPopups(float displayW, float displayH) {
-    RenderItemPropertiesPopover();
-    // And the menu a right-click on a snippet opens - beside the popover
-    // rather than inside it: the two hold the same actions and are opened
-    // different ways, and only one of them can be up at a time anyway,
-    // since opening either closes whatever popup was there.
-    RenderItemContextMenu();
-    // And the canvas bar's, for the tile that was right-clicked - out here
-    // rather than inside the bar's own window so that it is a popup at the
-    // same level as every other, and so it survives a frame in which the
-    // bar itself does not draw.
-    RenderCanvasContextMenu();
-    // And empty canvas's, the same way.
-    RenderEmptyCanvasMenu();
-    // At the top level every frame, so the popup always belongs to the same
-    // window whichever of the two things that open it asked.
-    RenderColorChooser(displayW, displayH);
-}
+void OverlayApp::DrawPopups(float displayW, float displayH) { popups_.DrawOverCanvas(displayW, displayH); }
 
 void OverlayApp::DrawOverCanvas(float displayW, float displayH) {
     RenderRegionCaptureOverlay();
@@ -557,7 +540,7 @@ void OverlayApp::DrawOverCanvas(float displayW, float displayH) {
 void OverlayApp::DrawPanels(float displayW, float displayH) {
     overview_.Draw(displayW, displayH, [this] { settingsPage_.Draw(); });
     cheatSheet_.Draw(displayW, displayH);
-    RenderConfirmDeletePopover();
+    popups_.DrawConfirmDelete();
 }
 
 void OverlayApp::DrawMessages() {

@@ -35,74 +35,7 @@ void OverlayApp::AskToDelete(DeleteTarget target) {
         Act(action::Delete{std::move(target)});
         return;
     }
-    // Opened at the next frame's Open even when asked from inside one: the
-    // Overview's buttons ask from within its PushID nesting, and the popup
-    // belongs at the top level.
-    PopupRecord popup;
-    popup.kind = PopupKind::ConfirmDelete;
-    popup.deleteTarget = std::move(target);
-    OpenPopup(std::move(popup));
-}
-
-void OverlayApp::RenderConfirmDeletePopover() {
-    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-    ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    const bool open = ImGui::BeginPopup(kConfirmDeletePopupId);
-    PopupDrawn(PopupKind::ConfirmDelete, open);
-    if (!open) {
-        return;
-    }
-    if (!PopupUp(PopupKind::ConfirmDelete)) {
-        // Ended from outside this frame, before ImGui heard of it.
-        ImGui::CloseCurrentPopup();
-        ImGui::EndPopup();
-        return;
-    }
-    const DeleteTarget target = *popup_->deleteTarget;
-    const bool isFolder = target.kind == DeleteTarget::Kind::Folder;
-    const bool deletedIn = target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
-    const char* word = isFolder ? strings::kDeleteConfirmFolderWord : strings::kDeleteConfirmCanvasWord;
-    // A delete marks the thing, which can be restored, and says so; a delete
-    // of something deleted already is for good, and says that.
-    const bool forGood = target.forGood || deletedIn;
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Px(220.0f));
-    if (deletedIn) {
-        ImGui::Text(strings::kDeleteConfirmPromptDeletedIn, target.name.c_str());
-    } else {
-        ImGui::Text(forGood ? strings::kDeleteConfirmPromptForGood : strings::kDeleteConfirmPrompt, word,
-                    target.name.c_str());
-    }
-    if (isFolder) {
-        ImGui::TextColored(theme::kDanger, "%s", strings::kDeleteConfirmAlsoCanvases);
-    }
-    // With the retention period on, "can be restored" has an end, and says
-    // when: the dialog is where a person decides how much that matters.
-    if (forGood) {
-        ImGui::TextColored(theme::kGraphite200, "%s", strings::kDeleteConfirmCannotUndo);
-    } else if (Cfg().purgeDeleted) {
-        ImGui::TextColored(theme::kGraphite200, strings::kDeleteConfirmRestorableFor, Cfg().purgeDeletedAfterDays);
-    } else {
-        ImGui::TextColored(theme::kGraphite200, "%s", strings::kDeleteConfirmRestorable);
-    }
-    ImGui::PopTextWrapPos();
-    ImGui::Spacing();
-
-    const bool cancelPressed = ImGui::Button(Labeled(strings::kDeleteConfirmCancel, strings::kMoveCopyCancel));
-    ImGui::SameLine();
-    const bool deletePressed = DangerButton("##confirmdelete", icons::kTrash,
-                                            forGood ? strings::kDeleteConfirmDeleteForGood : strings::kDeleteConfirmDelete);
-    // CloseCurrentPopup must be called while this popup is still current -
-    // i.e. before EndPopup, not after (it operates on the popup ID stack,
-    // which EndPopup pops). The delete itself is an action, done once the
-    // frame is drawn.
-    if (cancelPressed || deletePressed) {
-        ImGui::CloseCurrentPopup();
-    }
-    ImGui::EndPopup();
-
-    if (deletePressed) {
-        Act(action::Delete{target});
-    }
+    popups_.OpenConfirmDelete(std::move(target));
 }
 
 void OverlayApp::PerformDelete(const DeleteTarget& target) {
