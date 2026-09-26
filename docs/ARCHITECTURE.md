@@ -2512,6 +2512,18 @@ reasoning that the renderer ends the frame whatever happened in it - true,
 but something every change to the renderer had to keep true. The
 settings file is still written in the frame, where a failure is said.
 
+**What a setting does to the window is decided after the frame, in one
+place.** `ApplySettingsToWindow` compares what the settings running want
+with what the window was last given: no-activate, the input options,
+whether a frozen screen is held, and the display. The Settings panel
+used to let go of the frozen screen from inside its draw, on every frame
+it was shown, and to commit a picked monitor through a one-frame latch,
+so that the move came before the frame drew. Both were effects of
+drawing that the tray already decided elsewhere, and the latch's reason
+went when the window's half of a commit moved after the frame. Switching
+the frozen screen on still waits for the next entry into edit mode
+(`docs/SETTINGS.md`, section 7).
+
 **View-only draws only now and then.** Its picture does not change by
 itself, and with pinned snippets it can sit over a game for hours, where
 drawing at the refresh rate cost 2% of a core. The overlay tells the

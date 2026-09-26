@@ -1,6 +1,6 @@
 # Settings
 
-Status: **agreed** (2026-09-26); phases 1 to 4 of section 12 are built.
+Status: **agreed** (2026-09-26); phases 1 to 5 of section 12 are built.
 Every behavior below is either what the app does today (unmarked, or
 said so) or a change (marked **Change**). "Today" means the app as of
 `654fff5`. The questions it was reviewed with, and their answers, are in section 13.
@@ -465,7 +465,7 @@ depending on where they are changed:
 | "Don't steal focus" on | restyled at once; the overlay keeps the focus it took until the next entry | restart (hidden and shown), which hands focus back |
 | "Don't steal focus" off | restyled, and focus taken at once | restart |
 | "Freeze screen" on | at the next entry into edit mode | restart, which freezes on the way up |
-| "Freeze screen" off | released at once (today in the draw; C9) | restart |
+| "Freeze screen" off | released after the frame (C9) | restart |
 
 The Settings panel's reason for waiting to freeze is out of date
 (section 10, finding 1). A display move already retakes the frozen
@@ -721,8 +721,21 @@ throughout, and the file's text does not change until a phase says so.
      harness goes on drawing frames while hidden, and one of those saw the
      drag end. A preview is committed wherever the overlay settles: put
      away, left for view mode, and at exit.
-5. **Effects (C8, C9).** The display latch and the release in the draw
-   go. Headless tests check the Window and Display rows of section 7.
+5. **Effects (C8, C9)** (done). The display latch and the release in the
+   draw go. Headless tests check the Window and Display rows of section 7.
+
+   *Found while building it:*
+   - The release in the draw was never seen on screen: the D3D11 renderer
+     holds a texture released mid-frame until the frame is submitted
+     (`docs/ARCHITECTURE.md`, "A release waits for the frame"). The fake
+     window lets go at once, so the headless tests, which now look at each
+     frame's draw lists before what it posted runs, see a frame draw the
+     frozen screen after letting go of it before C9, and not after.
+   - A monitor picked in Settings is two previews, of the id and the name,
+     committed at once: one commit for a choice that spans two rows.
+   - The outdated comment of finding 1 went with the code it explained.
+     Switching the frozen screen on in Settings still waits for the next
+     entry into edit mode; section 7's two answers stand.
 6. **The docs.** Set this document's status to built, update
    `docs/ARCHITECTURE.md` ("Configuration", "Session and settings", the
    Settings paragraph) including finding 6, and correct the comments

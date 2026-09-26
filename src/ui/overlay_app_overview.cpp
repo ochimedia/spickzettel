@@ -1219,12 +1219,13 @@ void OverlayApp::RenderSettingsAppearance() {
             if (ImGui::IsWindowAppearing() && displayListCallback_) {
                 displays_ = displayListCallback_();
             }
-            // The two rows are one choice, so both are previewed and the
-            // latch commits them together.
+            // The two rows are one choice, so both are previewed and then
+            // committed together. The overlay moves after the frame - see
+            // TrayController::ApplySettingsToWindow.
             if (ImGui::Selectable(Labeled(primaryText, "displayprimary"), chosenId.empty())) {
                 settings_.Preview(setting::kDisplayId, std::string());
                 settings_.Preview(setting::kDisplayName, std::string());
-                displayChoiceCommitPending_ = true;
+                settings_.CommitPreviews();
             }
             for (size_t i = 0; i < displays_.size(); ++i) {
                 const std::string id = "display" + std::to_string(i);
@@ -1232,7 +1233,7 @@ void OverlayApp::RenderSettingsAppearance() {
                 if (ImGui::Selectable(Labeled(describe(displays_[i]).c_str(), id.c_str()), selected)) {
                     settings_.Preview(setting::kDisplayId, displays_[i].id);
                     settings_.Preview(setting::kDisplayName, displays_[i].name);
-                    displayChoiceCommitPending_ = true;
+                    settings_.CommitPreviews();
                 }
             }
             // Kept in the list while it is away, so the choice can be seen

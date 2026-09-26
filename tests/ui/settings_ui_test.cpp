@@ -122,6 +122,49 @@ TEST_F(UiTest, PickingAMonitorPutsTheOverlayOnIt) {
     EXPECT_EQ(host_.overlayWindow.onDisplay.id, "fake-left");
 }
 
+// What the display latch was for, before the overlay's move came after the
+// frame: a frozen screen taken again on the new monitor lets go of the old
+// one, and no frame draws the texture that went with it (docs/SETTINGS.md,
+// C8). The fake window lets go of a texture at once, so a release in the
+// middle of a frame shows here - see the test below.
+TEST_F(UiTest, PickingAMonitorWhileFrozenDrawsNoTextureThatIsGone) {
+    AppConfig config = DefaultConfig();
+    config.profileable.freezeScreen = true;
+    StartWith(config);
+    host_.displays.insert(host_.displays.begin(),
+                          platform::DisplayInfo{"fake-left", "Left Display", -2560, 0, 2560, 1440, false, 60, 100});
+    host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
+    host_.overlayWindow.captureReturnsHeight = static_cast<int>(kDisplayHeight);
+    host_.overlayWindow.captureReturnsPixelsRGBA.assign(static_cast<size_t>(kDisplayWidth * kDisplayHeight) * 4, 255);
+    host_.overlayWindow.uploadsSucceed = true;
+    int undrawable = 0;
+    afterRender_ = [&] {
+        for (const uint64_t texture : TexturesDrawn()) {
+            undrawable += host_.overlayWindow.IsDrawable(texture) ? 0 : 1;
+        }
+    };
+    ShowEditMode();
+    StepFrame();
+    ASSERT_EQ(host_.overlayWindow.captureCallCount, 1);
+
+    OpenOverviewUi();
+    RunUi("pick a monitor while frozen", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionappearance");
+        ctx->SetRef(ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID);
+        ctx->ItemClick("##overlaydisplay");
+        ctx->ItemClick("**/###display0");
+    });
+    StepFrame();
+
+    EXPECT_EQ(host_.overlayWindow.onDisplay.id, "fake-left");
+    EXPECT_EQ(host_.overlayWindow.captureCallCount, 2) << "taken again on the new monitor";
+    EXPECT_FALSE(AppSettings().Previewing());
+    EXPECT_EQ(undrawable, 0) << "a frame drew the old frozen screen after letting go of it";
+    EXPECT_EQ(host_.overlayWindow.badTextureUses, 0);
+}
+
 // Switched off in Settings, the frozen screen is let go of after the frame
 // (docs/SETTINGS.md, C9) - not from inside the Settings panel's draw, after
 // the frame had queued it as its backdrop. On screen the D3D11 renderer

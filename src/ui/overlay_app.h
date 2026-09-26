@@ -1055,12 +1055,6 @@ private:
     // at the list.
     std::function<std::vector<platform::DisplayInfo>()> displayListCallback_;
     std::vector<platform::DisplayInfo> displays_;
-    // A monitor picked from that list, committed at the start of the next
-    // frame rather than the moment it was picked. Committing one moves the
-    // overlay and takes the frozen screen again, which releases the old
-    // frozen image - and by the time the Settings panel draws, that image
-    // is already queued as this frame's backdrop. See OnFrame.
-    bool displayChoiceCommitPending_ = false;
     // See SetNoticeFinishedCallback's own doc comment.
     std::function<void()> noticeFinishedCallback_;
     // See SetHotkeyChangeCallback's own doc comment.

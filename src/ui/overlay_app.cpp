@@ -1089,14 +1089,6 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         ApplyAccentToStyle(ImGui::GetStyle());
         appliedAccentRGBA_ = Cfg().accentColorRGBA;
     }
-    // Before anything is drawn, so that the frozen image this frame will
-    // use as its backdrop is the one taken on the new monitor rather than
-    // one released halfway through the frame - see
-    // displayChoiceCommitPending_.
-    if (displayChoiceCommitPending_) {
-        displayChoiceCommitPending_ = false;
-        settings_.CommitPreviews();
-    }
     // Every display refresh, or only now and then - see
     // IOverlayWindow::SetFramePacing. Decided at the start of a frame from
     // state that changes between frames (a hotkey, a mode switch), so the
