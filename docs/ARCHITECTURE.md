@@ -2333,30 +2333,35 @@ the platform hides the whole overlay before grabbing pixels.
   has to say so - see the hotkey letter stranded by hiding, under the
   input grab.
 
-## The tray controller: hidden, edit and view-only
+## The tray controller: the overlay's five states
 
 `app::TrayController` owns the settings, the session and the overlay,
 loads the library, and is the only place that knows what a hotkey does.
-Two hotkeys drive three states:
+The overlay is in one of five states:
 
-```
-hidden --edit hotkey--> edit        edit --edit hotkey--> hidden
-hidden --view hotkey--> view        view --view hotkey--> hidden
-edit   --view hotkey--> view        view --edit hotkey--> edit
-```
+- **hidden**;
+- **the pinned view**: the current canvas's pinned snippets,
+  click-through;
+- **a notice**: a message and nothing else, click-through;
+- **view**: the current canvas, click-through;
+- **edit**: everything, interactive.
 
-Each hotkey toggles its own mode off and switches straight to its mode
-otherwise, including directly between edit and view with no hide and
-reshow. The controller is deliberately stateless about which state it is
-in: "hidden vs visible" is the window's `IsVisible()`, "edit vs view" is
-the overlay's `IsViewOnly()`, both ground truth something else maintains,
-so no `mode_` member can go stale.
+Two hotkeys ask for edit and view. Each puts its own mode away, and
+switches straight to its mode otherwise, including directly between edit
+and view with no hide and reshow. Away is the pinned view when the
+current canvas has a pinned snippet, and hidden otherwise. Every request
+in every state, and what the window is told on the way, is
+`docs/OVERLAY_STATES.md`, section 5, pinned by `overlay_states_test.cpp`.
 
-Where this is going is `docs/OVERLAY_STATES.md`: the five states the
-overlay really has - hidden, the pinned view, a notice, view and edit -
-as one machine, in which every pair of state and request has a written
+The controller keeps no state of its own: it reads the window's
+`IsVisible()` and the overlay's view-only, notice and pinned flags, so
+that no `mode_` member could go stale. That held for three states; with
+five, the flags are what goes stale. `docs/OVERLAY_STATES.md` makes them
+one machine, in which every pair of state and request has a written
 answer and the window is told what to be rather than which calls to
-make.
+make. (Found while writing it: this section said two hotkeys drive three
+states, which stopped being true when the pinned view and the notice
+came.)
 
 **Pinned snippets.** Whenever the current canvas has a pinned snippet,
 "hidden" is the pinned view instead: view-only with every other snippet
@@ -2364,7 +2369,7 @@ left out, click-through, never focused, put up the way a notice is. It
 stands in for hidden throughout, and there is deliberately no hotkey that
 hides it - unpinning is how pinned snippets go.
 
-**Notices.** A fourth state the hotkeys never ask for: view-only with the
+**Notices.** A state the hotkeys never ask for: view-only with the
 canvas left out, so the only thing on screen is a message. It exists for
 the silent capture hotkey, which acts while the overlay is hidden and
 still has to say what it did. Three things about it were found by
@@ -2402,10 +2407,13 @@ frozen screen, which was a picture of the display just left.
 
 **Hotkeys are the one setting that cannot just be written**: a
 registration can fail, so the editor asks and the controller commits only
-if the OS accepts. A set combination that cannot be registered is fatal
-for the three that bring the overlay up; the silent capture's is an
-extra, and a machine where another app owns it still gets an app that
-runs. A first run - nothing on disk at all - shows the overlay in edit
+if the OS accepts. A set combination that cannot be registered - another
+application owns it - is left unregistered and named at the start, for
+any of the four: the tray menu reaches the overlay without one (see "A
+hotkey another application owns does not stop the start", under
+Configuration). (Found while writing `docs/OVERLAY_STATES.md`: this still
+said such a hotkey was fatal for the three that bring the overlay up,
+after that had changed.) A first run - nothing on disk at all - shows the overlay in edit
 mode with a welcome note, since an app that installs a tray icon and then
 waits for a chord it never mentioned is indistinguishable from one that
 did not start.
