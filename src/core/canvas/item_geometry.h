@@ -99,7 +99,7 @@ Rect FitAspectRatioIntoViewport(float aspectRatio, float viewportW, float viewpo
 // that one" test, used wherever one snippet's place on screen has to be
 // read against another's: which snippet a z-order step has to pass (see
 // CanvasManager::MoveItemLayer) and which snippets a box drawn over the
-// canvas has caught (see OverlayApp::HandleBoxSelection). Touching edges
+// canvas has caught (see BoxSelect, ui/interaction/gestures.h). Touching edges
 // do not count: two rects laid side by side, one's right edge exactly on
 // the other's left, hide nothing of each other and catch nothing of a box
 // drawn along the seam, and neither does a rect with no area at all.

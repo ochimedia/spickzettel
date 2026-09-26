@@ -9,7 +9,7 @@ namespace sz::ui {
 // overlay draws as interface - a panel's padding, a button's size, a gap -
 // is written in pixels at 100% and goes through Px on its way to the
 // screen. The ImGui style carries the same scale (see
-// OverlayApp::ApplyUiScale), which covers text and ImGui's own widgets.
+// ApplySpickzettelStyle), which covers text and ImGui's own widgets.
 //
 // What is on the screen rather than the interface to it - a snippet, a
 // stroke, a note's text - has a size of its own and is not scaled.

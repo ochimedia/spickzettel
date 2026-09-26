@@ -36,7 +36,7 @@ namespace sz::core {
 //
 // With any tool a drag on empty canvas frames a snippet, and a double-click
 // or a hold makes one fullscreen; a plain click makes nothing (see
-// OverlayApp::HandleCreationGesture). Nothing persists these values: a
+// ui/interaction/recognizer.cpp). Nothing persists these values: a
 // shortcut is stored by name (see ShortcutActionKey), and nothing else
 // stores a tool.
 enum class Tool { Draw, Erase, Text, Select, NewDrawing, NewScreenshot };

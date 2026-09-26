@@ -16,9 +16,10 @@ namespace sz::core {
 // the person reading it, and this is the layer that persists it - config
 // sits below the app and cannot see those enums at all.
 //
-// OverlayApp::RunShortcutAction is the single place the two sides meet, and
-// the mapping there is exhaustive by switch rather than by numbering, so
-// adding a tool cannot silently bind the wrong thing.
+// The command table (ui/interaction/command.h) is the single place the two
+// sides meet: each command names the action it is stored under, by name
+// rather than by numbering, so adding a tool cannot silently bind the
+// wrong thing.
 //
 // `ShortcutActionKey` is what ends up in config.json, so the *names* are
 // the compatibility surface and the order below is only the order the

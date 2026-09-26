@@ -1180,7 +1180,7 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
 
     // A drawing a stray click made goes once the hand has moved on from it
     // (see Editor::UntouchedDrawing). A press elsewhere settles it as it
-    // happens (OnMouse); this catches moving on without one.
+    // happens (RecognizePress); this catches moving on without one.
     editor_.WatchUntouchedDrawing();
 
     // Nothing acts on a snippet that has gone - see Editor::Selection. The

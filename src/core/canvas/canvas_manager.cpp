@@ -613,8 +613,8 @@ void CanvasManager::ResetItemToNativeSize(ItemId id) {
     }
     item->rect = restored;
     // A fixed native pixel size and a viewport-filling override are
-    // contradictory - same reasoning as HandleItemGesture exiting fullscreen
-    // before letting the user move/resize an item directly.
+    // contradictory - same reasoning as a drag taking a snippet out of
+    // fullscreen before moving or resizing it (Session::PreviewLeaveFullscreen).
     item->isFullscreen = false;
     item->anchorRect = item->rect;
     item->anchorDisplayWidth = currentDisplayWidth_;

@@ -237,14 +237,14 @@ struct AppConfig {
     // manager raises a window you take hold of. Off, the stacking order is
     // the context menu's alone to change (Send backward, Bring forward), as
     // in a drawing program.
-    // See OverlayApp::HandleItemGesture.
+    // See ui/interaction/recognizer.cpp.
     bool raiseSelectedSnippet = true;
     // What a left press on empty canvas makes, by the modifier held as it
     // starts: a plain press, one with Ctrl, one with Alt - or neither, and
     // that kind is then made from the canvas's context menu or its tool's
     // key alone. The two never share a trigger: ParseConfig puts back the
     // defaults if a file says they do, and Settings swaps them rather than
-    // letting both have one. See OverlayApp::HandleCreationGesture.
+    // letting both have one. See Editor::EmptyCanvasCreationKind.
     CreationTrigger screenshotTrigger = CreationTrigger::Plain;
     CreationTrigger drawingTrigger = CreationTrigger::Ctrl;
     // The two bars that float over the selection: which buttons each one

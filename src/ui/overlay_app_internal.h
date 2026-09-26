@@ -128,19 +128,6 @@ inline constexpr float kNoteTextPad = 6.0f;
 inline constexpr uint32_t kNoteBackgroundColorRGBA = 0x000000FFu;
 inline constexpr float kNoteBackgroundOpacity = 0.5f;
 
-// What makes two presses a double-click on the raw mouse pipeline (see
-// OverlayApp::NoteDoubleClick): the second within this long and this far of
-// the first. ImGui's own defaults are 0.30 s and 6 px; a little more time,
-// since a double-click is how a fullscreen snippet is made and how drawing
-// mode is entered, and a near miss there is a click that did nothing.
-inline constexpr double kDoubleClickSeconds = 0.35;
-inline constexpr float kDoubleClickPx = 6.0f;
-// How long a press has to be held still to stand in for a double-click
-// (see OverlayApp::MatureHeldPress) - for a finger or a pen, which cannot
-// double-click reliably. Judged still by kDoubleClickPx, as a double-click
-// is: past that it is a drag, and a drag is never a hold.
-inline constexpr double kHoldSeconds = 0.5;
-
 // Every tool, with the icon, name and tooltip it is offered under - the
 // marking tools and Select first, then the two creation tools, which is
 // the order the Overview's Shortcuts tab lists them in. One table, so a

@@ -287,7 +287,7 @@ void OverlayApp::BuildItemContextMenuRows(const Item& item, std::vector<ContextM
 
     // Copy, Cut and Duplicate are the selection's, not this one snippet's.
     // A right-click has already made this snippet part of the selection
-    // (see HandleItemGesture), so the two agree whenever only it is
+    // (see RecognizePress), so the two agree whenever only it is
     // selected, and where they differ the shortcut shown beside the row is
     // the honest answer: Ctrl+D does the whole selection, so the row that
     // names Ctrl+D has to as well - and does, being the same command. Paste

@@ -87,7 +87,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // see ResolvePointerTarget for the walk and the answers it gives. The
     // handles and the bar are drawn from this, and take their presses from
     // the same walk asked of the raw event's own position
-    // (HandleItemGesture), so what lights up and what a click lands on are
+    // (RecognizePress), so what lights up and what a click lands on are
     // one answer - this frame's - with no window hit-test of ImGui's in
     // between to be a frame late.
     const ImGuiIO& io = ImGui::GetIO();
@@ -342,7 +342,7 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
 // few pixels out - a halo that says this one is open for drawing, and is
 // what a double-click visibly changes. Nothing here takes input: which of
 // it is under the pointer is ResolvePointerTarget's answer, and a press on
-// it is HandleItemGesture's.
+// it is the recognizer's (RecognizePress).
 void OverlayApp::PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing) {
     const ImVec2 pMin(std::round(item.rect.x), std::round(item.rect.y));
     const ImVec2 pMax(std::round(item.rect.x + item.rect.w), std::round(item.rect.y + item.rect.h));

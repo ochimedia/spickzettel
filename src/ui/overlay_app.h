@@ -81,8 +81,9 @@ inline constexpr const char* kEmptyCanvasMenuId = "##empty_canvas_menu";
 //    click or hold for fullscreen, drag for a region" item-creation
 //    gesture, and the selection's own gestures (a press on a snippet, on a
 //    selected snippet's handle, or on the selection bar - see
-//    HandleItemGesture) - is driven by the window's input stream (see
-//    OnInput: as it arrives, decoupled from render/frame rate). What a press
+//    ui/interaction/recognizer.cpp) - is driven by the window's input
+//    stream (see OnInput: as it arrives, decoupled from render/frame rate),
+//    through the editor's interactions (docs/INTERACTIONS.md). What a press
 //    lands on is ResolvePointerTarget's answer: the app's own walk over
 //    the selection's furniture and then the items, asked of the event's
 //    own position. ImGui never hit-tests an item, a handle or the bar, so
@@ -487,7 +488,7 @@ private:
     // an accent outline and, unless it is fullscreen, its eight handles.
     // Nothing in it takes input. Which of it is under the pointer is
     // ResolvePointerTarget's answer, what the pointer looks like over it
-    // is RenderItems', and a press on any of it is HandleItemGesture's -
+    // is RenderItems', and a press on any of it is the recognizer's -
     // so nothing over the canvas is hit-tested by ImGui at all - see
     // docs/ARCHITECTURE.md, "Selection", for why that rule is absolute.
     // `drawing`: the snippet is in drawing mode, and wears the stronger

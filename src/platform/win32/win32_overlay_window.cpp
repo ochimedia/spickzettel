@@ -48,7 +48,7 @@ constexpr const wchar_t* kWindowClassName = L"SpickzettelOverlayWindowClass";
 // itself it turns a press held still into a right click (the "press and
 // hold" gesture, with its ring animation) and a pen's barrel button and
 // taps into feedback of its own - and a held press is the app's: it
-// stands in for a double-click (see OverlayApp::MatureHeldPress). Told to
+// stands in for a double-click (see Pending, ui/interaction/gestures.h). Told to
 // Windows the two ways it documents: as a window property at creation,
 // and as the answer to WM_TABLET_QUERYSYSTEMGESTURESTATUS.
 //
@@ -57,8 +57,8 @@ constexpr const wchar_t* kWindowClassName = L"SpickzettelOverlayWindowClass";
 // still arrived as a left press, then 650 ms later a right press and
 // release with the left still down, then the left release, and none of it
 // tagged as touch. So the app does not rely on this being heard: it
-// ignores a second button while one is down (see
-// OverlayApp::Hand::pressedButton), which is what keeps the hold's work.
+// ignores a second button while one is down (see Gesture and Spent,
+// ui/interaction/gestures.h), which is what keeps the hold's work.
 // This stays because it is the documented request, costs nothing, and may
 // be honored for a pen or on another Windows.
 constexpr DWORD_PTR kTabletGestureFlags =
@@ -1350,7 +1350,7 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
             return 0;
         // Right button: the app's own right-button gestures (a resize from
         // a snippet's nearest edge, the eraser in drawing mode, framing a
-        // drawing on empty canvas - see OverlayApp::OnMouse). Shares
+        // drawing on empty canvas - see ui/interaction/recognizer.cpp). Shares
         // SetCapture/ReleaseCapture with the left button above (Win32
         // mouse capture is per-window, not per-button); harmless to call
         // again if already captured, and ReleaseCapture here is safe even
