@@ -341,6 +341,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
 // ================= A tile's context menu =================
 
 void OverlayApp::OpenCanvasContextMenu(CanvasId canvasId, ImVec2 at) {
+    PushPopup(PopupKind::CanvasMenu);
     canvasContextMenuCanvasId_ = canvasId;
     Queue(Effect{Effect::Kind::OpenCanvasMenu, at});
 }

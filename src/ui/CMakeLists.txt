@@ -11,6 +11,7 @@ add_library(sz_ui STATIC
     icon_draw.cpp
     interaction/command.cpp
     interaction/gestures.cpp
+    interaction/levels.cpp
     interaction/machine.cpp
     interaction/recognizer.cpp
     overlay_app.cpp

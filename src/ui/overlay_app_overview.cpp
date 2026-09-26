@@ -3006,6 +3006,7 @@ bool OverlayApp::TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
 }
 
 void OverlayApp::AskToDelete(ConfirmDeleteTarget target) {
+    PushPopup(PopupKind::ConfirmDelete);
     confirmDeleteTarget_ = std::move(target);
     // Queued even from inside a frame: the Overview's buttons ask from
     // within its PushID nesting, and the popup belongs at the top level.
@@ -3032,7 +3033,8 @@ void OverlayApp::OpenConfirmDelete() {
 void OverlayApp::RenderConfirmDeletePopover() {
     const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    if (!ImGui::BeginPopup(kConfirmDeletePopupId)) {
+    confirmDeleteShown_ = ImGui::BeginPopup(kConfirmDeletePopupId);
+    if (!confirmDeleteShown_) {
         return;
     }
     KeepPopoverInFront();

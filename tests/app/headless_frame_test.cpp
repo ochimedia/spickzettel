@@ -546,17 +546,71 @@ TEST_F(HeadlessAppTest, ARightClickOnEmptyCanvasLeavesDrawingModeAndOpensTheMenu
 TEST_F(HeadlessAppTest, OfTwoMenusAskedForBetweenFramesTheLastIsTheOneUp) {
     ShowEditMode();
     StepFrame();
-    Drag(300.0f, 300.0f, 600.0f, 500.0f);  // a snippet to right-click on
+    Drag(300.0f, 300.0f, 600.0f, 500.0f);  // a snippet to open a menu over
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     PressKey(ImGuiKey_Escape);
 
-    RawMouse(900.0f, 650.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);
-    RawMouse(900.0f, 650.0f, platform::MouseEventKind::Up, platform::MouseButton::Right);
-    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);
-    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Up, platform::MouseButton::Right);
+    Command emptyCanvas{CommandId::EmptyCanvasMenu};
+    emptyCanvas.at = platform::Vec2{900.0f, 650.0f};
+    Command item{CommandId::ItemMenu};
+    item.item = Canvases().CurrentOrNull()->items[0].id;
+    item.at = platform::Vec2{450.0f, 400.0f};
+    ASSERT_TRUE(controller_->Overlay().Dispatch(emptyCanvas));
+    ASSERT_TRUE(controller_->Overlay().Dispatch(item));
     StepFrames(2);
     EXPECT_TRUE(App().IsItemContextMenuOpen());
     EXPECT_FALSE(App().IsEmptyCanvasMenuOpen());
+}
+
+// A popup takes every key but the global hotkeys: undo, Delete, a tool
+// would act on the canvas under it, and it would stay up over one that had
+// changed (docs/INTERACTIONS.md, decision 2). Escape closes it, and only
+// it - the selection it was opened on stays.
+TEST_F(HeadlessAppTest, APopupTakesEveryKeyAndEscapeClosesOnlyIt) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 600.0f, 500.0f);  // a screenshot, selected as made
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    RightClick(450.0f, 400.0f);
+    ASSERT_TRUE(App().IsItemContextMenuOpen());
+
+    PressCtrlKey(ImGuiKey_Z);
+    PressKey(ImGuiKey_Delete);
+    PressKey(ImGuiKey_P);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "neither undone nor deleted under the menu";
+    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().IsItemContextMenuOpen());
+
+    PressKey(ImGuiKey_Escape);
+    StepFrame();
+    EXPECT_FALSE(App().IsItemContextMenuOpen());
+    EXPECT_EQ(App().Selection().size(), 1u) << "Escape closed the menu and did nothing else";
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "with the menu gone, undo is undo";
+}
+
+// A press while a menu is up is the menu's: a right click elsewhere closes
+// it and opens nothing else (docs/INTERACTIONS.md, section 5).
+TEST_F(HeadlessAppTest, ARightClickWhileAMenuIsUpOnlyClosesIt) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 600.0f, 500.0f);  // a snippet to right-click on
+    PressKey(ImGuiKey_Escape);
+    RightClick(900.0f, 650.0f);
+    ASSERT_TRUE(App().IsEmptyCanvasMenuOpen());
+
+    MoveTo(450.0f, 400.0f);
+    StepFrame();
+    MouseButtonEvent(ImGuiMouseButton_Right, true);
+    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);
+    StepFrame();
+    MouseButtonEvent(ImGuiMouseButton_Right, false);
+    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Up, platform::MouseButton::Right);
+    StepFrames(3);
+    EXPECT_FALSE(App().IsEmptyCanvasMenuOpen());
+    EXPECT_FALSE(App().IsItemContextMenuOpen());
+    EXPECT_TRUE(App().Selection().empty()) << "and selected nothing";
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
 }
 
 // A canvas switch in the middle of a right click on empty canvas drops it:

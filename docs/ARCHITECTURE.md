@@ -1868,10 +1868,13 @@ settling: a key that does nothing is no command.
 
 Whether a key *reaches* its command from where it is pressed is a
 separate question: not while text is being typed, not through the
-Overview or the cheat sheet, and for Escape, Delete and the arrows not
-through a popup or drawing mode. For now that is `KeyReaches`, one
-exhaustive switch holding the rules that used to be spread over three
-key handlers; the stack of `docs/INTERACTIONS.md` answers it in phase 3.
+Overview or the cheat sheet, not through a popup, and for Delete and the
+arrows not through drawing mode. The stack answers part of it already -
+a popup claims every key but the global hotkeys, so no undo, tool or
+clipboard key acts on the canvas under a menu (before, they did, and the
+menu stayed up over a canvas that had changed) - and the rest is still
+`KeyReaches`, one exhaustive switch, until the Text and Panel levels take
+it over.
 
 A key belongs to one command: the first row it is bound to, which puts
 the fixed keys ahead of chosen ones, and the table's order ahead of a
@@ -1950,6 +1953,22 @@ the very start of the frame instead, the canvas bar's menu was closed
 again before it was drawn. Of two popups asked for before a frame, the
 one asked for last now comes up; before, it was whichever the frame
 drew last.
+
+Every popup the app opens - the three context menus, the Properties
+popover, the color chooser, the delete confirmation - is an interaction
+on the machine's Popup level (`Popup`, `ui/interaction/levels.*`), put
+there as it is asked for (`OverlayApp::PushPopup`). It is the machine's
+record of what ImGui draws: the pointer is the popup's, since a press in
+it is its widgets' and one outside closes it and does nothing else, which
+ImGui does; so is every key but a global hotkey. It finishes on the first
+frame's tick that finds the view no longer showing it - a row chosen, a
+click outside, Escape - since ImGui closes a popup by itself and the
+machine has to follow. Ended from outside - another popup opened, a
+command whose scope covers popups - it asks the view to close it
+(`Effect::Kind::ClosePopup`), queued before the new one opens so that the
+one asked for last is up. Escape closes the innermost popup open, which
+may be one of ImGui's own inside it (a color picker in the Properties
+popover), and the popup finishes when it is itself gone.
 
 The panels' own keys - the Overview's Escape, a key being captured in
 Settings, the input options HUD's digits - and every widget are still

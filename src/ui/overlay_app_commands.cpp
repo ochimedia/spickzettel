@@ -101,14 +101,8 @@ void OverlayApp::HandleCommandKey(int key, bool repeat) {
     // Reaching its command as a key would, over a panel too, for a mouse
     // button - no panel here does anything with those, and taken for the
     // panel's, the button that opened the cheat sheet could not close it.
-    //
-    // An open popover takes Escape before any command sees it, and closes -
-    // on the next frame, which is where a popup can be closed (see Effect).
-    if (key == platform::KeyCombo::kEscape && !ImGui::GetIO().WantTextInput && !PanelOpen() &&
-        ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
-        Queue(Effect{Effect::Kind::CloseTopmostPopover});
-        return;
-    }
+    // An open popup never lets a key this far: the machine's Popup level
+    // claims it (see Popup).
     // Each key to one command: the first in the table that it is bound to,
     // which puts the fixed keys ahead of the chosen ones and, among those,
     // the table's order ahead of a profile that bound one key twice.

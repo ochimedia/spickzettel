@@ -79,6 +79,35 @@ std::string ItemNameForKind(ItemCreationKind kind, const Canvas& canvas, bool fu
 
 }  // namespace
 
+namespace {
+// What the editor asks of a view, with none there.
+class NoViews final : public EditorViews {
+public:
+    void Say(std::string /*text*/) override {}
+    void OpenOverview() override {}
+    void OpenSettings() override {}
+    void OpenPicker(ItemId /*item*/, bool /*copy*/) override {}
+    void ToggleCheatSheet() override {}
+    void OpenItemProperties(ItemId /*item*/, std::optional<platform::Vec2> /*at*/) override {}
+    void OpenColorChooser(platform::Vec2 /*at*/) override {}
+    void AskToDeleteCanvas(CanvasId /*canvas*/) override {}
+    void CanvasMade(CanvasId /*canvas*/) override {}
+    void OpenItemMenu(ItemId /*item*/, platform::Vec2 /*at*/) override {}
+    void OpenEmptyCanvasMenu(platform::Vec2 /*at*/) override {}
+    bool PointerOverView() const override { return false; }
+    bool PanelOpen() const override { return false; }
+    bool PopupOpen() const override { return false; }
+    bool PopupShowing(PopupKind /*kind*/) const override { return false; }
+    void ClosePopup(PopupKind /*kind*/) override {}
+    void CloseInnermostPopup() override {}
+};
+}  // namespace
+
+EditorViews& Editor::Views() const {
+    static NoViews none;
+    return views_ != nullptr ? *views_ : none;
+}
+
 Editor::Editor(Settings& settings, Session& session)
     : settings_(settings),
       session_(session),

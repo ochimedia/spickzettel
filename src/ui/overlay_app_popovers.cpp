@@ -229,6 +229,7 @@ void OverlayApp::RenderItemTextStyle(const Item& item) {
 // ================= The context menu =================
 
 void OverlayApp::OpenItemContextMenu(ItemId itemId, ImVec2 at) {
+    PushPopup(PopupKind::ItemMenu);
     itemContextMenuItemId_ = itemId;
     Queue(Effect{Effect::Kind::OpenItemMenu, at});
 }
@@ -311,6 +312,7 @@ void OverlayApp::BuildItemContextMenuRows(const Item& item, std::vector<ContextM
 // ================= Empty canvas's context menu =================
 
 void OverlayApp::OpenEmptyCanvasMenu(platform::Vec2 at) {
+    PushPopup(PopupKind::EmptyCanvasMenu);
     Queue(Effect{Effect::Kind::OpenEmptyCanvasMenu, ImVec2(at.x, at.y)});
 }
 
@@ -350,14 +352,86 @@ void OverlayApp::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) c
 // ================= Effects =================
 
 void OverlayApp::Queue(const Effect& effect) {
-    const auto same = std::find_if(effects_.begin(), effects_.end(),
-                                   [&](const Effect& queued) { return queued.kind == effect.kind; });
+    const auto same = std::find_if(effects_.begin(), effects_.end(), [&](const Effect& queued) {
+        return queued.kind == effect.kind && (effect.kind != Effect::Kind::ClosePopup || queued.popup == effect.popup);
+    });
     if (same != effects_.end()) {
-        *same = effect;
-        return;
+        effects_.erase(same);
     }
     effects_.push_back(effect);
 }
+
+void OverlayApp::PushPopup(PopupKind kind) { editor_.Input().Push(std::make_unique<Popup>(kind), Event{}); }
+
+namespace {
+// The popup's ImGui id, as its render function begins it.
+const char* PopupId(PopupKind kind) {
+    switch (kind) {
+        case PopupKind::ItemMenu:
+            return kItemContextMenuId;
+        case PopupKind::CanvasMenu:
+            return kCanvasContextMenuId;
+        case PopupKind::EmptyCanvasMenu:
+            return kEmptyCanvasMenuId;
+        case PopupKind::ItemProperties:
+            return kItemPropertiesPopupId;
+        case PopupKind::ColorChooser:
+            return kColorChooserPopupId;
+        case PopupKind::ConfirmDelete:
+            return kConfirmDeletePopupId;
+    }
+    return "";
+}
+}  // namespace
+
+bool OverlayApp::PopupShowing(PopupKind kind) const {
+    const auto opens = [kind](Effect::Kind effect) {
+        switch (effect) {
+            case Effect::Kind::OpenItemProperties:
+                return kind == PopupKind::ItemProperties;
+            case Effect::Kind::OpenItemMenu:
+                return kind == PopupKind::ItemMenu;
+            case Effect::Kind::OpenCanvasMenu:
+                return kind == PopupKind::CanvasMenu;
+            case Effect::Kind::OpenEmptyCanvasMenu:
+                return kind == PopupKind::EmptyCanvasMenu;
+            case Effect::Kind::OpenColorChooser:
+                return kind == PopupKind::ColorChooser;
+            case Effect::Kind::OpenConfirmDelete:
+                return kind == PopupKind::ConfirmDelete;
+            case Effect::Kind::ClosePopup:
+            case Effect::Kind::CloseInnermostPopup:
+                return false;
+        }
+        return false;
+    };
+    if (std::any_of(effects_.begin(), effects_.end(), [&](const Effect& effect) { return opens(effect.kind); })) {
+        return true;  // asked for, and opened at the next frame
+    }
+    switch (kind) {
+        case PopupKind::ItemMenu:
+            return itemContextMenu_.IsOpen();
+        case PopupKind::CanvasMenu:
+            return canvasContextMenu_.IsOpen();
+        case PopupKind::EmptyCanvasMenu:
+            return emptyCanvasMenu_.IsOpen();
+        case PopupKind::ItemProperties:
+            return itemPropertiesPopoverItemId_.has_value();
+        case PopupKind::ColorChooser:
+            return colorChooserOpen_;
+        case PopupKind::ConfirmDelete:
+            return confirmDeleteShown_;
+    }
+    return false;
+}
+
+void OverlayApp::ClosePopup(PopupKind kind) {
+    Effect effect{Effect::Kind::ClosePopup};
+    effect.popup = kind;
+    Queue(effect);
+}
+
+void OverlayApp::CloseInnermostPopup() { Queue(Effect{Effect::Kind::CloseInnermostPopup}); }
 
 // At the top level of the frame, in the order asked: a popup opened
 // replaces the one open before it, so the one asked for last is the one
@@ -386,7 +460,20 @@ void OverlayApp::ApplyEffects() {
             case Effect::Kind::OpenConfirmDelete:
                 OpenConfirmDelete();
                 break;
-            case Effect::Kind::CloseTopmostPopover:
+            case Effect::Kind::ClosePopup: {
+                // It and whatever is open inside it; nothing, if it is gone
+                // already - a row chosen, a click outside.
+                ImGuiContext& g = *ImGui::GetCurrentContext();
+                const ImGuiID id = ImGui::GetID(PopupId(effect.popup));
+                for (int level = 0; level < g.OpenPopupStack.Size; ++level) {
+                    if (g.OpenPopupStack[level].PopupId == id) {
+                        ImGui::ClosePopupToLevel(level, /*restore_focus_to_window_under_popup=*/true);
+                        break;
+                    }
+                }
+                break;
+            }
+            case Effect::Kind::CloseInnermostPopup:
                 CloseTopmostPopover();
                 break;
         }
@@ -398,12 +485,14 @@ void OverlayApp::ApplyEffects() {
 void OverlayApp::OpenColorChooser(platform::Vec2 from) {
     // Only asked for here: the bar's color button fires from the input
     // stream between frames - see Effect.
+    PushPopup(PopupKind::ColorChooser);
     Queue(Effect{Effect::Kind::OpenColorChooser, ImVec2(from.x, from.y)});
 }
 
 void OverlayApp::OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) {
     // Opened on the next frame - see Effect: a bar button fires outside
     // any frame.
+    PushPopup(PopupKind::ItemProperties);
     itemPropertiesPopoverItemId_ = item;
     if (at.has_value()) {
         itemPropertiesPopoverAnchor_ = ImVec2(at->x, at->y);

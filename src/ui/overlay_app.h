@@ -60,6 +60,11 @@ struct EdgeReveal {
     void Flash(double now, double seconds) { holdUntil = std::max(holdUntil, now + seconds); }
 };
 
+// The context menus' ImGui popup ids - see ContextMenu.
+inline constexpr const char* kItemContextMenuId = "##item_context_menu";
+inline constexpr const char* kCanvasContextMenuId = "##canvas_context_menu";
+inline constexpr const char* kEmptyCanvasMenuId = "##empty_canvas_menu";
+
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
 // attached to via Dear ImGui. Contains no OS-specific code: rendering is
 // entirely through ImGui's platform-agnostic API. What it draws - the
@@ -371,6 +376,15 @@ private:
     // sheet.
     bool PanelOpen() const override { return overviewOpen_ || cheatSheetOpen_; }
     bool PopupOpen() const override;
+    bool PopupShowing(PopupKind kind) const override;
+    void ClosePopup(PopupKind kind) override;
+    void CloseInnermostPopup() override;
+    // Every popup this class opens is put on the machine's Popup level
+    // first (ending the one that was there, which closes it), then asked
+    // for - see Popup.
+    void PushPopup(PopupKind kind);
+    // Whether the delete confirmation was up on the last frame.
+    bool confirmDeleteShown_ = false;
 
     // The canvas as the hand works on it: the selection, the tool, drawing
     // mode, the clipboard, and every command - see Editor. What this class
@@ -1134,13 +1148,13 @@ private:
     // owns its own "asked for, not yet opened" state; the id is kept here
     // because the rows are the snippet's, and it has to survive the frame
     // between the right-click and the menu appearing.
-    ContextMenu itemContextMenu_{"##item_context_menu"};
+    ContextMenu itemContextMenu_{kItemContextMenuId};
     std::optional<ItemId> itemContextMenuItemId_ = std::nullopt;
     // The canvas bar's own, and which tile's canvas it is up for.
-    ContextMenu canvasContextMenu_{"##canvas_context_menu"};
+    ContextMenu canvasContextMenu_{kCanvasContextMenuId};
     std::optional<CanvasId> canvasContextMenuCanvasId_ = std::nullopt;
     // Empty canvas's, which is up for nothing in particular.
-    ContextMenu emptyCanvasMenu_{"##empty_canvas_menu"};
+    ContextMenu emptyCanvasMenu_{kEmptyCanvasMenuId};
     // The color chooser - see OpenColorChooser: whether it was open on the
     // last frame, which is how its closing is noticed, and where it opens.
     bool colorChooserOpen_ = false;
@@ -1191,13 +1205,18 @@ private:
             OpenEmptyCanvasMenu,
             OpenColorChooser,
             OpenConfirmDelete,
-            // The popover or menu on top, as Escape does to it.
-            CloseTopmostPopover,
+            // A popup of the machine's closed from outside (see
+            // Popup::Interrupt), and the innermost popup open closed, as
+            // Escape does to it - which may be one of ImGui's own inside it.
+            ClosePopup,
+            CloseInnermostPopup,
         };
         Kind kind = Kind::OpenItemProperties;
         ImVec2 at{0.0f, 0.0f};  // where a menu or the color chooser opens
+        PopupKind popup = PopupKind::ItemMenu;  // which, for ClosePopup
     };
-    // Asked twice before a frame, done once - as asked the second time.
+    // Asked twice before a frame, done once - as asked the second time, and
+    // in its place: a popup closed and asked for again is up.
     void Queue(const Effect& effect);
     void ApplyEffects();
     std::vector<Effect> effects_;

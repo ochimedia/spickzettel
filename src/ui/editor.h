@@ -25,6 +25,7 @@
 #include "platform/i_overlay_window.h"
 #include "platform/platform_types.h"
 #include "ui/interaction/command.h"
+#include "ui/interaction/levels.h"
 #include "ui/interaction/machine.h"
 #include "ui/selection_layout.h"
 
@@ -109,6 +110,13 @@ public:
     virtual bool PointerOverView() const = 0;
     virtual bool PanelOpen() const = 0;
     virtual bool PopupOpen() const = 0;
+    // A popup the machine has on its Popup level: whether the view still
+    // shows it - or is about to, asked for and not yet opened - and
+    // closing it, or the innermost popup open, which may be one of ImGui's
+    // own inside it.
+    virtual bool PopupShowing(PopupKind kind) const = 0;
+    virtual void ClosePopup(PopupKind kind) = 0;
+    virtual void CloseInnermostPopup() = 0;
 };
 
 class Editor {
@@ -118,6 +126,9 @@ public:
     Editor(Settings& settings, Session& session);
 
     void SetViews(EditorViews* views) { views_ = views; }
+    // The view, or one that shows nothing and opens nothing while there is
+    // none - a test of the machine alone.
+    EditorViews& Views() const;
     // For the keyboard a note being typed needs - see BeginEditingNote.
     void AttachWindow(platform::IOverlayWindow* window) { window_ = window; }
 

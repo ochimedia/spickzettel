@@ -984,6 +984,8 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
         itemPropertiesPopoverItemId_.reset();
         confirmDeleteTarget_.reset();
         effects_.clear();
+        // Asked to close once edit mode draws again (see Popup::Interrupt).
+        editor_.Input().End(Level::Popup);
         // Normally cleared at the top of every RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle
