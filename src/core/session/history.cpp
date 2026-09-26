@@ -222,29 +222,6 @@ void History::Record(CanvasId canvas, Step step) {
     ++revision_;
 }
 
-bool History::MergeIntoTop(CanvasId canvas, const Step& step) {
-    const auto it = stacks_.find(canvas);
-    if (it == stacks_.end() || it->second.undo.empty()) {
-        return false;
-    }
-    const Step& top = it->second.undo.back();
-    if (top.what != step.what || top.changes.size() != step.changes.size()) {
-        return false;
-    }
-    for (size_t i = 0; i < step.changes.size(); ++i) {
-        if (top.changes[i].item != step.changes[i].item ||
-            top.changes[i].kind.index() != step.changes[i].kind.index()) {
-            return false;
-        }
-    }
-    // A new change all the same, and as final for the futures it ends.
-    for (const Change& change : step.changes) {
-        DropRedoOf(change.item, /*except=*/0);
-    }
-    it->second.redo.clear();
-    return true;
-}
-
 Step History::TakeUndo(CanvasId canvas) {
     std::deque<Step>& stack = stacks_.at(canvas).undo;
     Step step = std::move(stack.back());

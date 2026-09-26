@@ -654,7 +654,8 @@ while building phase 3").
    the wheel's last notch, takes the burst back.
 3. **No merging in the history.** With every burst held open on the
    session, nothing files a step into the one before it:
-   `History::MergeIntoTop`, `Revision` and the `merge` parameters go.
+   `History::MergeIntoTop` and the `merge` parameters go. (`Revision`
+   stays: an untouched drawing is told apart by it.)
 4. **The cases as tests.** The two rows of section 9 as scripted tests,
    and the randomized test checks a cancelled burst as it checks a
    cancelled drag.

@@ -204,25 +204,34 @@ TEST(SessionTest, APlacementChangeIsUndoneAndRedoneWhole) {
     EXPECT_EQ(manager.FindItemAnywhere(b)->rect, (Rect{210, 20, 100, 100}));
 }
 
-// A burst - wheel notches, arrow presses - folds into one entry that goes
-// back to where the burst began; anything else filed in between ends it.
-TEST(SessionTest, AMergedBurstOfPlacementChangesIsOneUndo) {
+// A burst - wheel notches, arrow presses - is a placement held open, one
+// entry that goes back to where the burst began; one for other snippets
+// ends it, and anything filed on the way ends it too.
+TEST(SessionTest, APlacementHeldOpenForABurstIsOneUndo) {
     Session session;
     CanvasManager& manager = Model(session);
     const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
     for (int i = 1; i <= 3; ++i) {
-        ASSERT_TRUE(session.SetRects({{a, Rect{static_cast<float>(i), 0, 100, 100}}}, /*merge=*/true));
+        if (!session.Placing({a})) {
+            session.BeginPlacement({a});
+        }
+        session.PreviewRect(a, Rect{static_cast<float>(i), 0, 100, 100});
     }
+    EXPECT_FALSE(session.Placing({})) << "exactly the snippets it holds";
+    ASSERT_TRUE(session.EndPlacement());
     ASSERT_TRUE(session.Undo().has_value());
     EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.x, 0.0f) << "the whole burst, at once";
     EXPECT_FALSE(session.CanUndo());
 
     ASSERT_TRUE(session.Redo().has_value());
+    session.BeginPlacement({a});
+    session.PreviewRect(a, Rect{9.0f, 0, 100, 100});
     const ItemId b = session.CreateItem(false, Rect{300, 0, 50, 50}, "B");  // something else filed
     ASSERT_NE(b, 0u);
-    ASSERT_TRUE(session.SetRects({{a, Rect{9.0f, 0, 100, 100}}}, /*merge=*/true));
+    EXPECT_FALSE(session.Placing({a})) << "ended by what was filed";
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.x, 3.0f) << "a new entry, not merged past the one between";
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_FLOAT_EQ(manager.FindItemAnywhere(a)->rect.x, 3.0f) << "filed before it, as a step of its own";
 }
 
 TEST(SessionTest, AStrokeIsUndoneAndRedone) {
@@ -1289,8 +1298,7 @@ TEST(SessionTest, AnUndoMidGestureTakesBackTheGesture) {
     EXPECT_FALSE(session.TextEditItem().has_value());
 }
 
-// Style changes are on the history: a popover's edit is one step, and a
-// run of the opacity wheel merged into one goes back to where it began.
+// Style changes are on the history, each a step of its own.
 TEST(SessionTest, StyleChangesAreUndone) {
     Session session;
     const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
@@ -1298,13 +1306,16 @@ TEST(SessionTest, StyleChangesAreUndone) {
     for (const float opacity : {0.9f, 0.8f, 0.7f}) {
         ItemStyle style = start;
         style.foregroundOpacity = opacity;
-        ASSERT_TRUE(session.SetStyles({{item, style}}, /*merge=*/true));
+        ASSERT_TRUE(session.SetStyles({{item, style}}));
     }
     ASSERT_TRUE(session.Undo().has_value());
-    EXPECT_EQ(ItemStyle::Of(*ItemById(session.Manager(), item)), start) << "the whole run";
+    EXPECT_FLOAT_EQ(ItemById(session.Manager(), item)->foregroundOpacity, 0.8f);
+    ASSERT_TRUE(session.Undo().has_value());
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(ItemStyle::Of(*ItemById(session.Manager(), item)), start);
     EXPECT_FALSE(session.CanUndo());
     ASSERT_TRUE(session.Redo().has_value());
-    EXPECT_FLOAT_EQ(ItemById(session.Manager(), item)->foregroundOpacity, 0.7f);
+    EXPECT_FLOAT_EQ(ItemById(session.Manager(), item)->foregroundOpacity, 0.9f);
 }
 
 // A style edit of several snippets - the opacity wheel spun over a

@@ -333,7 +333,7 @@ private:
             for (const ItemId id : ids) {
                 rects.emplace_back(id, Rect{Coord(), Coord(), 50.0f + Coord() * 0.3f, 50.0f + Coord() * 0.3f});
             }
-            session_.SetRects(rects, /*merge=*/Pick(2) == 0);
+            session_.SetRects(rects);
             return;
         }
         session_.BeginPlacement(ids);
@@ -342,7 +342,7 @@ private:
             session_.PreviewRect(id, Rect{Coord(), Coord(), 80.0f, 80.0f});
         }
         if (Pick(3) != 0) {
-            session_.EndPlacement(/*merge=*/Pick(2) == 0);
+            session_.EndPlacement();
         }
     }
     void Style() {
@@ -358,7 +358,7 @@ private:
             for (const ItemId id : ids) {
                 styles.emplace_back(id, style);
             }
-            session_.SetStyles(styles, /*merge=*/Pick(2) == 0);
+            session_.SetStyles(styles);
             return;
         }
         session_.PreviewStyle(ids.front(), style);

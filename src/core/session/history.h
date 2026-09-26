@@ -168,18 +168,13 @@ public:
     bool CanRedo(CanvasId canvas) const;
     // Counts the changes to a history that move its top - a step filed,
     // undone or redone - so that a caller can tell whether anything came
-    // between two of its own edits. A merge into the top step is that
-    // step, and counts for nothing; so does a snippet's history moving or
-    // being forgotten, or the oldest falling off the end.
+    // between two of its own edits. A snippet's history moving or being
+    // forgotten counts for nothing, and so does the oldest falling off the
+    // end.
     uint64_t Revision() const { return revision_; }
 
     // Files `step`, just done on `canvas`, on top of its undo stack.
     void Record(CanvasId canvas, Step step);
-    // Folds `step` into the top of `canvas`'s undo stack when that is a step
-    // of the same kind about the same snippets, keeping the top's own
-    // changes - which hold where the run began - and dropping `step`'s.
-    // False, changing nothing, when it is not.
-    bool MergeIntoTop(CanvasId canvas, const Step& step);
 
     // The step an undo or a redo on `canvas` would apply; null for none.
     const Step* NextUndo(CanvasId canvas) const;

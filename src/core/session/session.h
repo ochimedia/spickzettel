@@ -167,8 +167,8 @@ public:
     // and when there is, it is done: nothing on a stack is ever refused.
     bool CanUndo() const;
     bool CanRedo() const;
-    // See history::History::Revision - what OverlayApp's bursts are told
-    // apart by.
+    // See history::History::Revision - what tells the editor whether an
+    // untouched drawing is still the most recent thing done.
     uint64_t HistoryRevision() const { return history_.Revision(); }
     // The history itself, to read - for the tests.
     const history::History& History() const { return history_; }
@@ -214,19 +214,15 @@ public:
     // Takes a fullscreen snippet out of fullscreen as part of the gesture -
     // what taking hold of one does. No-op for one that is not fullscreen.
     void PreviewLeaveFullscreen(ItemId id);
-    // With `merge`, a change that continues the last one - the same
-    // snippets, and nothing else filed since - is folded into it instead,
-    // keeping that entry's `before`: a burst of wheel notches or arrow-key
-    // nudges is taken back in one step, to where it started. The caller
-    // decides what counts as a burst. True if anything was filed or merged.
-    bool EndPlacement(bool merge = false);
+    // Files the gesture as one step. True if anything was filed.
+    bool EndPlacement();
     // Ends it leaving no trace: every snippet it held back where the press
     // found it, nothing filed and nothing written - what Escape does to a
     // drag. The previews only ever changed the model in memory, so going
     // back to the checkpoint the gesture took is exact.
     void CancelPlacement();
     // A placement gesture in one call: each snippet to its rect, re-anchored.
-    bool SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool merge = false);
+    bool SetRects(const std::vector<std::pair<ItemId, Rect>>& rects);
     // See CanvasManager::ToggleFullscreen / ResetItemToNativeSize; one
     // entry each.
     void ToggleFullscreen(ItemId id, bool stretch);
@@ -242,14 +238,14 @@ public:
     void PreviewStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles);
     void PreviewStyle(ItemId id, const ItemStyle& style) { PreviewStyles({{id, style}}); }
     // Files the edit as one step, with every snippet it held when any of
-    // them changed. `merge` and the answer as for EndPlacement.
-    bool EndStyleEdit(bool merge = false);
+    // them changed. True if anything was filed.
+    bool EndStyleEdit();
     // The edit undone as if never made: the snippets' styles as they were
     // before, nothing filed - see CancelPlacement.
     void CancelStyleEdit();
     // Styles for several snippets at once, as one step: an edit begun and
-    // ended. `merge` as for EndPlacement, and the same answer.
-    bool SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge = false);
+    // ended, and the same answer.
+    bool SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles);
 
     // ----- Making, copying and moving snippets -----
 
@@ -377,12 +373,10 @@ private:
     // made - and LastWriteFailed says so. True when it landed, and always
     // without a store.
     bool Land(const Checkpoint& before);
-    // Land, then file `step` on `canvas`'s history - folded into the step on
-    // top with `merge` (see history::History::MergeIntoTop) - and let the
-    // histories of the snippets the command moved follow them (see
-    // migrations_). False when the write failed, and then nothing is
-    // filed.
-    bool Commit(const Checkpoint& before, CanvasId canvas, history::Step step, bool merge = false);
+    // Land, then file `step` on `canvas`'s history, and let the histories of
+    // the snippets the command moved follow them (see migrations_). False
+    // when the write failed, and then nothing is filed.
+    bool Commit(const Checkpoint& before, CanvasId canvas, history::Step step);
     // Erases what `ids` name for good - folders, canvases or snippets - as
     // one command: out of the model and the library, their textures
     // released and their history forgotten once it has landed. How many
@@ -412,7 +406,7 @@ private:
     Placements PlacementsOf(const std::vector<ItemId>& ids) const;
     // Commits the change from `before` to how those snippets are placed now
     // as one step - see EndPlacement.
-    bool CommitPlacements(const Checkpoint& checkpoint, const Placements& before, bool merge = false);
+    bool CommitPlacements(const Checkpoint& checkpoint, const Placements& before);
     // A cut's paste or a send of one snippet: moves `itemId` from the
     // canvas holding it onto `target`, on top; its history follows once the
     // command lands (see migrations_). The change for the step that files

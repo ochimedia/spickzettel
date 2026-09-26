@@ -261,11 +261,10 @@ Session::Placements Session::PlacementsOf(const std::vector<ItemId>& ids) const 
     return placements;
 }
 
-bool Session::CommitPlacements(const Checkpoint& checkpoint, const Placements& before, bool merge) {
+bool Session::CommitPlacements(const Checkpoint& checkpoint, const Placements& before) {
     // Compared against now: a gesture that ends where it began - a click, a
     // drag back to the start - files nothing. When anything moved, every
-    // snippet the gesture held is in the step, so that the next notch of a
-    // burst is about the same snippets even when one of them met the edge.
+    // snippet the gesture held is in the step, one that met the edge too.
     bool changed = false;
     Step step{0, What::Placement, {}};
     for (const auto& [id, placement] : before) {
@@ -281,7 +280,7 @@ bool Session::CommitPlacements(const Checkpoint& checkpoint, const Placements& b
         return false;
     }
     const CanvasId canvas = Model().CanvasHoldingItem(step.changes.front().item).value_or(0);
-    return Commit(checkpoint, canvas, std::move(step), merge);
+    return Commit(checkpoint, canvas, std::move(step));
 }
 
 void Session::BeginPlacement(const std::vector<ItemId>& ids) {
@@ -319,13 +318,13 @@ void Session::PreviewLeaveFullscreen(ItemId id) {
     Model().ToggleFullscreen(id, Model().DisplayWidth(), Model().DisplayHeight());
 }
 
-bool Session::EndPlacement(bool merge) {
+bool Session::EndPlacement() {
     if (!placement_.has_value()) {
         return false;
     }
     const PlacementGesture gesture = std::move(*placement_);
     placement_.reset();
-    return CommitPlacements(gesture.checkpoint, gesture.before, merge);
+    return CommitPlacements(gesture.checkpoint, gesture.before);
 }
 
 void Session::CancelPlacement() {
@@ -337,7 +336,7 @@ void Session::CancelPlacement() {
     Model().RollBack(gesture.checkpoint);
 }
 
-bool Session::SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool merge) {
+bool Session::SetRects(const std::vector<std::pair<ItemId, Rect>>& rects) {
     std::vector<ItemId> ids;
     for (const auto& [id, rect] : rects) {
         ids.push_back(id);
@@ -346,7 +345,7 @@ bool Session::SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool m
     for (const auto& [id, rect] : rects) {
         PreviewRect(id, rect);
     }
-    return EndPlacement(merge);
+    return EndPlacement();
 }
 
 void Session::ToggleFullscreen(ItemId id, bool stretch) {
@@ -404,7 +403,7 @@ void Session::PreviewStyles(const std::vector<std::pair<ItemId, ItemStyle>>& sty
     Model().MarkChanged();
 }
 
-bool Session::EndStyleEdit(bool merge) {
+bool Session::EndStyleEdit() {
     if (!styleEdit_.has_value()) {
         return false;
     }
@@ -427,7 +426,7 @@ bool Session::EndStyleEdit(bool merge) {
         return false;
     }
     const CanvasId canvas = Model().CanvasHoldingItem(step.changes.front().item).value_or(0);
-    return Commit(edit.checkpoint, canvas, std::move(step), merge);
+    return Commit(edit.checkpoint, canvas, std::move(step));
 }
 
 void Session::CancelStyleEdit() {
@@ -439,10 +438,10 @@ void Session::CancelStyleEdit() {
     Model().RollBack(edit.checkpoint);
 }
 
-bool Session::SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge) {
+bool Session::SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles) {
     EndOpenGesture();
     PreviewStyles(styles);
-    return EndStyleEdit(merge);
+    return EndStyleEdit();
 }
 
 // ================= Copying and moving snippets =================

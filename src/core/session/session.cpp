@@ -47,7 +47,7 @@ bool Session::WriteWholeLibrary() {
     return !lastWriteFailed_;
 }
 
-bool Session::Commit(const Checkpoint& before, CanvasId canvas, history::Step step, bool merge) {
+bool Session::Commit(const Checkpoint& before, CanvasId canvas, history::Step step) {
     if (!Land(before)) {
         return false;
     }
@@ -57,9 +57,7 @@ bool Session::Commit(const Checkpoint& before, CanvasId canvas, history::Step st
     if (step.changes.empty()) {
         return true;
     }
-    if (!merge || !history_.MergeIntoTop(canvas, step)) {
-        history_.Record(canvas, std::move(step));
-    }
+    history_.Record(canvas, std::move(step));
     return true;
 }
 
