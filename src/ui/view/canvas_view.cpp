@@ -1,5 +1,4 @@
-#include "ui/overlay_app.h"
-#include "ui/overlay_app_internal.h"
+#include "ui/view/canvas_view.h"
 
 #include <algorithm>
 #include <array>
@@ -19,11 +18,82 @@
 // own frame with, so they look exactly as ImGui's buttons do.
 #include <imgui_internal.h>
 
+
+#include "core/canvas/item_geometry.h"
+
+#include "core/canvas/canvas.h"
+#include "core/drawing/stroke_mesh.h"
+#include "generated/ui_strings.h"
+#include "ui/interaction/gestures.h"
+#include "ui/interaction/levels.h"
+#include "ui/theme.h"
+#include "ui/widgets.h"
+
 namespace sz::ui {
 
-using namespace overlay_detail;
+using namespace ::sz::core;
 
-// ================= Items =================
+CanvasView::CanvasView(Session& session, Settings& settings, Editor& editor, ViewHost& host)
+    : session_(session), settings_(settings), editor_(editor), host_(host) {}
+
+void CanvasView::BeginFrame() {
+    strokeMeshCache_.BeginFrame();
+    previewMeshCache_.BeginFrame();
+}
+
+void CanvasView::EndFrame() {
+    strokeMeshCache_.EndFrame();
+    previewMeshCache_.EndFrame();
+}
+
+void CanvasView::KeepTextures() {
+    Textures().BeginFrame();
+    KeepCurrentCanvasTextures();
+}
+
+void CanvasView::Draw(float displayW, float displayH, std::optional<ItemId> propertiesItem, float bottomPanelsTop) {
+    RenderCanvasLayer(displayW, displayH);
+    RenderItems(displayW, displayH, propertiesItem, bottomPanelsTop);
+}
+
+bool CanvasView::ItemsFadedForCreation() const {
+    return CreationKindFor(editor_.ActiveTool()).has_value() || editor_.Input().As<Framing>(Level::Gesture) != nullptr;
+}
+
+ImageSampling CanvasView::PictureSampling() const {
+    return ImageSampling{Cfg().imageFilter, host_.Window() != nullptr ? host_.Window()->ImageFilterCallback() : nullptr};
+}
+
+namespace {
+
+// A border (drawn with real content, so it can't be color-keyed away like
+// the background) plus a status line of live state. Useful for confirming
+// the overlay is actually rendering and receiving input, e.g. after moving
+// to a new machine or display setup.
+void DrawDebugOverlay(ImDrawList* drawList, const ImGuiIO& io, const CanvasManager& canvases,
+                       const std::string& hoveredResizeHandle) {
+    drawList->AddRect(ImVec2(4, 4), ImVec2(io.DisplaySize.x - 4, io.DisplaySize.y - 4), IM_COL32(0, 255, 255, 255),
+                       0.0f, 3.0f, ImDrawFlags_None);
+    char debugLine[200];
+    std::snprintf(debugLine, sizeof(debugLine),
+                   "Spickzettel overlay active | canvas=%s | items=%zu | mouse=(%.0f,%.0f)",
+                   canvases.CurrentOrNull() ? canvases.CurrentOrNull()->name.c_str() : strings::kHotkeyNone,
+                   canvases.CurrentOrNull() ? canvases.CurrentOrNull()->items.size() : size_t{0},
+                   io.MousePos.x, io.MousePos.y);
+    drawList->AddText(Px(16.0f, 16.0f), IM_COL32(0, 255, 255, 255), debugLine);
+    // A live readout of exactly which resize handle (if any) the mouse is
+    // over right now - see debugHoveredResizeHandle_'s own doc comment for
+    // why this exists: a screenshot alone can't tell "covered by a handle
+    // that's visually identical to its neighbor" apart from "not covered
+    // by anything," this can.
+    char handleLine[96];
+    std::snprintf(handleLine, sizeof(handleLine), "resize handle: %s",
+                   hoveredResizeHandle.empty() ? "none" : hoveredResizeHandle.c_str());
+    drawList->AddText(ImVec2(Px(16.0f), Px(16.0f) + ImGui::GetTextLineHeight()), IM_COL32(0, 255, 255, 255),
+                       handleLine);
+}
+
+}  // namespace
 
 namespace {
 // kItemMinWidth/kItemMinHeight/kGrabMarginPx/ClampRectToViewport live in
@@ -54,12 +124,8 @@ ImGuiMouseCursor ResizeHandleCursor(ResizeHandle handle) {
 ImVec2 Im(platform::Vec2 v) { return ImVec2(v.x, v.y); }
 }  // namespace
 
-std::optional<ImVec2> OverlayApp::SelectionBarButtonCenter(ChromeButton button) const {
-    const std::optional<platform::Vec2> center = editor_.SelectionBarButtonCenter(button);
-    return center.has_value() ? std::optional<ImVec2>(Im(*center)) : std::nullopt;
-}
-
-void OverlayApp::RenderItems(float displayW, float displayH) {
+void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemId> propertiesItem,
+                             float bottomPanelsTop) {
     // Reset every frame - see the member's own doc comment. Cleared up
     // front so a frame where the mouse has moved off every handle (or
     // there are no items at all) shows "none" rather than whatever handle
@@ -76,7 +142,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // equivalent of the mockup's setInputMode('region') raising the canvas
     // above the item layer. ResolvePointerTarget applies the same rule, so
     // nothing of the selection's is found under the pointer then either.
-    const bool itemsInteractive = !ArmedCreation().has_value();
+    const bool itemsInteractive = !editor_.ArmedCreation().has_value();
 
     // What the pointer is over, decided once, before anything is drawn -
     // see ResolvePointerTarget for the walk and the answers it gives. The
@@ -141,7 +207,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     if (held != nullptr) {
         stickyItemId = held->Item();
     } else {
-        stickyItemId = popups_.ItemOf(PopupKind::ItemProperties);
+        stickyItemId = propertiesItem;
     }
     const std::optional<ItemId> highlightId =
         stickyItemId.has_value() ? stickyItemId : (itemsInteractive ? target.body : std::nullopt);
@@ -234,14 +300,14 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
         RenderNoteEditor(*editingItem, editingMin, editingMax);
     }
 
-    RenderDock(displayW, displayH);
+    RenderDock(displayW, displayH, bottomPanelsTop);
 }
 
 
 
 // An item's content, the stroke being drawn into it, and its border, into
 // `drawList` at the item's own (unrounded) rect.
-void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, bool drawing,
+void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool drawing,
                                bool highlighted, bool isFrontmost) {
     const ImVec2 pMin(item.rect.x, item.rect.y);
     const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
@@ -339,7 +405,7 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
 // what a double-click visibly changes. Nothing here takes input: which of
 // it is under the pointer is ResolvePointerTarget's answer, and a press on
 // it is the recognizer's (RecognizePress).
-void OverlayApp::PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing) {
+void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing) {
     const ImVec2 pMin(std::round(item.rect.x), std::round(item.rect.y));
     const ImVec2 pMax(std::round(item.rect.x + item.rect.w), std::round(item.rect.y + item.rect.h));
     const float outline = PxWhole(drawing ? 3.0f : 2.0f);
@@ -369,7 +435,7 @@ void OverlayApp::PaintSelectionOutline(ImDrawList* drawList, const Item& item, b
 // border style.FrameBorderSize asks for is there too. Hover comes from the
 // resolver (`hotButton`), and a press shows as pressed only while the
 // pointer is still on it, the way a held Button does.
-void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton) {
+void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton) {
     const std::optional<Rect> bounds = editor_.SelectionBounds();
     const std::optional<ItemId> primaryId = editor_.PrimarySelection();
     if (!bounds.has_value() || !primaryId.has_value()) {
@@ -518,7 +584,7 @@ int ResizeStringForInputText(ImGuiInputTextCallbackData* data) {
 }
 }  // namespace
 
-void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
+void CanvasView::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     constexpr ImGuiWindowFlags kNoteWindowFlags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
@@ -593,7 +659,7 @@ void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
         // typing" (the app's own Undo covers that), so both paths commit;
         // only the source of the text differs (see preCallBuffer's own
         // comment above).
-        Act(action::FinishNoteEdit{preCallBuffer});
+        host_.Act(action::FinishNoteEdit{preCallBuffer});
     }
     ImGui::PopStyleColor();
     ImGui::PopFont();
@@ -609,7 +675,7 @@ void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
 // want carrying a type badge/label of any kind (name is tooltip-only).
 // Click a tile to restore it (bring it back exactly where it was, and to
 // the front) - a no-op (renders nothing) if nothing's minimized.
-void OverlayApp::RenderDock(float displayW, float displayH) {
+void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTop) {
     const Canvas* canvasPtr = Manager().CurrentOrNull();
     if (!canvasPtr) {
         return;  // nothing can be minimized when there's no canvas
@@ -632,7 +698,7 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         static_cast<float>(minimizedIds.size()) * chipSize + static_cast<float>(minimizedIds.size() - 1) * gap;
     // Above whatever is out on the bottom edge - the canvas bar, a strip
     // docked there - rather than under it.
-    const float chipsBottom = std::min(displayH - bottomMargin, canvasBar_.BottomPanelsTop() - gap);
+    const float chipsBottom = std::min(displayH - bottomMargin, bottomPanelsTop - gap);
     const ImVec2 dockMin((displayW - totalW) * 0.5f, chipsBottom - chipSize);
 
     ImGui::SetNextWindowPos(dockMin);
@@ -684,7 +750,7 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         std::snprintf(btnId, sizeof(btnId), "##dockchip%llu", static_cast<unsigned long long>(item->id));
         ImGui::SetCursorScreenPos(chipMin);
         if (ImGui::InvisibleButton(btnId, ImVec2(chipSize, chipSize))) {
-            Act(action::RestoreMinimized{item->id});
+            host_.Act(action::RestoreMinimized{item->id});
         }
         if (ImGui::IsItemHovered()) {
             const std::string label = item->name.empty() ? strings::kMoveCopyItemWord : item->name;
@@ -694,5 +760,356 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
     ImGui::End();
 }
 
+
+
+// ================= Textures, stroke rasters and overview previews =================
+//
+// What the UI draws pictures with: the textures of snippets' pictures, the
+// bitmaps strokes are drawn into in the rasterized render mode, and the
+// thumbnails the Overview shows - every one of them asked of the
+// TextureCache as it is drawn.
+
+namespace {
+
+// A stroke raster is not allowed to be enormous no matter how the item is
+// sized - 4096 on a side is well past a fullscreen capture and is where
+// the memory (64 MB at RGBA8) stops being reasonable to hold per item. An
+// item larger than this gets a *smaller resolution scale*, not a cropped
+// bitmap - see FitResolutionScale for why the distinction is the
+// difference between a stroke landing where it was drawn and a quarter of
+// the way across the screen from it.
+constexpr int kMaxRasterExtent = 4096;
+
+}  // namespace
+
+// ================= Pictures =================
+
+uint64_t CanvasView::PictureTexture(const Item& item) {
+    const TextureKey key{TextureKey::Kind::Picture, item.id};
+    // A capture's is there from the moment it was taken (see
+    // Session::CaptureShotItem).
+    if (const std::optional<uint64_t> made = Textures().Find(key)) {
+        return *made;
+    }
+    if (!item.picture.stored || !Store()) {
+        return 0;  // never had pixels of its own: the placeholder or the fill
+    }
+    const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id);
+    return Textures().Put(key, decoded.has_value()
+                                   ? TexturePixels{decoded->pixelsRGBA.data(), decoded->width, decoded->height}
+                                   : TexturePixels{});
+}
+
+void CanvasView::KeepCurrentCanvasTextures() {
+    const Canvas* canvas = Manager().CurrentOrNull();
+    if (canvas == nullptr) {
+        return;
+    }
+    for (const Item& item : canvas->items) {
+        // Only what can be on screen: a deleted snippet on the current
+        // canvas is as far from being drawn as one on another canvas.
+        if (!Manager().IsDeleted(*canvas, item)) {
+            PictureTexture(item);
+            StrokeRasterTextureFor(item.id);
+        }
+    }
+}
+
+// ================= Overview bitmap previews =================
+
+namespace {
+
+// How many *full* images may be decoded in one frame. A fullscreen QOI is
+// ~7ms, so a library of dozens would stall the panel on the frame it opens
+// - which is the frame it can least afford to. Spread over frames instead:
+// the thumbnails fill in over a fraction of a second and the panel stays
+// responsive throughout.
+//
+// This is the fallback path. A picture is normally stored with a thumbnail
+// (see LibraryStore::SaveImage), and those are read under a much larger
+// budget below, because a 256px QOI decodes in well under a millisecond.
+constexpr int kOverviewFullDecodesPerFrame = 2;
+
+// The same, for thumbnails. High enough that a normal library fills in on
+// the first frame - which is the whole point of writing them - and bounded
+// anyway, because "how many canvases are in this folder" has no upper
+// limit and a first frame that decodes two thousand of anything is a
+// stall whatever each one costs.
+constexpr int kOverviewThumbnailLoadsPerFrame = 48;
+
+}  // namespace
+
+void CanvasView::BeginOverviewPreviewFrame() {
+    const bool wanted = Cfg().overviewShowsBitmaps;
+    picturePreviewLoadBudget_ = wanted ? kOverviewFullDecodesPerFrame : 0;
+    picturePreviewThumbnailBudget_ = wanted ? kOverviewThumbnailLoadsPerFrame : 0;
+}
+
+ViewHost::PreviewDrawing CanvasView::Previews() {
+    BeginOverviewPreviewFrame();
+    return ViewHost::PreviewDrawing{PreviewTextureLookup(), PreviewMeshSlot(), PictureSampling()};
+}
+
+PreviewTextureFn CanvasView::PreviewTextureLookup() {
+    if (!Cfg().overviewShowsBitmaps) {
+        return {};
+    }
+    return [this](const Item& item) { return PicturePreviewTexture(item); };
+}
+
+std::optional<uint64_t> CanvasView::PicturePreviewTexture(const Item& item) {
+    if (!Store()) {
+        return 0;
+    }
+    // The current canvas's pictures already have their full-size texture
+    // loaded, and drawing that scaled into a 200px tile costs nothing extra
+    // - no decode, no second texture. Which is also the canvas most likely
+    // to be looked at in the overview.
+    if (const std::optional<uint64_t> full = Textures().Find(TextureKey{TextureKey::Kind::Picture, item.id});
+        full.has_value() && *full != 0) {
+        return *full;
+    }
+
+    const TextureKey key{TextureKey::Kind::Thumbnail, item.id};
+    if (const std::optional<uint64_t> made = Textures().Find(key)) {
+        return *made;  // 0 if it failed, which stops it being retried
+    }
+    if (!item.picture.stored) {
+        return 0;  // never had pixels of its own: the placeholder is the answer
+    }
+
+    // The thumbnail first, and on its own budget: this is the path nearly
+    // every picture takes, and it is cheap enough that a whole folder's
+    // worth lands on the first frame.
+    if (picturePreviewThumbnailBudget_ > 0) {
+        --picturePreviewThumbnailBudget_;
+        if (const std::optional<persistence::DecodedImage> thumb = Store()->LoadThumbnail(item.id)) {
+            return Textures().Put(key, TexturePixels{thumb->pixelsRGBA.data(), thumb->width, thumb->height});
+        }
+    } else {
+        return std::nullopt;  // even the cheap path is spoken for this frame
+    }
+
+    // No thumbnail: it could not be made when the picture was stored.
+    // Decode the real thing, under the small budget.
+    if (picturePreviewLoadBudget_ <= 0) {
+        // Its turn is next frame, or the one after. Distinct from the 0
+        // above, and the caller draws the two differently: a stand-in for
+        // an image that is arriving shortly is a wrong thumbnail that
+        // corrects itself, which is what the placeholder gradient looked
+        // like for the first few frames of every Overview visit.
+        return std::nullopt;
+    }
+    --picturePreviewLoadBudget_;
+
+    const std::optional<persistence::DecodedImage> decoded = Store()->LoadImage(item.id);
+    if (!decoded.has_value()) {
+        return Textures().Put(key, TexturePixels{});
+    }
+    const persistence::DecodedImage small =
+        persistence::DownscaleToFit(*decoded, persistence::LibraryStore::kThumbnailMaxExtent);
+    return Textures().Put(key, TexturePixels{small.pixelsRGBA.data(), small.width, small.height});
+}
+
+// ================= Rasterized vector strokes =================
+
+void CanvasView::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
+    // Native-sized when that fits the cap, uniformly smaller when it
+    // doesn't - and then every coordinate below goes through the same
+    // scale, so the raster stays in register with the strokes whatever
+    // size it came out at.
+    const float scale = FitResolutionScale(item.nativeW, item.nativeH, 1.0f, kMaxRasterExtent);
+    const int width = ScaledPixelExtent(item.nativeW, scale);
+    const int height = ScaledPixelExtent(item.nativeH, scale);
+
+    // Only new strokes to draw? Put them on top of what is already there.
+    // Finishing a stroke is by far the most common reason to get here, and
+    // redrawing every earlier stroke each time would make an item cost more
+    // with every mark ever made on it.
+    //
+    // "Only new strokes" has to mean the ones already drawn are untouched,
+    // which a count cannot say: undo, redo and the eraser all rewrite the
+    // list, and the eraser can rewrite the middle of it without changing
+    // its length. So the strokes this raster was built from are compared
+    // against the ones now there - element by element, and each of those
+    // rejects on point count before it looks at a single point.
+    const bool sameShape = raster.nativeW == item.nativeW && raster.nativeH == item.nativeH &&
+                           !raster.pixels.Empty();
+    const bool prefixUnchanged =
+        raster.builtFrom.size() <= item.strokes.size() &&
+        std::equal(raster.builtFrom.begin(), raster.builtFrom.end(), item.strokes.begin());
+    // The same comparison answers "is there anything to do at all": the
+    // whole list unchanged, and the same shape. Asked here rather than by
+    // the caller - one comparison that decides both whether and how much
+    // to draw.
+    if (sameShape && prefixUnchanged && raster.builtFrom.size() == item.strokes.size()) {
+        return;
+    }
+    size_t firstStroke = 0;
+    if (sameShape && prefixUnchanged) {
+        firstStroke = raster.builtFrom.size();
+    } else {
+        raster.pixels = StrokeBitmap(width, height);
+    }
+
+    // Strokes are in the item's own native space; the image is that space
+    // times `scale` (1 for anything under the cap). Each stroke is one brush
+    // session: coverage accumulated across all of its segments and the
+    // color laid down once, which is exactly what stops a stroke that
+    // crosses itself darkening at the crossing.
+    for (size_t i = firstStroke; i < item.strokes.size(); ++i) {
+        const Stroke& stroke = item.strokes[i];
+        if (stroke.points.empty()) {
+            continue;
+        }
+        raster.pixels.BeginStroke(stroke.colorRGBA, stroke.width * 0.5f * scale);
+        if (stroke.points.size() == 1) {
+            const StrokePoint& p = stroke.points.front();
+            raster.pixels.ExtendStroke(p.x * scale, p.y * scale, p.x * scale, p.y * scale);  // a dot
+        }
+        for (size_t s = 1; s < stroke.points.size(); ++s) {
+            raster.pixels.ExtendStroke(stroke.points[s - 1].x * scale, stroke.points[s - 1].y * scale,
+                                        stroke.points[s].x * scale, stroke.points[s].y * scale);
+        }
+        raster.pixels.EndStroke();
+    }
+
+    raster.nativeW = item.nativeW;
+    raster.nativeH = item.nativeH;
+    raster.builtFrom = item.strokes;
+    // Its texture follows the next time it is drawn - uploaded whole rather
+    // than by dirty rectangle: this runs once per finished stroke, not
+    // several times a frame.
+    ++raster.revision;
+}
+
+void CanvasView::RefreshStrokeRasters() {
+    if (Cfg().strokeRenderMode != StrokeRenderMode::Rasterized) {
+        // Includes the moment the mode is switched away: the textures and
+        // the megabytes behind them go with it.
+        ReleaseStrokeRasters();
+        return;
+    }
+    const Canvas* canvas = Manager().CurrentOrNull();
+    if (!canvas || !host_.Window()) {
+        ReleaseStrokeRasters();
+        return;
+    }
+
+    // The gate. While the generation hasn't moved, nothing on any canvas
+    // has changed, so there is nothing for the comparisons below to find -
+    // which is what makes comparing whole stroke lists affordable at all.
+    const uint64_t generation = Manager().Generation();
+    if (strokeRasterGeneration_.has_value() && *strokeRasterGeneration_ == generation) {
+        return;
+    }
+
+    for (const Item& item : canvas->items) {
+        // An item with nothing on it must *lose* its raster, not keep the
+        // one it had. Skipping it here is what left the last undone stroke
+        // on screen with nothing left in the model to explain it.
+        if (item.strokes.empty() || item.nativeW <= 0.0f || item.nativeH <= 0.0f) {
+            strokeRasters_.erase(item.id);
+            continue;
+        }
+        // The builder decides for itself whether there is anything to do -
+        // nothing, the new strokes only, or everything from scratch - from
+        // one comparison of what it built from against what is there now.
+        BuildStrokeRaster(item, strokeRasters_[item.id]);
+    }
+
+    // Anything not on this canvas any more - switched away from, or
+    // deleted - goes, and its texture with it, unasked for (see
+    // TextureCache).
+    for (auto it = strokeRasters_.begin(); it != strokeRasters_.end();) {
+        const bool stillHere = std::any_of(canvas->items.begin(), canvas->items.end(),
+                                            [&](const Item& item) { return item.id == it->first; });
+        it = stillHere ? std::next(it) : strokeRasters_.erase(it);
+    }
+    strokeRasterGeneration_ = generation;
+}
+
+uint64_t CanvasView::StrokeRasterTextureFor(ItemId itemId) {
+    const auto it = strokeRasters_.find(itemId);
+    if (it == strokeRasters_.end() || it->second.pixels.Empty()) {
+        return 0;
+    }
+    const StrokeBitmap& pixels = it->second.pixels;
+    return Textures().Get(TextureKey{TextureKey::Kind::StrokeRaster, itemId}, it->second.revision,
+                          TexturePixels{pixels.PixelsRGBA().data(), pixels.Width(), pixels.Height()});
+}
+
+void CanvasView::ReleaseStrokeRasters() {
+    // Cleared, not left at the current generation: the next pass has to
+    // rebuild from nothing, which is exactly what switching the mode back
+    // on needs.
+    strokeRasterGeneration_.reset();
+    strokeRasters_.clear();
+}
+
+// ================= View-only mode =================
+
+void CanvasView::DrawViewOnly(float displayW, float displayH, bool pinnedOnly,
+                              const std::function<void(ImDrawList*)>& demoMark) {
+    ImDrawList* drawList = BeginScreenLayer("##spickzettel_view_only", displayW, displayH);
+    // Nothing to show with an empty library (see CanvasManager's class
+    // comment) - view-only mode has no UI of its own to offer instead, so
+    // it just renders nothing, which is exactly right: a fully
+    // transparent, fully click-through overlay.
+    if (const Canvas* canvas = Manager().CurrentOrNull()) {
+        for (const Item& item : canvas->items) {
+            // A minimized snippet is drawn nowhere but its dock chip, and
+            // view-only has no dock. The pinned view draws the pinned ones
+            // and nothing else.
+            if (Manager().IsDeleted(*canvas, item) || item.minimized || (pinnedOnly && !item.pinned)) {
+                continue;
+            }
+            const ImVec2 pMin(item.rect.x, item.rect.y);
+            const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
+            drawList->PushClipRect(pMin, pMax, true);
+            DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, PictureTexture(item),
+                            StrokeRasterTextureFor(item.id), /*skipNoteText=*/false, CanvasMeshSlot(),
+                            PictureSampling());
+            drawList->PopClipRect();
+        }
+    }
+
+    if (Cfg().showDebugOverlay) {
+        DrawDebugOverlay(drawList, ImGui::GetIO(), Manager(), debugHoveredResizeHandle_);
+    }
+
+    // Also here, not just in edit mode - see ScreenChrome::DrawDemoMark. Drawn last
+    // within this one layer rather than in a layer of its own: view-only
+    // mode has nothing else on screen for it to be under.
+    demoMark(drawList);
+
+    EndScreenLayer();
+}
+
+// ================= Background: live layer + armed-item overlay + debug =================
+
+void CanvasView::RenderCanvasLayer(float displayW, float displayH) {
+    ImDrawList* drawList = BeginScreenLayer("##spickzettel_canvas", displayW, displayH);
+
+    // First, under everything: the frozen screen, if one is held. Stretched
+    // to the display rather than drawn 1:1 so a resolution change between
+    // the capture and now scales instead of leaving a gap - it will look
+    // soft, but a soft backdrop beats a torn one.
+    if (const uint64_t frozen = session_.FrozenScreenTexture(); frozen != 0) {
+        drawList->AddImage(ImTextureRef(static_cast<ImTextureID>(frozen)), ImVec2(0.0f, 0.0f),
+                            ImVec2(displayW, displayH));
+    }
+
+    if (Cfg().showDebugOverlay) {
+        DrawDebugOverlay(drawList, ImGui::GetIO(), Manager(), debugHoveredResizeHandle_);
+    }
+
+    // The armed item's own in-progress live stroke is drawn as part of
+    // RenderItems instead of here - see the comment there for why (a Shot
+    // item's opaque fill would otherwise hide it until the stroke
+    // finishes).
+
+    EndScreenLayer();
+}
 
 }  // namespace sz::ui

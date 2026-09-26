@@ -120,12 +120,6 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
     }
 }
 
-// An item's fill (its captured image/placeholder gradient/plain color
-// fill, at backgroundOpacity) plus its baked strokes (at
-// foregroundOpacity), into `pMin..pMax` - the shared core of both
-// RenderItems' per-item interactive window, RenderViewOnly's flat
-// read-only pass, and the dock's own thumbnail chips (see RenderDock).
-// Caller owns clipping (PushClipRect/PopClipRect) around this.
 void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint,
                   ImageSampling sampling) {
     const bool filtered = sampling.apply != nullptr && sampling.filter != platform::ImageFilter::Bilinear;
@@ -233,7 +227,7 @@ void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 //
 // `meshCache` must be a different one from the canvas's own: a tile draws
 // the same items the canvas behind it does, at a wholly different scale, in
-// the same frame - see OverlayApp::previewMeshCache_.
+// the same frame - see CanvasView::previewMeshCache_.
 void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax, float displayW,
                         float displayH, StrokeRenderMode rendering, bool showStrokes,
                         const PreviewTextureFn& previewTexture,
@@ -273,7 +267,7 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
     bool drewAnything = false;
     if (item.picture.opacity > 0.0f) {
         // Nothing at all for a picture whose pixels are still being read
-        // (see OverlayApp::PicturePreviewTexture, which says so by
+        // (see CanvasView::PicturePreviewTexture, which says so by
         // returning nothing rather than 0). The placeholder gradient means "there is no image
         // here", and a few frames of it in front of an image that *is*
         // there and is on its way reads as the thumbnails being wrong and

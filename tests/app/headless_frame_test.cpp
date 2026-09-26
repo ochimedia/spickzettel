@@ -4549,7 +4549,7 @@ TEST_F(HeadlessAppTest, SnippetsFadeBackWhileANewOneIsBeingMade) {
     PressKey(ImGuiKey_Escape);  // and nothing selected
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     ASSERT_FALSE(App().ItemsFadedForCreation());
-    const unsigned faint = static_cast<unsigned>(255.0f * ui::overlay_detail::kCreationFadeAlpha) + 1u;
+    const unsigned faint = static_cast<unsigned>(255.0f * ui::kCreationFadeAlpha) + 1u;
     ASSERT_GT(MostOpaqueSnippetVertex(), faint) << "a border at full strength, at least";
 
     MoveTo(1000.0f, 100.0f);

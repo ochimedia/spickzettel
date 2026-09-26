@@ -125,7 +125,7 @@ struct AppConfig {
     // true (default): every item on the current canvas draws a subtle
     // border around its bounds at all times in edit mode, not just the one
     // currently hovered/dragged/resized (that one always gets it regardless
-    // of this setting - see OverlayApp::RenderItems). Mainly for a
+    // of this setting - see CanvasView::RenderItems). Mainly for a
     // still-empty Drawing item, which otherwise renders nothing at all
     // until it's hovered or has ink on it - easy to lose track of on a
     // busy canvas. Set to false to only show it on hover.

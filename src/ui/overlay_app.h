@@ -15,6 +15,7 @@
 #include "ui/editor.h"
 #include "ui/item_painting.h"
 #include "ui/view/canvas_bar.h"
+#include "ui/view/canvas_view.h"
 #include "ui/view/cheat_sheet.h"
 #include "ui/view/messages.h"
 #include "ui/view/overview_panel.h"
@@ -186,10 +187,7 @@ public:
     // while a region is being dragged out - not for a press that has not
     // moved yet, which may still be a click, and would flicker. See
     // kCreationFadeAlpha.
-    bool ItemsFadedForCreation() const {
-        return CreationKindFor(editor_.ActiveTool()).has_value() ||
-               editor_.Input().As<Framing>(Level::Gesture) != nullptr;
-    }
+    bool ItemsFadedForCreation() const { return canvasView_.ItemsFadedForCreation(); }
     // Whether the Overview, or the cheat sheet, is up - the machine's Panel
     // level (see Panel).
     bool IsOverviewOpen() const { return PanelUp(PanelKind::Overview); }
@@ -213,7 +211,7 @@ public:
     // debugHoveredResizeHandle_). Exposed because "whose handle is live
     // where two items overlap" is a question about occlusion that a
     // screenshot answers badly and a test answers exactly.
-    const std::string& DebugHoveredResizeHandle() const { return debugHoveredResizeHandle_; }
+    const std::string& DebugHoveredResizeHandle() const { return canvasView_.DebugHoveredResizeHandle(); }
     // The selected snippets, in the order they were selected - see
     // Editor::Selection.
     const std::vector<ItemId>& Selection() const { return editor_.Selection(); }
@@ -423,7 +421,7 @@ private:
             restartOverlayCallback_();
         }
     }
-    PreviewDrawing Previews() override;
+    PreviewDrawing Previews() override { return canvasView_.Previews(); }
     void Do(const ViewAction& action);
     std::vector<ViewAction> actions_;
     // Every input event, in the order they happened - see IOverlayWindow::
@@ -435,48 +433,6 @@ private:
     // (see SetMode, SettleForPersistence and OnOverlayShown).
     void OfferLifecycle(Lifecycle which);
 
-    void RenderCanvasLayer(float displayW, float displayH);  // live layer + armed-item overlay + debug text
-    // Every item on the current canvas, back to front, into one layer,
-    // then the selection's outline, handles and bar over all of them, plus
-    // the note editor and the dock above it. Decides once, from
-    // ResolvePointerTarget, what the pointer is over and so what lights up
-    // and which shape it wears; see the definition.
-    void RenderItems(float displayW, float displayH);
-    // An item's content, its in-progress stroke (`drawing`: it is the
-    // snippet in drawing mode, whose stroke in flight is on the live layer)
-    // and its border, into the items layer's draw list - see the definition.
-    void PaintItemBody(ImDrawList* drawList, const Item& item, bool drawing, bool highlighted,
-                       bool isFrontmost);
-    // What a selected snippet wears while the selection is live, *drawn*:
-    // an accent outline and, unless it is fullscreen, its eight handles.
-    // Nothing in it takes input. Which of it is under the pointer is
-    // ResolvePointerTarget's answer, what the pointer looks like over it
-    // is RenderItems', and a press on any of it is the recognizer's -
-    // so nothing over the canvas is hit-tested by ImGui at all - see
-    // docs/ARCHITECTURE.md, "Selection", for why that rule is absolute.
-    // `drawing`: the snippet is in drawing mode, and wears the stronger
-    // outline that says so.
-    void PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing);
-    // The selection bar: its buttons on a small pill floating over
-    // the selection's bounding box (see SelectionBarLayout in the
-    // definition file for where exactly). `hotButton` is the button the
-    // pointer is over and allowed to light up this frame, if any - see
-    // RenderItems for what "allowed" means while something is held.
-    void PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton);
-    // The live text editor over an item whose note is being edited - the
-    // one piece of an item that is a real ImGui widget, in a window of its
-    // own above the items layer. See the definition.
-    void RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax);
-    // Small chips along the bottom of the screen, one per minimized item
-    // on the current canvas (see Item::minimized) - click one to restore
-    // it (unset minimized, bring to front). A no-op (renders nothing) if
-    // nothing's minimized.
-    void RenderDock(float displayW, float displayH);
-    // view-only mode's entire render path: the current canvas's items,
-    // read-only, at their real screen positions - no selection, no
-    // drag-resize, no Overview. See DrawItemContent (in the .cpp)
-    // for the fill/stroke drawing shared with RenderItems.
-    void RenderViewOnly(float displayW, float displayH);
 public:
     // A hotkey row armed, waiting for the combo the user wants, and the rest
     // of what a test asks of the Settings page's key rows - see SettingsPage.
@@ -495,100 +451,6 @@ private:
     // have to be dismissed before the app could be touched at all, and
     // would teach nothing about how the app actually works.
     void PlaceWelcomeNotes(float displayW, float displayH);
-
-    // ===== Rasterized vector strokes (StrokeRenderMode::Rasterized) =====
-
-    // An item's vector strokes, drawn into a bitmap so they can be
-    // composited in one go. Purely derived - the strokes are still the
-    // truth, this is thrown away and rebuilt from them, and is never
-    // persisted.
-    struct StrokeRaster {
-        StrokeBitmap pixels;
-        // Moved on whenever `pixels` change: what its texture is told to
-        // bring itself up to date by (see TextureCache::Get).
-        uint64_t revision = 0;
-        // What it was built from, kept so a stale raster is recognized by
-        // comparing rather than by guessing. A count is not enough and
-        // never could be: undoing back to nothing and drawing something new
-        // leaves the count exactly where it started, which is how the last
-        // undone stroke stayed on screen and the next one didn't appear.
-        //
-        // A copy of the strokes, not a summary of them. It costs a second
-        // copy of the points - a couple of hundred kilobytes for a heavy
-        // item - and buys an exact answer with no hash and no probability
-        // attached. The comparison is only reached when something has
-        // actually changed; see strokeRasterGeneration_.
-        float nativeW = 0.0f;
-        float nativeH = 0.0f;
-        std::vector<Stroke> builtFrom;
-    };
-    // Brings the current canvas's rasters in line with its items, and
-    // drops every other one. A no-op in the other two render modes, which
-    // also frees whatever was cached the moment the mode changes. Called
-    // once a frame, after every input that could have changed what is on
-    // the canvas and before anything draws it.
-    void RefreshStrokeRasters();
-    // Brings `raster` in line with `item`'s strokes: nothing at all when it
-    // already matches, just the new strokes on top of what is there when
-    // only new ones have been appended since it was built, and everything
-    // from scratch otherwise - all decided by one comparison of what it
-    // was built from against what is there now. Appending is the common
-    // case by a long way: it is what finishing a stroke does, and
-    // rebuilding every stroke each time would make a busy item cost more
-    // with every mark on it.
-    void BuildStrokeRaster(const Item& item, StrokeRaster& raster);
-    // The texture for `itemId`'s rasterized strokes, or 0 if there isn't
-    // one - which DrawItemContent takes as "draw them tessellated instead".
-    uint64_t StrokeRasterTextureFor(ItemId itemId);
-    void ReleaseStrokeRasters();
-
-    // ===== Textures =====
-
-    // Every texture is the session's TextureCache's, asked for by what it
-    // shows as it is about to be drawn, and never held here - see
-    // TextureCache for what that settles.
-    TextureCache& Textures() { return session_.Textures(); }
-    // A snippet's picture's texture, read from the library the first time
-    // it is asked for: 0 while there are no pixels to show - none stored,
-    // or they cannot be read - which draws the placeholder or the fill.
-    uint64_t PictureTexture(const Item& item);
-    // Asks for the textures of every snippet on the current canvas, drawn
-    // this frame or not - minimized, or left out of the pinned view - so
-    // that none is let go of and read again the moment it is drawn: the
-    // current canvas's pictures stay on the GPU, and no other canvas's do.
-    // Once a frame, before anything draws.
-    void KeepCurrentCanvasTextures();
-
-    // ===== Overview bitmap previews (AppConfig::overviewShowsBitmaps) =====
-
-    // A picture's pixels, decoded and scaled down to thumbnail size, for the
-    // canvas overview - which draws canvases that aren't current and whose
-    // full-size pixels are deliberately not in memory. Kept, like every
-    // texture, only while something draws it: while a panel shows its
-    // canvas, so a library of screenshots costs nothing while it isn't
-    // being browsed. The expensive part is the decode, not the memory - a
-    // preview is at most kOverviewPreviewMaxExtent on its long edge, a
-    // couple of hundred kilobytes against the eight megabytes it came from.
-    //
-    // Resets the per-frame decode budget - called once, at the top of the
-    // overview's own rendering.
-    void BeginOverviewPreviewFrame();
-    // The preview texture for one snippet's picture, loading it if there is
-    // budget left this frame and it hasn't already failed. Three answers,
-    // and the Overview draws each differently: a handle to draw with; 0 for
-    // a picture with no pixels to show at all (or whose read failed), which
-    // gets
-    // the placeholder gradient; and nothing at all for one whose turn to be
-    // read hasn't come yet, which gets drawn as an empty tile rather than a
-    // stand-in that will be replaced a few frames later. A slow library
-    // fills in over those frames rather than stalling the panel.
-    std::optional<uint64_t> PicturePreviewTexture(const Item& item);
-    // How a preview finds a picture's pixels: PicturePreviewTexture while the
-    // Overview shows bitmaps (see AppConfig::overviewShowsBitmaps), else
-    // nothing - an empty lookup, which DrawCanvasPreview tests for. Shared
-    // by the canvas grid, the canvas bar and the recently-deleted list.
-    PreviewTextureFn PreviewTextureLookup();
-
 
     // What the popover's Delete does, and what a delete Settings > Behavior
     // says not to ask about does (see AppConfig::confirmDelete) - the Delete
@@ -633,84 +495,6 @@ private:
     Settings& settings_;
     const AppConfig& Cfg() const { return settings_.Stored(); }
 
-    // How the stroke currently being drawn is rendered. Never Rasterized:
-    // a live stroke isn't in item.strokes yet and so isn't in the raster,
-    // and rebuilding one per mouse-move to include it would cost far more
-    // than the difference is worth. It joins the raster the moment it is
-    // finished.
-    StrokeRenderMode LiveStrokeRenderMode() const {
-        return Cfg().strokeRenderMode == StrokeRenderMode::Polyline ? StrokeRenderMode::Polyline
-                                                                : StrokeRenderMode::Tessellated;
-    }
-    // Per item, and only while the mode is Rasterized - see
-    // RefreshStrokeRasters, which is also what empties this again when the
-    // mode changes or a canvas stops being current.
-    std::unordered_map<ItemId, StrokeRaster> strokeRasters_;
-    // The canvas generation these rasters were last checked against, and
-    // the reason comparing whole stroke lists costs nothing in practice:
-    // while it hasn't moved, nothing anywhere has changed and there is
-    // nothing to compare. Only a gate on *when* to look - the comparison
-    // itself is still what decides the answer, so this never has to be
-    // precise about what changed, only that something did.
-    //
-    // Leaning on the generation counter rather than on a new
-    // "remember to invalidate" rule at each mutation site is deliberate:
-    // every change goes through the session's commands, which bump it, so
-    // there is one place to get it right. nullopt means "check regardless"
-    // - a fresh start, or the mode having just been switched on.
-    std::optional<uint64_t> strokeRasterGeneration_;
-    // The tessellated shape of each stroke, kept between frames - see
-    // StrokeMeshCache for what that saves and what invalidates an entry.
-    //
-    // Two of them, not one, because a cached mesh is only valid at the scale
-    // it was built at, and the two places strokes are drawn use different
-    // ones *in the same frame*: an item on the canvas is drawn at its own
-    // size, and the same item appears again, much smaller, in its canvas's
-    // Overview tile. One cache would have each rebuild the other's entry
-    // every frame - strictly worse than not caching at all. Sharing one
-    // between the canvas and the dock is safe by contrast, and they do:
-    // RenderItems skips minimized items and the dock draws only those, so no
-    // item is ever in both at once.
-    StrokeMeshCache strokeMeshCache_;
-    StrokeMeshCache previewMeshCache_;
-    // Opens and closes a frame on both of them - see its definition in
-    // overlay_app.cpp, and the one instance of it at the top of OnFrame.
-    struct MeshCacheFrame;
-    // Each cache aimed at the current generation, which is all a drawing
-    // call needs to be handed - see StrokeMeshSlot.
-    StrokeMeshSlot CanvasMeshSlot() { return StrokeMeshSlot{&strokeMeshCache_, Manager().Generation()}; }
-    StrokeMeshSlot PreviewMeshSlot() { return StrokeMeshSlot{&previewMeshCache_, Manager().Generation()}; }
-    // The picture filter from settings, with the callback that applies it -
-    // what every drawing call that may meet a picture is handed.
-    ImageSampling PictureSampling() const {
-        return ImageSampling{Cfg().imageFilter, window_ != nullptr ? window_->ImageFilterCallback() : nullptr};
-    }
-    // How many previews are still allowed to be read this frame, one budget
-    // per cost. Both reset each frame the overview is drawn.
-    //
-    // Full images are the fallback for a library with no sidecar
-    // thumbnails, and a decode is milliseconds - a handful per frame, so
-    // the panel doesn't stall on the frame it opens, which is exactly the
-    // frame it must not. Thumbnails are the ordinary path and cost well
-    // under a millisecond, so the budget is high enough that a normal
-    // library appears at once, and bounded only against a folder holding
-    // an unreasonable number of canvases.
-    int picturePreviewLoadBudget_ = 0;
-    int picturePreviewThumbnailBudget_ = 0;
-    // Which resize handle (if any) is currently hovered or dragging, as a
-    // short human-readable label ("nw item=3", "e item=5 (dragging)") -
-    // empty when none is. Set by RenderItems from the resolver's answer,
-    // cleared at the top of every call so it never shows a stale handle
-    // from a frame where the mouse has moved off every handle since.
-    // Exists purely for DrawDebugOverlay (gated on AppConfig::
-    // showDebugOverlay, same as everything else that setting draws) and
-    // the tests - a live
-    // readout of exactly what the resize margin thinks is under the
-    // cursor, since a screenshot alone can't distinguish "this pixel is
-    // covered by a handle that just isn't visually distinguishable from
-    // its neighbor" from "this pixel isn't covered by anything."
-    std::string debugHoveredResizeHandle_;
-
     // Set by AttachTo; what the overlay asks of the platform itself - the
     // frame pacing, the pointer, the keyboard. Never null once AttachTo has
     // been called - a window that outlives this OverlayApp, per the
@@ -752,6 +536,7 @@ private:
     ScreenChrome chrome_{session_, settings_, *this};
     Messages messages_{session_};
     Pointer pointer_{settings_, editor_, *this};
+    CanvasView canvasView_{session_, settings_, editor_, *this};
 };
 
 }  // namespace sz::ui

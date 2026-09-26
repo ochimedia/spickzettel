@@ -33,37 +33,6 @@ namespace sz::ui {
 
 using namespace overlay_detail;
 
-namespace {
-
-// A border (drawn with real content, so it can't be color-keyed away like
-// the background) plus a status line of live state. Useful for confirming
-// the overlay is actually rendering and receiving input, e.g. after moving
-// to a new machine or display setup.
-void DrawDebugOverlay(ImDrawList* drawList, const ImGuiIO& io, const CanvasManager& canvases,
-                       const std::string& hoveredResizeHandle) {
-    drawList->AddRect(ImVec2(4, 4), ImVec2(io.DisplaySize.x - 4, io.DisplaySize.y - 4), IM_COL32(0, 255, 255, 255),
-                       0.0f, 3.0f, ImDrawFlags_None);
-    char debugLine[200];
-    std::snprintf(debugLine, sizeof(debugLine),
-                   "Spickzettel overlay active | canvas=%s | items=%zu | mouse=(%.0f,%.0f)",
-                   canvases.CurrentOrNull() ? canvases.CurrentOrNull()->name.c_str() : strings::kHotkeyNone,
-                   canvases.CurrentOrNull() ? canvases.CurrentOrNull()->items.size() : size_t{0},
-                   io.MousePos.x, io.MousePos.y);
-    drawList->AddText(Px(16.0f, 16.0f), IM_COL32(0, 255, 255, 255), debugLine);
-    // A live readout of exactly which resize handle (if any) the mouse is
-    // over right now - see debugHoveredResizeHandle_'s own doc comment for
-    // why this exists: a screenshot alone can't tell "covered by a handle
-    // that's visually identical to its neighbor" apart from "not covered
-    // by anything," this can.
-    char handleLine[96];
-    std::snprintf(handleLine, sizeof(handleLine), "resize handle: %s",
-                   hoveredResizeHandle.empty() ? "none" : hoveredResizeHandle.c_str());
-    drawList->AddText(ImVec2(Px(16.0f), Px(16.0f) + ImGui::GetTextLineHeight()), IM_COL32(0, 255, 255, 255),
-                       handleLine);
-}
-
-}  // namespace
-
 namespace overlay_detail {
 
 const GalleryTool kGalleryTools[6] = {
@@ -181,12 +150,12 @@ void OverlayApp::SetMode(OverlayMode mode) {
         // kept as the chooser, if it was up, was ended.
         settings_.CommitPreviews();
         KeepPen();
-        // Normally cleared at the top of every RenderItems call - which
+        // Normally cleared at the top of every CanvasView::RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle
         // happened to be hovered on the last edit-mode frame for the
         // whole view-only session.
-        debugHoveredResizeHandle_.clear();
+        canvasView_.ForgetHoveredHandle();
     }
 }
 
@@ -242,6 +211,11 @@ bool OverlayApp::PopupOpen() const {
 }
 
 // ================= What the owners and the editor ask =================
+
+std::optional<ImVec2> OverlayApp::SelectionBarButtonCenter(ChromeButton button) const {
+    const std::optional<platform::Vec2> center = editor_.SelectionBarButtonCenter(button);
+    return center.has_value() ? std::optional<ImVec2>(ImVec2(center->x, center->y)) : std::nullopt;
+}
 
 void OverlayApp::AskToDelete(DeleteTarget target) {
     // Not asked at all where Settings > Behavior says not to: deleted after
@@ -305,30 +279,18 @@ void OverlayApp::KeepPen() {
 
 // ================= Frame =================
 
-// Brackets one frame's use of the two stroke-mesh caches. A struct rather
-// than a pair of calls because OnFrame has an early return in it (view-only
-// mode), and a cache left thinking its frame is still running never drops
-// what that frame didn't draw.
-struct OverlayApp::MeshCacheFrame {
-    StrokeMeshCache& canvas;
-    StrokeMeshCache& preview;
-    MeshCacheFrame(StrokeMeshCache& canvasCache, StrokeMeshCache& previewCache)
-        : canvas(canvasCache), preview(previewCache) {
-        canvas.BeginFrame();
-        preview.BeginFrame();
-    }
-    ~MeshCacheFrame() {
-        canvas.EndFrame();
-        preview.EndFrame();
-    }
-    MeshCacheFrame(const MeshCacheFrame&) = delete;
-    MeshCacheFrame& operator=(const MeshCacheFrame&) = delete;
-};
-
 void OverlayApp::OnFrame(float /*deltaSeconds*/) {
-    // Function scope, so every path out of here - including view-only mode's
-    // own early return - closes the frame out.
-    const MeshCacheFrame meshCacheFrame(strokeMeshCache_, previewMeshCache_);
+    // The mesh caches' frame, closed on every path out of here - including
+    // view-only mode's own early return: a cache left thinking its frame is
+    // still running never drops what that frame didn't draw.
+    struct MeshCacheFrame {
+        CanvasView& view;
+        explicit MeshCacheFrame(CanvasView& canvasView) : view(canvasView) { view.BeginFrame(); }
+        ~MeshCacheFrame() { view.EndFrame(); }
+        MeshCacheFrame(const MeshCacheFrame&) = delete;
+        MeshCacheFrame& operator=(const MeshCacheFrame&) = delete;
+    };
+    const MeshCacheFrame meshCacheFrame(canvasView_);
     const ImVec2 display = ImGui::GetIO().DisplaySize;
 
     Prepare(display.x, display.y);
@@ -337,7 +299,9 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         // out: nothing of the library on screen, only the message. See
         // OverlayMode::Notice.
         if (!IsNoticeOnly()) {
-            RenderViewOnly(display.x, display.y);
+            canvasView_.DrawViewOnly(display.x, display.y, IsPinnedOnly(), [&](ImDrawList* layer) {
+                chrome_.DrawDemoMark(layer, display.x, display.y);
+            });
         }
         DrawMessages();
         Apply();
@@ -502,8 +466,7 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     // asked for yet is let go of (see TextureCache::BeginFrame), and the
     // current canvas's pictures - from the library, the first time - are
     // asked for, which is what keeps them.
-    Textures().BeginFrame();
-    KeepCurrentCanvasTextures();
+    canvasView_.KeepTextures();
 
     // Live, not just at startup - see
     // CanvasManager::SyncItemsToDisplaySize's own doc comment. Cheap: a
@@ -556,17 +519,16 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     // In the rasterized mode, the bitmaps the strokes are drawn into. Last
     // thing before anything item-shaped is drawn: everything above this
     // line is input handling, and Alt+wheel canvas stepping lives up there.
-    RefreshStrokeRasters();
+    canvasView_.RefreshStrokeRasters();
 
     // Where the panels docked against the screen's edges are this frame, and
     // how far out - before anything is drawn, since the minimized chips
-    // RenderItems draws have to clear the ones on the bottom edge.
+    // the canvas view draws have to clear the ones on the bottom edge.
     canvasBar_.Update(displayW, displayH, popups_.Up(PopupKind::CanvasMenu));
 }
 
 void OverlayApp::DrawCanvas(float displayW, float displayH) {
-    RenderCanvasLayer(displayW, displayH);
-    RenderItems(displayW, displayH);
+    canvasView_.Draw(displayW, displayH, popups_.ItemOf(PopupKind::ItemProperties), canvasBar_.BottomPanelsTop());
     // Over the items, and under the popups.
     canvasBar_.Draw(displayW, displayH);
 }
@@ -765,70 +727,6 @@ void OverlayApp::OnOverlayShown() {
         io.ClearInputKeys();
         io.ClearInputMouse();
     }
-}
-
-// ================= View-only mode =================
-
-void OverlayApp::RenderViewOnly(float displayW, float displayH) {
-    ImDrawList* drawList = BeginScreenLayer("##spickzettel_view_only", displayW, displayH);
-    // Nothing to show with an empty library (see CanvasManager's class
-    // comment) - view-only mode has no UI of its own to offer instead, so
-    // it just renders nothing, which is exactly right: a fully
-    // transparent, fully click-through overlay.
-    if (const Canvas* canvas = Manager().CurrentOrNull()) {
-        for (const Item& item : canvas->items) {
-            // A minimized snippet is drawn nowhere but its dock chip, and
-            // view-only has no dock. The pinned view draws the pinned ones
-            // and nothing else.
-            if (Manager().IsDeleted(*canvas, item) || item.minimized || (IsPinnedOnly() && !item.pinned)) {
-                continue;
-            }
-            const ImVec2 pMin(item.rect.x, item.rect.y);
-            const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
-            drawList->PushClipRect(pMin, pMax, true);
-            DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, PictureTexture(item),
-                            StrokeRasterTextureFor(item.id), /*skipNoteText=*/false, CanvasMeshSlot(),
-                            PictureSampling());
-            drawList->PopClipRect();
-        }
-    }
-
-    if (Cfg().showDebugOverlay) {
-        DrawDebugOverlay(drawList, ImGui::GetIO(), Manager(), debugHoveredResizeHandle_);
-    }
-
-    // Also here, not just in edit mode - see ScreenChrome::DrawDemoMark. Drawn last
-    // within this one layer rather than in a layer of its own: view-only
-    // mode has nothing else on screen for it to be under.
-    chrome_.DrawDemoMark(drawList, displayW, displayH);
-
-    EndScreenLayer();
-}
-
-// ================= Background: live layer + armed-item overlay + debug =================
-
-void OverlayApp::RenderCanvasLayer(float displayW, float displayH) {
-    ImDrawList* drawList = BeginScreenLayer("##spickzettel_canvas", displayW, displayH);
-
-    // First, under everything: the frozen screen, if one is held. Stretched
-    // to the display rather than drawn 1:1 so a resolution change between
-    // the capture and now scales instead of leaving a gap - it will look
-    // soft, but a soft backdrop beats a torn one.
-    if (const uint64_t frozen = session_.FrozenScreenTexture(); frozen != 0) {
-        drawList->AddImage(ImTextureRef(static_cast<ImTextureID>(frozen)), ImVec2(0.0f, 0.0f),
-                            ImVec2(displayW, displayH));
-    }
-
-    if (Cfg().showDebugOverlay) {
-        DrawDebugOverlay(drawList, ImGui::GetIO(), Manager(), debugHoveredResizeHandle_);
-    }
-
-    // The armed item's own in-progress live stroke is drawn as part of
-    // RenderItems instead of here - see the comment there for why (a Shot
-    // item's opaque fill would otherwise hide it until the stroke
-    // finishes).
-
-    EndScreenLayer();
 }
 
 

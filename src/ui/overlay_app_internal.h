@@ -88,11 +88,6 @@ ShortcutAction ShortcutForTool(Tool tool);
 ShortcutAction ShortcutForCreateAction(CreateAction action);
 ShortcutAction ShortcutForClipboardAction(ClipboardAction action);
 
-// How much of itself every snippet keeps while a new one is being made -
-// see OverlayApp::ItemsFadedForCreation. Enough to tell where things are,
-// little enough that what is being framed is what is seen.
-inline constexpr float kCreationFadeAlpha = 0.2f;
-
 // What a folder or canvas is called until someone renames it is
 // TimestampName() - in core/util now, since CanvasManager names the ones
 // it has to mint itself the same way.
