@@ -19,7 +19,7 @@ Curve RegistryDefaultCurve() {
     return curve;
 }
 
-// Pixels per count the real cursor travelled for straight reports of each
+// Pixels per count the real cursor traveled for straight reports of each
 // size, slider at 10 - 960 counts per row, measured at 125 Hz and the same
 // at 1000 Hz and 50 Hz.
 TEST(PointerBallisticsTest, MatchesTheMeasuredDesktopPointer) {

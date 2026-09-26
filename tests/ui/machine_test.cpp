@@ -33,7 +33,7 @@ public:
         return answer_ ? answer_(event) : Answer::Pass();
     }
     void Interrupt(Editor& /*editor*/) override { log_.push_back(name_ + " interrupted"); }
-    void Cancel(Editor& /*editor*/) override { log_.push_back(name_ + " cancelled"); }
+    void Cancel(Editor& /*editor*/) override { log_.push_back(name_ + " canceled"); }
 
 private:
     Level level_;
@@ -98,7 +98,7 @@ TEST_F(MachineTest, FinishAndCancelPopWhatAnswered) {
     Stack().Push(Make(Level::Gesture, "Gesture", [](const Event&) { return Answer::Cancel(); }), Event{});
     log_.clear();
     Stack().Offer(Key(platform::KeyCombo::kEscape));
-    EXPECT_EQ(log_, (std::vector<std::string>{"Gesture offered", "Gesture cancelled"}));
+    EXPECT_EQ(log_, (std::vector<std::string>{"Gesture offered", "Gesture canceled"}));
     EXPECT_EQ(Stack().At(Level::Gesture), nullptr);
 }
 

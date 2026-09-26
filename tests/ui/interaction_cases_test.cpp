@@ -872,7 +872,7 @@ TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
                 }
             }
 
-            // Escape cancelled the move, the resize or the mark on top: every
+            // Escape canceled the move, the resize or the mark on top: every
             // snippet as that gesture found it - but for a drawing nobody put
             // anything into, which a press elsewhere is allowed to discard.
             const Interaction* after = editor.Input().At(Level::Gesture);

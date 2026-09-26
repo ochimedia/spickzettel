@@ -91,8 +91,8 @@ void Machine::Route(const Event& event) {
                 }
                 continue;
             case Answer::Kind::Cancel: {
-                const std::unique_ptr<Interaction> cancelled = std::move(stack_[index]);
-                cancelled->Cancel(editor_);
+                const std::unique_ptr<Interaction> canceled = std::move(stack_[index]);
+                canceled->Cancel(editor_);
                 return;
             }
             case Answer::Kind::Start:

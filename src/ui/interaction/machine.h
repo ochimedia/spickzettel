@@ -154,7 +154,7 @@ private:
     // A button held with nothing on the Gesture level has had its say: the
     // rest of its press is Spent (section 6.3). Asked after every change,
     // which is what makes a gesture ended while its button is down -
-    // cancelled, interrupted, a hold that acted, a double-click acted on at
+    // canceled, interrupted, a hold that acted, a double-click acted on at
     // its press - leave the rest of the drag doing nothing, whatever ended
     // it.
     void LeaveSpentIfHeld();

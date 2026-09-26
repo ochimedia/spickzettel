@@ -5,7 +5,7 @@
 // its say (Spent), and each gesture of section 9. What they answer is the
 // table of section 5; what they do to the library goes through the
 // session, and is filed when they finish, filed as it stands when they
-// are interrupted, and rolled back when they are cancelled (section 8).
+// are interrupted, and rolled back when they are canceled (section 8).
 
 #include <functional>
 #include <memory>

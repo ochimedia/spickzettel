@@ -329,7 +329,7 @@ mode, a handle - starts its interaction at once, with no Pending.
 
 ### 6.3 Spent: the rest of a press that has had its say
 
-When a gesture ends while its button is still down - cancelled,
+When a gesture ends while its button is still down - canceled,
 interrupted, a hold matured, a double-click acted on its second press -
 it is replaced by **Spent(button)**, which swallows that button's moves
 and release, and any other button's press and release, until its own
@@ -434,7 +434,7 @@ takes a checkpoint per gesture (`PlacementGesture::checkpoint`,
 (`RollBack`, used today when a write fails). What is new is
 `CancelPlacement`, `CancelErase` and `CancelStyleEdit`; `CancelShape`
 exists. A freehand stroke lives in the live layer until it is committed,
-so cancelling one is clearing it.
+so canceling one is clearing it.
 
 `Session::EndOpenGesture` stays as the safety net it is: with the machine
 right, no command ever finds a gesture open.
@@ -558,7 +558,7 @@ each.
 3. **The stack.** Levels, routing, Pending, Spent, the recognizer's rules,
    the interactions one kind at a time, cancel on the session side,
    `Editor` split out. This is where the changes marked **Change** land,
-   and where Escape starts cancelling. `Hand`, `PutDown`'s
+   and where Escape starts canceling. `Hand`, `PutDown`'s
    chain, `CloseTopmostPopover`, `noteOpenAtPress`, the gates in 7 and the
    gesture half of `OnMouse` go.
 4. **Bursts.** The nudge and the wheel as interactions; `lastBurst_` and
@@ -633,7 +633,7 @@ goes is never moved: what survives of `OverlayApp`'s input side goes into
    gesture of section 9 as an interaction. `Hand`, the gesture half of
    `OnMouse`, `MatureHeldPress` and `noteOpenAtPress` go - the last
    because the recognizer asks whether a note is open before anything at
-   the press can close it. Escape starts cancelling, and the **Change**s
+   the press can close it. Escape starts canceling, and the **Change**s
    of sections 6 and 9 land here.
 5. **The Popup level.** Every popup is an interaction, closed through the
    effect queue; `CloseTopmostPopover` goes, and a popup claims every key
@@ -685,8 +685,8 @@ while building phase 3").
    `History::MergeIntoTop` and the `merge` parameters go. (`Revision`
    stays: an untouched drawing is told apart by it.)
 4. **The cases as tests.** The two rows of section 9 as scripted tests,
-   and the randomized test checks a cancelled burst as it checks a
-   cancelled drag.
+   and the randomized test checks a canceled burst as it checks a
+   canceled drag.
 
 Phase 4 was done on 2026-09-26, in these steps.
 

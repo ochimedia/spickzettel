@@ -960,7 +960,7 @@ TEST_F(WrittenSessionTest, ACopysPictureIsWrittenWithTheCopy) {
 
 // A gesture called off writes nothing: the file holds what it held before
 // the press, and what was filed before the gesture is still there.
-TEST_F(WrittenSessionTest, ACancelledDragWritesNothing) {
+TEST_F(WrittenSessionTest, ACanceledDragWritesNothing) {
     const ItemId id = session_.CreateItem(false, Rect{0, 0, 100, 100}, "A");
     session_.BeginPlacement({id});
     session_.PreviewRect(id, Rect{50, 50, 100, 100});
@@ -1378,7 +1378,7 @@ TEST(SessionTest, AnEraseThatLostTrackOfItsFragmentsIsStillUndoneExactly) {
 // Every gesture can be called off, leaving the library exactly as the
 // gesture found it - what Escape does in the middle of one. Nothing is
 // filed, so there is nothing to undo.
-TEST(SessionTest, ACancelledGestureLeavesNoTrace) {
+TEST(SessionTest, ACanceledGestureLeavesNoTrace) {
     Session session;
     session.SyncItemsToDisplaySize(1000.0f, 1000.0f);
     CanvasManager& manager = Model(session);

@@ -1773,7 +1773,7 @@ Drawing mode is an interaction on the machine's Mode level
 tool in hand is read from there (`Editor::ActiveTool`), Select when the
 level is empty, rather than kept beside it. Each answers Escape - drawing
 mode is left, the tool put down - so Escape's stages fall out of it
-passing down the stack: a gesture cancelled, then a popup, a note or a
+passing down the stack: a gesture canceled, then a popup, a note or a
 panel closed, then drawing mode or the creation tool, and only then, at
 the Canvas level, a cut called off and the selection cleared. That order
 was an `if` chain in `PutDown`. Drawing mode also claims Delete and the
@@ -1830,7 +1830,7 @@ is a drag, with the snapshot taken from the press; it used to begin at
 the press, and a hold dropped it again. A double-click on empty canvas
 makes its snippet on the second press, as one on a snippet enters
 drawing mode on it, where it waited for the release. When a gesture
-ends with its button still down - cancelled, interrupted, a hold that
+ends with its button still down - canceled, interrupted, a hold that
 acted, a double-click acted on at its press - the rest of the press is
 `Spent`, which swallows it and any other button until the release: the
 machine puts one there whenever the Gesture level is left empty with a
@@ -1977,7 +1977,7 @@ and the pen. These were four hand-written functions, each with its own
 list of what to reset.
 
 Escape is not such a command while a gesture is in flight: the gesture
-sees it first and is *cancelled* - a stroke, a shape or an erase leaves
+sees it first and is *canceled* - a stroke, a shape or an erase leaves
 nothing and files nothing, a move or resize puts every snippet back where
 the press found it, a press still pending does nothing more. The session
 rolls the gesture back to the checkpoint it took when it began
@@ -2030,7 +2030,7 @@ Bursts used to be recognized after the fact: a step filed within a
 second of the last one of its kind, with the history's revision
 unchanged, was merged into the step on top. That needed the revision
 check to keep a drag or an undo in between from being merged into, and
-could not be cancelled, since the steps were already filed. As an
+could not be canceled, since the steps were already filed. As an
 interaction, what comes in between ends the burst, and nothing is filed
 until it is over. The second stays, as the end of an interaction the
 wheel has no other end for: a run of arrow presses within it is one

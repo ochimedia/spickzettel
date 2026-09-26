@@ -392,7 +392,7 @@ void Editor::Run(const Command& command, Filing filing) {
 // tool in hand has been put down and drawing mode left by then (see
 // CreationTool and DrawingMode), and what is left is the canvas's - a cut
 // waiting to be pasted is called off, then the selection clears. What a
-// stroke or a drag in flight does with it is its own: it is cancelled.
+// stroke or a drag in flight does with it is its own: it is canceled.
 void Editor::PutDown() {
     if (clipboardIsCut_ && !clipboard_.empty()) {
         // Never mind the cut: the snippets are still where they were, so
