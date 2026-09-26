@@ -542,6 +542,7 @@
   "profiles.summaryAnd": " +",
   "profiles.deleteThis": "Delete this profile",
   "profiles.name": "Name",
+  "profiles.nameTaken": "Another profile is already called \"%s\". This one keeps its name until you type one that is free.",
   "profiles.applications": "Applications",
   "profiles.addApplication": "Add an application",
   "profiles.titleContains": "Title contains",

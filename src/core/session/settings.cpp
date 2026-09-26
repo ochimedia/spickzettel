@@ -109,7 +109,17 @@ void Settings::ClearShortcutOverride(ShortcutAction action, std::optional<size_t
 
 void Settings::SetProfiles(std::vector<Profile> profiles) {
     stored_.profiles = std::move(profiles);
+    RepairProfileNames(stored_.profiles);
     CommitNow();
+}
+
+bool Settings::RenameProfile(size_t index, std::string name) {
+    if (!IsProfile(index) || name.empty() || IsProfileNameTaken(stored_.profiles, index, name)) {
+        return false;
+    }
+    stored_.profiles[index].name = std::move(name);
+    CommitNow();
+    return true;
 }
 
 }  // namespace sz::core

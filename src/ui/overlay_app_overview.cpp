@@ -2026,7 +2026,9 @@ bool EditStringList(const char* label, const char* addLabel, const char* id, std
 
 void OverlayApp::RenderSettingsProfiles() {
     // Every edit goes into this copy and is handed back once, at the end -
-    // so nothing here iterates a list the callback may have replaced.
+    // so nothing here iterates a list the callback may have replaced. A
+    // rename is the exception: it is an edit of its own, which can be
+    // refused, and the copy is kept in step with it (see RenderProfileRow).
     std::vector<Profile> edited = settings_.Profiles();
     bool changed = false;
 
@@ -2186,11 +2188,28 @@ bool OverlayApp::RenderProfileRow(size_t index, Profile& profile, bool& remove) 
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kProfilesName);
     ImGui::SameLine(Px(kProfileFieldX));
     ImGui::SetNextItemWidth(Px(kProfileFieldWidth));
-    // Never stored empty: while the field is cleared to type a new name the
-    // profile keeps its old one, and a field left empty shows it again.
-    if (ImGui::InputText("##name", name, sizeof(name)) && name[0] != '\0') {
-        profile.name = name;
-        changed = true;
+    // A rename is an edit of its own (Settings::RenameProfile), made at once
+    // rather than handed back with the rest of the row. Never stored empty
+    // or taken: while the field is cleared, or says another profile's name,
+    // the profile keeps its old one, and a field left like that shows it
+    // again once it lets go. A taken name is said under the field while it
+    // is typed, since the refusal is otherwise invisible.
+    if (ImGui::InputText("##name", name, sizeof(name))) {
+        if (settings_.RenameProfile(index, name)) {
+            profile.name = name;
+            takenProfileName_.reset();
+        } else if (name[0] != '\0' && IsProfileNameTaken(settings_.Profiles(), index, name)) {
+            takenProfileName_ = std::make_pair(index, std::string(name));
+        } else {
+            takenProfileName_.reset();
+        }
+    }
+    if (ImGui::IsItemDeactivated()) {
+        takenProfileName_.reset();
+    }
+    if (takenProfileName_ && takenProfileName_->first == index) {
+        ImGui::SetCursorPosX(Px(kProfileFieldX));
+        ImGui::TextColored(theme::kDeletedInk, strings::kProfilesNameTaken, takenProfileName_->second.c_str());
     }
     changed |= EditStringList(strings::kProfilesApplications, strings::kProfilesAddApplication, "exes",
                               profile.match.executables);

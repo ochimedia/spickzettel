@@ -208,4 +208,14 @@ ProfileableSettings ResolveForApplication(const ProfileableSettings& base,
 // top of Input and Shortcuts names the target it is editing.
 std::string UniqueProfileName(const std::vector<Profile>& profiles, std::string_view wanted);
 
+// Whether a profile other than the one at `index` is called `name`.
+bool IsProfileNameTaken(const std::vector<Profile>& profiles, size_t index, std::string_view name);
+
+// The invariant on names - not empty, and unique - made to hold for a
+// list that breaks it: an empty name becomes "Profile", and a name
+// another profile already has is numbered. What a settings file gets as
+// it is read (a load repair, docs/SETTINGS.md section 5), and what any
+// list handed to Settings::SetProfiles gets. True if it changed a name.
+bool RepairProfileNames(std::vector<Profile>& profiles);
+
 }  // namespace sz::core

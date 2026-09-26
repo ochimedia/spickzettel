@@ -154,6 +154,40 @@ TEST(SettingsTest, AHotkeyGivenAnothersCombinationLeavesThatOneUnbound) {
     EXPECT_EQ(settings.Stored().hotkeyEditMode, view) << "unbound collides with nothing";
 }
 
+// A rename to a name another profile has is refused, as is an empty one,
+// and the profile keeps its own; a free name is taken, and committed.
+TEST(SettingsTest, AProfileIsRenamedOnlyToAFreeName) {
+    AppConfig config = ConfigWithOneProfile();
+    Profile other;
+    other.name = "Other";
+    config.profiles.push_back(other);
+    Settings settings(config);
+    int commits = 0;
+    settings.SetChangedCallback([&commits] { ++commits; });
+
+    EXPECT_FALSE(settings.RenameProfile(0, "Other"));
+    EXPECT_FALSE(settings.RenameProfile(0, ""));
+    EXPECT_EQ(settings.Profiles()[0].name, "Game");
+    EXPECT_EQ(commits, 0);
+
+    EXPECT_TRUE(settings.RenameProfile(0, "Elden Ring"));
+    EXPECT_EQ(settings.Profiles()[0].name, "Elden Ring");
+    EXPECT_EQ(commits, 1);
+    EXPECT_TRUE(settings.RenameProfile(0, "Elden Ring")) << "its own name is not another's";
+}
+
+// A list handed over whole is held to the same invariant a file is.
+TEST(SettingsTest, ProfilesSetWholeHaveNamesThatAreNotEmptyAndUnique) {
+    Settings settings(DefaultConfig());
+    std::vector<Profile> profiles(3);
+    profiles[0].name = "Game";
+    profiles[1].name = "Game";
+    settings.SetProfiles(profiles);
+    EXPECT_EQ(settings.Profiles()[0].name, "Game");
+    EXPECT_EQ(settings.Profiles()[1].name, "Game 2");
+    EXPECT_EQ(settings.Profiles()[2].name, "Profile");
+}
+
 TEST(SettingsTest, AShortcutOverrideIsPerProfile) {
     Settings settings(ConfigWithOneProfile());
     settings.SetUnderlyingApplication(Game());

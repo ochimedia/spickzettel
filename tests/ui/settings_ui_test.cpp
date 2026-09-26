@@ -624,6 +624,36 @@ TEST_F(UiTest, AProfileRowKeepsItsFieldsUntilItIsOpened) {
     EXPECT_EQ(AppSettings().Profiles()[0].match.executables[0], "game.exe");
 }
 
+// Another profile's name is refused as it is typed, and the profile keeps
+// its own: two rows named alike could not be told apart in the picker.
+TEST_F(UiTest, AProfileIsNotRenamedToANameAnotherHas) {
+    AppConfig config = DefaultConfig();
+    for (const char* name : {"Test Game", "Other"}) {
+        Profile profile;
+        profile.name = name;
+        config.profiles.push_back(profile);
+    }
+    StartWith(config);
+
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("rename to a taken name", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionprofiles");
+        const ImGuiTestItemInfo row = ctx->ItemInfo("**/Test Game");
+        IM_CHECK(row.ID != 0);
+        ctx->SetRef(row.ID);
+        ctx->ItemOpen(row.ID);
+        ctx->ItemInputValue("##name", "Other");
+    });
+
+    ASSERT_EQ(AppSettings().Profiles().size(), 2u);
+    EXPECT_EQ(AppSettings().Profiles()[0].name, "Test Game");
+    EXPECT_EQ(AppSettings().Profiles()[1].name, "Other");
+}
+
 TEST_F(UiTest, TheOverviewMakesACanvasAndSwitchesToIt) {
     ShowEditMode();
     StepFrame();

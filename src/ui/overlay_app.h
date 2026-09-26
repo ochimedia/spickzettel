@@ -1223,6 +1223,10 @@ private:
     // game almost always means coming back to that game's settings, and the
     // picker says which either way.
     std::optional<size_t> editProfile_;
+    // A profile's name field while it says another profile's name, which
+    // the rename refused: the row, and what was typed - said under the field
+    // until it lets go. See RenderProfileRow.
+    std::optional<std::pair<size_t, std::string>> takenProfileName_;
     // Set only when the Overview was opened via an item's Move/Copy pill
     // button - picking a tile then moves/copies this item there instead of
     // just switching to it.

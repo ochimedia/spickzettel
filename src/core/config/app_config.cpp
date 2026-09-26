@@ -537,38 +537,6 @@ bool RepairSummonHotkeys(AppConfig& config) {
     return repaired;
 }
 
-bool RepairProfileNames(std::vector<Profile>& profiles) {
-    bool repaired = false;
-    // Nameless is unusable - the name is what the UI lists and what the
-    // picker names - but dropping the profile took its match and every
-    // override with it, at the next start, for a name cleared by hand. It
-    // gets the name a new profile would (the UI's "profiles.namePrefix").
-    for (Profile& profile : profiles) {
-        if (profile.name.empty()) {
-            profile.name = "Profile";
-            repaired = true;
-        }
-    }
-    // A name another profile already has is made unique the same way: two
-    // rows named alike in the picker cannot be told apart. Against every
-    // name in the file, the later ones included: made unique against the
-    // earlier ones alone, [Game, Game, "Game 2"] came out Game, Game 2,
-    // Game 2 2 - renaming the profile its owner had named, rather than the
-    // duplicate.
-    for (size_t i = 0; i < profiles.size(); ++i) {
-        const std::string& name = profiles[i].name;
-        const auto end = profiles.begin() + static_cast<std::ptrdiff_t>(i);
-        if (std::none_of(profiles.begin(), end, [&name](const Profile& p) { return p.name == name; })) {
-            continue;
-        }
-        std::vector<Profile> others = profiles;
-        others.erase(others.begin() + static_cast<std::ptrdiff_t>(i));
-        profiles[i].name = UniqueProfileName(others, name);
-        repaired = true;
-    }
-    return repaired;
-}
-
 // Every repair, not only up to the first that finds something.
 bool RepairOnLoad(AppConfig& config) {
     bool repaired = RepairCreationTriggers(config);

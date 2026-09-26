@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -160,9 +161,17 @@ public:
     // profile's to solve. An unbound combo collides with nothing.
     void SetShortcut(ShortcutAction action, platform::KeyCombo combo, std::optional<size_t> target);
     void ClearShortcutOverride(ShortcutAction action, std::optional<size_t> profile);
-    // Replaces the whole list - adding, renaming, deleting, editing what a
-    // profile matches - and commits. Which profile matches may change.
+    // Replaces the whole list - adding, deleting, editing what a profile
+    // matches - and commits. Which profile matches may change. The names
+    // are held to their invariant as a file's are (RepairProfileNames),
+    // which a list the Settings panel makes never needs.
     void SetProfiles(std::vector<Profile> profiles);
+    // Renames the profile at `index`, and commits. Refused - false, and the
+    // profile keeps its name - for an empty name, which is a field cleared
+    // to type a new one, and for a name another profile has (C3): two rows
+    // named alike in the picker cannot be told apart, and numbering the
+    // one being typed would change the text under the cursor.
+    bool RenameProfile(size_t index, std::string name);
 
     // How many times the settings have been resolved - for the input
     // options HUD, which shows it so that a toggle that seems to undo itself
