@@ -92,7 +92,7 @@ void OverlayApp::BeginOverviewPreviewFrame() {
     picturePreviewThumbnailBudget_ = wanted ? kOverviewThumbnailLoadsPerFrame : 0;
 }
 
-OverlayApp::PreviewTextureFn OverlayApp::PreviewTextureLookup() {
+PreviewTextureFn OverlayApp::PreviewTextureLookup() {
     if (!Cfg().overviewShowsBitmaps) {
         return {};
     }

@@ -1593,8 +1593,12 @@ caption written beside it by hand.
 of the session. Its definition is split across `overlay_app_*.cpp` by
 section of the UI (items, input, rasters, popovers, docks, overview,
 deleted) with `overlay_app.cpp` holding the per-frame entry points and
-construction; it is still one class. Helpers used by more than one
-file live in `overlay_app_internal.h` under `overlay_detail`; anything
+construction; it is still one class. What every surface shares is in
+files of its own: the palette, the accent and the style (`theme.*`), the
+buttons, the panel backdrop, the screen layers and the key names
+(`widgets.*`), and how a snippet is painted, on the canvas or in a
+preview (`item_painting.*`). Helpers used by more than one of the class's
+files live in `overlay_app_internal.h` under `overlay_detail`; anything
 used by one file stays a file-local helper. `ui::ContextMenu`
 (`context_menu.*`) is the one piece drawn beside the class rather than
 inside it: it is a widget, not a view of the session, and depends on

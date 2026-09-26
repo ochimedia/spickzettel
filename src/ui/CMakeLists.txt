@@ -9,6 +9,7 @@ add_library(sz_ui STATIC
     editor.cpp
     editor_commands.cpp
     icon_draw.cpp
+    item_painting.cpp
     interaction/bursts.cpp
     interaction/canvas.cpp
     interaction/command.cpp
@@ -28,7 +29,9 @@ add_library(sz_ui STATIC
     overlay_app_rasters.cpp
     selection_layout.cpp
     settings_widgets.cpp
+    theme.cpp
     ui_scale.cpp
+    widgets.cpp
 )
 
 target_include_directories(sz_ui PUBLIC ${CMAKE_SOURCE_DIR}/src)

@@ -26,73 +26,7 @@ using namespace overlay_detail;
 
 // ================= Overview: canvas switcher / manager / move-copy picker =================
 
-namespace overlay_detail {
-
-// An icon+text button in the given colors - the .btn equivalent (icon
-// and text sizes/gap match .btn svg / .btn's own gap). The two colorings
-// below are the only ones in use.
-bool IconTextButton(const char* strId, const Icon& icon, const char* text, const ImVec4& fill,
-                    const ImVec4& hover, const ImVec4& ink) {
-    constexpr float kIconSize = 15.0f;
-    constexpr float kGap = 7.0f;
-    const ImGuiStyle& style = ImGui::GetStyle();
-    const ImVec2 textSize = ImGui::CalcTextSize(text);
-    const ImVec2 size(style.FramePadding.x * 2.0f + Px(kIconSize) + Px(kGap) + textSize.x,
-                       style.FramePadding.y * 2.0f + std::max(Px(kIconSize), textSize.y));
-    ImGui::PushStyleColor(ImGuiCol_Button, fill);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, hover);
-    const bool pressed = ImGui::Button(strId, size);
-    ImGui::PopStyleColor(3);
-    const ImVec2 minPt = ImGui::GetItemRectMin();
-    const ImVec2 maxPt = ImGui::GetItemRectMax();
-    const float contentH = maxPt.y - minPt.y;
-    const ImU32 inkColor = ImGui::GetColorU32(ink);
-    const ImVec2 iconPos(minPt.x + style.FramePadding.x, minPt.y + (contentH - Px(kIconSize)) * 0.5f);
-    DrawIcon(ImGui::GetWindowDrawList(), icon, iconPos, Px(kIconSize), inkColor);
-    const ImVec2 textPos(iconPos.x + Px(kIconSize) + Px(kGap), minPt.y + (contentH - textSize.y) * 0.5f);
-    ImGui::GetWindowDrawList()->AddText(textPos, inkColor, text);
-    return pressed;
-}
-
-// Always accent-colored: the primary action of a panel (New canvas, New
-// folder, Restore).
-bool PrimaryButton(const char* strId, const Icon& icon, const char* text) {
-    return IconTextButton(strId, icon, text, theme::Accent(), theme::AccentHover(), theme::AccentInk());
-}
-
-}  // namespace overlay_detail
-
 namespace {
-
-// The same in DangerIconButton's red - for a destructive action that
-// deserves visible text rather than a bare icon (the confirm-delete
-// popup's own "Delete" button - see RenderConfirmDeletePopover).
-bool DangerButton(const char* strId, const Icon& icon, const char* text) {
-    return IconTextButton(strId, icon, text, theme::kDangerSoft, theme::kDanger, theme::kWhite);
-}
-
-// A plain text tab, active tab in accent, inactive tabs a quiet neutral -
-// the Overview's own Canvases/Settings switcher (see RenderOverview).
-// `text` doubles as both the visible label and the ImGui ID (safe here -
-// the two tab labels are the only buttons with that exact text anywhere
-// in the Overview's ID scope), so ordinary ImGui::Button already centers
-// it correctly with no extra layout math needed, unlike PrimaryButton/
-// DangerButton's bespoke icon+text placement above.
-bool TabButton(const char* id, const char* text, bool active) {
-    const char* label = Labeled(text, id);
-    const ImVec2 size(Px(84.0f), 0.0f);
-    active = active || PressLandsThisFrame(label, size);
-    ImGui::PushStyleColor(ImGuiCol_Button, active ? theme::Accent() : theme::kFieldBg);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, active ? theme::AccentHover() : theme::kHoverWash);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, theme::AccentHover());
-    ImGui::PushStyleColor(ImGuiCol_Text, active ? theme::AccentInk() : theme::kGraphite200);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, Px(theme::kRadiusSm));
-    const bool pressed = ImGui::Button(label, size);
-    ImGui::PopStyleVar();
-    ImGui::PopStyleColor(4);
-    return pressed;
-}
 
 // The label over a group of settings, with the explanation that covers the
 // group as a whole behind its own "?".
@@ -245,93 +179,6 @@ bool SettingsSectionButton(const char* id, const char* text, bool active) {
 
 }  // namespace
 
-namespace overlay_detail {
-
-// Renders a scaled-down snapshot of `canvas`'s items into `thumbMin..thumbMax`
-// - uniform scale (never stretched), letterboxed/centered, computed from how
-// the real overlay's own dimensions compare to the thumbnail box.
-//
-// `meshCache` must be a different one from the canvas's own: a tile draws
-// the same items the canvas behind it does, at a wholly different scale, in
-// the same frame - see OverlayApp::previewMeshCache_.
-void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax, float displayW,
-                        float displayH, StrokeRenderMode rendering, bool showStrokes,
-                        const std::function<std::optional<uint64_t>(const Item&)>& previewTexture,
-                        StrokeMeshSlot meshCache, ImageSampling sampling) {
-    drawList->PushClipRect(thumbMin, thumbMax, true);
-    drawList->AddRectFilled(thumbMin, thumbMax, IM_COL32(14, 16, 20, 255));
-
-    if (displayW > 0.0f && displayH > 0.0f) {
-        const float scale = std::min((thumbMax.x - thumbMin.x) / displayW, (thumbMax.y - thumbMin.y) / displayH);
-        const float offsetX = thumbMin.x + ((thumbMax.x - thumbMin.x) - displayW * scale) * 0.5f;
-        const float offsetY = thumbMin.y + ((thumbMax.y - thumbMin.y) - displayH * scale) * 0.5f;
-
-        for (const Item& item : canvas.items) {
-            // Deleted on its own: not part of what the canvas shows, and not
-            // what restoring a deleted canvas brings back either.
-            if (item.deletedAt != 0) {
-                continue;
-            }
-            const ImVec2 pMin(offsetX + item.rect.x * scale, offsetY + item.rect.y * scale);
-            const ImVec2 pMax(offsetX + (item.rect.x + item.rect.w) * scale, offsetY + (item.rect.y + item.rect.h) * scale);
-            DrawItemPreview(drawList, item, pMin, pMax, rendering, showStrokes, previewTexture, meshCache, sampling);
-        }
-    }
-
-    drawList->PopClipRect();
-}
-
-void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
-                     bool showStrokes,
-                     const std::function<std::optional<uint64_t>(const Item&)>& previewTexture,
-                     StrokeMeshSlot meshCache, ImageSampling sampling) {
-    // The picture with whichever texture it can have here: the real one for
-    // the current canvas (already loaded), a thumbnail-sized copy for the
-    // rest if previews are on, and none at all otherwise - in which case
-    // DrawSnippetPicture falls back to the same placeholder gradient or
-    // plain fill it uses anywhere else.
-    bool drewAnything = false;
-    if (item.picture.opacity > 0.0f) {
-        // Nothing at all for a picture whose pixels are still being read
-        // (see OverlayApp::PicturePreviewTexture, which says so by
-        // returning nothing rather than 0). The placeholder gradient means "there is no image
-        // here", and a few frames of it in front of an image that *is*
-        // there and is on its way reads as the thumbnails being wrong and
-        // then correcting themselves. An outlined empty box - what the
-        // fall-through below draws - says the same thing quietly.
-        const std::optional<uint64_t> texture =
-            previewTexture ? previewTexture(item) : std::optional<uint64_t>(0);
-        if (texture.has_value()) {
-            DrawSnippetPicture(drawList, item.picture, pMin, pMax, *texture, sampling);
-            drewAnything = true;
-        }
-    }
-    if (!drewAnything) {
-        drawList->AddRect(pMin, pMax, IM_COL32(90, 96, 110, 180));
-    }
-    if (!showStrokes) {
-        return;
-    }
-
-    // Native -> preview is one scale factor per axis: the box over the
-    // item's native size. pMin is already the item's origin in the preview,
-    // so it doubles as DrawStroke's offset.
-    const float boxW = pMax.x - pMin.x;
-    const float boxH = pMax.y - pMin.y;
-    const float strokeScaleX = item.nativeW != 0.0f ? boxW / item.nativeW : (item.rect.w != 0.0f ? boxW / item.rect.w : 1.0f);
-    const float strokeScaleY = item.nativeH != 0.0f ? boxH / item.nativeH : (item.rect.h != 0.0f ? boxH / item.rect.h : 1.0f);
-    // Rasterized has no bitmap to draw here - a preview keeps no cache of its
-    // own, and building one for a thumbnail would cost more than the
-    // difference could possibly show at this size.
-    const StrokeRenderMode previewMode =
-        rendering == StrokeRenderMode::Rasterized ? StrokeRenderMode::Tessellated : rendering;
-    for (size_t index = 0; index < item.strokes.size(); ++index) {
-        DrawStroke(drawList, item.strokes[index], previewMode, pMin.x, pMin.y, strokeScaleX, strokeScaleY,
-                   item.foregroundOpacity, meshCache.For(item.id, index));
-    }
-}
-
-}  // namespace overlay_detail
 
 void OverlayApp::RenderOverview(float displayW, float displayH) {
     if (!IsOverviewOpen()) {
@@ -339,7 +186,7 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     }
     // A click on the backdrop closes it - after this frame, which draws it
     // whole, as every action waits for the draw to finish (see Act).
-    if (RenderPanelBackdrop("##overview_backdrop", displayW, displayH)) {
+    if (PanelBackdrop("##overview_backdrop", displayW, displayH)) {
         Act(action::ClosePanel{PanelKind::Overview});
     }
 
@@ -390,29 +237,6 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     RenderOverviewFooter(showCanvasesBody);
 
     ImGui::End();
-}
-
-bool OverlayApp::RenderPanelBackdrop(const char* windowId, float displayW, float displayH) {
-    ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
-    ImGui::SetNextWindowSize(ImVec2(displayW, displayH));
-    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.039f, 0.051f, 0.071f, 0.72f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    // Rounded corners on a full-viewport window would just cut two dark
-    // triangles out of the screen's own corners - zero it out here only
-    // (the overview panel keeps the global radius-lg rounding).
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-    // No padding, or the button below starts that far in from the corner
-    // and a click in the strip along the screen's edges closes nothing.
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-    ImGui::Begin(windowId, nullptr,
-                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
-                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav |
-                      ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoMove);
-    const bool clicked = ImGui::InvisibleButton("##backdrop_btn", ImVec2(displayW, displayH));
-    ImGui::End();
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor();
-    return clicked;
 }
 
 void OverlayApp::RenderOverviewHeader() {

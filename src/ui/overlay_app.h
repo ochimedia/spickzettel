@@ -13,6 +13,7 @@
 
 #include "ui/context_menu.h"
 #include "ui/editor.h"
+#include "ui/item_painting.h"
 #include "ui/view_action.h"
 #include "ui/interaction/gestures.h"
 #include "ui/icon_draw.h"
@@ -56,13 +57,6 @@ enum class OverlayMode {
     Notice,
 };
 
-// How a snippet's pictures are resampled: the setting (AppConfig::
-// imageFilter) and the renderer's callback that applies it, which is null
-// where nothing renders. See overlay_detail::DrawPicture.
-struct ImageSampling {
-    platform::ImageFilter filter = platform::ImageFilter::Bilinear;
-    platform::DrawCallback apply = nullptr;
-};
 
 // How far out a panel that hides against an edge of the screen is: 0 all
 // the way in, 1 all the way out. It slides out while it is wanted or until
@@ -638,9 +632,7 @@ private:
     // ShowingDeleted), or the Settings or About panel; and the footer, whose buttons belong to
     // whichever body is showing.
     void RenderOverview(float displayW, float displayH);
-    // Dims the whole screen behind a panel - the Overview, the cheat sheet
-    // - and is true for a click on it, outside the panel, which closes it.
-    bool RenderPanelBackdrop(const char* windowId, float displayW, float displayH);
+
     // Every key and gesture, grouped, with the keys as they are bound - see
     // BuildCheatSheet. A panel over a dimmed canvas like the Overview, but
     // with nothing in it to click: Escape, its own key again, or a click
@@ -890,7 +882,6 @@ private:
     // Overview shows bitmaps (see AppConfig::overviewShowsBitmaps), else
     // nothing - an empty lookup, which DrawCanvasPreview tests for. Shared
     // by the canvas grid, the canvas bar and the recently-deleted list.
-    using PreviewTextureFn = std::function<std::optional<uint64_t>(const Item&)>;
     PreviewTextureFn PreviewTextureLookup();
 
     // Overview: switch canvases, delete/reorder them, or (when opened from

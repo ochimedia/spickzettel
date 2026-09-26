@@ -71,7 +71,7 @@ TEST_F(HeadlessAppTest, ViewOnlyModeAsksForFramesOnlyWhileSomethingMoves) {
 // ImGui style draw with from the next frame, and what is drawn on it turns
 // light when the accent is dark and dark when it is bright.
 TEST_F(HeadlessAppTest, TheAccentColorRecolorsTheThemeAndTheStyle) {
-    namespace theme = overlay_detail::theme;
+    namespace theme = ui::theme;
     ShowEditMode();
     StepFrame();
     EXPECT_FLOAT_EQ(theme::Accent().y, 0x6C / 255.0f) << "teal by default";
@@ -1343,9 +1343,9 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                     KeyEvent(mod, true);
                 }
             }
-            KeyEvent(overlay_detail::ImGuiKeyForCombo(key), true);
+            KeyEvent(ui::ImGuiKeyForCombo(key), true);
             StepFrame();
-            KeyEvent(overlay_detail::ImGuiKeyForCombo(key), false);
+            KeyEvent(ui::ImGuiKeyForCombo(key), false);
             for (const auto& [down, mod] : mods) {
                 if (down) {
                     KeyEvent(mod, false);

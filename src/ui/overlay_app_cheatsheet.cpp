@@ -182,7 +182,7 @@ void OverlayApp::RenderCheatSheet(float displayW, float displayH) {
     }
     // Escape and its own key close it too, as its interaction's (see
     // Panel).
-    if (RenderPanelBackdrop("##cheat_sheet_backdrop", displayW, displayH)) {
+    if (PanelBackdrop("##cheat_sheet_backdrop", displayW, displayH)) {
         Act(action::ClosePanel{PanelKind::CheatSheet});
     }
 

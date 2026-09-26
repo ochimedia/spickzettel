@@ -228,7 +228,7 @@ protected:
     // KeyForVirtualKey, from the other side.
     static int KeyForImGuiKey(ImGuiKey key) {
         if (const std::optional<platform::KeyCombo> combo =
-                overlay_detail::ComboForImGuiKey(key, false, false, false)) {
+                ui::ComboForImGuiKey(key, false, false, false)) {
             return combo->key;
         }
         switch (key) {
