@@ -13,6 +13,7 @@
 
 #include "ui/context_menu.h"
 #include "ui/editor.h"
+#include "ui/interaction/gestures.h"
 #include "ui/icon_draw.h"
 #include "ui/interaction/command.h"
 #include "core/build_info/build_info.h"
@@ -57,71 +58,6 @@ struct EdgeReveal {
     double lastWanted = -1.0e9;
     void Update(bool wanted, double now, float deltaSeconds);
     void Flash(double now, double seconds) { holdUntil = std::max(holdUntil, now + seconds); }
-};
-
-// A move or resize in progress - see OverlayApp::HandleItemGesture. A move
-// carries the whole selection; a resize is one snippet's, by one handle or
-// from its nearest edge with Alt+right-drag.
-struct ItemGesture {
-    // The snippet grabbed: the one being resized, or the one the move was
-    // started on.
-    ItemId item = 0;
-    bool resize = false;  // else a move
-    // Which button started it: the left for a move and a handle, the right
-    // for a resize from the nearest edge (or, never dragged, a right
-    // click). Events from the other button are not its business.
-    platform::MouseButton button = platform::MouseButton::Left;
-    std::optional<ResizeHandle> handle;  // the handle it was grabbed by, when by one
-    // The snapshot the whole gesture is computed from - see
-    // HandleItemGesture for why a snapshot plus the full delta, not an
-    // incremental delta per event. A move snapshots every selected
-    // snippet's rect; a resize only `item`'s, as `startRects.front()`.
-    float startMouseX = 0.0f;
-    float startMouseY = 0.0f;
-    struct StartRect {
-        ItemId item = 0;
-        Rect rect;
-    };
-    std::vector<StartRect> startRects;
-    // A resize of more than one selected snippet at once: the handle
-    // drags the selection's box, and every snippet in it is scaled about
-    // the point the drag leaves fixed - see
-    // OverlayApp::ResizeSelectionAsAGroup. `startBounds` is that box as
-    // it was at the press; unused for a move and for a one-snippet
-    // resize, which is `startRects.front()`'s own rect.
-    bool group = false;
-    Rect startBounds;
-    // Whether the pointer has traveled far enough since the press for
-    // this to be a drag rather than a click: a click selects and moves
-    // nothing, so nothing is written until then.
-    bool moved = false;
-    // Which edge(s) a resize moves - fixed for the gesture's whole lifetime
-    // once decided at the press. Unused (all false) for a move.
-    bool left = false;
-    bool right = false;
-    bool top = false;
-    bool bottom = false;
-    // Where the snippets it may touch were when the press came is the
-    // session's, which files the gesture as one undo entry when it ends, if
-    // anything moved (see Session::BeginPlacement).
-};
-
-// A box drawn over the canvas to select by - Shift held, dragged from
-// open canvas (see OverlayApp::HandleBoxSelection). It holds the two
-// corners the drag has reached, and whether it has traveled far enough
-// to be a drag at all: a Shift-press that never moves is a click on open
-// canvas, which with Shift held adds nothing and takes nothing away.
-struct BoxSelection {
-    float fromX = 0.0f;
-    float fromY = 0.0f;
-    float toX = 0.0f;
-    float toY = 0.0f;
-    bool moved = false;
-    Rect Bounds() const {
-        const float x0 = std::min(fromX, toX);
-        const float y0 = std::min(fromY, toY);
-        return Rect{x0, y0, std::max(fromX, toX) - x0, std::max(fromY, toY) - y0};
-    }
 };
 
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
@@ -263,8 +199,8 @@ public:
     // moved yet, which may still be a click, and would flicker. See
     // kCreationFadeAlpha.
     bool ItemsFadedForCreation() const {
-        const CreationGesture* creation = GestureIf<CreationGesture>();
-        return CreationKindFor(editor_.ActiveTool()).has_value() || (creation != nullptr && creation->dragTo.has_value());
+        return CreationKindFor(editor_.ActiveTool()).has_value() ||
+               editor_.Input().As<Framing>(Level::Gesture) != nullptr;
     }
     bool IsOverviewOpen() const { return overviewOpen_; }
     // Whether the cheat sheet is up - see RenderCheatSheet.
@@ -329,24 +265,19 @@ public:
 
     // SettleHand, for the moments no frame follows - hiding, restarting,
     // exiting, the OS ending the session - where a drawing nothing went
-    // into is discarded too (see SettleUntouchedDrawing).
+    // into is discarded too (see Editor::SettleUntouchedDrawing).
     void SettleForPersistence();
-    // What every command that does not come from the pointer itself does
-    // first - a key, a hotkey, a menu row, the overlay going away: the
-    // gesture in flight ends where it stands, keeping what it did (see
-    // EndGesture), a note being typed is committed, and the hand starts
-    // over from nothing (see Hand). The command then acts on a library
-    // with nothing half done in it, and the rest of the drag does nothing.
-    // Settling rather than ignoring the command, because "is a gesture in
-    // flight" is exactly what goes stale when a release is lost - ignored
-    // for it, the hotkey that hides the overlay would be refused for good.
-    // See docs/ARCHITECTURE.md, "The hand".
-    void SettleHand() override;
+    // What every command does first as far as the hand goes, for the
+    // moments no command follows - the overlay going away, view-only mode:
+    // the gesture in flight ends where it stands, keeping what it did, and
+    // a note being typed is committed - see Editor::SettleHand and
+    // docs/ARCHITECTURE.md, "The hand".
+    void SettleHand() { editor_.SettleHand(); }
 
     // ===== Commands =====
     //
     // Runs `command` if it can act now (see Available), after ending what
-    // its scope covers (see SettleHand, and Scope). Every key, context menu
+    // its scope covers (see Scope). Every key, context menu
     // row, selection bar button and global hotkey reaches the app through
     // here - see ui/interaction/command.h. True when it ran.
     bool Dispatch(const Command& command) { return editor_.Dispatch(command); }
@@ -368,12 +299,12 @@ public:
     uint64_t CommandsRun() const { return editor_.CommandsRun(); }
     std::optional<CommandId> LastCommand() const { return editor_.LastCommand(); }
 
-    // Whether the hand has nothing in flight: no gesture, no hold, no
-    // button held. What a test asks after a command.
-    bool HandAtRest() const {
-        return !GestureInFlight() && !hand_.heldPress.has_value() && !hand_.pressedButton.has_value() &&
-               !hand_.ignoredButton.has_value();
-    }
+    // Whether the hand has nothing in flight - see Editor::HandAtRest.
+    // What a test asks after a command.
+    bool HandAtRest() const { return editor_.HandAtRest(); }
+    // The stack of interactions, bottom to top, as names - see
+    // Machine::Describe. What a test asks of the state it is in.
+    std::string InputStack() const { return editor_.Input().Describe(); }
 
     // Asks for the first-run notes to be placed on the current
     // canvas. Called by TrayController when there was no library on disk to
@@ -432,8 +363,14 @@ private:
     void OpenColorChooser(platform::Vec2 at) override;
     void AskToDeleteCanvas(CanvasId canvas) override;
     void CanvasMade(CanvasId canvas) override { overviewScrollToCanvasId_ = canvas; }
-    void EndDrawingGesture() override;
-    std::optional<ItemCreationKind> CreationInFlight() const override;
+    void OpenItemMenu(ItemId item, platform::Vec2 at) override { OpenItemContextMenu(item, ImVec2(at.x, at.y)); }
+    void OpenEmptyCanvasMenu(platform::Vec2 at) override;
+    bool PointerOverView() const override;
+    // Whether a panel covering the canvas is up, which the canvas's own
+    // keys, wheel and pointer then leave alone - the Overview or the cheat
+    // sheet.
+    bool PanelOpen() const override { return overviewOpen_ || cheatSheetOpen_; }
+    bool PopupOpen() const override;
 
     // The canvas as the hand works on it: the selection, the tool, drawing
     // mode, the clipboard, and every command - see Editor. What this class
@@ -445,20 +382,9 @@ private:
     // SetInputCallback - offered to the editor's machine (see Machine),
     // with the editor told the modifiers, the time and the display first.
     void OnInput(const platform::InputEvent& event);
-    // The machine's Canvas level, for now handing events to the handlers
-    // below - see its definition.
+    // The machine's Canvas level - see its definition.
     class CanvasRoot;
     void InstallCanvasRoot();
-    void OnCanvasEvent(const Event& event);
-    void OnMouse(const platform::MouseEvent& event);
-    // Ends the gesture in flight where it stands without anything a release
-    // would newly make or fire: what it has already done is kept and filed
-    // - a move or resize, a stroke, a right-drag erase - and a snippet not
-    // yet framed, a box not yet applied, a bar button not yet fired, a menu
-    // not yet opened are dropped. What SettleHand ends it with, and what a
-    // press ends it with whose own release went missing. The rest of the
-    // drag then does nothing - see Hand::gesture.
-    void EndGesture();
 
     void RenderCanvasLayer(float displayW, float displayH);  // live layer + armed-item overlay + debug text
     // The layers that sit over the canvas and under the Overview: the
@@ -544,18 +470,6 @@ private:
     // pointer is over and allowed to light up this frame, if any - see
     // RenderItems for what "allowed" means while something is held.
     void PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton);
-    // What a resize started on `item` carries: that snippet alone, or -
-    // when it is one of several selected - every selected snippet and
-    // the box around them, which the drag then scales.
-    void SnapshotResizeTargets(ItemGesture& gesture, ItemId item);
-    // A resize carrying the whole selection: every snippet in it scaled
-    // by one factor about the corner or edge the drag leaves fixed, so
-    // the group keeps its shape and its spacing. `dx`/`dy` are the whole
-    // drag, from the press to now, as every other resize is computed.
-    void ResizeSelectionAsAGroup(float dx, float dy);
-    // Opens the session's placement gesture over what a move or resize
-    // may change, as the press starts it - see Session::BeginPlacement.
-    void BeginPlacementRecord(const ItemGesture& gesture);
     // The live text editor over an item whose note is being edited - the
     // one piece of an item that is a real ImGui widget, in a window of its
     // own above the items layer. See the definition.
@@ -632,8 +546,7 @@ private:
     // The context menu a right click on empty canvas opens: the ways to
     // make a snippet, Paste, and the way to the Overview and Settings -
     // what the canvas itself offers, with no snippet to act on. Asked for
-    // the same way as the snippet's (see HandleEmptyCanvasRightPress).
-    void OpenEmptyCanvasMenu(ImVec2 at);
+    // the same way as the snippet's.
     void RenderEmptyCanvasMenu();
     void BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) const;
     // "Ctrl+D" for a command a key reaches, empty for one none does - what
@@ -676,10 +589,6 @@ private:
     // with nothing in it to click: Escape, its own key again, or a click
     // outside it closes it.
     void RenderCheatSheet(float displayW, float displayH);
-    // Whether a panel covering the canvas is up, which the canvas's own
-    // keys, wheel and pointer then leave alone - the Overview or the cheat
-    // sheet.
-    bool PanelOpen() const { return overviewOpen_ || cheatSheetOpen_; }
     void RenderOverviewHeader();
     // What the sidebar and the grid ask for, applied once both have
     // finished reading the folders and canvases rather than mutating the
@@ -908,62 +817,6 @@ private:
     // have to be dismissed before the app could be touched at all, and
     // would teach nothing about how the app actually works.
     void PlaceWelcomeNotes(float displayW, float displayH);
-    // The box-selection gesture's moves and its release - started in
-    // HandleItemGesture, which is also where the press that starts one is
-    // decided. Always consumes the event.
-    bool HandleBoxSelection(const platform::MouseEvent& event);
-    // Starts, continues, or ends the selection's one gesture (a press on a
-    // snippet with Select in hand or Alt held, which selects it and moves
-    // the selection; or on a selected snippet's handle, which resizes it -
-    // see Hand::gesture and the definition), and holds
-    // and fires the selection bar's buttons. Returns true if this event
-    // was consumed (caller returns immediately without its own normal
-    // handling for that button); false lets it fall through to whatever it
-    // would otherwise do.
-    bool HandleItemGesture(const platform::MouseEvent& event);
-    // The one creation gesture, press to release, on the left button: a
-    // press on empty canvas starts it - making whichever kind the modifier
-    // held picks (see EmptyCanvasCreationKind) - and so does a press
-    // anywhere while a creation is armed. Dragged, it frames the snippet;
-    // the second press of a double-click makes it fullscreen; a plain
-    // click makes nothing (with a creation tool in hand, which was picked
-    // on purpose, a click is fullscreen too). Returns true if the event
-    // was the gesture's.
-    bool HandleCreationGesture(const platform::MouseEvent& event);
-    // A right press on empty canvas, press to release: a click opens the
-    // empty canvas's menu where it landed, and a drag does nothing.
-    void HandleEmptyCanvasRightPress(const platform::MouseEvent& event);
-    // A stroke, an erase or a note opened, on the snippet in drawing mode
-    // - the marking tools' whole gesture, Down to Up. Only ever called in
-    // drawing mode: the Down arms the snippet in drawing mode, and the Move and Up that
-    // follow continue whatever it started.
-    void HandleStrokeEvent(const platform::MouseEvent& event);
-    // Remembers this press for the next one to be judged a double-click
-    // against, and says whether it is one: the same button, within
-    // kDoubleClickSeconds and kDoubleClickPx of the last press, with the
-    // same modifiers held for both - none, or one that picks what a press
-    // on empty canvas makes. A double is never the first half of the next
-    // one.
-    bool NoteDoubleClick(const platform::MouseEvent& event);
-    // Remembers the press in progress as one a hold can stand in for a
-    // double-click on: held still for kHoldSeconds it enters drawing mode
-    // on `item`, or makes a fullscreen snippet of `creates` - see
-    // Hand::heldPress. The second press of a double-click is never
-    // remembered: it does on release what the hold would do.
-    void HoldPress(const platform::MouseEvent& event, std::optional<ItemId> item,
-                   std::optional<ItemCreationKind> creates);
-    // Acts on Hand::heldPress once it has been held long enough - called
-    // every frame, since a pointer held still sends no events. Whatever the
-    // press started (a move, a creation) is dropped from under it
-    // unwritten, so its release then does nothing.
-    void MatureHeldPress();
-    // Whether a press at this point, with this button, is one on empty
-    // canvas that should make a snippet - nothing under it, nothing open
-    // that a click outside of is meant to close.
-    bool PressMakesASnippet(const platform::MouseEvent& event) const;
-    // Stops watching the untouched drawing if the gesture in flight moves or
-    // resizes it - see its own doc comment.
-    void KeepPlacedDrawings();
 
     // ===== Rasterized vector strokes (StrokeRenderMode::Rasterized) =====
 
@@ -1238,45 +1091,6 @@ private:
     // disarms whichever was already armed (see RenderHotkeyEditor's own
     // body) rather than tracking capture state per row.
     std::optional<HotkeySlot> hotkeyCaptureSlot_ = std::nullopt;
-    // The right button's erase on the snippet being drawn on (see OnMouse):
-    // where it was pressed, and whether it has become a drag - and so an
-    // erase - yet. A press that never does is a right click, which leaves
-    // drawing mode on release.
-    struct RightErase {
-        float x = 0.0f;
-        float y = 0.0f;
-        bool erasing = false;
-    };
-    // A right press on empty canvas, until its release opens the menu - or
-    // until it drags, which ends it. See HandleEmptyCanvasRightPress.
-    struct EmptyCanvasRightPress {
-        float x = 0.0f;
-        float y = 0.0f;
-    };
-    // The last press on the raw pipeline, for the next one to be judged a
-    // double-click against - see NoteDoubleClick. Cleared once it has been
-    // the first half of a double, so a third click starts over.
-    struct LastPress {
-        platform::MouseButton button = platform::MouseButton::Left;
-        CreationTrigger modifiers = CreationTrigger::Plain;
-        double atSeconds = 0.0;
-        float x = 0.0f;
-        float y = 0.0f;
-    };
-    // The press in progress, while a hold could still make of it what a
-    // double-click would have (see HoldPress/MatureHeldPress): where and
-    // when it was pressed, and what a hold does - drawing mode on `item`,
-    // or a fullscreen snippet of `creates`. Dropped the moment the press
-    // moves past kDoubleClickPx or is released. For a finger or a pen,
-    // which cannot double-click reliably; a mouse can do either.
-    struct HeldPress {
-        platform::MouseButton button = platform::MouseButton::Left;
-        float x = 0.0f;
-        float y = 0.0f;
-        double atSeconds = 0.0;
-        std::optional<ItemId> item;
-        std::optional<ItemCreationKind> creates;
-    };
 
     // Set by AttachTo; what the overlay asks of the platform itself - the
     // frame pacing, the pointer, the keyboard. Never null once AttachTo has
@@ -1307,136 +1121,6 @@ private:
     // saved: it is kept as AppConfig::strokeWidth once the size preview has
     // faded, so a burst of notches is one write (see RenderBrushSizePreview).
     bool drawWidthDirty_ = false;
-
-
-    // The creation gesture in flight: what it places, then a click
-    // (fullscreen) or a drag (region) - started by a creation tool's press or
-    // by a press on empty canvas (see HandleCreationGesture).
-    struct CreationGesture {
-        ItemCreationKind kind = ItemCreationKind::Screenshot;
-        float downX = 0.0f;  // where it was pressed
-        float downY = 0.0f;
-        // Where the pointer is now, once it has traveled far enough from
-        // the press to be a drag framing a region - nothing for a click.
-        std::optional<ImVec2> dragTo;
-        // Whether the press that started it was the second of a
-        // double-click - released without a drag, that makes the snippet
-        // fullscreen.
-        bool isDouble = false;
-        // Whether it began as a press on empty canvas rather than with a
-        // creation tool in hand - what decides that a drawing it makes is
-        // Editor::UntouchedDrawing.
-        bool fromEmptyCanvas = false;
-    };
-
-    // RectEraser's own placement gesture (see OnMouse): unlike Rectangle/
-    // Line above, nothing is drawn into the live layer while dragging - the
-    // rect is only ever a preview (see RenderRectEraserOverlay), and the
-    // actual erase (CanvasManager::EraseRectAt) happens once, at Up, with
-    // the final dragged rect, as one undoable step (see Session::EraseRect).
-    struct RectErase {
-        float x0 = 0.0f;  // the corner it was pressed at
-        float y0 = 0.0f;
-        float x1 = 0.0f;  // where the pointer is now
-        float y1 = 0.0f;
-    };
-    // The Draw or Erase gesture in progress, decided as it starts from the
-    // modifiers held then (see HandleStrokeEvent) - and for Draw, which
-    // shape it is making, since a shape can switch between line and
-    // rectangle mid-drag; for the rectangular eraser, the rectangle.
-    struct StrokeInFlight {
-        enum class Kind { Freehand, Shape, Erase, EraseRect };
-        Kind kind = Kind::Freehand;
-        DrawShape shape = DrawShape::Freehand;  // Shape only
-        RectErase rect;                         // EraseRect only
-        // Where its last press or move was - where it ends when it has to
-        // be ended without its release (see EndGesture). The pointer is
-        // somewhere else by then: at the next press, for a release that
-        // went missing.
-        platform::Vec2 last{};
-    };
-    // A press on one of the selection bar's buttons, held until the
-    // release that fires it (if it lands on the same button - see
-    // HandleItemGesture). Nothing else on the bar or a handle reacts to
-    // the pointer while one is held, as with an ImGui button holding
-    // ActiveId.
-    struct BarPress {
-        ChromeButton button = ChromeButton::Close;
-    };
-
-    // What the pointer is doing, if anything - one gesture at a time, from
-    // the press that starts it to the release that ends it, on the raw
-    // platform pipeline (see OnMouse) rather than ImGui's widgets:
-    //  - ItemGesture: a snippet moved, or resized by a handle or from its
-    //    nearest edge (see HandleItemGesture). Also what keeps the dragged
-    //    snippet highlighted if the pointer strays off it mid-drag;
-    //  - BarPress: a selection bar button held down;
-    //  - BoxSelection: the box dragged with Shift to select by;
-    //  - CreationGesture: a snippet being framed or placed;
-    //  - StrokeInFlight: the pen or the eraser in drawing mode;
-    //  - RightErase: the right button's erase on the snippet drawn on;
-    //  - EmptyCanvasRightPress: a right click on empty canvas, until it
-    //    opens the menu.
-    //
-    // One field rather than one per kind, because they exclude each other,
-    // and with one each nothing said so: which was live followed from the
-    // order OnMouse asked in, and ending one - a key pressed mid-drag, a
-    // mode left - meant knowing every field it might be. A drag went on
-    // moving a snippet a Delete had hidden, and a stroke outlived the
-    // Escape that left its drawing mode, each for want of the one field
-    // that said so being cleared. Ended by its own release, or by
-    // EndGesture; once it has ended, the rest of the held button's drag
-    // finds nothing to continue and does nothing.
-    using Gesture = std::variant<std::monostate, ItemGesture, BarPress, BoxSelection, CreationGesture, StrokeInFlight,
-                                 RightErase, EmptyCanvasRightPress>;
-
-    // Everything the pointer is in the middle of, from a press to its
-    // release: the gesture, the press a hold or a double-click is judged
-    // on, and which buttons are down. One value, because every way of
-    // interrupting the hand - a key, a hotkey, the overlay going away -
-    // has to end all of it, and SettleHand does that by ending the gesture
-    // and then putting a fresh Hand in place. While these were fields of
-    // their own, each interruption reset its own list of them, and each
-    // list missed one: a stroke left in flight by a tool key, a button left
-    // held across a hide, a hold that matured after an undo.
-    struct Hand {
-        Gesture gesture;
-        std::optional<LastPress> lastPress;
-        // Whether the press in progress was the second of a double-click -
-        // set by OnMouse on every Down for the handlers that care
-        // (HandleItemGesture enters drawing mode on it; HandleCreationGesture
-        // makes the snippet fullscreen on it).
-        bool pressIsDouble = false;
-        std::optional<HeldPress> heldPress;
-        // The button that is down, and the other one if it was pressed
-        // meanwhile: the first button to press owns the pointer until it
-        // lets go, and the other is ignored - its press, its moves and its
-        // release - until it lets go too (see OnMouse). No gesture here has
-        // ever meant anything by a second button, and one thing does send
-        // it: Windows' press-and-hold on a touch screen injects a right
-        // press and release while the finger's left press is still down,
-        // which would take back what the hold had just done (drawing mode
-        // entered, a fullscreen snippet made) even where the platform fails
-        // to switch it off.
-        std::optional<platform::MouseButton> pressedButton;
-        std::optional<platform::MouseButton> ignoredButton;
-        // Whether a note was open for typing when the press in progress
-        // began. Such a press is for closing it and makes nothing (see
-        // PressMakesASnippet) - even once settling an untouched snippet has
-        // closed the note itself.
-        bool noteOpenAtPress = false;
-    };
-    Hand hand_;
-    template <class T>
-    T* GestureIf() {
-        return std::get_if<T>(&hand_.gesture);
-    }
-    template <class T>
-    const T* GestureIf() const {
-        return std::get_if<T>(&hand_.gesture);
-    }
-    // Whether a gesture is in flight - a button held on the canvas.
-    bool GestureInFlight() const { return !std::holds_alternative<std::monostate>(hand_.gesture); }
 
     // Item properties popover (foreground/background opacity, background
     // color, fullscreen, order, copy, move): which item it's currently

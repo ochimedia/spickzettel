@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -123,19 +124,38 @@ public:
     T* As(Level level) const {
         return dynamic_cast<T*>(At(level));
     }
+    // The overlay has just come up: whatever was held when it went away
+    // has been let go of since, wherever that release went. The Gesture
+    // level is cleared (interrupted) and the buttons are forgotten - see
+    // docs/INTERACTIONS.md, section 9, "Shown".
+    void Forget();
+    // The gesture buttons down, as the events have said (ButtonBit).
+    uint8_t HeldButtons() const { return held_; }
+
     // The stack, bottom to top, as names - "Canvas" and "-" for an empty
     // level: "Canvas / - / - / - / - / Pending". For tests and logs.
     std::string Describe() const;
 
 private:
+    // Offers the event down the stack - the routing proper.
+    void Route(const Event& event);
     // Takes the interaction at `index` off the stack and interrupts it.
     void InterruptAt(size_t index);
+    // A button held with nothing on the Gesture level has had its say: the
+    // rest of its press is Spent (section 6.3). Asked after every change,
+    // which is what makes a gesture ended while its button is down -
+    // cancelled, interrupted, a hold that acted, a double-click acted on at
+    // its press - leave the rest of the drag doing nothing, whatever ended
+    // it.
+    void LeaveSpentIfHeld();
     // Section 4: every interaction is on its own level. Checked after
     // every change in a debug build.
     void CheckLevels() const;
 
     Editor& editor_;
     std::array<std::unique_ptr<Interaction>, kLevelCount> stack_;
+    uint8_t held_ = 0;
+    platform::MouseButton lastPressed_ = platform::MouseButton::Left;
 };
 
 }  // namespace sz::ui

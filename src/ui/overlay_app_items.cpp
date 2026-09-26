@@ -103,25 +103,25 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // buttons, only that handle or button reacts - the rule ImGui applies
     // to its own widgets while one of them holds ActiveId, so a handle
     // dragged across a bar button doesn't light that button up.
-    const ItemGesture* held = GestureIf<ItemGesture>();
-    const BarPress* pressed = GestureIf<BarPress>();
-    const bool resizing = held != nullptr && held->resize;
+    const Placement* held = editor_.Input().As<Placement>(Level::Gesture);
+    const BarPress* pressed = editor_.Input().As<BarPress>(Level::Gesture);
+    const bool resizing = held != nullptr && held->Resizing();
     const bool blocked = resizing || pressed != nullptr;
     const bool hotHandle =
         furnitureHot && target.kind == PointerTarget::Kind::Handle &&
-        (!blocked || (resizing && held->item == target.item && held->handle == target.handle));
+        (!blocked || (resizing && held->Item() == target.item && held->Handle() == target.handle));
     std::optional<ChromeButton> hotButton;
     if (furnitureHot && target.kind == PointerTarget::Kind::Button &&
-        (!blocked || (pressed != nullptr && pressed->button == target.button))) {
+        (!blocked || (pressed != nullptr && pressed->Pressed() == target.button))) {
         hotButton = target.button;
     }
 
     // The debug overlay's readout of which handle is live, with a dragging
     // handle reported for as long as it drags, wherever the pointer is.
-    if (held != nullptr && held->handle.has_value()) {
+    if (held != nullptr && held->Handle().has_value()) {
         char handleDebug[64];
-        std::snprintf(handleDebug, sizeof(handleDebug), "%s item=%llu (dragging)", ResizeHandleName(*held->handle),
-                      static_cast<unsigned long long>(held->item));
+        std::snprintf(handleDebug, sizeof(handleDebug), "%s item=%llu (dragging)", ResizeHandleName(*held->Handle()),
+                      static_cast<unsigned long long>(held->Item()));
         debugHoveredResizeHandle_ = handleDebug;
     } else if (hotHandle) {
         char handleDebug[64];
@@ -143,7 +143,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // highlight the instant the mouse leaves its rect to go interact with
     // the popover instead.
     const std::optional<ItemId> stickyItemId =
-        held != nullptr ? std::optional<ItemId>(held->item) : itemPropertiesPopoverItemId_;
+        held != nullptr ? std::optional<ItemId>(held->Item()) : itemPropertiesPopoverItemId_;
     const std::optional<ItemId> highlightId =
         stickyItemId.has_value() ? stickyItemId : (itemsInteractive ? target.body : std::nullopt);
 
@@ -204,7 +204,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // the same translucent-fill-and-outline the region capture's own drag
     // preview uses, being the same gesture in a different sense: one
     // frames what is to be made, this one frames what is already there.
-    if (const BoxSelection* selecting = GestureIf<BoxSelection>(); selecting != nullptr && selecting->moved) {
+    if (const BoxSelect* selecting = editor_.Input().As<BoxSelect>(Level::Gesture); selecting != nullptr) {
         const Rect box = selecting->Bounds();
         const ImVec2 pMin(box.x, box.y);
         const ImVec2 pMax(box.x + box.w, box.y + box.h);
@@ -403,7 +403,8 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
     for (const ChromeButton button : buttons) {
         const HitRect rect = BarButtonRect(bar, buttons, button);
         const bool hovered = hotButton == button;
-        const bool held = GestureIf<BarPress>() != nullptr && GestureIf<BarPress>()->button == button;
+        const BarPress* pressed = editor_.Input().As<BarPress>(Level::Gesture);
+        const bool held = pressed != nullptr && pressed->Pressed() == button;
         // Close is the one danger-red button; a pinned selection's Pin
         // wears the accent, the way a selected tool does - and on the
         // drawing bar, the tool in hand does. The rest are plain pills.

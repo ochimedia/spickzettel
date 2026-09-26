@@ -562,8 +562,10 @@ goes is never moved: what survives of `OverlayApp`'s input side goes into
    level hands them to today's handlers. No behavior changes.
 4. **The Gesture level.** The recognizer's rules, Pending, Spent and each
    gesture of section 9 as an interaction. `Hand`, the gesture half of
-   `OnMouse` and `MatureHeldPress` go. Escape starts cancelling, and the
-   **Change**s of sections 6 and 9 land here.
+   `OnMouse`, `MatureHeldPress` and `noteOpenAtPress` go - the last
+   because the recognizer asks whether a note is open before anything at
+   the press can close it. Escape starts cancelling, and the **Change**s
+   of sections 6 and 9 land here.
 5. **The Mode level.** Drawing mode and a creation tool in hand; Escape's
    stages come from passing down, and `PutDown`'s chain goes.
 6. **The Popup level.** Every popup is an interaction, closed through the
@@ -571,7 +573,7 @@ goes is never moved: what survives of `OverlayApp`'s input side goes into
    but the global hotkeys (decision 2).
 7. **The Text level and hotkeys.** A note being typed, a name being
    edited, a key being captured; global hotkeys arrive as `Hotkey`
-   events. `noteOpenAtPress` and `CompletesAHotkeyCapture` go.
+   events. `CompletesAHotkeyCapture` goes.
 8. **The Panel level.** The Overview and the cheat sheet, with their own
    keys; `KeyReaches` goes, since reaching is now the stack's answer.
 9. **Lifecycle.** Shown, Hidden, ViewOnly and SessionEnding as events,

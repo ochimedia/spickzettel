@@ -15,12 +15,10 @@ bool Editor::Dispatch(const Command& command) {
     if (!Available(command)) {
         return false;
     }
-    // What the scope covers ends first - see Scope. The gestures and a note
-    // being typed are still the view's, which ends them for either scope.
+    // What the scope covers ends first - see Scope. A note being typed is
+    // not on the stack yet, and is committed for either scope.
     machine_.EndFor(InfoFor(command.id).scope);
-    if (views_ != nullptr) {
-        views_->SettleHand();
-    }
+    CommitNoteBeingEdited();
     ++commandsRun_;
     lastCommand_ = command.id;
     Run(command);
@@ -93,6 +91,16 @@ bool Editor::Available(const Command& command) const {
             const Canvas* canvas = Manager().FindCanvas(command.canvas);
             return canvas != nullptr && !Manager().IsDeleted(*canvas);
         }
+        case CommandId::DrawingMode:
+            return item != nullptr;
+        case CommandId::LeaveDrawingMode:
+            return drawingItem_.has_value();
+        case CommandId::ItemMenu:
+            return item != nullptr && command.at.has_value();
+        case CommandId::EmptyCanvasMenu:
+            return command.at.has_value();
+        case CommandId::FrameSnippet:
+            return command.rect.has_value();
     }
     return false;  // unreachable: the switch names every command
 }
@@ -260,14 +268,46 @@ void Editor::Run(const Command& command) {
             return;
         case CommandId::FullscreenScreenshot:
         case CommandId::FullscreenDrawing:
-            // Asked for, so a drawing made this way is not watched as a
-            // stray the way a double-click's is (see UntouchedDrawing) - as
-            // with a creation tool. A capture leaves the overlay's own
-            // window out (see IOverlayWindow::CaptureRegion), whatever menu
-            // it was chosen from.
-            CreateFullscreenItem(command.id == CommandId::FullscreenScreenshot ? ItemCreationKind::Screenshot
-                                                                               : ItemCreationKind::Drawing);
+        case CommandId::FrameSnippet: {
+            // A capture leaves the overlay's own window out (see
+            // IOverlayWindow::CaptureRegion), whatever asked for it. Made by
+            // a press on empty canvas, it is the hand moving on from a
+            // snippet it was drawing on.
+            const ItemCreationKind kind = command.id == CommandId::FullscreenScreenshot ? ItemCreationKind::Screenshot
+                                          : command.id == CommandId::FullscreenDrawing ? ItemCreationKind::Drawing
+                                                                                       : command.kind;
+            if (command.madeBy == MadeBy::Press) {
+                ExitDrawingMode();
+            }
+            const ItemId made = command.id == CommandId::FrameSnippet ? CreateRegionItem(kind, *command.rect)
+                                                                      : CreateFullscreenItem(kind);
+            if (made == 0) {
+                return;  // too small to be meant, or not written: the tool stays in hand to try again
+            }
+            switch (command.madeBy) {
+                case MadeBy::Asking:
+                    break;
+                case MadeBy::Tool:
+                    // A creation tool places once. A drawing has already
+                    // handed over to Draw (see HandOverNewItem); a
+                    // screenshot hands back the tool that was in hand
+                    // before it.
+                    if (activeTool_ == Tool::NewScreenshot) {
+                        PutDownCreationTool();
+                    }
+                    break;
+                case MadeBy::Press:
+                    // A drawing a press on empty canvas made is watched
+                    // until something goes into it - see UntouchedDrawing.
+                    // One asked for, from a menu or with a creation tool,
+                    // is not.
+                    if (kind == ItemCreationKind::Drawing) {
+                        WatchAsUntouched(made);
+                    }
+                    break;
+            }
             return;
+        }
         case CommandId::DeleteCanvas:
             // Through the same confirmation the Overview's own delete
             // button asks for, rather than deleting outright: a canvas
@@ -285,6 +325,22 @@ void Editor::Run(const Command& command) {
         case CommandId::Settings:
             if (views_ != nullptr) {
                 views_->OpenSettings();
+            }
+            return;
+        case CommandId::DrawingMode:
+            EnterDrawingMode(command.item);
+            return;
+        case CommandId::LeaveDrawingMode:
+            ExitDrawingMode();
+            return;
+        case CommandId::ItemMenu:
+            if (views_ != nullptr) {
+                views_->OpenItemMenu(command.item, *command.at);
+            }
+            return;
+        case CommandId::EmptyCanvasMenu:
+            if (views_ != nullptr) {
+                views_->OpenEmptyCanvasMenu(*command.at);
             }
             return;
     }

@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include "ui/editor.h"
+#include "ui/interaction/gestures.h"
 
 namespace sz::ui {
 
@@ -69,6 +70,20 @@ void Machine::SetRoot(std::unique_ptr<Interaction> root) {
 }
 
 void Machine::Offer(const Event& event) {
+    const bool gestureButton =
+        event.button == platform::MouseButton::Left || event.button == platform::MouseButton::Right;
+    if (event.kind == EventKind::PointerDown && gestureButton) {
+        held_ |= platform::ButtonBit(event.button);
+        lastPressed_ = event.button;
+    } else if (event.kind == EventKind::PointerUp && gestureButton) {
+        held_ &= static_cast<uint8_t>(~platform::ButtonBit(event.button));
+    }
+    Route(event);
+    LeaveSpentIfHeld();
+    CheckLevels();
+}
+
+void Machine::Route(const Event& event) {
     for (size_t index = kLevelCount; index-- > 0;) {
         Interaction* offered = stack_[index].get();
         if (offered == nullptr) {
@@ -79,7 +94,6 @@ void Machine::Offer(const Event& event) {
         assert(stack_[index].get() == offered && "an interaction changed the stack while answering");
         switch (answer.kind) {
             case Answer::Kind::Claim:
-                CheckLevels();
                 return;
             case Answer::Kind::Pass:
                 continue;
@@ -90,14 +104,12 @@ void Machine::Offer(const Event& event) {
                     editor_.Dispatch(*answer.command);
                 }
                 if (answer.usedUp) {
-                    CheckLevels();
                     return;
                 }
                 continue;
             case Answer::Kind::Cancel: {
                 const std::unique_ptr<Interaction> cancelled = std::move(stack_[index]);
                 cancelled->Cancel(editor_);
-                CheckLevels();
                 return;
             }
             case Answer::Kind::Start:
@@ -112,11 +124,9 @@ void Machine::Offer(const Event& event) {
                     }
                     Push(std::move(answer.push), event);
                 }
-                CheckLevels();
                 return;
         }
     }
-    CheckLevels();
 }
 
 void Machine::Push(std::unique_ptr<Interaction> interaction, const Event& cause) {
@@ -127,6 +137,7 @@ void Machine::Push(std::unique_ptr<Interaction> interaction, const Event& cause)
     }
     stack_[level] = std::move(interaction);
     stack_[level]->Begin(cause, editor_);
+    LeaveSpentIfHeld();
     CheckLevels();
 }
 
@@ -146,7 +157,27 @@ void Machine::EndFor(Scope scope) {
 void Machine::End(Level level) {
     assert(level != Level::Canvas && "the Canvas level is always there");
     InterruptAt(static_cast<size_t>(level));
+    LeaveSpentIfHeld();
     CheckLevels();
+}
+
+void Machine::Forget() {
+    held_ = 0;
+    InterruptAt(static_cast<size_t>(Level::Gesture));
+    CheckLevels();
+}
+
+void Machine::LeaveSpentIfHeld() {
+    std::unique_ptr<Interaction>& gesture = stack_[static_cast<size_t>(Level::Gesture)];
+    if (gesture != nullptr || held_ == 0) {
+        return;
+    }
+    const platform::MouseButton button =
+        (held_ & platform::ButtonBit(lastPressed_)) != 0
+            ? lastPressed_
+            : ((held_ & platform::ButtonBit(platform::MouseButton::Left)) != 0 ? platform::MouseButton::Left
+                                                                                : platform::MouseButton::Right);
+    gesture = std::make_unique<Spent>(button);
 }
 
 void Machine::InterruptAt(size_t index) {

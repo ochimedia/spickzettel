@@ -99,14 +99,16 @@ public:
     virtual void AskToDeleteCanvas(CanvasId canvas) = 0;
     // A canvas was made, for the Overview to bring it into view.
     virtual void CanvasMade(CanvasId canvas) = 0;
-    // Until the Gesture level of docs/INTERACTIONS.md holds them, the
-    // gestures are the view's: ending the one in flight, whole, before a
-    // command (see OverlayApp::SettleHand); ending a stroke or a right-drag
-    // erase as drawing mode is left; and what kind of snippet a press on
-    // empty canvas is framing, if one is.
-    virtual void SettleHand() = 0;
-    virtual void EndDrawingGesture() = 0;
-    virtual std::optional<ItemCreationKind> CreationInFlight() const = 0;
+    // A context menu, where a right click let go.
+    virtual void OpenItemMenu(ItemId item, platform::Vec2 at) = 0;
+    virtual void OpenEmptyCanvasMenu(platform::Vec2 at) = 0;
+    // What ImGui knows, as of the last frame (docs/INTERACTIONS.md,
+    // section 3): whether the pointer is over one of its windows, or one of
+    // them holds a press, or a popup is open (io.WantCaptureMouse); whether
+    // a panel covers the canvas; whether a popup is open.
+    virtual bool PointerOverView() const = 0;
+    virtual bool PanelOpen() const = 0;
+    virtual bool PopupOpen() const = 0;
 };
 
 class Editor {
@@ -187,6 +189,36 @@ public:
     // What the next left press places, if anything: the snippet being
     // framed, or else what the tool in hand places (see CreationKindFor).
     std::optional<ItemCreationKind> ArmedCreation() const;
+
+    // ===== The hand =====
+
+    // What ImGui knows - see EditorViews; all false with no view.
+    bool PointerOverView() const { return views_ != nullptr && views_->PointerOverView(); }
+    bool PanelOpen() const { return views_ != nullptr && views_->PanelOpen(); }
+    bool PopupOpen() const { return views_ != nullptr && views_->PopupOpen(); }
+    // The recognizer's memory of the last click (docs/INTERACTIONS.md,
+    // section 6.4): a press is the second half of a double-click when it
+    // is the same button, within kDoubleClickSeconds and kDoubleClickPx of
+    // the click's press, with the same creation trigger held - none, or
+    // one that picks what a press on empty canvas makes. Any other
+    // modifier makes a press no half of one: Shift+click twice on one
+    // snippet adds it and takes it out again, and nothing else.
+    // TakeDoubleClick asks at a press and forgets the click either way, so
+    // a double is never the first half of the next one.
+    void RememberClick(const Event& press);
+    bool TakeDoubleClick(const Event& press);
+    // What every command ends first, as far as the hand goes: the gesture
+    // in flight, kept, and a note being typed, committed - see Dispatch.
+    // For the moments no command follows: the overlay going away, view-only
+    // mode.
+    void SettleHand();
+    // The overlay has just come up: nothing is in the hand, whatever was
+    // held when it went away - see Machine::Forget - and no click is
+    // remembered.
+    void ForgetTheHand();
+    // Nothing in flight: no gesture, and no press waiting to be
+    // understood. The rest of a press that has had its say is at rest.
+    bool HandAtRest() const;
 
     // ===== The tool, and drawing mode =====
 
@@ -433,10 +465,11 @@ public:
     // Where the middle of a selection bar button is, or nothing while the
     // bar is not showing it.
     std::optional<platform::Vec2> SelectionBarButtonCenter(ChromeButton button) const;
-    // Runs a selection bar button's command, on the release that completes
+    // A selection bar button's command, run by the release that completes
     // a press on it: the command it is (see CommandForBarButton), about the
-    // snippet selected last and from where the button sits.
-    void ActivateBarButton(ChromeButton button);
+    // snippet selected last and from where the button sits. Nothing with
+    // nothing selected.
+    std::optional<Command> BarButtonCommand(ChromeButton button) const;
 
     // ===== Commands =====
     //
@@ -535,6 +568,14 @@ private:
     Burst lastBurst_ = Burst::None;
     double lastBurstAtSeconds_ = 0.0;
     uint64_t lastBurstRevision_ = 0;
+
+    struct Click {
+        platform::MouseButton button = platform::MouseButton::Left;
+        CreationTrigger trigger = CreationTrigger::Plain;
+        double atSeconds = 0.0;
+        platform::Vec2 at;
+    };
+    std::optional<Click> lastClick_;
 
     std::function<void(CommandId)> appCommandCallback_;
     uint64_t commandsRun_ = 0;

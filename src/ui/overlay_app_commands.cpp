@@ -84,6 +84,11 @@ bool OverlayApp::KeyReaches(CommandId id) const {
         case CommandId::DeleteCanvas:
         case CommandId::Overview:
         case CommandId::Settings:
+        case CommandId::DrawingMode:
+        case CommandId::LeaveDrawingMode:
+        case CommandId::ItemMenu:
+        case CommandId::EmptyCanvasMenu:
+        case CommandId::FrameSnippet:
             return false;
     }
     return false;  // unreachable: the switch names every command

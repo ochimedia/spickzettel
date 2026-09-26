@@ -1002,15 +1002,12 @@ void OverlayApp::SettleForPersistence() {
     editor_.SettleUntouchedDrawing();
 }
 
-void OverlayApp::SettleHand() {
-    EndGesture();
-    editor_.CommitNoteBeingEdited();
-    // And the rest of the hand with it, whole - the press a hold or a
-    // double-click would be judged on, and which buttons are down: as far
-    // as this knows none is from here, and the release still to come finds
-    // nothing to end. Replaced rather than cleared field by field, so
-    // nothing added to Hand later can be missed.
-    hand_ = Hand{};
+bool OverlayApp::PointerOverView() const {
+    return ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().WantCaptureMouse;
+}
+
+bool OverlayApp::PopupOpen() const {
+    return ImGui::GetCurrentContext() != nullptr && ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
 }
 
 // ================= Frame =================
@@ -1065,7 +1062,7 @@ void OverlayApp::HandleMouseWheel(float notches) {
     // does (see Hand::ignoredButton) - a notch nudged in the middle of a
     // stroke would switch the canvas under it, and one mid-drag would be
     // filed inside the drag, undone to a size the drag then wrote over.
-    if (notches == 0.0f || PanelOpen() || GestureInFlight()) {
+    if (notches == 0.0f || PanelOpen()) {
         return;
     }
     {
@@ -1173,12 +1170,6 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         // now redundant but harmless, and still documents the intent.
         ImGui::GetIO().IniFilename = nullptr;
         styleApplied_ = true;
-    }
-    // A press held still sends no events, so its hold matures here, on the
-    // clock - see Hand::heldPress. Not in view-only mode, where no press
-    // reaches the app in the first place.
-    if (!viewOnly_) {
-        MatureHeldPress();
     }
     // The accent, whenever the setting differs from what was last applied -
     // on every frame while a color is being dragged in Settings, so the
@@ -1448,6 +1439,7 @@ void OverlayApp::OnOverlayShown() {
     // it was hidden has come up since, wherever that release went. Settled
     // already when it was put away, unless it went some other way.
     SettleHand();
+    editor_.ForgetTheHand();
     // The panels docked against the edges come out for a moment, so they
     // are seen where they are - asked for here, done on the first frame.
     edgePanelsFlashPending_ = true;
@@ -1931,7 +1923,7 @@ void OverlayApp::RenderToolModifierBadge() {
         return;
     }
     const ImGuiIO& io = ImGui::GetIO();
-    const StrokeInFlight* stroke = GestureIf<StrokeInFlight>();
+    const Marking* stroke = editor_.Input().As<Marking>(Level::Gesture);
     const bool dragging = stroke != nullptr;
     if (!dragging) {
         // Only where a press would make one: over the snippet in drawing
@@ -1946,14 +1938,15 @@ void OverlayApp::RenderToolModifierBadge() {
     // make now - the modifiers held, or the bar's cycled shape.
     const Icon* icon = nullptr;
     if (editor_.ActiveTool() == Tool::Draw) {
-        const DrawShape shape = dragging ? stroke->shape : editor_.ShapeForPress();
-        if (dragging && stroke->kind != StrokeInFlight::Kind::Shape) {
+        const DrawShape shape = dragging ? stroke->Shape() : editor_.ShapeForPress();
+        if (dragging && stroke->GetKind() != Marking::Kind::Shape) {
             return;  // freehand, which needs no saying
         }
         icon = shape == DrawShape::Rectangle ? &icons::kRectangle
                : shape == DrawShape::Line    ? &icons::kLine
                                              : nullptr;
-    } else if (dragging ? stroke->kind == StrokeInFlight::Kind::EraseRect : editor_.ShapeForPress() == DrawShape::Rectangle) {
+    } else if (dragging ? stroke->GetKind() == Marking::Kind::EraseRect
+                        : editor_.ShapeForPress() == DrawShape::Rectangle) {
         icon = &icons::kEraserRect;
     }
     if (icon == nullptr) {

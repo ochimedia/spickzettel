@@ -1639,39 +1639,68 @@ ImGui's.
 
 ### One gesture engine on the raw pipeline
 
-Every way a snippet is selected, moved or resized is one gesture on the
-left button, in `HandleItemGesture`, fed by the platform's input stream
-rather than by frame-time polling (see "Input, in order"). Starting a gesture is gated on
-`!io.WantCaptureMouse`, so a click on a panel is the panel's; a gesture
-in flight is consumed regardless, so straying over a panel mid-drag
-cannot hand the event to it. The engine is a start snapshot plus the
-*full* delta from there, recomputed on every move - not an incremental
-delta, which drifts under event coalescing, and not ImGui's drag delta,
-which loses the grab offset against a screen edge.
+What a press on the canvas means is decided in one place,
+`RecognizePress` (`ui/interaction/recognizer.*`): the rules of
+`docs/INTERACTIONS.md`, section 6.5, tried in order, the first that
+matches deciding what the press does at once and which interaction it
+starts on the Gesture level of the machine (see "Input, in order"). The
+same decisions were spread over `OnMouse`, `HandleItemGesture`,
+`HandleCreationGesture` and `HandleStrokeEvent`, and depended on the
+order they were asked in. A press over one of ImGui's windows is the
+window's (rule 1, `io.WantCaptureMouse`); a gesture in flight takes its
+moves and its release wherever they land, so straying over a panel
+mid-drag cannot hand the event to it. A move or resize is a snapshot
+plus the *full* delta from the press, recomputed on every move - not an
+incremental delta, which drifts under event coalescing, and not ImGui's
+drag delta, which loses the grab offset against a screen edge.
 
-A press is a click until the pointer has traveled 4px. A resize started
-on one of several selected snippets scales all of them about the fixed
-corner; the smallest is the floor for the group. Shift-drag on open
-canvas draws a box that adds every snippet it touches to the selection.
-One button at a time: the first to press owns the pointer until it lets
-go. Windows' press-and-hold on a touch screen injects a right press into
-a held finger's left press, and the app does not depend on the OS being
+A press whose meaning is still open - a click, a drag, a hold or the
+first half of a double-click - is a `Pending` interaction, which does
+nothing until one of them happens. It does at once only what every
+meaning shares: the first click on a snippet selects it, and a
+double-click then extends that into drawing mode, so no click waits the
+double-click time for its answer. The move begins only once the press
+is a drag, with the snapshot taken from the press; it used to begin at
+the press, and a hold dropped it again. A double-click on empty canvas
+makes its snippet on the second press, as one on a snippet enters
+drawing mode on it, where it waited for the release. When a gesture
+ends with its button still down - cancelled, interrupted, a hold that
+acted, a double-click acted on at its press - the rest of the press is
+`Spent`, which swallows it and any other button until the release: the
+machine puts one there whenever the Gesture level is left empty with a
+button held, so "the rest of the drag does nothing" is a state, not the
+consequence of fields being empty. The gesture's outcomes that make or
+open something - a snippet framed, drawing mode entered, a menu opened -
+are commands of their own in the table (`FrameSnippet`, `DrawingMode`,
+`ItemMenu`, ...), run after the gesture is off the stack, so none of
+them changes the stack under the machine's routing.
+
+A press is a click until the pointer has traveled 4px (6px for framing
+a snippet, and for a hold to still be a hold). A resize started on one
+of several selected snippets scales all of them about the fixed corner;
+the smallest is the floor for the group. Shift-drag on open canvas draws
+a box that adds every snippet it touches to the selection. One button at
+a time: every gesture ignores another button's press, moves and release.
+Windows' press-and-hold on a touch screen injects a right press into a
+held finger's left press, and the app does not depend on the OS being
 asked not to.
 
-What the pointer is doing is one field, `Hand::gesture`: a
-`std::variant` of the seven things a held button can be in the middle of -
-moving or resizing snippets, holding a bar button, dragging a selection
-box, framing a snippet, a stroke, a right-drag erase, a right click on
-empty canvas - or none. It was a
-field per kind, which excluded each other only by the order `OnMouse`
-asked in, and ending "whatever is in flight" meant knowing every field
-it might be; each place that forgot one was a bug. A drag went on moving
-a snippet a Delete had hidden and filed that move after the delete, so
-the first undo did nothing to be seen; an undo mid-drag restored a
-placement the drag then wrote over, losing that step; a stroke outlived
-the Escape that left its drawing mode; and a canvas switch settled the
-left button's gestures only, so a right-drag resize went on across it.
-How one is ended early is the next section's.
+What the pointer is doing is one interaction on the Gesture level -
+`Pending`, `Spent`, `Placement` (a move or a resize), `BarPress`,
+`BoxSelect`, `Framing` or `Marking` (a stroke, a shape, the eraser's path
+or its rectangle, and the right button's erase) - or nothing
+(`ui/interaction/gestures.*`). Before the machine it was a
+`std::variant` in `OverlayApp::Hand`, and before that a field per kind,
+which excluded each other only by the order `OnMouse` asked in; each
+place that forgot one was a bug. A drag went on moving a snippet a Delete
+had hidden and filed that move after the delete, so the first undo did
+nothing to be seen; an undo mid-drag restored a placement the drag then
+wrote over, losing that step; a stroke outlived the Escape that left its
+drawing mode; and a canvas switch settled the left button's gestures
+only, so a right-drag resize went on across it. Each gesture answers
+every event kind in one switch (`Gesture::Offer`), so there is no event
+a gesture has no answer for. How one is ended early is the next
+section's.
 
 The selection bar floats over the selection's bounding box, or below it
 when there is no room, or inside its top edge for a fullscreen snippet.
@@ -1732,13 +1761,11 @@ silently isn't there.
 
 ### The hand
 
-Everything the pointer is in the middle of is one value,
-`OverlayApp::Hand`: the gesture, the press a hold or a double-click is
-judged on, and which buttons are down. Something else often wants to
-act while it is: a key, a global hotkey, a menu row, the overlay going
-away. There are two answers - end what the hand is doing and act, or
-leave the hand be and refuse the command - and the app takes the first,
-for everything but the pointer's own device.
+Something often wants to act while the hand is in the middle of
+something: a key, a global hotkey, a menu row, the overlay going away.
+There are two answers - end what the hand is doing and act, or leave the
+hand be and refuse the command - and the app takes the first, for
+everything but the pointer's own device.
 
 - Refusing depends on knowing a gesture is in flight, and that is the
   one thing that goes stale: a release lost to a focus change or a hide
@@ -1755,26 +1782,30 @@ for everything but the pointer's own device.
   release may never come, and a queued command fires at a moment nobody
   chose.
 
-So every command calls `SettleHand` first. It ends the gesture with
-`EndGesture` - what is done is kept and filed, a stroke committed as one
-undo step, a move or resize filed where it got to; nothing a release
-would newly do happens, so no snippet being framed is made, no held bar
-button fires, no right click opens a menu - commits a note being typed,
-and then replaces the whole `Hand` with a fresh one. The rest of the
-held button's drag finds nothing in flight and does nothing, and its
-release finds no button it knows to be down. An undo pressed mid-stroke
-therefore takes back the stroke so far, the most recent thing done.
+So every command ends what its scope covers first (`Machine::EndFor`),
+the Gesture level among it: the gesture there is *interrupted* - what is
+done is kept and filed, a stroke committed as one undo step, a move or
+resize filed where it got to, and nothing a release would newly do
+happens, so no snippet being framed is made, no held bar button fires, no
+right click opens a menu, and a rectangle erase erases nothing. A note
+being typed is committed. The rest of the held button's press is Spent,
+and its release ends that. An undo pressed mid-stroke therefore takes
+back the stroke so far, the most recent thing done. There used to be a
+second way to end a gesture, a synthesized release through `OnMouse`,
+for canvas switches and hiding; it made a region being framed and fired a
+held bar button - things nobody asked for, over a canvas they had not
+clicked on.
 
-Replacing the value is the point. While these were separate fields,
-each way of interrupting reset its own list of them - view-only mode
-one list, a canvas switch another, the overlay coming up a third, undo
-and delete a fourth - and each list missed something: a stroke left in
-flight by a tool key, a button left held across a hide, a hold that
-matured after an undo, an ImGui button latched across a hide. A field
-added to `Hand` now needs no reset anywhere. There used to be a second
-way to end a gesture, a synthesized release through `OnMouse`, for canvas
-switches and hiding; it made a region being framed and fired a held bar
-button - things nobody asked for, over a canvas they had not clicked on.
+Escape is not such a command while a gesture is in flight: the gesture
+sees it first and is *cancelled* - a stroke, a shape or an erase leaves
+nothing and files nothing, a move or resize puts every snippet back where
+the press found it, a press still pending does nothing more. The session
+rolls the gesture back to the checkpoint it took when it began
+(`Session::CancelPlacement`, `CancelErase`, `CancelShape`), which is
+exact and costs no write, since previews change the model in memory and
+nothing is written until a step is filed. Only with nothing in flight
+does Escape go on to put the tool down, leave drawing mode, call off a
+cut or clear the selection.
 
 The pointer's own device is the exception: input from the mouse holding
 the gesture is ignored until it ends rather than ending it. A second
@@ -1782,9 +1813,10 @@ button pressed on top is ignored until its own release (a touch screen's
 press-and-hold injects exactly that). The wheel, and a mouse button bound
 to a command, do nothing while a gesture is in flight: a notch mid-stroke
 would have switched the canvas under it, and one mid-drag would have been
-filed inside the drag. An
-arrow key is a command like any other: mid-drag it ends the drag where
-it is and nudges after it, two undo steps.
+filed inside the drag. The gesture's own button pressed again means its
+release went missing: the gesture ends as interrupted, and the press is
+taken afresh. An arrow key is a command like any other: mid-drag it ends
+the drag where it is and nudges after it, two undo steps.
 
 Where this is going is `docs/INTERACTIONS.md`: every input through one
 state machine - a stack of interactions, each offered every event first -
@@ -1799,9 +1831,9 @@ them lost), modifiers, the wheel and holds, with drawing mode entered and
 strokes left in flight, interrupted by every command in the table (next
 section) - by its key, its hotkey, or dispatched as its menu row or bar
 button would. After each command that ran (`OverlayApp::CommandsRun`
-says which did), nothing is in flight in the app or open on the session,
-and a stroke it interrupted is on its snippet (or, after an undo, taken
-back). It counts the strokes it checked that way, and fails for a command
+says which did), nothing is in flight in the app - at most the rest of a
+press, Spent - or open on the session, and a stroke it interrupted is on
+its snippet (or, after an undo, taken back). It counts the strokes it checked that way, and fails for a command
 that never ran, so neither check can quietly stop running.
 
 ### Commands
@@ -1815,13 +1847,13 @@ under), or a global hotkey. The table is checked at compile time to hold
 one row per id, in order. No ImGui in it: what a command is and what
 reaches it are the app's words, not its widgets'.
 
-Every way in ends at `OverlayApp::Dispatch`: `HandleCommandKey` for the
+Every way in ends at `Editor::Dispatch`: `HandleCommandKey` for the
 keys and the mouse buttons a shortcut may be, the three context menus (each row names its command), the selection
 bar (`CommandForBarButton`), and the tray, whose hotkeys and "Show" menu
 entry dispatch through the overlay and are handed back to it to run
 (`SetAppCommandCallback`) - the tray alone knows the window and the modes,
 but the hand is the overlay's to settle. `Dispatch` asks `Available`,
-settles the command's scope (`SettleHand`), and runs it. So settling
+ends what the command's scope covers, and runs it. So settling
 first is no longer something each command has to remember: nothing runs
 a command any other way, and `Run` is one exhaustive switch.
 
@@ -1873,9 +1905,7 @@ and the modifiers held, in the order they happened - section 3 of
 from the message pump while keys, the wheel and the modifiers were read
 from ImGui at the next frame, so a key pressed between two moves of a
 drag was seen after both: the drag had gone on to the second move by the
-time the key ended it. Now each event is handled as it arrives, by the
-handlers that were there - `OnMouse` for the two gesture buttons,
-`HandleCommandKey` for keys and the other buttons, `HandleMouseWheel`.
+time the key ended it. Now each event is handled as it arrives.
 
 - The modifiers are the key state or'd with the input grab's record,
   the two sources the frame already gave ImGui (see RenderFrame), and a
@@ -1902,10 +1932,15 @@ Finish, Cancel or Start. The machine is the editor's (`Editor::Input`),
 since the interactions work on the editor; nothing in it knows ImGui.
 Its routing is tested alone, with interactions that do nothing but
 answer (`tests/ui/machine_test.cpp`). A command's scope is ended through
-it before the command runs (`Machine::EndFor`). Until the levels above
-take over, the Canvas level hands every event to the handlers that took
-it before - `OverlayApp::CanvasRoot` - so the machine changes nothing
-yet; each step of phase 3 moves one kind of interaction onto it.
+it before the command runs (`Machine::EndFor`). The Canvas level
+(`OverlayApp::CanvasRoot`) hands a press to the recognizer (see "One
+gesture engine") and keys and the wheel to the handlers that took them
+before the machine - `HandleCommandKey`, `HandleMouseWheel` - until the
+levels above take them over; each step of phase 3 moves one kind of
+interaction onto it. The machine also keeps which buttons are down, from
+the presses and releases it is offered: that is what leaves the rest of
+a press Spent, and what the overlay coming up forgets
+(`Machine::Forget`).
 
 What only a frame can do - opening a popup, closing the top one on
 Escape - is queued as an effect (`OverlayApp::Effect`) and done in the

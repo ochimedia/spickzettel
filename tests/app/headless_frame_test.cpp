@@ -433,6 +433,33 @@ TEST_F(HeadlessAppTest, ADoubleClickOnEmptyCanvasMakesAFullscreenScreenshot) {
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{item.id}) << "selected as made, so its bar is there";
 }
 
+// The snippet a double-click makes is made on its second press, not its
+// release, as a double-click on a snippet enters drawing mode on its
+// second press - and what the rest of that press does is nothing: a drag
+// from there frames no second snippet (docs/INTERACTIONS.md, 6.4).
+TEST_F(HeadlessAppTest, ADoubleClickOnEmptyCanvasMakesTheSnippetOnItsSecondPress) {
+    ShowEditMode();
+    StepFrame();
+    MoveTo(640.0f, 400.0f);
+    StepFrame();
+    RawMouse(640.0f, 400.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(640.0f, 400.0f, platform::MouseEventKind::Up);
+    StepFrame();
+    RawMouse(640.0f, 400.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u) << "made as the second press lands";
+    EXPECT_TRUE(Canvases().CurrentOrNull()->items[0].isFullscreen);
+    for (int i = 1; i <= 4; ++i) {
+        RawMouse(640.0f + 60.0f * static_cast<float>(i), 400.0f + 40.0f * static_cast<float>(i),
+                 platform::MouseEventKind::Move);
+        StepFrame();
+    }
+    RawMouse(880.0f, 560.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "and the drag after it framed nothing";
+}
+
 TEST_F(HeadlessAppTest, ADragOnEmptyCanvasFramesAScreenshot) {
     ShowEditMode();
     StepFrame();
@@ -1428,6 +1455,7 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                     }
                     command.canvas = Canvases().Canvases()[pick(Canvases().Canvases().size())].id;
                     command.at = platform::Vec2{pointer.x, pointer.y};
+                    command.rect = Rect{pointer.x, pointer.y, 200.0f, 150.0f};
                     controller_->Overlay().Dispatch(command);
                 }
                 if (App().CommandsRun() > before) {
@@ -1752,6 +1780,97 @@ TEST_F(HeadlessAppTest, UndoMidStrokeTakesBackTheStrokeInFlight) {
     EXPECT_EQ(item.strokes[0], first) << "and the stroke before is still there";
 }
 
+// Escape with the pen still down calls the stroke off: nothing of it is
+// left and nothing is filed for it, the snippet stays in drawing mode, and
+// the rest of the drag draws nothing (docs/INTERACTIONS.md, section 5).
+TEST_F(HeadlessAppTest, EscapeMidStrokeCallsTheStrokeOff) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    const ItemId drawing = Canvases().CurrentOrNull()->items[0].id;
+    Drag(350.0f, 400.0f, 650.0f, 400.0f);
+    ASSERT_EQ(StrokeCountOnCurrentCanvas(), 1u);
+
+    MoveTo(350.0f, 480.0f);
+    StepFrame();
+    RawMouse(350.0f, 480.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(500.0f, 480.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    PressKey(ImGuiKey_Escape);
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "nothing of it left";
+    RawMouse(650.0f, 480.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(650.0f, 480.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "and the rest of the drag drew nothing";
+    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(drawing)) << "still drawing";
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u) << "the undo takes the stroke before";
+}
+
+// The same for a line and for the eraser: a line called off leaves no
+// line, and an erase called off puts back what it had taken.
+TEST_F(HeadlessAppTest, EscapeMidShapeOrEraseLeavesTheDrawingAsItWas) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 700.0f, 600.0f);
+    Drag(150.0f, 300.0f, 650.0f, 300.0f);
+    const std::vector<Stroke> drawn = Canvases().CurrentOrNull()->items[0].strokes;
+    ASSERT_EQ(drawn.size(), 1u);
+    const auto escapeMidDrag = [&](float fromX, float fromY, float toX, float toY) {
+        MoveTo(fromX, fromY);
+        StepFrame();
+        RawMouse(fromX, fromY, platform::MouseEventKind::Down);
+        StepFrame();
+        RawMouse(toX, toY, platform::MouseEventKind::Move);
+        StepFrame();
+        PressKey(ImGuiKey_Escape);
+        RawMouse(toX, toY, platform::MouseEventKind::Up);
+        StepFrames(2);
+    };
+
+    KeyEvent(ImGuiMod_Shift, true);
+    StepFrame();
+    escapeMidDrag(200.0f, 450.0f, 600.0f, 450.0f);
+    KeyEvent(ImGuiMod_Shift, false);
+    StepFrame();
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].strokes, drawn) << "no line";
+    EXPECT_FALSE(AppSession().LiveLayer().ActiveStroke().has_value());
+
+    PressKey(ImGuiKey_E);
+    escapeMidDrag(150.0f, 300.0f, 650.0f, 300.0f);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].strokes, drawn) << "the erased stroke, whole again";
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u) << "nothing filed for either: the undo takes the stroke";
+}
+
+// A rectangle erase ended from outside erases nothing: its release is what
+// erases, and nothing is erased that a release did not ask for.
+TEST_F(HeadlessAppTest, ARectangleEraseEndedFromOutsideErasesNothing) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 700.0f, 600.0f);
+    Drag(150.0f, 150.0f, 200.0f, 200.0f);
+    ASSERT_EQ(StrokeCountOnCurrentCanvas(), 1u);
+    PressKey(ImGuiKey_E);
+
+    KeyEvent(ImGuiMod_Ctrl, true);
+    MoveTo(120.0f, 120.0f);
+    StepFrame();
+    RawMouse(120.0f, 120.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(300.0f, 300.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    KeyEvent(ImGuiMod_Ctrl, false);
+    PressKey(ImGuiKey_E);  // the eraser put down: drawing mode ends, and the erase with it
+    RawMouse(300.0f, 300.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u);
+}
+
 // Drawing mode is entered with the pen, whatever tool was used last time.
 TEST_F(HeadlessAppTest, DrawingModeAlwaysStartsWithThePen) {
     ShowEditMode();
@@ -1965,7 +2084,8 @@ TEST_F(HeadlessAppTest, AHoldOnASnippetEntersDrawingModeAndMovesNothing) {
 }
 
 // A key pressed during a hold is what the hand wants instead: Escape
-// leaves the snippet let go of, and a tool key's tool stays in hand.
+// calls the press off - the selecting it did at once stays, and the next
+// Escape is the one that clears it - and a tool key's tool stays in hand.
 TEST_F(HeadlessAppTest, EscapePressedDuringAHoldCallsItOff) {
     ShowEditMode();
     StepFrame();
@@ -1982,9 +2102,11 @@ TEST_F(HeadlessAppTest, EscapePressedDuringAHoldCallsItOff) {
     PressKey(ImGuiKey_Escape);
     StepFrames(35);
     EXPECT_FALSE(App().DrawingItem().has_value()) << "Escape, and not drawing mode after it";
-    EXPECT_TRUE(App().Selection().empty());
+    EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot}) << "the press, called off; its selecting stays";
     RawMouse(400.0f, 400.0f, platform::MouseEventKind::Up);
     StepFrames(2);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_TRUE(App().Selection().empty());
 }
 
 TEST_F(HeadlessAppTest, AToolKeyPressedDuringAHoldKeepsItsTool) {
@@ -3259,6 +3381,66 @@ TEST_F(OverlappingItemsTest, UndoMidDragTakesBackTheDragSoFar) {
     EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the first move is still there to undo";
 }
 
+// Escape with the button still down calls the drag off: the snippet is
+// back where the press found it, nothing is filed for it, and the rest of
+// the drag moves nothing.
+TEST_F(OverlappingItemsTest, EscapeMidDragPutsTheSnippetBack) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+    Drag(x, y, x, y + 50.0f);
+    ASSERT_FLOAT_EQ(BackItem().rect.y, items.back.y + 50.0f);
+    StepFrames(30);
+
+    RawMouse(x, y + 50.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(x, y + 150.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    ASSERT_FLOAT_EQ(BackItem().rect.y, items.back.y + 150.0f);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 50.0f) << "back where the press found it";
+    RawMouse(x, y + 300.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(x, y + 300.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 50.0f) << "the rest of the drag moved nothing";
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the first move is the one to undo";
+}
+
+// A press on a snippet selects it at once and moves it only once it is a
+// drag: until then nothing is open on the session (docs/INTERACTIONS.md,
+// 6.2).
+TEST_F(OverlappingItemsTest, APressOnASnippetBeginsNoMoveUntilItDrags) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    PressKey(ImGuiKey_Escape);  // out of drawing mode, where a press elsewhere is for leaving it
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);
+    MoveTo(x, y);
+    StepFrame();
+    RawMouse(x, y, platform::MouseEventKind::Down);
+    StepFrame();
+    EXPECT_EQ(App().Selection().size(), 1u) << "selected at once";
+    EXPECT_FALSE(HandGestureOpen(controller_->GetSession())) << "nothing to move yet";
+    RawMouse(x, y + 2.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    EXPECT_FALSE(HandGestureOpen(controller_->GetSession())) << "still a click";
+    RawMouse(x, y + 40.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    EXPECT_TRUE(HandGestureOpen(controller_->GetSession())) << "a drag now";
+    RawMouse(x, y + 40.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 40.0f) << "moved the whole way from the press";
+}
+
 // A key pressed between two moves of a drag acts between them, however
 // quickly they come - with no frame in between, as a fast hand manages.
 // Keys were read at the frame, after every move that came before it, and
@@ -4097,8 +4279,9 @@ protected:
     std::unique_ptr<persistence::LibraryStore> store_;
 };
 
-// Escape with the button still held, halfway through a stroke on a snippet
-// whose earlier strokes are written: the stroke is ended there as a release
+// Drawing mode left with the button still held - the key of the tool in
+// hand, which puts it down - halfway through a stroke on a snippet whose
+// earlier strokes are written: the stroke is ended there as a release
 // would end it - one undo step, and written as it ends.
 TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     AttachStore();
@@ -4124,7 +4307,7 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     StepFrame();
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Move);
     StepFrame();
-    PressKey(ImGuiKey_Escape);
+    PressKey(ImGuiKey_P);
     ASSERT_FALSE(App().DrawingItem().has_value());
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Up);
     MouseButtonEvent(ImGuiMouseButton_Left, false);

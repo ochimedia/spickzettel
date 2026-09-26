@@ -12,6 +12,7 @@
 #include "core/canvas/item_geometry.h"
 #include "core/util/timestamp_name.h"
 #include "generated/ui_strings.h"
+#include "ui/interaction/gestures.h"
 #include "ui/ui_scale.h"
 
 namespace sz::ui {
@@ -195,12 +196,62 @@ bool Editor::SelectionLive() const { return !ArmedCreation().has_value(); }
 bool Editor::PressPicksUp() const { return !drawingItem_.has_value() || held_.alt; }
 
 std::optional<ItemCreationKind> Editor::ArmedCreation() const {
-    if (views_ != nullptr) {
-        if (const std::optional<ItemCreationKind> framing = views_->CreationInFlight()) {
-            return framing;
+    if (const Framing* framing = machine_.As<Framing>(Level::Gesture)) {
+        return framing->Kind();
+    }
+    if (const Pending* pending = machine_.As<Pending>(Level::Gesture)) {
+        if (pending->GetMeaning().framing.has_value()) {
+            return pending->GetMeaning().framing;
         }
     }
     return CreationKindFor(activeTool_);
+}
+
+// ================= The hand =================
+
+namespace {
+// Whether `trigger` can be half of a double-click: none, or one set to
+// make something on empty canvas.
+bool DoublesWith(const std::optional<CreationTrigger>& trigger, const AppConfig& config) {
+    return trigger.has_value() && (*trigger == CreationTrigger::Plain || *trigger == config.screenshotTrigger ||
+                                   *trigger == config.drawingTrigger);
+}
+}  // namespace
+
+void Editor::RememberClick(const Event& press) {
+    const std::optional<CreationTrigger> trigger = CreationTriggerFor(press.modifiers);
+    if (!DoublesWith(trigger, Cfg())) {
+        lastClick_.reset();
+        return;
+    }
+    lastClick_ = Click{press.button, *trigger, press.seconds, press.position};
+}
+
+bool Editor::TakeDoubleClick(const Event& press) {
+    const std::optional<Click> last = std::exchange(lastClick_, std::nullopt);
+    const std::optional<CreationTrigger> trigger = CreationTriggerFor(press.modifiers);
+    if (!last.has_value() || !DoublesWith(trigger, Cfg()) || last->button != press.button ||
+        last->trigger != *trigger || press.seconds - last->atSeconds > kDoubleClickSeconds) {
+        return false;
+    }
+    const float dx = press.position.x - last->at.x;
+    const float dy = press.position.y - last->at.y;
+    return std::sqrt(dx * dx + dy * dy) <= kDoubleClickPx;
+}
+
+void Editor::SettleHand() {
+    machine_.EndFor(Scope::Hand);
+    CommitNoteBeingEdited();
+}
+
+void Editor::ForgetTheHand() {
+    machine_.Forget();
+    lastClick_.reset();
+}
+
+bool Editor::HandAtRest() const {
+    const Interaction* gesture = machine_.At(Level::Gesture);
+    return gesture == nullptr || dynamic_cast<const Spent*>(gesture) != nullptr;
 }
 
 // ================= The tool, and drawing mode =================
@@ -271,8 +322,8 @@ void Editor::ExitDrawingMode() {
     // press on another snippet does, a frame later (see PruneSelection),
     // and the move or resize that press has just started is not the
     // mode's to end.
-    if (views_ != nullptr) {
-        views_->EndDrawingGesture();
+    if (machine_.As<Marking>(Level::Gesture) != nullptr) {
+        machine_.End(Level::Gesture);
     }
     session_.LiveLayer().Clear();
     drawingItem_.reset();
@@ -596,9 +647,7 @@ void Editor::CreateAndSwitchToNewCanvas() {
 // selected snippet has to end on the canvas it started on, before the
 // snippet leaves it.
 void Editor::MoveSelectionToNewCanvas() {
-    if (views_ != nullptr) {
-        views_->SettleHand();
-    }
+    SettleHand();
     const CanvasId target = CreateCanvasBesideCurrent();
     const std::vector<ItemId> moved = session_.SendItemsTo(selection_, target, /*copy=*/false).items;
     session_.SwitchToCanvas(target);
@@ -619,9 +668,7 @@ void Editor::SwitchToCanvasSettled(CanvasId id) {
     // on, and a note being typed is committed to the item it belongs to -
     // only the current canvas is drawn, so an editor left open across the
     // switch would strand what was typed.
-    if (views_ != nullptr) {
-        views_->SettleHand();
-    }
+    SettleHand();
     session_.SwitchToCanvas(id);
 }
 
@@ -685,9 +732,7 @@ void Editor::QuickCapture(float displayW, float displayH) {
     // on, as before any other canvas switch. A capture hotkey can arrive
     // mid-stroke: it is global, and nothing about holding the mouse down
     // stops it.
-    if (views_ != nullptr) {
-        views_->SettleHand();
-    }
+    SettleHand();
     // A canvas of its own, beside the one being worked on - a capture is
     // about where you are, not where you were last looking - and we go to
     // it: a screen full of captures piled on the canvas you were drawing
@@ -1137,14 +1182,10 @@ std::optional<platform::Vec2> Editor::SelectionBarButtonCenter(ChromeButton butt
     return platform::Vec2{(rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f};
 }
 
-// What a selection bar button does, on the release that completes its
-// press: its command, about the snippet selected last. Runs from the input
-// stream, between frames, so nothing here has to be deferred past an item
-// loop that is iterating canvas.items by index.
-void Editor::ActivateBarButton(ChromeButton button) {
+std::optional<Command> Editor::BarButtonCommand(ChromeButton button) const {
     const std::optional<ItemId> primaryId = PrimarySelection();
     if (!primaryId.has_value()) {
-        return;
+        return std::nullopt;
     }
     Command command{CommandForBarButton(button), *primaryId};
     if (const std::optional<platform::Vec2> center = SelectionBarButtonCenter(button)) {
@@ -1159,7 +1200,7 @@ void Editor::ActivateBarButton(ChromeButton button) {
             command.at = *center;
         }
     }
-    Dispatch(command);
+    return command;
 }
 
 }  // namespace sz::ui

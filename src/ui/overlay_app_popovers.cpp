@@ -310,7 +310,9 @@ void OverlayApp::BuildItemContextMenuRows(const Item& item, std::vector<ContextM
 
 // ================= Empty canvas's context menu =================
 
-void OverlayApp::OpenEmptyCanvasMenu(ImVec2 at) { Queue(Effect{Effect::Kind::OpenEmptyCanvasMenu, at}); }
+void OverlayApp::OpenEmptyCanvasMenu(platform::Vec2 at) {
+    Queue(Effect{Effect::Kind::OpenEmptyCanvasMenu, ImVec2(at.x, at.y)});
+}
 
 void OverlayApp::RenderEmptyCanvasMenu() {
     const std::optional<int> chosen = emptyCanvasMenu_.Render(
@@ -452,14 +454,14 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
 // ================= Drag previews =================
 
 void OverlayApp::RenderRegionCaptureOverlay() {
-    const CreationGesture* framing = GestureIf<CreationGesture>();
-    if (framing == nullptr || !framing->dragTo.has_value()) {
+    const Framing* framing = editor_.Input().As<Framing>(Level::Gesture);
+    if (framing == nullptr) {
         return;
     }
-    const CreationGesture& gesture = *framing;
+    const Rect frame = framing->Frame();
     ImDrawList* drawList = ImGui::GetForegroundDrawList();
-    const ImVec2 pMin(std::min(gesture.downX, gesture.dragTo->x), std::min(gesture.downY, gesture.dragTo->y));
-    const ImVec2 pMax(std::max(gesture.downX, gesture.dragTo->x), std::max(gesture.downY, gesture.dragTo->y));
+    const ImVec2 pMin(frame.x, frame.y);
+    const ImVec2 pMax(frame.x + frame.w, frame.y + frame.h);
     drawList->AddRectFilled(pMin, pMax, theme::AccentU32(40));
     drawList->AddRect(pMin, pMax, theme::AccentU32(255), 0.0f, PxWhole(2.0f), ImDrawFlags_None);
     char dims[32];
@@ -469,8 +471,8 @@ void OverlayApp::RenderRegionCaptureOverlay() {
 }
 
 void OverlayApp::RenderRectEraserOverlay() {
-    const StrokeInFlight* stroke = GestureIf<StrokeInFlight>();
-    if (stroke == nullptr || stroke->kind != StrokeInFlight::Kind::EraseRect) {
+    const Marking* stroke = editor_.Input().As<Marking>(Level::Gesture);
+    if (stroke == nullptr || stroke->GetKind() != Marking::Kind::EraseRect) {
         return;
     }
     // Same visual language as RenderRegionCaptureOverlay, in a cool tone
@@ -478,9 +480,9 @@ void OverlayApp::RenderRectEraserOverlay() {
     // preview, not a placement one, and the two shouldn't read as the
     // same affordance at a glance.
     ImDrawList* drawList = ImGui::GetForegroundDrawList();
-    const RectErase& r = stroke->rect;
-    const ImVec2 pMin(std::min(r.x0, r.x1), std::min(r.y0, r.y1));
-    const ImVec2 pMax(std::max(r.x0, r.x1), std::max(r.y0, r.y1));
+    const Rect box = stroke->EraseBox();
+    const ImVec2 pMin(box.x, box.y);
+    const ImVec2 pMax(box.x + box.w, box.y + box.h);
     drawList->AddRectFilled(pMin, pMax, IM_COL32(120, 170, 255, 40));
     drawList->AddRect(pMin, pMax, IM_COL32(120, 170, 255, 255), 0.0f, PxWhole(2.0f), ImDrawFlags_None);
 }

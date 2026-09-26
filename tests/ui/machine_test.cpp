@@ -12,6 +12,7 @@
 #include "core/session/session.h"
 #include "core/session/settings.h"
 #include "ui/editor.h"
+#include "ui/interaction/gestures.h"
 
 namespace sz::ui {
 namespace {
@@ -146,6 +147,46 @@ TEST_F(MachineTest, AScopeEndsWhatItCovers) {
     ASSERT_TRUE(editor_.Dispatch(Command{CommandId::Undo}));
     EXPECT_EQ(Stack().At(Level::Gesture), nullptr);
     EXPECT_NE(Stack().At(Level::Text), nullptr);
+}
+
+// A button held with nothing on the Gesture level has had its say: the
+// rest of the press is Spent, which swallows it and any other button
+// until its own release - section 6.3.
+TEST_F(MachineTest, TheRestOfAPressThatHadItsSayIsSpent) {
+    Event press;
+    press.kind = EventKind::PointerDown;
+    press.button = platform::MouseButton::Left;
+    Stack().Offer(press);  // the root claims it and starts nothing
+    EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / - / Spent");
+
+    Event other = press;
+    other.button = platform::MouseButton::Right;
+    log_.clear();
+    Stack().Offer(other);
+    EXPECT_TRUE(log_.empty()) << "another button's press, swallowed";
+    Event otherUp = other;
+    otherUp.kind = EventKind::PointerUp;
+    Stack().Offer(otherUp);
+    EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / - / Spent");
+
+    Event release = press;
+    release.kind = EventKind::PointerUp;
+    Stack().Offer(release);
+    EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / - / -");
+
+    // A gesture ended from outside with its button down leaves the rest of
+    // the press Spent too - and one ended by its release does not.
+    Stack().Offer(press);
+    Stack().Push(Make(Level::Gesture, "Stroke"), press);
+    Stack().EndFor(Scope::Hand);
+    EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / - / Spent");
+    // Its own button pressed again: the release went missing, and the
+    // press is a new one, offered on down - here to the root.
+    log_.clear();
+    Stack().Offer(press);
+    EXPECT_EQ(log_, (std::vector<std::string>{"Canvas offered"}));
+    Stack().Forget();
+    EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / - / -") << "the overlay came up: nothing held";
 }
 
 }  // namespace

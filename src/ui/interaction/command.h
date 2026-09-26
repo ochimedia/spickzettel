@@ -56,7 +56,8 @@ enum class CommandId {
     ToggleViewMode,
     QuickCapture,
     SilentCapture,
-    // Reached from a menu or the selection bar only.
+    // Reached from a menu or the selection bar only - and the two
+    // fullscreen snippets from a gesture too, a double-click or a hold.
     ToggleFullscreen,
     ToggleFullscreenStretched,  // the menu row with Shift held
     ResetSize,
@@ -76,6 +77,13 @@ enum class CommandId {
     DeleteCanvas,
     Overview,
     Settings,
+    // Reached from a gesture only: what a press on the canvas means once
+    // the recognizer knows (see docs/INTERACTIONS.md, section 6.5).
+    DrawingMode,       // on `item` - a double-click, a hold
+    LeaveDrawingMode,  // a press elsewhere, a right click on the snippet
+    ItemMenu,          // `item`'s context menu, at `at` - a right click
+    EmptyCanvasMenu,   // at `at` - a right click on empty canvas
+    FrameSnippet,      // of `kind`, at `rect` - a drag on empty canvas, or with a creation tool
 };
 
 // What a command ends before it runs - see OverlayApp::SettleHand, and
@@ -84,14 +92,25 @@ enum class CommandId {
 // switches or empties the canvas, which will end more than the hand.
 enum class Scope { Hand, Canvas };
 
+// Who asked for a snippet to be made: a menu row or a key, the creation
+// tool in hand, or a press on empty canvas - which decides what happens
+// around it (see Editor::Run): the screenshot tool is put down once it has
+// placed, and a drawing a press made is watched until something goes
+// into it (see Editor::UntouchedDrawing).
+enum class MadeBy { Asking, Tool, Press };
+
 // One command, with what it is about. Most take the selection as it is
 // and need nothing else; a menu row names the snippet or the canvas it
-// was opened on, and a bar button where it sits, for what it opens.
+// was opened on, and a bar button where it sits, for what it opens. A
+// snippet made by a gesture says of what kind, where, and who made it.
 struct Command {
     CommandId id = CommandId::Undo;
     core::ItemId item = 0;
     core::CanvasId canvas = 0;
     std::optional<platform::Vec2> at;
+    std::optional<core::Rect> rect;
+    core::ItemCreationKind kind = core::ItemCreationKind::Screenshot;
+    MadeBy madeBy = MadeBy::Asking;
 };
 
 struct CommandInfo {
@@ -189,6 +208,11 @@ inline constexpr std::array kCommands = [] {
         Clicked(CommandId::DeleteCanvas, "deleteCanvas"),
         Clicked(CommandId::Overview, "overview"),
         Clicked(CommandId::Settings, "settings"),
+        Clicked(CommandId::DrawingMode, "drawingMode"),
+        Clicked(CommandId::LeaveDrawingMode, "leaveDrawingMode"),
+        Clicked(CommandId::ItemMenu, "itemMenu"),
+        Clicked(CommandId::EmptyCanvasMenu, "emptyCanvasMenu"),
+        Clicked(CommandId::FrameSnippet, "frameSnippet"),
     };
 }();
 inline constexpr size_t kCommandCount = kCommands.size();
@@ -200,7 +224,7 @@ constexpr bool InIdOrder() {
             return false;
         }
     }
-    return kCommands.back().id == CommandId::Settings;  // the last id: none left without a row
+    return kCommands.back().id == CommandId::FrameSnippet;  // the last id: none left without a row
 }
 }  // namespace command_detail
 static_assert(command_detail::InIdOrder(), "kCommands must hold one row per CommandId, in CommandId order");
