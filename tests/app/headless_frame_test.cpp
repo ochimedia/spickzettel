@@ -762,6 +762,26 @@ TEST_F(HeadlessAppTest, AnUntouchedDrawingIsNotSavedOnTheWayOut) {
     EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty());
 }
 
+// Coming up settles what went some other way than being put away, in the
+// order going away does: the stroke first, into the drawing it is on, and
+// only then the drawing, no longer untouched. The other way round the
+// drawing went for good with the stroke in flight on it.
+TEST_F(HeadlessAppTest, ComingUpKeepsAStrokeInFlightOnANewDrawing) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 400.0f, 400.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    RawMouse(150.0f, 150.0f, platform::MouseEventKind::Down, platform::MouseButton::Left);
+    StepFrame();
+    RawMouse(250.0f, 200.0f, platform::MouseEventKind::Move, platform::MouseButton::Left);
+    StepFrame();
+
+    controller_->Overlay().OnOverlayShown();
+
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].strokes.size(), 1u);
+}
+
 // A paste made by key after a stray drawing is the most recent thing done,
 // and the first undo takes the paste back, not the drawing.
 TEST_F(HeadlessAppTest, UndoAfterAPasteTakesThePasteBackNotAnUntouchedDrawing) {

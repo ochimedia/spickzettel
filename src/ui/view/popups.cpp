@@ -471,7 +471,7 @@ void Popups::CloseInnermost() { Queue(Effect{Effect::Kind::CloseInnermostPopup})
 
 void Popups::LetGoOfWidget() { Queue(Effect{Effect::Kind::LetGoOfWidget}); }
 
-void Popups::Settle() {
+void Popups::KeepChooserColor() {
     if (Up(PopupKind::ColorChooser)) {
         KeepPenColor();
     }

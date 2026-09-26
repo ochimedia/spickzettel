@@ -28,11 +28,7 @@ enum class EventKind {
     // A global hotkey, from the tray - `command` is what it runs. May
     // arrive while the overlay is hidden, with no frames.
     Hotkey,
-    // The overlay shown or put away, or the session ending - `lifecycle`.
-    Lifecycle,
 };
-
-enum class Lifecycle { Shown, Hidden, ViewOnly, EditMode, SessionEnding };
 
 struct Event {
     EventKind kind = EventKind::Tick;
@@ -48,7 +44,6 @@ struct Event {
     // key being captured in Settings takes the combination instead.
     CommandId command = CommandId::Undo;
     platform::KeyCombo combo;
-    Lifecycle lifecycle = Lifecycle::Shown;
 
     static Event FromInput(const platform::InputEvent& input);
 };

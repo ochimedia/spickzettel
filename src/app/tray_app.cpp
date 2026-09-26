@@ -300,12 +300,14 @@ void TrayController::Apply(const OverlayTransition& transition) {
     const bool comingUp = transition.route == Route::Up || transition.route == Route::ThroughHidden;
 
     // 1. Settle. Put away, what the hand holds is finished where it stands,
-    // and so written - see SettleForPersistence; the same for a restart,
-    // which ends the showing it is part of. Edit to View settles through
-    // the mode, in step 5.
+    // and so written - see OverlayApp::Settle; the same for a restart,
+    // which ends the showing it is part of. Leaving Edit for any other
+    // mode - View, and the pinned view on the way away - settles through
+    // the mode, in step 5, which ends everything.
     const bool away = to == OverlayState::Hidden || to == OverlayState::Pinned;
-    if ((IsSessionState(from) && away) || transition.restart) {
-        overlayApp_.SettleForPersistence();
+    const bool modeSettles = from == OverlayState::Edit && to != OverlayState::Edit && to != OverlayState::Hidden;
+    if (((IsSessionState(from) && away) || transition.restart) && !modeSettles) {
+        overlayApp_.Settle(ui::Scope::Hand);
     }
     // 2. The frozen screen belongs to the edit mode it was taken for -
     // including one entered again, which takes it again.
@@ -384,7 +386,7 @@ void TrayController::SettleForExit() {
     // What was being typed or drawn is finished, and so written: every
     // change is written as it is made (see Session), so nothing else is
     // owed to the library. The settings file may be.
-    overlayApp_.SettleForPersistence(ui::Lifecycle::SessionEnding);
+    overlayApp_.Settle(ui::Scope::All);
     if (configWriteOwed_) {
         PersistConfig();  // owed since a settings edit; the last chance for it
     }

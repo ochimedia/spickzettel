@@ -46,7 +46,6 @@ Answer DrawingMode::Offer(const Event& event, Editor& editor) {
         case EventKind::Modifiers:
         case EventKind::Tick:
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();
@@ -68,7 +67,6 @@ Answer CreationTool::Offer(const Event& event, Editor& /*editor*/) {
         case EventKind::Modifiers:
         case EventKind::Tick:
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();
@@ -111,7 +109,6 @@ Answer Panel::Offer(const Event& event, Editor& editor) {
         case EventKind::Modifiers:
         case EventKind::Tick:
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();
@@ -165,7 +162,6 @@ Answer Popup::Offer(const Event& event, Editor& editor) {
             }
             return Answer::Pass();
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();
@@ -209,7 +205,6 @@ Answer TypingNote::Offer(const Event& event, Editor& editor) {
             }
             return Answer::Pass();
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();
@@ -238,7 +233,6 @@ Answer NameEdit::Offer(const Event& event, Editor& /*editor*/) {
         case EventKind::Tick:
             return editing_() ? Answer::Pass() : Answer::Finish(/*usedUp=*/false);
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();
@@ -296,8 +290,6 @@ Answer KeyCapture::Offer(const Event& event, Editor& /*editor*/) {
             }
             bind_(event.combo);
             return Answer::Finish();
-        case EventKind::Lifecycle:
-            return Answer::Pass();
     }
     return Answer::Pass();
 }

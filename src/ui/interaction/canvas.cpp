@@ -57,7 +57,6 @@ Answer CanvasLevel::Offer(const Event& event, Editor& editor) {
         case EventKind::KeyUp:
         case EventKind::Modifiers:
         case EventKind::Tick:
-        case EventKind::Lifecycle:
             return Answer::Claim();  // nothing waits on these here
         case EventKind::Hotkey:
             return Answer::Start(Command{event.command});

@@ -89,10 +89,10 @@ public:
     // ImGui's active widget let go of, and a drag and drop dropped - see
     // Widget.
     void LetGoOfWidget();
-    // The overlay settling with the chooser still up - put away, which
-    // leaves a popup up for the next showing, and perhaps never shown
-    // again: what it was left on is kept now.
-    void Settle();
+    // The pen's color kept if the chooser is up: the overlay settling with
+    // it still up - put away, which leaves a popup up for the next showing,
+    // and perhaps never shown again - keeps what it was left on now.
+    void KeepChooserColor();
 
     // ===== The frame =====
 

@@ -112,12 +112,12 @@ public:
 
     // Sets what is drawn and whether input is taken - TrayController's, as
     // it moves the overlay between its states (docs/OVERLAY_STATES.md,
-    // section 6, step 5). Leaving Edit for any other mode offers the
-    // ViewOnly lifecycle event and ends everything above the canvas (an
-    // armed item, a note being typed, a popup, a panel, drawing mode), so
-    // edit mode later starts clean rather than wherever it was left off;
-    // entering Edit offers EditMode. The other modes are all read-only,
-    // take no input, and switch among themselves without either.
+    // section 6, step 5). Leaving Edit for any other mode settles with the
+    // All scope, which ends everything above the canvas (a gesture, a note
+    // being typed, a popup, a panel, drawing mode), so edit mode later
+    // starts clean rather than wherever it was left off. The other modes
+    // are all read-only, take no input, and switch among themselves
+    // without settling.
     void SetMode(OverlayMode mode);
     OverlayMode Mode() const { return mode_; }
 
@@ -248,12 +248,17 @@ public:
     // Overview that can be told apart at a glance. The user's own call.
     void QuickCapture(float displayW, float displayH) { editor_.QuickCapture(displayW, displayH); }
 
-    // The overlay going away - hidden, restarted, the app exiting, the OS
-    // ending the session: offered to the input machine, and then what a
-    // command's Hand scope ends is ended (see Editor::Settle and
-    // docs/ARCHITECTURE.md, "The hand"), and a drawing nothing went into is
-    // discarded (see Editor::SettleUntouchedDrawing).
-    void SettleForPersistence(Lifecycle why = Lifecycle::Hidden);
+    // Whatever is in flight, finished as the overlay goes away, comes up or
+    // turns view-only - one sequence for all of them, in one order: what
+    // `scope` covers ended, top down (see Editor::Settle and
+    // docs/ARCHITECTURE.md, "The hand"); a drawing nothing went into
+    // discarded (see Editor::SettleUntouchedDrawing); and what only a frame
+    // of edit mode would otherwise have kept, kept now - a slider's
+    // preview, the pen as the hand left it. Hand for the overlay put away,
+    // restarted or coming up, which leaves drawing mode, a panel and a
+    // popup as they were; All for view-only mode and for good, at exit and
+    // at the end of the OS session.
+    void Settle(Scope scope);
 
     // ===== Commands =====
     //
@@ -428,10 +433,6 @@ private:
     // SetInputCallback - offered to the editor's machine (see Machine),
     // with the editor told the modifiers, the time and the display first.
     void OnInput(const platform::InputEvent& event);
-    // The overlay shown or put away, view-only mode entered or left: an
-    // event every level is offered before the scope it calls for is ended
-    // (see SetMode, SettleForPersistence and OnOverlayShown).
-    void OfferLifecycle(Lifecycle which);
 
 public:
     // A hotkey row armed, waiting for the combo the user wants, and the rest
@@ -467,7 +468,7 @@ private:
     // strokeColorRGBA: the width the wheel left once its size preview has
     // faded, and the color the chooser was left on when it closes (see
     // Popups) - and both when the overlay settles, before either could come
-    // (see SettleForPersistence and SetMode).
+    // (see Settle).
     void KeepPen();
 
 

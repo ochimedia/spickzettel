@@ -81,7 +81,6 @@ Answer NudgeBurst::Offer(const Event& event, Editor& editor) {
             return Answer::Pass();
         case EventKind::Modifiers:
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();
@@ -132,7 +131,6 @@ Answer WheelBurst::Offer(const Event& event, Editor& editor) {
         case EventKind::KeyUp:
         case EventKind::Modifiers:
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();

@@ -111,7 +111,6 @@ Answer Gesture::Offer(const Event& event, Editor& editor) {
         case EventKind::Tick:
             return Ticked(event, editor);
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();
     }
     return Answer::Pass();
@@ -136,7 +135,6 @@ Answer Spent::Offer(const Event& event, Editor& /*editor*/) {
         case EventKind::Modifiers:
         case EventKind::Tick:
         case EventKind::Hotkey:
-        case EventKind::Lifecycle:
             return Answer::Pass();  // Escape included: nothing here to cancel
     }
     return Answer::Pass();

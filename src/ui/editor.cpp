@@ -785,12 +785,11 @@ void Editor::SwitchCanvasByOffset(int delta) {
 }
 
 void Editor::QuickCapture(float displayW, float displayH) {
-    // Whatever the hand is in the middle of ends on the canvas it started
-    // on, as before any other canvas switch. A capture hotkey can arrive
-    // mid-stroke: it is global, and nothing about holding the mouse down
-    // stops it. Its command's scope has ended it already; this is for the
-    // tray, which can capture without one.
-    Settle(Scope::Canvas);
+    // Whatever the hand was in the middle of has ended on the canvas it
+    // started on, as before any other canvas switch: a capture hotkey can
+    // arrive mid-stroke, and its command's scope, Canvas, ends it (the tray
+    // runs a capture only as that command).
+    //
     // A canvas of its own, beside the one being worked on - a capture is
     // about where you are, not where you were last looking - and we go to
     // it: a screen full of captures piled on the canvas you were drawing

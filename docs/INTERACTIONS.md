@@ -78,10 +78,17 @@ now.
 | `Modifiers` | Ctrl, Shift, Alt | only when they change |
 | `Tick` | - | once per frame: what timeouts run on |
 | `Hotkey` | which | global; may arrive while hidden, with no frames |
-| `Lifecycle` | Shown, Hidden, ViewOnly, EditMode, SessionEnding | from the tray |
 
 Every event carries its time and the modifiers as they were when it
 happened.
+
+Found after the build: a `Lifecycle` event (Shown, Hidden, ViewOnly,
+EditMode, SessionEnding, from the tray) was on this list, offered to
+every level before the overlay settled. No interaction answered it with
+anything but Pass or Claim: what the overlay going away, coming up or
+turning view-only does is its scope, ended as a command's is. So it
+went, and those moments end their scope directly (`OverlayApp::Settle`,
+section 9's last three rows).
 
 **Change: one ordered stream.** Today the pointer and the keys arrive on
 two timelines: raw pointer events call `OnMouse` from the message pump,
@@ -458,9 +465,9 @@ Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.
 | Hotkey mid-anything | passed to the root | - | its command, after its scope ended what it covers | - | - |
 | Lost release | own button pressed again | - | interrupted; the press routed afresh | - | - |
 | Touch hold's injected right press | lands on Spent | - | swallowed | - | - |
-| Put away | Lifecycle: Hidden | - | the Hand scope ends the gesture and the text; the rest stays for the next showing | - | - |
-| Shown | Lifecycle: Shown | - | the Gesture level cleared; the recognizer forgets | - | - |
-| View-only | Lifecycle: ViewOnly | - | All scope | - | - |
+| Put away | the overlay settles | - | the Hand scope ends the gesture and the text; the rest stays for the next showing | - | - |
+| Shown | the overlay settles | - | the Hand scope, for whatever went some other way; the machine forgets the buttons held | - | - |
+| View-only | the overlay settles | - | All scope | - | - |
 
 Found while building phase 3: the Text row first said a press outside a
 note is used up by closing it. Today that press also does what it does -
@@ -647,6 +654,7 @@ goes is never moved: what survives of `OverlayApp`'s input side goes into
 9. **Lifecycle.** Shown, Hidden, ViewOnly and SessionEnding as events,
    with the All scope; `SettleHand`, `SwitchToCanvasSettled` and
    `SetViewOnly`'s settling go - one `Editor::Settle(scope)` in their place.
+   (The events went after the build; see section 3.)
 10. **Widgets.** An ImGui drag as a Widget gesture: Escape clears it, and
     restores a slider's value.
 11. **The cases as tests.** Each row of section 9 as a scripted test

@@ -1186,12 +1186,12 @@ command, is one transaction of the snippet's record and strokes; with
 `synchronous=FULL` it is bound by the disk's flush, around ten
 milliseconds on a local SSD, paid on the frame the command lands in.
 
-Leaving drawing mode - Escape or the view-only hotkey while the button
-is held - ends a stroke in flight as a release would, so it is kept, is
-its own undo step, and is written like any other. Hiding the overlay,
-restarting it for a setting, exiting and the OS ending the session all
-settle what the hand is in the middle of first
-(`OverlayApp::SettleForPersistence`), which writes it.
+A command that ends a stroke in flight - the view-only hotkey while the
+button is held, say - keeps it as a release would: its own undo step,
+written like any other. Escape cancels it instead (see "The hand").
+Hiding the overlay, restarting it for a setting, exiting and the OS
+ending the session all settle what the hand is in the middle of first
+(`OverlayApp::Settle`), which writes it.
 
 **One writer per library.** Two copies of the app would each write the
 library from a stale picture of it.
@@ -1969,9 +1969,12 @@ hidden, restarted - ends what a command's Hand scope does, and drawing
 mode, a panel and a popup are still up at the next showing; the overlay
 coming up ends it again, for whatever went some other way, and forgets
 which buttons were down (`Machine::Forget`); view-only mode, and the app
-exiting, end everything above the canvas. Each is offered to the stack
-first, as a `Lifecycle` event. These were four hand-written functions,
-each with its own list of what to reset.
+exiting, end everything above the canvas. All of these go through one
+sequence, `OverlayApp::Settle`: the scope, then the drawing a stray click
+made - after the gesture, which may have put a stroke into it - then
+what only a frame of edit mode would otherwise keep, a slider's preview
+and the pen. These were four hand-written functions, each with its own
+list of what to reset.
 
 Escape is not such a command while a gesture is in flight: the gesture
 sees it first and is *cancelled* - a stroke, a shape or an erase leaves

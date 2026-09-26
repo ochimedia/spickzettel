@@ -47,8 +47,8 @@ inline constexpr double kHoldSeconds = 0.5;
 // finger held still); its own button pressed again means its release went
 // missing, and it ends as interrupted with the press routed afresh; the
 // wheel is ignored; Escape cancels it; other keys, the modifiers, the
-// clock, a hotkey and the lifecycle are passed on - a command they start
-// interrupts it. What is left is each gesture's own: its moves, its
+// clock and a hotkey are passed on - a command they start interrupts it.
+// What is left is each gesture's own: its moves, its
 // release, and what it does with time and the modifiers.
 class Gesture : public Interaction {
 public:

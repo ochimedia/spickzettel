@@ -188,8 +188,7 @@ Four requests change no state, and do the same in every state:
   In Edit, a move takes the frozen screen again.
 - **Session ending**:
   - What the hand holds is ended, along with everything above the canvas
-    (the SessionEnding lifecycle event, All scope), and a settings file
-    still owed is written.
+    (the All scope), and a settings file still owed is written.
   - The state does not change: the window stays up, and the frozen screen
     stays.
   - If the logoff is called off, the overlay carries on in its state,
@@ -207,12 +206,11 @@ One procedure for every cell. Where today does the same work, it is in
 the same order unless said otherwise.
 
 1. **Settle.**
-   - Leaving View or Edit for Away, or for a restart: the Hidden lifecycle
-     event and the Hand scope, and the untouched drawing settled
-     (`SettleForPersistence`).
+   - Leaving View or Edit for Away, or for a restart: the Hand scope
+     (`OverlayApp::Settle`).
    - Leaving Edit for View, Pinned or a Notice: this is done by the mode
-     in step 5 (the ViewOnly lifecycle event, All scope). For Pinned and
-     a Notice that is a rule, not a leftover - section 10, finding 1.
+     in step 5 (the All scope), and not here as well. For Pinned and a
+     Notice that is a rule, not a leftover - section 10, finding 1.
 2. **Release the frozen screen**, when leaving Edit - for any state,
    including a restart and a quick capture's re-entry.
 3. **End the session**, when leaving View or Edit for a state without
@@ -225,9 +223,8 @@ the same order unless said otherwise.
    transition stops here and the state is Hidden. Only coming up can
    fail, since a window that is up already exists.
 5. **Tell the overlay its mode** (`OverlayApp::SetMode`): what it draws,
-   and which lifecycle event the input machine is offered - ViewOnly on
-   leaving Edit for any other mode, EditMode on entering Edit. Down, the
-   mode stays as it was, except that a
+   and, on leaving Edit for any other mode, the All scope settled. Down,
+   the mode stays as it was, except that a
    notice going down leaves plain View, as today: a notice's mode is what
    reports its fade.
 6. **Start the session**, when entering View or Edit from a state without
@@ -405,7 +402,7 @@ then, rather than at the next edit mode that comes up from Hidden.
 1. Putting the overlay away into the pinned view from Edit ends what
    edit mode left up - drawing mode, a panel, a popup. So does a notice
    that comes up after edit mode was put away. Both enter view-only,
-   whose lifecycle event ends everything above the canvas. Putting it
+   whose settle ends everything above the canvas. Putting it
    away into Hidden keeps them (`docs/INTERACTIONS.md`, decision 3). So
    whether drawing mode survives being put away depends on whether the
    canvas has a pinned snippet, or whether a silent capture happened

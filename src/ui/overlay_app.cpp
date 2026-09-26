@@ -55,7 +55,6 @@ void OverlayApp::SetMode(OverlayMode mode) {
     if (IsViewOnly() == wasViewOnly) {
         return;
     }
-    OfferLifecycle(IsViewOnly() ? Lifecycle::ViewOnly : Lifecycle::EditMode);
     // Every mode but Edit, the pinned view and a notice included. Those two
     // are the overlay put away, as hidden is, which keeps what edit mode
     // left up - but unlike hidden they draw frames, and ImGui closes a
@@ -65,25 +64,10 @@ void OverlayApp::SetMode(OverlayMode mode) {
     // rather than the popup alone behind the machine's back. See
     // docs/OVERLAY_STATES.md, section 10.
     if (IsViewOnly()) {
-        // Nothing should stay "in progress" while merely viewing, so the
-        // All scope ends everything above the canvas, top down: the
-        // gesture, while drawing mode still says which snippet a stroke in
-        // flight belongs to; a note being typed, whose editor is not drawn
-        // in view-only mode and so would never hear that it closed; a
-        // popup, a panel; drawing mode, or the creation tool in hand. Edit
-        // mode starts clean later rather than resuming whatever happened
-        // to be up. The effects first: a popup ended asks for itself to be
-        // closed once edit mode draws again (see Popup::Interrupt).
-        popups_.ForgetEffects();
-        editor_.Settle(Scope::All);
-        editor_.SettleUntouchedDrawing();
-        // A slider or swatch in the middle of a drag is not drawn again to
-        // say it was let go of, which is where its preview is committed:
-        // what it was dragged to is committed here instead. The pen's width
-        // too, whose preview view-only mode does not draw; its color was
-        // kept as the chooser, if it was up, was ended.
-        settings_.CommitPreviews();
-        KeepPen();
+        // Nothing should stay "in progress" while merely viewing: edit
+        // mode starts clean later rather than resuming whatever happened to
+        // be up.
+        Settle(Scope::All);
         // Normally cleared at the top of every CanvasView::RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle
@@ -108,30 +92,32 @@ bool OverlayApp::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     return settings_.Set(HotkeySetting(slot), combo);
 }
 
-void OverlayApp::OfferLifecycle(Lifecycle which) {
-    Event event;
-    event.kind = EventKind::Lifecycle;
-    event.lifecycle = which;
-    event.modifiers = editor_.Held();
-    editor_.Input().Offer(event);
-}
-
-void OverlayApp::SettleForPersistence(Lifecycle why) {
-    // Put away, what a command's Hand scope ends: the gesture, kept, and a
-    // note being typed, committed - drawing mode, a panel and a popup are
-    // still up at the next showing, as they were left. Ending for good,
-    // everything above the canvas.
-    OfferLifecycle(why);
-    editor_.Settle(why == Lifecycle::SessionEnding ? Scope::All : Scope::Hand);
-    // Going away is moving on too, as the next showing would say (see
-    // OnOverlayShown) - but exit has no next showing, and a restart loads
-    // the drawing as an ordinary snippet: a fullscreen empty one, over the
+void OverlayApp::Settle(Scope scope) {
+    // Ending everything above the canvas ends a popup, which asks for
+    // itself to be closed once edit mode draws again (see
+    // Popup::Interrupt): what was asked of ImGui before that is let go of
+    // first, for a frame that will not come in edit mode.
+    if (scope == Scope::All) {
+        popups_.ForgetEffects();
+    }
+    // Top down: the gesture first, while drawing mode still says which
+    // snippet a stroke in flight belongs to - kept, as a command's scope
+    // keeps it; then a note being typed, committed, whose editor may never
+    // be drawn again to hear that it closed; and, for All, a popup, a
+    // panel, drawing mode or the creation tool in hand.
+    editor_.Settle(scope);
+    // After the gesture, which may have put a stroke into it: going away is
+    // moving on, and so is coming up, which nothing ran while hidden to
+    // notice. Exit has no next showing, and a restart would load the
+    // drawing as an ordinary snippet - a fullscreen empty one, over the
     // canvas.
     editor_.SettleUntouchedDrawing();
-    // A drag put away with the overlay is not drawn again before the next
-    // showing, and not at all before an exit: committed now, as its end
-    // would have (see SetMode). And the pen as the hand left it: its width
-    // before its preview has faded, its color with the chooser up.
+    // A slider or swatch in the middle of a drag is not drawn again to say
+    // it was let go of, which is where its preview is committed - not
+    // before the next showing, and not at all before an exit or in
+    // view-only mode: committed now, as its end would have. And the pen
+    // as the hand left it: its width before its preview has faded, its
+    // color with the chooser up.
     settings_.CommitPreviews();
     KeepPen();
 }
@@ -327,7 +313,7 @@ void OverlayApp::ClosePanel(PanelKind kind) {
 
 void OverlayApp::KeepPen() {
     pointer_.KeepPenWidth();
-    popups_.Settle();
+    popups_.KeepChooserColor();
 }
 
 // ================= Frame =================
@@ -723,14 +709,10 @@ void OverlayApp::OnOverlayShown() {
     // Something the app did while nobody was looking - see
     // SayDeletedForGoodAtStart.
     messages_.OnOverlayShown();
-    // Hiding is moving on too, and nothing ran while hidden to notice - see
-    // Editor::UntouchedDrawing.
-    editor_.SettleUntouchedDrawing();
     // Nothing is in the hand as the overlay comes up: what went down before
     // it was hidden has come up since, wherever that release went. Settled
     // already when it was put away, unless it went some other way.
-    OfferLifecycle(Lifecycle::Shown);
-    editor_.Settle(Scope::Hand);
+    Settle(Scope::Hand);
     editor_.ForgetTheHand();
     // The panels docked against the edges come out for a moment, so they
     // are seen where they are - asked for here, done on the first frame.
