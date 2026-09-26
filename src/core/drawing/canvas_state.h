@@ -7,9 +7,11 @@
 
 namespace sz::core {
 
-// Holds the drawing surface's content: a list of completed strokes plus at
-// most one stroke currently being drawn. Platform-agnostic; has no
-// knowledge of input devices, windows, or rendering APIs.
+// A list of completed strokes plus at most one stroke currently being
+// drawn: the session's live layer, where a stroke or a shape is drawn
+// before it is committed to its snippet (see Session::LiveLayer).
+// Platform-agnostic; has no knowledge of input devices, windows, or
+// rendering APIs.
 class CanvasState {
 public:
     void BeginStroke(StrokePoint point, uint32_t colorRGBA, float width);

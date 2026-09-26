@@ -3,7 +3,7 @@
 //
 // The menu is opened the way a hand opens it: a right click on the
 // snippet, through the raw mouse pipeline, since that is where the press
-// that asks for it arrives (see OverlayApp::HandleItemGesture). Only the
+// that asks for it arrives (see RecognizePress). Only the
 // rows themselves are clicked by name, which is the part worth asserting
 // - that a row is there, that it is available or not, and that choosing
 // it runs the action it promises.

@@ -228,7 +228,7 @@ struct AppConfig {
     // (a diagnostic, always-on-in-both-modes, with a status line attached);
     // this one is part of the normal look.
     bool showEditModeBorder = true;
-    // 0xRRGGBBAA-packed like Item::backgroundColorRGBA - the alpha byte is
+    // 0xRRGGBBAA-packed like Picture::tintColorRGBA - the alpha byte is
     // unused here too, editModeBorderOpacity is the alpha actually drawn.
     uint32_t editModeBorderColorRGBA = 0xFFFFFFFFu;  // white
     float editModeBorderOpacity = 0.22f;             // 0..1, translucent by default
@@ -359,9 +359,7 @@ std::optional<ParsedConfig> TryParseConfig(std::string_view text);
 
 // The most a settings file is read past. A config.json is a few kilobytes;
 // one of megabytes is not a settings file, whatever it is, and is read as
-// one that said nothing rather than allocated for - the same budget-before-
-// allocation rule the library's records and pictures have (see
-// persistence::kMaxRecordBytes).
+// one that said nothing rather than allocated for.
 constexpr size_t kMaxConfigFileBytes = size_t{1} << 20;
 
 // A hotkey as config.json spells it - "Ctrl+Alt+O", "F9" - and as a message
@@ -416,14 +414,11 @@ constexpr float kMaxStrokeWidthPx = 256.0f;
 std::string SerializeConfig(const AppConfig& config);
 
 // Writes SerializeConfig(config)'s text to `path`, creating its parent
-// directory first if needed - the write-half of app_main's own
-// LoadOrCreateConfig (main_win32.cpp/main_devlinux.cpp), factored out here
-// so TrayController::OnSettingsChanged (an in-app settings edit, not a
-// first-run default) has a single, unit-testable place to call rather
-// than duplicating the same ofstream dance a third time. Returns false
-// (does nothing) if `path` is empty - the "nowhere to persist to"
-// convention shared with persistence::LibraryStore's own empty-directory
-// handling - or if the file couldn't be opened for writing.
+// directory first if needed, through a temporary file renamed over it -
+// what LoadOrCreateConfig writes and every settings change after it (see
+// TrayController::PersistConfig). Returns false (does nothing) if `path`
+// is empty - a host with nowhere to persist to - or if the file could not
+// be written.
 bool WriteConfigFile(const std::filesystem::path& path, const AppConfig& config);
 
 }  // namespace sz::core

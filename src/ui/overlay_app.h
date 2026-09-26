@@ -77,7 +77,7 @@ enum class OverlayMode {
 // with a selection, the way a drawing program's are (see Editor::Selection), and
 // drawing on one is a mode entered by double-clicking or holding on it
 // (see Editor::DrawingItem); everything that acts on a snippet is on the bar that
-// floats over the selection (see PaintSelectionBar), and everything else
+// floats over the selection (see CanvasView::PaintSelectionBar), and everything else
 // is a key or the Overview. Input arrives two ways accordingly:
 //  - Everything over the canvas - freehand pen/eraser strokes, the "double
 //    click or hold for fullscreen, drag for a region" item-creation
@@ -90,7 +90,7 @@ enum class OverlayMode {
 //    the selection's furniture and then the items, asked of the event's
 //    own position. ImGui never hit-tests an item, a handle or the bar, so
 //    nothing about them is a frame late (see docs/ARCHITECTURE.md,
-//    "Selection").
+//    "Nothing over the canvas is hit-tested by ImGui").
 //  - Popovers, the canvas bar, the dock and the Overview are ordinary
 //    bounded ImGui windows/widgets, and every one of them sits above every
 //    item. `io.WantCaptureMouse` means one of them is under the pointer
@@ -473,7 +473,7 @@ private:
 
     // Applied once, on the first OnFrame call (ImGui's style/color tables
     // only exist once a context does, which isn't guaranteed yet at
-    // construction or even AttachTo time - see ApplySpickzettelStyle's own
+    // construction or even AttachTo time - see theme::ApplyStyle's own
     // comment for why this couldn't just run from AttachTo).
     bool styleApplied_ = false;
 

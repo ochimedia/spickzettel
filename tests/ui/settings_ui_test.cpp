@@ -50,8 +50,8 @@ TEST_F(UiTest, TheSettingsSectionsAreAllReachable) {
 
 // The regression this harness was built for: a dropdown nested inside the
 // Overview panel opened *behind* it and read as a control that did
-// nothing. Verified by putting the bug back (dropping the picker's own
-// KeepPopoverInFront call) and watching this fail: the click lands on the
+// nothing. Verified by putting the bug back (dropping the call that then
+// brought the picker to the front) and watching this fail: the click lands on the
 // panel covering the popup, so the pick silently doesn't take and the
 // setting below goes to the wrong target - which is exactly what it looked
 // like from the outside, and took a screenshot and a guess to find.
@@ -632,7 +632,7 @@ TEST_F(UiTest, AHelpMarkerOpensItsExplanationInFront) {
         // In front of the panel that opened it, said in the terms ImGui
         // itself uses: g.Windows is in display order, and the last entry is
         // the one drawn on top - which is where BringWindowToDisplayFront
-        // (KeepPopoverInFront) puts its target.
+        // (see OverlayApp::StackSurfaces) puts its target.
         IM_CHECK_GT(DisplayIndexOf(popover), DisplayIndexOf(ctx->WindowInfo("//##overview_panel").Window));
         ctx->KeyPress(ImGuiKey_Escape);
     });

@@ -110,8 +110,8 @@ private:
     // outline that says so.
     void PaintSelectionOutline(ImDrawList* drawList, const core::Item& item, bool drawing);
     // The selection bar: its buttons on a small pill floating over
-    // the selection's bounding box (see SelectionBarLayout in the
-    // definition file for where exactly). `hotButton` is the button the
+    // the selection's bounding box (see LayoutBar in selection_layout.h
+    // for where exactly). `hotButton` is the button the
     // pointer is over and allowed to light up this frame, if any - see
     // RenderItems for what "allowed" means while something is held.
     void PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton);
@@ -189,8 +189,8 @@ private:
     // texture, only while something draws it: while a panel shows its
     // canvas, so a library of screenshots costs nothing while it isn't
     // being browsed. The expensive part is the decode, not the memory - a
-    // preview is at most kOverviewPreviewMaxExtent on its long edge, a
-    // couple of hundred kilobytes against the eight megabytes it came from.
+    // preview is at most LibraryStore::kThumbnailMaxExtent on its long edge,
+    // a couple of hundred kilobytes against the eight megabytes it came from.
     //
     // Resets the per-frame decode budget - see Previews.
     void BeginOverviewPreviewFrame();
@@ -264,8 +264,8 @@ private:
     // How many previews are still allowed to be read this frame, one budget
     // per cost. Both reset each frame previews are drawn.
     //
-    // Full images are the fallback for a library with no sidecar
-    // thumbnails, and a decode is milliseconds - a handful per frame, so
+    // Full images are the fallback for a picture stored without a
+    // thumbnail, and a decode is milliseconds - a handful per frame, so
     // the panel doesn't stall on the frame it opens, which is exactly the
     // frame it must not. Thumbnails are the ordinary path and cost well
     // under a millisecond, so the budget is high enough that a normal

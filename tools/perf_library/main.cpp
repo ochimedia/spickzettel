@@ -1,7 +1,7 @@
 // Writes a synthetic Spickzettel library, for measuring how the overlay
 // behaves against a known amount of drawing.
 //
-// Built through CanvasManager and LibraryStore rather than by emitting JSON
+// Built through CanvasManager and LibraryStore rather than by writing rows
 // directly, so a generated library is by construction exactly what the app
 // itself would have written - if the on-disk format changes, this follows it
 // without anyone remembering to update a second copy of the schema.

@@ -26,7 +26,7 @@ TEST(Win32PlatformHostTest, TheHostWindowIsTopLevelAndAnswersASessionEnd) {
     ASSERT_NE(hwnd, nullptr) << "not a top-level window, so not one a session end reaches";
     EXPECT_FALSE(IsWindowVisible(hwnd)) << "top-level, but never on screen";
 
-    EXPECT_EQ(SendMessageA(hwnd, WM_QUERYENDSESSION, 0, 0), TRUE) << "fine by us, once the flush has run";
+    EXPECT_EQ(SendMessageA(hwnd, WM_QUERYENDSESSION, 0, 0), TRUE) << "fine by us, once the settle has run";
     EXPECT_EQ(sessionEnds, 1);
     SendMessageA(hwnd, WM_ENDSESSION, TRUE, 0);
     EXPECT_EQ(sessionEnds, 2) << "and again when it is decided";
@@ -61,7 +61,7 @@ TEST(Win32PlatformHostTest, ACloseFromOutsideExitsAsTheTrayMenuDoes) {
     EXPECT_EQ(sessionEnds, 1);
     SendMessageA(hwnd, WM_ENDSESSION, TRUE, ENDSESSION_CLOSEAPP);
     EXPECT_EQ(exits, 2) << "the Restart Manager waits for it to go";
-    EXPECT_EQ(sessionEnds, 1) << "the exit's own flush, not another before it";
+    EXPECT_EQ(sessionEnds, 1) << "the exit's own settle, not another before it";
 }
 
 // The same close sent to the overlay, which is the window taskkill finds

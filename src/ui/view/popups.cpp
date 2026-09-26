@@ -584,7 +584,7 @@ void Popups::RenderColorChooser(float displayW, float displayH) {
     const bool open = ImGui::BeginPopup(kColorChooserPopupId);
     ImGui::PopStyleVar();
     // Closed since the last frame, what it was left on is the color from
-    // now on, and the next time the app starts - see PopupClosed.
+    // now on, and the next time the app starts - see Closed.
     Drawn(PopupKind::ColorChooser, open);
     if (!open) {
         return;

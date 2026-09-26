@@ -20,7 +20,7 @@ namespace sz::core {
 // state without reaching into CanvasManager's private members.
 struct CanvasManagerSnapshot {
     std::vector<Folder> folders;
-    std::vector<Canvas> canvases;  // items included; each Canvas's liveLayer is not persisted (see Canvas::liveLayer).
+    std::vector<Canvas> canvases;  // items included
     FolderId currentFolderId = 0;
     CanvasId currentCanvasId = 0;
 };
@@ -159,7 +159,7 @@ public:
     // canvases is a legal state of the model, and one a delete can leave
     // behind. It is not a state the *UI* makes on purpose: the Overview's
     // "New folder" follows this with a canvas of its own (see
-    // OverlayApp::CreateCanvasInCurrentFolder).
+    // Editor::CreateCanvasInCurrentFolder).
     FolderId AddFolder(std::string name);
     // Browse-state only - does not affect `currentCanvasId_`. No-op if `id`
     // doesn't exist or is deleted.

@@ -1003,7 +1003,7 @@ void OverviewPanel::RenderOverviewAboutPanel() {
         // The licenses, in the same panel and the same scroll region as
         // the About text rather than in a popup: this is a page you read,
         // not a thing you act on, and the Overview has enough windows
-        // stacked over it already (see OverviewPanel::StackSurfaces). The way back
+        // stacked over it already (see OverlayApp::StackSurfaces). The way back
         // is in the panel's footer, which does not scroll.
         RenderMarkdownSubset(build::NoticesText());
         ImGui::PopTextWrapPos();
@@ -1064,7 +1064,7 @@ void OverviewPanel::BeginRenaming(std::optional<FolderId> folder, std::optional<
                              [this] {
                                  // A rename field gives the keyboard back when ImGui
                                  // deactivates it (see the InputText sites in
-                                 // RenderOverview). Stopped from outside - the Overview
+                                 // RenderFolderSidebar and RenderCanvasGrid). Stopped from outside - the Overview
                                  // closed between frames - that frame never comes, and the
                                  // keyboard stayed borrowed from the game for the rest of
                                  // the session. ReleaseTextInput is idempotent.

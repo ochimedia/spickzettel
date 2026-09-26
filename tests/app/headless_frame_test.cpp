@@ -545,7 +545,7 @@ TEST_F(HeadlessAppTest, ARightClickOnEmptyCanvasLeavesDrawingModeAndOpensTheMenu
 
 // Two menus asked for before a frame could open either: the one asked for
 // last is the one that comes up, whatever order the frame draws them in -
-// see OverlayApp::Effect.
+// see Popups::Effect.
 TEST_F(HeadlessAppTest, OfTwoMenusAskedForBetweenFramesTheLastIsTheOneUp) {
     ShowEditMode();
     StepFrame();
@@ -1783,7 +1783,7 @@ TEST_F(HeadlessAppTest, ARightClickOnASnippetSelectsItAndOpensItsContextMenu) {
 }
 
 // The menu belongs to the click that never dragged: a right-drag is a
-// resize (see ARightDragFromNearestEdgeResizes...) and must leave no menu
+// resize (see ARightDragResizesFromTheNearestEdge...) and must leave no menu
 // hanging open over the snippet it just resized.
 TEST_F(HeadlessAppTest, ARightDragResizesAndOpensNoContextMenu) {
     ShowEditMode();
@@ -4211,7 +4211,7 @@ TEST_F(HeadlessAppTest, ANoteNothingWasTypedIntoGoesWhenTheHandMovesOn) {
     EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty()) << "erased, not kept deleted";
 }
 
-// Hiding and exiting both flush, and a note being typed is the note as it
+// Hiding and exiting both settle, and a note being typed is the note as it
 // is typed (see Session::PreviewText) - but its edit is one step only once
 // it is committed, which both do on the way out.
 TEST_F(HeadlessAppTest, HidingByHotkeyCommitsTheNoteBeingTyped) {
@@ -4421,7 +4421,7 @@ protected:
         std::filesystem::remove_all(root_);
     }
 
-    // One drawing on the canvas, so there is something unsaved.
+    // One drawing on the canvas, so there is something to write.
     void PlaceADrawing() {
         ShowEditMode();
         StepFrame();

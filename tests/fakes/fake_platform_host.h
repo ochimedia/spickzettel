@@ -293,10 +293,9 @@ public:
 
     std::vector<platform::DisplayInfo> ListDisplays() const override { return displays; }
 
-    // Empty by default, same "no persistence" convention as
-    // dataDirectoryPath just below (see TrayController::OnSettingsChanged)
-    // - a test opts in by pointing this at a real (typically temporary)
-    // file path.
+    // Empty by default, same "no persistence" convention as libraryPath
+    // (see TrayController::PersistConfig) - a test opts in by pointing this
+    // at a real (typically temporary) file path.
     std::filesystem::path GetConfigFilePath() const override { return configFilePath; }
     std::filesystem::path configFilePath;
 

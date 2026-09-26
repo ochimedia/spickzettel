@@ -161,7 +161,7 @@ std::optional<platform::KeyCombo> ParseHotkey(std::string_view text) {
 
 std::string FormatHotkey(const platform::KeyCombo& combo) {
     if (!combo.IsValid() && !combo.IsMouseButton()) {
-        return std::string();  // unbound: nothing to spell (the file says null - see HotkeyJson)
+        return std::string();  // unbound: nothing to spell (the file says null - see Write(HotkeyRule))
     }
     std::string result;
     if (combo.ctrl) {

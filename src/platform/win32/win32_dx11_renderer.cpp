@@ -399,8 +399,9 @@ void Win32Dx11Renderer::NewFrame() {
     // is then already in the past: a message meant to last two seconds is
     // over before it is drawn once, which is exactly what a capture taken
     // while hidden looked like - the shot landed and nothing was ever
-    // said. Win32OverlayWindow::Show already resets the app's *own* delta
-    // for the same reason; this is the same fix for the clock ImGui keeps.
+    // said. The window's Show step (Win32OverlayWindow::Carry) already
+    // resets the app's *own* delta for the same reason; this is the same
+    // fix for the clock ImGui keeps.
     //
     // A ceiling rather than a reset, because it costs nothing to apply
     // every frame and covers every other way a frame can be late (a

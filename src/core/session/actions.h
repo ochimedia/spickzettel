@@ -79,7 +79,7 @@ constexpr std::optional<ItemCreationKind> CreationKindFor(Tool tool) {
 enum class CreateAction { NewCanvas, NewCanvasWithSelection };
 
 // One of the buttons on the selection bar - the small pill that floats
-// over the selected snippets (see OverlayApp::PaintSelectionBar). Five of
+// over the selected snippets (see CanvasView::PaintSelectionBar). Five of
 // them act on the selection: Close deletes it, Pin pins or unpins it,
 // Minimize sends it to the dock; Maximize and More take the snippet
 // selected last. The other four are the *drawing* bar, which the pill
@@ -97,7 +97,7 @@ enum class ChromeButton { Close, Maximize, Minimize, More, Pin, Pen, Eraser, Tex
 // the selection on it; Paste puts what is on it onto the canvas being
 // looked at. The clipboard holds ids rather than snippets, so a Cut takes
 // nothing away until the Paste that moves it - see
-// OverlayApp::PasteFromClipboard.
+// Editor::PasteFromClipboard.
 //
 // Duplicate is the copy and the paste in one step, and is here because
 // that is where a hand goes looking for it. It deliberately leaves the

@@ -46,10 +46,11 @@ PickerOrder SamplePickerOrder() {
 
 // A color swatch in the Settings panel opens ImGui's own picker, which -
 // unlike every popover this app opens itself - has no Begin/End pair of
-// ours to hang a per-frame "stay in front" on. The panel reasserts itself
-// to the front every frame, so without help the picker is buried the frame
-// after it opens: visible for one frame, then gone, with the clicks that
-// follow landing on the panel. See OverlayApp::KeepChildPopupsInFront.
+// ours to hang a per-frame "stay in front" on. The panel is brought to the
+// front every frame, so without help the picker is buried the frame after
+// it opens: visible for one frame, then gone, with the clicks that follow
+// landing on the panel. See OverlayApp::StackSurfaces, which finds it
+// through ImGui's open-popup stack.
 void ExpectPickerInFrontOfThePanel(const PickerOrder& order) {
     ASSERT_GT(order.popupsOpen, 0) << "the color picker never opened";
     ASSERT_GE(order.pickerIndex, 0);
@@ -72,7 +73,7 @@ size_t CanvasesInFolder(const CanvasManager& canvases, FolderId folderId) {
 // ImGui deactivates the field. Switching to view mode closes the Overview
 // from outside the frame, so the field is never rendered again and that
 // deactivation never comes - the keyboard was left borrowed for the rest
-// of the session. See OverlayApp::CloseOverview.
+// of the session. See OverviewPanel::Close.
 TEST_F(UiTest, SwitchingModeWhileRenamingGivesTheKeyboardBack) {
     ShowEditMode();
     StepFrame();

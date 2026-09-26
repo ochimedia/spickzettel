@@ -363,7 +363,7 @@ bool ScreenChrome::HandleKey(const Event& event, bool editMode) {
 // whole overlay window out of what it grabs (see CaptureScreen), so nothing
 // this draws can reach a captured image.
 //
-// It moves, every kDemoWatermarkMoveSeconds. A mark that lives in one
+// It moves, every kMoveSeconds. A mark that lives in one
 // corner is a mark you stop seeing after a minute and can work around
 // permanently - putting one snippet over it and never moving that snippet
 // again. Wandering, it has to be dealt with rather than arranged around,

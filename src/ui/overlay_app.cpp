@@ -133,8 +133,7 @@ bool OverlayApp::PopupOpen() const {
 // ================= Input, and the first run =================
 
 namespace {
-// The backing a text note gets by default (ApplyCreationDefaults, and the
-// first-run welcome note). Half-transparent black: note text defaults to
+// The backing the first-run welcome notes get. Black: note text defaults to
 // white, and white on a light backing is poor contrast wherever the overlay
 // sits over something pale. Black behind white reads on anything.
 constexpr uint32_t kNoteBackgroundColorRGBA = 0x000000FFu;

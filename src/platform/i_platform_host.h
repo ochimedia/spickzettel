@@ -59,7 +59,8 @@ public:
 
     // Called on the app thread when the OS is ending the user's session -
     // logging off, shutting down - before the process is taken down. The
-    // last chance to write what is unsaved; see TrayController::OnSessionEnding.
+    // last chance to finish what is in flight and write a settings file
+    // still owed; see TrayController::OnSessionEnding.
     virtual void SetSessionEndCallback(std::function<void()> callback) = 0;
 
     // Runs `task` on the app thread after the current frame or message, and

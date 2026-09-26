@@ -70,9 +70,8 @@ void ApplyAccentToStyle(ImGuiStyle& style) {
 }
 
 // ImGui::GetStyle() dereferences the current context, which the platform
-// window's renderer creates (Win32Dx11Renderer::Initialize,
-// DevLinuxGlRenderer::Initialize) on the first showing - hence a frame, and
-// never OverlayApp::AttachTo.
+// window's renderer creates (Win32Dx11Renderer::Initialize) on the first
+// showing - hence a frame, and never OverlayApp::AttachTo.
 void ApplyStyle(float scale) {
     ImGuiStyle& style = ImGui::GetStyle();
     // The base font size is the font's, set when it was loaded, and not a

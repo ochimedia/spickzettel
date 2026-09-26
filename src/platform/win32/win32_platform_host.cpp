@@ -311,8 +311,8 @@ void Win32PlatformHost::Quit(int exitCode) {
 }
 
 void Win32PlatformHost::Exit() {
-    // The tray menu's Exit, which flushes first; with nobody listening yet,
-    // there is nothing to flush.
+    // The tray menu's Exit, which settles first; with nobody listening yet,
+    // there is nothing to settle.
     if (trayCallback_) {
         trayCallback_(TrayCommand::Exit);
     } else {

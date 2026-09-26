@@ -928,7 +928,7 @@ void Editor::StepSelectionOpacity(int steps, bool background) {
             style.pictureOpacity = stepped(style.pictureOpacity, 0.0f);
             shown = style.pictureOpacity;
         } else {
-            // Not below a tenth - see OverlayApp::RenderItemOpacity.
+            // Not below a tenth - see Popups::RenderItemOpacity.
             style.foregroundOpacity = stepped(style.foregroundOpacity, 0.1f);
             shown = style.foregroundOpacity;
         }

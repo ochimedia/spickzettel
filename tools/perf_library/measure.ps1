@@ -23,7 +23,7 @@ param(
     [int]$Repeat = 1,
     [int]$SettleSeconds = 6,
     # Turns on the input-options HUD, whose first line is the frame rate and
-    # frame time (see OverlayApp::DrawInputOptionsHud). Note this is NOT
+    # frame time (see ScreenChrome::DrawInputOptionsHud). Note this is NOT
     # `showDebugOverlay`, which draws the cyan border and the canvas/mouse
     # readout and carries no timing at all. The HUD also claims the number
     # keys while it is up, so don't send digits during a measurement.
@@ -72,12 +72,12 @@ function New-MeasurementConfig {
 {
   "version": 1,
   "hotkeys": { "editMode": "Ctrl+Alt+O", "viewMode": "Ctrl+Alt+V", "quickCapture": "Ctrl+Alt+C", "silentCapture": "Ctrl+Alt+S" },
-  "drawing": { "strokeColor": "#FF0000", "strokeWidth": 3.0, "renderMode": "$Mode", "paintPixels": false },
-  "appearance": { "showItemBorders": true, "itemChromeMode": "always" },
+  "drawing": { "strokeColor": "#FF0000", "strokeWidth": 3.0, "renderMode": "$Mode" },
+  "appearance": { "showItemBorders": true },
   "overview": { "showStrokes": true, "showBitmaps": false },
-  "input": { "dontStealFocus": false, "softwarePointer": false, "rawMouseInput": false,
-             "dontForwardKeystrokes": false, "counterRawMouseInput": false, "freezeScreen": false },
-  "diagnostics": { "showDebugOverlay": false, "showInputOptionsHud": $($Hud.ToString().ToLower()), "showResizeHandleRegions": false }
+  "behavior": { "dontStealFocus": false, "softwarePointer": false, "rawMouseInput": false,
+                "dontForwardKeystrokes": false, "counterRawMouseInput": false, "freezeScreen": false },
+  "diagnostics": { "showDebugOverlay": false, "showInputOptionsHud": $($Hud.ToString().ToLower()) }
 }
 "@
     Set-Content -Path $Path -Value $json -Encoding UTF8

@@ -71,7 +71,7 @@ public:
 
     // Opens the menu. Inside a frame, at its top level, like Render - which
     // is why the press that asks for a menu queues this rather than calling
-    // it (see OverlayApp::Effect).
+    // it (see Popups::Effect).
     void Open();
 
     // What a frame's Render did: whether the menu was on screen, and the

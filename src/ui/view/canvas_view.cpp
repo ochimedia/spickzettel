@@ -500,8 +500,8 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         const char* tooltip = nullptr;
         switch (button) {
             // The pen's and the eraser's icons show the shape they are
-            // cycled to (see ActivateBarButton), so the button reads as
-            // what a drag will make.
+            // cycled to (see DrawingMode::CyclePenShape), so the button
+            // reads as what a drag will make.
             case ChromeButton::Pen:
                 icon = editor_.PenShape() == DrawShape::Line        ? &icons::kLine
                        : editor_.PenShape() == DrawShape::Rectangle ? &icons::kRectangle
