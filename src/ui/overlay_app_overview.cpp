@@ -352,21 +352,6 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
                   ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing |
                       ImGuiWindowFlags_NoMove);
-    // Reasserted here, right after Begin rather than after End - still
-    // after the items' own per-frame reassert (see the backdrop's own
-    // BringToFront for why that ordering matters), but *before* this
-    // window's own body renders. That order matters for a reason the
-    // backdrop never runs into: the
-    // Settings tab's hotkey editor opens a real ImGui popup window (see
-    // RenderHotkeyEditor's own KeepPopoverInFront call) nested inside this
-    // one. BringWindowToDisplayFront just moves its target to the end of
-    // ImGui's window list - whichever such call runs *last* in the frame
-    // wins the front spot for the frame *after*. Called after End() - after
-    // the body, including that popup's own KeepPopoverInFront - it would
-    // always run last and bury the popup one frame after it opened: a
-    // dropdown that appears to open but cannot be clicked. Called here, the
-    // popup's own later KeepPopoverInFront wins.
-    BringToFront("##overview_panel");
 
     RenderOverviewHeader();
     ImGui::Separator();
@@ -405,18 +390,6 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     RenderOverviewFooter(showCanvasesBody);
 
     ImGui::End();
-    // Anything opened from inside this panel that has no Begin/End pair of
-    // ours to reassert itself - ImGui's own color picker, opened by a
-    // ColorEdit swatch, is the whole list of them - goes back in front of
-    // the panel here. The panel brings itself to the front on every frame
-    // (see the BringToFront above), and BringWindowToDisplayFront is just
-    // a move to the end of ImGui's window list, so whoever calls it last
-    // wins: without this the picker was in front on the frame it opened
-    // and behind the panel on every frame after, which is exactly what it
-    // looked like - a picker that flashed up and vanished, with the clicks
-    // meant for it landing on the panel. The properties popover carries the
-    // same call for the same reason.
-    KeepChildPopupsInFront();
 }
 
 bool OverlayApp::RenderPanelBackdrop(const char* windowId, float displayW, float displayH) {
@@ -439,14 +412,6 @@ bool OverlayApp::RenderPanelBackdrop(const char* windowId, float displayW, float
     ImGui::End();
     ImGui::PopStyleVar(3);
     ImGui::PopStyleColor();
-    // Ordinary windows only get pushed to the front of ImGui's own window
-    // stack automatically once, the first frame they're created - items
-    // and the canvas bar each reassert themselves to the front every frame
-    // (see BringToFront's other call sites), and since RenderItems/
-    // RenderCanvasBar both run before the Overview every frame, that left
-    // them ending up in front of (and clickable over) an Overview that's
-    // been open more than one frame, without this doing the same.
-    BringToFront(windowId);
     return clicked;
 }
 
@@ -1147,9 +1112,6 @@ void OverlayApp::RenderSettingsAppearance() {
         ImGui::SameLine();
         ImGui::SetNextItemWidth(Px(300.0f));
         if (ImGui::BeginCombo("##overlaydisplay", preview.c_str())) {
-            // Same reason as the Profiles dropdowns: a popup inside a window
-            // that re-asserts itself to the front every frame has to as well.
-            KeepPopoverInFront();
             if (ImGui::IsWindowAppearing() && displayListCallback_) {
                 displays_ = displayListCallback_();
             }
@@ -1204,7 +1166,6 @@ void OverlayApp::RenderSettingsAppearance() {
         // Applied from the next frame on, by OnFrame - the whole of one
         // frame is drawn at one scale.
         if (ImGui::BeginCombo("##uiscale", preview)) {
-            KeepPopoverInFront();
             if (ImGui::Selectable(Labeled(autoText, "uiscaleauto"), Cfg().uiScalePercent == 0)) {
                 settings_.Set(setting::kUiScale, 0);
             }
@@ -1787,10 +1748,6 @@ void OverlayApp::RenderEditTargetPicker(ProfileGroup group) {
     // other name ending the same way. Rows are told apart by index, which
     // two profiles of one name do not share either.
     if (ImGui::BeginCombo("##edittarget", nullptr, ImGuiComboFlags_CustomPreview)) {
-        // Same reason as the Profiles section's own dropdown: a popup
-        // nested inside a window that re-asserts itself to the front every
-        // frame has to do the same, or it opens behind the panel.
-        KeepPopoverInFront();
         if (ImGui::Selectable(Labeled(strings::kProfilesDefaults, "targetdefaults"), !editProfile_.has_value())) {
             editProfile_.reset();
         }
@@ -2369,7 +2326,7 @@ void OverlayApp::RenderOverviewAboutPanel() {
         // The licenses, in the same panel and the same scroll region as
         // the About text rather than in a popup: this is a page you read,
         // not a thing you act on, and the Overview has enough windows
-        // stacked over it already (see KeepPopoverInFront). The way back
+        // stacked over it already (see OverlayApp::StackSurfaces). The way back
         // is in the panel's footer, which does not scroll.
         RenderMarkdownSubset(build::NoticesText());
         ImGui::PopTextWrapPos();
@@ -2570,7 +2527,6 @@ void OverlayApp::RenderConfirmDeletePopover() {
     if (!open) {
         return;
     }
-    KeepPopoverInFront();
     if (!PopupUp(PopupKind::ConfirmDelete)) {
         // Ended from outside this frame, before ImGui heard of it.
         ImGui::CloseCurrentPopup();

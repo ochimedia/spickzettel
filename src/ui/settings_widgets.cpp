@@ -97,11 +97,6 @@ void HelpMarker(const char* id, const char* title, const char* text) {
         ImGui::OpenPopup(popupId);
     }
     if (ImGui::BeginPopup(popupId)) {
-        // Same reason as every other popup nested in this panel: the
-        // Overview re-asserts itself to the front every frame, so anything
-        // opened inside it has to as well or it opens behind. See
-        // KeepPopoverInFront.
-        KeepPopoverInFront();
         ImGui::PushTextWrapPos(Px(kHelpWrapWidth));
         // The title repeated inside, because a popover can land over the
         // row that opened it.

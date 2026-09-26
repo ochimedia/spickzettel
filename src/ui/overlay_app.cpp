@@ -21,16 +21,12 @@
 #include "platform/pen_glyph.h"
 
 #include <imgui.h>
-// For BringWindowToDisplayFront/FindWindowByName - see the "Window
-// stacking order" note in docs/ARCHITECTURE.md for why this is needed:
-// the app's own layers and panels (the canvas layer, the items layer, the
-// canvas bar, the screen chrome) all use NoBringToFrontOnFocus (so a
-// click on one doesn't jump it to front, which would fight the order the
-// frame draws them in), but that flag also changes where a *new* window
-// is first inserted in ImGui's internal stack, and nothing else
-// re-asserts the intended order afterward. Pinned to a specific ImGui
-// commit (see cmake/FetchImGui.cmake), so relying on this internal header
-// is a deliberate, contained choice rather than an accident.
+// For BringWindowToDisplayFront, FindWindowByName and the open-popup stack
+// - see StackSurfaces, which sets the order of every window the overlay
+// draws, since neither the order they are drawn in nor ImGui's own focus
+// history says it. Pinned to a specific ImGui commit (see
+// cmake/FetchImGui.cmake), so relying on this internal header is a
+// deliberate, contained choice rather than an accident.
 #include <imgui_internal.h>
 
 namespace sz::ui {
@@ -625,46 +621,6 @@ void EndScreenLayer() {
     ImGui::PopStyleVar();
 }
 
-// Re-asserts `name`'s window as the frontmost, undoing whatever position
-// ImGui's own insertion/focus history left it at. Call once per frame, in
-// back-to-front order, for every window whose stacking needs to track the
-// data model rather than ImGui's default focus-driven ordering.
-void BringToFront(const char* name) {
-    if (ImGuiWindow* window = ImGui::FindWindowByName(name)) {
-        ImGui::BringWindowToDisplayFront(window);
-    }
-}
-
-// Reasserts the *currently open* popup (call from inside its own
-// BeginPopup/EndPopup scope) to the front of the display order - needed
-// every single frame it's open, not just the frame it was created on: see
-// this function's call site in RenderItemPropertiesPopover for why an
-// opener window's own per-frame
-// BringToFront(name) would otherwise quietly win the front spot back on
-// every later frame. Takes the window pointer directly rather than going
-// through the name-based BringToFront above: an anonymous popup's actual
-// ImGuiWindow name isn't the id string passed to OpenPopup/BeginPopup
-// (that's only the ID seed), so a name lookup for it wouldn't find
-// anything - GetCurrentWindow() is the only reliable way to get it.
-void KeepPopoverInFront() { ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow()); }
-
-// See this function's own doc comment (overlay_app_internal.h) for why it's
-// needed at all. g.OpenPopupStack is one shared stack for every currently
-// open popup app-wide, nested in open order; g.BeginPopupStack reflects how
-// many levels of that stack are still inside an active Begin/End scope
-// right now - since a widget like ColorEdit3 has already closed its own
-// nested popup's Begin/End pair by the time it returns, anything from
-// BeginPopupStack.Size onward in OpenPopupStack is exactly "still open, but
-// with no Begin call left this frame to reassert it" - reach into
-// imgui_internal.h and do that reassertion here instead.
-void KeepChildPopupsInFront() {
-    ImGuiContext& g = *ImGui::GetCurrentContext();
-    for (int i = g.BeginPopupStack.Size; i < g.OpenPopupStack.Size; ++i) {
-        if (ImGuiWindow* popupWindow = g.OpenPopupStack[i].Window) {
-            ImGui::BringWindowToDisplayFront(popupWindow);
-        }
-    }
-}
 
 // Converts our 0xRRGGBBAA packing (see stroke.h) to ImGui's native ImU32.
 ImU32 ToImColor(uint32_t colorRGBA, float opacity) {
@@ -1061,10 +1017,76 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     DrawOverCanvas(display.x, display.y);
     DrawPanels(display.x, display.y);
     DrawMessages();
-    // 8. The stack: for now each surface brings itself to the front as it
-    // is drawn, in this order - see BringToFront.
+    StackSurfaces();
     DrawPointer();
     Apply();
+}
+
+namespace {
+// Brings `window` to the front, if this frame drew it, and then every popup
+// ImGui has open inside it - a dropdown, a help popover, a color picker -
+// each followed by any open inside it in turn.
+void Front(ImGuiWindow* window) {
+    if (window == nullptr || !window->Active) {
+        return;
+    }
+    ImGui::BringWindowToDisplayFront(window);
+    const ImGuiContext& g = *ImGui::GetCurrentContext();
+    for (const ImGuiPopupData& popup : g.OpenPopupStack) {
+        const ImGuiWindow* parent = popup.Window != nullptr ? popup.Window->ParentWindow : nullptr;
+        if (parent != nullptr && popup.Window != window && parent->RootWindow == window) {
+            Front(popup.Window);
+        }
+    }
+}
+
+void Front(const char* name) { Front(ImGui::FindWindowByName(name)); }
+
+// The window of one of the app's popups, opened at the top level of a
+// frame as all of them are, while ImGui has it open. The stack is set at
+// the top level too, so the id hashes the same way here.
+ImGuiWindow* AppPopupWindow(PopupKind kind) {
+    const ImGuiID id = ImGui::GetID(PopupId(kind));
+    for (const ImGuiPopupData& popup : ImGui::GetCurrentContext()->OpenPopupStack) {
+        if (popup.PopupId == id) {
+            return popup.Window;
+        }
+    }
+    return nullptr;
+}
+}  // namespace
+
+// Section 3 of docs/VIEW_LAYER.md, bottom to top: each surface brought to
+// the front in turn, once everything is drawn. A window's place is read
+// only when the frame is rendered and when the next frame hit-tests, so
+// one pass here decides both. Before, each surface brought itself to the
+// front as it was drawn, and whichever call ran last in the frame won: a
+// popup inside the Overview had to come after the panel's own call, or it
+// opened behind it - a dropdown that could not be clicked, a color picker
+// that flashed up and vanished. The order is today's, including the
+// border and the demo mark over the popups on the canvas (finding 3).
+void OverlayApp::StackSurfaces() {
+    Front("##spickzettel_canvas");
+    Front("##sz_items_layer");
+    if (const std::optional<ItemId> note = editor_.EditingNote()) {
+        char noteWinName[40];
+        std::snprintf(noteWinName, sizeof(noteWinName), "##noteedit%llu", static_cast<unsigned long long>(*note));
+        Front(noteWinName);
+    }
+    Front("##dock");
+    Front("##canvas_bar");
+    // The popups over the canvas, one up at a time.
+    for (const PopupKind kind : {PopupKind::ItemProperties, PopupKind::ItemMenu, PopupKind::CanvasMenu,
+                                 PopupKind::EmptyCanvasMenu, PopupKind::ColorChooser}) {
+        Front(AppPopupWindow(kind));
+    }
+    Front("##sz_input_hud_layer");
+    Front("##sz_chrome_layer");
+    Front("##overview_backdrop");
+    Front("##overview_panel");
+    Front("##cheat_sheet_backdrop");
+    Front("##cheat_sheet_panel");
+    Front(AppPopupWindow(PopupKind::ConfirmDelete));
 }
 
 void OverlayApp::Prepare(float displayW, float displayH) {
@@ -2360,13 +2382,11 @@ void OverlayApp::RenderCanvasLayer(float displayW, float displayH) {
 void OverlayApp::RenderScreenChrome(float displayW, float displayH) {
     DrawInputOptionsHud(BeginScreenLayer("##sz_input_hud_layer", displayW, displayH));
     EndScreenLayer();
-    BringToFront("##sz_input_hud_layer");
 
     ImDrawList* chrome = BeginScreenLayer("##sz_chrome_layer", displayW, displayH);
     DrawEditModeBorder(chrome, displayW, displayH);
     DrawDemoWatermark(chrome, displayW, displayH);
     EndScreenLayer();
-    BringToFront("##sz_chrome_layer");
 }
 
 

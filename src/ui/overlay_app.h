@@ -421,6 +421,9 @@ private:
     void DrawPanels(float displayW, float displayH);
     // 7. The message and the persistence warning.
     void DrawMessages();
+    // 8. The stack: every window drawn brought to the front in section 3's
+    // order, the popups ImGui opened inside one just above it.
+    void StackSurfaces();
     // 9. The pointer's shape, and the software pointer.
     void DrawPointer();
     // 10. The actions recorded in 2 to 6, in order; the pen's width once its

@@ -113,12 +113,6 @@ ContextMenu::Drawn ContextMenu::Render(ImVec2 anchor, const Builder& build) {
     if (!open) {
         return Drawn{};
     }
-    // Every item re-asserts itself to the front on every frame it is
-    // drawn, so a popup has to as well or the first snippet it overlaps
-    // covers it - the same per-frame reassertion OverlayApp's own popovers
-    // make (see KeepPopoverInFront), done here directly so this file needs
-    // to know nothing about the app.
-    ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
 
     if (entries.empty()) {
         // Nothing left to act on - the snippet it was opened over has been

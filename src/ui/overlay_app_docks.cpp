@@ -317,9 +317,6 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     }
 
     ImGui::End();
-    // Over the snippets, which re-assert themselves to the front every
-    // frame; under the popovers, which are submitted after it.
-    BringToFront("##canvas_bar");
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);
 

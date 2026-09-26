@@ -1650,6 +1650,16 @@ stays in the draw is a widget's own value: a setting
 previews it, the pen's color while the chooser is dragged. None of these
 adds, removes, reorders or switches anything a draw is walking.
 
+The stack is set once a frame, after the draw (`StackSurfaces`): each
+surface brought to the front in the order of `docs/VIEW_LAYER.md`,
+section 3, and each popup ImGui opened inside one just above it. Before,
+19 calls in eight files each brought a window to the front as it was
+drawn, and since the last call in a frame wins, the order was that of
+the calls: two faults - a Settings dropdown that opened behind the panel
+and could not be clicked, a color picker that flashed up and vanished -
+were each fixed by moving a call, and the order that resulted was
+written down nowhere.
+
 ### Making a snippet
 
 Making a snippet is the thing done most often, so it is a press on empty
@@ -2438,8 +2448,8 @@ the platform hides the whole overlay before grabbing pixels.
   the app paints into is `NoInputs`; ImGui's hit-test does not stop at
   an excluded window but at the next ordinary one behind it.
 - `NoBringToFrontOnFocus` also changes where a *new* window is first
-  inserted (the back). The app re-asserts its layers to the front every
-  frame, in the order it draws them.
+  inserted (the back). The app sets the order of every window it draws
+  itself, every frame (`OverlayApp::StackSurfaces`).
 - Chrome that has to sit at a stated height gets a screen layer of its
   own; the background and foreground draw lists are fixed at the very
   bottom and the very top, and a border drawn at the bottom was invisible
@@ -2458,10 +2468,14 @@ the platform hides the whole overlay before grabbing pixels.
 - A popup's id is scoped to the window current at `OpenPopup`/
   `BeginPopup`; both must run inside the same `Begin`/`End` block or the
   popup silently never opens.
-- `BringWindowToDisplayFront` wins by running *last*; a window that
-  re-asserts itself must do so before any popover it opens renders, and
-  a widget's own internal popup (`ColorEdit3`'s picker) has no `Begin` to
-  hook, so `KeepChildPopupsInFront` walks the open-popup stack for it.
+- `BringWindowToDisplayFront` wins by running *last*, so the app calls it
+  in one place, once everything is drawn: section 3 of
+  `docs/VIEW_LAYER.md`, bottom to top, with every popup ImGui has open
+  inside a window brought up right after that window - found through the
+  open-popup stack, which also reaches a widget's own internal popup
+  (`ColorEdit3`'s picker) that has no `Begin` of ours to hook. Tooltips
+  are drawn in a layer of their own above every window, whatever the
+  order.
 - A popup's default placement is anchored to the mouse and can overlap
   its opener, stealing clicks; pin it with `SetNextWindowPos`.
 - `TextWrapped` wraps to a width that is not settled on a new auto-resize

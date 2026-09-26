@@ -244,7 +244,6 @@ void OverlayApp::RenderCheatSheet(float displayW, float displayH) {
                   ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing |
                       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar);
-    BringToFront("##cheat_sheet_panel");
 
     ImGui::TextColored(theme::kWhite, "%s", strings::kCheatSheetTitle);
     // How to get out again, right-aligned on the title's line.

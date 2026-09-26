@@ -66,7 +66,6 @@ void OverlayApp::RenderItemPropertiesPopover() {
     if (!open) {
         return;
     }
-    KeepPopoverInFront();
     if (!up) {
         // Ended from outside this frame, before ImGui heard of it.
         ImGui::CloseCurrentPopup();
@@ -103,9 +102,6 @@ void OverlayApp::RenderItemPropertiesPopover() {
     }
     RenderItemBackgroundColor(item);
     RenderItemTextStyle(item);
-    // After the background-color ColorEdit3 swatch, not before - see
-    // KeepChildPopupsInFront.
-    KeepChildPopupsInFront();
     // A change of style is one step for as long as the hand is on it - a
     // slider dragged, the color picker's square - and ends when it lets go.
     if (!ImGui::IsAnyItemActive()) {
@@ -371,8 +367,7 @@ void OverlayApp::Queue(const Effect& effect) {
     effects_.push_back(effect);
 }
 
-namespace {
-// The popup's ImGui id, as its render function begins it.
+namespace overlay_detail {
 const char* PopupId(PopupKind kind) {
     switch (kind) {
         case PopupKind::ItemMenu:
@@ -390,7 +385,7 @@ const char* PopupId(PopupKind kind) {
     }
     return "";
 }
-}  // namespace
+}  // namespace overlay_detail
 
 // ================= The popup that is up =================
 
@@ -592,9 +587,6 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
     if (!open) {
         return;
     }
-    // Items re-assert themselves to the front every frame; a popup has to
-    // as well, or the first snippet it overlaps covers it.
-    KeepPopoverInFront();
     if (!up) {
         // Ended from outside this frame, before ImGui heard of it.
         ImGui::CloseCurrentPopup();

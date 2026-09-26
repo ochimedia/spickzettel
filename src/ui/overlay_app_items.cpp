@@ -225,9 +225,6 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
         }
     }
     EndScreenLayer();
-    // Above the canvas layer, which was created before it: both carry
-    // NoBringToFrontOnFocus, so each went in at the back on creation.
-    BringToFront("##sz_items_layer");
 
     // The text editor, while an item's note is being edited: a real ImGui
     // widget, so a window of its own, above every item rather than just
@@ -601,7 +598,6 @@ void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     ImGui::PopStyleColor();
     ImGui::PopFont();
     ImGui::End();
-    BringToFront(noteWinName);
 }
 
 // One square thumbnail tile per minimized item on the current canvas (see
@@ -696,7 +692,6 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         }
     }
     ImGui::End();
-    BringToFront("##dock");
 }
 
 

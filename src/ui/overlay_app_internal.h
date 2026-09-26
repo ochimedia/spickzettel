@@ -51,6 +51,8 @@ namespace sz::ui::overlay_detail {
 inline constexpr const char* kItemPropertiesPopupId = "##item_properties_popover";
 inline constexpr const char* kColorChooserPopupId = "##color_chooser";
 inline constexpr const char* kConfirmDeletePopupId = "##confirm_delete_popover";
+// A popup's ImGui id, as its render function begins it.
+const char* PopupId(PopupKind kind);
 
 // Color palette + corner-radius scale - see docs/ARCHITECTURE.md's
 // "Visual theme" section. Every themed draw call across the split files
@@ -256,38 +258,9 @@ bool DangerIconButton(const char* strId, const Icon& icon);
 // than the background/foreground draw lists, whose height is fixed at the
 // very bottom and the very top.
 //
-// Call BringToFront on the same id, once per frame, in the order the
-// layers should stack - see RenderScreenChrome.
+// Where a layer sits is the stack's to say - see OverlayApp::StackSurfaces.
 ImDrawList* BeginScreenLayer(const char* id, float displayW, float displayH);
 void EndScreenLayer();
-
-// Re-asserts `name`'s window as the frontmost, undoing whatever position
-// ImGui's own insertion/focus history left it at. Call once per frame, in
-// back-to-front order, for every window whose stacking needs to track the
-// data model rather than ImGui's default focus-driven ordering.
-void BringToFront(const char* name);
-
-// Reasserts the *currently open* popup (call from inside its own
-// BeginPopup/EndPopup scope) to the front of the display order - needed
-// every single frame it's open, not just the frame it was created on.
-// Takes the current window directly rather than going through the
-// name-based BringToFront above: an anonymous popup's actual ImGuiWindow
-// name isn't the id string passed to OpenPopup/BeginPopup (that's only
-// the ID seed), so a name lookup for it wouldn't find anything.
-void KeepPopoverInFront();
-
-// Reasserts any popup nested *underneath* the currently open one (call
-// from the same place as KeepPopoverInFront, after the nested popup's own
-// owning widget - e.g. after an ImGui::ColorEdit3 swatch). A widget like
-// ColorEdit3 opens and closes its own internal popup with no caller-visible
-// Begin/End pair to hook a KeepPopoverInFront() call into, and - unlike our
-// own popups - never reasserts that popup's position in the display order
-// on frames after the one it opened on. Left alone, this popup's own
-// KeepPopoverInFront() call above would then win every frame after that
-// one, since it runs unconditionally and a plain Begin() call for an
-// already-open window doesn't re-front itself. See the definition
-// (overlay_app.cpp) for how it finds such a popup without knowing its name.
-void KeepChildPopupsInFront();
 
 // Which stroke renderer to use - StrokeRenderMode, from
 // core/drawing/stroke_render_mode.h, so the config setting and the drawing

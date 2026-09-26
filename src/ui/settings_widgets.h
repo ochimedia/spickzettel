@@ -105,9 +105,6 @@ void SettingCombo(Settings& settings, const GlobalSetting<ChoiceRule<E>>& row, c
     ImGui::SameLine(Px(labelColumn));
     ImGui::SetNextItemWidth(Px(width));
     if (ImGui::BeginCombo(Labeled("", id), preview)) {
-        // Same reason as every other popup in this panel - see
-        // KeepPopoverInFront.
-        KeepPopoverInFront();
         for (const ChoiceLabel<E>& choice : choices) {
             if (ImGui::Selectable(Labeled(choice.label, choice.id), choice.value == current) &&
                 choice.value != current) {
