@@ -520,15 +520,23 @@ The rules that keep a chain sound:
 - **No steps downward.** A newer file is C11's case.
 
 Tests: each step on its own, from a small document of its source
-version. And one fixture per released version (for now the file
-`v0.1.0` writes), read through the whole chain to the expected config.
+version. And the files each release wrote, read through the whole chain
+to the config they were written from (below).
 
 **No migration exists yet.** Version 1 is current, and C10 adds only the
-means. The file `v0.1.0` writes is kept as a test fixture, together
-with a fixture holding every setting at a value other than its default.
-Reading each fixture must give the expected config, so a later rename
-that forgets its migration fails a test instead of resetting a setting
-in the field.
+means. Settings files are kept as test fixtures in
+`tests/core/config_files/`, of two kinds:
+
+- **What a release wrote**: `v0.1.0-defaults.json` and
+  `v0.1.0-everything.json`, the second with every setting that release
+  had at a value other than its default. They were produced by that
+  release's own serializer and are never edited. Each must read as the
+  config it was written from, so a later rename that forgets its
+  migration fails a test instead of resetting a setting in the field.
+- **What this build writes**: `current-defaults.json` and
+  `current-everything.json`, which the writer must produce byte for
+  byte. A change to the file, such as a new setting, then shows as a
+  diff to review, and the test says where the new text was written.
 
 **Stays as today:**
 
@@ -658,9 +666,9 @@ Roughly, for review. The names may change in the building:
 **Phases.** Each phase is its own set of commits. The tests stay green
 throughout, and the file's text does not change until a phase says so.
 
-1. **Fixtures first.** Record today's `SerializeConfig` output, for the
-   defaults and for a config with every setting changed, as test
-   fixtures. Add tests that read them back.
+1. **Fixtures first** (done). The files of section 8: what `v0.1.0`
+   wrote and what today's build writes, for the defaults and with every
+   setting changed, and the tests that read them.
 2. **The catalog (C1, C2).** Add the rows, and make reading and writing
    loops over them, the profiles' sparse objects included. `AppConfig`
    holds `ProfileableSettings`. Add one test that walks every row:
@@ -673,7 +681,7 @@ throughout, and the file's text does not change until a phase says so.
    - for a Profile row, an override survives the file inside a profile,
      and an absent one stays absent.
 
-   The phase 1 fixtures come out byte for byte.
+   The `current-*` files come out byte for byte.
 3. **The version (C10, C11), the repairs in one place, and writing them
    back (C4).** The hotkey repair moves out of `Initialize`.
 4. **One edit path (C5, C6, C3, C7).** `Settings::Set`, `Preview` and

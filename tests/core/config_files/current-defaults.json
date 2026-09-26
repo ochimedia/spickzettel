@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "hotkeys": {
+    "editMode": "Ctrl+Alt+S",
+    "viewMode": "Ctrl+Alt+V",
+    "quickCapture": "Ctrl+Alt+C",
+    "silentCapture": "Ctrl+Alt+X"
+  },
+  "drawing": {
+    "strokeColor": "#FF0000",
+    "strokeWidth": 3.0,
+    "renderMode": "tessellated",
+    "raiseSelected": true,
+    "screenshotTrigger": "plain",
+    "drawingTrigger": "ctrl"
+  },
+  "appearance": {
+    "showItemBorders": true,
+    "showToastsWhileHidden": true,
+    "imageFilter": "bilinear",
+    "accentColor": "#2C6C7C",
+    "uiScale": "auto",
+    "snippetColors": {
+      "borderFront": "#F5F7F96E",
+      "borderOther": "#F5F7F93C",
+      "borderPinned": "#FF6A3D99"
+    },
+    "canvasBar": {
+      "show": true
+    },
+    "editModeBorder": {
+      "show": true,
+      "color": "#FFFFFF",
+      "opacity": 0.22,
+      "width": 10.0,
+      "onlyWhenEmpty": false
+    }
+  },
+  "bars": {
+    "snippet": [
+      {
+        "button": "pin",
+        "shown": true
+      },
+      {
+        "button": "more",
+        "shown": true
+      },
+      {
+        "button": "minimize",
+        "shown": true
+      },
+      {
+        "button": "maximize",
+        "shown": true
+      },
+      {
+        "button": "close",
+        "shown": true
+      }
+    ],
+    "drawing": [
+      {
+        "button": "pen",
+        "shown": true
+      },
+      {
+        "button": "eraser",
+        "shown": true
+      },
+      {
+        "button": "text",
+        "shown": true
+      },
+      {
+        "button": "color",
+        "shown": true
+      }
+    ]
+  },
+  "overview": {
+    "showStrokes": true,
+    "showBitmaps": true
+  },
+  "defaults": {
+    "screenshot": {
+      "keepAspect": true,
+      "foregroundOpacity": 1.0,
+      "backgroundOpacity": 1.0
+    },
+    "drawing": {
+      "keepAspect": true,
+      "foregroundOpacity": 1.0,
+      "backgroundOpacity": 0.0,
+      "backgroundColor": "#FFFFFF"
+    },
+    "text": {
+      "color": "#FFFFFF"
+    }
+  },
+  "deleted": {
+    "confirmDelete": true,
+    "confirmDeleteForGood": true,
+    "deleteForGoodAutomatically": true,
+    "afterDays": 14
+  },
+  "display": {
+    "id": "",
+    "name": ""
+  },
+  "behavior": {
+    "dontStealFocus": true,
+    "takeFocusOverElevated": true,
+    "softwarePointer": true,
+    "rawMouseInput": true,
+    "dontForwardKeystrokes": true,
+    "counterRawMouseInput": false,
+    "counterThreshold": 100,
+    "freezeScreen": false
+  },
+  "shortcuts": {
+    "pen": "P",
+    "eraser": "E",
+    "text": null,
+    "select": null,
+    "newScreenshot": "S",
+    "newDrawing": "D",
+    "newCanvas": null,
+    "newCanvasWithSelection": "Ctrl+Shift+N",
+    "copy": "Ctrl+C",
+    "cut": "Ctrl+X",
+    "paste": "Ctrl+V",
+    "duplicate": "Ctrl+D",
+    "cheatSheet": "Ctrl+H"
+  },
+  "diagnostics": {
+    "showDebugOverlay": false,
+    "showInputOptionsHud": false
+  },
+  "profiles": []
+}

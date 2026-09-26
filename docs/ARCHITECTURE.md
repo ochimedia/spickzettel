@@ -849,6 +849,17 @@ The file is written
 through temp-then-rename, since truncating it in place leaves a window
 in which every setting is a half-written file.
 
+The files a release wrote are kept as test fixtures
+(`tests/core/config_files/`): `v0.1.0`'s with the defaults and with every
+setting it had changed, produced by that release's own serializer. Each
+must go on reading as the config it was written from, because once a
+build is out, a renamed key is a setting that goes back to its default
+for everyone who upgrades, and nothing else would notice. What this build
+writes is kept beside them and must come out byte for byte, so a change
+to the file is a diff to review. `docs/SETTINGS.md` is the plan these
+serve: one catalog of settings, read and written from it, with migrations
+between versions.
+
 `KeyCombo` represents a hotkey as modifiers plus one logical key rather
 than an OS virtual-key code, and no modifier is required: a bare
 function key is a legitimate hotkey, and refusing plain letters is a

@@ -1,0 +1,162 @@
+{
+  "version": 1,
+  "hotkeys": {
+    "editMode": "Ctrl+Shift+D",
+    "viewMode": "F9",
+    "quickCapture": "Ctrl+Alt+Shift+S",
+    "silentCapture": null
+  },
+  "drawing": {
+    "strokeColor": "#00FF00",
+    "strokeWidth": 6.5,
+    "renderMode": "polyline",
+    "paintPixels": true,
+    "raiseSelected": false,
+    "screenshotTrigger": "alt",
+    "drawingTrigger": "off"
+  },
+  "appearance": {
+    "showItemBorders": false,
+    "showToastsWhileHidden": false,
+    "imageFilter": "lanczos",
+    "accentColor": "#8040C0",
+    "snippetColors": {
+      "borderFront": "#11223344",
+      "borderOther": "#55667788",
+      "borderPinned": "#99AABBCC"
+    },
+    "canvasBar": {
+      "show": false
+    },
+    "editModeBorder": {
+      "show": false,
+      "color": "#5AA9FF",
+      "opacity": 0.4,
+      "width": 16.0,
+      "onlyWhenEmpty": true
+    }
+  },
+  "bars": {
+    "snippet": [
+      {
+        "button": "more",
+        "shown": true
+      },
+      {
+        "button": "pin",
+        "shown": true
+      },
+      {
+        "button": "minimize",
+        "shown": false
+      },
+      {
+        "button": "maximize",
+        "shown": true
+      },
+      {
+        "button": "close",
+        "shown": true
+      }
+    ],
+    "drawing": [
+      {
+        "button": "pen",
+        "shown": true
+      },
+      {
+        "button": "eraser",
+        "shown": true
+      },
+      {
+        "button": "text",
+        "shown": true
+      },
+      {
+        "button": "color",
+        "shown": false
+      }
+    ]
+  },
+  "overview": {
+    "showStrokes": false,
+    "showBitmaps": false
+  },
+  "deleted": {
+    "confirmDelete": false,
+    "confirmDeleteForGood": false,
+    "deleteForGoodAutomatically": false,
+    "afterDays": 21
+  },
+  "display": {
+    "id": "\\\\?\\DISPLAY#TEST#1",
+    "name": "Test Display"
+  },
+  "behavior": {
+    "dontStealFocus": false,
+    "takeFocusOverElevated": false,
+    "softwarePointer": false,
+    "rawMouseInput": false,
+    "dontForwardKeystrokes": false,
+    "counterRawMouseInput": true,
+    "counterThreshold": 40,
+    "freezeScreen": true
+  },
+  "shortcuts": {
+    "pen": "Shift+Q",
+    "eraser": null,
+    "text": null,
+    "select": null,
+    "newScreenshot": "S",
+    "newDrawing": "D",
+    "newCanvas": null,
+    "newCanvasWithSelection": "Ctrl+Shift+N",
+    "copy": "Ctrl+C",
+    "cut": "Ctrl+X",
+    "paste": "Ctrl+V",
+    "duplicate": "Ctrl+D",
+    "cheatSheet": "F1"
+  },
+  "diagnostics": {
+    "showDebugOverlay": true,
+    "showInputOptionsHud": true,
+    "showLibraryTreeHud": true
+  },
+  "profiles": [
+    {
+      "name": "Game",
+      "match": {
+        "exe": [
+          "game.exe",
+          "launcher.exe"
+        ],
+        "titleContains": [
+          "Game Window"
+        ]
+      },
+      "behavior": {
+        "dontStealFocus": false,
+        "takeFocusOverElevated": false,
+        "softwarePointer": false,
+        "rawMouseInput": false,
+        "dontForwardKeystrokes": false,
+        "counterRawMouseInput": true,
+        "counterThreshold": 250,
+        "freezeScreen": true
+      },
+      "shortcuts": {
+        "pen": "W",
+        "eraser": null
+      }
+    },
+    {
+      "name": "Notes",
+      "match": {
+        "exe": [],
+        "titleContains": [
+          "Notepad"
+        ]
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ add_executable(sz_core_tests
     core/build_info_test.cpp
     core/app_config_test.cpp
     core/atomic_file_test.cpp
+    core/config_files_test.cpp
     core/canvas_manager_test.cpp
     core/canvas_state_test.cpp
     core/display_choice_test.cpp
@@ -55,6 +56,11 @@ set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIO
 # it strictly - see ui/ui_strings_file_test.cpp.
 set_source_files_properties(ui/ui_strings_file_test.cpp PROPERTIES COMPILE_DEFINITIONS
     "SPICKZETTEL_UI_STRINGS_JSON=\"${CMAKE_SOURCE_DIR}/assets/ui_strings.json\"")
+
+# Settings files as released builds wrote them and as this one writes them,
+# read from the source tree - see core/config_files_test.cpp.
+set_source_files_properties(core/config_files_test.cpp PROPERTIES COMPILE_DEFINITIONS
+    "SPICKZETTEL_CONFIG_FILES=\"${CMAKE_CURRENT_SOURCE_DIR}/core/config_files\"")
 
 spickzettel_use_utf8_code_page(sz_core_tests)
 
