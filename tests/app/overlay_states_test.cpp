@@ -179,7 +179,7 @@ TEST(OverlayStatesNextTest, EveryRouteAgreesWithItsEnds) {
 
 // ===== The app, cell by cell =====
 
-// Long enough for a message to have faded - see ShowActionToast.
+// Long enough for a message to have faded - see Messages::Say.
 constexpr int kFramesPastAToast = 200;
 
 enum class State { Hidden, Pinned, Notice, View, Edit };

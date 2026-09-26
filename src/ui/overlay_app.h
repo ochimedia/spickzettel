@@ -16,6 +16,7 @@
 #include "ui/item_painting.h"
 #include "ui/view/canvas_bar.h"
 #include "ui/view/cheat_sheet.h"
+#include "ui/view/messages.h"
 #include "ui/view/overview_panel.h"
 #include "ui/view/popups.h"
 #include "ui/view/screen_chrome.h"
@@ -58,7 +59,7 @@ enum class OverlayMode {
     // The current canvas's pinned snippets (Item::pinned) and nothing else
     // - what is left on screen when the overlay is put away with any there.
     Pinned,
-    // Only the message a hotkey just set (see ShowActionToast), for a
+    // Only the message a hotkey just set (see Messages), for a
     // hotkey that acts while the overlay is hidden. Over when the message
     // is - see SetNoticeFinishedCallback.
     Notice,
@@ -142,28 +143,28 @@ public:
     // leaving it to expire: the clock a message expires on only runs while
     // frames do, so one set while hidden would otherwise still be waiting,
     // hours later, for whenever the overlay next comes up.
-    void DismissActionToast() { actionToastText_.clear(); }
+    void DismissActionToast() { messages_.Dismiss(); }
     // At startup, when the retention period deleted `count` folders and
     // canvases for good: said the next time the overlay comes up, rather
     // than while nobody is looking at it - see OnOverlayShown.
-    void SayDeletedForGoodAtStart(size_t count, int days);
+    void SayDeletedForGoodAtStart(size_t count, int days) { messages_.SayDeletedForGoodAtStart(count, days); }
     // What that message currently says, empty for none - the readable half
     // of the pair above, and how a test asks whether something was said at
     // all rather than looking at pixels.
-    const std::string& ActionToastText() const { return actionToastText_; }
+    const std::string& ActionToastText() const { return messages_.Text(); }
 
     // ===== When the disk says no =====
     //
     // What is on screen looks saved whether or not it is, so a save that
     // failed is said out loud, and kept on screen for as long as it stays
     // failed: a line along the bottom naming the library (see
-    // RenderPersistenceWarning), rather than a toast that fades while the
+    // Messages), rather than a toast that fades while the
     // problem does not. The same line carries a settings file that could
     // not be written, which the tray reports here.
-    void SetConfigWriteFailed(std::optional<std::string> path) { configWriteFailedPath_ = std::move(path); }
+    void SetConfigWriteFailed(std::optional<std::string> path) { messages_.SetConfigWriteFailed(std::move(path)); }
     // The warning as it would be drawn this frame, or empty when there is
     // nothing wrong - for a test, and for anything else that has to know.
-    std::string PersistenceWarning() const;
+    std::string PersistenceWarning() const { return messages_.PersistenceWarning(); }
     // What the overlay is currently set to do, for anything that needs to
     // ask rather than watch: the tool a stroke would use, whether a create
     // action is armed and waiting for a click, and whether the Overview is
@@ -339,7 +340,7 @@ public:
 
 private:
     // What the editor asks of the view - see EditorViews.
-    void Say(std::string text) override { ShowActionToast(std::move(text)); }
+    void Say(std::string text) override { messages_.Say(std::move(text)); }
     void OpenOverview() override;
     void OpenSettings() override;
     void OpenPicker(ItemId itemId, bool isCopy) override;
@@ -526,10 +527,6 @@ public:
     bool IsCapturingShortcut() const { return settingsPage_.IsCapturingShortcut(); }
 
 private:
-    void RenderActionToast();
-    // See SetConfigWriteFailed.
-    void RenderPersistenceWarning();
-
     // Places the first-run notes, centered as a group: the welcome, and the
     // two warnings beside it - see RequestWelcomeNote.
     // Ordinary items, deliberately: each can be moved, edited, or closed
@@ -632,7 +629,6 @@ private:
     // by the canvas grid, the canvas bar and the recently-deleted list.
     PreviewTextureFn PreviewTextureLookup();
 
-    void ShowActionToast(std::string text);
 
     // What the popover's Delete does, and what a delete Settings > Behavior
     // says not to ask about does (see AppConfig::confirmDelete) - the Delete
@@ -662,12 +658,6 @@ private:
 
     // See SetMode.
     OverlayMode mode_ = OverlayMode::Edit;
-    // Fired once when a notice's message has faded - see
-    // SetNoticeFinishedCallback. Guarded by this, so a notice that stays up
-    // (because the window could not be hidden, say) does not call it on
-    // every frame afterwards.
-    bool noticeFinishedReported_ = false;
-
     // What is being worked on, which library is showing, and everything that
     // keeps it in step with the disk and the GPU - see Session. Owned by
     // TrayController; this class is a view of it.
@@ -781,16 +771,6 @@ private:
     // faded, so a burst of notches is one write (see KeepPenWidth).
     bool drawWidthDirty_ = false;
 
-    // Small transient "Moved to X" / "Copied to X" banner after a
-    // move/copy - text empty or ImGui::GetTime() past the expiry means
-    // nothing to draw (see RenderActionToast).
-    std::string actionToastText_;
-    double actionToastExpireAtSeconds_ = 0.0;
-    // See SayDeletedForGoodAtStart.
-    std::string messageForNextShow_;
-    // The settings file the tray last failed to write, while it stays
-    // unwritten - see SetConfigWriteFailed.
-    std::optional<std::string> configWriteFailedPath_;
     // The pacing last handed to the window - see OnFrame, which decides it
     // each frame and passes it on only when it changes.
     std::optional<platform::FramePacing> appliedFramePacing_;
@@ -829,6 +809,7 @@ private:
     Popups popups_{session_, settings_, editor_, *this};
     CanvasBar canvasBar_{session_, settings_, editor_, *this};
     ScreenChrome chrome_{session_, settings_, *this};
+    Messages messages_{session_};
 };
 
 }  // namespace sz::ui

@@ -87,7 +87,7 @@ std::optional<CreationTrigger> CreationTriggerFor(const platform::Modifiers& hel
 class EditorViews {
 public:
     virtual ~EditorViews() = default;
-    // A message for a moment - see OverlayApp::ShowActionToast.
+    // A message for a moment - see Messages::Say.
     virtual void Say(std::string text) = 0;
     virtual void OpenOverview() = 0;
     virtual void OpenSettings() = 0;

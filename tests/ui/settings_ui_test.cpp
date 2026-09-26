@@ -36,7 +36,7 @@ TEST_F(UiTest, TheSettingsSectionsAreAllReachable) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
         // By id, not by the words on the button - see the SectionRow table
-        // in overlay_app_overview.cpp, and assets/ui_strings.json for where
+        // in ui/view/settings_page.cpp, and assets/ui_strings.json for where
         // the words live now. A test that reached for "Appearance" broke the
         // moment anyone reworded it, which is the coupling this removed.
         for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior", "sectiondefaults",

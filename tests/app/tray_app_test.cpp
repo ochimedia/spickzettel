@@ -1066,7 +1066,7 @@ TEST_F(TrayControllerPersistenceTest, AFirstRunsLibraryAndACaptureAreOnDiskAsThe
     // QuickCapture creates an item (a real CanvasManager mutation) purely
     // through plain data/platform calls - no ImGui context needed, unlike
     // most of OverlayApp's rendering, so this is safe to drive directly
-    // from a FakePlatformHost-based test - see ShowActionToast's own
+    // from a FakePlatformHost-based test - see Messages::Say's own
     // ImGui::GetCurrentContext() guard.
     const int captureId = FindHotkeyId(host, config.hotkeyQuickCapture);
     host.TriggerHotkey(captureId);

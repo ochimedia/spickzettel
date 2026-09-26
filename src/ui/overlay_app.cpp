@@ -155,7 +155,7 @@ void OverlayApp::AttachTo(platform::IOverlayWindow& window) {
 void OverlayApp::SetMode(OverlayMode mode) {
     const bool wasViewOnly = IsViewOnly();
     mode_ = mode;
-    noticeFinishedReported_ = false;  // a notice entered now is reported when its own message fades
+    messages_.NewNotice();  // a notice entered now is reported when its own message fades
     if (IsViewOnly() == wasViewOnly) {
         return;
     }
@@ -246,6 +246,63 @@ bool OverlayApp::PointerOverView() const {
 
 bool OverlayApp::PopupOpen() const {
     return ImGui::GetCurrentContext() != nullptr && ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+}
+
+// ================= What the owners and the editor ask =================
+
+void OverlayApp::AskToDelete(DeleteTarget target) {
+    // Not asked at all where Settings > Behavior says not to: deleted after
+    // the draw, as the confirmation's own Delete would be.
+    const bool forGood = target.forGood || target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
+    if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
+        Act(action::Delete{std::move(target)});
+        return;
+    }
+    popups_.OpenConfirmDelete(std::move(target));
+}
+
+void OverlayApp::PerformDelete(const DeleteTarget& target) {
+    editor_.Settle(Scope::Canvas);  // a command - see Scope
+    const bool forGood = target.forGood || target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
+    const bool deletedIn = target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
+    // Its textures go as it leaves the screen, either way (see
+    // TextureCache), and its history only with the thing itself, for good.
+    if (forGood) {
+        if (deletedIn ? session_.DeleteMarkedCanvasesPermanently(target.id) : session_.DeletePermanently(target.id)) {
+            messages_.Say(strings::kToastDeletedForGood);
+        }
+    } else if (session_.Delete(target.id)) {
+        messages_.Say(strings::kToastDeleted);
+    }
+}
+
+void OverlayApp::OpenOverview() {
+    overview_.Open();
+    settingsPage_.OnPanelOpened();
+}
+
+void OverlayApp::OpenSettings() {
+    overview_.OpenSettings();
+    settingsPage_.OnPanelOpened();
+}
+
+void OverlayApp::AskToDeleteCanvas(CanvasId canvas) {
+    const Canvas* found = Manager().FindCanvas(canvas);
+    AskToDelete(DeleteTarget{DeleteTarget::Kind::Canvas, canvas, found != nullptr ? found->name : std::string()});
+}
+
+void OverlayApp::OpenPicker(ItemId itemId, bool isCopy) { overview_.OpenPicker(itemId, isCopy); }
+
+void OverlayApp::ToggleCheatSheet() { cheatSheet_.Toggle(); }
+
+void OverlayApp::ClosePanel(PanelKind kind) {
+    switch (kind) {
+        case PanelKind::Overview:
+            overview_.Close();
+            return;
+        case PanelKind::CheatSheet:
+            return;  // nothing of its own to put away
+    }
 }
 
 // ================= Frame =================
@@ -443,7 +500,7 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     // capture hotkey, and a message always gets a frame. The debug overlay
     // is the exception, since it follows the pointer.
     {
-        const bool toastShowing = !actionToastText_.empty() && ImGui::GetTime() < actionToastExpireAtSeconds_;
+        const bool toastShowing = messages_.Showing();
         const platform::FramePacing pacing = IsViewOnly() && !IsNoticeOnly() && !toastShowing && !Cfg().showDebugOverlay
                                                  ? platform::FramePacing::Idle
                                                  : platform::FramePacing::EveryFrame;
@@ -549,8 +606,7 @@ void OverlayApp::DrawMessages() {
     // still did something, and this is the only thing that says so - it
     // costs a frame that was being drawn anyway, and click-through means it
     // cannot get in the way of anything.
-    RenderActionToast();
-    RenderPersistenceWarning();
+    messages_.Draw();
 }
 
 void OverlayApp::DrawPointer() {
@@ -571,15 +627,9 @@ void OverlayApp::Apply() {
 
     if (IsViewOnly()) {
         // A notice exists only to carry its message, so it is over when the
-        // message is - faded, or never set at all, which is the same
-        // condition RenderActionToast draws nothing on. Reported once (see
-        // noticeFinishedReported_); the window goes away on the other end.
-        if (IsNoticeOnly() && !noticeFinishedReported_ &&
-            (actionToastText_.empty() || ImGui::GetTime() >= actionToastExpireAtSeconds_)) {
-            noticeFinishedReported_ = true;
-            if (noticeFinishedCallback_) {
-                noticeFinishedCallback_();
-            }
+        // message is. Reported once; the window goes away on the other end.
+        if (IsNoticeOnly() && messages_.NoticeJustFinished() && noticeFinishedCallback_) {
+            noticeFinishedCallback_();
         }
         return;
     }
@@ -654,7 +704,7 @@ void OverlayApp::Do(const ViewAction& action) {
                    [&](const action::SendPicked& a) { overview_.SendPickedItemTo(a.canvas); },
                    [&](const action::Restore& a) {
                        if (session_.Restore(a.id)) {
-                           ShowActionToast(strings::kToastRestored);
+                           messages_.Say(strings::kToastRestored);
                            overview_.SettleDeletedFolderShown();
                        }
                    },
@@ -738,28 +788,11 @@ void OverlayApp::ApplyPointerShape() {
     window_->SetCursorShape(wanted);
 }
 
-void OverlayApp::SayDeletedForGoodAtStart(size_t count, int days) {
-    if (count == 0) {
-        return;
-    }
-    char text[160];
-    if (count == 1) {
-        std::snprintf(text, sizeof(text), strings::kToastPurgedOne, days);
-    } else {
-        std::snprintf(text, sizeof(text), strings::kToastPurgedMany, count, days);
-    }
-    messageForNextShow_ = text;
-}
-
 void OverlayApp::OnOverlayShown() {
     settingsPage_.OnOverlayShown();
     // Something the app did while nobody was looking - see
-    // SayDeletedForGoodAtStart - said now, and for long enough to be read.
-    if (!messageForNextShow_.empty() && ImGui::GetCurrentContext() != nullptr) {
-        actionToastText_ = std::move(messageForNextShow_);
-        messageForNextShow_.clear();
-        actionToastExpireAtSeconds_ = ImGui::GetTime() + 8.0;
-    }
+    // SayDeletedForGoodAtStart.
+    messages_.OnOverlayShown();
     // Hiding is moving on too, and nothing ran while hidden to notice - see
     // Editor::UntouchedDrawing.
     editor_.SettleUntouchedDrawing();
@@ -809,7 +842,7 @@ void OverlayApp::OnOverlayShown() {
     // so it came back held: the first click was taken as the release, and
     // an ImGui drag went on with no button down.
     //
-    // Guarded like ShowActionToast's: the overlay can be shown by a hotkey
+    // Guarded like Messages::Say: the overlay can be shown by a hotkey
     // pressed before a single frame has ever been drawn.
     if (ImGui::GetCurrentContext() != nullptr) {
         ImGuiIO& io = ImGui::GetIO();
@@ -1142,7 +1175,7 @@ void OverlayApp::RenderBrushSizePreview() {
     // the two never overlap and the label doesn't jump sides.
     const ImVec2 boxMin(center.x + radius + Px(kLabelGap), center.y - textSize.y * 0.5f - Px(kLabelPadY));
     const ImVec2 boxMax(boxMin.x + textSize.x + Px(kLabelPadX) * 2.0f, boxMin.y + textSize.y + Px(kLabelPadY) * 2.0f);
-    // Same pill as RenderActionToast - over arbitrary game content, plain
+    // Same pill as the toast (see Messages) - over arbitrary game content, plain
     // text has no guaranteed contrast to sit against.
     dl->AddRectFilled(boxMin, boxMax, fade(IM_COL32(18, 20, 26, 235)), theme::kRadiusPill);
     dl->AddText(ImVec2(boxMin.x + Px(kLabelPadX), boxMin.y + Px(kLabelPadY)), fade(IM_COL32(240, 242, 245, 255)),
