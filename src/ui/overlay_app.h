@@ -14,6 +14,8 @@
 #include "ui/context_menu.h"
 #include "ui/editor.h"
 #include "ui/item_painting.h"
+#include "ui/view/settings_page.h"
+#include "ui/view/view_host.h"
 #include "ui/view_action.h"
 #include "ui/interaction/gestures.h"
 #include "ui/icon_draw.h"
@@ -108,7 +110,7 @@ inline constexpr const char* kEmptyCanvasMenuId = "##empty_canvas_menu";
 //    (or holds a press, or a popup is open), and gates all of the first
 //    group: a click landing on a widget doesn't also start a stroke, a
 //    gesture or a placement underneath it.
-class OverlayApp : private EditorViews {
+class OverlayApp : private EditorViews, private ViewHost {
 public:
     // A view of `session`, editing it and the `settings` - both outlive it;
     // TrayController owns all three. Nothing is copied out: every frame reads
@@ -348,7 +350,7 @@ public:
     // fact" shape, this is "ask the host first": the callback itself
     // attempts the actual RegisterGlobalHotkey/UnregisterGlobalHotkey swap,
     // makes the edit (Settings::Set) on success, and returns whether it
-    // took - see TryChangeHotkey, the Settings panel's only caller of this.
+    // took - see SettingsPage::TryChangeHotkey, its only caller.
     // Left null (e.g. a test), every requested change is made at once -
     // there's no real OS hotkey to fail against.
     void SetHotkeyChangeCallback(std::function<bool(HotkeySlot, platform::KeyCombo)> callback) {
@@ -424,8 +426,12 @@ private:
     // preview has faded; the HUD's restart; a notice's end.
     void Apply();
 
-    // Records what a widget asks for, for Apply - see ViewAction.
-    void Act(ViewAction action) { actions_.push_back(std::move(action)); }
+    // What the owners of the surfaces ask of this class - see ViewHost.
+    // Act records what a widget asks for, for Apply - see ViewAction.
+    void Act(ViewAction action) override { actions_.push_back(std::move(action)); }
+    platform::IOverlayWindow* Window() const override { return window_; }
+    std::vector<platform::DisplayInfo> ListDisplays() override;
+    bool ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) override;
     void Do(const ViewAction& action);
     std::vector<ViewAction> actions_;
     // Every input event, in the order they happened - see IOverlayWindow::
@@ -663,116 +669,21 @@ private:
     // picker closes, leaving the Overview open. Nothing moves when the
     // target is the canvas the snippet is already on.
     void SendPickedItemTo(CanvasId target);
-    // The Overview's "Settings" tab body (see overviewTab_'s own doc
-    // comment): the section list, and the section picked. Every row in it is
-    // bound to its setting's row in the catalog and makes its own edit as it
-    // is changed - see settings_widgets.h.
-    void RenderOverviewSettingsPanel();
-    // The Settings tab's own bodies, one per section in its list - see
-    // RenderOverviewSettingsPanel for what decides which settings live
-    // where.
-    void RenderSettingsAppearance();
-    void RenderSettingsInteraction();
-    // One bar's buttons as a row to arrange: each is a tile that switches
-    // it on or off when clicked and can be dragged onto another to move it
-    // there.
-    void RenderBarButtonRow(const char* id, const char* label, const GlobalSetting<BarRule>& row);
-    void RenderSettingsBehavior();
-    // What a new snippet starts with - see AppConfig::screenshotDefaults.
-    void RenderSettingsDefaults();
-    void RenderSettingsDebug();
-    // The list of profiles, and what the overlay is up over. Edits are
-    // collected into a copy and handed to Settings::SetProfiles once, at
-    // the end - the codebase's usual
-    // don't-mutate-while-rendering-from-it rule, and here it also keeps the
-    // callback from re-entering the loop it was called from.
-    void RenderSettingsProfiles();
-    // Its two parts: the buttons that make a profile - for what the
-    // overlay is up over, or a blank one - and one profile's row, closed
-    // or open. Both edit what they are handed in place and say whether
-    // they did; a row asks to be removed through `remove` rather than
-    // erasing from the list it is being drawn from.
-    bool RenderProfileMakers(std::vector<Profile>& edited);
-    bool RenderProfileRow(size_t index, Profile& profile, bool& remove);
-    // The picker at the top of the two overridable sections: whose values
-    // are on screen - the defaults, the profile that matched, or any other
-    // one - plus what it inherits and how much of it is set here.
-    void RenderEditTargetPicker(ProfileGroup group);
-    // The Settings calls, aimed at whichever of the defaults or a profile
-    // the panel is showing (editProfile_) - which is not necessarily the
-    // profile in effect. What the section being edited currently resolves
-    // to; what it would resolve to with this target's own overrides taken
-    // away is Settings::Base and needs no call: a profile inherits the
-    // defaults and nothing else.
-    ProfileableSettings EditedSettings() const { return settings_.ResolvedFor(editProfile_); }
-    // A shortcut binding's override in the target being edited: handed back
-    // to the defaults, and whether there is one.
-    void ClearShortcutOverride(ShortcutAction action) { settings_.ClearShortcutOverride(action, editProfile_); }
-    bool IsShortcutOverriddenHere(ShortcutAction action) const {
-        return settings_.IsShortcutOverridden(action, editProfile_);
-    }
     // The Overview's third tab: which build this is (build::VersionLine)
     // plus ABOUT.md, compiled in so it travels with the binary rather than
     // living next to it as a file that can go missing - see
     // build::AboutText.
     void RenderOverviewAboutPanel();
-    // One hotkey's own press-to-capture editor row, called three times (by
-    // RenderOverviewSettingsPanel) for the edit/view/quick-capture hotkeys.
-    // A button showing the current combo; clicking it arms hotkeyCaptureSlot_
-    // for this slot (clicking the armed button again cancels), and the very
-    // next real key press becomes the new combo, whatever modifiers happen
-    // to be held at that moment - including none at all, and including a
-    // function key
-    // (see platform::KeyCombo's own doc comment). "Press the combo you
-    // want" rather than checkboxes plus a letter picker, which could not
-    // represent a function key at all. See TryChangeHotkey for how a
-    // captured combo takes effect.
-    // `buttonX` is where the key's button starts, the same for every row
-    // of the section - see KeyButtonColumn.
-    void RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, float buttonX);
-    // Offers `combo` to hotkeyChangeCallback_ (see its own doc comment),
-    // which stores it once the OS has registered it. Returns false (and
-    // the hotkey is left untouched) if the callback rejects it - a real
-    // OS-level conflict - so RenderHotkeyEditor's widgets can show the edit
-    // didn't take rather than silently keeping a value nothing downstream
-    // actually agreed to. A collision with one of this app's own other
-    // hotkeys is not a rejection: that one is unbound instead (see
-    // TrayController::ChangeHotkey).
-    bool TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo);
-
 public:
-    // Whether a hotkey row is armed, waiting for the combo the user wants -
-    // a KeyCapture on the machine's Text level (see KeyCapture, which also
-    // says why a hotkey that fires meanwhile is the press).
-    bool IsCapturingHotkey() const { return CapturingHotkey().has_value(); }
-    // Ends the capture with `combo` as the answer. Nothing while none is
-    // armed.
-    void CompleteHotkeyCapture(platform::KeyCombo combo);
-    // What clicking a hotkey row's button, or a shortcut row's, does - here
-    // so a test can arm one without driving the Settings panel. Arming
-    // either disarms the other: both rows are on one page, each waits for
-    // the next key, and one press bound it to both.
-    void ArmHotkeyCapture(HotkeySlot slot);
-    void ArmShortcutCapture(ShortcutAction action);
-    bool IsCapturingShortcut() const { return CapturingShortcut().has_value(); }
+    // A hotkey row armed, waiting for the combo the user wants, and the rest
+    // of what a test asks of the Settings page's key rows - see SettingsPage.
+    bool IsCapturingHotkey() const { return settingsPage_.IsCapturingHotkey(); }
+    void CompleteHotkeyCapture(platform::KeyCombo combo) { settingsPage_.CompleteHotkeyCapture(combo); }
+    void ArmHotkeyCapture(HotkeySlot slot) { settingsPage_.ArmHotkeyCapture(slot); }
+    void ArmShortcutCapture(ShortcutAction action) { settingsPage_.ArmShortcutCapture(action); }
+    bool IsCapturingShortcut() const { return settingsPage_.IsCapturingShortcut(); }
 
 private:
-    // The row waiting, if one is.
-    std::optional<HotkeySlot> CapturingHotkey() const;
-    std::optional<ShortcutAction> CapturingShortcut() const;
-    // Stops a row waiting, binding nothing.
-    void DisarmCapture();
-    // The Settings tab's Shortcuts section: every tool and create action,
-    // each with the key it answers to. A section of its own rather than
-    // rows appended to another one - eleven key editors would be most of
-    // whatever panel they were put in, and "what is bound to what" is a
-    // question people come to answer on its own. A summon hotkey goes to
-    // the OS before it is stored - see TryChangeHotkey.
-    void RenderSettingsHotkeys();
-    // One row of it. A row waiting takes the next key pressed, or Escape,
-    // Backspace or Delete for none - see KeyCapture.
-    void RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label, float buttonX);
-    float KeyButtonColumn() const;
     // Cancel/Delete confirmation for a canvas or folder Delete button
     // clicked in the Overview - see confirmDeleteTarget_'s own doc
     // comment for why canvas/folder deletion gets this extra step while
@@ -1088,13 +999,8 @@ private:
 
     // See SetRestartOverlayCallback's own doc comment.
     std::function<void()> restartOverlayCallback_;
-    // See SetDisplayListCallback. `displays_` is its last answer, asked when
-    // the Overview opens and again whenever the monitor list is opened
-    // rather than every frame: listing displays is a trip through the
-    // display configuration, and they seldom change while someone is looking
-    // at the list.
+    // See SetDisplayListCallback.
     std::function<std::vector<platform::DisplayInfo>()> displayListCallback_;
-    std::vector<platform::DisplayInfo> displays_;
     // See SetNoticeFinishedCallback's own doc comment.
     std::function<void()> noticeFinishedCallback_;
     // See SetHotkeyChangeCallback's own doc comment.
@@ -1172,7 +1078,7 @@ private:
 
     // Which of the Overview's two tabs is showing - Canvases (the
     // original/default content: folder sidebar + canvas tile grid) or
-    // Settings (RenderOverviewSettingsPanel, added once there were enough
+    // Settings (SettingsPage, added once there were enough
     // in-app-relevant AppConfig fields - showDebugOverlay, the colors,
     // etc. - to be worth a UI rather than only a hand-edited config.json
     // line). Not persisted - purely which tab is showing right now, reset
@@ -1218,27 +1124,6 @@ private:
     // footer button below it), where SetScrollY would scroll the panel
     // instead. See SwitchOverviewTab.
     bool overviewBodyScrollToTop_ = false;
-    // Which body the Settings tab shows. Not reset with the panel: coming
-    // back to Settings usually means coming back to the same section, and
-    // the list down the side makes where you are obvious anyway.
-    //
-    // Appearance/Drawing/Diagnostics are about you and are global;
-    // Input/Shortcuts are about whatever is underneath, and are what a
-    // per-application profile may override - see
-    // RenderOverviewSettingsPanel.
-    enum class SettingsSection { Appearance, Interaction, Behavior, Defaults, Hotkeys, Profiles, Debug };
-    SettingsSection settingsSection_ = SettingsSection::Appearance;
-    // Whose values the Input and Shortcuts sections are showing. Nullopt is
-    // the defaults; otherwise an index into Settings::Profiles. Reset to the
-    // active profile every time the overlay is shown (see OnOverlayShown):
-    // coming back to Settings over a
-    // game almost always means coming back to that game's settings, and the
-    // picker says which either way.
-    std::optional<size_t> editProfile_;
-    // A profile's name field while it says another profile's name, which
-    // the rename refused: the row, and what was typed - said under the field
-    // until it lets go. See RenderProfileRow.
-    std::optional<std::pair<size_t, std::string>> takenProfileName_;
     // Set only when the Overview was opened via an item's Move/Copy pill
     // button - picking a tile then moves/copies this item there instead of
     // just switching to it.
@@ -1310,6 +1195,11 @@ private:
     // See RequestWelcomeNote/PlaceWelcomeNotes. Cleared the moment the notes
     // are placed, so they can never be placed twice.
     bool welcomeNotePending_ = false;
+
+    // ===== The owners of the surfaces (docs/VIEW_LAYER.md, section 7) =====
+    //
+    // Last, so that everything they are handed is there before them.
+    SettingsPage settingsPage_{settings_, editor_, *this};
 };
 
 }  // namespace sz::ui

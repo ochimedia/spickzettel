@@ -197,6 +197,21 @@ void OverlayApp::SetMode(OverlayMode mode) {
     }
 }
 
+std::vector<platform::DisplayInfo> OverlayApp::ListDisplays() {
+    return displayListCallback_ ? displayListCallback_() : std::vector<platform::DisplayInfo>{};
+}
+
+bool OverlayApp::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
+    // Offered even when unchanged: the combo it already has may be one
+    // that never registered, and picking it again is how to try again. The
+    // callback stores it once it is registered; with nothing to register
+    // with, it is stored here.
+    if (hotkeyChangeCallback_) {
+        return hotkeyChangeCallback_(slot, combo);
+    }
+    return settings_.Set(HotkeySetting(slot), combo);
+}
+
 void OverlayApp::OfferLifecycle(Lifecycle which) {
     Event event;
     event.kind = EventKind::Lifecycle;
@@ -754,9 +769,7 @@ void OverlayApp::SayDeletedForGoodAtStart(size_t count, int days) {
 }
 
 void OverlayApp::OnOverlayShown() {
-    // Whose settings the panel shows by default: the ones in effect, which
-    // the host resolved for what the overlay is coming up over.
-    editProfile_ = settings_.ActiveProfile();
+    settingsPage_.OnOverlayShown();
     // Something the app did while nobody was looking - see
     // SayDeletedForGoodAtStart - said now, and for long enough to be read.
     if (!messageForNextShow_.empty() && ImGui::GetCurrentContext() != nullptr) {

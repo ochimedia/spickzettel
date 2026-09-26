@@ -1593,7 +1593,11 @@ caption written beside it by hand.
 of the session. Its definition is split across `overlay_app_*.cpp` by
 section of the UI (items, input, rasters, popovers, docks, overview,
 deleted) with `overlay_app.cpp` holding the per-frame entry points and
-construction; it is still one class. What every surface shares is in
+construction. It is being split into one owner per surface
+(`docs/VIEW_LAYER.md`, section 7), each a class in `ui/view/` that holds
+its surface's state, draws from what it is handed, and asks for anything
+beyond its own through `ViewHost`, which `OverlayApp` implements; no
+owner knows another. The Settings tab is the first (`SettingsPage`). What every surface shares is in
 files of its own: the palette, the accent and the style (`theme.*`), the
 buttons, the panel backdrop, the screen layers and the key names
 (`widgets.*`), and how a snippet is painted, on the canvas or in a

@@ -31,6 +31,7 @@ add_library(sz_ui STATIC
     settings_widgets.cpp
     theme.cpp
     ui_scale.cpp
+    view/settings_page.cpp
     widgets.cpp
 )
 
