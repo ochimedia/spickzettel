@@ -5,6 +5,7 @@ add_executable(sz_core_tests
     app/overlay_states_test.cpp
     app/perf_bench_test.cpp
     app/tray_app_test.cpp
+    app/view_layer_test.cpp
     core/build_info_test.cpp
     core/app_config_test.cpp
     core/atomic_file_test.cpp
@@ -78,6 +79,7 @@ if(SPICKZETTEL_UI_TESTS)
         ui/context_menu_ui_test.cpp
         ui/overview_ui_test.cpp
         ui/settings_ui_test.cpp
+        ui/view_layer_ui_test.cpp
     )
     target_include_directories(sz_ui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(sz_ui_tests PRIVATE sz_app imgui_test_engine GTest::gtest_main)
