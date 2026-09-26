@@ -498,6 +498,42 @@ cancel leaves the library exactly as the gesture found it) and, from
 phase 3, runs against the machine directly, fast enough for thousands of
 seeds.
 
+### Phase 2 and the input grab
+
+The event stream starts where the grab's work ends, and the grab has to
+come out of phase 2 unchanged - countering above all, which took weeks of
+measurement to get where it is (`docs/ARCHITECTURE.md`, "Taking input
+back from the game"). Countering itself never passes through the app's
+input: the raw-input sink, the bank and its injected corrections all
+live on the hook thread, and what reaches the overlay is what the grab
+posts or the window samples. Three places touch it all the same, and
+phase 2 keeps each as it is:
+
+- **Movement stays sampled once per frame.** Under the grab, the window
+  emits one Move per frame from the virtual pointer, and moves are never
+  posted: posting one per report flooded the queue at 1000 Hz. "Every
+  event in arrival order" means those frame-time moves take their place
+  in the stream when the frame emits them - not a move per raw report,
+  which is also the shape that disturbed the raw-input rate countering
+  depends on.
+- **An event's modifiers come from the same two sources the frame reads
+  now:** `GetAsyncKeyState` OR'd with the grab's own record of the keys
+  it swallowed. Either alone is wrong under the grab - the backend's key
+  messages need focus, and Alt-drag stopped working once before for
+  exactly that.
+- **Nothing new on the hook thread, and nothing that holds the frame
+  back.** The heartbeat that lets the hooks stand down, the per-frame
+  step sampling, and the order the window is shown and hidden in (the
+  last correction reaches a raw-input listener about 145 ms before the
+  window is gone) are timing the grab relies on. The stream is fed and
+  drained on the app thread, where the messages already arrive.
+
+Checked by the grab's own tests, unchanged, and then by hand in a game
+with countering on, as its settings were tuned: if phase 2 turns out to
+need anything inside the grab after all, that is a structural change in
+the sense of the principle above, measured before and after with the
+method its numbers came from.
+
 ## 12. Decisions
 
 Settled on review (2026-09-26):
