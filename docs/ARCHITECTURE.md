@@ -788,14 +788,34 @@ costs the busy timeout each time.
 `config.json` by `ParseConfig`/`SerializeConfig`. Parsing is pure core
 logic; only *where* the file lives is platform-specific.
 
+**Every setting is one row of a catalog** (`settings_catalog.h`, and
+`docs/SETTINGS.md` for the whole plan). A row says where the setting is
+in the file, what values it may hold (its rule), when a change to it
+takes effect, and where its value lives, and reading and writing the file
+are loops over the rows. Before, the reader and the writer listed every
+setting in two shapes, a profile's reading and writing listed the
+overridable ones twice more, and each choice had a pair of functions
+spelling its names both ways: one setting was named in up to seven
+files, and nothing failed when a copy was missed. A rule's `Hold` is the
+one answer to what a setting keeps given a value - held to a band, or
+rejected - and the parser asks it, as edits will. So a number past a
+float's range is rejected by every float, where the banded ones used to
+read it as their maximum and the others as nothing.
+
 The overridable settings are held once, as `AppConfig::profileable`, a
 `ProfileableSettings` named as the file names them. `AppConfig` used to
 keep its own copies under other names (`editModeNoActivate` for
 `dontStealFocus`), copied to and from the profile's struct on every read
-and edit, on the grounds that the file nests them differently. Where
-each is in the file is the reader's and the writer's to say, and they
-say it anyway; the second copy only added two functions to keep in step
-and a second name for each setting.
+and edit, on the grounds that the file nests them differently; the rows
+say where each is in the file, so the second copy had nothing left to do.
+
+C++ cannot list a struct's fields, so a field without a row would be a
+setting nothing reads or writes, and no test of the rows could see it.
+Two things can: the number of initializers a struct takes, compared at
+compile time with the number of rows for the profile's two structs and
+with a constant for `AppConfig`; and a test that takes the structs apart
+with structured bindings and checks that changing every row changes every
+field.
 
 The file is JSON rather than flat `key=value` lines because of
 profiles: a profile matches on a list of executable names and window
@@ -808,8 +828,8 @@ Three things about the file are deliberate:
 
 - **Groups, not a flat namespace** (`hotkeys`, `drawing`, `appearance`,
   `bars`, `overview`, `display`, `behavior`, `shortcuts`, `diagnostics`).
-  `AppConfig`'s fields stay flat and the mapping lives in the
-  serializer. The grouping is not cosmetic: `behavior` and `shortcuts` are
+  Where each setting is in them is said by its row in the catalog. The
+  grouping is not cosmetic: `behavior` and `shortcuts` are
   exactly the settings a per-application profile may override, so a
   profile is those two objects again, sparse.
 - **Absent means inherit, `null` means explicitly unset.** "Said

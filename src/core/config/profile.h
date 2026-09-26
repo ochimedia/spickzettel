@@ -75,10 +75,10 @@ struct ProfileOverrides {
 
 // The same settings as concrete values: the defaults (AppConfig::
 // profileable), or the result of resolving a profile against them. Named
-// as config.json names them, and flat, so that a UI row can name its field
-// once, as a pair of pointers to member - `&ProfileableSettings::
-// freezeScreen` alongside `&ProfileOverrides::freezeScreen` - instead of a
-// near-identical block of plumbing per setting.
+// as config.json names them, and flat, so that a setting is one pair of
+// member pointers - `&ProfileableSettings::freezeScreen` alongside
+// `&ProfileOverrides::freezeScreen` - in its catalog row (see
+// ProfileSetting).
 struct ProfileableSettings {
     // true (default): the overlay window never steals OS input focus just
     // from being shown or clicked in edit mode (WS_EX_NOACTIVATE on
@@ -173,34 +173,17 @@ struct ProfileableSettings {
 // The pair of pointers that names one overridable boolean: where its
 // concrete value lives, and where a profile's answer about it lives. Held
 // together so a caller can't accidentally pair "freeze screen" with
-// "software pointer".
+// "software pointer". The same pair as a ProfileSetting row's, which the
+// code that treats every setting alike walks (settings_catalog.h).
 struct ProfileableField {
     bool ProfileableSettings::*value;
     std::optional<bool> ProfileOverrides::*override;
-};
-
-// Every one of them, in no particular order - for the code that has to
-// treat them uniformly (applying a profile, counting what it overrides).
-// The Settings panel does *not* walk this: its rows are as many different
-// explanations, not a list.
-inline constexpr ProfileableField kProfileableFields[] = {
-    {&ProfileableSettings::dontStealFocus, &ProfileOverrides::dontStealFocus},
-    {&ProfileableSettings::takeFocusOverElevated, &ProfileOverrides::takeFocusOverElevated},
-    {&ProfileableSettings::softwarePointer, &ProfileOverrides::softwarePointer},
-    {&ProfileableSettings::rawMouseInput, &ProfileOverrides::rawMouseInput},
-    {&ProfileableSettings::dontForwardKeystrokes, &ProfileOverrides::dontForwardKeystrokes},
-    {&ProfileableSettings::counterRawMouseInput, &ProfileOverrides::counterRawMouseInput},
-    {&ProfileableSettings::freezeScreen, &ProfileOverrides::freezeScreen},
 };
 
 // The same pair for a number.
 struct ProfileableIntField {
     int ProfileableSettings::*value;
     std::optional<int> ProfileOverrides::*override;
-};
-
-inline constexpr ProfileableIntField kProfileableIntFields[] = {
-    {&ProfileableSettings::counterThreshold, &ProfileOverrides::counterThreshold},
 };
 
 struct Profile {

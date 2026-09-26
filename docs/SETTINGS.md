@@ -341,7 +341,7 @@ The kinds are those the parser has today, named once:
 | hotkey | a key combination, or `null`; a mouse button rejected | summon hotkeys |
 | shortcut | a key or Mouse3-5, or `null` | tool shortcuts |
 | text | any string | display |
-| bar | names or `{button, shown}` objects; unknown names dropped | bars |
+| bar | names or `{button, shown}` objects; unknown names dropped; made to hold each of that bar's buttons once | bars |
 
 **Change (C2)**: a number too large for a float is rejected by every
 float rule. Today the banded positive rule reads `1e100` as the top of
@@ -358,7 +358,6 @@ These are today's except where marked:
 | Summon hotkeys differ, unless unbound | a later one is unbound (moved from `Initialize`) | the one that had the combination is unbound; the OS registration is tried first (section 6) |
 | One shortcut, one action, per target | none | the others in the target are unbound |
 | A profile's binding wins over an inherited same key | applied when resolving, not stored | the same |
-| A bar holds each of its buttons once | normalized | the widget cannot break it |
 | Profile names are not empty | "Profile" | a cleared field keeps the old name |
 | Profile names are unique | numbered ("Game 2") | new profiles numbered; **Change (C3)**: a rename to a name another profile has is refused. The profile keeps its old name for as long as the typed one is taken, as with a cleared field, and a line under the field says the name is taken |
 
@@ -669,19 +668,26 @@ throughout, and the file's text does not change until a phase says so.
 1. **Fixtures first** (done). The files of section 8: what `v0.1.0`
    wrote and what today's build writes, for the defaults and with every
    setting changed, and the tests that read them.
-2. **The catalog (C1, C2).** Add the rows, and make reading and writing
-   loops over them, the profiles' sparse objects included. `AppConfig`
-   holds `ProfileableSettings`. Add one test that walks every row:
+2. **The catalog (C1, C2)** (done). Add the rows, and make reading and
+   writing loops over them, the profiles' sparse objects included.
+   `AppConfig` holds `ProfileableSettings`. Add one test that walks every
+   row:
    - the default is written at the row's path;
    - a changed value survives the file, and changes that row's field and
      nobody else's;
-   - a value outside the rule is held or rejected as the rule says, by
-     the parser and by `Set` alike;
+   - a value outside the rule is held or rejected as the rule's `Hold`
+     says, which is what `Set` will hold it to;
    - a wrong type keeps the default;
    - for a Profile row, an override survives the file inside a profile,
      and an absent one stays absent.
 
    The `current-*` files come out byte for byte.
+
+   *Found while building it:* a bar's normalization concerns that one
+   setting, so it is the bar rule's `Hold` rather than an invariant
+   (section 5). And a `"uiScale": 0` written into the file by hand reads
+   as 75, the bottom of the band, not as "auto": the file spells that
+   `"auto"`, and 0 is only how the setting holds it. Kept as it was.
 3. **The version (C10, C11), the repairs in one place, and writing them
    back (C4).** The hotkey repair moves out of `Initialize`.
 4. **One edit path (C5, C6, C3, C7).** `Settings::Set`, `Preview` and
@@ -695,10 +701,18 @@ throughout, and the file's text does not change until a phase says so.
    that name `Mutable()`.
 
 A guard against a new field that has no row: C++ cannot list a struct's
-fields, so the per-row test cannot see one that is missing. A
-`static_assert` on the number of `AppConfig`'s members (counted as an
-aggregate's) against a constant fails the build when a field is added,
-and the comment beside the constant says to add the row (question 6).
+fields, so the per-row test cannot see one that is missing. Built in
+phase 2 as two checks (question 6):
+
+- **At compile time,** the number of initializers each struct takes. For
+  `ProfileableSettings` and `ProfileOverrides` it is compared with the
+  number of Profile rows, so it is exact. For `AppConfig` it is compared
+  with a constant, a tripwire whose comment says to add the row.
+- **A test** that takes the structs apart with structured bindings and
+  checks that setting every row to another value changes every field
+  (`profiles` aside). A row pointing at the wrong field of the same type,
+  which no count can see, leaves a field unchanged here. The per-row test
+  also names both rows.
 
 ## 13. Questions for review, and the answers
 

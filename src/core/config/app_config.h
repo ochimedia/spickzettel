@@ -39,8 +39,8 @@ struct SnippetDefaults {
 //
 // The file groups these (`hotkeys`, `drawing`, `appearance`, `bars`,
 // `overview`, `defaults`, `deleted`, `display`, `behavior`, `shortcuts`,
-// `diagnostics`), and the mapping lives in one place, the serializer. The
-// grouping is not
+// `diagnostics`), and where each field is in the file is said in one place,
+// its row in the catalog (settings_catalog.h). The grouping is not
 // cosmetic: `behavior` and `shortcuts` are exactly the settings a
 // per-application profile may override - the ones that are about the
 // machine in front of you rather than about you - so a profile is the same

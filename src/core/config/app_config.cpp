@@ -13,7 +13,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "core/canvas/item.h"
+#include "core/config/settings_catalog.h"
 #include "core/util/atomic_file.h"
 
 namespace sz::core {
@@ -33,6 +33,45 @@ namespace {
 // decimals is far more than any setting here resolves and round-trips back
 // to the same float.
 double Num(float value) { return std::round(static_cast<double>(value) * 1e6) / 1e6; }
+
+// ===== Every field has a row =====
+//
+// C++ cannot list a struct's fields, so nothing in the catalog can see a
+// field that has no row - and such a field is a setting nothing reads or
+// writes, which no test of the rows would notice. What can be counted is
+// how many initializers a struct takes, which for these is how many
+// fields they have.
+struct AnyInitializer {
+    template <typename T>
+    operator T() const;  // never called: only asked about, below
+};
+
+template <typename T, typename... Initializers>
+constexpr size_t FieldCount() {
+    if constexpr (requires { T{Initializers{}..., AnyInitializer{}}; }) {
+        return FieldCount<T, Initializers..., AnyInitializer>();
+    } else {
+        return sizeof...(Initializers);
+    }
+}
+
+constexpr size_t kProfileRows = [] {
+    size_t rows = 0;
+    std::apply([&rows](const auto*... row) { ((rows += kIsProfileSetting<std::decay_t<decltype(*row)>> ? 1 : 0), ...); },
+               setting::kAll);
+    return rows + 1;  // and kShortcuts
+}();
+// One field per overridable setting, in both halves of a profile.
+static_assert(FieldCount<ProfileableSettings>() == kProfileRows,
+              "a ProfileableSettings field without a row in settings_catalog.h");
+static_assert(FieldCount<ProfileOverrides>() == kProfileRows,
+              "a ProfileOverrides field without a row in settings_catalog.h");
+// AppConfig's fields are not one per row - `profileable` holds a group of
+// them, the snippet defaults hold three each, `profiles` is no row - so
+// this is a tripwire rather than a proof: a field added here fails the
+// build until it has its row, and then this count is raised.
+static_assert(FieldCount<AppConfig>() == 43, "an AppConfig field added: give it a row in settings_catalog.h, "
+                                              "then count it here");
 
 // Bumped when a future version needs to tell an older file's shape from its
 // own. Written by every save, read by nothing yet - the point of having it
@@ -62,7 +101,7 @@ std::string ToUpper(std::string s) {
 // (no modifier tokens at all) -> KeyCombo{key=kFunctionKeyBase+9} - see
 // KeyCombo's own doc comment on why bare function keys are allowed.
 // "Mouse3", "Mouse4" and "Mouse5" are the middle button and the two side
-// buttons, which only a shortcut may be (see ReadHotkey). Returns
+// buttons, which only a shortcut may be (see HotkeyRule). Returns
 // std::nullopt if the text doesn't parse to a valid combo.
 std::optional<platform::KeyCombo> ParseHotkey(std::string_view text) {
     platform::KeyCombo combo;
@@ -167,305 +206,98 @@ std::string FormatHexColor(uint32_t colorRGBA) {
     return std::string(buf);
 }
 
-std::optional<StrokeRenderMode> ParseStrokeRenderMode(std::string_view text) {
-    const std::string upper = ToUpper(Trim(text));
-    if (upper == "TESSELLATED") {
-        return StrokeRenderMode::Tessellated;
-    }
-    if (upper == "POLYLINE") {
-        return StrokeRenderMode::Polyline;
-    }
-    if (upper == "RASTERIZED") {
-        return StrokeRenderMode::Rasterized;
-    }
-    return std::nullopt;
-}
-
-const char* StrokeRenderModeName(StrokeRenderMode mode) {
-    switch (mode) {
-        case StrokeRenderMode::Polyline:
-            return "polyline";
-        case StrokeRenderMode::Rasterized:
-            return "rasterized";
-        case StrokeRenderMode::Tessellated:
-            break;
-    }
-    return "tessellated";
-}
-
-std::optional<platform::ImageFilter> ParseImageFilter(std::string_view text) {
-    const std::string upper = ToUpper(Trim(text));
-    if (upper == "BILINEAR") {
-        return platform::ImageFilter::Bilinear;
-    }
-    if (upper == "NEAREST") {
-        return platform::ImageFilter::Nearest;
-    }
-    if (upper == "BICUBIC") {
-        return platform::ImageFilter::Bicubic;
-    }
-    if (upper == "LANCZOS") {
-        return platform::ImageFilter::Lanczos;
-    }
-    return std::nullopt;
-}
-
-const char* ImageFilterName(platform::ImageFilter filter) {
-    switch (filter) {
-        case platform::ImageFilter::Nearest:
-            return "nearest";
-        case platform::ImageFilter::Bicubic:
-            return "bicubic";
-        case platform::ImageFilter::Lanczos:
-            return "lanczos";
-        case platform::ImageFilter::Bilinear:
-            break;
-    }
-    return "bilinear";
-}
-
-std::optional<CreationTrigger> ParseCreationTrigger(std::string_view text) {
-    const std::string upper = ToUpper(Trim(text));
-    if (upper == "PLAIN") {
-        return CreationTrigger::Plain;
-    }
-    if (upper == "CTRL") {
-        return CreationTrigger::Ctrl;
-    }
-    if (upper == "ALT") {
-        return CreationTrigger::Alt;
-    }
-    if (upper == "OFF") {
-        return CreationTrigger::Off;
-    }
-    return std::nullopt;
-}
-
-const char* CreationTriggerName(CreationTrigger trigger) {
-    switch (trigger) {
-        case CreationTrigger::Ctrl:
-            return "ctrl";
-        case CreationTrigger::Alt:
-            return "alt";
-        case CreationTrigger::Off:
-            return "off";
-        case CreationTrigger::Plain:
-            break;
-    }
-    return "plain";
-}
-
-void ReadCreationTrigger(const json& j, const char* key, CreationTrigger& out) {
-    if (const auto it = j.find(key); it != j.end() && it->is_string()) {
-        if (const auto trigger = ParseCreationTrigger(it->get<std::string>())) {
-            out = *trigger;
-        }
-    }
-}
-
-// ===== Reading =====
+// ===== Reading and writing one setting =====
 //
-// Every setting in the file is optional and every one of these leaves its
-// target alone unless the file holds a value of the right type that also
-// passes whatever validation the setting has. That is the whole
-// "malformed input means defaults, never throw" contract in one place -
-// where the hand-rolled key=value parser this replaced had to restate it
-// per key.
+// Parse turns what the file holds into a candidate value, or nothing for
+// JSON that is not that kind of value at all; the row's rule then decides
+// what the setting keeps (Hold - see setting.h). A setting the file says
+// nothing about never gets this far, and keeps its default. That is the
+// whole "malformed input means defaults, never throw" contract, in one
+// place for every setting.
 
 // The object at `key`, or an empty one - so a file missing a whole group
 // reads as "said nothing about any of it" rather than needing a check per
 // setting.
-const json& Group(const json& parent, const char* key) {
+const json& Group(const json& parent, std::string_view key) {
     static const json kEmpty = json::object();
-    const auto it = parent.find(key);
+    const auto it = parent.find(std::string(key));
     return it != parent.end() && it->is_object() ? *it : kEmpty;
 }
 
-void ReadBool(const json& j, const char* key, bool& out) {
-    const auto it = j.find(key);
-    if (it != j.end() && it->is_boolean()) {
-        out = it->get<bool>();
-    }
+std::optional<bool> Parse(const BoolRule&, const json& j) {
+    return j.is_boolean() ? std::optional(j.get<bool>()) : std::nullopt;
 }
 
-// A whole number held to [min, max]; a fraction is rounded, and anything
-// that is not a finite number keeps the default.
-void ReadInt(const json& j, const char* key, int& out, int min, int max) {
-    const auto it = j.find(key);
-    if (it != j.end() && it->is_number()) {
-        if (const double value = it->get<double>(); std::isfinite(value)) {
-            out = static_cast<int>(std::lround(std::clamp(value, static_cast<double>(min), static_cast<double>(max))));
+// Held to the band here already, in double: a number past int's range is
+// still a very large number, not an overflow.
+std::optional<int> ParseWholeNumber(const json& j, int min, int max) {
+    if (!j.is_number()) {
+        return std::nullopt;
+    }
+    const double value = j.get<double>();
+    if (!std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return static_cast<int>(std::lround(std::clamp(value, static_cast<double>(min), static_cast<double>(max))));
+}
+
+std::optional<int> Parse(const IntRule& rule, const json& j) { return ParseWholeNumber(j, rule.min, rule.max); }
+
+// As a float, which is what the setting holds: 1e100 is a number here and
+// infinite there, and the rule rejects it.
+std::optional<float> ParseFloat(const json& j) {
+    return j.is_number() ? std::optional(j.get<float>()) : std::nullopt;
+}
+std::optional<float> Parse(const FloatRule&, const json& j) { return ParseFloat(j); }
+std::optional<float> Parse(const PositiveFloatRule&, const json& j) { return ParseFloat(j); }
+std::optional<float> Parse(const PositiveBandRule&, const json& j) { return ParseFloat(j); }
+
+std::optional<uint32_t> Parse(const ColorRule&, const json& j) {
+    return j.is_string() ? ParseHexColor(j.get<std::string>()) : std::nullopt;
+}
+
+template <typename E>
+std::optional<E> Parse(const ChoiceRule<E>& rule, const json& j) {
+    if (!j.is_string()) {
+        return std::nullopt;
+    }
+    const std::string upper = ToUpper(Trim(j.get<std::string>()));
+    for (const Choice<E>& choice : rule.choices) {
+        if (upper == ToUpper(std::string(choice.name))) {
+            return choice.value;
         }
     }
+    return std::nullopt;
 }
 
-void ReadString(const json& j, const char* key, std::string& out) {
-    const auto it = j.find(key);
-    if (it != j.end() && it->is_string()) {
-        out = it->get<std::string>();
+// "auto", or a percentage. Anything else keeps the default, which is
+// "auto" - a scale nobody chose is Windows' one.
+std::optional<int> Parse(const AutoOrPercentRule& rule, const json& j) {
+    if (j.is_string()) {
+        return j.get<std::string>() == "auto" ? std::optional(0) : std::nullopt;
     }
+    return ParseWholeNumber(j, rule.min, rule.max);
 }
 
-// `min`/`max` clamp rather than reject: for the settings that use it every
-// value has a meaning and only the range is wrong, so an out-of-range one
-// is pulled to the nearest end instead of silently reverting to a default
-// the user never chose.
-void ReadFloat(const json& j, const char* key, float& out, float min, float max) {
-    const auto it = j.find(key);
-    if (it != j.end() && it->is_number()) {
-        // 1e100 is valid JSON and infinite as a float; clamping would pull
-        // it to the far end of the range, which is a value the user did
-        // not choose either. Not a number this setting can hold: default.
-        if (const float value = it->get<float>(); std::isfinite(value)) {
-            out = std::clamp(value, min, max);
-        }
+// A combination, or null for one deliberately unbound - and an unbound one
+// has to survive a round trip. One that took another's combination leaves
+// that other unbound (see TrayController::ChangeHotkey), and reading the
+// unbound one back as "said nothing" gave it its default again on the next
+// start - where the default could now be the very combination the other
+// hotkey had taken, and two registrations of one combination refuse to
+// start the app. The same for a shortcut: read as "said nothing", the ones
+// bound by default would take their letters back.
+std::optional<platform::KeyCombo> ParseCombo(const json& j) {
+    if (j.is_null()) {
+        return platform::KeyCombo{};
     }
+    return j.is_string() ? ParseHotkey(j.get<std::string>()) : std::nullopt;
 }
+std::optional<platform::KeyCombo> Parse(const HotkeyRule&, const json& j) { return ParseCombo(j); }
+std::optional<platform::KeyCombo> Parse(const ShortcutRule&, const json& j) { return ParseCombo(j); }
 
-// For the settings where any positive value is workable and only zero or
-// negative is nonsense - rejected rather than clamped, so a typo falls back
-// to the default instead of to an arbitrary bound. Positive has a ceiling
-// all the same, held to rather than rejected: "workable" stops being true
-// somewhere, and a value past it still says which way the user leaned.
-void ReadPositiveFloat(const json& j, const char* key, float& out, float max) {
-    const auto it = j.find(key);
-    if (it != j.end() && it->is_number()) {
-        if (const float value = it->get<float>(); value > 0.0f && std::isfinite(value)) {
-            out = std::min(value, max);
-        }
-    }
-}
-
-// Both at once, and the order matters: zero is rejected outright rather
-// than pulled up to `min`, because a 0px border isn't a thin border, it is
-// the "show it" checkbox saying off in a worse way. Anything positive is
-// then held inside the band the layout actually works in.
-void ReadPositiveClampedFloat(const json& j, const char* key, float& out, float min, float max) {
-    const auto it = j.find(key);
-    if (it != j.end() && it->is_number()) {
-        if (const float value = it->get<float>(); value > 0.0f) {
-            out = std::clamp(value, min, max);
-        }
-    }
-}
-
-void ReadColor(const json& j, const char* key, uint32_t& out) {
-    const auto it = j.find(key);
-    if (it != j.end() && it->is_string()) {
-        if (const auto color = ParseHexColor(it->get<std::string>())) {
-            out = *color;
-        }
-    }
-}
-
-// A global hotkey in the file: a combination, or null for one deliberately
-// unbound - the same spelling the tool shortcuts use (see ReadShortcuts),
-// and for the same reason: an unbound hotkey has to survive a round trip.
-// One that took another's combination leaves that other unbound (see
-// TrayController::ChangeHotkey), and reading the unbound one back as "said
-// nothing" gave it its default again on the next start - where the default
-// could now be the very combination the other hotkey had taken, and two
-// registrations of one combination refuse to start the app.
-json HotkeyJson(const platform::KeyCombo& combo) {
-    if (!combo.IsValid()) {
-        return nullptr;
-    }
-    return FormatHotkey(combo);
-}
-
-void ReadHotkey(const json& j, const char* key, platform::KeyCombo& out) {
-    const auto it = j.find(key);
-    if (it == j.end()) {
-        return;  // said nothing: keep the default
-    }
-    if (it->is_null()) {
-        out = platform::KeyCombo{};
-    } else if (it->is_string()) {
-        // A key: a mouse button is no global hotkey, and one written here
-        // by hand is read as if the file had said nothing.
-        if (const auto combo = ParseHotkey(it->get<std::string>()); combo.has_value() && combo->IsValid()) {
-            out = *combo;
-        }
-    }
-}
-
-void ReadShortcuts(const json& j, ShortcutBindings& out) {
-    for (const ShortcutAction action : kAllShortcutActions) {
-        const auto it = j.find(std::string(ShortcutActionKey(action)));
-        if (it == j.end()) {
-            continue;  // said nothing: keep the default
-        }
-        if (it->is_null()) {
-            // Deliberately unbound, and it has to survive a round trip:
-            // read as "said nothing", the four bound-by-default actions
-            // would take their letters back on the next start.
-            out[ShortcutActionIndex(action)] = platform::KeyCombo{};
-        } else if (it->is_string()) {
-            if (const auto combo = ParseHotkey(it->get<std::string>())) {
-                out[ShortcutActionIndex(action)] = *combo;
-            }
-        }
-    }
-}
-
-// The `behavior` group's key names, in one place: the base config writes all
-// of them, a profile writes whichever it overrides, and both have to agree
-// on what they are called.
-struct InputKeys {
-    static constexpr const char* kDontStealFocus = "dontStealFocus";
-    static constexpr const char* kTakeFocusOverElevated = "takeFocusOverElevated";
-    static constexpr const char* kSoftwarePointer = "softwarePointer";
-    static constexpr const char* kRawMouseInput = "rawMouseInput";
-    static constexpr const char* kDontForwardKeystrokes = "dontForwardKeystrokes";
-    static constexpr const char* kCounterRawMouseInput = "counterRawMouseInput";
-    static constexpr const char* kCounterThreshold = "counterThreshold";
-    static constexpr const char* kFreezeScreen = "freezeScreen";
-};
-
-// The sparse counterpart of ReadBool: absent (or the wrong type) leaves the
-// override unset, which is what "this profile says nothing about it" is.
-void ReadOptionalBool(const json& j, const char* key, std::optional<bool>& out) {
-    const auto it = j.find(key);
-    if (it != j.end() && it->is_boolean()) {
-        out = it->get<bool>();
-    }
-}
-
-void WriteOptionalBool(json& j, const char* key, const std::optional<bool>& value) {
-    if (value.has_value()) {
-        j[key] = *value;
-    }
-}
-
-// ReadOptionalBool for a number, clamped the way ReadInt clamps.
-void ReadOptionalInt(const json& j, const char* key, std::optional<int>& out, int min, int max) {
-    if (const auto it = j.find(key); it != j.end() && it->is_number()) {
-        int value = min;
-        ReadInt(j, key, value, min, max);
-        out = value;
-    }
-}
-
-void WriteOptionalInt(json& j, const char* key, const std::optional<int>& value) {
-    if (value.has_value()) {
-        j[key] = *value;
-    }
-}
-
-std::vector<std::string> ReadStringList(const json& j, const char* key) {
-    std::vector<std::string> out;
-    const auto it = j.find(key);
-    if (it == j.end() || !it->is_array()) {
-        return out;
-    }
-    for (const json& entry : *it) {
-        if (entry.is_string()) {
-            if (std::string value = entry.get<std::string>(); !value.empty()) {
-                out.push_back(std::move(value));
-            }
-        }
-    }
-    return out;
+std::optional<std::string> Parse(const TextRule&, const json& j) {
+    return j.is_string() ? std::optional(j.get<std::string>()) : std::nullopt;
 }
 
 // A bar's buttons, as the file gives them: an array of names, or of
@@ -473,18 +305,14 @@ std::vector<std::string> ReadStringList(const json& j, const char* key) {
 // there for a file edited by hand, where ["pin", "close"] is the obvious
 // way to write "just these two, in this order"; what a shown button is
 // written as when this writes the file is the object, since that is the
-// form that can also say no.
-//
-// Nothing is read into the config unless the array is actually there: a
-// file that says nothing about a bar keeps the default, the same rule the
-// shortcuts follow.
-std::optional<BarButtonList> ReadBar(const json& group, const char* key) {
-    const auto it = group.find(key);
-    if (it == group.end() || !it->is_array()) {
+// form that can also say no. Names this build does not know are dropped;
+// the rule then makes the list hold each of the bar's buttons once.
+std::optional<BarButtonList> Parse(const BarRule&, const json& j) {
+    if (!j.is_array()) {
         return std::nullopt;
     }
     BarButtonList list;
-    for (const json& entry : *it) {
+    for (const json& entry : j) {
         std::optional<ChromeButton> button;
         bool shown = true;
         if (entry.is_string()) {
@@ -504,7 +332,30 @@ std::optional<BarButtonList> ReadBar(const json& group, const char* key) {
     return list;
 }
 
-json WriteBar(const BarButtonList& buttons) {
+json Write(const BoolRule&, bool value) { return value; }
+json Write(const IntRule&, int value) { return value; }
+json Write(const FloatRule&, float value) { return Num(value); }
+json Write(const PositiveFloatRule&, float value) { return Num(value); }
+json Write(const PositiveBandRule&, float value) { return Num(value); }
+json Write(const ColorRule&, uint32_t value) { return FormatHexColor(value); }
+template <typename E>
+json Write(const ChoiceRule<E>& rule, E value) {
+    for (const Choice<E>& choice : rule.choices) {
+        if (choice.value == value) {
+            return std::string(choice.name);
+        }
+    }
+    return std::string(rule.choices.front().name);
+}
+json Write(const AutoOrPercentRule&, int value) { return value == 0 ? json("auto") : json(value); }
+json Write(const HotkeyRule&, const platform::KeyCombo& value) {
+    return value.IsValid() ? json(FormatHotkey(value)) : json(nullptr);
+}
+json Write(const ShortcutRule&, const platform::KeyCombo& value) {
+    return value.key == 0 ? json(nullptr) : json(FormatHotkey(value));
+}
+json Write(const TextRule&, const std::string& value) { return value; }
+json Write(const BarRule&, const BarButtonList& buttons) {
     json out = json::array();
     for (const BarButtonSetting& entry : buttons) {
         out.push_back(json{{"button", std::string(BarButtonKey(entry.button))}, {"shown", entry.shown}});
@@ -512,15 +363,126 @@ json WriteBar(const BarButtonList& buttons) {
     return out;
 }
 
-json WriteShortcuts(const ShortcutBindings& bindings) {
-    json out = json::object();
+// Whether a value is left out of the file: only a text size not decided
+// yet (see AppConfig::noteTextSizePx), which the file says by saying
+// nothing.
+template <typename Rule>
+bool Omitted(const Rule&, const typename Rule::Value&) {
+    return false;
+}
+bool Omitted(const PositiveBandRule& rule, float value) { return rule.zeroIsUndecided && value <= 0.0f; }
+
+// What the file holds for a setting, if it holds anything: `path` read in
+// `root`, which is the document or, for a profile's own settings, the
+// profile's object.
+const json* Find(const json& root, const SettingPath& path) {
+    const json* parent = &Group(root, path.group);
+    if (!path.subgroup.empty()) {
+        parent = &Group(*parent, path.subgroup);
+    }
+    const auto it = parent->find(std::string(path.key));
+    return it != parent->end() ? &*it : nullptr;
+}
+
+// The same place, made if it is not there yet - in the order this is
+// called in, which is the catalog's.
+json& Slot(json& root, const SettingPath& path) {
+    json& group = root[std::string(path.group)];
+    json& parent = path.subgroup.empty() ? group : group[std::string(path.subgroup)];
+    return parent[std::string(path.key)];
+}
+
+template <typename Rule>
+std::optional<typename Rule::Value> ReadValue(const Rule& rule, const json* j) {
+    if (j == nullptr) {
+        return std::nullopt;  // said nothing
+    }
+    if (std::optional<typename Rule::Value> value = Parse(rule, *j)) {
+        return Hold(rule, std::move(*value));
+    }
+    return std::nullopt;
+}
+
+template <typename Rule>
+void WriteValue(json& root, const SettingPath& path, const Rule& rule, const typename Rule::Value& value) {
+    if (!Omitted(rule, value)) {
+        Slot(root, path) = Write(rule, value);
+    }
+}
+
+// One row, from the file into the config and back. The shortcuts are
+// thirteen settings keyed by action in their group.
+template <typename Row>
+void ReadRow(const json& doc, const Row& row, AppConfig& config) {
+    if (auto value = ReadValue(row.rule, Find(doc, row.path))) {
+        ValueIn(row, config) = std::move(*value);
+    }
+}
+void ReadRow(const json& doc, const ShortcutSettings& row, AppConfig& config) {
     for (const ShortcutAction action : kAllShortcutActions) {
-        const platform::KeyCombo& combo = bindings[ShortcutActionIndex(action)];
-        const std::string key(ShortcutActionKey(action));
-        if (combo.key == 0) {
-            out[key] = nullptr;
-        } else {
-            out[key] = FormatHotkey(combo);
+        if (auto value = ReadValue(row.rule, Find(doc, {row.group, "", ShortcutActionKey(action)}))) {
+            config.profileable.shortcuts[ShortcutActionIndex(action)] = *value;
+        }
+    }
+}
+
+template <typename Row>
+void WriteRow(json& doc, const Row& row, const AppConfig& config) {
+    WriteValue(doc, row.path, row.rule, ValueIn(row, config));
+}
+void WriteRow(json& doc, const ShortcutSettings& row, const AppConfig& config) {
+    for (const ShortcutAction action : kAllShortcutActions) {
+        WriteValue(doc, {row.group, "", ShortcutActionKey(action)}, row.rule,
+                   config.profileable.shortcuts[ShortcutActionIndex(action)]);
+    }
+}
+
+// A profile's answer about one row, read from and written to the profile's
+// object: absent is "inherit", which is why only what it overrides is
+// written. Rows no profile can override have none.
+template <typename Rule>
+void ReadOverride(const json&, const GlobalSetting<Rule>&, ProfileOverrides&) {}
+template <typename Rule>
+void ReadOverride(const json& entry, const ProfileSetting<Rule>& row, ProfileOverrides& overrides) {
+    if (auto value = ReadValue(row.rule, Find(entry, row.path))) {
+        overrides.*row.override = std::move(*value);
+    }
+}
+void ReadOverride(const json& entry, const ShortcutSettings& row, ProfileOverrides& overrides) {
+    for (const ShortcutAction action : kAllShortcutActions) {
+        if (auto value = ReadValue(row.rule, Find(entry, {row.group, "", ShortcutActionKey(action)}))) {
+            overrides.shortcuts[ShortcutActionIndex(action)] = *value;
+        }
+    }
+}
+
+template <typename Rule>
+void WriteOverride(json&, const GlobalSetting<Rule>&, const ProfileOverrides&) {}
+template <typename Rule>
+void WriteOverride(json& entry, const ProfileSetting<Rule>& row, const ProfileOverrides& overrides) {
+    if (const auto& value = overrides.*row.override) {
+        WriteValue(entry, row.path, row.rule, *value);
+    }
+}
+void WriteOverride(json& entry, const ShortcutSettings& row, const ProfileOverrides& overrides) {
+    for (const ShortcutAction action : kAllShortcutActions) {
+        if (const auto& value = overrides.shortcuts[ShortcutActionIndex(action)]) {
+            WriteValue(entry, {row.group, "", ShortcutActionKey(action)}, row.rule, *value);
+        }
+    }
+}
+
+std::vector<std::string> ReadStringList(const json& j, const char* key) {
+    std::vector<std::string> out;
+    const auto it = j.find(key);
+    if (it == j.end() || !it->is_array()) {
+        return out;
+    }
+    for (const json& entry : *it) {
+        if (entry.is_string()) {
+            if (std::string value = entry.get<std::string>(); !value.empty()) {
+                out.push_back(std::move(value));
+            }
         }
     }
     return out;
@@ -544,23 +506,8 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
         return std::nullopt;
     }
 
-    const json& hotkeys = Group(doc, "hotkeys");
-    ReadHotkey(hotkeys, "editMode", config.hotkeyEditMode);
-    ReadHotkey(hotkeys, "viewMode", config.hotkeyViewMode);
-    ReadHotkey(hotkeys, "quickCapture", config.hotkeyQuickCapture);
-    ReadHotkey(hotkeys, "silentCapture", config.hotkeySilentCapture);
+    ForEachSetting([&](const auto& row) { ReadRow(doc, row, config); });
 
-    const json& drawing = Group(doc, "drawing");
-    ReadColor(drawing, "strokeColor", config.strokeColorRGBA);
-    ReadPositiveFloat(drawing, "strokeWidth", config.strokeWidth, kMaxStrokeWidthPx);
-    if (const auto it = drawing.find("renderMode"); it != drawing.end() && it->is_string()) {
-        if (const auto mode = ParseStrokeRenderMode(it->get<std::string>())) {
-            config.strokeRenderMode = *mode;
-        }
-    }
-    ReadBool(drawing, "raiseSelected", config.raiseSelectedSnippet);
-    ReadCreationTrigger(drawing, "screenshotTrigger", config.screenshotTrigger);
-    ReadCreationTrigger(drawing, "drawingTrigger", config.drawingTrigger);
     // One press cannot make both: a file that gives the two the same
     // trigger, by hand or by an edit gone wrong, gets the defaults back
     // rather than one of them silently winning.
@@ -569,97 +516,6 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
         config.screenshotTrigger = defaults.screenshotTrigger;
         config.drawingTrigger = defaults.drawingTrigger;
     }
-
-    const json& bars = Group(doc, "bars");
-    if (std::optional<BarButtonList> snippetBar = ReadBar(bars, "snippet")) {
-        config.snippetBar = std::move(*snippetBar);
-    }
-    if (std::optional<BarButtonList> drawingBar = ReadBar(bars, "drawing")) {
-        config.drawingBar = std::move(*drawingBar);
-    }
-    // Whatever the file said, both lists come out holding each of their
-    // bar's buttons exactly once - see NormalizeSnippetBar.
-    NormalizeSnippetBar(config.snippetBar);
-    NormalizeDrawingBar(config.drawingBar);
-
-    const json& appearance = Group(doc, "appearance");
-    ReadBool(appearance, "showItemBorders", config.showItemBorders);
-    ReadBool(appearance, "showToastsWhileHidden", config.showToastsWhileHidden);
-    ReadColor(appearance, "accentColor", config.accentColorRGBA);
-    // "auto", or a percentage. Anything else keeps the default, which is
-    // "auto" - a scale nobody chose is Windows' one.
-    if (const auto it = appearance.find("uiScale"); it != appearance.end()) {
-        if (it->is_string() && it->get<std::string>() == "auto") {
-            config.uiScalePercent = 0;
-        } else {
-            ReadInt(appearance, "uiScale", config.uiScalePercent, kUiScalePercentMin, kUiScalePercentMax);
-        }
-    }
-    if (const auto it = appearance.find("imageFilter"); it != appearance.end() && it->is_string()) {
-        if (const auto filter = ParseImageFilter(it->get<std::string>())) {
-            config.imageFilter = *filter;
-        }
-    }
-
-    const json& snippetColors = Group(appearance, "snippetColors");
-    ReadColor(snippetColors, "borderFront", config.itemBorderColorFrontRGBA);
-    ReadColor(snippetColors, "borderOther", config.itemBorderColorOtherRGBA);
-    ReadColor(snippetColors, "borderPinned", config.itemBorderColorPinnedRGBA);
-    ReadBool(Group(appearance, "canvasBar"), "show", config.showCanvasBar);
-
-    const json& border = Group(appearance, "editModeBorder");
-    ReadBool(border, "show", config.showEditModeBorder);
-    ReadColor(border, "color", config.editModeBorderColorRGBA);
-    ReadFloat(border, "opacity", config.editModeBorderOpacity, 0.0f, 1.0f);
-    ReadPositiveClampedFloat(border, "width", config.editModeBorderWidthPx, kEditModeBorderWidthMin,
-               kEditModeBorderWidthMax);
-    ReadBool(border, "onlyWhenEmpty", config.editModeBorderOnlyWhenEmpty);
-
-    const json& defaults = Group(doc, "defaults");
-    for (auto [key, out] : {std::pair{"screenshot", &config.screenshotDefaults},
-                            std::pair{"drawing", &config.drawingDefaults}}) {
-        const json& kind = Group(defaults, key);
-        ReadBool(kind, "keepAspect", out->keepAspect);
-        ReadFloat(kind, "foregroundOpacity", out->foregroundOpacity, 0.1f, 1.0f);
-        ReadFloat(kind, "backgroundOpacity", out->backgroundOpacity, 0.0f, 1.0f);
-    }
-    ReadColor(Group(defaults, "drawing"), "backgroundColor", config.drawingBackgroundColorRGBA);
-    const json& noteText = Group(defaults, "text");
-    // Zero, or anything that is not a size, is "not decided yet" - see
-    // AppConfig::noteTextSizePx.
-    ReadPositiveClampedFloat(noteText, "size", config.noteTextSizePx, kNoteTextSizeMin, kNoteTextSizeMax);
-    ReadColor(noteText, "color", config.noteTextColorRGBA);
-
-    const json& overview = Group(doc, "overview");
-    ReadBool(overview, "showStrokes", config.overviewShowsStrokes);
-    ReadBool(overview, "showBitmaps", config.overviewShowsBitmaps);
-
-    const json& deleted = Group(doc, "deleted");
-    ReadBool(deleted, "confirmDelete", config.confirmDelete);
-    ReadBool(deleted, "confirmDeleteForGood", config.confirmDeleteForGood);
-    ReadBool(deleted, "deleteForGoodAutomatically", config.purgeDeleted);
-    ReadInt(deleted, "afterDays", config.purgeDeletedAfterDays, kPurgeDeletedAfterDaysMin, kPurgeDeletedAfterDaysMax);
-
-    const json& display = Group(doc, "display");
-    ReadString(display, "id", config.overlayDisplayId);
-    ReadString(display, "name", config.overlayDisplayName);
-
-    const json& input = Group(doc, "behavior");
-    ReadBool(input, InputKeys::kDontStealFocus, config.profileable.dontStealFocus);
-    ReadBool(input, InputKeys::kTakeFocusOverElevated, config.profileable.takeFocusOverElevated);
-    ReadBool(input, InputKeys::kSoftwarePointer, config.profileable.softwarePointer);
-    ReadBool(input, InputKeys::kRawMouseInput, config.profileable.rawMouseInput);
-    ReadBool(input, InputKeys::kDontForwardKeystrokes, config.profileable.dontForwardKeystrokes);
-    ReadBool(input, InputKeys::kCounterRawMouseInput, config.profileable.counterRawMouseInput);
-    ReadInt(input, InputKeys::kCounterThreshold, config.profileable.counterThreshold,
-            platform::EditModeInputOptions::kCounterThresholdMin, platform::EditModeInputOptions::kCounterThresholdMax);
-    ReadBool(input, InputKeys::kFreezeScreen, config.profileable.freezeScreen);
-
-    ReadShortcuts(Group(doc, "shortcuts"), config.profileable.shortcuts);
-
-    const json& diagnostics = Group(doc, "diagnostics");
-    ReadBool(diagnostics, "showDebugOverlay", config.showDebugOverlay);
-    ReadBool(diagnostics, "showInputOptionsHud", config.showInputOptionsHud);
 
     if (const auto profiles = doc.find("profiles"); profiles != doc.end() && profiles->is_array()) {
         for (const json& entry : *profiles) {
@@ -683,36 +539,7 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
             const json& match = Group(entry, "match");
             profile.match.executables = ReadStringList(match, "exe");
             profile.match.titleContains = ReadStringList(match, "titleContains");
-
-            const json& profileInput = Group(entry, "behavior");
-            ReadOptionalBool(profileInput, InputKeys::kDontStealFocus, profile.overrides.dontStealFocus);
-            ReadOptionalBool(profileInput, InputKeys::kTakeFocusOverElevated,
-                              profile.overrides.takeFocusOverElevated);
-            ReadOptionalBool(profileInput, InputKeys::kSoftwarePointer, profile.overrides.softwarePointer);
-            ReadOptionalBool(profileInput, InputKeys::kRawMouseInput, profile.overrides.rawMouseInput);
-            ReadOptionalBool(profileInput, InputKeys::kDontForwardKeystrokes,
-                              profile.overrides.dontForwardKeystrokes);
-            ReadOptionalBool(profileInput, InputKeys::kCounterRawMouseInput,
-                              profile.overrides.counterRawMouseInput);
-            ReadOptionalInt(profileInput, InputKeys::kCounterThreshold, profile.overrides.counterThreshold,
-                            platform::EditModeInputOptions::kCounterThresholdMin,
-                            platform::EditModeInputOptions::kCounterThresholdMax);
-            ReadOptionalBool(profileInput, InputKeys::kFreezeScreen, profile.overrides.freezeScreen);
-
-            const json& profileShortcuts = Group(entry, "shortcuts");
-            for (const ShortcutAction action : kAllShortcutActions) {
-                const auto it = profileShortcuts.find(std::string(ShortcutActionKey(action)));
-                if (it == profileShortcuts.end()) {
-                    continue;  // says nothing: inherit
-                }
-                if (it->is_null()) {
-                    profile.overrides.shortcuts[ShortcutActionIndex(action)] = platform::KeyCombo{};
-                } else if (it->is_string()) {
-                    if (const auto combo = ParseHotkey(it->get<std::string>())) {
-                        profile.overrides.shortcuts[ShortcutActionIndex(action)] = *combo;
-                    }
-                }
-            }
+            ForEachSetting([&](const auto& row) { ReadOverride(entry, row, profile.overrides); });
             config.profiles.push_back(std::move(profile));
         }
         // Against every name in the file, the later ones included: made
@@ -738,111 +565,9 @@ std::string SerializeConfig(const AppConfig& config) {
     json doc;
     doc["version"] = kConfigVersion;
 
-    doc["hotkeys"] = {
-        {"editMode", HotkeyJson(config.hotkeyEditMode)},
-        {"viewMode", HotkeyJson(config.hotkeyViewMode)},
-        {"quickCapture", HotkeyJson(config.hotkeyQuickCapture)},
-        {"silentCapture", HotkeyJson(config.hotkeySilentCapture)},
-    };
+    ForEachSetting([&](const auto& row) { WriteRow(doc, row, config); });
 
-    doc["drawing"] = {
-        {"strokeColor", FormatHexColor(config.strokeColorRGBA)},
-        {"strokeWidth", Num(config.strokeWidth)},
-        {"renderMode", StrokeRenderModeName(config.strokeRenderMode)},
-        {"raiseSelected", config.raiseSelectedSnippet},
-        {"screenshotTrigger", CreationTriggerName(config.screenshotTrigger)},
-        {"drawingTrigger", CreationTriggerName(config.drawingTrigger)},
-    };
-
-    doc["appearance"] = {
-        {"showItemBorders", config.showItemBorders},
-        {"showToastsWhileHidden", config.showToastsWhileHidden},
-        {"imageFilter", ImageFilterName(config.imageFilter)},
-        {"accentColor", FormatHexColor(config.accentColorRGBA)},
-        {"uiScale", config.uiScalePercent == 0 ? json("auto") : json(config.uiScalePercent)},
-        {"snippetColors",
-         {
-             {"borderFront", FormatHexColor(config.itemBorderColorFrontRGBA)},
-             {"borderOther", FormatHexColor(config.itemBorderColorOtherRGBA)},
-             {"borderPinned", FormatHexColor(config.itemBorderColorPinnedRGBA)},
-         }},
-        {"canvasBar",
-         {
-             {"show", config.showCanvasBar},
-         }},
-        {"editModeBorder",
-         {
-             {"show", config.showEditModeBorder},
-             {"color", FormatHexColor(config.editModeBorderColorRGBA)},
-             {"opacity", Num(config.editModeBorderOpacity)},
-             {"width", Num(config.editModeBorderWidthPx)},
-             {"onlyWhenEmpty", config.editModeBorderOnlyWhenEmpty},
-         }},
-    };
-
-    doc["bars"] = {
-        {"snippet", WriteBar(config.snippetBar)},
-        {"drawing", WriteBar(config.drawingBar)},
-    };
-
-    doc["overview"] = {
-        {"showStrokes", config.overviewShowsStrokes},
-        {"showBitmaps", config.overviewShowsBitmaps},
-    };
-
-    const auto kindJson = [](const SnippetDefaults& kind) {
-        return json{
-            {"keepAspect", kind.keepAspect},
-            {"foregroundOpacity", Num(kind.foregroundOpacity)},
-            {"backgroundOpacity", Num(kind.backgroundOpacity)},
-        };
-    };
-    json drawing = kindJson(config.drawingDefaults);
-    drawing["backgroundColor"] = FormatHexColor(config.drawingBackgroundColorRGBA);
-    json noteText{{"color", FormatHexColor(config.noteTextColorRGBA)}};
-    if (config.noteTextSizePx > 0.0f) {
-        noteText["size"] = Num(config.noteTextSizePx);
-    }
-    doc["defaults"] = {
-        {"screenshot", kindJson(config.screenshotDefaults)},
-        {"drawing", std::move(drawing)},
-        {"text", std::move(noteText)},
-    };
-
-    doc["deleted"] = {
-        {"confirmDelete", config.confirmDelete},
-        {"confirmDeleteForGood", config.confirmDeleteForGood},
-        {"deleteForGoodAutomatically", config.purgeDeleted},
-        {"afterDays", config.purgeDeletedAfterDays},
-    };
-
-    doc["display"] = {
-        {"id", config.overlayDisplayId},
-        {"name", config.overlayDisplayName},
-    };
-
-    // The group a per-application profile overrides - see AppConfig's own
-    // doc comment on which settings are about the machine in front of you
-    // rather than about you.
-    doc["behavior"] = json{
-        {InputKeys::kDontStealFocus, config.profileable.dontStealFocus},
-        {InputKeys::kTakeFocusOverElevated, config.profileable.takeFocusOverElevated},
-        {InputKeys::kSoftwarePointer, config.profileable.softwarePointer},
-        {InputKeys::kRawMouseInput, config.profileable.rawMouseInput},
-        {InputKeys::kDontForwardKeystrokes, config.profileable.dontForwardKeystrokes},
-        {InputKeys::kCounterRawMouseInput, config.profileable.counterRawMouseInput},
-        {InputKeys::kCounterThreshold, config.profileable.counterThreshold},
-        {InputKeys::kFreezeScreen, config.profileable.freezeScreen},
-    };
-
-    doc["shortcuts"] = WriteShortcuts(config.profileable.shortcuts);
-
-    doc["diagnostics"] = {
-        {"showDebugOverlay", config.showDebugOverlay},
-        {"showInputOptionsHud", config.showInputOptionsHud},
-    };
-
-    // Sparse, unlike every group above: a profile writes only what it
+    // Sparse, unlike everything above: a profile writes only what it
     // overrides, because an absent key is how it says "inherit". Written
     // last because it is the part someone hand-editing this file is most
     // likely to be looking for, and the part that grows.
@@ -856,37 +581,7 @@ std::string SerializeConfig(const AppConfig& config) {
             match["titleContains"] = profile.match.titleContains;
         }
         entry["match"] = std::move(match);
-
-        json input = json::object();
-        WriteOptionalBool(input, InputKeys::kDontStealFocus, profile.overrides.dontStealFocus);
-        WriteOptionalBool(input, InputKeys::kTakeFocusOverElevated, profile.overrides.takeFocusOverElevated);
-        WriteOptionalBool(input, InputKeys::kSoftwarePointer, profile.overrides.softwarePointer);
-        WriteOptionalBool(input, InputKeys::kRawMouseInput, profile.overrides.rawMouseInput);
-        WriteOptionalBool(input, InputKeys::kDontForwardKeystrokes, profile.overrides.dontForwardKeystrokes);
-        WriteOptionalBool(input, InputKeys::kCounterRawMouseInput, profile.overrides.counterRawMouseInput);
-        WriteOptionalInt(input, InputKeys::kCounterThreshold, profile.overrides.counterThreshold);
-        WriteOptionalBool(input, InputKeys::kFreezeScreen, profile.overrides.freezeScreen);
-        if (!input.empty()) {
-            entry["behavior"] = std::move(input);
-        }
-
-        json shortcuts = json::object();
-        for (const ShortcutAction action : kAllShortcutActions) {
-            const std::optional<platform::KeyCombo>& combo =
-                profile.overrides.shortcuts[ShortcutActionIndex(action)];
-            if (!combo.has_value()) {
-                continue;
-            }
-            const std::string key(ShortcutActionKey(action));
-            if (combo->key == 0) {
-                shortcuts[key] = nullptr;
-            } else {
-                shortcuts[key] = FormatHotkey(*combo);
-            }
-        }
-        if (!shortcuts.empty()) {
-            entry["shortcuts"] = std::move(shortcuts);
-        }
+        ForEachSetting([&](const auto& row) { WriteOverride(entry, row, profile.overrides); });
         profiles.push_back(std::move(entry));
     }
     doc["profiles"] = std::move(profiles);
