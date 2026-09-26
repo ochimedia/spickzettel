@@ -11,11 +11,173 @@
 
 #include <gtest/gtest.h>
 
+#include "app/overlay_states.h"
 #include "fakes/headless_app.h"
 #include "support/session_test_access.h"
 
 namespace sz::test {
 namespace {
+
+// ===== The table itself: Next, cell by cell =====
+
+using app::Next;
+using app::OverlayFacts;
+using app::OverlayRequest;
+using app::OverlayState;
+using app::OverlayTransition;
+using app::Route;
+
+struct NextCell {
+    OverlayState state;
+    OverlayRequest request;
+    OverlayFacts facts;
+    OverlayState to;
+    Route route;
+    bool startsSession;
+    bool endsSession;
+};
+
+OverlayFacts Pinned() {
+    OverlayFacts facts;
+    facts.pinnedHere = true;
+    return facts;
+}
+OverlayFacts Messages() {
+    OverlayFacts facts;
+    facts.messagesWhileHidden = true;
+    return facts;
+}
+OverlayFacts NoSession() {
+    OverlayFacts facts;
+    facts.viewHasSession = false;
+    return facts;
+}
+OverlayFacts FirstRun() {
+    OverlayFacts facts;
+    facts.firstRun = true;
+    return facts;
+}
+
+const char* Name(Route route) {
+    switch (route) {
+        case Route::Stay:
+            return "Stay";
+        case Route::Up:
+            return "Up";
+        case Route::Down:
+            return "Down";
+        case Route::InPlace:
+            return "InPlace";
+        case Route::ThroughHidden:
+            return "ThroughHidden";
+    }
+    return "?";
+}
+
+// docs/OVERLAY_STATES.md, section 5, one row per cell - and per fact that
+// changes a cell.
+TEST(OverlayStatesNextTest, EveryCellOfTheTable) {
+    using S = OverlayState;
+    using R = OverlayRequest;
+    const OverlayFacts none;
+    const std::vector<NextCell> cells = {
+        {S::Hidden, R::Edit, none, S::Edit, Route::Up, true, false},
+        {S::Pinned, R::Edit, Pinned(), S::Edit, Route::ThroughHidden, true, false},
+        {S::Notice, R::Edit, none, S::Edit, Route::ThroughHidden, true, false},
+        {S::View, R::Edit, none, S::Edit, Route::InPlace, false, false},
+        {S::View, R::Edit, NoSession(), S::Edit, Route::ThroughHidden, true, false},
+        {S::Edit, R::Edit, none, S::Hidden, Route::Down, false, true},
+        {S::Edit, R::Edit, Pinned(), S::Pinned, Route::ThroughHidden, false, true},
+
+        {S::Hidden, R::View, none, S::View, Route::Up, true, false},
+        {S::Pinned, R::View, Pinned(), S::View, Route::InPlace, false, false},
+        {S::Notice, R::View, none, S::View, Route::InPlace, false, false},
+        {S::View, R::View, none, S::Hidden, Route::Down, false, true},
+        {S::View, R::View, Pinned(), S::Pinned, Route::InPlace, false, true},
+        {S::View, R::View, NoSession(), S::Hidden, Route::Down, false, false},
+        {S::Edit, R::View, none, S::View, Route::InPlace, false, false},
+
+        {S::Hidden, R::QuickCapture, none, S::Edit, Route::Up, true, false},
+        {S::Pinned, R::QuickCapture, none, S::Edit, Route::ThroughHidden, true, false},
+        {S::Notice, R::QuickCapture, none, S::Edit, Route::ThroughHidden, true, false},
+        {S::View, R::QuickCapture, none, S::Edit, Route::InPlace, false, false},
+        {S::Edit, R::QuickCapture, none, S::Edit, Route::InPlace, false, false},
+        {S::Edit, R::QuickCapture, Pinned(), S::Edit, Route::InPlace, false, false},
+
+        {S::Hidden, R::SilentCapture, Messages(), S::Notice, Route::Up, false, false},
+        {S::Hidden, R::SilentCapture, none, S::Hidden, Route::Stay, false, false},
+        {S::Pinned, R::SilentCapture, Messages(), S::Pinned, Route::Stay, false, false},
+        {S::Notice, R::SilentCapture, Messages(), S::Notice, Route::Stay, false, false},
+        {S::View, R::SilentCapture, Messages(), S::View, Route::Stay, false, false},
+        {S::Edit, R::SilentCapture, Messages(), S::Edit, Route::Stay, false, false},
+
+        {S::Notice, R::NoticeFaded, none, S::Hidden, Route::Down, false, false},
+        {S::Hidden, R::NoticeFaded, none, S::Hidden, Route::Stay, false, false},
+        {S::Pinned, R::NoticeFaded, Pinned(), S::Pinned, Route::Stay, false, false},
+        {S::View, R::NoticeFaded, none, S::View, Route::Stay, false, false},
+        {S::Edit, R::NoticeFaded, none, S::Edit, Route::Stay, false, false},
+
+        {S::Edit, R::Restart, none, S::Edit, Route::ThroughHidden, false, false},
+        {S::Hidden, R::Restart, none, S::Hidden, Route::Stay, false, false},
+        {S::Pinned, R::Restart, Pinned(), S::Pinned, Route::Stay, false, false},
+        {S::Notice, R::Restart, none, S::Notice, Route::Stay, false, false},
+        {S::View, R::Restart, none, S::View, Route::Stay, false, false},
+
+        {S::Hidden, R::Start, FirstRun(), S::Edit, Route::Up, true, false},
+        {S::Hidden, R::Start, Pinned(), S::Pinned, Route::Up, false, false},
+        {S::Hidden, R::Start, none, S::Hidden, Route::Stay, false, false},
+    };
+    for (const NextCell& cell : cells) {
+        const OverlayTransition transition = Next(cell.state, cell.request, cell.facts);
+        SCOPED_TRACE(std::string(app::Name(cell.state)) + " + request " + std::to_string(static_cast<int>(cell.request)));
+        EXPECT_EQ(transition.from, cell.state);
+        EXPECT_STREQ(app::Name(transition.to), app::Name(cell.to));
+        EXPECT_STREQ(Name(transition.route), Name(cell.route));
+        EXPECT_EQ(transition.startsSession, cell.startsSession);
+        EXPECT_EQ(transition.endsSession, cell.endsSession);
+        EXPECT_EQ(transition.restart, cell.request == R::Restart && cell.state == S::Edit);
+    }
+}
+
+// What holds of every cell whatever the facts: a Stay goes nowhere, a
+// route agrees with where it starts and ends, and a session never both
+// starts and ends.
+TEST(OverlayStatesNextTest, EveryRouteAgreesWithItsEnds) {
+    const OverlayState states[] = {OverlayState::Hidden, OverlayState::Pinned, OverlayState::Notice,
+                                   OverlayState::View, OverlayState::Edit};
+    const OverlayRequest requests[] = {OverlayRequest::Edit,          OverlayRequest::View,
+                                       OverlayRequest::QuickCapture,  OverlayRequest::SilentCapture,
+                                       OverlayRequest::NoticeFaded,   OverlayRequest::Restart,
+                                       OverlayRequest::Start};
+    for (int bits = 0; bits < 16; ++bits) {
+        OverlayFacts facts;
+        facts.pinnedHere = (bits & 1) != 0;
+        facts.messagesWhileHidden = (bits & 2) != 0;
+        facts.firstRun = (bits & 4) != 0;
+        facts.viewHasSession = (bits & 8) != 0;
+        for (const OverlayState state : states) {
+            for (const OverlayRequest request : requests) {
+                const OverlayTransition t = Next(state, request, facts);
+                SCOPED_TRACE(std::string(app::Name(state)) + " + request " +
+                             std::to_string(static_cast<int>(request)) + ", facts " + std::to_string(bits));
+                EXPECT_EQ(t.from, state);
+                if (t.route == Route::Stay) {
+                    EXPECT_EQ(t.to, state);
+                    EXPECT_FALSE(t.startsSession || t.endsSession || t.restart);
+                    continue;
+                }
+                EXPECT_EQ(t.route == Route::Up, state == OverlayState::Hidden);
+                EXPECT_EQ(t.route == Route::Down, t.to == OverlayState::Hidden);
+                EXPECT_FALSE(t.startsSession && t.endsSession);
+                EXPECT_FALSE(t.to == OverlayState::Pinned && !facts.pinnedHere) << "nothing to pin";
+                EXPECT_FALSE(t.to == OverlayState::Notice && state != OverlayState::Hidden)
+                    << "a notice only while nothing else is up";
+            }
+        }
+    }
+}
+
+// ===== The app, cell by cell =====
 
 // Long enough for a message to have faded - see ShowActionToast.
 constexpr int kFramesPastAToast = 200;
