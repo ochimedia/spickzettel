@@ -513,6 +513,25 @@ TEST_F(HeadlessAppTest, ARightClickOnEmptyCanvasLeavesDrawingModeAndOpensTheMenu
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
+// Two menus asked for before a frame could open either: the one asked for
+// last is the one that comes up, whatever order the frame draws them in -
+// see OverlayApp::Effect.
+TEST_F(HeadlessAppTest, OfTwoMenusAskedForBetweenFramesTheLastIsTheOneUp) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 600.0f, 500.0f);  // a snippet to right-click on
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    PressKey(ImGuiKey_Escape);
+
+    RawMouse(900.0f, 650.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);
+    RawMouse(900.0f, 650.0f, platform::MouseEventKind::Up, platform::MouseButton::Right);
+    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);
+    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Up, platform::MouseButton::Right);
+    StepFrames(2);
+    EXPECT_TRUE(App().IsItemContextMenuOpen());
+    EXPECT_FALSE(App().IsEmptyCanvasMenuOpen());
+}
+
 // A canvas switch in the middle of a right click on empty canvas drops it:
 // the release that follows opens no menu over the canvas switched to.
 TEST_F(HeadlessAppTest, ACaptureMidRightClickOpensNoMenu) {

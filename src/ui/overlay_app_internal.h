@@ -40,6 +40,12 @@
 
 namespace sz::ui::overlay_detail {
 
+// The popups OverlayApp::ApplyEffects opens, by the ids their render
+// functions begin them with.
+inline constexpr const char* kItemPropertiesPopupId = "##item_properties_popover";
+inline constexpr const char* kColorChooserPopupId = "##color_chooser";
+inline constexpr const char* kConfirmDeletePopupId = "##confirm_delete_popover";
+
 // Color palette + corner-radius scale - see docs/ARCHITECTURE.md's
 // "Visual theme" section. Every themed draw call across the split files
 // pulls its color from here instead of hand-rolling one, so the whole app

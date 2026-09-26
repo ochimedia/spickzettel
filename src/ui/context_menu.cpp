@@ -70,16 +70,12 @@ Metrics Measure(const std::vector<ContextMenuEntry>& entries) {
 
 }  // namespace
 
-void ContextMenu::RequestOpenAt(ImVec2 screenPos) {
-    requested_ = true;
+void ContextMenu::OpenAt(ImVec2 screenPos) {
     anchor_ = screenPos;
+    ImGui::OpenPopup(popupId_);
 }
 
 std::optional<int> ContextMenu::Render(const Builder& build) {
-    if (requested_) {
-        requested_ = false;
-        ImGui::OpenPopup(popupId_);
-    }
     // Asked before the rows are built so that a menu nobody opened costs
     // one lookup a frame and nothing else. IsPopupOpen, OpenPopup and
     // BeginPopup all hash the id against the current window, so all three

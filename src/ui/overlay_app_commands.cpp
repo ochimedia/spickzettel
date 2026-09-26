@@ -229,15 +229,13 @@ void OverlayApp::Run(const Command& command) {
             return;
         }
         case CommandId::Properties:
-            // A request flag rather than ImGui::OpenPopup directly - see
-            // colorChooserRequested_'s own doc comment: a bar button fires
-            // outside any frame, with no current window for a popup to be
-            // scoped to.
+            // Opened on the next frame - see Effect: a bar button fires
+            // outside any frame.
             itemPropertiesPopoverItemId_ = command.item;
-            itemPropertiesPopoverRequested_ = true;
             if (command.at.has_value()) {
                 itemPropertiesPopoverAnchor_ = ImVec2(command.at->x, command.at->y);
             }
+            Queue(Effect{Effect::Kind::OpenItemProperties});
             return;
         // The drawing bar: the tool to draw with, and the color. The tool
         // already in hand is cycled through its shapes instead - pen, line,
@@ -285,9 +283,8 @@ void OverlayApp::Run(const Command& command) {
             // button asks for, rather than deleting outright: a canvas
             // takes every snippet on it along, and unlike a snippet's own
             // delete there is no undo entry to take it back with.
-            confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, command.canvas,
-                                                       Manager().FindCanvas(command.canvas)->name};
-            confirmDeletePopoverRequested_ = true;
+            AskToDelete(ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, command.canvas,
+                                            Manager().FindCanvas(command.canvas)->name});
             return;
         case CommandId::Overview:
             OpenOverview();

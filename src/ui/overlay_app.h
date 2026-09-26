@@ -699,8 +699,8 @@ private:
     // The color chooser: one picker, and what it is set to is the color
     // drawn with. Opened by the drawing bar's color button, next to
     // `from`, the point it was pressed from; OpenColorChooser only asks,
-    // since the bar's buttons fire from the raw mouse pipeline outside
-    // any frame, and RenderColorChooser opens it on the next one. What
+    // since the bar's buttons fire from the input stream outside any
+    // frame, and it opens on the next one (see Effect). What
     // was picked is kept as AppConfig::strokeColorRGBA when the chooser
     // closes.
     void OpenColorChooser(ImVec2 from);
@@ -726,9 +726,9 @@ private:
 
     // The context menu a right-click on a snippet opens - the popover's
     // actions as a list of named rows with their shortcuts beside them,
-    // plus the ones that only had a key until now. Asked for from the raw
-    // mouse callback, which is why opening is a request rather than a call
-    // (see ContextMenu::RequestOpenAt).
+    // plus the ones that only had a key until now. Asked for from the input
+    // stream, which is why opening is queued rather than done (see
+    // Effect).
     void OpenItemContextMenu(ItemId itemId, ImVec2 at);
     void RenderItemContextMenu();
     // The rows, for the snippet the menu is open over. Rebuilt every frame
@@ -1319,10 +1319,11 @@ private:
     // says not to ask about does on the press (see AppConfig::confirmDelete).
     void PerformDelete(const ConfirmDeleteTarget& target);
     std::optional<ConfirmDeleteTarget> confirmDeleteTarget_;
-    // See RenderConfirmDeletePopover's own request-flag reasoning (mirrors
-    // itemPropertiesPopoverRequested_, even though nothing here is
-    // actually reached from the raw platform callback the way that is).
-    bool confirmDeletePopoverRequested_ = false;
+    // Asks to delete `target`, through the popover unless Settings >
+    // Behavior says not to ask - see OpenConfirmDelete.
+    void AskToDelete(ConfirmDeleteTarget target);
+    // The effect AskToDelete queues.
+    void OpenConfirmDelete();
 
 
     // Applied once, on the first OnFrame call (ImGui's style/color tables
@@ -1766,25 +1767,8 @@ private:
     std::optional<CanvasId> canvasContextMenuCanvasId_ = std::nullopt;
     // Empty canvas's, which is up for nothing in particular.
     ContextMenu emptyCanvasMenu_{"##empty_canvas_menu"};
-    // Why the popovers open through request flags (this one, and
-    // itemPropertiesPopoverRequested_ below) rather than calling
-    // ImGui::OpenPopup where the button fires: a selection bar button
-    // fires from HandleItemGesture, which runs from the platform's raw
-    // mouse callback - itself invoked synchronously from
-    // glfwPollEvents()/the Win32 message pump, *before* that iteration's
-    // ImGui::NewFrame() (see DevLinuxPlatformHost::RunEventLoop /
-    // Win32OverlayWindow's own message loop). ImGui::OpenPopup at that
-    // point has no current window to scope its ID against - g.CurrentWindow
-    // is whatever Render() left behind at the *end* of the previous frame,
-    // which ImGuiWindow::GetID then dereferences unconditionally
-    // (IDStack.back() on a stack that's empty by then) - a real, verified
-    // (ASan-caught) null-pointer segfault, not a hypothetical one. The
-    // flag is consumed (and cleared) at the top of the popover's own
-    // Render function on the very next frame, properly inside a frame.
-    // The color chooser - see OpenColorChooser. Asked for by the bar's
-    // Color button, opened on the next frame; and whether it was open on
-    // the last one, which is how its closing is noticed.
-    bool colorChooserRequested_ = false;
+    // The color chooser - see OpenColorChooser: whether it was open on the
+    // last frame, which is how its closing is noticed, and where it opens.
     bool colorChooserOpen_ = false;
     ImVec2 colorChooserAnchor_ = ImVec2(0.0f, 0.0f);
     // What the pen draws and the eraser erases on a plain drag, with no
@@ -1820,7 +1804,36 @@ private:
     int64_t demoWatermarkMove_ = -1;
     int demoWatermarkCell_ = 0;
     ImVec2 demoWatermarkJitter_{0.5f, 0.5f};
-    bool itemPropertiesPopoverRequested_ = false;
+
+    // Something only a frame can do, asked for from wherever - between
+    // frames included - and done in the next frame, just before the popups
+    // are drawn: opening a popup. ImGui::OpenPopup scopes its id against the window being
+    // drawn, and between frames there is none - a bar button fires from
+    // the input stream, before the frame's NewFrame, and OpenPopup there
+    // dereferenced an empty id stack (a verified crash, not a hypothetical
+    // one). Asked for inside a frame, it waits too, which keeps every
+    // popup's id at the top level of the frame whatever nesting it was
+    // asked from. Not at the very start of the frame: opened there, the
+    // canvas bar's menu was closed again before it was drawn - ImGui wants
+    // a popup opened after the frame's other windows, shortly before it is
+    // begun. What it opens on - which snippet, which canvas - is set where
+    // it is asked for. See docs/INTERACTIONS.md, section 3.
+    struct Effect {
+        enum class Kind {
+            OpenItemProperties,
+            OpenItemMenu,
+            OpenCanvasMenu,
+            OpenEmptyCanvasMenu,
+            OpenColorChooser,
+            OpenConfirmDelete,
+        };
+        Kind kind = Kind::OpenItemProperties;
+        ImVec2 at{0.0f, 0.0f};  // where a menu or the color chooser opens
+    };
+    // Asked twice before a frame, done once - as asked the second time.
+    void Queue(const Effect& effect);
+    void ApplyEffects();
+    std::vector<Effect> effects_;
 
     // Overview (canvas switcher / manager / move-copy picker).
     bool overviewOpen_ = false;

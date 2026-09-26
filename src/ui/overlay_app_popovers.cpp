@@ -115,13 +115,6 @@ void OverlayApp::MoveSelectionToNewCanvas() {
 // ================= The properties popover =================
 
 void OverlayApp::RenderItemPropertiesPopover() {
-    // Consume the deferred-open request first - see
-    // itemPropertiesPopoverRequested_'s own doc comment.
-    if (itemPropertiesPopoverRequested_) {
-        itemPropertiesPopoverRequested_ = false;
-        ImGui::OpenPopup("##item_properties_popover");
-    }
-
     // Anchored just below the "More" button that opened it (see
     // itemPropertiesPopoverAnchor_'s own doc comment) rather than ImGui's
     // default near-mouse placement. Pivot (1, 0): the anchor point is the
@@ -130,7 +123,7 @@ void OverlayApp::RenderItemPropertiesPopover() {
     // near it (which it usually does - every cluster is right-aligned to
     // its own item, and an item can sit anywhere up to the screen edge).
     ImGui::SetNextWindowPos(itemPropertiesPopoverAnchor_, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-    if (!ImGui::BeginPopup("##item_properties_popover")) {
+    if (!ImGui::BeginPopup(kItemPropertiesPopupId)) {
         // Not open (never triggered this frame, or the user closed it -
         // click-outside, Escape) - drop the sticky reference used by
         // RenderItems' highlight resolution along with it. A
@@ -299,7 +292,7 @@ void OverlayApp::RenderItemTextStyle(const Item& item) {
 
 void OverlayApp::OpenItemContextMenu(ItemId itemId, ImVec2 at) {
     itemContextMenuItemId_ = itemId;
-    itemContextMenu_.RequestOpenAt(at);
+    Queue(Effect{Effect::Kind::OpenItemMenu, at});
 }
 
 void OverlayApp::RenderItemContextMenu() {
@@ -379,7 +372,7 @@ void OverlayApp::BuildItemContextMenuRows(const Item& item, std::vector<ContextM
 
 // ================= Empty canvas's context menu =================
 
-void OverlayApp::OpenEmptyCanvasMenu(ImVec2 at) { emptyCanvasMenu_.RequestOpenAt(at); }
+void OverlayApp::OpenEmptyCanvasMenu(ImVec2 at) { Queue(Effect{Effect::Kind::OpenEmptyCanvasMenu, at}); }
 
 void OverlayApp::RenderEmptyCanvasMenu() {
     const std::optional<int> chosen = emptyCanvasMenu_.Render(
@@ -414,22 +407,58 @@ void OverlayApp::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) c
     add(CommandId::CheatSheet, "##emptymenu_cheat_sheet", &icons::kKeyboard, strings::kMenuCheatSheet);
 }
 
+// ================= Effects =================
+
+void OverlayApp::Queue(const Effect& effect) {
+    const auto same = std::find_if(effects_.begin(), effects_.end(),
+                                   [&](const Effect& queued) { return queued.kind == effect.kind; });
+    if (same != effects_.end()) {
+        *same = effect;
+        return;
+    }
+    effects_.push_back(effect);
+}
+
+// At the top level of the frame, in the order asked: a popup opened
+// replaces the one open before it, so the one asked for last is the one
+// that stays up.
+void OverlayApp::ApplyEffects() {
+    std::vector<Effect> effects;
+    effects.swap(effects_);
+    for (const Effect& effect : effects) {
+        switch (effect.kind) {
+            case Effect::Kind::OpenItemProperties:
+                ImGui::OpenPopup(kItemPropertiesPopupId);
+                break;
+            case Effect::Kind::OpenItemMenu:
+                itemContextMenu_.OpenAt(effect.at);
+                break;
+            case Effect::Kind::OpenCanvasMenu:
+                canvasContextMenu_.OpenAt(effect.at);
+                break;
+            case Effect::Kind::OpenEmptyCanvasMenu:
+                emptyCanvasMenu_.OpenAt(effect.at);
+                break;
+            case Effect::Kind::OpenColorChooser:
+                colorChooserAnchor_ = effect.at;
+                ImGui::OpenPopup(kColorChooserPopupId);
+                break;
+            case Effect::Kind::OpenConfirmDelete:
+                OpenConfirmDelete();
+                break;
+        }
+    }
+}
+
 // ================= The color chooser =================
 
 void OverlayApp::OpenColorChooser(ImVec2 from) {
-    // Only asked for here: the bar's color button fires from the raw
-    // mouse callback between frames, where there is no window for
-    // ImGui::OpenPopup to belong to.
-    colorChooserRequested_ = true;
-    colorChooserAnchor_ = from;
+    // Only asked for here: the bar's color button fires from the input
+    // stream between frames - see Effect.
+    Queue(Effect{Effect::Kind::OpenColorChooser, from});
 }
 
 void OverlayApp::RenderColorChooser(float displayW, float displayH) {
-    constexpr const char* kPopupId = "##color_chooser";
-    if (colorChooserRequested_) {
-        colorChooserRequested_ = false;
-        ImGui::OpenPopup(kPopupId);
-    }
     // Beside the point it was asked from, on whichever side has room, so
     // a bar near an edge of the screen does not have its chooser placed
     // off it.
@@ -440,7 +469,7 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
                                    colorChooserAnchor_.y + (above ? -gap : gap)),
                             ImGuiCond_Appearing, ImVec2(toTheLeft ? 1.0f : 0.0f, above ? 1.0f : 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Px(8.0f, 8.0f));
-    const bool open = ImGui::BeginPopup(kPopupId);
+    const bool open = ImGui::BeginPopup(kColorChooserPopupId);
     ImGui::PopStyleVar();
     if (!open) {
         if (colorChooserOpen_) {

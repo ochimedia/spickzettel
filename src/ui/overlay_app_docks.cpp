@@ -355,7 +355,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
 
 void OverlayApp::OpenCanvasContextMenu(CanvasId canvasId, ImVec2 at) {
     canvasContextMenuCanvasId_ = canvasId;
-    canvasContextMenu_.RequestOpenAt(at);
+    Queue(Effect{Effect::Kind::OpenCanvasMenu, at});
 }
 
 void OverlayApp::RenderCanvasContextMenu() {

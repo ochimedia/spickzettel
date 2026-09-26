@@ -1022,6 +1022,7 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
         CloseOverview();
         itemPropertiesPopoverItemId_.reset();
         confirmDeleteTarget_.reset();
+        effects_.clear();
         // Normally cleared at the top of every RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle
@@ -1389,6 +1390,9 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // Over the items: the canvas bar, and the popovers - the properties
     // popover a snippet's More button opens, and the color chooser.
     RenderCanvasBar(displayW, displayH);
+    // What was asked for that only a frame can do - see Effect - just
+    // before the popups it opens are drawn.
+    ApplyEffects();
     RenderItemPropertiesPopover();
     // And the menu a right-click on a snippet opens - beside the popover
     // rather than inside it: the two hold the same actions and are opened

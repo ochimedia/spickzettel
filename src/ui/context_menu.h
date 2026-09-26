@@ -69,17 +69,12 @@ public:
     // literal, in practice.
     explicit ContextMenu(const char* popupId) : popupId_(popupId) {}
 
-    // Opens the menu with its corner at `screenPos`, on the next frame.
-    //
-    // Deferred rather than immediate because the press that asks for it
-    // usually arrives on the raw mouse callback, which runs between frames
-    // where ImGui::OpenPopup has no current window to scope its id against
-    // - a verified null dereference, not a hypothetical one. See
-    // OverlayApp::itemPropertiesPopoverRequested_ for the long version.
-    void RequestOpenAt(ImVec2 screenPos);
+    // Opens the menu with its corner at `screenPos`. Inside a frame, at its
+    // top level, like Render - which is why the press that asks for a menu
+    // queues this rather than calling it (see OverlayApp::Effect).
+    void OpenAt(ImVec2 screenPos);
 
-    // Whether the menu is on screen right now - which is not the same as
-    // having been asked for: the request is consumed by the next Render.
+    // Whether the menu was on screen on the last Render.
     bool IsOpen() const { return open_; }
 
     // Draws the menu if it is open. Returns the `action` of the row chosen
@@ -88,7 +83,6 @@ public:
 
 private:
     const char* popupId_;
-    bool requested_ = false;
     bool open_ = false;
     ImVec2 anchor_{0.0f, 0.0f};
 };

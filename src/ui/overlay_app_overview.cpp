@@ -899,10 +899,9 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                         actions.restore = f.id;
                         break;
                     case DeletedButton::DeleteForGood:
-                        confirmDeleteTarget_ = ConfirmDeleteTarget{
+                        AskToDelete(ConfirmDeleteTarget{
                             deleted ? ConfirmDeleteTarget::Kind::Folder : ConfirmDeleteTarget::Kind::DeletedCanvasesIn,
-                            f.id, f.name, /*forGood=*/true};
-                        confirmDeletePopoverRequested_ = true;
+                            f.id, f.name, /*forGood=*/true});
                         break;
                     case DeletedButton::None:
                         break;
@@ -913,8 +912,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                 const bool deletePressed = DangerIconButton("##delfolder", icons::kTrash);
                 ImGui::EndDisabled();
                 if (deletePressed) {
-                    confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Folder, f.id, f.name};
-                    confirmDeletePopoverRequested_ = true;
+                    AskToDelete(ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Folder, f.id, f.name});
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("%s", strings::kOverviewDeleteFolder);
@@ -1102,9 +1100,8 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
                     actions.restore = c.id;
                     break;
                 case DeletedButton::DeleteForGood:
-                    confirmDeleteTarget_ =
-                        ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name, /*forGood=*/true};
-                    confirmDeletePopoverRequested_ = true;
+                    AskToDelete(
+                        ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name, /*forGood=*/true});
                     break;
                 case DeletedButton::None:
                     break;
@@ -1116,8 +1113,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
             const bool deletePressed = DangerIconButton("##delcanvas", icons::kTrash);
             ImGui::EndDisabled();
             if (deletePressed) {
-                confirmDeleteTarget_ = ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name};
-                confirmDeletePopoverRequested_ = true;
+                AskToDelete(ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name});
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("%s", strings::kOverviewDeleteCanvas);
@@ -3009,37 +3005,34 @@ bool OverlayApp::TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     return true;
 }
 
-void OverlayApp::RenderConfirmDeletePopover() {
-    // Consume the deferred-open request first - see
-    // confirmDeletePopoverRequested_'s own doc comment. Not strictly
-    // required here the way it is for the properties popover (a Delete
-    // button click always happens from inside a valid ImGui frame, never
-    // the raw platform callback), but keeping the same request-flag shape
-    // as RenderItemPropertiesPopover means this
-    // popup's own OpenPopup/BeginPopup pair never has to worry about the
-    // Overview's own PushID nesting around the button that requested it.
-    if (confirmDeletePopoverRequested_) {
-        confirmDeletePopoverRequested_ = false;
-        // Not asked at all where Settings > Behavior says not to: done here
-        // rather than at each button, where the Overview is still being
-        // drawn from what the delete changes - the reason the request is
-        // deferred in the first place.
-        if (confirmDeleteTarget_.has_value()) {
-            const ConfirmDeleteTarget& target = *confirmDeleteTarget_;
-            const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
-            if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
-                const ConfirmDeleteTarget unasked = target;
-                confirmDeleteTarget_.reset();
-                PerformDelete(unasked);
-                return;
-            }
-        }
-        ImGui::OpenPopup("##confirm_delete_popover");
-    }
+void OverlayApp::AskToDelete(ConfirmDeleteTarget target) {
+    confirmDeleteTarget_ = std::move(target);
+    // Queued even from inside a frame: the Overview's buttons ask from
+    // within its PushID nesting, and the popup belongs at the top level.
+    Queue(Effect{Effect::Kind::OpenConfirmDelete});
+}
 
+void OverlayApp::OpenConfirmDelete() {
+    // Not asked at all where Settings > Behavior says not to: done here
+    // rather than at each button, where the Overview is still being drawn
+    // from what the delete changes.
+    if (confirmDeleteTarget_.has_value()) {
+        const ConfirmDeleteTarget& target = *confirmDeleteTarget_;
+        const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
+        if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
+            const ConfirmDeleteTarget unasked = target;
+            confirmDeleteTarget_.reset();
+            PerformDelete(unasked);
+            return;
+        }
+    }
+    ImGui::OpenPopup(kConfirmDeletePopupId);
+}
+
+void OverlayApp::RenderConfirmDeletePopover() {
     const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    if (!ImGui::BeginPopup("##confirm_delete_popover")) {
+    if (!ImGui::BeginPopup(kConfirmDeletePopupId)) {
         return;
     }
     KeepPopoverInFront();
