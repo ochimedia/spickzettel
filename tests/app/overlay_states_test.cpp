@@ -254,7 +254,8 @@ protected:
         StartWith(std::move(config));
     }
 
-    // The state, as today's flags say it.
+    // The state, as what is on screen says it: the window, and the
+    // overlay's mode.
     State Observed() const {
         if (!host_.overlayWindow.visible) {
             return State::Hidden;
@@ -355,80 +356,87 @@ struct Cell {
     std::vector<std::string> calls;
 };
 
-// What the way up from Hidden into a session does: the window is made and
-// placed, the profile is resolved for what is underneath and handed to the
-// window, and then it is shown.
-const std::vector<std::string> kUp = {"EnsureCreated",  "MoveToDisplay", "UnderlyingApplication",
-                                      "NoActivate(on)", "EditModeInput", "Show"};
+// What the way up from Hidden into a session does before the window is
+// presented: the window is made and placed, and the profile is resolved
+// for what is underneath and handed to the window.
+const std::vector<std::string> kUp = {"EnsureCreated", "MoveToDisplay", "UnderlyingApplication", "NoActivate(on)",
+                                      "EditModeInput"};
 
 std::vector<std::string> Then(std::vector<std::string> calls, const std::vector<std::string>& more) {
     calls.insert(calls.end(), more.begin(), more.end());
     return calls;
 }
 
-// Today's table, as the app does it at fa49b05. The cells marked Change in
-// docs/OVERLAY_STATES.md change here when their phase lands, and nowhere
-// else.
-const std::vector<Cell>& TodaysTable() {
+// The table, as the app does it. The cells a Change of
+// docs/OVERLAY_STATES.md touches say which; they change here when their
+// phase lands, and nowhere else. What the window does for each Present is
+// PresentationSteps' (tests/platform/presentation_test.cpp).
+const std::vector<Cell>& Table() {
     static const std::vector<Cell> cells = {
         // From Hidden: up.
-        {From::Hidden, State::Hidden, Request::Edit, State::Edit, Then(kUp, {"Passthrough(off)", "Capture"})},
-        // Shown, and made click-through afterwards: edit mode in between (C1).
-        {From::Hidden, State::Hidden, Request::View, State::View, Then(kUp, {"Passthrough(on)"})},
+        {From::Hidden, State::Hidden, Request::Edit, State::Edit, Then(kUp, {"Present(Interactive)", "Capture"})},
+        // C1: up click-through, where it was shown as edit mode and made
+        // click-through afterwards.
+        {From::Hidden, State::Hidden, Request::View, State::View, Then(kUp, {"Present(ClickThrough)"})},
         {From::Hidden, State::Hidden, Request::QuickCapture, State::Edit,
-         Then({"EnsureCreated", "MoveToDisplay", "Capture"}, Then(kUp, {"Passthrough(off)", "Capture"}))},
+         Then({"EnsureCreated", "MoveToDisplay", "Capture"}, Then(kUp, {"Present(Interactive)", "Capture"}))},
         {From::Hidden, State::Hidden, Request::SilentCapture, State::Notice,
-         {"EnsureCreated", "MoveToDisplay", "Capture", "EnsureCreated", "MoveToDisplay", "ShowClickThrough"}},
+         {"EnsureCreated", "MoveToDisplay", "Capture", "EnsureCreated", "MoveToDisplay", "Present(ClickThrough)"}},
 
         // From the pinned view: edit mode through hidden, for its profile.
         {From::Pinned, State::Pinned, Request::Edit, State::Edit,
-         Then({"Hide"}, Then(kUp, {"Passthrough(off)", "Capture"}))},
-        // In place, with no profile (C3).
-        {From::Pinned, State::Pinned, Request::View, State::View, {"Passthrough(on)"}},
+         Then({"Present(Hidden)"}, Then(kUp, {"Present(Interactive)", "Capture"}))},
+        // In place, with no profile (C3). C2: the window stays as it is,
+        // where it used to hand focus to whatever had it when the pinned
+        // view came up.
+        {From::Pinned, State::Pinned, Request::View, State::View, {"Present(ClickThrough)"}},
         {From::Pinned, State::Pinned, Request::QuickCapture, State::Edit,
-         Then({"EnsureCreated", "MoveToDisplay", "Capture", "Hide"}, Then(kUp, {"Passthrough(off)", "Capture"}))},
+         Then({"EnsureCreated", "MoveToDisplay", "Capture", "Present(Hidden)"},
+              Then(kUp, {"Present(Interactive)", "Capture"}))},
         {From::Pinned, State::Pinned, Request::SilentCapture, State::Pinned,
          {"EnsureCreated", "MoveToDisplay", "Capture"}},
 
         // From a notice: the same as from the pinned view.
         {From::Notice, State::Notice, Request::Edit, State::Edit,
-         Then({"Hide"}, Then(kUp, {"Passthrough(off)", "Capture"}))},
-        {From::Notice, State::Notice, Request::View, State::View, {"Passthrough(on)"}},
+         Then({"Present(Hidden)"}, Then(kUp, {"Present(Interactive)", "Capture"}))},
+        {From::Notice, State::Notice, Request::View, State::View, {"Present(ClickThrough)"}},
         {From::Notice, State::Notice, Request::QuickCapture, State::Edit,
-         Then({"EnsureCreated", "MoveToDisplay", "Capture", "Hide"}, Then(kUp, {"Passthrough(off)", "Capture"}))},
+         Then({"EnsureCreated", "MoveToDisplay", "Capture", "Present(Hidden)"},
+              Then(kUp, {"Present(Interactive)", "Capture"}))},
         {From::Notice, State::Notice, Request::SilentCapture, State::Notice,
          {"EnsureCreated", "MoveToDisplay", "Capture"}},
-        {From::Notice, State::Notice, Request::NoticeFaded, State::Hidden, {"Hide"}},
+        {From::Notice, State::Notice, Request::NoticeFaded, State::Hidden, {"Present(Hidden)"}},
 
-        // From view mode with a session: edit mode in place.
-        {From::View, State::View, Request::Edit, State::Edit, {"Passthrough(off)", "Capture"}},
-        {From::View, State::View, Request::View, State::Hidden, {"Hide"}},
+        // From view mode with a session: edit mode in place - C4: with the
+        // keys forgotten and the pointer placed, as coming up does.
+        {From::View, State::View, Request::Edit, State::Edit, {"Present(Interactive)", "Capture"}},
+        {From::View, State::View, Request::View, State::Hidden, {"Present(Hidden)"}},
         {From::View, State::View, Request::QuickCapture, State::Edit,
-         {"EnsureCreated", "MoveToDisplay", "Capture", "Passthrough(off)", "Capture"}},
+         {"EnsureCreated", "MoveToDisplay", "Capture", "Present(Interactive)", "Capture"}},
         {From::View, State::View, Request::SilentCapture, State::View, {"EnsureCreated", "MoveToDisplay", "Capture"}},
         // Put away into the pinned view in place: only what is drawn changes.
-        {From::ViewWithAPinnedSnippet, State::View, Request::View, State::Pinned, {}},
+        {From::ViewWithAPinnedSnippet, State::View, Request::View, State::Pinned, {"Present(ClickThrough)"}},
         // From view mode without one: edit mode through hidden (C3).
         {From::ViewFromPinned, State::View, Request::Edit, State::Edit,
-         Then({"Hide"}, Then(kUp, {"Passthrough(off)", "Capture"}))},
-        {From::ViewFromPinned, State::View, Request::View, State::Pinned, {}},
+         Then({"Present(Hidden)"}, Then(kUp, {"Present(Interactive)", "Capture"}))},
+        {From::ViewFromPinned, State::View, Request::View, State::Pinned, {"Present(ClickThrough)"}},
 
         // From edit mode.
-        {From::Edit, State::Edit, Request::Edit, State::Hidden, {"Hide"}},
-        {From::Edit, State::Edit, Request::View, State::View, {"Passthrough(on)"}},
+        {From::Edit, State::Edit, Request::Edit, State::Hidden, {"Present(Hidden)"}},
+        {From::Edit, State::Edit, Request::View, State::View, {"Present(ClickThrough)"}},
         // The shot is cut from the frozen screen, and the screen frozen again.
         {From::Edit, State::Edit, Request::QuickCapture, State::Edit,
-         {"EnsureCreated", "MoveToDisplay", "Passthrough(off)", "Capture"}},
+         {"EnsureCreated", "MoveToDisplay", "Present(Interactive)", "Capture"}},
         {From::Edit, State::Edit, Request::SilentCapture, State::Edit, {"EnsureCreated", "MoveToDisplay"}},
         // Put away into the pinned view through hidden (C7).
         {From::EditWithAPinnedSnippet, State::Edit, Request::Edit, State::Pinned,
-         {"Hide", "EnsureCreated", "MoveToDisplay", "ShowClickThrough"}},
+         {"Present(Hidden)", "EnsureCreated", "MoveToDisplay", "Present(ClickThrough)"}},
     };
     return cells;
 }
 
 TEST_F(OverlayStatesTest, EveryCellLeadsWhereTheTableSaysTheWayItSays) {
-    for (const Cell& cell : TodaysTable()) {
+    for (const Cell& cell : Table()) {
         SCOPED_TRACE(std::string(Name(cell.fromState)) + " + " + Name(cell.request) + " -> " + Name(cell.to) +
                      " (row from " + std::to_string(static_cast<int>(cell.from)) + ")");
         Restart(Config());
@@ -475,9 +483,8 @@ TEST_F(OverlayStatesTest, ARestartGoesThroughHiddenInTheSameSession) {
 
     EXPECT_EQ(Observed(), State::Edit);
     EXPECT_EQ(host_.overlayWindow.calls,
-              (std::vector<std::string>{"NoActivate(off)", "Hide", "EnsureCreated", "MoveToDisplay",
-                                        "NoActivate(off)", "EditModeInput", "Show", "Passthrough(off)",
-                                        "Capture"}));
+              (std::vector<std::string>{"NoActivate(off)", "Present(Hidden)", "EnsureCreated", "MoveToDisplay",
+                                        "NoActivate(off)", "EditModeInput", "Present(Interactive)", "Capture"}));
     ExpectInvariants();
 }
 

@@ -49,26 +49,37 @@ public:
     }
     std::function<void()> displaysChangedCallback;
 
-    void Show() override {
-        calls.push_back("Show");
-        ++showCallCount;
-        visible = true;
-    }
-
-    void ShowClickThrough() override {
-        calls.push_back("ShowClickThrough");
-        ++showClickThroughCallCount;
-        ++showCallCount;
-        inputPassthrough = true;
-        visible = true;
-    }
-
-    void Hide() override {
-        calls.push_back("Hide");
-        ++hideCallCount;
-        visible = false;
-        if (forgetUnderlyingAppOnHide) {
-            underlyingApp = {};
+    void Present(platform::Presentation presentation) override {
+        switch (presentation) {
+            case platform::Presentation::Hidden:
+                calls.push_back("Present(Hidden)");
+                break;
+            case platform::Presentation::ClickThrough:
+                calls.push_back("Present(ClickThrough)");
+                break;
+            case platform::Presentation::Interactive:
+                calls.push_back("Present(Interactive)");
+                break;
+        }
+        if (!created) {
+            return;  // like the real thing: nothing to present
+        }
+        const bool up = presentation != platform::Presentation::Hidden;
+        if (up && !visible) {
+            ++showCallCount;
+            if (presentation == platform::Presentation::ClickThrough) {
+                ++showClickThroughCallCount;
+            }
+        }
+        if (!up && visible) {
+            ++hideCallCount;
+            if (forgetUnderlyingAppOnHide) {
+                underlyingApp = {};
+            }
+        }
+        visible = up;
+        if (up) {
+            inputPassthrough = presentation == platform::Presentation::ClickThrough;
         }
     }
 
@@ -89,11 +100,6 @@ public:
     platform::ForegroundApp UnderlyingApplication() const override {
         calls.push_back("UnderlyingApplication");
         return underlyingApp;
-    }
-
-    void SetInputPassthrough(bool enabled) override {
-        calls.push_back(enabled ? "Passthrough(on)" : "Passthrough(off)");
-        inputPassthrough = enabled;
     }
 
     void SetEditModeNoActivate(bool enabled) override {
@@ -207,10 +213,10 @@ public:
     // give the overlay a window, and every show and capture has to cope.
     bool createSucceeds = true;
     int ensureCreatedCallCount = 0;
+    // How often the window came up, how often of those click-through - the
+    // whole difference between taking focus and leaving it alone on the
+    // real thing - and how often it went down.
     int showCallCount = 0;
-    // Counted separately, though it shows the same way here: which of the
-    // two a caller used is the whole difference between taking focus and
-    // leaving it alone on the real thing.
     int showClickThroughCallCount = 0;
     int hideCallCount = 0;
     // The display the window covers: the one it was created on, until moved.

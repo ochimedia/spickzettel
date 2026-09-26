@@ -277,8 +277,9 @@ thing:
 - The grab starts for a window that is visible and not click-through. A
   window coming up click-through is counted as click-through before it
   is shown.
-- `SW_SHOW` activates the window by itself. A window coming up
-  click-through, or under no-activate, is shown with `SW_SHOWNOACTIVATE`.
+- `SW_SHOW` activates the window by itself, and nothing notes where
+  focus came from. Every show is `SW_SHOWNOACTIVATE`, and focus is taken
+  by one step of its own, which notes it.
 - The camera correction is settled while the window still covers the
   game, before anything reveals the game: a hide, or a switch to
   click-through.
@@ -290,10 +291,10 @@ The steps for each pair:
 
 | From → to | Steps |
 |---|---|
-| Hidden → Interactive | show (activating unless no-activate); take focus unless no-activate; claim the front; forget keys, place the pointer; grab on |
-| Hidden → ClickThrough | count as click-through; show without activating; click-through styles; claim the front; forget keys |
-| Interactive → ClickThrough | settle the camera; click-through styles; grab off; hand focus back if held |
-| ClickThrough → Interactive | styles off; take focus unless no-activate; forget keys, place the pointer; grab on |
+| Hidden → Interactive | count as interactive, styles off; show; take focus unless no-activate; claim the front; forget keys, place the pointer; grab on |
+| Hidden → ClickThrough | count as click-through; show; click-through styles; claim the front; forget keys; grab off |
+| Interactive → ClickThrough | settle the camera; count as click-through, styles on; grab off; hand focus back if held |
+| ClickThrough → Interactive | count as interactive, styles off; take focus unless no-activate; forget keys, place the pointer; grab on |
 | up → Hidden | settle the camera; put back a borrowed no-activate bit; hide; grab off; hand focus back if held |
 | same → same | nothing |
 
@@ -311,19 +312,26 @@ show. That leads to two faults found by reading:
   through view mode, gives focus back on hiding to the window from
   before, not to the one the user moved to.
 
-Both are to be confirmed by hand in phase 3.
+Both were confirmed on the real desktop before phase 3, and are gone
+after it, by a scripted check: a scratch instance with its own
+`%APPDATA%`, two plain windows, and the hotkeys sent as key presses. The
+same check confirmed C1: with "Don't steal focus" off, the view hotkey
+from hidden moved the foreground to the overlay and straight back, and
+no longer does.
 
 **Change** (C4): ClickThrough → Interactive forgets the keys held and
 places the pointer, as a show does. Today, switching from view to edit
 in place does neither. A window with no focus hears of the cursor only
 once it moves (the reason `RenderFrame` seeds the pointer after a show),
-so a click before any movement hovered nothing. Found by reading; to be
-confirmed by hand.
+so a click before any movement hovered nothing. Found by reading, and
+not confirmed by hand: what ImGui hovers is not visible from outside.
 
-The steps are planned by a pure function in `platform/` with no OS
-headers: `PresentationSteps(from, to, noActivate)`. The Win32 window
-carries them out. The function is tested on every pair, with the rules
-above as properties:
+The steps are planned by a pure function in `platform/presentation.h`,
+with no OS headers: `PresentationSteps(from, to, noActivate)`. The Win32
+window carries them out, one `PresentationStep` at a time. The function
+is tested on every pair, with and without no-activate, from a window
+holding focus and one not, with the rules above as properties
+(`tests/platform/presentation_test.cpp`):
 
 - no plan starts the grab for a click-through target;
 - the styles never go on before a first show;

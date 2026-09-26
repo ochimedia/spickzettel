@@ -217,7 +217,7 @@ void TrayController::RunAppCommand(CommandId id) {
 
 void TrayController::QuickCaptureAndShow() {
     // Idempotent and invisible if already created (see EnsureCreated's own
-    // contract) - critically, this doesn't call Show() itself, so the
+    // contract) - critically, this doesn't present the window, so the
     // capture below happens against whatever was on screen before this
     // hotkey fired (the hidden desktop, or the already-visible overlay),
     // never against the overlay's own edit-mode UI.
@@ -297,6 +297,22 @@ OverlayMode ModeFor(OverlayState state) {
 }
 
 bool IsSessionState(OverlayState state) { return state == OverlayState::View || state == OverlayState::Edit; }
+
+// What the window is for each state: edit mode takes input, every other
+// state that is up is only there to be looked at.
+platform::Presentation PresentationFor(OverlayState state) {
+    switch (state) {
+        case OverlayState::Hidden:
+            return platform::Presentation::Hidden;
+        case OverlayState::Edit:
+            return platform::Presentation::Interactive;
+        case OverlayState::Pinned:
+        case OverlayState::Notice:
+        case OverlayState::View:
+            break;
+    }
+    return platform::Presentation::ClickThrough;
+}
 }  // namespace
 
 void TrayController::Apply(const OverlayTransition& transition) {
@@ -326,7 +342,7 @@ void TrayController::Apply(const OverlayTransition& transition) {
     }
     // Through hidden: down first, then up as from Hidden.
     if (transition.route == Route::ThroughHidden) {
-        host_.GetOverlayWindow().Hide();
+        host_.GetOverlayWindow().Present(platform::Presentation::Hidden);
     }
     // 4. The display, and the window, when coming up. A window that cannot
     // be made leaves the overlay hidden.
@@ -349,8 +365,9 @@ void TrayController::Apply(const OverlayTransition& transition) {
     if (transition.startsSession || transition.restart) {
         ApplyProfileForCurrentApplication(/*keepPrevious=*/transition.restart);
     }
-    // 7. The window.
-    PresentWindow(transition);
+    // 7. The window is told what to be, and gets there in the order only
+    // it knows - see IOverlayWindow::Present.
+    host_.GetOverlayWindow().Present(PresentationFor(to));
     state_ = to;
     // 8. Anything the overlay remembers about state the OS owns is stale
     // once it has been away - see OnOverlayShown.
@@ -365,33 +382,6 @@ void TrayController::Apply(const OverlayTransition& transition) {
         session_.FreezeScreen(overlayDisplay_);
     }
     CheckInvariants();
-}
-
-void TrayController::PresentWindow(const OverlayTransition& transition) {
-    platform::IOverlayWindow& window = host_.GetOverlayWindow();
-    const OverlayState to = transition.to;
-    if (to == OverlayState::Hidden) {
-        window.Hide();
-        return;
-    }
-    const bool session = IsSessionState(to);
-    if (transition.route == Route::InPlace) {
-        // The pinned view, from view mode, is already click-through and
-        // unfocused: only what is drawn changes.
-        if (session) {
-            window.SetInputPassthrough(to == OverlayState::View);
-        }
-        return;
-    }
-    if (!session) {
-        // The pinned view and a notice are only there to be looked at:
-        // click-through from the first moment, and never focused - see
-        // IOverlayWindow::ShowClickThrough.
-        window.ShowClickThrough();
-        return;
-    }
-    window.Show();
-    window.SetInputPassthrough(to == OverlayState::View);
 }
 
 void TrayController::CheckInvariants() const {

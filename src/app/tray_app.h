@@ -150,8 +150,6 @@ private:
     // Section 6: one transition, every step in its order. A Stay does
     // nothing.
     void Apply(const OverlayTransition& transition);
-    // Section 6's step 7 as the window can be told it today, call by call.
-    void PresentWindow(const OverlayTransition& transition);
     // Section 3's invariants, checked after every transition in a debug
     // build.
     void CheckInvariants() const;

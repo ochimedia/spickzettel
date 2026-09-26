@@ -140,7 +140,7 @@ void OverlayApp::OnHotkey(CommandId command, const platform::KeyCombo& combo) {
 }
 
 void OverlayApp::OnInput(const platform::InputEvent& event) {
-    // Real OS-level click-through (see IOverlayWindow::SetInputPassthrough)
+    // Real OS-level click-through (see IOverlayWindow::Present)
     // means view-only mode receives no input on Windows; guarded here too so
     // it is read-only on every backend, not just the real one.
     if (IsViewOnly()) {

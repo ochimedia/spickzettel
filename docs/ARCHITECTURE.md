@@ -2379,14 +2379,32 @@ canvas left out, so the only thing on screen is a message. It exists for
 the silent capture hotkey, which acts while the overlay is hidden and
 still has to say what it did. Three things about it were found by
 watching it fail on the real thing: showing a window activates it
-(`SW_SHOW` takes focus by itself, hence `ShowClickThrough`); a
+(`SW_SHOW` takes focus by itself, hence `SW_SHOWNOACTIVATE`); a
 window given `WS_EX_LAYERED` before its first show draws nothing, so the
 order is show first, click-through styles second - with the window
 already counted click-through for the input grab, which a show in edit
-mode starts and the passthrough a moment later took down again; and
+mode starts and the passthrough a moment later took down again. Those
+are now the window's own rules for every change it is told to make (see
+"The window is told what to be", below); and
 ImGui's clock is not the app's clock, so the first frame after an hour
 in the tray carries an hour's delta and puts every expiry set while
 hidden in the past - the renderer caps the delta at 0.1 s.
+
+**The window is told what to be.** `IOverlayWindow::Present` takes
+hidden, click-through or interactive, and the window gets there in the
+order only it knows: a plan of steps from `PresentationSteps`
+(`platform/presentation.h`), pure and tested on every pair, which the
+Win32 window carries out. It replaced four calls - show, show
+click-through, hide, passthrough - whose order each caller chose, and
+view mode came up the way that went wrong: shown as edit mode and made
+click-through a moment later, which started the input grab and, with
+"Don't steal focus" off, took focus from the game only to hand it back.
+Focus is taken by one step, which notes the window it was taken from,
+and handed back only while the overlay holds it. Noted at the show
+instead, as it was, the note could be hours old: view mode from the
+pinned view handed focus to whatever had it when the pinned view came
+up. Each fault was reproduced on the real desktop before the change and
+gone after it (`docs/OVERLAY_STATES.md`, section 7).
 
 **View-only draws only now and then.** Its picture does not change by
 itself, and with pinned snippets it can sit over a game for hours, where

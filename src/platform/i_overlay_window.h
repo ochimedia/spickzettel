@@ -4,6 +4,7 @@
 #include <functional>
 
 #include "platform/platform_types.h"
+#include "platform/presentation.h"
 
 // Declared, not included: the one ImGui type this header names is the
 // signature of a draw callback, which the UI hands to ImDrawList::
@@ -52,20 +53,17 @@ public:
 
     // ===== Showing =====
 
-    // Shows the window and gives it focus, unless SetEditModeNoActivate(true)
-    // is in effect.
-    virtual void Show() = 0;
-    // Shows it click-through (see SetInputPassthrough) and without ever
-    // taking focus, whatever that setting says. On Windows showing a window
-    // is what activates it, so this has to be a distinct operation; and the
-    // window is click-through from its first moment, where a show followed
-    // by SetInputPassthrough(true) was in edit mode in between - long
-    // enough to start the input grab and take it down again. For a window
-    // only there to be looked at - see app::TrayController::ShowNotice.
-    virtual void ShowClickThrough() = 0;
-    // Hides the window and restores focus to whatever previously had it, if
-    // this window still holds it.
-    virtual void Hide() = 0;
+    // Makes the window what `presentation` says, from whatever it is -
+    // hidden, up click-through, or up interactive - in the order only the
+    // window knows (see PresentationSteps, and docs/OVERLAY_STATES.md,
+    // section 7). A no-op before EnsureCreated, and for what it already is.
+    //
+    // Click-through, every mouse event over the window goes to whatever is
+    // beneath it, and the window never takes focus. Interactive, it takes
+    // focus unless SetEditModeNoActivate(true) is in effect. Focus taken is
+    // handed back, on going click-through or hidden, to the window it was
+    // taken from - and only if this window still holds it.
+    virtual void Present(Presentation presentation) = 0;
     virtual bool IsVisible() const = 0;
 
     // Whether frames are wanted at the display's refresh rate or only now
@@ -93,16 +91,10 @@ public:
     virtual void RequestTextInput() = 0;
     virtual void ReleaseTextInput() = 0;
 
-    // OS-level click-through: while enabled every mouse event over this
-    // window goes to whatever is beneath it, and keyboard focus is handed
-    // back to what had it before the overlay was shown. For view-only mode.
-    // Independent of Show/Hide; takes effect immediately.
-    virtual void SetInputPassthrough(bool enabled) = 0;
-
     // How much physical input the overlay takes away from the foreground
     // application while it is up in edit mode - see EditModeInputOptions.
-    // Safe to call at any time; applies only while genuinely visible in
-    // edit mode, never while hidden or in click-through view-only mode.
+    // Safe to call at any time; applies only while presented interactive,
+    // never while hidden or click-through.
     virtual void SetEditModeInput(const EditModeInputOptions& options) = 0;
 
     // The input options HUD is up: its rows are toggled by number keys, and

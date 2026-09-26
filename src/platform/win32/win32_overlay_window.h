@@ -41,13 +41,10 @@ public:
     // What a close asked of this window from outside does - see WM_CLOSE
     // in HandleMessage. The host's own exit, which it sets.
     void SetCloseRequestedCallback(std::function<void()> callback) { closeRequestedCallback_ = std::move(callback); }
-    void Show() override;
-    void ShowClickThrough() override;
-    void Hide() override;
+    void Present(Presentation presentation) override;
     bool IsVisible() const override;
     int ScalePercent() const override;
     ForegroundApp UnderlyingApplication() const override;
-    void SetInputPassthrough(bool enabled) override;
     void SetEditModeInput(const EditModeInputOptions& options) override;
     void SetInputOptionsHudDigits(int digitCount) override;
     void SetEditModeNoActivate(bool enabled) override;
@@ -80,9 +77,6 @@ public:
     DWORD MillisecondsUntilIdleFrame() const;
 
 private:
-    // Both public Show variants, which differ only in whether the window
-    // is allowed to take focus on the way up.
-    void ShowInternal(bool activate);
     static LRESULT CALLBACK WndProcThunk(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     // Hands `event` to the input callback, stamped with the time and the
@@ -97,6 +91,13 @@ private:
     // gives ImGui - see there.
     static Modifiers HeldModifiers();
     double NowSeconds() const;
+    // One step of a presentation plan - see Present. `heldFocus` is whether
+    // this window held focus when the change began.
+    void Carry(PresentationStep step, bool heldFocus);
+    // Takes focus, noting the window it is taken from unless this window
+    // holds it already - the one way this window takes focus. See
+    // focusTakenFrom_.
+    void TakeFocus();
     // Recomputes whether the input grab may run right now (visible, and in
     // edit mode rather than click-through view-only) and applies it.
     void RefreshEditModeInput();
@@ -119,10 +120,16 @@ private:
     // Where the last per-frame Move was emitted for the software pointer,
     // so a frame in which it didn't move emits nothing - see RenderFrame.
     POINT lastEmittedMove_{LONG_MIN, LONG_MIN};
-    HWND previousForegroundWindow_ = nullptr;
+    // The window focus was taken from, noted at the moment it was taken
+    // (see TakeFocus) and dropped once it is handed back - so only while
+    // this window may hold focus it took. Where focus goes back to on going
+    // click-through or hidden, and when a text field that borrowed it
+    // closes. Noted at the show, as it once was, it could be hours old by
+    // then, or a window the user had since left.
+    HWND focusTakenFrom_ = nullptr;
     bool visible_ = false;
     bool inputPassthrough_ = false;
-    // See SetEditModeInput. Held here so Show/Hide/SetInputPassthrough can
+    // See SetEditModeInput. Held here so a presentation can
     // re-derive whether the grab should currently be running at all -
     // the options say what is wanted, the window says when it applies.
     EditModeInputOptions editModeInput_;
@@ -143,8 +150,7 @@ private:
     // See SetEditModeNoActivate's doc comment. Consulted at EnsureCreated()
     // time (baked into the window's creation style - SetEditModeNoActivate
     // also live-restyles hwnd_ directly if it already exists by then) and
-    // by Show()/SetInputPassthrough(false)/ReleaseTextInput() to decide
-    // whether they should be touching OS focus at all.
+    // by Present to decide whether it should be taking focus at all.
     bool noActivate_ = false;
     // Whether RequestTextInput took WS_EX_NOACTIVATE off to borrow real keyboard
     // focus, so ReleaseTextInput knows to put it back - see both.

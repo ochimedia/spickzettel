@@ -36,7 +36,7 @@ TEST(Win32OverlayWindowTest, EveryInputMessageArrivesAsOneEventInOrder) {
     ASSERT_TRUE(window.EnsureCreated(display));
     // Shown, as only a shown window hands its input on - click-through and
     // without focus, so nothing else on the desktop is disturbed.
-    window.ShowClickThrough();
+    window.Present(Presentation::ClickThrough);
     std::vector<InputEvent> events;
     window.SetInputCallback([&events](const InputEvent& event) {
         // Not whatever the real keyboard holds, nor the frames' ticks.
@@ -92,7 +92,7 @@ TEST(Win32OverlayWindowTest, EveryInputMessageArrivesAsOneEventInOrder) {
 
     // Hidden, it is nobody's input: the grab hands on the key of the hotkey
     // that hid the window after the hide.
-    window.Hide();
+    window.Present(Presentation::Hidden);
     events.clear();
     SendMessageW(hwnd, WM_KEYDOWN, 'S', 1);
     SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(10, 20));

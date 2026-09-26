@@ -310,55 +310,140 @@ void Win32OverlayWindow::SetDisplaysChangedCallback(std::function<void()> callba
     displaysChangedCallback_ = std::move(callback);
 }
 
-void Win32OverlayWindow::Show() { ShowInternal(/*activate=*/true); }
-
-void Win32OverlayWindow::ShowClickThrough() {
-    // Click-through as far as the grab is concerned before the show, which
-    // starts it for a window that is not (see RefreshEditModeInput). The
-    // styles themselves only after it: a window that has WS_EX_LAYERED
-    // before its first show draws nothing at all - a notice came up, stayed
-    // its two seconds and went, with no message on it.
-    inputPassthrough_ = true;
-    ShowInternal(/*activate=*/false);
-    SetInputPassthrough(true);
-}
-
-void Win32OverlayWindow::ShowInternal(bool activate) {
-    if (!hwnd_ || visible_) {
+void Win32OverlayWindow::Present(Presentation presentation) {
+    if (!hwnd_) {
         return;
     }
-    // Captured regardless of noActivate_: it's the restore target for
-    // Hide() and, under noActivate_, for ReleaseTextInput() too - whether or
-    // not this Show() call itself ends up taking focus.
-    previousForegroundWindow_ = GetForegroundWindow();
-    // SW_SHOW *activates* the window it shows - that is the whole
-    // difference between it and SW_SHOWNOACTIVATE, and it is enough to take
-    // focus on its own, with no SetForegroundWindow anywhere near it.
-    // Ordinarily that is wanted; where it isn't, WS_EX_NOACTIVATE (see
-    // SetEditModeNoActivate) makes it impossible anyway - and where a
-    // caller wants no focus regardless of that setting, it says so (see
-    // ShowClickThrough).
-    ShowWindow(hwnd_, activate ? SW_SHOW : SW_SHOWNOACTIVATE);
-    if (activate && !noActivate_) {
-        SetForegroundWindow(hwnd_);
+    const Presentation from = !visible_          ? Presentation::Hidden
+                              : inputPassthrough_ ? Presentation::ClickThrough
+                                                  : Presentation::Interactive;
+    // Asked before anything moves: once the window is hidden, whether it
+    // held focus can no longer be told.
+    const bool heldFocus = GetForegroundWindow() == hwnd_;
+    for (const PresentationStep step : PresentationSteps(from, presentation, noActivate_)) {
+        Carry(step, heldFocus);
     }
-    // Claim the top of the topmost band, without taking activation.
-    // WS_EX_TOPMOST puts a window in that band but says nothing about its
-    // order *within* it, and that order follows activation - which under
-    // noActivate_ we deliberately never take, so ShowWindow alone leaves us
-    // wherever the last activation left us.
-    //
-    // Necessary but not sufficient on its own: whatever put another topmost
-    // window in front is generally still going on after this call. See the
-    // recheck in RenderFrame.
-    SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    visible_ = true;
-    shownSeconds_ = 0.0f;
-    seedPointerFromCursor_ = true;
-    // No key goes down unseen while hidden that goes up seen - see EmitKey.
-    keysDown_.reset();
-    RefreshEditModeInput();
-    QueryPerformanceCounter(&lastFrameTime_);  // avoid a large delta-time spike on the first frame
+}
+
+void Win32OverlayWindow::Carry(PresentationStep step, bool heldFocus) {
+    switch (step) {
+        case PresentationStep::SettleCamera:
+            SettleCameraBeforeReveal();
+            return;
+        case PresentationStep::RestoreBorrowedNoActivate:
+            // A field open at this moment is being hidden along with the
+            // overlay, so whatever it borrowed goes back now rather than on a
+            // close that will never come. The grab-side claims are cleared by
+            // the grab going off; this is the window's own half, the
+            // WS_EX_NOACTIVATE bit.
+            if (focusBorrowed_) {
+                const LONG_PTR exStyle = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
+                SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE);
+                focusBorrowed_ = false;
+            }
+            return;
+        case PresentationStep::CountAsClickThrough:
+            inputPassthrough_ = true;
+            return;
+        case PresentationStep::CountAsInteractive:
+            inputPassthrough_ = false;
+            return;
+        case PresentationStep::ClickThroughStylesOn:
+        case PresentationStep::ClickThroughStylesOff: {
+            // The WM_NCHITTEST/HTTRANSPARENT handling turned out not to be
+            // enough on its own: that mechanism only re-does hit-testing among
+            // windows on the *same thread* ("the message will be sent to
+            // underlying windows in the same thread" per its own docs), and
+            // the whole point here is routing to a window in a completely
+            // different process (the game). WS_EX_TRANSPARENT is what actually
+            // makes a window invisible to hit-testing at the OS/window-manager
+            // level, regardless of what owns whatever's underneath - the
+            // standard technique for a genuine cross-process click-through
+            // overlay. WS_EX_TRANSPARENT alone is reported unreliable without
+            // WS_EX_LAYERED alongside it; deliberately not calling
+            // SetLayeredWindowAttributes/UpdateLayeredWindow for it, though -
+            // this window's actual per-pixel transparency still comes entirely
+            // from ImGui_ImplWin32_EnableAlphaCompositing's DWM blur-behind
+            // (see the translucency section of docs/ARCHITECTURE.md), and
+            // those two legacy layered-window APIs are how the *other*,
+            // rejected translucency techniques there fed a window's visible
+            // alpha - if a set-once color/alpha value from either applied on
+            // top of blur-behind, it would fight it. WS_EX_LAYERED's bit is
+            // only being borrowed here for what it does to hit-testing, not
+            // for what it can do to pixels.
+            LONG_PTR exStyle = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
+            if (step == PresentationStep::ClickThroughStylesOn) {
+                exStyle |= (WS_EX_LAYERED | WS_EX_TRANSPARENT);
+            } else {
+                exStyle &= ~(WS_EX_LAYERED | WS_EX_TRANSPARENT);
+            }
+            SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle);
+            return;
+        }
+        case PresentationStep::Show:
+            // SW_SHOWNOACTIVATE: SW_SHOW *activates* the window it shows -
+            // that is the whole difference between the two, and it is enough
+            // to take focus on its own, with no SetForegroundWindow anywhere
+            // near it. Focus is taken by TakeFocus alone, which notes where
+            // from.
+            ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+            visible_ = true;
+            shownSeconds_ = 0.0f;
+            QueryPerformanceCounter(&lastFrameTime_);  // avoid a large delta-time spike on the first frame
+            return;
+        case PresentationStep::Hide:
+            ShowWindow(hwnd_, SW_HIDE);
+            visible_ = false;
+            return;
+        case PresentationStep::TakeFocus:
+            TakeFocus();
+            return;
+        case PresentationStep::HandFocusBack:
+            // Only if this window held focus when the change began. Once
+            // click-through, the user can freely click into and out of other
+            // windows through the overlay, and GetForegroundWindow() already
+            // tracks wherever that leaves them - handing focus to a noted
+            // window then would undo a real focus change the user made.
+            // Keyboard focus is independent of the cursor, so without the
+            // hand back, a window that held focus would keep the keyboard -
+            // eating the game's WASD - for as long as view mode is up.
+            if (heldFocus && focusTakenFrom_ && IsWindow(focusTakenFrom_)) {
+                SetForegroundWindow(focusTakenFrom_);
+            }
+            focusTakenFrom_ = nullptr;
+            return;
+        case PresentationStep::ClaimFront:
+            // Claim the top of the topmost band, without taking activation.
+            // WS_EX_TOPMOST puts a window in that band but says nothing about
+            // its order *within* it, and that order follows activation -
+            // which under noActivate_ we deliberately never take, so showing
+            // alone leaves us wherever the last activation left us.
+            //
+            // Necessary but not sufficient on its own: whatever put another
+            // topmost window in front is generally still going on after this
+            // call. See the recheck in RenderFrame.
+            SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            return;
+        case PresentationStep::ForgetKeys:
+            // No key goes down unseen while away that goes up seen - see
+            // EmitKey.
+            keysDown_.reset();
+            return;
+        case PresentationStep::PlacePointer:
+            seedPointerFromCursor_ = true;
+            return;
+        case PresentationStep::RefreshGrab:
+            RefreshEditModeInput();
+            return;
+    }
+}
+
+void Win32OverlayWindow::TakeFocus() {
+    const HWND foreground = GetForegroundWindow();
+    if (foreground != hwnd_) {
+        focusTakenFrom_ = foreground;
+    }
+    SetForegroundWindow(hwnd_);
 }
 
 void Win32OverlayWindow::SetInputOptionsHudDigits(int digitCount) {
@@ -408,42 +493,6 @@ void Win32OverlayWindow::SettleCameraBeforeReveal() {
     }
 }
 
-void Win32OverlayWindow::Hide() {
-    if (!hwnd_ || !visible_) {
-        return;
-    }
-    SettleCameraBeforeReveal();
-    // Only reclaim/restore focus if this window itself currently holds
-    // it. `previousForegroundWindow_` is a one-time snapshot from Show()
-    // - accurate for as long as this window keeps holding real OS focus
-    // itself (ordinary edit mode), but not once input-passthrough view
-    // mode hands focus off to whatever's underneath (see
-    // SetInputPassthrough): from that point on, the user can freely
-    // click into and out of *other* windows through the click-through
-    // overlay, and GetForegroundWindow() already correctly tracks
-    // wherever that leaves them - overriding it with our own stale
-    // memory here would silently undo a real focus change the user made
-    // while the overlay was up (e.g. switching to a window that wasn't
-    // even foreground yet at Show() time).
-    const bool weHoldFocus = (GetForegroundWindow() == hwnd_);
-    // A field open at this moment is being hidden along with the overlay, so
-    // whatever it borrowed goes back now rather than on a close that will
-    // never come. The grab-side claims are cleared by SetActive below; this
-    // is the window's own half, the WS_EX_NOACTIVATE bit.
-    if (focusBorrowed_) {
-        const LONG_PTR exStyle = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
-        SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE);
-        focusBorrowed_ = false;
-    }
-    ShowWindow(hwnd_, SW_HIDE);
-    visible_ = false;
-    RefreshEditModeInput();  // never keep the machine's input while invisible
-    if (weHoldFocus && previousForegroundWindow_ && IsWindow(previousForegroundWindow_)) {
-        SetForegroundWindow(previousForegroundWindow_);
-    }
-    previousForegroundWindow_ = nullptr;
-}
-
 bool Win32OverlayWindow::IsVisible() const { return visible_; }
 
 int Win32OverlayWindow::ScalePercent() const {
@@ -463,7 +512,7 @@ ForegroundApp Win32OverlayWindow::UnderlyingApplication() const {
     // hidden case.
     HWND target = GetForegroundWindow();
     if (target == nullptr || target == hwnd_) {
-        target = previousForegroundWindow_;
+        target = focusTakenFrom_;
     }
     if (target == nullptr || !IsWindow(target)) {
         return {};
@@ -506,73 +555,6 @@ ForegroundApp Win32OverlayWindow::UnderlyingApplication() const {
         }
     }
     return app;
-}
-
-void Win32OverlayWindow::SetInputPassthrough(bool enabled) {
-    inputPassthrough_ = enabled;
-    if (!hwnd_) {
-        return;
-    }
-
-    // The WM_NCHITTEST/HTTRANSPARENT handling below turned out not to be
-    // enough on its own: that mechanism only re-does hit-testing among
-    // windows on the *same thread* ("the message will be sent to
-    // underlying windows in the same thread" per its own docs), and the
-    // whole point here is routing to a window in a completely different
-    // process (the game). WS_EX_TRANSPARENT is what actually makes a
-    // window invisible to hit-testing at the OS/window-manager level,
-    // regardless of what owns whatever's underneath - the standard
-    // technique for a genuine cross-process click-through overlay.
-    // WS_EX_TRANSPARENT alone is reported unreliable without
-    // WS_EX_LAYERED alongside it; deliberately not calling
-    // SetLayeredWindowAttributes/UpdateLayeredWindow for it, though -
-    // this window's actual per-pixel transparency still comes entirely
-    // from ImGui_ImplWin32_EnableAlphaCompositing's DWM blur-behind (see
-    // the translucency section of docs/ARCHITECTURE.md), and those two
-    // legacy layered-window APIs are how the *other*, rejected
-    // translucency techniques there fed a window's visible alpha - if a
-    // set-once color/alpha value from either applied on top of blur-behind,
-    // it would fight it. WS_EX_LAYERED's bit is only being borrowed here
-    // for what it does to hit-testing, not for what it can do to pixels.
-    if (enabled && visible_) {
-        SettleCameraBeforeReveal();  // view-only drops the frozen screen next
-    }
-    LONG_PTR exStyle = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
-    if (enabled) {
-        exStyle |= (WS_EX_LAYERED | WS_EX_TRANSPARENT);
-    } else {
-        exStyle &= ~(WS_EX_LAYERED | WS_EX_TRANSPARENT);
-    }
-    SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle);
-    // View-only mode is click-through by design, so the grab stands down
-    // for its duration and comes back when edit mode does.
-    RefreshEditModeInput();
-
-    if (!visible_) {
-        return;
-    }
-    // Click-through alone only covers mouse routing - keyboard focus is
-    // independent of cursor position in Win32, so without this, whichever
-    // window was focused when view mode was entered (typically this
-    // overlay itself, from Show()) would keep "owning" the keyboard the
-    // entire time view mode is up, silently eating the game's WASD/etc.
-    // input. Handing focus back to whatever had it before this overlay
-    // ever took over - the same target Hide() itself restores to - is
-    // what actually makes view mode not interfere with gameplay, not just
-    // "not swallow clicks."
-    if (enabled) {
-        if (previousForegroundWindow_ && IsWindow(previousForegroundWindow_)) {
-            SetForegroundWindow(previousForegroundWindow_);
-        }
-    } else if (!noActivate_) {
-        // Back to edit mode: reclaim focus so drawing/the toolbar work
-        // immediately, without needing an extra click on the overlay
-        // first. Skipped under noActivate_ - there, edit mode is meant to
-        // stay mouse-only and leave the game focused; RequestTextInput() grabs
-        // real focus later only if something (e.g. a rename field)
-        // actually needs it.
-        SetForegroundWindow(hwnd_);
-    }
 }
 
 namespace {
@@ -763,7 +745,7 @@ void Win32OverlayWindow::SetEditModeNoActivate(bool enabled) {
     if (!hwnd_) {
         return;  // not created yet - EnsureCreated bakes noActivate_ into the initial exStyle instead
     }
-    // Same live-restyle technique SetInputPassthrough already uses for
+    // Same live-restyle technique the click-through styles use for
     // WS_EX_LAYERED/WS_EX_TRANSPARENT: WS_EX_NOACTIVATE can be flipped on
     // an already-created window via SetWindowLongPtr, it doesn't have to
     // be set only at CreateWindowEx time. Windows picks this up for the
@@ -779,17 +761,16 @@ void Win32OverlayWindow::SetEditModeNoActivate(bool enabled) {
     SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle);
 
     // Turning it OFF while already visible in edit mode should reclaim
-    // focus immediately, matching what Show() would have done had this
-    // been set before the window was ever shown - otherwise edit mode
-    // would silently stay mouse-only until the next hide/show cycle.
-    // Turning it ON needs no equivalent action: whatever already has focus
-    // (this window, or the game underneath) simply keeps it; this window
-    // just won't grab it again on its own from here on. Skipped while in
-    // view-only/input-passthrough - there, focus deliberately stays with
-    // whatever's underneath regardless of this setting (see
-    // SetInputPassthrough).
+    // focus immediately, matching what coming up interactive would have
+    // done had this been set before - otherwise edit mode would silently
+    // stay mouse-only until the next hide/show cycle. Turning it ON needs
+    // no equivalent action: whatever already has focus (this window, or the
+    // game underneath) simply keeps it; this window just won't grab it
+    // again on its own from here on. Skipped while click-through - there,
+    // focus deliberately stays with whatever's underneath regardless of
+    // this setting.
     if (!enabled && visible_ && !inputPassthrough_) {
-        SetForegroundWindow(hwnd_);
+        TakeFocus();
     }
 
     // Last, because it is the whole precondition for the grab: turning this
@@ -841,7 +822,7 @@ void Win32OverlayWindow::RequestTextInput() {
         SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle & ~WS_EX_NOACTIVATE);
         focusBorrowed_ = true;
     }
-    SetForegroundWindow(hwnd_);
+    TakeFocus();
     // Foreground is the window; focus is the keyboard. Ask for both - the
     // second is what an InputText is actually waiting on.
     SetFocus(hwnd_);
@@ -872,9 +853,12 @@ void Win32OverlayWindow::ReleaseTextInput() {
     SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle | WS_EX_NOACTIVATE);
     focusBorrowed_ = false;
 
-    if (previousForegroundWindow_ && IsWindow(previousForegroundWindow_)) {
-        SetForegroundWindow(previousForegroundWindow_);
+    // Back to the window the field took focus from - only if this window
+    // still holds it, as on going click-through or hidden.
+    if (GetForegroundWindow() == hwnd_ && focusTakenFrom_ && IsWindow(focusTakenFrom_)) {
+        SetForegroundWindow(focusTakenFrom_);
     }
+    focusTakenFrom_ = nullptr;
 }
 
 void Win32OverlayWindow::SetFrameCallback(FrameCallback callback) { frameCallback_ = std::move(callback); }
@@ -1313,9 +1297,9 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
     switch (msg) {
         case WM_NCHITTEST: {
             if (inputPassthrough_) {
-                // Belt-and-suspenders alongside SetInputPassthrough's own
-                // WS_EX_TRANSPARENT toggle (see its comment for why that,
-                // not this, is what actually makes cross-process
+                // Belt-and-suspenders alongside the WS_EX_TRANSPARENT style
+                // (see PresentationStep::ClickThroughStylesOn in Carry for
+                // why that, not this, is what actually makes cross-process
                 // click-through work) - answering HTTRANSPARENT here too
                 // costs nothing and is the technically "correct" response
                 // regardless.
@@ -1413,7 +1397,7 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
         // own `if (hwnd_) return true;` would then keep reporting success
         // against an already-destroyed handle forever, with no way for
         // the tray/hotkeys to ever bring the overlay back. This window's
-        // lifecycle is owned entirely by Show()/Hide()/Destroy() (driven
+        // lifecycle is owned entirely by Present()/Destroy() (driven
         // by the tray icon and hotkeys), not by its own default close
         // affordances - so neither falls through to the default handling:
         // Alt+F4 is swallowed, and a WM_CLOSE is an exit (below).
