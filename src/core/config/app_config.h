@@ -183,7 +183,7 @@ struct AppConfig {
     // Whether a hotkey that acts while the overlay is hidden may put a
     // message on screen to say what it did - which means showing the
     // overlay for as long as that message lasts, click-through and with
-    // nothing else drawn (see TrayController::ShowNotice). On: a silent
+    // nothing else drawn (a notice - see docs/OVERLAY_STATES.md). On: a silent
     // capture is silent about interrupting you, not about having happened.
     // Off: it leaves no trace at all until you next open the overlay.
     //

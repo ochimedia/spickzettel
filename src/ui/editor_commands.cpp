@@ -260,8 +260,9 @@ void Editor::Run(const Command& command, Filing filing) {
             ClearSelection();
             return;
         case CommandId::Pin: {
-            // Nothing happens on screen until the overlay is put away - see
-            // TrayController::PutAway, which is where a pin is acted on. Not
+            // Nothing happens on screen until the overlay is put away - into
+            // the pinned view, which is where a pin is acted on (see
+            // docs/OVERLAY_STATES.md, "Away"). Not
             // an undo step, the same as Minimize: it changes where the
             // snippet is shown, not what it holds. One press pins the whole
             // selection, or unpins it when every one of it is pinned.
