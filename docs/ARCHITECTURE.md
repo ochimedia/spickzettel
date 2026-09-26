@@ -2143,7 +2143,7 @@ drew last.
 Every popup the app opens - the three context menus, the Properties
 popover, the color chooser, the delete confirmation - is an interaction
 on the machine's Popup level (`Popup`, `ui/interaction/levels.*`), put
-there as it is asked for (`OverlayApp::PushPopup`). It is the machine's
+there as it is asked for (`OverlayApp::OpenPopup`). It is the machine's
 record of what ImGui draws: the pointer is the popup's, since a press in
 it is its widgets' and one outside closes it and does nothing else, which
 ImGui does; so is every key but a global hotkey. It finishes on the first
@@ -2155,6 +2155,26 @@ command whose scope covers popups - it asks the view to close it
 one asked for last is up. Escape closes the innermost popup open, which
 may be one of ImGui's own inside it (a color picker in the Properties
 popover), and the popup finishes when it is itself gone.
+
+The view keeps one record of the popup that is up
+(`OverlayApp::PopupRecord`): its kind, what it is about, where it opens,
+and whether a frame has drawn it - set as it is asked for, let go of as
+it closes (`docs/VIEW_LAYER.md`, section 4). The machine allows one popup
+at a time, so one record is enough; there used to be a copy per kind,
+each under a name of its own, and `PopupShowing` read six of them. What
+closing a popup does (`PopupClosed`) is done once, however it closes: by
+the draw that finds ImGui without a popup the record says was drawn, or
+at once when the machine ends it from outside. Before, only the draw
+noticing did it, so a popup ended while nothing drew it closed late or
+never: the color chooser, put away with the overlay and then the app
+exited from the tray, lost the color picked in it. And Properties'
+closing ran on every frame it was not up, which ended the style edit a
+spin of Ctrl and the wheel holds open after every notch - three undo
+steps for one spin, and nothing for Escape to call off. The pen's width
+and color are also kept when the overlay settles (`KeepPen`), as a
+settings preview is committed: the width was kept only once the wheel's
+size preview had faded, drawn, and put away within that second it was
+lost at exit too.
 
 A note being typed into is the Text level's (`TypingNote`), pushed by
 the press that opens it. Every key is the field's; a press on the field,

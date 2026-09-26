@@ -2612,26 +2612,25 @@ bool OverlayApp::TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
 }
 
 void OverlayApp::AskToDelete(ConfirmDeleteTarget target) {
-    PushPopup(PopupKind::ConfirmDelete);
-    confirmDeleteTarget_ = std::move(target);
     // Queued even from inside a frame: the Overview's buttons ask from
     // within its PushID nesting, and the popup belongs at the top level.
-    Queue(Effect{Effect::Kind::OpenConfirmDelete});
+    PopupRecord popup;
+    popup.kind = PopupKind::ConfirmDelete;
+    popup.deleteTarget = std::move(target);
+    OpenPopup(std::move(popup));
 }
 
 void OverlayApp::OpenConfirmDelete() {
     // Not asked at all where Settings > Behavior says not to: done here
     // rather than at each button, where the Overview is still being drawn
     // from what the delete changes.
-    if (confirmDeleteTarget_.has_value()) {
-        const ConfirmDeleteTarget& target = *confirmDeleteTarget_;
-        const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
-        if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
-            const ConfirmDeleteTarget unasked = target;
-            confirmDeleteTarget_.reset();
-            PerformDelete(unasked);
-            return;
-        }
+    const ConfirmDeleteTarget& target = *popup_->deleteTarget;
+    const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
+    if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
+        const ConfirmDeleteTarget unasked = target;
+        PopupClosed(PopupKind::ConfirmDelete);
+        PerformDelete(unasked);
+        return;
     }
     ImGui::OpenPopup(kConfirmDeletePopupId);
 }
@@ -2639,16 +2638,19 @@ void OverlayApp::OpenConfirmDelete() {
 void OverlayApp::RenderConfirmDeletePopover() {
     const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-    confirmDeleteShown_ = ImGui::BeginPopup(kConfirmDeletePopupId);
-    if (!confirmDeleteShown_) {
+    const bool open = ImGui::BeginPopup(kConfirmDeletePopupId);
+    PopupDrawn(PopupKind::ConfirmDelete, open);
+    if (!open) {
         return;
     }
     KeepPopoverInFront();
-    if (!confirmDeleteTarget_.has_value()) {
+    if (!PopupUp(PopupKind::ConfirmDelete)) {
+        // Ended from outside this frame, before ImGui heard of it.
+        ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
         return;
     }
-    const ConfirmDeleteTarget target = *confirmDeleteTarget_;
+    const ConfirmDeleteTarget target = *popup_->deleteTarget;
     const bool isFolder = target.kind == ConfirmDeleteTarget::Kind::Folder;
     const bool deletedIn = target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
     const char* word = isFolder ? strings::kDeleteConfirmFolderWord : strings::kDeleteConfirmCanvasWord;
@@ -2694,9 +2696,6 @@ void OverlayApp::RenderConfirmDeletePopover() {
 
     if (deletePressed) {
         PerformDelete(target);
-    }
-    if (cancelPressed || deletePressed) {
-        confirmDeleteTarget_.reset();
     }
 }
 

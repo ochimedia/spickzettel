@@ -256,10 +256,10 @@ one at a time, so the view keeps one record, holding:
 - where it opens;
 - whether it was drawn on the last frame.
 
-`PopupShowing` asks the effect queue and then this record. The six
-subjects and anchors go, and so do the five copies of "drawn".
-`ContextMenu` keeps drawing its rows and handing back the one chosen;
-whether a menu is up is the record's to say.
+The record is set when the popup is asked for, so `PopupShowing` asks it
+alone. The six subjects and anchors go, and so do the five copies of
+"drawn". `ContextMenu` keeps drawing its rows and handing back the one
+chosen; whether a menu is up, and where it opens, is the record's to say.
 
 **Change (C3)**: what closing a popup does is done once, however it
 closes. Today the draw that notices ImGui has closed the popup does it.
@@ -530,6 +530,12 @@ Everything else stays as it is today.
    call site runs from inside `RenderOverview`. In fact any command
    reaches it through `Say`, between frames too. Corrected when it moves
    (C8).
+6. **A spin of Ctrl or Shift and the wheel was several undo steps**
+   (found building C3). Properties' draw ended the style edit on every
+   frame it was not up. That is the edit a spin of the wheel's opacity
+   holds open, so it was ended after every notch: one undo took back one
+   notch, and Escape found nothing to call off. Fixed by C3, since the
+   closing runs once, when Properties closes.
 
 ## 10. Where the code goes, and getting there
 

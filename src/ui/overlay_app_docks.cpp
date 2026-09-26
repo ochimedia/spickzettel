@@ -122,7 +122,7 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     // having slid away would be a puzzle. The menu closes itself on the
     // click that chooses or dismisses it, so this cannot hold the bar out.
     const bool barWanted =
-        cfg.showCanvasBar && !busy && (atBottom || onBar || canvasContextMenu_.IsOpen());
+        cfg.showCanvasBar && !busy && (atBottom || onBar || PopupUp(PopupKind::CanvasMenu));
     canvasBarReveal_.Update(barWanted, now, io.DeltaTime);
     if (!cfg.showCanvasBar) {
         canvasBarReveal_ = EdgeReveal{};
@@ -341,34 +341,37 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
 // ================= A tile's context menu =================
 
 void OverlayApp::OpenCanvasContextMenu(CanvasId canvasId, ImVec2 at) {
-    PushPopup(PopupKind::CanvasMenu);
-    canvasContextMenuCanvasId_ = canvasId;
-    Queue(Effect{Effect::Kind::OpenCanvasMenu, at});
+    PopupRecord popup;
+    popup.kind = PopupKind::CanvasMenu;
+    popup.canvas = canvasId;
+    popup.at = at;
+    OpenPopup(std::move(popup));
 }
 
 void OverlayApp::RenderCanvasContextMenu() {
     // Looked up afresh every frame, like the snippet menu's: a canvas can
     // be deleted or moved to another folder from elsewhere while this is
     // up, and either takes it off the bar.
+    const bool up = PopupUp(PopupKind::CanvasMenu);
+    const CanvasId canvasId = up ? popup_->canvas : 0;
     const Canvas* canvas = nullptr;
-    if (canvasContextMenuCanvasId_.has_value()) {
-        const Canvas* found = Manager().FindCanvas(*canvasContextMenuCanvasId_);
+    if (up) {
+        const Canvas* found = Manager().FindCanvas(canvasId);
         if (found != nullptr && !Manager().IsDeleted(*found)) {
             canvas = found;
         }
     }
-    const std::optional<int> chosen = canvasContextMenu_.Render([&](std::vector<ContextMenuEntry>& rows) {
-        if (canvas != nullptr) {
-            BuildCanvasContextMenuRows(*canvas, rows);
-        }
-    });
-    if (chosen.has_value()) {
-        Command command{static_cast<CommandId>(*chosen)};
-        command.canvas = *canvasContextMenuCanvasId_;
+    const ContextMenu::Drawn drawn =
+        canvasContextMenu_.Render(up ? popup_->at : ImVec2(0.0f, 0.0f), [&](std::vector<ContextMenuEntry>& rows) {
+            if (canvas != nullptr) {
+                BuildCanvasContextMenuRows(*canvas, rows);
+            }
+        });
+    PopupDrawn(PopupKind::CanvasMenu, drawn.up);
+    if (drawn.chosen.has_value()) {
+        Command command{static_cast<CommandId>(*drawn.chosen)};
+        command.canvas = canvasId;
         Dispatch(command);
-    }
-    if (!canvasContextMenu_.IsOpen()) {
-        canvasContextMenuCanvasId_.reset();
     }
 }
 

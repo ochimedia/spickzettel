@@ -211,16 +211,20 @@ public:
     bool IsOverviewOpen() const { return PanelUp(PanelKind::Overview); }
     bool IsCheatSheetOpen() const { return PanelUp(PanelKind::CheatSheet); }
     // Whether the color chooser is up - see RenderColorChooser.
-    bool IsColorChooserOpen() const { return colorChooserOpen_; }
+    bool IsColorChooserOpen() const { return PopupUp(PopupKind::ColorChooser); }
     // Whether the snippet context menu is up, and over which snippet -
     // see RenderItemContextMenu.
-    bool IsItemContextMenuOpen() const { return itemContextMenu_.IsOpen(); }
-    std::optional<ItemId> ItemContextMenuItem() const { return itemContextMenuItemId_; }
+    bool IsItemContextMenuOpen() const { return PopupUp(PopupKind::ItemMenu); }
+    std::optional<ItemId> ItemContextMenuItem() const {
+        return PopupUp(PopupKind::ItemMenu) ? std::optional<ItemId>(popup_->item) : std::nullopt;
+    }
     // The same for the canvas bar's tiles - see RenderCanvasContextMenu.
-    bool IsCanvasContextMenuOpen() const { return canvasContextMenu_.IsOpen(); }
-    std::optional<CanvasId> CanvasContextMenuCanvas() const { return canvasContextMenuCanvasId_; }
+    bool IsCanvasContextMenuOpen() const { return PopupUp(PopupKind::CanvasMenu); }
+    std::optional<CanvasId> CanvasContextMenuCanvas() const {
+        return PopupUp(PopupKind::CanvasMenu) ? std::optional<CanvasId>(popup_->canvas) : std::nullopt;
+    }
     // And for empty canvas - see RenderEmptyCanvasMenu.
-    bool IsEmptyCanvasMenuOpen() const { return emptyCanvasMenu_.IsOpen(); }
+    bool IsEmptyCanvasMenuOpen() const { return PopupUp(PopupKind::EmptyCanvasMenu); }
     // How far out the canvas bar is, 0 to 1 - see EdgeReveal and
     // UpdateEdgePanels.
     float CanvasBarReveal() const { return canvasBarReveal_.amount; }
@@ -387,12 +391,6 @@ private:
     bool PopupShowing(PopupKind kind) const override;
     void ClosePopup(PopupKind kind) override;
     void CloseInnermostPopup() override;
-    // Every popup this class opens is put on the machine's Popup level
-    // first (ending the one that was there, which closes it), then asked
-    // for - see Popup.
-    void PushPopup(PopupKind kind);
-    // Whether the delete confirmation was up on the last frame.
-    bool confirmDeleteShown_ = false;
 
     // The canvas as the hand works on it: the selection, the tool, drawing
     // mode, the clipboard, and every command - see Editor. What this class
@@ -903,12 +901,61 @@ private:
     // What the popover's Delete does, and what a delete Settings > Behavior
     // says not to ask about does on the press (see AppConfig::confirmDelete).
     void PerformDelete(const ConfirmDeleteTarget& target);
-    std::optional<ConfirmDeleteTarget> confirmDeleteTarget_;
     // Asks to delete `target`, through the popover unless Settings >
     // Behavior says not to ask - see OpenConfirmDelete.
     void AskToDelete(ConfirmDeleteTarget target);
-    // The effect AskToDelete queues.
+    // Opens the popover, when the effect AskToDelete queues is done - or,
+    // where Settings says not to ask, deletes.
     void OpenConfirmDelete();
+
+    // ===== The popup that is up (docs/VIEW_LAYER.md, section 4) =====
+    //
+    // The machine's Popup level says which of this class's popups is up,
+    // one at a time, and opening one ends the one that was there. So the
+    // view keeps one record of it, set when it is asked for and let go of
+    // when its closing is done.
+    struct PopupRecord {
+        PopupKind kind = PopupKind::ItemMenu;
+        // What it is about: the snippet menu's and Properties' snippet, the
+        // canvas tile menu's canvas, the delete confirmation's target.
+        ItemId item = 0;
+        CanvasId canvas = 0;
+        std::optional<ConfirmDeleteTarget> deleteTarget;
+        // Where it opens.
+        ImVec2 at{0.0f, 0.0f};
+        // Whether a frame has drawn it - which tells "closed by itself"
+        // from "asked for and not opened yet" when a frame finds ImGui
+        // without it.
+        bool drawn = false;
+    };
+    std::optional<PopupRecord> popup_;
+    bool PopupUp(PopupKind kind) const { return popup_.has_value() && popup_->kind == kind; }
+    // Asks for `popup`: put on the machine's Popup level first (ending the
+    // one that was there, whose closing is done then), recorded, and opened
+    // at the next frame's Open (see Effect).
+    void OpenPopup(PopupRecord popup);
+    // What closing a popup of `kind` does, done once however it closes -
+    // by itself, or ended from outside (see ClosePopup) - and the record let
+    // go of. Nothing unless it is the popup up.
+    //
+    // The snippet menu, the canvas tile menu and the delete confirmation
+    // forget what they were about, which letting go of the record does;
+    // Properties ends the style edit; the color chooser keeps the pen's
+    // color (see KeepPenColor).
+    void PopupClosed(PopupKind kind);
+    // What each popup's draw says of it, every frame: whether ImGui drew it.
+    // A popup the record says was drawn and ImGui no longer has closed by
+    // itself - a row chosen, a click outside, Escape - and its closing is
+    // done here.
+    void PopupDrawn(PopupKind kind, bool drawn);
+    // The pen's width and color, kept as AppConfig::strokeWidth and
+    // strokeColorRGBA: the width the wheel left once its size preview has
+    // faded, and the color the chooser was left on when it closes - and
+    // both when the overlay settles, before either could come (see
+    // SettleForPersistence and SetMode).
+    void KeepPenWidth();
+    void KeepPenColor();
+    void KeepPen();
 
 
     // Applied once, on the first OnFrame call (ImGui's style/color tables
@@ -1061,32 +1108,15 @@ private:
     std::function<bool(HotkeySlot, platform::KeyCombo)> hotkeyChangeCallback_;
     // Whether the wheel has changed the pen's width since it was last
     // saved: it is kept as AppConfig::strokeWidth once the size preview has
-    // faded, so a burst of notches is one write (see RenderBrushSizePreview).
+    // faded, so a burst of notches is one write (see KeepPenWidth).
     bool drawWidthDirty_ = false;
 
-    // Item properties popover (foreground/background opacity, background
-    // color, fullscreen, order, copy, move): which item it's currently
-    // open for, if any - set by the selection bar's "More" button (see
-    // ActivateBarButton).
-    std::optional<ItemId> itemPropertiesPopoverItemId_ = std::nullopt;
-    // Where to open the popover above - captured from the "More" button's
-    // own screen position at click time (see ActivateBarButton).
-    ImVec2 itemPropertiesPopoverAnchor_ = ImVec2(0.0f, 0.0f);
-    // The snippet context menu, and which snippet it is up for. The menu
-    // owns its own "asked for, not yet opened" state; the id is kept here
-    // because the rows are the snippet's, and it has to survive the frame
-    // between the right-click and the menu appearing.
+    // The three context menus: the snippet's, the canvas bar tile's, and
+    // empty canvas's. Whether one is up, and over what, is the popup
+    // record's (see popup_).
     ContextMenu itemContextMenu_{kItemContextMenuId};
-    std::optional<ItemId> itemContextMenuItemId_ = std::nullopt;
-    // The canvas bar's own, and which tile's canvas it is up for.
     ContextMenu canvasContextMenu_{kCanvasContextMenuId};
-    std::optional<CanvasId> canvasContextMenuCanvasId_ = std::nullopt;
-    // Empty canvas's, which is up for nothing in particular.
     ContextMenu emptyCanvasMenu_{kEmptyCanvasMenuId};
-    // The color chooser - see OpenColorChooser: whether it was open on the
-    // last frame, which is how its closing is noticed, and where it opens.
-    bool colorChooserOpen_ = false;
-    ImVec2 colorChooserAnchor_ = ImVec2(0.0f, 0.0f);
     // The canvas bar, docked against the bottom edge - see UpdateEdgePanels.
     // How far out it is, and where it was drawn this frame (none while it
     // is all the way in).
@@ -1123,16 +1153,12 @@ private:
     // asked from. Not at the very start of the frame: opened there, the
     // canvas bar's menu was closed again before it was drawn - ImGui wants
     // a popup opened after the frame's other windows, shortly before it is
-    // begun. What it opens on - which snippet, which canvas - is set where
-    // it is asked for. See docs/INTERACTIONS.md, section 3.
+    // begun. What it opens on - which snippet, which canvas - and where is
+    // the popup record's (see popup_). See docs/INTERACTIONS.md, section 3.
     struct Effect {
         enum class Kind {
-            OpenItemProperties,
-            OpenItemMenu,
-            OpenCanvasMenu,
-            OpenEmptyCanvasMenu,
-            OpenColorChooser,
-            OpenConfirmDelete,
+            // The popup the record holds opened, if it is still that one.
+            OpenPopup,
             // A popup of the machine's closed from outside (see
             // Popup::Interrupt), and the innermost popup open closed, as
             // Escape does to it - which may be one of ImGui's own inside it.
@@ -1142,9 +1168,8 @@ private:
             // see Widget.
             LetGoOfWidget,
         };
-        Kind kind = Kind::OpenItemProperties;
-        ImVec2 at{0.0f, 0.0f};  // where a menu or the color chooser opens
-        PopupKind popup = PopupKind::ItemMenu;  // which, for ClosePopup
+        Kind kind = Kind::OpenPopup;
+        PopupKind popup = PopupKind::ItemMenu;  // which, to open or close
     };
     // Asked twice before a frame, done once - as asked the second time, and
     // in its place: a popup closed and asked for again is up.

@@ -954,10 +954,11 @@ void OverlayApp::SetMode(OverlayMode mode) {
         editor_.SettleUntouchedDrawing();
         // A slider or swatch in the middle of a drag is not drawn again to
         // say it was let go of, which is where its preview is committed:
-        // what it was dragged to is committed here instead.
+        // what it was dragged to is committed here instead. The pen's width
+        // too, whose preview view-only mode does not draw; its color was
+        // kept as the chooser, if it was up, was ended.
         settings_.CommitPreviews();
-        itemPropertiesPopoverItemId_.reset();
-        confirmDeleteTarget_.reset();
+        KeepPen();
         // Normally cleared at the top of every RenderItems call - which
         // view-only mode never runs, so without this the debug overlay's
         // "resize handle:" line would keep showing whatever handle
@@ -989,8 +990,10 @@ void OverlayApp::SettleForPersistence(Lifecycle why) {
     editor_.SettleUntouchedDrawing();
     // A drag put away with the overlay is not drawn again before the next
     // showing, and not at all before an exit: committed now, as its end
-    // would have (see SetMode).
+    // would have (see SetMode). And the pen as the hand left it: its width
+    // before its preview has faded, its color with the chooser up.
     settings_.CommitPreviews();
+    KeepPen();
 }
 
 bool OverlayApp::PointerOverView() const {
@@ -2001,12 +2004,7 @@ void OverlayApp::RenderBrushSizePreview() {
     if (now >= sizePreviewExpireAtSeconds_) {
         // The preview gone, the width the wheel settled on is kept - once,
         // not per notch (see drawWidthDirty_).
-        if (drawWidthDirty_) {
-            drawWidthDirty_ = false;
-            if (settings_.Get(setting::kStrokeWidth) != editor_.DrawWidth()) {
-                settings_.Set(setting::kStrokeWidth, editor_.DrawWidth());
-            }
-        }
+        KeepPenWidth();
         return;
     }
     if (PanelOpen()) {

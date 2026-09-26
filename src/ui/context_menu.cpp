@@ -70,20 +70,16 @@ Metrics Measure(const std::vector<ContextMenuEntry>& entries) {
 
 }  // namespace
 
-void ContextMenu::OpenAt(ImVec2 screenPos) {
-    anchor_ = screenPos;
-    ImGui::OpenPopup(popupId_);
-}
+void ContextMenu::Open() { ImGui::OpenPopup(popupId_); }
 
-std::optional<int> ContextMenu::Render(const Builder& build) {
+ContextMenu::Drawn ContextMenu::Render(ImVec2 anchor, const Builder& build) {
     // Asked before the rows are built so that a menu nobody opened costs
     // one lookup a frame and nothing else. IsPopupOpen, OpenPopup and
     // BeginPopup all hash the id against the current window, so all three
     // have to be reached at the same nesting level - which for every menu
     // in this app is the top level of a frame.
     if (!ImGui::IsPopupOpen(popupId_)) {
-        open_ = false;
-        return std::nullopt;
+        return Drawn{};
     }
 
     std::vector<ContextMenuEntry> entries;
@@ -103,8 +99,8 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
     const ImVec2 display = ImGui::GetIO().DisplaySize;
     const float width = metrics.innerWidth + Px(kMenuPad) * 2.0f;
     const float height = std::min(metrics.height, display.y);
-    const float x = anchor_.x + width > display.x ? anchor_.x - width : anchor_.x;
-    const float y = anchor_.y + height > display.y ? anchor_.y - height : anchor_.y;
+    const float x = anchor.x + width > display.x ? anchor.x - width : anchor.x;
+    const float y = anchor.y + height > display.y ? anchor.y - height : anchor.y;
     ImGui::SetNextWindowPos(ImVec2(std::clamp(x, 0.0f, std::max(0.0f, display.x - width)),
                                    std::clamp(y, 0.0f, std::max(0.0f, display.y - height))),
                             ImGuiCond_Always);
@@ -115,10 +111,8 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
     const bool open = ImGui::BeginPopup(popupId_);
     ImGui::PopStyleVar(2);
     if (!open) {
-        open_ = false;
-        return std::nullopt;
+        return Drawn{};
     }
-    open_ = true;
     // Every item re-asserts itself to the front on every frame it is
     // drawn, so a popup has to as well or the first snippet it overlaps
     // covers it - the same per-frame reassertion OverlayApp's own popovers
@@ -132,7 +126,7 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
         // the user has to dismiss; closing is what they would do anyway.
         ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
-        return std::nullopt;
+        return Drawn{true, std::nullopt};
     }
 
     // Selectable paints its hover in the Header colors, which the app's
@@ -144,7 +138,7 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, style.Colors[ImGuiCol_FrameBgHovered]);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, style.Colors[ImGuiCol_FrameBgActive]);
 
-    std::optional<int> chosen;
+    Drawn drawn{true, std::nullopt};
     ImDrawList* drawList = ImGui::GetWindowDrawList();
     for (size_t i = 0; i < entries.size(); ++i) {
         const ContextMenuEntry& entry = entries[i];
@@ -167,7 +161,7 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
         // nothing.
         if (ImGui::Selectable(entry.id, false, ImGuiSelectableFlags_None,
                                ImVec2(metrics.innerWidth, metrics.rowHeight))) {
-            chosen = entry.action;
+            drawn.chosen = entry.action;
         }
         const ImU32 ink = ImGui::GetColorU32(ImGuiCol_Text);
         if (entry.icon != nullptr) {
@@ -193,7 +187,7 @@ std::optional<int> ContextMenu::Render(const Builder& build) {
 
     ImGui::PopStyleColor(2);
     ImGui::EndPopup();
-    return chosen;
+    return drawn;
 }
 
 }  // namespace sz::ui

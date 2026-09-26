@@ -37,6 +37,46 @@ protected:
 
     // Whether the machine holds no popup, and nothing else above the canvas.
     std::string NothingUp() const { return "Canvas / - / - / - / - / -"; }
+
+    // A drawing, in drawing mode, with the color chooser up and a color
+    // picked in it - one that differs from the pen's color as stored. The
+    // chooser is left up.
+    void PickAColor() {
+        MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+        const uint32_t before = AppSettings().Stored().strokeColorRGBA;
+        const std::optional<ImVec2> color = App().SelectionBarButtonCenter(ChromeButton::Color);
+        ASSERT_TRUE(color.has_value());
+        RawClick(color->x, color->y);
+        StepFrames(2);
+        ASSERT_TRUE(App().IsColorChooserOpen());
+
+        // A drag across the picker's square, which sits at the top left of
+        // the chooser - to ImGui alone, as a widget is dragged.
+        const ImGuiContext& g = *ImGui::GetCurrentContext();
+        ASSERT_FALSE(g.OpenPopupStack.empty());
+        const ImRect square = g.OpenPopupStack.back().Window->InnerRect;
+        MoveTo(square.Min.x + 30.0f, square.Min.y + 30.0f);
+        StepFrame();
+        MouseButtonEvent(ImGuiMouseButton_Left, true);
+        StepFrame();
+        MoveTo(square.Min.x + 120.0f, square.Min.y + 60.0f);
+        StepFrames(2);
+        MouseButtonEvent(ImGuiMouseButton_Left, false);
+        StepFrames(2);
+        ASSERT_NE(App().DrawColorRGBA(), before) << "the drag changed nothing, so the test proves nothing";
+        ASSERT_TRUE(App().IsColorChooserOpen());
+    }
+
+    // A drawing, in drawing mode, with the pen's width just changed by the
+    // wheel: its size preview is up, and the width not yet kept.
+    float WheelThePen() {
+        MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+        const float before = AppSettings().Stored().strokeWidth;
+        MoveTo(500.0f, 400.0f);
+        Wheel(2.0f);
+        EXPECT_EQ(AppSettings().Stored().strokeWidth, before) << "not yet: the preview is still up";
+        return before + 2.0f;
+    }
 };
 
 // ===== The stack (section 3) =====
@@ -251,34 +291,99 @@ TEST_F(ViewLayerTest, ClosingPropertiesEndsItsStyleEdit) {
 TEST_F(ViewLayerTest, TheColorChooserKeepsThePensColorWhenItCloses) {
     ShowEditMode();
     StepFrame();
-    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
     const uint32_t before = AppSettings().Stored().strokeColorRGBA;
-    const std::optional<ImVec2> color = App().SelectionBarButtonCenter(ChromeButton::Color);
-    ASSERT_TRUE(color.has_value());
-    RawClick(color->x, color->y);
-    StepFrames(2);
-    ASSERT_TRUE(App().IsColorChooserOpen());
-
-    // A drag across the picker's square, which sits at the top left of the
-    // chooser - to ImGui alone, as a widget is dragged.
-    const ImGuiContext& g = *ImGui::GetCurrentContext();
-    ASSERT_FALSE(g.OpenPopupStack.empty());
-    const ImRect square = g.OpenPopupStack.back().Window->InnerRect;
-    MoveTo(square.Min.x + 30.0f, square.Min.y + 30.0f);
-    StepFrame();
-    MouseButtonEvent(ImGuiMouseButton_Left, true);
-    StepFrame();
-    MoveTo(square.Min.x + 120.0f, square.Min.y + 60.0f);
-    StepFrames(2);
-    MouseButtonEvent(ImGuiMouseButton_Left, false);
-    StepFrames(2);
-    ASSERT_NE(App().DrawColorRGBA(), before) << "the drag changed nothing, so this test proves nothing";
+    PickAColor();
     EXPECT_EQ(AppSettings().Stored().strokeColorRGBA, before) << "kept as it closes, not as it is dragged";
 
     PressKey(ImGuiKey_Escape);
     StepFrame();
     EXPECT_FALSE(App().IsColorChooserOpen());
     EXPECT_EQ(AppSettings().Stored().strokeColorRGBA, App().DrawColorRGBA());
+}
+
+// Properties' closing is done when it closes, and not on every frame it is
+// not up: done every frame, it ended the style edit a spin of Ctrl and the
+// wheel holds open, after every notch - a spin of three notches was three
+// undo steps, and Escape found nothing to call off.
+TEST_F(ViewLayerTest, ASpinOfTheWheelsOpacityIsOneStepAndEscapeCallsItOff) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 700.0f, 550.0f);  // a screenshot, selected as made
+    const ItemId id = Canvases().CurrentOrNull()->items[0].id;
+    RawClick(500.0f, 400.0f);
+    MoveTo(500.0f, 400.0f);
+    const auto spin = [this] {
+        KeyEvent(ImGuiMod_Ctrl, true);
+        StepFrame();
+        Wheel(-1.0f);
+        Wheel(-1.0f);
+        Wheel(-1.0f);
+        KeyEvent(ImGuiMod_Ctrl, false);
+        StepFrame();
+    };
+    const auto opacity = [&] { return Canvases().FindItemAnywhere(id)->picture.opacity; };
+
+    spin();
+    ASSERT_FLOAT_EQ(opacity(), 0.85f);
+    StepFrames(90);  // the burst lapses, and is filed
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_FLOAT_EQ(opacity(), 1.0f) << "one undo, not three";
+
+    spin();
+    ASSERT_FLOAT_EQ(opacity(), 0.85f);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FLOAT_EQ(opacity(), 1.0f) << "the whole spin called off";
+}
+
+// ===== The pen kept when the overlay settles (section 4, C4) =====
+
+// The width the wheel set is kept once its preview fades - and, put away
+// before it has, when the overlay settles: otherwise an exit before edit
+// mode is drawn again loses it.
+TEST_F(ViewLayerTest, APenWidthPutAwayWithItsPreviewUpIsKeptOnExit) {
+    ShowEditMode();
+    StepFrame();
+    const float wheeled = WheelThePen();
+    ShowEditMode();  // the edit hotkey again: put away
+    ASSERT_FALSE(host_.overlayWindow.IsVisible());
+    host_.TriggerTrayCommand(platform::TrayCommand::Exit);
+    ASSERT_TRUE(host_.quitCalled);
+    EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, wheeled);
+}
+
+TEST_F(ViewLayerTest, APenWidthLeftForViewModeWithItsPreviewUpIsKept) {
+    ShowEditMode();
+    StepFrame();
+    const float wheeled = WheelThePen();
+    ShowViewMode();
+    EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, wheeled);
+}
+
+// The color picked is kept when the chooser closes - and, put away with the
+// chooser up (a popup stays up for the next showing), when the overlay
+// settles.
+TEST_F(ViewLayerTest, APenColorPutAwayWithTheChooserUpIsKeptOnExit) {
+    ShowEditMode();
+    StepFrame();
+    PickAColor();
+    const uint32_t picked = App().DrawColorRGBA();
+    ShowEditMode();  // put away, the chooser still up
+    ASSERT_FALSE(host_.overlayWindow.IsVisible());
+    host_.TriggerTrayCommand(platform::TrayCommand::Exit);
+    ASSERT_TRUE(host_.quitCalled);
+    EXPECT_EQ(AppSettings().Stored().strokeColorRGBA, picked);
+}
+
+// Left for view mode, the chooser is ended from outside, and nothing draws
+// it: its closing is done then, not at the next frame of edit mode.
+TEST_F(ViewLayerTest, APenColorLeftForViewModeWithTheChooserUpIsKept) {
+    ShowEditMode();
+    StepFrame();
+    PickAColor();
+    const uint32_t picked = App().DrawColorRGBA();
+    ShowViewMode();
+    EXPECT_EQ(AppSettings().Stored().strokeColorRGBA, picked);
+    EXPECT_FALSE(App().IsColorChooserOpen());
 }
 
 // Escape on the delete confirmation deletes nothing.

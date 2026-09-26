@@ -53,26 +53,23 @@ bool ColorSwatchButton(ImU32 fillColor, bool selected) {
 // ================= The properties popover =================
 
 void OverlayApp::RenderItemPropertiesPopover() {
-    // Anchored just below the "More" button that opened it (see
-    // itemPropertiesPopoverAnchor_'s own doc comment) rather than ImGui's
-    // default near-mouse placement. Pivot (1, 0): the anchor point is the
-    // popover's own top-right corner, not top-left - keeps it from
+    // Anchored just below the "More" button that opened it rather than
+    // ImGui's default near-mouse placement. Pivot (1, 0): the anchor point
+    // is the popover's own top-right corner, not top-left - keeps it from
     // running off the right edge of the screen when that button sits
     // near it (which it usually does - every cluster is right-aligned to
     // its own item, and an item can sit anywhere up to the screen edge).
-    ImGui::SetNextWindowPos(itemPropertiesPopoverAnchor_, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-    if (!ImGui::BeginPopup(kItemPropertiesPopupId)) {
-        // Not open (never triggered this frame, or the user closed it -
-        // click-outside, Escape) - drop the sticky reference used by
-        // RenderItems' highlight resolution along with it. A
-        // harmless no-op on every ordinary frame where it was already
-        // unset. A style being dragged when it closed ends with it.
-        itemPropertiesPopoverItemId_.reset();
-        session_.EndStyleEdit();
+    const bool up = PopupUp(PopupKind::ItemProperties);
+    ImGui::SetNextWindowPos(up ? popup_->at : ImVec2(0.0f, 0.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    const bool open = ImGui::BeginPopup(kItemPropertiesPopupId);
+    PopupDrawn(PopupKind::ItemProperties, open);
+    if (!open) {
         return;
     }
     KeepPopoverInFront();
-    if (!itemPropertiesPopoverItemId_.has_value()) {
+    if (!up) {
+        // Ended from outside this frame, before ImGui heard of it.
+        ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
         return;
     }
@@ -86,7 +83,7 @@ void OverlayApp::RenderItemPropertiesPopover() {
     }
     const Canvas& canvas = *canvasPtr;
     const auto it = std::find_if(canvas.items.begin(), canvas.items.end(),
-                                  [&](const Item& i) { return i.id == *itemPropertiesPopoverItemId_; });
+                                  [&](const Item& i) { return i.id == popup_->item; });
     // Gone, or deleted while the popover was open.
     if (it == canvas.items.end() || Manager().IsDeleted(canvas, *it)) {
         ImGui::CloseCurrentPopup();
@@ -229,45 +226,49 @@ void OverlayApp::RenderItemTextStyle(const Item& item) {
 // ================= The context menu =================
 
 void OverlayApp::OpenItemContextMenu(ItemId itemId, ImVec2 at) {
-    PushPopup(PopupKind::ItemMenu);
-    itemContextMenuItemId_ = itemId;
-    Queue(Effect{Effect::Kind::OpenItemMenu, at});
+    PopupRecord popup;
+    popup.kind = PopupKind::ItemMenu;
+    popup.item = itemId;
+    popup.at = at;
+    OpenPopup(std::move(popup));
 }
 
 void OverlayApp::RenderItemContextMenu() {
     // Found again every frame rather than held by pointer across them:
     // Duplicate grows the canvas's item vector and the two z-order rows
     // reorder it, either of which moves every Item in it.
+    const bool up = PopupUp(PopupKind::ItemMenu);
+    const ItemId itemId = up ? popup_->item : 0;
     const Item* item = nullptr;
-    if (itemContextMenuItemId_.has_value()) {
+    if (up) {
         if (const Canvas* canvas = Manager().CurrentOrNull()) {
             for (const Item& candidate : canvas->items) {
-                if (candidate.id == *itemContextMenuItemId_ && !Manager().IsDeleted(*canvas, candidate)) {
+                if (candidate.id == itemId && !Manager().IsDeleted(*canvas, candidate)) {
                     item = &candidate;
                     break;
                 }
             }
         }
     }
-    // No snippet - deleted while the menu was up, or its canvas switched
-    // out from under it - leaves the rows empty, which is how the menu is
-    // told to close itself (see ContextMenu::Render).
-    const std::optional<int> chosen = itemContextMenu_.Render([&](std::vector<ContextMenuEntry>& rows) {
-        if (item != nullptr) {
-            BuildItemContextMenuRows(*item, rows);
-        }
-    });
-    if (chosen.has_value()) {
+    // No snippet - deleted while the menu was up, its canvas switched out
+    // from under it, or the menu ended from outside - leaves the rows
+    // empty, which is how the menu is told to close itself (see
+    // ContextMenu::Render).
+    const ContextMenu::Drawn drawn =
+        itemContextMenu_.Render(up ? popup_->at : ImVec2(0.0f, 0.0f), [&](std::vector<ContextMenuEntry>& rows) {
+            if (item != nullptr) {
+                BuildItemContextMenuRows(*item, rows);
+            }
+        });
+    PopupDrawn(PopupKind::ItemMenu, drawn.up);
+    if (drawn.chosen.has_value()) {
         // Fullscreen with Shift held stretches to the screen rather than
         // keeping the snippet's shape - the row's other half.
-        CommandId id = static_cast<CommandId>(*chosen);
+        CommandId id = static_cast<CommandId>(*drawn.chosen);
         if (id == CommandId::ToggleFullscreen && ImGui::GetIO().KeyShift) {
             id = CommandId::ToggleFullscreenStretched;
         }
-        Dispatch(Command{id, *itemContextMenuItemId_});
-    }
-    if (!itemContextMenu_.IsOpen()) {
-        itemContextMenuItemId_.reset();
+        Dispatch(Command{id, itemId});
     }
 }
 
@@ -312,15 +313,23 @@ void OverlayApp::BuildItemContextMenuRows(const Item& item, std::vector<ContextM
 // ================= Empty canvas's context menu =================
 
 void OverlayApp::OpenEmptyCanvasMenu(platform::Vec2 at) {
-    PushPopup(PopupKind::EmptyCanvasMenu);
-    Queue(Effect{Effect::Kind::OpenEmptyCanvasMenu, ImVec2(at.x, at.y)});
+    PopupRecord popup;
+    popup.kind = PopupKind::EmptyCanvasMenu;
+    popup.at = ImVec2(at.x, at.y);
+    OpenPopup(std::move(popup));
 }
 
 void OverlayApp::RenderEmptyCanvasMenu() {
-    const std::optional<int> chosen = emptyCanvasMenu_.Render(
-        [&](std::vector<ContextMenuEntry>& rows) { BuildEmptyCanvasMenuRows(rows); });
-    if (chosen.has_value()) {
-        Dispatch(Command{static_cast<CommandId>(*chosen)});
+    const bool up = PopupUp(PopupKind::EmptyCanvasMenu);
+    const ContextMenu::Drawn drawn =
+        emptyCanvasMenu_.Render(up ? popup_->at : ImVec2(0.0f, 0.0f), [&](std::vector<ContextMenuEntry>& rows) {
+            if (up) {
+                BuildEmptyCanvasMenuRows(rows);
+            }
+        });
+    PopupDrawn(PopupKind::EmptyCanvasMenu, drawn.up);
+    if (drawn.chosen.has_value()) {
+        Dispatch(Command{static_cast<CommandId>(*drawn.chosen)});
     }
 }
 
@@ -353,15 +362,14 @@ void OverlayApp::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) c
 
 void OverlayApp::Queue(const Effect& effect) {
     const auto same = std::find_if(effects_.begin(), effects_.end(), [&](const Effect& queued) {
-        return queued.kind == effect.kind && (effect.kind != Effect::Kind::ClosePopup || queued.popup == effect.popup);
+        const bool aboutAPopup = effect.kind == Effect::Kind::OpenPopup || effect.kind == Effect::Kind::ClosePopup;
+        return queued.kind == effect.kind && (!aboutAPopup || queued.popup == effect.popup);
     });
     if (same != effects_.end()) {
         effects_.erase(same);
     }
     effects_.push_back(effect);
 }
-
-void OverlayApp::PushPopup(PopupKind kind) { editor_.Input().Push(std::make_unique<Popup>(kind), Event{}); }
 
 namespace {
 // The popup's ImGui id, as its render function begins it.
@@ -384,52 +392,91 @@ const char* PopupId(PopupKind kind) {
 }
 }  // namespace
 
-bool OverlayApp::PopupShowing(PopupKind kind) const {
-    const auto opens = [kind](Effect::Kind effect) {
-        switch (effect) {
-            case Effect::Kind::OpenItemProperties:
-                return kind == PopupKind::ItemProperties;
-            case Effect::Kind::OpenItemMenu:
-                return kind == PopupKind::ItemMenu;
-            case Effect::Kind::OpenCanvasMenu:
-                return kind == PopupKind::CanvasMenu;
-            case Effect::Kind::OpenEmptyCanvasMenu:
-                return kind == PopupKind::EmptyCanvasMenu;
-            case Effect::Kind::OpenColorChooser:
-                return kind == PopupKind::ColorChooser;
-            case Effect::Kind::OpenConfirmDelete:
-                return kind == PopupKind::ConfirmDelete;
-            case Effect::Kind::ClosePopup:
-            case Effect::Kind::CloseInnermostPopup:
-            case Effect::Kind::LetGoOfWidget:
-                return false;
-        }
-        return false;
-    };
-    if (std::any_of(effects_.begin(), effects_.end(), [&](const Effect& effect) { return opens(effect.kind); })) {
-        return true;  // asked for, and opened at the next frame
-    }
-    switch (kind) {
-        case PopupKind::ItemMenu:
-            return itemContextMenu_.IsOpen();
-        case PopupKind::CanvasMenu:
-            return canvasContextMenu_.IsOpen();
-        case PopupKind::EmptyCanvasMenu:
-            return emptyCanvasMenu_.IsOpen();
-        case PopupKind::ItemProperties:
-            return itemPropertiesPopoverItemId_.has_value();
-        case PopupKind::ColorChooser:
-            return colorChooserOpen_;
-        case PopupKind::ConfirmDelete:
-            return confirmDeleteShown_;
-    }
-    return false;
+// ================= The popup that is up =================
+
+// Asked for, it is up - including the frames before one draws it, which
+// is what the machine's Popup asks on every tick (see Popup::Offer).
+bool OverlayApp::PopupShowing(PopupKind kind) const { return PopupUp(kind); }
+
+void OverlayApp::OpenPopup(PopupRecord popup) {
+    // Ending the one there first: its closing is done now, against its own
+    // record, before this one takes the record's place.
+    editor_.Input().Push(std::make_unique<Popup>(popup.kind), Event{});
+    const PopupKind kind = popup.kind;
+    popup.drawn = false;
+    popup_ = std::move(popup);
+    Effect effect{Effect::Kind::OpenPopup};
+    effect.popup = kind;
+    Queue(effect);
 }
 
+void OverlayApp::PopupClosed(PopupKind kind) {
+    if (!PopupUp(kind)) {
+        return;
+    }
+    switch (kind) {
+        case PopupKind::ItemProperties:
+            // A style being dragged when it closed ends with it.
+            session_.EndStyleEdit();
+            break;
+        case PopupKind::ColorChooser:
+            KeepPenColor();
+            break;
+        case PopupKind::ItemMenu:
+        case PopupKind::CanvasMenu:
+        case PopupKind::EmptyCanvasMenu:
+        case PopupKind::ConfirmDelete:
+            break;  // what it was about goes with the record
+    }
+    popup_.reset();
+}
+
+void OverlayApp::PopupDrawn(PopupKind kind, bool drawn) {
+    if (!PopupUp(kind)) {
+        return;
+    }
+    if (drawn) {
+        popup_->drawn = true;
+    } else if (popup_->drawn) {
+        PopupClosed(kind);  // closed by itself
+    }
+}
+
+// Ended from outside - by the machine, as a command's scope or view-only
+// mode ends it (see Popup::Interrupt): its closing is done at once, since
+// the frame that would notice may never come - the overlay put away, the
+// app exiting. ImGui's half waits for the next frame, where there is one.
 void OverlayApp::ClosePopup(PopupKind kind) {
+    PopupClosed(kind);
     Effect effect{Effect::Kind::ClosePopup};
     effect.popup = kind;
     Queue(effect);
+}
+
+void OverlayApp::KeepPenWidth() {
+    if (!drawWidthDirty_) {
+        return;
+    }
+    drawWidthDirty_ = false;
+    if (settings_.Get(setting::kStrokeWidth) != editor_.DrawWidth()) {
+        settings_.Set(setting::kStrokeWidth, editor_.DrawWidth());
+    }
+}
+
+void OverlayApp::KeepPenColor() {
+    if (settings_.Get(setting::kStrokeColor) != editor_.DrawColorRGBA()) {
+        settings_.Set(setting::kStrokeColor, editor_.DrawColorRGBA());
+    }
+}
+
+void OverlayApp::KeepPen() {
+    KeepPenWidth();
+    // Up, the chooser keeps it as it closes; kept now for an overlay that
+    // settles with it still up - put away, which leaves a popup up for the
+    // next showing, and perhaps never shown again.
+    if (PopupUp(PopupKind::ColorChooser)) {
+        KeepPenColor();
+    }
 }
 
 void OverlayApp::CloseInnermostPopup() { Queue(Effect{Effect::Kind::CloseInnermostPopup}); }
@@ -442,24 +489,29 @@ void OverlayApp::ApplyEffects() {
     effects.swap(effects_);
     for (const Effect& effect : effects) {
         switch (effect.kind) {
-            case Effect::Kind::OpenItemProperties:
-                ImGui::OpenPopup(kItemPropertiesPopupId);
-                break;
-            case Effect::Kind::OpenItemMenu:
-                itemContextMenu_.OpenAt(effect.at);
-                break;
-            case Effect::Kind::OpenCanvasMenu:
-                canvasContextMenu_.OpenAt(effect.at);
-                break;
-            case Effect::Kind::OpenEmptyCanvasMenu:
-                emptyCanvasMenu_.OpenAt(effect.at);
-                break;
-            case Effect::Kind::OpenColorChooser:
-                colorChooserAnchor_ = effect.at;
-                ImGui::OpenPopup(kColorChooserPopupId);
-                break;
-            case Effect::Kind::OpenConfirmDelete:
-                OpenConfirmDelete();
+            case Effect::Kind::OpenPopup:
+                // Not one asked for and ended since.
+                if (!PopupUp(effect.popup)) {
+                    break;
+                }
+                switch (effect.popup) {
+                    case PopupKind::ItemMenu:
+                        itemContextMenu_.Open();
+                        break;
+                    case PopupKind::CanvasMenu:
+                        canvasContextMenu_.Open();
+                        break;
+                    case PopupKind::EmptyCanvasMenu:
+                        emptyCanvasMenu_.Open();
+                        break;
+                    case PopupKind::ItemProperties:
+                    case PopupKind::ColorChooser:
+                        ImGui::OpenPopup(PopupId(effect.popup));
+                        break;
+                    case PopupKind::ConfirmDelete:
+                        OpenConfirmDelete();
+                        break;
+                }
                 break;
             case Effect::Kind::ClosePopup: {
                 // It and whatever is open inside it; nothing, if it is gone
@@ -501,49 +553,56 @@ void OverlayApp::ApplyEffects() {
 void OverlayApp::OpenColorChooser(platform::Vec2 from) {
     // Only asked for here: the bar's color button fires from the input
     // stream between frames - see Effect.
-    PushPopup(PopupKind::ColorChooser);
-    Queue(Effect{Effect::Kind::OpenColorChooser, ImVec2(from.x, from.y)});
+    PopupRecord popup;
+    popup.kind = PopupKind::ColorChooser;
+    popup.at = ImVec2(from.x, from.y);
+    OpenPopup(std::move(popup));
 }
 
 void OverlayApp::OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) {
     // Opened on the next frame - see Effect: a bar button fires outside
-    // any frame.
-    PushPopup(PopupKind::ItemProperties);
-    itemPropertiesPopoverItemId_ = item;
+    // any frame. Asked for from nowhere in particular, it opens by the
+    // selection bar's More button, which is where it is asked from.
+    PopupRecord popup;
+    popup.kind = PopupKind::ItemProperties;
+    popup.item = item;
     if (at.has_value()) {
-        itemPropertiesPopoverAnchor_ = ImVec2(at->x, at->y);
+        popup.at = ImVec2(at->x, at->y);
+    } else if (const std::optional<platform::Vec2> more = editor_.SelectionBarButtonCenter(ChromeButton::More)) {
+        popup.at = ImVec2(more->x, more->y);
     }
-    Queue(Effect{Effect::Kind::OpenItemProperties});
+    OpenPopup(std::move(popup));
 }
 
 void OverlayApp::RenderColorChooser(float displayW, float displayH) {
     // Beside the point it was asked from, on whichever side has room, so
     // a bar near an edge of the screen does not have its chooser placed
     // off it.
+    const bool up = PopupUp(PopupKind::ColorChooser);
+    const ImVec2 anchor = up ? popup_->at : ImVec2(0.0f, 0.0f);
     const float gap = Px(20.0f);
-    const bool above = colorChooserAnchor_.y > displayH * 0.5f;
-    const bool toTheLeft = colorChooserAnchor_.x > displayW * 0.5f;
-    ImGui::SetNextWindowPos(ImVec2(colorChooserAnchor_.x + (toTheLeft ? -gap : gap),
-                                   colorChooserAnchor_.y + (above ? -gap : gap)),
+    const bool above = anchor.y > displayH * 0.5f;
+    const bool toTheLeft = anchor.x > displayW * 0.5f;
+    ImGui::SetNextWindowPos(ImVec2(anchor.x + (toTheLeft ? -gap : gap), anchor.y + (above ? -gap : gap)),
                             ImGuiCond_Appearing, ImVec2(toTheLeft ? 1.0f : 0.0f, above ? 1.0f : 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, Px(8.0f, 8.0f));
     const bool open = ImGui::BeginPopup(kColorChooserPopupId);
     ImGui::PopStyleVar();
+    // Closed since the last frame, what it was left on is the color from
+    // now on, and the next time the app starts - see PopupClosed.
+    PopupDrawn(PopupKind::ColorChooser, open);
     if (!open) {
-        if (colorChooserOpen_) {
-            // Closed since the last frame. What it was left on is the
-            // color from now on, and the next time the app starts.
-            colorChooserOpen_ = false;
-            if (settings_.Get(setting::kStrokeColor) != editor_.DrawColorRGBA()) {
-                settings_.Set(setting::kStrokeColor, editor_.DrawColorRGBA());
-            }
-        }
         return;
     }
-    colorChooserOpen_ = true;
     // Items re-assert themselves to the front every frame; a popup has to
     // as well, or the first snippet it overlaps covers it.
     KeepPopoverInFront();
+    if (!up) {
+        // Ended from outside this frame, before ImGui heard of it.
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
     float rgb[3];
     ColorRGBAToFloats(editor_.DrawColorRGBA(), rgb);
     ImGui::SetNextItemWidth(Px(220.0f));

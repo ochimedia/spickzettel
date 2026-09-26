@@ -69,22 +69,24 @@ public:
     // literal, in practice.
     explicit ContextMenu(const char* popupId) : popupId_(popupId) {}
 
-    // Opens the menu with its corner at `screenPos`. Inside a frame, at its
-    // top level, like Render - which is why the press that asks for a menu
-    // queues this rather than calling it (see OverlayApp::Effect).
-    void OpenAt(ImVec2 screenPos);
+    // Opens the menu. Inside a frame, at its top level, like Render - which
+    // is why the press that asks for a menu queues this rather than calling
+    // it (see OverlayApp::Effect).
+    void Open();
 
-    // Whether the menu was on screen on the last Render.
-    bool IsOpen() const { return open_; }
-
-    // Draws the menu if it is open. Returns the `action` of the row chosen
-    // this frame, if any; choosing a row also closes the menu.
-    std::optional<int> Render(const Builder& build);
+    // What a frame's Render did: whether the menu was on screen, and the
+    // `action` of the row chosen, if one was - which also closes the menu.
+    struct Drawn {
+        bool up = false;
+        std::optional<int> chosen;
+    };
+    // Draws the menu if it is open, with its corner at `anchor`. Whether it
+    // is up, and where it opens, are the caller's to keep: this draws what
+    // it is told and says what happened.
+    Drawn Render(ImVec2 anchor, const Builder& build);
 
 private:
     const char* popupId_;
-    bool open_ = false;
-    ImVec2 anchor_{0.0f, 0.0f};
 };
 
 }  // namespace sz::ui

@@ -138,12 +138,16 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // own highlight regardless of where the mouse currently is, instead of
     // the hover picking a different item (or none) the moment the cursor
     // strays off its rect mid-gesture, or onto another item stacked in
-    // front of it. itemPropertiesPopoverItemId_ gets the same treatment, so
-    // the item a popover is currently showing for doesn't lose its
-    // highlight the instant the mouse leaves its rect to go interact with
-    // the popover instead.
-    const std::optional<ItemId> stickyItemId =
-        held != nullptr ? std::optional<ItemId>(held->Item()) : itemPropertiesPopoverItemId_;
+    // front of it. The snippet Properties is up for gets the same
+    // treatment, so the item a popover is currently showing for doesn't
+    // lose its highlight the instant the mouse leaves its rect to go
+    // interact with the popover instead.
+    std::optional<ItemId> stickyItemId;
+    if (held != nullptr) {
+        stickyItemId = held->Item();
+    } else if (PopupUp(PopupKind::ItemProperties)) {
+        stickyItemId = popup_->item;
+    }
     const std::optional<ItemId> highlightId =
         stickyItemId.has_value() ? stickyItemId : (itemsInteractive ? target.body : std::nullopt);
 
