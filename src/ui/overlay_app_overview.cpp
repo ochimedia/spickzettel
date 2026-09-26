@@ -488,10 +488,7 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 }  // namespace overlay_detail
 
 void OverlayApp::RenderOverview(float displayW, float displayH) {
-    if (!overviewOpen_) {
-        return;
-    }
-    if (HandleOverviewEscape()) {
+    if (!IsOverviewOpen()) {
         return;
     }
     if (RenderPanelBackdrop("##overview_backdrop", displayW, displayH)) {
@@ -529,7 +526,7 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     // panel this frame. Drawn on, the body fell back to whichever tab was
     // last open, a frame of Settings, and the grid read back the
     // thumbnails CloseOverview had just let go of, to hold them unseen.
-    if (!overviewOpen_) {
+    if (!IsOverviewOpen()) {
         ImGui::End();
         return;
     }
@@ -584,32 +581,6 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     KeepChildPopupsInFront();
 
     ApplyOverviewActions(actions);
-}
-
-bool OverlayApp::HandleOverviewEscape() {
-    const bool isRenaming = renamingFolderId_.has_value() || renamingCanvasId_.has_value();
-    if (isRenaming || !ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-        return false;
-    }
-    // Innermost thing first: without this, Escape on an open help popover
-    // or dropdown closed the whole panel out from under it - one keypress
-    // undoing everything that was open rather than the thing that was in
-    // the way.
-    if (CloseTopmostPopover()) {
-        return true;
-    }
-    if (shortcutCaptureAction_.has_value()) {
-        // Escape on an armed Shortcuts row clears that binding rather than
-        // closing the panel - "press the key you want, or Escape for none"
-        // is the whole unbinding gesture, and it has to be caught here,
-        // above the close, because this check runs first every frame.
-        const ShortcutAction action = *shortcutCaptureAction_;
-        shortcutCaptureAction_.reset();
-        SetToolShortcut(action, platform::KeyCombo{});
-        return true;
-    }
-    CloseOverview();
-    return true;
 }
 
 bool OverlayApp::RenderPanelBackdrop(const char* windowId, float displayW, float displayH) {
@@ -812,11 +783,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             }
             const bool rowHovered = ImGui::IsItemHovered();
             if (rowHovered && !deleted && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                renamingFolderId_ = f.id;
-                renamingCanvasId_.reset();
-                std::snprintf(renameBuffer_, sizeof(renameBuffer_), "%s", f.name.c_str());
-                renameJustFocused_ = true;
-                window_->RequestTextInput();
+                BeginRenaming(f.id, std::nullopt, f.name);
             }
             if (rowHovered && !isCurrentFolder) {
                 sidebarDrawList->AddRectFilled(rowMin, ImVec2(rowMin.x + selectWidth, rowMax.y),
@@ -1075,11 +1042,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
         } else {
             ImGui::TextColored(deleted ? theme::kDeletedInk : theme::kWhite, "%s", c.name.c_str());
             if (!deleted && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                renamingCanvasId_ = c.id;
-                renamingFolderId_.reset();
-                std::snprintf(renameBuffer_, sizeof(renameBuffer_), "%s", c.name.c_str());
-                renameJustFocused_ = true;
-                window_->RequestTextInput();
+                BeginRenaming(std::nullopt, c.id, c.name);
             }
         }
         // No "...and this folder holds more than one" condition: the last
@@ -2083,7 +2046,7 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
     // running - see RenderEditTargetPicker.
     const platform::KeyCombo current = EditedSettings().shortcuts[index];
     const bool overridden = IsShortcutOverriddenHere(action);
-    const bool capturing = shortcutCaptureAction_ == action;
+    const bool capturing = CapturingShortcut() == action;
 
     ImGui::PushID(static_cast<int>(index));
     // The icon the same action wears on the drawing bar, so a row is
@@ -2106,7 +2069,7 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
                                  : (FormatKeyComboLabel(current) + "##shortcut_btn").c_str(),
                        ImVec2(Px(200.0f), 0.0f))) {
         if (capturing) {
-            shortcutCaptureAction_.reset();
+            DisarmCapture();
         } else {
             ArmShortcutCapture(action);
         }
@@ -2128,35 +2091,8 @@ void OverlayApp::RenderShortcutEditor(ShortcutAction action, const Icon& icon, c
         }
     }
 
-    if (capturing) {
-        const ImGuiIO& io = ImGui::GetIO();
-        // Escape is handled in RenderOverview, before its own close check -
-        // see there. Backspace and Delete mean the same thing here, since
-        // they are what a hand reaches for to empty a field.
-        if (ImGui::IsKeyPressed(ImGuiKey_Backspace, false) || ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
-            shortcutCaptureAction_.reset();
-            SetToolShortcut(action, platform::KeyCombo{});
-        } else {
-            std::optional<platform::KeyCombo> edited;
-            for (int k = ImGuiKey_0; k <= ImGuiKey_F24 && !edited.has_value(); ++k) {
-                const auto imguiKey = static_cast<ImGuiKey>(k);
-                if (ImGui::IsKeyPressed(imguiKey, false)) {
-                    edited = ComboForImGuiKey(imguiKey, io.KeyCtrl, io.KeyAlt, io.KeyShift);
-                }
-            }
-            // Or a mouse button: the middle one or a side one, which the
-            // row takes as readily as a key (see KeyCombo::IsMouseButton).
-            for (int b = ImGuiMouseButton_Middle; b < ImGuiMouseButton_COUNT && !edited.has_value(); ++b) {
-                if (ImGui::IsMouseClicked(b, false)) {
-                    edited = ComboForImGuiMouseButton(b, io.KeyCtrl, io.KeyAlt, io.KeyShift);
-                }
-            }
-            if (edited.has_value()) {
-                shortcutCaptureAction_.reset();
-                SetToolShortcut(action, *edited);
-            }
-        }
-    }
+    // What a waiting row does with the next key or button is its
+    // KeyCapture's - see ArmShortcutCapture.
     ImGui::PopID();
 }
 
@@ -2913,19 +2849,14 @@ void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlo
     ImGui::TextUnformatted(label);
     ImGui::SameLine(buttonX);
 
-    const bool capturing = hotkeyCaptureSlot_ == slot;
+    const bool capturing = CapturingHotkey() == slot;
     if (ImGui::Button(capturing ? Labeled(strings::kHotkeysComboPrompt, "combo_btn")
                                  : (FormatKeyComboLabel(current) + "##combo_btn").c_str(),
                        ImVec2(Px(200.0f), 0.0f))) {
         // Clicking the armed row's own button cancels capture instead of
-        // re-arming it. Escape does too, but only as a side effect of
-        // closing the whole Overview - RenderOverview's own Escape-to-close
-        // check runs before this function ever does, every frame, so a
-        // dedicated Escape-cancels-just-the-capture check here would never
-        // actually run (see CloseOverview, which resets hotkeyCaptureSlot_
-        // for exactly this reason).
+        // re-arming it, as Escape does (see KeyCapture).
         if (capturing) {
-            hotkeyCaptureSlot_.reset();
+            DisarmCapture();
         } else {
             ArmHotkeyCapture(slot);
         }
@@ -2934,44 +2865,89 @@ void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlo
         ImGui::SetTooltip("%s", strings::kHotkeysComboTooltip);
     }
 
-    if (capturing) {
-        const ImGuiIO& io = ImGui::GetIO();
-        for (int k = ImGuiKey_0; k <= ImGuiKey_F24; ++k) {
-            const auto imguiKey = static_cast<ImGuiKey>(k);
-            if (!ImGui::IsKeyPressed(imguiKey, false)) {
-                continue;
-            }
-            const std::optional<platform::KeyCombo> edited =
-                ComboForImGuiKey(imguiKey, io.KeyCtrl, io.KeyAlt, io.KeyShift);
-            if (!edited.has_value()) {
-                continue;
-            }
-            CompleteHotkeyCapture(*edited);
-            break;
-        }
-    }
+    // What a waiting row does with the next key is its KeyCapture's - see
+    // ArmHotkeyCapture.
     ImGui::PopID();
 }
 
+// A row waiting is a KeyCapture on the machine's Text level - one at a
+// time, so arming one disarms the other, as the level holds one.
 void OverlayApp::ArmHotkeyCapture(HotkeySlot slot) {
-    hotkeyCaptureSlot_ = slot;
-    shortcutCaptureAction_.reset();
+    editor_.Input().Push(std::make_unique<KeyCapture>(slot,
+                                                      [this, slot](platform::KeyCombo combo) {
+                                                          if (!TryChangeHotkey(slot, combo)) {
+                                                              ShowActionToast(strings::kHotkeysComboRejected);
+                                                          }
+                                                      }),
+                         Event{});
 }
 
 void OverlayApp::ArmShortcutCapture(ShortcutAction action) {
-    shortcutCaptureAction_ = action;
-    hotkeyCaptureSlot_.reset();
+    editor_.Input().Push(std::make_unique<KeyCapture>(
+                             action, [this, action](platform::KeyCombo combo) { SetToolShortcut(action, combo); }),
+                         Event{});
+}
+
+std::optional<HotkeySlot> OverlayApp::CapturingHotkey() const {
+    const KeyCapture* capture = editor_.Input().As<KeyCapture>(Level::Text);
+    if (capture == nullptr || !std::holds_alternative<HotkeySlot>(capture->Waiting())) {
+        return std::nullopt;
+    }
+    return std::get<HotkeySlot>(capture->Waiting());
+}
+
+std::optional<ShortcutAction> OverlayApp::CapturingShortcut() const {
+    const KeyCapture* capture = editor_.Input().As<KeyCapture>(Level::Text);
+    if (capture == nullptr || !std::holds_alternative<ShortcutAction>(capture->Waiting())) {
+        return std::nullopt;
+    }
+    return std::get<ShortcutAction>(capture->Waiting());
+}
+
+void OverlayApp::DisarmCapture() {
+    if (editor_.Input().As<KeyCapture>(Level::Text) != nullptr) {
+        editor_.Input().End(Level::Text);
+    }
 }
 
 void OverlayApp::CompleteHotkeyCapture(platform::KeyCombo combo) {
-    if (!hotkeyCaptureSlot_.has_value()) {
+    const std::optional<HotkeySlot> slot = CapturingHotkey();
+    if (!slot.has_value()) {
         return;
     }
-    const HotkeySlot slot = *hotkeyCaptureSlot_;
-    hotkeyCaptureSlot_.reset();
-    if (!TryChangeHotkey(slot, combo)) {
+    DisarmCapture();
+    if (!TryChangeHotkey(*slot, combo)) {
         ShowActionToast(strings::kHotkeysComboRejected);
     }
+}
+
+void OverlayApp::BeginRenaming(std::optional<FolderId> folder, std::optional<CanvasId> canvas,
+                               const std::string& name) {
+    renamingFolderId_ = folder;
+    renamingCanvasId_ = canvas;
+    std::snprintf(renameBuffer_, sizeof(renameBuffer_), "%s", name.c_str());
+    renameJustFocused_ = true;
+    if (window_) {
+        window_->RequestTextInput();
+    }
+    // Every key is the field's until it lets go - see NameEdit.
+    editor_.Input().Push(std::make_unique<NameEdit>(
+                             [this] { return renamingFolderId_.has_value() || renamingCanvasId_.has_value(); },
+                             [this] {
+                                 // A rename field gives the keyboard back when ImGui
+                                 // deactivates it (see the InputText sites in
+                                 // RenderOverview). Stopped from outside - the Overview
+                                 // closed between frames - that frame never comes, and the
+                                 // keyboard stayed borrowed from the game for the rest of
+                                 // the session. ReleaseTextInput is idempotent.
+                                 const bool wasRenaming = renamingFolderId_.has_value() || renamingCanvasId_.has_value();
+                                 renamingFolderId_.reset();
+                                 renamingCanvasId_.reset();
+                                 if (wasRenaming && window_) {
+                                     window_->ReleaseTextInput();
+                                 }
+                             }),
+                         Event{});
 }
 
 // See SetHotkeyChangeCallback's own doc comment for why this is "ask
@@ -3165,7 +3141,9 @@ void OverlayApp::RenderPersistenceWarning() {
 
 void OverlayApp::OpenOverview() {
     pickerItemId_.reset();
-    overviewOpen_ = true;
+    if (!IsOverviewOpen()) {
+        editor_.Input().Push(std::make_unique<Panel>(PanelKind::Overview), Event{});
+    }
     overviewTab_ = OverviewTab::Canvases;
     showDeleted_ = false;
     deletedFolderShown_.reset();
@@ -3188,35 +3166,41 @@ void OverlayApp::AskToDeleteCanvas(CanvasId canvas) {
 void OverlayApp::OpenPicker(ItemId itemId, bool isCopy) {
     pickerItemId_ = itemId;
     pickerIsCopy_ = isCopy;
-    overviewOpen_ = true;
+    if (!IsOverviewOpen()) {
+        editor_.Input().Push(std::make_unique<Panel>(PanelKind::Overview), Event{});
+    }
 }
 
 void OverlayApp::CloseOverview() {
-    overviewOpen_ = false;
     pickerItemId_.reset();
-    // A rename field gives the keyboard back when ImGui deactivates it (see
-    // the InputText sites in RenderOverview). A mode switch closes the
-    // Overview between frames, so the field is never rendered again and
-    // that frame never comes - without this the keyboard stays borrowed
-    // from the game for the rest of the session. ReleaseTextInput is
-    // idempotent, so the ordinary route running as well costs nothing.
-    const bool wasRenaming = renamingFolderId_.has_value() || renamingCanvasId_.has_value();
-    renamingFolderId_.reset();
-    renamingCanvasId_.reset();
-    if (wasRenaming && window_) {
-        window_->ReleaseTextInput();
+    // A name being edited, or a key being captured, is the Overview's: a
+    // row left armed would sit silently waiting, capturing whatever key is
+    // pressed next time Settings reopens.
+    if (editor_.Input().At(Level::Text) != nullptr && editor_.Input().As<TypingNote>(Level::Text) == nullptr) {
+        editor_.Input().End(Level::Text);
     }
-    // RenderOverview's own Escape-to-close check (above in this file) runs
-    // before RenderOverviewSettingsPanel/RenderHotkeyEditor ever get a
-    // chance to see that same keypress, so a hotkey row armed for capture
-    // has no way to notice Escape closed the whole panel out from under it
-    // - reset it here instead, or it would sit silently armed, capturing
-    // whatever key is pressed next time Settings reopens.
-    hotkeyCaptureSlot_.reset();
-    // Same for an armed Shortcuts row - though that one has to survive
-    // Escape *itself* (see RenderOverview), so what this covers is the
-    // panel being closed some other way with a row still waiting.
-    shortcutCaptureAction_.reset();
+    // Nothing, when the machine has ended it already - see Panel.
+    if (IsOverviewOpen()) {
+        editor_.Input().End(Level::Panel);
+    }
+}
+
+void OverlayApp::ToggleCheatSheet() {
+    if (IsCheatSheetOpen()) {
+        editor_.Input().End(Level::Panel);
+    } else {
+        editor_.Input().Push(std::make_unique<Panel>(PanelKind::CheatSheet), Event{});
+    }
+}
+
+void OverlayApp::ClosePanel(PanelKind kind) {
+    switch (kind) {
+        case PanelKind::Overview:
+            CloseOverview();
+            return;
+        case PanelKind::CheatSheet:
+            return;  // nothing of its own to put away
+    }
 }
 
 void OverlayApp::ShowActionToast(std::string text) {

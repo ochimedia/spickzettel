@@ -238,6 +238,10 @@ std::optional<CommandId> CommandForShortcut(core::ShortcutAction action);
 std::optional<CommandId> CommandForHotkey(core::HotkeySlot slot);
 CommandId CommandForBarButton(core::ChromeButton button);
 
+// The name a shortcut gives a mouse button it may be - the middle one and
+// the two side ones - or 0 for the two gestures are made with.
+int ComboKeyForMouseButton(platform::MouseButton button);
+
 // The global hotkey `slot` is set to in `config`.
 const platform::KeyCombo& HotkeyCombo(const core::AppConfig& config, core::HotkeySlot slot);
 

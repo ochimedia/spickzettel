@@ -149,12 +149,9 @@ public:
     bool ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo);
 
 private:
-    // Whether a hotkey row in Settings is waiting for a combo, in which
-    // case the hotkey that just fired is the answer and does nothing else -
-    // see OverlayApp::IsCapturingHotkey. Each hotkey handler asks first.
-    bool CompletesAHotkeyCapture(const platform::KeyCombo& combo);
-    // A global hotkey: its command, dispatched through the overlay (see
-    // OverlayApp::Dispatch) - unless a Settings row is waiting for it.
+    // A global hotkey: its command, offered to the overlay's input machine
+    // (see OverlayApp::OnHotkey) - where a Settings row waiting for a combo
+    // takes it as the answer instead (see KeyCapture).
     void OnHotkey(HotkeySlot slot);
     // Where the overlay hands the hotkeys' commands back to, once it has
     // settled what they cover (see OverlayApp::SetAppCommandCallback).

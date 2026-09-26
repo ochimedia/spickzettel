@@ -1339,7 +1339,7 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     RenderConfirmDeletePopover();
     RenderActionToast();
     RenderPersistenceWarning();
-    HandleInputOptionsHudKeys();
+    UpdateInputOptionsHud();
     ApplyPointerShape();
     DrawSoftwareCursor();
 }
@@ -1782,7 +1782,7 @@ void OverlayApp::DrawInputOptionsHud(ImDrawList* drawList) const {
     }
 }
 
-void OverlayApp::HandleInputOptionsHudKeys() {
+void OverlayApp::UpdateInputOptionsHud() {
     // Both halves of the same decision: the digits belong to the HUD only
     // while it is visible, and the platform needs to know so it can stop
     // holding a keyboard hook open on the HUD's behalf. Pushed only on a
@@ -1820,19 +1820,22 @@ void OverlayApp::HandleInputOptionsHudKeys() {
             return;  // the overlay is being rebuilt; nothing else this frame
         }
     }
+}
 
-    if (ImGui::GetIO().WantTextInput) {
-        return;
+// Reaches here as the Canvas level's (see CanvasRoot), so never while text
+// is being typed or a panel or a popup is up: each of those takes every key.
+bool OverlayApp::HandleInputOptionsHudKey(const Event& event) {
+    if (!Cfg().showInputOptionsHud || viewOnly_ || event.repeat) {
+        return false;
     }
     for (int i = 0; i < static_cast<int>(std::size(kInputOptionRows)); ++i) {
-        const auto key = static_cast<ImGuiKey>(ImGuiKey_1 + i);
-        if (!ImGui::IsKeyPressed(key, /*repeat=*/false)) {
+        if (event.key != '1' + i) {
             continue;
         }
         if (!InputOptionAvailable(i)) {
             // Dimmed in the panel, and inert here to match. Its prerequisite
             // is one of the rows above, so it is one keypress away.
-            return;
+            return true;
         }
         // Into the profile that matched, if one did - the HUD is about the
         // configuration that is running, and the running configuration is
@@ -1852,8 +1855,9 @@ void OverlayApp::HandleInputOptionsHudKeys() {
         if (RowNeedsOverlayRestart(kInputOptionRows[i].which)) {
             pendingOverlayRestart_ = true;
         }
-        return;  // one row per frame
+        return true;
     }
+    return false;
 }
 
 // Draws the pointer at ImGui's mouse position, whatever put it there - which

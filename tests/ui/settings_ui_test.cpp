@@ -273,7 +273,12 @@ TEST_F(UiTest, AShortcutRowTakesAMouseButton) {
         ctx->ItemClick("**/###sectionhotkeys");
     });
     controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
-    RunUi("press the side button", [](ImGuiTestContext* ctx) { ctx->MouseClick(3); });
+    // As the window hands it on: to ImGui, and into the input stream, whose
+    // it is - a row waits on the stream (see KeyCapture).
+    MouseButtonEvent(3, true);
+    StepFrame();
+    MouseButtonEvent(3, false);
+    StepFrame();
     EXPECT_FALSE(App().IsCapturingShortcut());
     EXPECT_EQ(AppSettings().Stored().toolShortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
               (platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button}));

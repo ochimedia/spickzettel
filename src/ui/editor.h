@@ -117,6 +117,9 @@ public:
     virtual bool PopupShowing(PopupKind kind) const = 0;
     virtual void ClosePopup(PopupKind kind) = 0;
     virtual void CloseInnermostPopup() = 0;
+    // A panel the machine ended - Escape, the overlay going away: the view
+    // puts it away.
+    virtual void ClosePanel(PanelKind kind) = 0;
 };
 
 class Editor {
@@ -494,6 +497,15 @@ public:
     // always available, since a stroke in flight is on the history only
     // once it has been settled.
     bool Available(const Command& command) const;
+    // The command a key - KeyCombo's name for it, or a mouse button a
+    // shortcut may be - runs with `held` down, if any: the first row of the
+    // table it is bound to, which puts the fixed keys ahead of the chosen
+    // ones and, among those, the table's order ahead of a profile that
+    // bound one key twice. A key matches exactly the modifiers its binding
+    // names, but for Escape, Delete and the arrows, which never cared (a
+    // nudge reads Shift itself). A key held down and repeating runs only a
+    // command that repeats; a global hotkey is the tray's, never a key's.
+    std::optional<CommandId> CommandForKey(int key, const platform::Modifiers& held, bool repeat) const;
     // Where the global hotkeys' commands run: the tray, which alone knows
     // the window and the modes. Left null they do nothing.
     void SetAppCommandCallback(std::function<void(CommandId)> callback) {

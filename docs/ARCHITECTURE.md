@@ -1847,8 +1847,9 @@ under), or a global hotkey. The table is checked at compile time to hold
 one row per id, in order. No ImGui in it: what a command is and what
 reaches it are the app's words, not its widgets'.
 
-Every way in ends at `Editor::Dispatch`: `HandleCommandKey` for the
-keys and the mouse buttons a shortcut may be, the three context menus (each row names its command), the selection
+Every way in ends at `Editor::Dispatch`: the Canvas level of the input
+machine for the keys and the mouse buttons a shortcut may be (the command
+a key runs is `Editor::CommandForKey`'s answer), the three context menus (each row names its command), the selection
 bar (`CommandForBarButton`), and the tray, whose hotkeys and "Show" menu
 entry dispatch through the overlay and are handed back to it to run
 (`SetAppCommandCallback`) - the tray alone knows the window and the modes,
@@ -1869,14 +1870,17 @@ command that is not available does nothing at all, including not
 settling: a key that does nothing is no command.
 
 Whether a key *reaches* its command from where it is pressed is a
-separate question: not while text is being typed, not through the
-Overview or the cheat sheet, not through a popup, and for Delete and the
-arrows not through drawing mode. The stack answers part of it already -
-a popup claims every key but the global hotkeys, so no undo, tool or
-clipboard key acts on the canvas under a menu (before, they did, and the
-menu stayed up over a canvas that had changed) - and the rest is still
-`KeyReaches`, one exhaustive switch, until the Text and Panel levels take
-it over.
+separate question, and the stack's answer: a key reaches the Canvas level
+only if every level above passed it. A note being typed, a name being
+edited or a row waiting for a key claims every key; a popup every key
+but the global hotkeys, so no undo, tool or clipboard key acts on the
+canvas under a menu (before, they did, and the menu stayed up over a
+canvas that had changed); a panel every key but the global hotkeys and
+its own, so the cheat sheet's key closes the cheat sheet. That replaced
+`KeyReaches`, one switch of conditions per command that had been three
+key handlers before it. Delete and the arrows do nothing in drawing
+mode, where the snippet is being worked in rather than on - the Mode
+level's to say, once drawing mode is on the stack.
 
 A key belongs to one command: the first row it is bound to, which puts
 the fixed keys ahead of chosen ones, and the table's order ahead of a
@@ -1939,10 +1943,9 @@ Its routing is tested alone, with interactions that do nothing but
 answer (`tests/ui/machine_test.cpp`). A command's scope is ended through
 it before the command runs (`Machine::EndFor`). The Canvas level
 (`OverlayApp::CanvasRoot`) hands a press to the recognizer (see "One
-gesture engine") and keys and the wheel to the handlers that took them
-before the machine - `HandleCommandKey`, `HandleMouseWheel` - until the
-levels above take them over; each step of phase 3 moves one kind of
-interaction onto it. The machine also keeps which buttons are down, from
+gesture engine"), a key or a bound mouse button to its command, and the
+wheel to `HandleMouseWheel`, until phase 4 makes the wheel's bursts
+interactions. The machine also keeps which buttons are down, from
 the presses and releases it is offered: that is what leaves the rest of
 a press Spent, and what the overlay coming up forgets
 (`Machine::Forget`).
@@ -1981,9 +1984,19 @@ the typing and keeps the text too. It replaced `Hand::noteOpenAtPress`,
 which existed because settling the untouched drawing could close the note
 before the press asked whether one was open; the recognizer asks first.
 
-The panels' own keys - the Overview's Escape, a key being captured in
-Settings, the input options HUD's digits - and every widget are still
-ImGui's. They become interactions of their own in phase 3.
+The Overview and the cheat sheet are the Panel level's (`Panel`): pushed
+as they open, ended by their own widgets (the backdrop, a canvas picked),
+by Escape - after a popup of ImGui's open inside them - and by whatever
+is started below them. A name being edited in the Overview (`NameEdit`)
+and a Settings row waiting for a key (`KeyCapture`) are Text interactions
+above it, so Escape reaches them first: on a waiting row it binds nothing
+to a chosen key, and only stops a hotkey's row waiting, without closing
+the Overview - before, Escape on a hotkey's row closed the whole panel.
+A row takes its key from the input stream rather than from ImGui, and a
+global hotkey that fires while a hotkey's row waits is the key it takes
+(the tray used to ask the overlay first, `CompletesAHotkeyCapture`). The
+input options HUD's number keys are the Canvas level's, ahead of any
+command they might be bound to.
 
 ### Item text
 

@@ -100,6 +100,7 @@ public:
     bool PopupShowing(PopupKind /*kind*/) const override { return false; }
     void ClosePopup(PopupKind /*kind*/) override {}
     void CloseInnermostPopup() override {}
+    void ClosePanel(PanelKind /*kind*/) override {}
 };
 }  // namespace
 

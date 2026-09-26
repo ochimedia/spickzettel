@@ -44,6 +44,21 @@ CommandId CommandForBarButton(core::ChromeButton button) {
     return CommandId::DeleteSelection;  // unreachable: the switch names every button
 }
 
+int ComboKeyForMouseButton(platform::MouseButton button) {
+    switch (button) {
+        case platform::MouseButton::Middle:
+            return platform::KeyCombo::kMiddleButton;
+        case platform::MouseButton::X1:
+            return platform::KeyCombo::kX1Button;
+        case platform::MouseButton::X2:
+            return platform::KeyCombo::kX2Button;
+        case platform::MouseButton::Left:
+        case platform::MouseButton::Right:
+            return 0;
+    }
+    return 0;
+}
+
 const platform::KeyCombo& HotkeyCombo(const core::AppConfig& config, core::HotkeySlot slot) {
     switch (slot) {
         case core::HotkeySlot::EditMode:

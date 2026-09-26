@@ -207,9 +207,10 @@ public:
         return CreationKindFor(editor_.ActiveTool()).has_value() ||
                editor_.Input().As<Framing>(Level::Gesture) != nullptr;
     }
-    bool IsOverviewOpen() const { return overviewOpen_; }
-    // Whether the cheat sheet is up - see RenderCheatSheet.
-    bool IsCheatSheetOpen() const { return cheatSheetOpen_; }
+    // Whether the Overview, or the cheat sheet, is up - the machine's Panel
+    // level (see Panel).
+    bool IsOverviewOpen() const { return PanelUp(PanelKind::Overview); }
+    bool IsCheatSheetOpen() const { return PanelUp(PanelKind::CheatSheet); }
     // Whether the color chooser is up - see RenderColorChooser.
     bool IsColorChooserOpen() const { return colorChooserOpen_; }
     // Whether the snippet context menu is up, and over which snippet -
@@ -368,7 +369,7 @@ private:
     void OpenOverview() override;
     void OpenSettings() override;
     void OpenPicker(ItemId itemId, bool isCopy) override;
-    void ToggleCheatSheet() override { cheatSheetOpen_ = !cheatSheetOpen_; }
+    void ToggleCheatSheet() override;
     void OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) override;
     void OpenColorChooser(platform::Vec2 at) override;
     void AskToDeleteCanvas(CanvasId canvas) override;
@@ -379,7 +380,12 @@ private:
     // Whether a panel covering the canvas is up, which the canvas's own
     // keys, wheel and pointer then leave alone - the Overview or the cheat
     // sheet.
-    bool PanelOpen() const override { return overviewOpen_ || cheatSheetOpen_; }
+    bool PanelOpen() const override { return editor_.Input().At(Level::Panel) != nullptr; }
+    bool PanelUp(PanelKind kind) const {
+        const Panel* panel = editor_.Input().As<Panel>(Level::Panel);
+        return panel != nullptr && panel->Kind() == kind;
+    }
+    void ClosePanel(PanelKind kind) override;
     bool PopupOpen() const override;
     bool PopupShowing(PopupKind kind) const override;
     void ClosePopup(PopupKind kind) override;
@@ -451,10 +457,14 @@ private:
     // Draws into whichever layer the caller hands it - see
     // RenderScreenChrome, which is what decides how high that layer sits.
     void DrawInputOptionsHud(ImDrawList* drawList) const;
-    // Handles the number keys the HUD advertises. Toggles the option,
-    // persists it, and re-enters edit mode so options that only apply on
-    // entry actually take hold.
-    void HandleInputOptionsHudKeys();
+    // Keeps the window told how many number keys the HUD takes, and restarts
+    // the overlay once a toggle that needs it has had its key let go of -
+    // once a frame.
+    void UpdateInputOptionsHud();
+    // A number key the HUD advertises, as it goes down: toggles the option,
+    // persists it, and asks for edit mode to be re-entered for an option
+    // that only applies on entry. False for a key that is not the HUD's.
+    bool HandleInputOptionsHudKey(const Event& event);
     // The option a HUD row addresses, or nullptr for an out-of-range index.
     // Which setting a HUD row addresses, and what it currently reads - see
     // the definitions. The value is the resolved one: the HUD reports what
@@ -590,16 +600,15 @@ private:
     // will draw (or erase) at, under the cursor, plus the number. See
     // sizePreviewExpireAtSeconds_ for why it's transient.
     void RenderBrushSizePreview();
-    // The Overview, in the order it is drawn: Escape first, which closes
-    // the innermost open thing and ends the frame's Overview when it did;
-    // the dimming backdrop, which closes the Overview on a click outside
+    // The Overview, in the order it is drawn (Escape is its interaction's -
+    // see Panel): the dimming backdrop, which closes the Overview on a click
+    // outside
     // the panel; the header, which is the picker's prompt while a snippet
     // is being sent somewhere and the tabs otherwise; the body - the
     // folder sidebar and the canvas grid (with what is deleted in them, see
     // ShowingDeleted), or the Settings or About panel; and the footer, whose buttons belong to
     // whichever body is showing.
     void RenderOverview(float displayW, float displayH);
-    bool HandleOverviewEscape();
     // Dims the whole screen behind a panel - the Overview, the cheat sheet
     // - and is true for a click on it, outside the panel, which closes it.
     bool RenderPanelBackdrop(const char* windowId, float displayW, float displayH);
@@ -762,16 +771,12 @@ private:
     bool TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo);
 
 public:
-    // Whether a hotkey row is armed, waiting for the combo the user wants
-    // (see hotkeyCaptureSlot_). Asked by TrayController when a registered
-    // hotkey fires: a combo one of the app's own hotkeys already has never
-    // reaches the capture loop as a key press - Windows hands a registered
-    // combination to the hotkey and to nothing else - so the hotkey firing
-    // *is* the press, and completes the capture rather than doing what it
-    // usually does.
-    bool IsCapturingHotkey() const { return hotkeyCaptureSlot_.has_value(); }
-    // Ends the capture with `combo` as the answer - the key the loop saw,
-    // or the combo of the hotkey that fired. Nothing while none is armed.
+    // Whether a hotkey row is armed, waiting for the combo the user wants -
+    // a KeyCapture on the machine's Text level (see KeyCapture, which also
+    // says why a hotkey that fires meanwhile is the press).
+    bool IsCapturingHotkey() const { return CapturingHotkey().has_value(); }
+    // Ends the capture with `combo` as the answer. Nothing while none is
+    // armed.
     void CompleteHotkeyCapture(platform::KeyCombo combo);
     // What clicking a hotkey row's button, or a shortcut row's, does - here
     // so a test can arm one without driving the Settings panel. Arming
@@ -779,9 +784,14 @@ public:
     // the next key, and one press bound it to both.
     void ArmHotkeyCapture(HotkeySlot slot);
     void ArmShortcutCapture(ShortcutAction action);
-    bool IsCapturingShortcut() const { return shortcutCaptureAction_.has_value(); }
+    bool IsCapturingShortcut() const { return CapturingShortcut().has_value(); }
 
 private:
+    // The row waiting, if one is.
+    std::optional<HotkeySlot> CapturingHotkey() const;
+    std::optional<ShortcutAction> CapturingShortcut() const;
+    // Stops a row waiting, binding nothing.
+    void DisarmCapture();
     // The Settings tab's Shortcuts section: every tool and create action,
     // each with the key it answers to. A section of its own rather than
     // rows appended to another one - eleven key editors would be most of
@@ -793,9 +803,8 @@ private:
     // callback. The one ordinary setting here - whether a hidden overlay
     // may say what it just did - is what needs it.
     void RenderSettingsHotkeys(bool& anyChanged);
-    // One row of it. `capturing` rows read the next key pressed; Escape
-    // unbinds, and Backspace/Delete do too, since a row showing "(none)" is
-    // exactly what someone reaches for those keys to get.
+    // One row of it. A row waiting takes the next key pressed, or Escape,
+    // Backspace or Delete for none - see KeyCapture.
     void RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label, float buttonX);
     float KeyButtonColumn() const;
     // Binds `combo` to `action`, taking it off whatever else held it -
@@ -803,18 +812,6 @@ private:
     // themselves, and two rows claiming one key is a state where only one
     // of them can ever fire. Pass a default-constructed combo to unbind.
     void SetToolShortcut(ShortcutAction action, platform::KeyCombo combo);
-    // Dispatches the command `key` is bound to - a key's name as KeyCombo
-    // spells it, or a mouse button a shortcut may be - as it goes down, if
-    // the key reaches it from where it is pressed (see KeyReaches). Each
-    // key to one command: the first in the table it is bound to (see
-    // KeysFor). `repeat` for a key held down and repeating.
-    void HandleCommandKey(int key, bool repeat);
-    // Whether a key for `id` gets through to it from here: not while text
-    // is being typed, and not through a panel, a popup or drawing mode
-    // where the command is not theirs. docs/INTERACTIONS.md, section 7,
-    // calls this reaching, and the stack of phase 3 answers it; until then
-    // it is these rules.
-    bool KeyReaches(CommandId id) const;
     // The wheel, turned `notches`: with Alt it steps between the canvases of
     // the current canvas's folder, plain it sizes the tool in hand - see
     // the definition.
@@ -1005,7 +1002,7 @@ private:
     // remove a keyboard hook, which is not something to ask for every frame.
     int appliedInputOptionsHudDigits_ = 0;
     // A HUD toggle that needs edit mode re-entered waits here until the key is
-    // released - see HandleInputOptionsHudKeys for why holding the restart is
+    // released - see UpdateInputOptionsHud for why holding the restart is
     // the difference between every press counting and one in three vanishing.
     bool pendingOverlayRestart_ = false;
 
@@ -1098,18 +1095,6 @@ private:
     // covered by a handle that just isn't visually distinguishable from
     // its neighbor" from "this pixel isn't covered by anything."
     std::string debugHoveredResizeHandle_;
-    // Which Shortcuts-tab row is armed, waiting for the key the user wants
-    // - nullopt when none is, one at a time for the same reason
-    // hotkeyCaptureSlot_ is. Escape while armed unbinds the row rather than
-    // closing the Overview, which is the only place Escape means something
-    // other than "out of here" - see RenderOverview.
-    std::optional<ShortcutAction> shortcutCaptureAction_ = std::nullopt;
-    // Which hotkey slot's RenderHotkeyEditor row is currently "armed",
-    // waiting for the user to press the combo they want - std::nullopt when
-    // none is. Only one at a time: arming a different row implicitly
-    // disarms whichever was already armed (see RenderHotkeyEditor's own
-    // body) rather than tracking capture state per row.
-    std::optional<HotkeySlot> hotkeyCaptureSlot_ = std::nullopt;
 
     // Set by AttachTo; what the overlay asks of the platform itself - the
     // frame pacing, the pointer, the keyboard. Never null once AttachTo has
@@ -1226,11 +1211,6 @@ private:
     void ApplyEffects();
     std::vector<Effect> effects_;
 
-    // Overview (canvas switcher / manager / move-copy picker).
-    bool overviewOpen_ = false;
-    // See RenderCheatSheet. Toggled by its command (CommandId::CheatSheet),
-    // from its key or the empty canvas's menu.
-    bool cheatSheetOpen_ = false;
     // Which of the Overview's two tabs is showing - Canvases (the
     // original/default content: folder sidebar + canvas tile grid) or
     // Settings (RenderOverviewSettingsPanel, added once there were enough
@@ -1311,6 +1291,9 @@ private:
     std::optional<CanvasId> renamingCanvasId_ = std::nullopt;
     char renameBuffer_[128] = {};
     bool renameJustFocused_ = false;
+    // Starts renaming a folder or a canvas, from `name` - and puts a
+    // NameEdit on the machine's Text level for as long as it lasts.
+    void BeginRenaming(std::optional<FolderId> folder, std::optional<CanvasId> canvas, const std::string& name);
     // A canvas the Overview should bring into view the next time it draws
     // its grid, then forget - set whenever one is created, since a new
     // canvas goes to the end of its folder (see CanvasManager::AddCanvas)

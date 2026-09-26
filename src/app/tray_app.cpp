@@ -185,18 +185,7 @@ bool TrayController::Initialize() {
     return true;
 }
 
-bool TrayController::CompletesAHotkeyCapture(const platform::KeyCombo& combo) {
-    if (!overlayApp_.IsCapturingHotkey()) {
-        return false;
-    }
-    overlayApp_.CompleteHotkeyCapture(combo);
-    return true;
-}
-
 void TrayController::OnHotkey(HotkeySlot slot) {
-    if (CompletesAHotkeyCapture(HotkeyCombo(settings_.Stored(), slot))) {
-        return;
-    }
     // A command like any other, and dispatched like one: the overlay's
     // input machine offers it to what is open, which passes it on, ends
     // what the command's scope covers, and hands it back here to run (see

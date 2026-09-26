@@ -47,7 +47,7 @@ TEST(ShortcutActionTest, TheClipboardShipsOnTheUsualChords) {
 // takes the selection with it on the "new" chord with Shift - both chords
 // rather than letters, so neither can fire from ordinary typing. Ctrl+D
 // sits beside a plain D for a new drawing, which the exact-modifier match
-// in HandleCommandKey keeps apart.
+// in Editor::CommandForKey keeps apart.
 TEST(ShortcutActionTest, DuplicateAndTheCanvasThatTakesTheSelectionShipBound) {
     const ShortcutBindings bindings = DefaultShortcuts();
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::Duplicate), WithCtrl('D'));

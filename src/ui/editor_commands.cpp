@@ -12,6 +12,9 @@ namespace sz::ui {
 // and runs it. See docs/INTERACTIONS.md, section 7.
 
 bool Editor::Dispatch(const Command& command) {
+    // Nothing acts on a snippet that has gone, before or after - an undo or
+    // a delete can take a selected one off the screen.
+    PruneSelection();
     if (!Available(command)) {
         return false;
     }
@@ -20,7 +23,35 @@ bool Editor::Dispatch(const Command& command) {
     ++commandsRun_;
     lastCommand_ = command.id;
     Run(command);
+    PruneSelection();
     return true;
+}
+
+std::optional<CommandId> Editor::CommandForKey(int key, const platform::Modifiers& held, bool repeat) const {
+    if (key == 0) {
+        return std::nullopt;
+    }
+    const ShortcutBindings& shortcuts = settings_.Live().shortcuts;
+    for (const CommandInfo& info : kCommands) {
+        if (info.hotkey.has_value()) {
+            continue;  // the OS hands those to the tray, not to this window
+        }
+        for (const platform::KeyCombo& binding : KeysFor(info.id, Cfg(), shortcuts)) {
+            // Exactly the modifiers the binding names, so a bare "P" does
+            // not also fire on Ctrl+P - which is somebody else's chord, even
+            // if nothing here claims it yet.
+            if (binding.key != key || (!info.anyModifiers && (held.ctrl != binding.ctrl || held.alt != binding.alt ||
+                                                              held.shift != binding.shift))) {
+                continue;
+            }
+            // The key belongs to this command, repeating or not.
+            if (repeat && !info.repeats) {
+                return std::nullopt;
+            }
+            return info.id;
+        }
+    }
+    return std::nullopt;
 }
 
 bool Editor::Available(const Command& command) const {

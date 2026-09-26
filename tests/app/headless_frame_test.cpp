@@ -1659,6 +1659,47 @@ TEST_F(HeadlessAppTest, ArmingAHotkeyOrAShortcutCaptureDisarmsTheOther) {
     EXPECT_FALSE(App().IsCapturingShortcut());
 }
 
+// A row waiting for a key takes the next one pressed, with its modifiers,
+// from the input stream - over the Overview, which takes every other key.
+// Escape on a shortcut's row binds nothing; on a hotkey's it only stops the
+// row waiting, and neither closes the Overview.
+TEST_F(HeadlessAppTest, AWaitingRowTakesTheNextKeyAndEscapeStopsIt) {
+    ShowEditMode();
+    StepFrame();
+    Command settings{CommandId::Settings};
+    ASSERT_TRUE(controller_->Overlay().Dispatch(settings));
+    StepFrame();
+    ASSERT_EQ(App().InputStack(), "Canvas / - / Overview / - / - / -");
+
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    EXPECT_EQ(App().InputStack(), "Canvas / - / Overview / - / KeyCapture / -");
+    KeyEvent(ImGuiMod_Ctrl, true);
+    KeyEvent(ImGuiMod_Shift, true);
+    PressKey(ImGuiKey_K);
+    KeyEvent(ImGuiMod_Shift, false);
+    KeyEvent(ImGuiMod_Ctrl, false);
+    StepFrame();
+    EXPECT_FALSE(App().IsCapturingShortcut());
+    EXPECT_EQ(AppSettings().Stored().toolShortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
+              (platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, 'K'}));
+
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(AppSettings().Stored().toolShortcuts[ShortcutActionIndex(ShortcutAction::Copy)].IsValid())
+        << "Escape binds nothing";
+    EXPECT_TRUE(App().IsOverviewOpen());
+
+    const platform::KeyCombo hotkey = AppSettings().Stored().hotkeyEditMode;
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::EditMode);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(App().IsCapturingHotkey());
+    EXPECT_EQ(AppSettings().Stored().hotkeyEditMode, hotkey) << "a hotkey's row only stops waiting";
+    EXPECT_TRUE(App().IsOverviewOpen());
+
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(App().IsOverviewOpen()) << "with nothing waiting, Escape closes the Overview";
+}
+
 // ===== The hand at rest: Select =====
 
 // A marking tool is in hand only in drawing mode, so putting it down -
@@ -1702,8 +1743,8 @@ TEST_F(HeadlessAppTest, WithSelectInHandADragAnywhereOnASnippetPicksItUp) {
 // opens its context menu, and makes nothing and changes nothing else; on
 // empty canvas a right click opens that menu instead (see the tests under
 // "Making a snippet"). Escape then closes the menu, and the *next* Escape clears
-// the selection: an open popover takes the first press (see
-// HandleCommandKey).
+// the selection: an open popup takes the first press (see
+// Popup).
 TEST_F(HeadlessAppTest, ARightClickOnASnippetSelectsItAndOpensItsContextMenu) {
     ShowEditMode();
     StepFrame();
@@ -2437,7 +2478,7 @@ TEST_F(HeadlessAppTest, AKeyStrandedByHidingIsNotAPressOnTheWayBack) {
 // overlay was away is heard of by nobody - ImGui still believes it held,
 // and so would the input stream, had the window not said otherwise on the
 // way back. Latched, it would make the exact-modifier test in
-// HandleCommandKey refuse an ordinary key press.
+// Editor::CommandForKey refuse an ordinary key press.
 TEST_F(HeadlessAppTest, AModifierHeldWhenTheOverlayWentAwayDoesNotOutliveIt) {
     ShowEditMode();
     KeyEvent(ImGuiMod_Ctrl, true);

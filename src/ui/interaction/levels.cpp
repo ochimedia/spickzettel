@@ -4,6 +4,50 @@
 
 namespace sz::ui {
 
+// ================= Panel =================
+
+Answer Panel::Offer(const Event& event, Editor& editor) {
+    switch (event.kind) {
+        case EventKind::PointerDown:
+            // A mouse button bound to the panel's own command is its key.
+            if (event.button != platform::MouseButton::Left && event.button != platform::MouseButton::Right &&
+                kind_ == PanelKind::CheatSheet &&
+                editor.CommandForKey(ComboKeyForMouseButton(event.button), event.modifiers, false) ==
+                    CommandId::CheatSheet) {
+                return Answer::Pass();
+            }
+            return Answer::Claim();
+        case EventKind::PointerMove:
+        case EventKind::PointerUp:
+        case EventKind::Wheel:
+            return Answer::Claim();
+        case EventKind::KeyDown:
+            if (event.key == platform::KeyCombo::kEscape) {
+                if (editor.PopupOpen()) {
+                    editor.Views().CloseInnermostPopup();
+                    return Answer::Claim();
+                }
+                return Answer::Cancel();
+            }
+            if (kind_ == PanelKind::CheatSheet &&
+                editor.CommandForKey(event.key, event.modifiers, event.repeat) == CommandId::CheatSheet) {
+                return Answer::Pass();  // its own key, which closes it
+            }
+            return Answer::Claim();
+        case EventKind::KeyUp:
+        case EventKind::Modifiers:
+        case EventKind::Tick:
+        case EventKind::Hotkey:
+        case EventKind::Lifecycle:
+            return Answer::Pass();
+    }
+    return Answer::Pass();
+}
+
+void Panel::Interrupt(Editor& editor) { editor.Views().ClosePanel(kind_); }
+
+// ================= Popup =================
+
 const char* PopupName(PopupKind kind) {
     switch (kind) {
         case PopupKind::ItemMenu:
@@ -97,6 +141,87 @@ void TypingNote::Interrupt(Editor& editor) {
     if (editor.EditingNote() == item_) {
         editor.CommitNoteBeingEdited();
     }
+}
+
+// ================= NameEdit =================
+
+Answer NameEdit::Offer(const Event& event, Editor& /*editor*/) {
+    switch (event.kind) {
+        case EventKind::PointerDown:
+        case EventKind::PointerMove:
+        case EventKind::PointerUp:
+        case EventKind::Wheel:
+            return Answer::Pass();
+        case EventKind::KeyDown:
+        case EventKind::KeyUp:
+            return Answer::Claim();
+        case EventKind::Modifiers:
+            return Answer::Pass();
+        case EventKind::Tick:
+            return editing_() ? Answer::Pass() : Answer::Finish(/*usedUp=*/false);
+        case EventKind::Hotkey:
+        case EventKind::Lifecycle:
+            return Answer::Pass();
+    }
+    return Answer::Pass();
+}
+
+// ================= KeyCapture =================
+
+Answer KeyCapture::Offer(const Event& event, Editor& /*editor*/) {
+    const auto combo = [&event](int key) {
+        return platform::KeyCombo{event.modifiers.ctrl, event.modifiers.alt, event.modifiers.shift, key};
+    };
+    switch (event.kind) {
+        case EventKind::PointerDown:
+            if (event.button == platform::MouseButton::Left || event.button == platform::MouseButton::Right) {
+                return Answer::Pass();  // the panel's - its button disarms the row
+            }
+            if (ForHotkey()) {
+                return Answer::Claim();  // a hotkey is a key
+            }
+            bind_(combo(ComboKeyForMouseButton(event.button)));
+            return Answer::Finish();
+        case EventKind::PointerMove:
+        case EventKind::PointerUp:
+        case EventKind::Wheel:
+            return Answer::Pass();
+        case EventKind::KeyDown: {
+            if (event.key == platform::KeyCombo::kEscape) {
+                if (!ForHotkey()) {
+                    bind_(platform::KeyCombo{});
+                }
+                return Answer::Finish();
+            }
+            if (event.key == platform::KeyCombo::kBackspace || event.key == platform::KeyCombo::kDelete) {
+                if (ForHotkey()) {
+                    return Answer::Claim();
+                }
+                bind_(platform::KeyCombo{});
+                return Answer::Finish();
+            }
+            const platform::KeyCombo pressed = combo(event.key);
+            if (!pressed.IsValid()) {
+                return Answer::Claim();  // not a key a row can hold
+            }
+            bind_(pressed);
+            return Answer::Finish();
+        }
+        case EventKind::KeyUp:
+            return Answer::Claim();
+        case EventKind::Modifiers:
+        case EventKind::Tick:
+            return Answer::Pass();
+        case EventKind::Hotkey:
+            if (!ForHotkey()) {
+                return Answer::Pass();
+            }
+            bind_(event.combo);
+            return Answer::Finish();
+        case EventKind::Lifecycle:
+            return Answer::Pass();
+    }
+    return Answer::Pass();
 }
 
 }  // namespace sz::ui

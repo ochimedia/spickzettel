@@ -25,22 +25,6 @@ using namespace overlay_detail;
 
 namespace {
 
-// The shortcut name of a mouse button a shortcut may be, or 0 for the two
-// gestures are made with.
-int ComboKeyForMouseButton(platform::MouseButton button) {
-    switch (button) {
-        case platform::MouseButton::Middle:
-            return platform::KeyCombo::kMiddleButton;
-        case platform::MouseButton::X1:
-            return platform::KeyCombo::kX1Button;
-        case platform::MouseButton::X2:
-            return platform::KeyCombo::kX2Button;
-        case platform::MouseButton::Left:
-        case platform::MouseButton::Right:
-            return 0;
-    }
-    return 0;
-}
 
 }  // namespace
 
@@ -49,7 +33,7 @@ void OverlayApp::SetToolShortcut(ShortcutAction action, platform::KeyCombo combo
         // Whatever else held this key loses it. The alternative - refusing
         // the change - leaves the user to go and find the other holder
         // themselves, and two rows claiming one key is a state where only
-        // the first of them could ever fire (see HandleCommandKey).
+        // the first of them could ever fire (see Editor::CommandForKey).
         //
         // Judged against what the *edited* target resolves to, not against
         // what is running: a collision inside a profile is a collision when
@@ -166,8 +150,7 @@ public:
                 }
                 // A shortcut the button may be - never while a gesture is in
                 // flight, which the Gesture level above sees to.
-                app_.HandleCommandKey(ComboKeyForMouseButton(event.button), /*repeat=*/false);
-                return Answer::Claim();
+                return Bound(ComboKeyForMouseButton(event.button), event, editor);
             case EventKind::PointerMove:
             case EventKind::PointerUp:
                 return Answer::Claim();  // dropped
@@ -175,8 +158,10 @@ public:
                 app_.HandleMouseWheel(event.wheel);
                 return Answer::Claim();
             case EventKind::KeyDown:
-                app_.HandleCommandKey(event.key, event.repeat);
-                return Answer::Claim();
+                if (app_.HandleInputOptionsHudKey(event)) {
+                    return Answer::Claim();
+                }
+                return Bound(event.key, event, editor);
             case EventKind::KeyUp:
             case EventKind::Modifiers:
             case EventKind::Tick:
@@ -193,6 +178,26 @@ public:
     void Cancel(Editor& /*editor*/) override {}
 
 private:
+    // The command `key` is bound to, started - or nothing, for a key bound
+    // to none. Every level above has passed it, which is what reaching the
+    // command means (docs/INTERACTIONS.md, section 7).
+    static Answer Bound(int key, const Event& event, Editor& editor) {
+        const std::optional<CommandId> id = editor.CommandForKey(key, event.modifiers, event.repeat);
+        if (!id.has_value()) {
+            return Answer::Claim();
+        }
+        // Delete and the arrows are not drawing mode's: there the snippet is
+        // being worked in, not on. The Mode level's to say, once drawing mode
+        // is on it.
+        const bool onTheSnippet = *id == CommandId::DeleteSelection || *id == CommandId::NudgeLeft ||
+                                  *id == CommandId::NudgeRight || *id == CommandId::NudgeUp ||
+                                  *id == CommandId::NudgeDown;
+        if (onTheSnippet && editor.DrawingItem().has_value()) {
+            return Answer::Claim();
+        }
+        return Answer::Start(Command{*id});
+    }
+
     OverlayApp& app_;
 };
 

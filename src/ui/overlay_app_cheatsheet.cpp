@@ -177,12 +177,13 @@ std::vector<size_t> BalancedColumnStarts(const std::vector<float>& heights, size
 }  // namespace
 
 void OverlayApp::RenderCheatSheet(float displayW, float displayH) {
-    if (!cheatSheetOpen_) {
+    if (!IsCheatSheetOpen()) {
         return;
     }
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape, /*repeat=*/false) ||
-        RenderPanelBackdrop("##cheat_sheet_backdrop", displayW, displayH)) {
-        cheatSheetOpen_ = false;
+    // Escape and its own key close it too, as its interaction's (see
+    // Panel).
+    if (RenderPanelBackdrop("##cheat_sheet_backdrop", displayW, displayH)) {
+        editor_.Input().End(Level::Panel);
         return;
     }
 
