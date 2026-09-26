@@ -230,18 +230,6 @@ TEST(TrayControllerTest, AHotkeyLeftUnboundByAnotherStaysUnboundAcrossARestart) 
     std::filesystem::remove(path);
 }
 
-TEST(TrayControllerTest, InitializeUnbindsALaterDuplicateOfAnEarlierHotkey) {
-    test::FakePlatformHost host;
-    AppConfig config = DefaultConfig();
-    config.hotkeyQuickCapture = config.hotkeyEditMode;  // as a hand-edited file might say
-    TrayController controller(host, config);
-    ASSERT_TRUE(controller.Initialize()) << "one combination twice is not a reason to refuse to start";
-
-    EXPECT_EQ(CountRegistrations(host, config.hotkeyEditMode), 1);
-    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
-    EXPECT_TRUE(host.overlayWindow.IsVisible()) << "the earlier hotkey keeps the combination";
-}
-
 TEST(TrayControllerTest, ChangeHotkeyLeavesTheOldHotkeyLiveWhenRegistrationFails) {
     test::FakePlatformHost host;
     const AppConfig config = DefaultConfig();
@@ -918,6 +906,45 @@ TEST_F(TrayControllerPersistenceTest, TheStandInForASettingsFileSetAsideIsWritte
     host.FireBackgroundTimer();
     ASSERT_TRUE(std::filesystem::is_regular_file(dir_ / "config.json"));
     EXPECT_FALSE(ParseConfig(ReadFile(dir_ / "config.json")).purgeDeleted);
+}
+
+// A file edited by hand to give two hotkeys one combination: reading it
+// unbinds the later, the app starts with the earlier registered once, and
+// the file is written back at start to say so.
+TEST_F(TrayControllerPersistenceTest, AFileReadingRepairedIsWrittenBackAtStart) {
+    std::filesystem::create_directories(dir_);
+    std::ofstream(dir_ / "config.json", std::ios::binary) << R"({"hotkeys": {"quickCapture": "Ctrl+Alt+S"}})";
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
+    ASSERT_TRUE(loaded.writeBack);
+
+    test::FakePlatformHost host;
+    host.configFilePath = dir_ / "config.json";
+    TrayController controller(host, loaded.config);
+    controller.WriteConfigAtStart();
+    ASSERT_TRUE(controller.Initialize());
+
+    EXPECT_EQ(CountRegistrations(host, loaded.config.hotkeyEditMode), 1);
+    host.TriggerHotkey(FindHotkeyId(host, loaded.config.hotkeyEditMode));
+    EXPECT_TRUE(host.overlayWindow.IsVisible()) << "the earlier hotkey keeps the combination";
+    const AppConfig written = ParseConfig(ReadFile(dir_ / "config.json"));
+    EXPECT_EQ(written, loaded.config);
+    EXPECT_FALSE(written.hotkeyQuickCapture.IsValid());
+}
+
+// Nothing to write back: the file is left as the person wrote it, a value
+// held to its rule included, until a settings change writes it anyway.
+TEST_F(TrayControllerPersistenceTest, AFileReadingLeftAsItWasIsNotWrittenAtStart) {
+    std::filesystem::create_directories(dir_);
+    const std::string text = R"({"drawing": {"strokeWidth": 1000}})";
+    std::ofstream(dir_ / "config.json", std::ios::binary) << text;
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
+    ASSERT_FALSE(loaded.writeBack);
+
+    test::FakePlatformHost host;
+    host.configFilePath = dir_ / "config.json";
+    TrayController controller(host, loaded.config);
+    ASSERT_TRUE(controller.Initialize());
+    EXPECT_EQ(ReadFile(dir_ / "config.json"), text);
 }
 
 TEST_F(TrayControllerPersistenceTest, ExitWritesASettingsFileStillOwed) {

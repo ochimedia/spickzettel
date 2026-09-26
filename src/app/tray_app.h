@@ -87,6 +87,11 @@ public:
         skipRetentionThisStart_ = true;
         configFileKept_ = keepFile;
     }
+    // Before Initialize, when reading config.json changed what it says - a
+    // load repair (see LoadedConfig::writeBack). The file is written once at
+    // Initialize, so that it says what runs, and a write that fails is owed
+    // like any other. Not over a file kept (StartOnStandInSettings).
+    void WriteConfigAtStart() { writeConfigAtStart_ = true; }
 
     // Which of the five the overlay is in - see docs/OVERLAY_STATES.md.
     OverlayState State() const { return state_; }
@@ -262,6 +267,8 @@ private:
     // See StartOnStandInSettings.
     bool skipRetentionThisStart_ = false;
     bool configFileKept_ = false;
+    // See WriteConfigAtStart.
+    bool writeConfigAtStart_ = false;
     // Constructed up front (from host.GetLibraryPath(), possibly empty) but
     // only ever used - Load()'d from, attached to overlayApp_ - when that
     // path is non-empty; see Initialize().

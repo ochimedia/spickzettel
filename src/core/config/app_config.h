@@ -340,9 +340,18 @@ AppConfig DefaultConfig();
 // hand-edited or truncated file should be treated as absent, not crash the
 // app on startup. Running out of memory can, as it can anywhere.
 AppConfig ParseConfig(std::string_view text);
-// The same, but nullopt for text that is not a JSON object at all - which
-// a settings file that is only missing some keys never is.
-std::optional<AppConfig> TryParseConfig(std::string_view text);
+// What reading a settings file gave, and whether reading changed what the
+// file says: a load repair, such as a hotkey unbound for having another's
+// combination (docs/SETTINGS.md, section 5). Holding one value to its rule
+// does not count - a value out of range, a missing key - since the file
+// does not say something the app cannot run with.
+struct ParsedConfig {
+    AppConfig config;
+    bool changed = false;
+};
+// The same as ParseConfig, but nullopt for text that is not a JSON object
+// at all - which a settings file that is only missing some keys never is.
+std::optional<ParsedConfig> TryParseConfig(std::string_view text);
 
 // The most a settings file is read past. A config.json is a few kilobytes;
 // one of megabytes is not a settings file, whatever it is, and is read as
@@ -367,6 +376,10 @@ struct LoadedConfig {
     AppConfig config;
     ConfigSource source = ConfigSource::Read;
     std::filesystem::path setAsideAs;
+    // A file read, and changed by reading it (ParsedConfig::changed): to be
+    // written back at start, so that it says what runs - see
+    // TrayController::WriteConfigAtStart.
+    bool writeBack = false;
 };
 
 // The settings the app starts with. Only a missing file is a first run,

@@ -59,35 +59,14 @@ bool TrayController::Initialize() {
     if (!host_.ShowTrayIcon()) {
         return false;
     }
-    // The stand-in for a settings file set aside, written where the file
-    // was - by the loader already, unless that write failed, and then
-    // owed and tried again like any settings write. Not on the file: the
-    // next start found none, made the defaults, and had retention back on.
-    if (skipRetentionThisStart_ && !configFileKept_) {
+    // The file made to say what runs, once: the stand-in for a settings
+    // file set aside, written where the file was - by the loader already,
+    // unless that write failed - or a file reading repaired (see
+    // WriteConfigAtStart). Owed and tried again like any settings write.
+    // Not writing the stand-in cost the retention setting: the next start
+    // found no file, made the defaults, and had retention back on.
+    if ((skipRetentionThisStart_ && !configFileKept_) || writeConfigAtStart_) {
         PersistConfig();
-    }
-
-    // Two of the app's own hotkeys on one combination would register once
-    // and fail once, and a failure below refuses to start - so a later
-    // duplicate of an earlier combination is unbound first, and the file is
-    // corrected so it stays that way. What ChangeHotkey does for an edit
-    // made in the app, done here for a file edited by hand.
-    {
-        AppConfig& stored = settings_.Mutable();
-        platform::KeyCombo* slots[] = {&stored.hotkeyEditMode, &stored.hotkeyViewMode, &stored.hotkeyQuickCapture,
-                                       &stored.hotkeySilentCapture};
-        bool unboundAny = false;
-        for (size_t later = 1; later < std::size(slots); ++later) {
-            for (size_t earlier = 0; earlier < later; ++earlier) {
-                if (slots[later]->IsValid() && *slots[later] == *slots[earlier]) {
-                    *slots[later] = platform::KeyCombo{};
-                    unboundAny = true;
-                }
-            }
-        }
-        if (unboundAny) {
-            PersistConfig();
-        }
     }
 
     // A set combination that cannot be registered - another application

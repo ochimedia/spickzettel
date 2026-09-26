@@ -93,6 +93,9 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     if (config.source == sz::core::ConfigSource::SetAside || config.source == sz::core::ConfigSource::Unreadable) {
         trayController.StartOnStandInSettings(/*keepFile=*/config.setAsideAs.empty());
     }
+    if (config.writeBack) {
+        trayController.WriteConfigAtStart();
+    }
     if (!trayController.Initialize()) {
         // A message box because there is no tray icon yet to hang a
         // notice on, and a tray app that starts and silently isn't there

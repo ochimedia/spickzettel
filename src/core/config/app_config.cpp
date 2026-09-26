@@ -488,16 +488,100 @@ std::vector<std::string> ReadStringList(const json& j, const char* key) {
     return out;
 }
 
+// ===== The load repairs =====
+//
+// What a file can say that no one setting's rule rules out, and that the
+// app cannot run with as it is: the load half of each invariant in
+// docs/SETTINGS.md, section 5. Each says whether it changed anything,
+// since a file that needed one is written back at start (LoadedConfig::
+// writeBack) and then says what runs.
+
+// One press cannot make both: a file that gives the two the same trigger,
+// by hand or by an edit gone wrong, gets the defaults back rather than one
+// of them silently winning.
+bool RepairCreationTriggers(AppConfig& config) {
+    if (config.screenshotTrigger != config.drawingTrigger || config.screenshotTrigger == CreationTrigger::Off) {
+        return false;
+    }
+    const AppConfig defaults;
+    config.screenshotTrigger = defaults.screenshotTrigger;
+    config.drawingTrigger = defaults.drawingTrigger;
+    return true;
+}
+
+// One combination cannot summon two things, so a later duplicate of an
+// earlier one is unbound and the earlier keeps it - what TrayController::
+// ChangeHotkey does for an edit made in the app, done here for a file
+// edited by hand.
+bool RepairSummonHotkeys(AppConfig& config) {
+    platform::KeyCombo* hotkeys[] = {&config.hotkeyEditMode, &config.hotkeyViewMode, &config.hotkeyQuickCapture,
+                                     &config.hotkeySilentCapture};
+    bool repaired = false;
+    for (size_t later = 1; later < std::size(hotkeys); ++later) {
+        for (size_t earlier = 0; earlier < later; ++earlier) {
+            if (hotkeys[later]->IsValid() && *hotkeys[later] == *hotkeys[earlier]) {
+                *hotkeys[later] = platform::KeyCombo{};
+                repaired = true;
+            }
+        }
+    }
+    return repaired;
+}
+
+bool RepairProfileNames(std::vector<Profile>& profiles) {
+    bool repaired = false;
+    // Nameless is unusable - the name is what the UI lists and what the
+    // picker names - but dropping the profile took its match and every
+    // override with it, at the next start, for a name cleared by hand. It
+    // gets the name a new profile would (the UI's "profiles.namePrefix").
+    for (Profile& profile : profiles) {
+        if (profile.name.empty()) {
+            profile.name = "Profile";
+            repaired = true;
+        }
+    }
+    // A name another profile already has is made unique the same way: two
+    // rows named alike in the picker cannot be told apart. Against every
+    // name in the file, the later ones included: made unique against the
+    // earlier ones alone, [Game, Game, "Game 2"] came out Game, Game 2,
+    // Game 2 2 - renaming the profile its owner had named, rather than the
+    // duplicate.
+    for (size_t i = 0; i < profiles.size(); ++i) {
+        const std::string& name = profiles[i].name;
+        const auto end = profiles.begin() + static_cast<std::ptrdiff_t>(i);
+        if (std::none_of(profiles.begin(), end, [&name](const Profile& p) { return p.name == name; })) {
+            continue;
+        }
+        std::vector<Profile> others = profiles;
+        others.erase(others.begin() + static_cast<std::ptrdiff_t>(i));
+        profiles[i].name = UniqueProfileName(others, name);
+        repaired = true;
+    }
+    return repaired;
+}
+
+// Every repair, not only up to the first that finds something.
+bool RepairOnLoad(AppConfig& config) {
+    bool repaired = RepairCreationTriggers(config);
+    repaired = RepairSummonHotkeys(config) || repaired;
+    repaired = RepairProfileNames(config.profiles) || repaired;
+    return repaired;
+}
+
 }  // namespace
 
 AppConfig DefaultConfig() { return AppConfig{}; }
 
-AppConfig ParseConfig(std::string_view text) { return TryParseConfig(text).value_or(DefaultConfig()); }
+AppConfig ParseConfig(std::string_view text) {
+    std::optional<ParsedConfig> parsed = TryParseConfig(text);
+    return parsed ? std::move(parsed->config) : DefaultConfig();
+}
 
 std::string HotkeyText(const platform::KeyCombo& combo) { return FormatHotkey(combo); }
 
-std::optional<AppConfig> TryParseConfig(std::string_view text) {
-    AppConfig config = DefaultConfig();
+std::optional<ParsedConfig> TryParseConfig(std::string_view text) {
+    ParsedConfig parsed;
+    AppConfig& config = parsed.config;
 
     // No exceptions, no callback: a hand-edited or truncated file is a
     // discarded value here.
@@ -508,15 +592,6 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
 
     ForEachSetting([&](const auto& row) { ReadRow(doc, row, config); });
 
-    // One press cannot make both: a file that gives the two the same
-    // trigger, by hand or by an edit gone wrong, gets the defaults back
-    // rather than one of them silently winning.
-    if (config.screenshotTrigger == config.drawingTrigger && config.screenshotTrigger != CreationTrigger::Off) {
-        const AppConfig defaults;
-        config.screenshotTrigger = defaults.screenshotTrigger;
-        config.drawingTrigger = defaults.drawingTrigger;
-    }
-
     if (const auto profiles = doc.find("profiles"); profiles != doc.end() && profiles->is_array()) {
         for (const json& entry : *profiles) {
             if (!entry.is_object()) {
@@ -526,39 +601,16 @@ std::optional<AppConfig> TryParseConfig(std::string_view text) {
             if (const auto name = entry.find("name"); name != entry.end() && name->is_string()) {
                 profile.name = name->get<std::string>();
             }
-            // Nameless is unusable - the name is what the UI lists and what
-            // the picker names - but dropping the profile took its match and
-            // every override with it, at the next start, for a name cleared
-            // by hand. It gets the name a new profile would (the UI's
-            // "profiles.namePrefix"). A name another profile already has is
-            // made unique the same way, once every profile is read (below):
-            // two rows named alike in the picker cannot be told apart.
-            if (profile.name.empty()) {
-                profile.name = "Profile";
-            }
             const json& match = Group(entry, "match");
             profile.match.executables = ReadStringList(match, "exe");
             profile.match.titleContains = ReadStringList(match, "titleContains");
             ForEachSetting([&](const auto& row) { ReadOverride(entry, row, profile.overrides); });
             config.profiles.push_back(std::move(profile));
         }
-        // Against every name in the file, the later ones included: made
-        // unique against the earlier ones alone, [Game, Game, "Game 2"]
-        // came out Game, Game 2, Game 2 2 - renaming the profile its owner
-        // had named, rather than the duplicate.
-        for (size_t i = 0; i < config.profiles.size(); ++i) {
-            const std::string& name = config.profiles[i].name;
-            const auto end = config.profiles.begin() + static_cast<std::ptrdiff_t>(i);
-            if (std::none_of(config.profiles.begin(), end, [&name](const Profile& p) { return p.name == name; })) {
-                continue;
-            }
-            std::vector<Profile> others = config.profiles;
-            others.erase(others.begin() + static_cast<std::ptrdiff_t>(i));
-            config.profiles[i].name = UniqueProfileName(others, name);
-        }
     }
 
-    return config;
+    parsed.changed = RepairOnLoad(config);
+    return parsed;
 }
 
 std::string SerializeConfig(const AppConfig& config) {
@@ -614,9 +666,10 @@ LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_v
         std::string text(static_cast<size_t>(size), '\0');
         in.read(text.data(), static_cast<std::streamsize>(text.size()));
         text.resize(static_cast<size_t>(in.gcount()));
-        if (std::optional<AppConfig> config = TryParseConfig(text)) {
-            loaded.config = std::move(*config);
+        if (std::optional<ParsedConfig> parsed = TryParseConfig(text)) {
+            loaded.config = std::move(parsed->config);
             loaded.source = ConfigSource::Read;
+            loaded.writeBack = parsed->changed;
             return loaded;
         }
     }

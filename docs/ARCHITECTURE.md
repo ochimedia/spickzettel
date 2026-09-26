@@ -839,8 +839,8 @@ Three things about the file are deliberate:
   leaves that other unbound, and an unbound hotkey read back as "said
   nothing" took its default again on the next start - which could now be
   the combination the other had taken, and one combination registered
-  twice left the second hotkey dead. The tray also unbinds a later
-  duplicate of an earlier hotkey at startup, for a file edited by hand.
+  twice left the second hotkey dead. A file edited by hand to give two
+  hotkeys one combination has the later one unbound as it is read.
   Every setting is written, defaults included, so the file documents
   what can be set.
 - **A hotkey another application owns does not stop the start.** It
@@ -877,6 +877,18 @@ stand-in has retention off even when the file could not be moved aside.
 The file is written
 through temp-then-rename, since truncating it in place leaves a window
 in which every setting is a half-written file.
+
+What a file can say that no one setting's rule rules out, and the app
+cannot run with, is repaired as it is read, in one place
+(`RepairOnLoad`): both creation triggers on one press go back to their
+defaults, a later duplicate of an earlier summon hotkey is unbound, and
+profile names are made non-empty and unique. A file that needed any of
+these is written back as the app starts, so that it says what runs.
+Before, the hotkey repair was the tray's, at startup, and the only one
+written back; the others waited for the next settings change, and until
+then the file said one thing and the app did another. A value held to
+its rule is not a repair: out of range or missing, it reads the same at
+every start, and the next settings change writes it anyway.
 
 The files a release wrote are kept as test fixtures
 (`tests/core/config_files/`): `v0.1.0`'s with the defaults and with every

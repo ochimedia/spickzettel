@@ -2,6 +2,7 @@
 
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -646,6 +647,50 @@ TEST(AppConfigTest, CreationTriggersDefaultParseAndNeverCoincide) {
     EXPECT_EQ(bothOff.drawingTrigger, CreationTrigger::Off);
 }
 
+// One combination cannot summon two things: a file that gives it to two
+// hotkeys has the later one unbound as it is read, and the earlier keeps
+// it. Two unbound hotkeys share nothing.
+TEST(AppConfigTest, AFileGivingTwoHotkeysOneCombinationHasTheLaterUnbound) {
+    const AppConfig config = ParseConfig(R"({"hotkeys": {
+        "editMode": "Ctrl+Alt+Q", "viewMode": null, "quickCapture": "Ctrl+Alt+Q", "silentCapture": null}})");
+    EXPECT_EQ(config.hotkeyEditMode, (platform::KeyCombo{true, true, false, 'Q'}));
+    EXPECT_FALSE(config.hotkeyQuickCapture.IsValid());
+    EXPECT_FALSE(config.hotkeyViewMode.IsValid());
+    EXPECT_FALSE(config.hotkeySilentCapture.IsValid());
+}
+
+// What reading repaired is reported, for the file to be written back at
+// start; a value held to its rule is not a repair, and neither is anything
+// the file leaves out or says that this build does not know.
+TEST(AppConfigTest, ReadingReportsEveryLoadRepairAndNothingElse) {
+    for (const char* text : {
+             R"({"drawing": {"screenshotTrigger": "alt", "drawingTrigger": "alt"}})",
+             R"({"hotkeys": {"editMode": "Ctrl+Alt+V"}})",
+             R"({"profiles": [{"name": "", "match": {"exe": ["a.exe"]}}]})",
+             R"({"profiles": [{"name": "Game"}, {"name": "Game"}]})",
+         }) {
+        SCOPED_TRACE(text);
+        const std::optional<ParsedConfig> parsed = TryParseConfig(text);
+        ASSERT_TRUE(parsed);
+        EXPECT_TRUE(parsed->changed);
+    }
+    for (const std::string& text : {
+             std::string("{}"),
+             One("drawing", "strokeWidth", "1000"),
+             One("drawing", "strokeWidth", R"("wide")"),
+             One("hotkeys", "viewMode", "null"),
+             One("drawing", "somethingNewer", "true"),
+             std::string(R"({"drawing": {"screenshotTrigger": "off", "drawingTrigger": "off"}})"),
+             std::string(R"({"profiles": [{"name": "Game"}, {"name": "Game 2"}, 7]})"),
+             SerializeConfig(DefaultConfig()),
+         }) {
+        SCOPED_TRACE(text);
+        const std::optional<ParsedConfig> parsed = TryParseConfig(text);
+        ASSERT_TRUE(parsed);
+        EXPECT_FALSE(parsed->changed);
+    }
+}
+
 TEST(AppConfigTest, OverviewPreviewTogglesRoundTrip) {
     EXPECT_TRUE(DefaultConfig().overviewShowsStrokes);
     EXPECT_TRUE(DefaultConfig().overviewShowsBitmaps);
@@ -763,6 +808,21 @@ TEST_F(WriteConfigFileTest, LoadingReadsBackWhatWasWritten) {
     const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
     EXPECT_EQ(loaded.source, ConfigSource::Read);
     EXPECT_FLOAT_EQ(loaded.config.strokeWidth, 9.0f);
+    EXPECT_FALSE(loaded.writeBack);
+}
+
+// A file reading repaired is to be written back at start - by the tray,
+// which retries a write that fails; the loader leaves it as it was.
+TEST_F(WriteConfigFileTest, AFileReadingRepairedIsToBeWrittenBack) {
+    std::filesystem::create_directories(dir_);
+    const std::string clash = R"({"hotkeys": {"editMode": "Ctrl+Alt+V"}})";
+    std::ofstream(dir_ / "config.json", std::ios::binary) << clash;
+
+    const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
+    EXPECT_EQ(loaded.source, ConfigSource::Read);
+    EXPECT_TRUE(loaded.writeBack);
+    EXPECT_FALSE(loaded.config.hotkeyViewMode.IsValid());
+    EXPECT_EQ(ReadFile(dir_ / "config.json"), clash);
 }
 
 TEST_F(WriteConfigFileTest, WithoutAFileLoadingIsAFirstRunAndWritesTheDefaults) {
