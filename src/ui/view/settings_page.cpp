@@ -600,7 +600,7 @@ void SettingsPage::RenderBarButtonRow(const char* id, const char* label, const G
     // row's list, and a tile dropped on the other row moved whatever sat
     // at that index there.
     char payloadType[32] = {};
-    std::snprintf(payloadType, sizeof(payloadType), "HB_BAR_%s", id);
+    std::snprintf(payloadType, sizeof(payloadType), "SZ_BAR_%s", id);
     for (size_t at = 0; at < buttons.size(); ++at) {
         const BarButtonSetting& entry = buttons[at];
         // Named for the button rather than for the place it currently

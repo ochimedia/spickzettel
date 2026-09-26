@@ -1633,9 +1633,7 @@ and it asks the view, through `EditorViews`, for what only a view can
 do: a message, a panel or a popup opened. The hit test
 (`Editor::ResolvePointerTarget`) is the editor's too, over the same
 rects the view paints the handles and the bar to (`selection_layout.*`),
-so what is hit is what is drawn. Until the Gesture level holds the
-gestures, they stay in the view, and `EditorViews` asks it to settle
-them.
+so what is hit is what is drawn.
 
 Panels - popovers, the canvas bar, the dock, the note editor, the
 Overview - are ordinary ImGui windows and widgets. Items and the
@@ -1645,14 +1643,12 @@ ImGui's own input state, which the platform backends feed; a UI not
 built on ImGui would need a key callback on `IOverlayWindow` in its
 place.
 
-Where this is going is `docs/VIEW_LAYER.md`: one list of what is on
-screen, whose order is the stack; a frame in named stages, in which
-nothing is changed by being drawn; one way for a widget to act, done
-after the draw; and `OverlayApp` split into owners, one per surface.
-
-A frame is those stages, one function each, called in order by
-`OnFrame`: Prepare, the canvas, the effect queue, the popups, what sits
-over the canvas, the panels, the messages, the pointer, and Apply. What a
+A frame is the stages of `docs/VIEW_LAYER.md`, section 5, one function
+each, called in order by `OnFrame`: Prepare, the canvas, the effect
+queue, the popups, what sits over the canvas, the panels, the messages,
+the stack, the pointer, and Apply. Nothing is changed by being drawn:
+what the frame's own state calls for is done in Prepare, before anything
+is drawn from it, and what a widget asks for in Apply, after. What a
 widget asks for - a tile clicked, a drop, a name let go of, a menu's row,
 a delete - is a value (`ui/view_action.h`) recorded as it is drawn and
 done in Apply, in the order recorded (`OverlayApp::Act`). Before, each
@@ -2323,13 +2319,14 @@ busy over a game.
 
 ### The Overview
 
-A translucent backdrop and a centered panel, drawn last so ordinary
-insertion order puts them above everything. Tabs: Canvases (a folder
+A translucent backdrop and a centered panel, above every surface of the
+canvas and below the cheat sheet, the delete confirmation and the
+messages (`docs/VIEW_LAYER.md`, section 3). Tabs: Canvases (a folder
 sidebar and a tile grid with live thumbnails, drag to reorder, drag a
 tile onto a folder to move it), Settings, About. What either pane asks
-for is collected and applied after both have been drawn, since the
-handlers read a `const&` into the live canvas vector that a mutation
-would reallocate. "New canvas" and "New folder" switch to what they made
+for is an action, done once the frame is drawn (see "The overlay UI"),
+since the draw reads a `const&` into the live canvas vector that a
+mutation would reallocate. "New canvas" and "New folder" switch to what they made
 and leave the panel up; closing it the instant a button is pressed was
 disorienting, and stopping at "it exists" left half the job to a click
 on a tile that had just appeared. The move/copy picker deliberately does
@@ -2441,12 +2438,16 @@ Every cursor is ImGui's except the crosshair and the pen, which ImGui's
 set does not have and every OS does, so those go through
 `IOverlayWindow::SetCursorShape`. `WantedPointerShape` is the one place
 that says what the pointer means; both the OS cursor and the drawn
-software pointer read it, so they cannot disagree. It is re-asserted
-every frame because the backend's own cursor push lands one frame late.
+software pointer read it, so they cannot disagree. The shape is pushed
+again when the pointer moves, or when ImGui's wanted cursor has changed
+in either of the last two frames - the backend's own cursor push lands
+one frame late - and not otherwise: pushing it every frame was measured
+at a quarter of an idle frame (see `Pointer::ApplyPointerShape`).
 
 The demo watermark is drawn wherever the overlay is visible, above every
-snippet and below only the Overview: a mark a snippet can be parked on
-top of is not one. It wanders every ten seconds across a 3x3 grid, never
+snippet and every popup over the canvas, and below only the panels, the
+delete confirmation and what ImGui's foreground list carries: a mark a
+snippet can be parked on top of is not one. It wanders every ten seconds across a 3x3 grid, never
 landing where it was, so it cannot be hidden permanently under a snippet
 that is never moved again. It needs no special handling for capture:
 the platform hides the whole overlay before grabbing pixels.

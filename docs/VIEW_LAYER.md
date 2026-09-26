@@ -1,13 +1,13 @@
 # The view layer
 
-Status: **agreed** (2026-09-26); nothing here is built yet.
-Every behavior below is either what the app does today (unmarked, or
-said so) or a change (marked **Change**). "Today" means the app as of
-`73e091c`. The questions it was reviewed with, and their answers, are in
-section 11. It is built in the phases of section 10, and becomes the
-reference for how the overlay is drawn, as
-`docs/INTERACTIONS.md` is for input, `docs/OVERLAY_STATES.md` for the
-overlay's states and `docs/SETTINGS.md` for settings.
+Status: **built** (2026-09-26), in the phases of section 10: the
+reference for how the overlay is drawn, as `docs/INTERACTIONS.md` is for
+input, `docs/OVERLAY_STATES.md` for the overlay's states and
+`docs/SETTINGS.md` for settings. Every behavior below is either what the
+app did before it (unmarked, or said so) or a change (marked **Change**)
+that it made. All ten were made; what the building found is noted under
+each phase. "Today" means the app as of `73e091c`, before the work. The
+questions it was reviewed with, and their answers, are in section 11.
 
 ## The principle
 
@@ -539,16 +539,18 @@ Everything else stays as it is today.
 
 ## 10. Where the code goes, and getting there
 
-Roughly, for review. The names may change in the building:
+As built:
 
 - **`ui/overlay_app.{h,cpp}`:** the frame and its stages, the mode, the
   actions, and the routing to the owners.
-- **`ui/view_action.h`:** the action type (section 6).
+- **`ui/view_action.h`:** the action type (section 6), and `DeleteTarget`.
 - **One pair of files per owner of section 7**, in `ui/view/`:
   `canvas_view`, `canvas_bar`, `popups`, `overview_panel`,
   `settings_page`, `cheat_sheet`, `screen_chrome`, `messages`,
-  `pointer`.
-- **`ui/theme`, `ui/widgets` and `ui/item_painting`** (C9).
+  `pointer`; and `view_host.h`, what an owner may ask of `OverlayApp`.
+- **`ui/theme`, `ui/widgets` and `ui/item_painting`** (C9). A Settings
+  row's widgets stay in `ui/settings_widgets`, where `docs/SETTINGS.md`
+  put them.
 
 **Phases.** Each phase is its own set of commits, and the tests stay
 green throughout.
@@ -560,23 +562,59 @@ green throughout.
      does what it does today.
    - **Closing:** each popup's closing does what the table of section 4
      says.
+
+   *Built in* `b108f9c`: `tests/support/view_stack.h` names every window
+   a frame drew by its surface, and `tests/app/view_layer_test.cpp` and
+   `tests/ui/view_layer_ui_test.cpp` hold the rest. *Found while building
+   it:* the order of section 3 was right as written.
 2. **Popups (C2, C3, C4).** One record, closing done once, and the pen
    kept. It starts with tests that show the pen's width and color lost,
    seen failing before the change.
+
+   *Built in* `3cd1f68`. All four pen tests failed first, as section 9
+   said they would. *Found while building it:* finding 6. And the record
+   is set as a popup is asked for, so `PopupShowing` asks it alone,
+   without the effect queue.
 3. **Stages and actions (C5, C6, C7).** The stage functions and the
    actions. `OverviewActions`, the local copies and the Overview's early
    return go. New tests check that an action's change shows in the frame
    after the one it was asked in, using the frame hook of
    `docs/SETTINGS.md`, phase 5.
+
+   *Built in* `8f2c7f8`. The test that a frame draws one library was seen
+   failing with the canvas bar's switch put back in the draw. *Found
+   while building it:* the cheat sheet's backdrop closed its panel in the
+   draw too, so the action closes either panel. A delete where Settings
+   says not to ask is an action at once rather than a popup that deletes
+   as it opens.
 4. **The stack (C1).** One table and one pass. Phase 1's stack test does
    not change.
+
+   *Built in* `418712c`. The pass finds the app's popups by their ids,
+   hashed at the top level of the frame as they are opened, and ImGui's
+   own by the window they were opened in. Tooltips need nothing: ImGui
+   draws them in a layer of their own, above every window.
 5. **Owners (C8, C9).** Code moves, one owner per commit: the shared
    files first, then the Settings page, the Overview, the popups, the
    canvas bar, the screen chrome, the messages and the pointer, and the
    canvas view last. No behavior changes, and every id stays.
+
+   *Built in* `2f4d2d0` to `23fa1be`, the cheat sheet after the Overview.
+   What an owner asks of `OverlayApp` is an interface, `ViewHost`: to act,
+   to say something, the window, the displays, a hotkey offered to the
+   OS, a delete asked, the overlay restarted, a tile menu opened, and what
+   a preview is drawn with. The Overview draws the Settings page's body
+   through a call `OverlayApp` hands it, and the view-only layer the demo
+   mark the same way. `overlay_app_internal.h` went last, its tool tables
+   to the Settings page.
 6. **Leftovers and docs (C10).** The payload names, and finding 4.
    `docs/ARCHITECTURE.md`'s "The overlay UI" is rewritten around this
    document, and this document is marked built.
+
+   *Built in* the commit that marks this document built, and in
+   `23fa1be` for "The overlay UI". *Found while building it:* the demo
+   mark's paragraph in `docs/ARCHITECTURE.md` said "below only the
+   Overview" (finding 3); it says where the mark sits now.
 
 **Risks, and what guards them:**
 

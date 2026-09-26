@@ -475,18 +475,18 @@ void OverviewPanel::RenderFolderSidebar() {
             // where it was until it is restored.
             if (!deleted) {
                 if (ImGui::BeginDragDropSource()) {
-                    ImGui::SetDragDropPayload("HB_FOLDER_REORDER", &f.id, sizeof(FolderId));
+                    ImGui::SetDragDropPayload("SZ_FOLDER", &f.id, sizeof(FolderId));
                     ImGui::TextUnformatted(f.name.c_str());
                     ImGui::EndDragDropSource();
                 }
                 if (ImGui::BeginDragDropTarget()) {
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_FOLDER_REORDER")) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SZ_FOLDER")) {
                         const FolderId draggedId = *static_cast<const FolderId*>(payload->Data);
                         if (draggedId != f.id) {
                             host_.Act(action::ReorderFolder{draggedId, fi});
                         }
                     }
-                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_CANVAS_REORDER")) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SZ_CANVAS")) {
                         const CanvasId draggedCanvasId = *static_cast<const CanvasId*>(payload->Data);
                         host_.Act(action::MoveCanvasToFolder{draggedCanvasId, f.id});
                     }
@@ -687,12 +687,12 @@ void OverviewPanel::RenderCanvasGrid(float displayW, float displayH, const ViewH
             }
         }
         if (!deleted && ImGui::BeginDragDropSource()) {
-            ImGui::SetDragDropPayload("HB_CANVAS_REORDER", &c.id, sizeof(CanvasId));
+            ImGui::SetDragDropPayload("SZ_CANVAS", &c.id, sizeof(CanvasId));
             ImGui::TextUnformatted(c.name.c_str());
             ImGui::EndDragDropSource();
         }
         if (!deleted && ImGui::BeginDragDropTarget()) {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_CANVAS_REORDER")) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SZ_CANVAS")) {
                 const CanvasId draggedId = *static_cast<const CanvasId*>(payload->Data);
                 if (draggedId != c.id) {
                     host_.Act(action::ReorderCanvas{draggedId, folderCanvasPlaces[idxInFolder]});
