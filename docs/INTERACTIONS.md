@@ -239,8 +239,8 @@ one table. A behavior change is an edit to a row. Proposed defaults:
 | Widget drag (ImGui) | **cancel** | ignored | ImGui's | ImGui's | as above |
 | Slider (ImGui) | **cancel: value restored** | ignored | ImGui's | ImGui's | as above |
 | Spent button | pass | ignored | ignored | nothing | the release came after all |
-| Nudge burst | cancel: back to where it began | interrupt | interrupt | nothing | - |
-| Wheel burst | cancel: back to where it began | interrupt | continue (same kind) | kind changes: finish, start anew | - |
+| Nudge burst | while an arrow is held: cancel, back to where it began; after: finish, and Escape goes on | interrupt | interrupt | nothing | - |
+| Wheel burst | cancel: back to where it began | interrupt | continue (same kind); another kind: finish, start anew | nothing (the next notch says which kind) | - |
 | Text (note) | **finish: text kept** (today's decision) | press outside: passed on, the field lets go and keeps the text | ImGui's | ImGui's | - |
 | Popup | close | press outside: close, used up | ImGui's | - | - |
 | Panel | close | its own | its own | - | - |
@@ -446,8 +446,8 @@ Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.
 | Tile dragged (canvas bar, Overview) | rule 1: Widget | ImGui draws the drag | dropped on a tile: reorder command | nothing (nothing done yet) | ImGui's drag cleared; Spent |
 | Slider (Properties) | rule 1: Widget over the Popup level | the value previews | release: one step | filed | rolled back; ImGui's active item cleared; Spent |
 | Typing a note | the Text tool's press, pushed on the Text level | keys are the field's | press outside: kept, and the press goes on (it makes no snippet) | kept (committed) | kept (today's choice) |
-| Held arrow key | KeyDown at Canvas: a nudge burst | a nudge per repeat | key up: one step | filed | rolled back |
-| Wheel spin | the first notch: a burst of its kind | a step per notch | a second without one: one step | filed | rolled back |
+| Held arrow key | KeyDown at Canvas: a nudge burst | a nudge per repeat, and per press of an arrow | a second without a nudge: one step | filed | rolled back, while an arrow is held |
+| Wheel spin | the first notch: a burst of its kind - the selection's size, or its opacity | a step per notch | a second without one: one step | filed | rolled back |
 | Hotkey mid-anything | passed to the root | - | its command, after its scope ended what it covers | - | - |
 | Lost release | own button pressed again | - | interrupted; the press routed afresh | - | - |
 | Touch hold's injected right press | lands on Spent | - | swallowed | - | - |
@@ -474,6 +474,23 @@ Two findings from writing the table:
   step from key down to key up, exactly. The wheel has no "up", so it
   keeps a timeout - but as the end of an interaction, which an outside
   command interrupts (filing it) rather than merging into.
+
+Found while building phase 4: ended at key up, a nudge burst would make
+each press of an arrow its own step, where today a run of presses within
+a second is one undo - on purpose (`Editor::NudgeSelection` says so), and
+not marked as a change here. So the nudge burst ends as the wheel's
+does, a second after its last step, and keeps the clock as the end of an
+interaction; what the clock no longer does is decide whether two steps
+belong together - anything in between ends the burst. Escape cancels it
+only while an arrow is held: after the key is up, Escape means what it
+meant, putting the hand down a stage, rather than taking back presses
+already let go of. The wheel's row also changed: a modifier change does
+nothing to a burst, and the next notch says which kind it is - as today,
+where Ctrl and Shift for the two opacities are one burst, and a
+modifier pressed and let go of between two notches is no end of one.
+Only the wheel's steps that are filed are bursts: the selection's size
+and its opacity. A tool's size and a step between canvases file nothing,
+and stay what they are.
 
 Every case fits the five answers and the six levels without an escape
 hatch. The ones I expected to need one - the hold, the touch injection,
@@ -517,8 +534,9 @@ each.
    and where Escape starts cancelling. `Hand`, `PutDown`'s
    chain, `CloseTopmostPopover`, `noteOpenAtPress`, the gates in 7 and the
    gesture half of `OnMouse` go.
-4. **Bursts.** The nudge and the wheel as interactions; `kBurstSeconds`,
-   `lastBurst_` and friends go.
+4. **Bursts.** The nudge and the wheel as interactions; `lastBurst_` and
+   friends go, and `kBurstSeconds` is left only as when a burst ends (see
+   the findings in section 9).
 
 Tests grow with it: each row of section 9 as a scripted test against the
 machine alone; the randomized test gains Escape anywhere (checking that a
@@ -618,6 +636,28 @@ goes is never moved: what survives of `OverlayApp`'s input side goes into
 Phase 3 was done on 2026-09-26, in these steps; what building it found
 wrong in the tables above is recorded where it was corrected ("Found
 while building phase 3").
+
+### Phase 4, in steps
+
+1. **A style edit of several snippets.** The session's style edit holds
+   any number of snippets and files them as one step, as a placement
+   does; a style change of several at once is that edit, begun and ended.
+   No behavior changes.
+2. **Bursts.** A nudge burst and a wheel burst, each an interaction on
+   the Gesture level holding a placement or a style edit open on the
+   session: every step is a preview, the burst ends a second after its
+   last step - filed as one step - and Escape cancels it (section 5).
+   The arrow keys stay commands; a burst runs them as its steps
+   (`Editor::Step`), with nothing ended first, since the burst is the
+   hand. `lastBurst_`, `BurstContinues` and the history's revision check
+   go. **Change:** Escape while an arrow is held, or within a second of
+   the wheel's last notch, takes the burst back.
+3. **No merging in the history.** With every burst held open on the
+   session, nothing files a step into the one before it:
+   `History::MergeIntoTop`, `Revision` and the `merge` parameters go.
+4. **The cases as tests.** The two rows of section 9 as scripted tests,
+   and the randomized test checks a cancelled burst as it checks a
+   cancelled drag.
 
 ## 12. Decisions
 
