@@ -1736,21 +1736,14 @@ plus the *full* delta from the press, recomputed on every move - not an
 incremental delta, which drifts under event coalescing, and not ImGui's
 drag delta, which loses the grab offset against a screen edge.
 
-A press whose meaning is still open - a click, a drag, a hold or the
-first half of a double-click - is a `Pending` interaction, which does
-nothing until one of them happens. It does at once only what every
-meaning shares: the first click on a snippet selects it, and a
-double-click then extends that into drawing mode, so no click waits the
-double-click time for its answer. The move begins only once the press
-is a drag, with the snapshot taken from the press. A double-click acts
-on its second press: on empty canvas it makes its snippet, on a snippet
-it enters drawing mode. When a gesture
-ends with its button still down - canceled, interrupted, a hold that
-acted, a double-click acted on at its press - the rest of the press is
-`Spent`, which swallows it and any other button until the release: the
-machine puts one there whenever the Gesture level is left empty with a
-button held, so "the rest of the drag does nothing" is a state, not the
-consequence of fields being empty. The gesture's outcomes that make or
+A press whose meaning is still open is a `Pending` interaction, and the
+rest of a press whose gesture has ended is `Spent`
+(`docs/INTERACTIONS.md`, sections 4 and 6): the machine puts one there
+whenever the Gesture level is left empty with a button held, so "the
+rest of the drag does nothing" is a state, not the consequence of fields
+being empty. A pending press does at once only what every meaning
+shares - the first click on a snippet selects it - so no click waits the
+double-click time for its answer. The gesture's outcomes that make or
 open something - a snippet framed, drawing mode entered, a menu opened -
 are commands of their own in the table (`FrameSnippet`, `DrawingMode`,
 `ItemMenu`, ...), run after the gesture is off the stack, so none of
@@ -1760,11 +1753,7 @@ A press is a click until the pointer has traveled 4px (6px for framing
 a snippet, and for a hold to still be a hold). A resize started on one
 of several selected snippets scales all of them about the fixed corner;
 the smallest is the floor for the group. Shift-drag on open canvas draws
-a box that adds every snippet it touches to the selection. One button at
-a time: every gesture ignores another button's press, moves and release.
-Windows' press-and-hold on a touch screen injects a right press into a
-held finger's left press, and the app does not depend on the OS being
-asked not to.
+a box that adds every snippet it touches to the selection.
 
 What the pointer is doing is one interaction on the Gesture level -
 `Pending`, `Spent`, `Placement` (a move or a resize), `BarPress`,
@@ -1883,30 +1872,25 @@ what only a frame of edit mode would otherwise keep, a slider's preview
 and the pen.
 
 Escape is not such a command while a gesture is in flight: the gesture
-sees it first and is *canceled* - a stroke, a shape or an erase leaves
-nothing and files nothing, a move or resize puts every snippet back where
-the press found it, a press still pending does nothing more. The session
-rolls the gesture back to the checkpoint it took when it began
-(`Session::CancelPlacement`, `CancelErase`, `CancelShape`), which is
-exact and costs no write, since previews change the model in memory and
-nothing is written until a step is filed. A slider in the Properties
-popover is a Widget gesture over the popup, so Escape mid-drag puts its
-value back (`Session::CancelStyleEdit`) and has the view let go of ImGui's
-active widget (an effect, since only a frame may touch it) - as it does a
-tile being dragged in the Overview or the canvas bar. Only with nothing
-in flight does Escape go on to put the tool down, leave drawing mode,
-call off a cut or clear the selection.
+sees it first and is *canceled*, leaving things as the press found them
+(`docs/INTERACTIONS.md`, section 5, has every gesture's answer). The
+session rolls the gesture back to the checkpoint it took when it began
+(`Session::CancelPlacement`, `CancelErase`, `CancelShape`,
+`CancelStyleEdit`), which is exact and costs no write, since previews
+change the model in memory and nothing is written until a step is filed.
+A canceled Widget gesture - a slider, a tile dragged - also has the view
+let go of ImGui's active widget, an effect, since only a frame may touch
+it.
 
 The pointer's own device is the exception: input from the mouse holding
-the gesture is ignored until it ends rather than ending it. A second
-button pressed on top is ignored until its own release (a touch screen's
-press-and-hold injects exactly that). The wheel, and a mouse button bound
-to a command, do nothing while a gesture is in flight: a notch mid-stroke
-would have switched the canvas under it, and one mid-drag would have been
-filed inside the drag. The gesture's own button pressed again means its
-release went missing: the gesture ends as interrupted, and the press is
-taken afresh. An arrow key is a command like any other: mid-drag it ends
-the drag where it is and nudges after it, two undo steps.
+the gesture is ignored until it ends rather than ending it - a second
+button, since a touch screen's press-and-hold injects one into a finger
+held still; the wheel and a mouse button bound to a command, since a
+notch mid-stroke would switch the canvas under it. The gesture's own
+button pressed again means its release went missing: the gesture ends
+as interrupted, and the press is taken afresh. An arrow key is a command
+like any other: mid-drag it ends the drag where it is and nudges after
+it, two undo steps.
 
 ### Bursts
 
@@ -2085,21 +2069,17 @@ hashed at the top level. Done at the very start of the frame instead,
 the canvas bar's menu was closed again before it was drawn. Of two
 popups asked for before a frame, the one asked for last comes up.
 
-Every popup the app opens - the three context menus, the Properties
-popover, the color chooser, the delete confirmation - is an interaction
-on the machine's Popup level (`Popup`, `ui/interaction/levels.*`), put
-there as it is asked for (`Popups::Open`). It is the machine's
-record of what ImGui draws: the pointer is the popup's, since a press in
-it is its widgets' and one outside closes it and does nothing else, which
-ImGui does; so is every key but a global hotkey. It finishes on the first
-frame's tick that finds the view no longer showing it - a row chosen, a
-click outside, Escape - since ImGui closes a popup by itself and the
-machine has to follow. Ended from outside - another popup opened, a
-command whose scope covers popups - it asks the view to close it
-(`Effect::Kind::ClosePopup`), queued before the new one opens so that the
-one asked for last is up. Escape closes the innermost popup open, which
-may be one of ImGui's own inside it (a color picker in the Properties
-popover), and the popup finishes when it is itself gone.
+Every popup the app opens is an interaction on the machine's Popup
+level (`Popup`, `ui/interaction/levels.*`), put there as it is asked for
+(`Popups::Open`): the machine's record of what ImGui draws. It finishes
+on the first frame's tick that finds the view no longer showing it,
+since ImGui closes a popup by itself - a row chosen, a click outside -
+and the machine has to follow. Ended from outside - another popup
+opened, a command whose scope covers popups - it asks the view to close
+it (`Effect::Kind::ClosePopup`), queued before the new one opens so that
+the one asked for last is up. Escape closes the innermost popup open,
+which may be one of ImGui's own inside it (a color picker in the
+Properties popover), and the popup finishes when it is itself gone.
 
 The view keeps one record of the popup that is up
 (`Popups::PopupRecord`, `ui/view/popups.*`): its kind, what it is about, where it opens,
@@ -2115,23 +2095,14 @@ in it. The pen's width and color are also kept when the overlay settles
 (`KeepPen`), as a settings preview is committed, since the wheel's size
 preview keeps the width only once it has faded, drawn.
 
-A note being typed into is the Text level's (`TypingNote`), pushed by
-the press that opens it. Every key is the field's; a press on the field,
-or on any of ImGui's windows, is ImGui's; a press anywhere else is passed
-on, still with the note open - which is what keeps that press from making
-a snippet - and the field, let go of, keeps what was typed. Escape ends
-the typing and keeps the text too.
-
-The Overview and the cheat sheet are the Panel level's (`Panel`): pushed
-as they open, ended by their own widgets (the backdrop, a canvas picked),
-by Escape - after a popup of ImGui's open inside them - and by whatever
-is started below them. A name being edited in the Overview (`NameEdit`)
-and a Settings row waiting for a key (`KeyCapture`) are Text interactions
-above it, so Escape reaches them first: on a waiting row it binds nothing
-to a chosen key, and only stops a hotkey's row waiting, without closing
-the Overview. A row takes its key from the input stream rather than from
-ImGui, and a global hotkey that fires while a hotkey's row waits is the
-key it takes. The input options HUD's number keys are the Canvas level's, ahead of any
+The Text level holds a note being typed (`TypingNote`), a name being
+edited in the Overview (`NameEdit`) and a Settings row waiting for a key
+(`KeyCapture`); the Panel level the Overview and the cheat sheet
+(`Panel`). A press outside a note being typed is passed on, with the
+note still open - which is what keeps that press from making a snippet.
+A row takes its key from the input stream rather than from ImGui, and a
+global hotkey that fires while a hotkey's row waits is the key it takes.
+The input options HUD's number keys are the Canvas level's, ahead of any
 command they might be bound to.
 
 ### Item text
