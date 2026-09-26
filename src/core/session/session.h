@@ -217,6 +217,11 @@ public:
     // nudges is taken back in one step, to where it started. The caller
     // decides what counts as a burst. True if anything was filed or merged.
     bool EndPlacement(bool merge = false);
+    // Ends it leaving no trace: every snippet it held back where the press
+    // found it, nothing filed and nothing written - what Escape does to a
+    // drag. The previews only ever changed the model in memory, so going
+    // back to the checkpoint the gesture took is exact.
+    void CancelPlacement();
     // A placement gesture in one call: each snippet to its rect, re-anchored.
     bool SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool merge = false);
     // See CanvasManager::ToggleFullscreen / ResetItemToNativeSize; one
@@ -231,6 +236,9 @@ public:
     // EndStyleEdit, or with the next command of any other kind.
     void PreviewStyle(ItemId id, const ItemStyle& style);
     void EndStyleEdit();
+    // The edit undone as if never made: the snippet's style as it was
+    // before, nothing filed - see CancelPlacement.
+    void CancelStyleEdit();
     // Styles for several snippets at once, as one step - the opacity
     // wheel's. `merge` as for EndPlacement, and the same answer.
     bool SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge = false);
@@ -302,6 +310,8 @@ public:
     void BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx);
     void ExtendErase(float screenX, float screenY, float widthScreenPx);
     void EndErase();
+    // The erase undone as if never begun - see CancelPlacement.
+    void CancelErase();
     // The rectangular eraser: one whole gesture in one call.
     void EraseRect(ItemId itemId, float minX, float minY, float maxX, float maxY);
 
@@ -318,6 +328,9 @@ public:
     void UpdateShape(float screenX, float screenY);
     void SetShape(Shape shape);
     void EndShape(float screenX, float screenY);
+    // Drops the shape in progress without leaving anything - what EndShape
+    // does with a drag too short to be meant, and what Escape does to one.
+    void CancelShape();
     bool IsDrawingShape() const { return shapeItemId_.has_value(); }
 
     // ===== Capturing the screen =====
@@ -482,9 +495,6 @@ private:
     std::optional<ItemId> textEditItemId_;
     std::string textEditOriginal_;
     Checkpoint textEditCheckpoint_;
-    // Drops the shape in progress without leaving anything - what EndShape
-    // does with a drag too short to be meant.
-    void CancelShape();
     // The shape in progress, if any - see BeginShape. Where it began and
     // where the pointer last was, so SetShape can redraw it without a move.
     std::optional<ItemId> shapeItemId_;

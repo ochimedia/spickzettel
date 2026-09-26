@@ -949,6 +949,20 @@ TEST_F(WrittenSessionTest, ACopysPictureIsWrittenWithTheCopy) {
     }
 }
 
+// A gesture called off writes nothing: the file holds what it held before
+// the press, and what was filed before the gesture is still there.
+TEST_F(WrittenSessionTest, ACancelledDragWritesNothing) {
+    const ItemId id = session_.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    session_.BeginPlacement({id});
+    session_.PreviewRect(id, Rect{50, 50, 100, 100});
+    session_.CancelPlacement();
+    EXPECT_EQ(session_.Manager().FindItemAnywhere(id)->rect, (Rect{0, 0, 100, 100}));
+    const CanvasManagerSnapshot disk = OnDisk();
+    ASSERT_EQ(ItemsIn(disk), 1u);
+    EXPECT_EQ(disk.canvases[0].items[0].rect, (Rect{0, 0, 100, 100}));
+    EXPECT_FALSE(session_.LastWriteFailed());
+}
+
 // A snippet sent to another canvas, and the canvas it left then deleted for
 // good: it is where it was sent, picture and all.
 TEST_F(WrittenSessionTest, ACanvasDeletedForGoodAfterASnippetLeftItKeepsTheSnippet) {
@@ -1314,6 +1328,58 @@ TEST(SessionTest, AnEraseThatLostTrackOfItsFragmentsIsStillUndoneExactly) {
     EXPECT_EQ(ItemById(session.Manager(), item)->strokes, before);
     ASSERT_TRUE(session.Undo().has_value()) << "and the strokes before it, as they were";
     EXPECT_EQ(StrokeHeights(session.Manager(), item), (std::vector<float>{30.0f}));
+}
+
+// Every gesture can be called off, leaving the library exactly as the
+// gesture found it - what Escape does in the middle of one. Nothing is
+// filed, so there is nothing to undo.
+TEST(SessionTest, ACancelledGestureLeavesNoTrace) {
+    Session session;
+    session.SyncItemsToDisplaySize(1000.0f, 1000.0f);
+    CanvasManager& manager = Model(session);
+    const ItemId a = manager.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId b = manager.CreateItem(false, Rect{200, 0, 100, 100}, "B");
+    DrawLineInto(session, a, 30.0f);
+    session.ToggleFullscreen(b, /*stretch=*/false);
+    const std::vector<Stroke> strokes = ItemById(manager, a)->strokes;
+    const Rect bFullscreen = ItemById(manager, b)->rect;
+    const ItemStyle style = ItemStyle::Of(*ItemById(manager, a));
+
+    // A drag of both, one of them taken out of fullscreen on the way.
+    session.BeginPlacement({a, b});
+    session.PreviewLeaveFullscreen(b);
+    session.PreviewRect(a, Rect{40, 40, 100, 100});
+    session.PreviewRect(b, Rect{240, 40, 100, 100});
+    session.CancelPlacement();
+    EXPECT_EQ(ItemById(manager, a)->rect, (Rect{0, 0, 100, 100}));
+    EXPECT_TRUE(ItemById(manager, b)->isFullscreen);
+    EXPECT_EQ(ItemById(manager, b)->rect, bFullscreen);
+
+    session.BeginErase(a, 50.0f, 30.0f, 10.0f);
+    session.ExtendErase(60.0f, 30.0f, 10.0f);
+    ASSERT_NE(ItemById(manager, a)->strokes, strokes) << "the erase took something";
+    session.CancelErase();
+    EXPECT_EQ(ItemById(manager, a)->strokes, strokes);
+
+    ItemStyle faded = style;
+    faded.foregroundOpacity = 0.3f;
+    session.PreviewStyle(a, faded);
+    session.CancelStyleEdit();
+    EXPECT_EQ(ItemStyle::Of(*ItemById(manager, a)), style);
+
+    session.BeginShape(a, Session::Shape::Line, 10.0f, 10.0f, 0xFF0000FFu, 3.0f);
+    session.UpdateShape(80.0f, 80.0f);
+    session.CancelShape();
+    EXPECT_TRUE(session.LiveLayer().Strokes().empty());
+    EXPECT_EQ(ItemById(manager, a)->strokes, strokes);
+
+    // Nothing of any of them was filed, and the gestures are closed: the
+    // next command finds nothing open to file first.
+    size_t filed = 0;
+    while (session.Undo().has_value()) {
+        ++filed;
+    }
+    EXPECT_EQ(filed, 2u) << "the stroke and the fullscreen from before, and nothing else";
 }
 
 }  // namespace

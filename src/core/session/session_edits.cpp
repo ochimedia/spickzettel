@@ -322,6 +322,15 @@ bool Session::EndPlacement(bool merge) {
     return CommitPlacements(gesture.checkpoint, gesture.before, merge);
 }
 
+void Session::CancelPlacement() {
+    if (!placement_.has_value()) {
+        return;
+    }
+    const PlacementGesture gesture = std::move(*placement_);
+    placement_.reset();
+    Model().RollBack(gesture.checkpoint);
+}
+
 bool Session::SetRects(const std::vector<std::pair<ItemId, Rect>>& rects, bool merge) {
     std::vector<ItemId> ids;
     for (const auto& [id, rect] : rects) {
@@ -383,6 +392,15 @@ void Session::EndStyleEdit() {
     }
     const CanvasId canvas = Model().CanvasHoldingItem(edit.item).value_or(0);
     Commit(edit.checkpoint, canvas, Step{0, What::Style, {Change{edit.item, history::StyleChanged{edit.before}}}});
+}
+
+void Session::CancelStyleEdit() {
+    if (!styleEdit_.has_value()) {
+        return;
+    }
+    const StyleEdit edit = std::move(*styleEdit_);
+    styleEdit_.reset();
+    Model().RollBack(edit.checkpoint);
 }
 
 bool Session::SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge) {
@@ -667,6 +685,15 @@ void Session::EndErase() {
     // The whole gesture in one step, so it is one undo.
     RecordEraseGesture(itemId);
     eraseGestureStartSnapshot_.clear();
+}
+
+void Session::CancelErase() {
+    if (!eraseItemId_.has_value()) {
+        return;
+    }
+    eraseItemId_.reset();
+    eraseGestureStartSnapshot_.clear();
+    Model().RollBack(eraseCheckpoint_);
 }
 
 void Session::EraseRect(ItemId itemId, float minX, float minY, float maxX, float maxY) {
