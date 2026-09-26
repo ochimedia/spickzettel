@@ -232,15 +232,20 @@ public:
     // ----- How snippets look -----
 
     // A style change as it is being made - a slider dragged, a color
-    // picked: the snippet takes `style` at once, and the edit ends with
-    // EndStyleEdit, or with the next command of any other kind.
-    void PreviewStyle(ItemId id, const ItemStyle& style);
-    void EndStyleEdit();
-    // The edit undone as if never made: the snippet's style as it was
+    // picked, the opacity wheel spun over several snippets: each takes its
+    // style at once, and the edit ends with EndStyleEdit, or with the next
+    // command of any other kind. It goes on for as long as it is about the
+    // same snippets; a preview about others ends it and begins another.
+    void PreviewStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles);
+    void PreviewStyle(ItemId id, const ItemStyle& style) { PreviewStyles({{id, style}}); }
+    // Files the edit as one step, with every snippet it held when any of
+    // them changed. `merge` and the answer as for EndPlacement.
+    bool EndStyleEdit(bool merge = false);
+    // The edit undone as if never made: the snippets' styles as they were
     // before, nothing filed - see CancelPlacement.
     void CancelStyleEdit();
-    // Styles for several snippets at once, as one step - the opacity
-    // wheel's. `merge` as for EndPlacement, and the same answer.
+    // Styles for several snippets at once, as one step: an edit begun and
+    // ended. `merge` as for EndPlacement, and the same answer.
     bool SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge = false);
 
     // ----- Making, copying and moving snippets -----
@@ -480,11 +485,10 @@ private:
         Checkpoint checkpoint;
     };
     std::optional<PlacementGesture> placement_;
-    // The style edit in progress: which snippet, its style when the edit
-    // began - see PreviewStyle - and the library as it was then.
+    // The style edit in progress: which snippets, their styles when the
+    // edit began - see PreviewStyles - and the library as it was then.
     struct StyleEdit {
-        ItemId item = 0;
-        ItemStyle before;
+        std::vector<std::pair<ItemId, ItemStyle>> before;
         Checkpoint checkpoint;
     };
     std::optional<StyleEdit> styleEdit_;

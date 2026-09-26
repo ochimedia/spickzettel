@@ -1018,7 +1018,9 @@ A gesture that changes something continuously is previewed through the
 session and ends as one command: a drag opens a placement
 (`BeginPlacement`, `PreviewRect`, `EndPlacement`), a popover slider or
 the color picker a style edit (`PreviewStyle`, ended when the hand lets
-go of the widget), the eraser and the shapes their own gestures. A new
+go of the widget), the eraser and the shapes their own gestures. A
+style edit, like a placement, can hold several snippets as one step
+(`PreviewStyles`): the opacity wheel changes the whole selection. A new
 snippet is made whole, from a prototype the UI fills with Settings >
 Defaults, instead of being made and then adjusted field by field; a paste,
 a duplicate and a send to another canvas are one call each. The stroke

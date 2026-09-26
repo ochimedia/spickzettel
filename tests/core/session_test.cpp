@@ -1307,6 +1307,40 @@ TEST(SessionTest, StyleChangesAreUndone) {
     EXPECT_FLOAT_EQ(ItemById(session.Manager(), item)->foregroundOpacity, 0.7f);
 }
 
+// A style edit of several snippets - the opacity wheel spun over a
+// selection - goes on while it is about the same ones, and is one step
+// for all of them; a preview about others ends it, and a cancel puts every
+// one back.
+TEST(SessionTest, AStyleEditOfSeveralSnippetsIsOneStep) {
+    Session session;
+    const ItemId a = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId b = Model(session).CreateItem(false, Rect{200, 0, 100, 100}, "B");
+    const ItemStyle start = ItemStyle::Of(*ItemById(session.Manager(), a));
+    const auto faded = [&start](float opacity) {
+        ItemStyle style = start;
+        style.foregroundOpacity = opacity;
+        return style;
+    };
+    for (const float opacity : {0.9f, 0.8f, 0.7f}) {
+        session.PreviewStyles({{a, faded(opacity)}, {b, faded(opacity)}});
+    }
+    EXPECT_FALSE(session.CanUndo()) << "nothing filed while it goes on";
+    ASSERT_TRUE(session.EndStyleEdit());
+    EXPECT_FALSE(session.EndStyleEdit()) << "ended once";
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(ItemStyle::Of(*ItemById(session.Manager(), a)), start);
+    EXPECT_EQ(ItemStyle::Of(*ItemById(session.Manager(), b)), start);
+    EXPECT_FALSE(session.CanUndo()) << "both, in the one step";
+
+    session.PreviewStyles({{a, faded(0.5f)}, {b, faded(0.5f)}});
+    session.PreviewStyles({{a, faded(0.4f)}});  // about other snippets: a step of its own
+    session.CancelStyleEdit();
+    EXPECT_FLOAT_EQ(ItemById(session.Manager(), a)->foregroundOpacity, 0.5f) << "back to where the second began";
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(ItemStyle::Of(*ItemById(session.Manager(), a)), start);
+    EXPECT_EQ(ItemStyle::Of(*ItemById(session.Manager(), b)), start);
+}
+
 // An erase gesture that has lost track of which fragment stands for which
 // stroke still files what it did, as one replacement of the whole list:
 // the strokes never change behind the history's back.

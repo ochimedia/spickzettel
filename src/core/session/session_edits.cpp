@@ -361,37 +361,67 @@ void Session::ResetItemToNativeSize(ItemId id) {
 
 // ================= How snippets look =================
 
-void Session::PreviewStyle(ItemId id, const ItemStyle& style) {
-    if (styleEdit_.has_value() && styleEdit_->item != id) {
+void Session::PreviewStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles) {
+    // The snippets there are, of those named: the edit is about them.
+    std::vector<std::pair<Item*, const ItemStyle*>> items;
+    std::vector<ItemId> ids;
+    for (const auto& [id, style] : styles) {
+        if (Item* item = Model().FindItemAnywhere(id)) {
+            items.emplace_back(item, &style);
+            ids.push_back(id);
+        }
+    }
+    const auto sameSnippets = [&ids](const StyleEdit& edit) {
+        return edit.before.size() == ids.size() &&
+               std::equal(ids.begin(), ids.end(), edit.before.begin(),
+                          [](ItemId id, const std::pair<ItemId, ItemStyle>& was) { return id == was.first; });
+    };
+    if (styleEdit_.has_value() && !sameSnippets(*styleEdit_)) {
         EndStyleEdit();
     }
     if (!styleEdit_.has_value()) {
         EndOpenGesture();
     }
-    Item* item = Model().FindItemAnywhere(id);
-    if (item == nullptr) {
+    if (items.empty()) {
         return;
     }
     if (!styleEdit_.has_value()) {
-        styleEdit_ = StyleEdit{id, ItemStyle::Of(*item), Before({id})};
+        StyleEdit edit{{}, Before(ids)};
+        for (const auto& [item, style] : items) {
+            edit.before.emplace_back(item->id, ItemStyle::Of(*item));
+        }
+        styleEdit_ = std::move(edit);
     }
-    style.ApplyTo(*item);
+    for (const auto& [item, style] : items) {
+        style->ApplyTo(*item);
+    }
     Model().MarkChanged();
 }
 
-void Session::EndStyleEdit() {
+bool Session::EndStyleEdit(bool merge) {
     if (!styleEdit_.has_value()) {
-        return;
+        return false;
     }
     const StyleEdit edit = std::move(*styleEdit_);
     styleEdit_.reset();
-    const Item* item = Model().FindItemAnywhere(edit.item);
-    if (item == nullptr || ItemStyle::Of(*item) == edit.before) {
-        Land(edit.checkpoint);  // nothing to file
-        return;
+    // Every snippet the edit held is in the step when any of them changed -
+    // see CommitPlacements, for the same reason.
+    bool changed = false;
+    Step step{0, What::Style, {}};
+    for (const auto& [id, before] : edit.before) {
+        const Item* item = Model().FindItemAnywhere(id);
+        if (item == nullptr) {
+            continue;
+        }
+        changed = changed || ItemStyle::Of(*item) != before;
+        step.changes.push_back(Change{id, history::StyleChanged{before}});
     }
-    const CanvasId canvas = Model().CanvasHoldingItem(edit.item).value_or(0);
-    Commit(edit.checkpoint, canvas, Step{0, What::Style, {Change{edit.item, history::StyleChanged{edit.before}}}});
+    if (!changed) {
+        Land(edit.checkpoint);  // nothing to file
+        return false;
+    }
+    const CanvasId canvas = Model().CanvasHoldingItem(step.changes.front().item).value_or(0);
+    return Commit(edit.checkpoint, canvas, std::move(step), merge);
 }
 
 void Session::CancelStyleEdit() {
@@ -405,31 +435,8 @@ void Session::CancelStyleEdit() {
 
 bool Session::SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles, bool merge) {
     EndOpenGesture();
-    std::vector<ItemId> ids;
-    for (const auto& [id, style] : styles) {
-        ids.push_back(id);
-    }
-    const Checkpoint checkpoint = Before(ids);
-    // Every snippet named in the step when any changed - see
-    // RecordPlacements, for the same reason.
-    bool changed = false;
-    Step step{0, What::Style, {}};
-    for (const auto& [id, style] : styles) {
-        Item* item = Model().FindItemAnywhere(id);
-        if (item == nullptr) {
-            continue;
-        }
-        const ItemStyle before = ItemStyle::Of(*item);
-        changed = changed || before != style;
-        style.ApplyTo(*item);
-        step.changes.push_back(Change{id, history::StyleChanged{before}});
-    }
-    if (!changed) {
-        return false;
-    }
-    Model().MarkChanged();
-    const CanvasId canvas = Model().CanvasHoldingItem(step.changes.front().item).value_or(0);
-    return Commit(checkpoint, canvas, std::move(step), merge);
+    PreviewStyles(styles);
+    return EndStyleEdit(merge);
 }
 
 // ================= Copying and moving snippets =================
