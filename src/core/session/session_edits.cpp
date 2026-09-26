@@ -289,6 +289,12 @@ void Session::BeginPlacement(const std::vector<ItemId>& ids) {
     placement_ = PlacementGesture{PlacementsOf(ids), Before(ids)};
 }
 
+bool Session::Placing(const std::vector<ItemId>& ids) const {
+    return placement_.has_value() && placement_->before.size() == ids.size() &&
+           std::equal(ids.begin(), ids.end(), placement_->before.begin(),
+                      [](ItemId id, const auto& was) { return id == was.first; });
+}
+
 namespace {
 bool Places(const std::vector<std::pair<ItemId, history::Placement>>& placements, ItemId id) {
     return std::any_of(placements.begin(), placements.end(), [id](const auto& p) { return p.first == id; });

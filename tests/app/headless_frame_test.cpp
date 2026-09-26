@@ -1516,9 +1516,16 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                     const CommandId last = *App().LastCommand();
                     const std::string name(InfoFor(last).name);
                     ran[static_cast<size_t>(last)] = true;
-                    ASSERT_TRUE(App().HandAtRest()) << "step " << step << ", " << name;
                     ASSERT_FALSE(session.LiveLayer().ActiveStroke().has_value()) << "step " << step << ", " << name;
-                    ASSERT_FALSE(HandGestureOpen(session)) << "step " << step << ", " << name;
+                    if (IsNudge(last)) {
+                        // A step of the burst it began or went on with,
+                        // which is in the hand now, holding it open.
+                        ASSERT_NE(App().InputStack().find("NudgeBurst"), std::string::npos)
+                            << "step " << step << ", " << name;
+                    } else {
+                        ASSERT_TRUE(App().HandAtRest()) << "step " << step << ", " << name;
+                        ASSERT_FALSE(HandGestureOpen(session)) << "step " << step << ", " << name;
+                    }
                     // Kept - and an undo then takes it back, as the most
                     // recent thing done; clearing the drawing takes it along.
                     if (stroke.has_value() && last != CommandId::ClearDrawing) {
@@ -3704,7 +3711,7 @@ TEST_F(OverlappingItemsTest, AnArrowKeyEndsADragAndNudgesAfterIt) {
     RawMouse(x + 20.0f, y, platform::MouseEventKind::Move);
     StepFrame();
     PressKey(ImGuiKey_DownArrow);
-    EXPECT_TRUE(App().HandAtRest());
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / NudgeBurst") << "the drag is over";
     RawMouse(x + 40.0f, y, platform::MouseEventKind::Move);
     StepFrame();
     RawMouse(x + 40.0f, y, platform::MouseEventKind::Up);
@@ -4018,6 +4025,7 @@ TEST_F(HeadlessAppTest, TheWheelScalesTheSelectionOutsideDrawingModeAndSizesTheP
     EXPECT_NEAR(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w, 0.5f) << "and back";
     EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, widthBefore + 1.0f) << "the pen untouched";
 
+    StepFrames(90);            // the spin over: Escape now would take it back
     PressKey(ImGuiKey_Escape);  // nothing selected: the wheel has nothing to do
     Wheel(1.0f);
     EXPECT_NEAR(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w, 0.5f);

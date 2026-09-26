@@ -113,6 +113,13 @@ struct Command {
     MadeBy madeBy = MadeBy::Asking;
 };
 
+// The arrow keys' commands, which come in bursts - see
+// ui/interaction/bursts.h.
+constexpr bool IsNudge(CommandId id) {
+    return id == CommandId::NudgeLeft || id == CommandId::NudgeRight || id == CommandId::NudgeUp ||
+           id == CommandId::NudgeDown;
+}
+
 struct CommandInfo {
     CommandId id;
     // A stable name, for tests and logs.

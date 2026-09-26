@@ -9,6 +9,7 @@ add_library(sz_ui STATIC
     editor.cpp
     editor_commands.cpp
     icon_draw.cpp
+    interaction/bursts.cpp
     interaction/canvas.cpp
     interaction/command.cpp
     interaction/gestures.cpp

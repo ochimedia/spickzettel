@@ -22,7 +22,19 @@ bool Editor::Dispatch(const Command& command) {
     Settle(InfoFor(command.id).scope);
     ++commandsRun_;
     lastCommand_ = command.id;
-    Run(command);
+    Run(command, Filing::Step);
+    PruneSelection();
+    return true;
+}
+
+bool Editor::Step(const Command& command) {
+    PruneSelection();
+    if (!Available(command)) {
+        return false;
+    }
+    ++commandsRun_;
+    lastCommand_ = command.id;
+    Run(command, Filing::Burst);
     PruneSelection();
     return true;
 }
@@ -134,7 +146,7 @@ bool Editor::Available(const Command& command) const {
     return false;  // unreachable: the switch names every command
 }
 
-void Editor::Run(const Command& command) {
+void Editor::Run(const Command& command, Filing filing) {
     // The key of the tool already in hand puts it down again - back to
     // Select, the hand at rest (see the Tool enum), which for a marking
     // tool means leaving drawing mode.
@@ -156,16 +168,16 @@ void Editor::Run(const Command& command) {
             DeleteSelection();
             return;
         case CommandId::NudgeLeft:
-            NudgeSelection(-nudge, 0.0f);
+            NudgeSelection(-nudge, 0.0f, filing);
             return;
         case CommandId::NudgeRight:
-            NudgeSelection(nudge, 0.0f);
+            NudgeSelection(nudge, 0.0f, filing);
             return;
         case CommandId::NudgeUp:
-            NudgeSelection(0.0f, -nudge);
+            NudgeSelection(0.0f, -nudge, filing);
             return;
         case CommandId::NudgeDown:
-            NudgeSelection(0.0f, nudge);
+            NudgeSelection(0.0f, nudge, filing);
             return;
         case CommandId::DrawTool:
             toggleTool(Tool::Draw);

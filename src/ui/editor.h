@@ -64,8 +64,8 @@ inline constexpr float kRegionMinSize = 24.0f;
 // Editor::ScaleSelectionByWheel and StepSelectionOpacity.
 inline constexpr float kWheelScaleStep = 1.1f;
 inline constexpr float kWheelOpacityStep = 0.05f;
-// How long after one wheel notch or arrow-key nudge the next still belongs
-// to the same burst, and is taken back with it by one undo.
+// How long a burst of wheel notches or arrow-key nudges goes on without a
+// step before it ends, filed as one - see ui/interaction/bursts.h.
 inline constexpr double kBurstSeconds = 1.0;
 
 // Smallest positive integer N such that `prefix + std::to_string(N)` isn't
@@ -239,9 +239,13 @@ public:
     // held when it went away - see Machine::Forget - and no click is
     // remembered.
     void ForgetTheHand();
-    // Nothing in flight: no gesture, and no press waiting to be
-    // understood. The rest of a press that has had its say is at rest.
+    // Nothing in flight: no gesture, no press waiting to be understood,
+    // and no burst. The rest of a press that has had its say is at rest.
     bool HandAtRest() const;
+    // A button held down to some purpose: a gesture, or a press waiting
+    // to be understood - not the rest of one, and not a burst, which the
+    // keys or the wheel make.
+    bool PointerInUse() const;
 
     // ===== The tool, and drawing mode =====
 
@@ -434,21 +438,33 @@ public:
     // reset to the original size - as its own undo entry.
     void ToggleFullscreenUndoably(ItemId id, bool stretch);
     void ResetToNativeSizeUndoably(ItemId id);
+    // How a change to the selection is filed: as a step of its own, or
+    // previewed into the placement or the style edit a burst holds open on
+    // the session, to be filed when the burst ends - see
+    // ui/interaction/bursts.h.
+    enum class Filing { Step, Burst };
     // Moves every selected snippet by (dx, dy), clamped on screen - the
     // arrow keys.
-    void NudgeSelection(float dx, float dy);
+    void NudgeSelection(float dx, float dy, Filing filing);
     // The wheel over a selection outside drawing mode: every selected
     // snippet scaled by kWheelScaleStep per notch, as a group about the
     // middle of the box around them - the same scaling a corner handle
     // does, so shapes and spacing are kept, and the smallest snippet's
     // floor stops all of them. A fullscreen snippet is left as it is.
+    // Always a burst's.
     void ScaleSelectionByWheel(int steps);
     // Ctrl or Shift with the wheel: the selection's background or
     // foreground opacity, kWheelOpacityStep per notch, within the ranges
-    // the Properties popover's sliders have. Says the new value.
+    // the Properties popover's sliders have. Says the new value. Always a
+    // burst's.
     void StepSelectionOpacity(int steps, bool background);
-    // The wheel, turned `notches`, as the Canvas level has it - see the
-    // definition for what each modifier makes of it.
+    // What a notch of the wheel would do now, by the modifiers held, the
+    // pointer and the mode - see Wheel. The selection's size and its
+    // opacity are filed, and come in bursts; the rest file nothing.
+    enum class WheelKind { Nothing, Canvases, SelectionSize, SelectionOpacity, ToolSize };
+    WheelKind KindOfWheel() const;
+    // The wheel, turned `notches`, as the Canvas level or a wheel burst
+    // has it - see the definition for what each modifier makes of it.
     void Wheel(float notches);
     // Deletes every selected snippet, undoably, as Close does.
     void DeleteSelection();
@@ -523,30 +539,27 @@ public:
     void SetAppCommandCallback(std::function<void(CommandId)> callback) {
         appCommandCallback_ = std::move(callback);
     }
-    // How many commands have run, and which ran last.
+    // Runs `command` as a step of the burst on top of the stack (see
+    // NudgeBurst) if it can act now: nothing is ended first - the burst is
+    // the hand - and what it changes is held open by the burst, filed when
+    // the burst ends. True when it ran.
+    bool Step(const Command& command);
+    // How many commands have run, by Dispatch or as a burst's steps, and
+    // which ran last.
     uint64_t CommandsRun() const { return commandsRun_; }
     std::optional<CommandId> LastCommand() const { return lastCommand_; }
 
 private:
-    // What a command does, once Dispatch has settled what it covers.
-    void Run(const Command& command);
+    // What a command does, once Dispatch has settled what it covers - or
+    // as a burst's step.
+    void Run(const Command& command, Filing filing);
     // Escape: puts the hand down one stage - see the definition.
     void PutDown();
 
-    // Files a wheel notch or an arrow-key nudge, folded into the burst the
-    // last one began when it continues it: the same kind of step, soon
-    // enough after it, with nothing filed, undone or redone in between - a
-    // drag of the same snippets, or an undo that left an older step of
-    // theirs on top, would otherwise be taken into the burst. What decides
-    // that a burst is one undo (see Session::EndPlacement).
-    enum class Burst { None, Wheel, Nudge, Opacity };
-    void RecordPlacementBurst(Burst kind, const std::vector<std::pair<ItemId, Rect>>& rects);
-    // The same for the opacity wheel's steps.
-    void RecordStyleBurst(Burst kind, const std::vector<std::pair<ItemId, ItemStyle>>& styles);
-    // Whether a step of `kind` now continues the burst the last one began,
-    // and noting that one was filed - the two halves of both of the above.
-    bool BurstContinues(Burst kind) const;
-    void NoteBurst(Burst kind);
+    // Previews `rects` into the placement a burst holds open on the
+    // session, begun here for these snippets when it is not open for them
+    // yet - see Filing.
+    void PreviewPlacement(const std::vector<std::pair<ItemId, Rect>>& rects);
     void ShowUndoStep(const std::optional<Session::UndoStep>& step);
     void Say(std::string text);
 
@@ -590,11 +603,6 @@ private:
     std::optional<ItemId> untouchedDrawing_;
     // The history as it stood once untouchedDrawing_ was made - see Undo.
     uint64_t untouchedDrawingRevision_ = 0;
-
-    // See RecordPlacementBurst and RecordStyleBurst.
-    Burst lastBurst_ = Burst::None;
-    double lastBurstAtSeconds_ = 0.0;
-    uint64_t lastBurstRevision_ = 0;
 
     struct Click {
         platform::MouseButton button = platform::MouseButton::Left;

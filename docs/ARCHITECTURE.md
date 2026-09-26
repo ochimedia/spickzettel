@@ -1359,10 +1359,10 @@ change - because a drag takes a fullscreen snippet out of fullscreen,
 and an undo that brought back the rect but not the fullscreen would not
 be the snippet as it was. A style is everything the properties popover
 and the opacity wheel change. Steps that come in bursts - wheel notches,
-arrow-key nudges, opacity steps - fold into the step the burst began,
-keeping its before, when they continue it within a second and nothing
-else was filed in between: a spin of the wheel is taken back in one
-step, to where it started.
+arrow-key nudges, opacity steps - are one step: the burst holds a
+placement or a style edit open on the session while it goes on, and it
+is filed when the burst ends (see "Bursts"). A spin of the wheel is
+taken back in one step, to where it started.
 
 ### Making a snippet is on the history, and an untouched one goes
 
@@ -1847,6 +1847,39 @@ release went missing: the gesture ends as interrupted, and the press is
 taken afresh. An arrow key is a command like any other: mid-drag it ends
 the drag where it is and nudges after it, two undo steps.
 
+### Bursts
+
+A key held down repeats, and a wheel spun turns several notches: steps
+that come one after another, which a person means as one - one undo,
+back to where they began. Each is an interaction on the Gesture level
+(`ui/interaction/bursts.*`): an arrow begins a `NudgeBurst`, and the
+wheel over a selection, outside drawing mode, a `WheelBurst` of its
+kind - the selection's size, or its opacity. The burst holds a placement
+or a style edit open on the session, so every step is a preview, and
+files it as one step when a second passes without another. Anything
+else ends it first, filed: a press, a command (its scope ends the Gesture
+level), a notch of another kind. Escape takes it back to where it began,
+through the same cancel a drag has - for the arrows only while one is
+held, since a run of presses already let go of is not what Escape is
+pressed about; with none held, Escape ends the burst and goes on to put
+the hand down.
+
+The arrows stay commands. A burst runs each as its step
+(`Editor::Step`), which ends nothing first - the burst is the hand - and
+has the nudge preview into the burst's placement rather than file a step
+of its own (`Editor::Filing`). The wheel's size and opacity are not
+commands, and only a burst reaches them.
+
+Bursts used to be recognized after the fact: a step filed within a
+second of the last one of its kind, with the history's revision
+unchanged, was merged into the step on top. That needed the revision
+check to keep a drag or an undo in between from being merged into, and
+could not be cancelled, since the steps were already filed. As an
+interaction, what comes in between ends the burst, and nothing is filed
+until it is over. The second stays, as the end of an interaction the
+wheel has no other end for: a run of arrow presses within it is one
+undo, as it has always been.
+
 Where this is going is `docs/INTERACTIONS.md`: every input through one
 state machine - a stack of interactions, each offered every event first -
 in which every pair of state and event has a written answer. That
@@ -1986,8 +2019,8 @@ answer (`tests/ui/machine_test.cpp`). A command's scope is ended through
 it before the command runs (`Machine::EndFor`). The Canvas level
 (`CanvasLevel`, `ui/interaction/canvas.*`) hands a press to the
 recognizer (see "One gesture engine"), a key or a bound mouse button to
-its command, and the wheel to `Editor::Wheel`, until phase 4 makes the
-wheel's bursts interactions. The whole machine - every level, the
+its command, and the wheel to `Editor::Wheel` - an arrow, and the
+wheel on the selection, beginning a burst (below). The whole machine - every level, the
 recognizer, the commands - is the editor's, with nothing of the view in
 it: what it asks of ImGui goes through `EditorViews`, which a test of the
 machine alone leaves out. The machine also keeps which buttons are down, from

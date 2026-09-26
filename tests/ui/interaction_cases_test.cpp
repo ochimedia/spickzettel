@@ -17,6 +17,7 @@
 #include "core/session/settings.h"
 #include "support/session_test_access.h"
 #include "ui/editor.h"
+#include "ui/interaction/bursts.h"
 #include "ui/interaction/gestures.h"
 
 namespace sz::ui {
@@ -670,8 +671,15 @@ TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
                 if (editor.CommandsRun() > runBefore) {
                     const CommandId last = *editor.LastCommand();
                     ran[static_cast<size_t>(last)] = true;
-                    ASSERT_TRUE(editor.HandAtRest()) << "step " << step << ", " << InfoFor(last).name;
-                    ASSERT_FALSE(test::HandGestureOpen(session)) << "step " << step << ", " << InfoFor(last).name;
+                    if (IsNudge(last)) {
+                        // A step of the burst it began or went on with,
+                        // which is in the hand now, holding it open.
+                        ASSERT_NE(editor.Input().As<NudgeBurst>(Level::Gesture), nullptr)
+                            << "step " << step << ", " << InfoFor(last).name;
+                    } else {
+                        ASSERT_TRUE(editor.HandAtRest()) << "step " << step << ", " << InfoFor(last).name;
+                        ASSERT_FALSE(test::HandGestureOpen(session)) << "step " << step << ", " << InfoFor(last).name;
+                    }
                 }
             }
 

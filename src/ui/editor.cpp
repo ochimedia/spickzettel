@@ -304,6 +304,8 @@ bool Editor::HandAtRest() const {
     return gesture == nullptr || dynamic_cast<const Spent*>(gesture) != nullptr;
 }
 
+bool Editor::PointerInUse() const { return dynamic_cast<const Gesture*>(machine_.At(Level::Gesture)) != nullptr; }
+
 // ================= The tool, and drawing mode =================
 
 Tool Editor::ActiveTool() const {
@@ -812,35 +814,22 @@ void Editor::ResetToNativeSizeUndoably(ItemId id) {
     KeepDrawingsPlaced({id});
 }
 
-bool Editor::BurstContinues(Burst kind) const {
-    return lastBurst_ == kind && now_ - lastBurstAtSeconds_ < kBurstSeconds &&
-           session_.HistoryRevision() == lastBurstRevision_;
-}
-
-void Editor::NoteBurst(Burst kind) {
-    lastBurst_ = kind;
-    lastBurstAtSeconds_ = now_;
-    lastBurstRevision_ = session_.HistoryRevision();
-}
-
-void Editor::RecordPlacementBurst(Burst kind, const std::vector<std::pair<ItemId, Rect>>& rects) {
-    // One that files nothing - a nudge against the screen's edge - starts
-    // no run: armed, the next press within the second merged into whatever
-    // was filed last, a drag included, and one undo took back both.
-    if (session_.SetRects(rects, BurstContinues(kind))) {
-        NoteBurst(kind);
+void Editor::PreviewPlacement(const std::vector<std::pair<ItemId, Rect>>& rects) {
+    std::vector<ItemId> ids;
+    for (const auto& [id, rect] : rects) {
+        ids.push_back(id);
+    }
+    if (!session_.Placing(ids)) {
+        session_.BeginPlacement(ids);
+    }
+    for (const auto& [id, rect] : rects) {
+        session_.PreviewRect(id, rect);
     }
 }
 
-void Editor::RecordStyleBurst(Burst kind, const std::vector<std::pair<ItemId, ItemStyle>>& styles) {
-    if (session_.SetStyles(styles, BurstContinues(kind))) {
-        NoteBurst(kind);
-    }
-}
-
-void Editor::NudgeSelection(float dx, float dy) {
+void Editor::NudgeSelection(float dx, float dy, Filing filing) {
     // A run of presses - or a key held down, repeating - is one undo, back
-    // to where the run began.
+    // to where the run began: a burst's (see NudgeBurst).
     std::vector<std::pair<ItemId, Rect>> rects;
     for (const ItemId id : selection_) {
         const Item* item = Manager().FindItemAnywhere(id);
@@ -852,7 +841,11 @@ void Editor::NudgeSelection(float dx, float dy) {
                                                         item->rect.h},
                                                    displayW_, displayH_));
     }
-    RecordPlacementBurst(Burst::Nudge, rects);
+    if (filing == Filing::Burst) {
+        PreviewPlacement(rects);
+    } else {
+        session_.SetRects(rects);
+    }
 }
 
 void Editor::ScaleSelectionByWheel(int steps) {
@@ -909,8 +902,9 @@ void Editor::ScaleSelectionByWheel(int steps) {
     // A drawing placed and then scaled is one someone wants, as one moved
     // or resized by hand is.
     KeepDrawingsPlaced(ids);
-    // A spin of the wheel is one undo, back to the size it started at.
-    RecordPlacementBurst(Burst::Wheel, rects);
+    // A spin of the wheel is one undo, back to the size it started at: a
+    // burst's (see WheelBurst).
+    PreviewPlacement(rects);
 }
 
 void Editor::StepSelectionOpacity(int steps, bool background) {
@@ -944,8 +938,9 @@ void Editor::StepSelectionOpacity(int steps, bool background) {
     if (!shown.has_value()) {
         return;
     }
-    // A spin of the wheel is one undo, back to where it started.
-    RecordStyleBurst(Burst::Opacity, styles);
+    // A spin of the wheel is one undo, back to where it started: a
+    // burst's (see WheelBurst).
+    session_.PreviewStyles(styles);
     // The value, since the change itself can be hard to judge by eye: the
     // last snippet's, which with several selected is the one selected last.
     char text[64];
@@ -976,29 +971,50 @@ void Editor::StepSelectionOpacity(int steps, bool background) {
 // what decides, not whether something happens to be selected: in drawing
 // mode something always is, and the wheel must not start scaling the
 // snippet under the pen.
+Editor::WheelKind Editor::KindOfWheel() const {
+    if (held_.alt) {
+        return WheelKind::Canvases;
+    }
+    if (PointerOverView()) {
+        return WheelKind::Nothing;  // a widget under the pointer has the wheel
+    }
+    if (held_.ctrl != held_.shift) {
+        return WheelKind::SelectionOpacity;
+    }
+    if (held_.ctrl) {
+        return WheelKind::Nothing;  // both held: neither opacity is meant more than the other
+    }
+    return DrawingItem().has_value() ? WheelKind::ToolSize : WheelKind::SelectionSize;
+}
+
 void Editor::Wheel(float notches) {
     if (notches == 0.0f) {
         return;
     }
-    if (held_.alt) {
-        // Wheel up goes back through the list, wheel down forward - the
-        // direction a page scrolls, applied to canvases.
-        if (const int steps = TakeWheelSteps(canvasWheelRemainder_, notches); steps != 0) {
-            SwitchCanvasByOffset(-steps);
-        }
-    } else if (PointerOverView()) {
-        // A widget under the pointer has the wheel.
-    } else if (held_.ctrl != held_.shift) {
-        if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
-            StepSelectionOpacity(steps, /*background=*/held_.ctrl);
-        }
-    } else if (held_.ctrl) {
-        // Both held: neither opacity is meant more than the other.
-    } else if (!DrawingItem().has_value()) {
-        if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
-            ScaleSelectionByWheel(steps);
-        }
-    } else if (const int steps = TakeWheelSteps(sizeWheelRemainder_, notches); steps != 0) {
+    switch (KindOfWheel()) {
+        case WheelKind::Nothing:
+            return;
+        case WheelKind::Canvases:
+            // Wheel up goes back through the list, wheel down forward - the
+            // direction a page scrolls, applied to canvases.
+            if (const int steps = TakeWheelSteps(canvasWheelRemainder_, notches); steps != 0) {
+                SwitchCanvasByOffset(-steps);
+            }
+            return;
+        case WheelKind::SelectionOpacity:
+            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
+                StepSelectionOpacity(steps, /*background=*/held_.ctrl);
+            }
+            return;
+        case WheelKind::SelectionSize:
+            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
+                ScaleSelectionByWheel(steps);
+            }
+            return;
+        case WheelKind::ToolSize:
+            break;
+    }
+    if (const int steps = TakeWheelSteps(sizeWheelRemainder_, notches); steps != 0) {
         // Nothing whole out of the accumulator yet - a high-resolution wheel
         // mid-notch - is no size change, and nothing to show either.
         const auto step = static_cast<float>(steps);

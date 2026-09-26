@@ -35,8 +35,7 @@ Answer DrawingMode::Offer(const Event& event, Editor& editor) {
             }
             const std::optional<CommandId> command = editor.CommandForKey(event.key, event.modifiers, event.repeat);
             const bool onTheSnippet =
-                command == CommandId::DeleteSelection || command == CommandId::NudgeLeft ||
-                command == CommandId::NudgeRight || command == CommandId::NudgeUp || command == CommandId::NudgeDown;
+                command.has_value() && (*command == CommandId::DeleteSelection || IsNudge(*command));
             return onTheSnippet ? Answer::Claim() : Answer::Pass();
         }
         case EventKind::PointerDown:

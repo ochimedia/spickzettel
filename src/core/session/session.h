@@ -207,6 +207,9 @@ public:
     // filed when nothing changed: a click that selected and never moved.
     // Beginning another ends the one open.
     void BeginPlacement(const std::vector<ItemId>& ids);
+    // Whether a placement is open holding exactly the snippets `ids`, in
+    // that order - one a burst began, still going on.
+    bool Placing(const std::vector<ItemId>& ids) const;
     void PreviewRect(ItemId id, Rect rect);
     // Takes a fullscreen snippet out of fullscreen as part of the gesture -
     // what taking hold of one does. No-op for one that is not fullscreen.
