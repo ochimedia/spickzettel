@@ -1,11 +1,12 @@
 # Overlay states
 
-Status: **agreed** (2026-09-26), being built in the phases of section 11.
-Every behavior below is either what the app does today (unmarked, or
-said so) or a change (marked **Change**). "Today" means the app as of
-`fa49b05`. Once built, it is the reference for how the overlay comes and
-goes, as `docs/INTERACTIONS.md` is for input. The questions it was
-reviewed with, and their answers, are in section 12.
+Status: **built** (2026-09-26), in the phases of section 11: the
+reference for how the overlay comes and goes, as `docs/INTERACTIONS.md`
+is for input. Every behavior below is either what the app did before it
+(unmarked, or said so) or a change (marked **Change**) that it made. All
+were made but C6, which a condition of its own ruled out (section 10,
+finding 1). "Today" means the app as of `fa49b05`, before the work. The
+questions it was reviewed with, and their answers, are in section 12.
 
 ## The principle
 
@@ -350,9 +351,11 @@ frame are posted instead:
 
 **Change** (C5): `IPlatformHost::Post(task)` runs a task on the app
 thread after the current frame or message, and before the next frame.
-- **Win32**: a queue, and a `PostMessage` to the host window, which the
-  loop dispatches before it draws.
-- **The fake host**: runs posted tasks when a test steps past a frame.
+- **Win32**: a queue, and a `PostMessage` to the host window for each
+  task, which the loop dispatches before it draws. Each message runs the
+  oldest task, so one a task posts runs after those already waiting.
+- **The fake host**: holds posted tasks, and the headless app runs them
+  after each frame it steps.
 
 As a result, the notice hides, the restart happens, and a changed setting
 reaches the window one frame later than today. This removes:

@@ -171,13 +171,15 @@ private:
     // and the timer stopped once it is written.
     void OnBackgroundTimer();
     void OnTrayCommand(platform::TrayCommand command);
-    // Wired to Settings::SetChangedCallback in Initialize(). Applies to the
-    // window whatever of the settings it acts on actually changed, then
-    // writes the settings to host_.GetConfigFilePath() via WriteConfigFile -
-    // a no-op if that path is empty, same "nowhere to persist to"
-    // convention host_.GetLibraryPath() already has for
-    // libraryStore_ (see Initialize()).
+    // Wired to Settings::SetChangedCallback in Initialize(). Writes the
+    // settings to host_.GetConfigFilePath() via WriteConfigFile - a no-op if
+    // that path is empty, same "nowhere to persist to" convention
+    // host_.GetLibraryPath() already has for libraryStore_ (see
+    // Initialize()) - and has ApplySettingsToWindow run after the frame.
     void OnSettingsChanged();
+    // Applies to the window whatever of the settings it acts on actually
+    // changed, and moves the overlay to the display they now choose.
+    void ApplySettingsToWindow();
     // Whether this showing - the whole showing, not one mode of it - has
     // to take focus whatever the settings say
     // about leaving it alone, because Windows would otherwise deliver us

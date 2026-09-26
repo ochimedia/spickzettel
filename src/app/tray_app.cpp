@@ -125,9 +125,12 @@ bool TrayController::Initialize() {
     overlayApp_.SetHotkeyChangeCallback([this](HotkeySlot slot, platform::KeyCombo combo) {
         return ChangeHotkey(slot, combo);
     });
-    overlayApp_.SetRestartOverlayCallback([this] { Request(OverlayRequest::Restart); });
+    // The two requests that arrive in a frame, carried out after it: a
+    // transition changes what the frame is part of (docs/OVERLAY_STATES.md,
+    // section 8).
+    overlayApp_.SetRestartOverlayCallback([this] { host_.Post([this] { Request(OverlayRequest::Restart); }); });
     overlayApp_.SetDisplayListCallback([this] { return host_.ListDisplays(); });
-    overlayApp_.SetNoticeFinishedCallback([this] { Request(OverlayRequest::NoticeFaded); });
+    overlayApp_.SetNoticeFinishedCallback([this] { host_.Post([this] { Request(OverlayRequest::NoticeFaded); }); });
     overlayApp_.SetAppCommandCallback([this](CommandId id) { RunAppCommand(id); });
 
     // Empty path means "this host has nowhere to persist to" (e.g. a
@@ -507,6 +510,14 @@ void TrayController::ApplyProfileForCurrentApplication(bool keepPrevious) {
 }
 
 void TrayController::OnSettingsChanged() {
+    // The window's half after the frame a setting is usually committed in
+    // (see IPlatformHost::Post); the file now, where a failure is said in
+    // the same frame.
+    host_.Post([this] { ApplySettingsToWindow(); });
+    PersistConfig();
+}
+
+void TrayController::ApplySettingsToWindow() {
     // The two runtime side effects, gated on an actual change so toggling
     // some unrelated setting doesn't re-poke the window or tear the input
     // hooks down and put them straight back up. Compared against what is
@@ -528,7 +539,6 @@ void TrayController::OnSettingsChanged() {
     if (state_ != OverlayState::Hidden) {
         MoveOverlayTo(OverlayDisplay());
     }
-    PersistConfig();
 }
 
 void TrayController::PersistConfig() {

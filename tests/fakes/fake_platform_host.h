@@ -329,6 +329,19 @@ public:
     }
     std::function<void()> sessionEndCallback;
 
+    // Held until a test runs them - the headless app does after every frame
+    // (see HeadlessAppTest::StepFrame), as the real loop does before the
+    // next one.
+    void Post(std::function<void()> task) override { posted.push_back(std::move(task)); }
+    void RunPostedTasks() {
+        while (!posted.empty()) {
+            const std::function<void()> task = std::move(posted.front());
+            posted.erase(posted.begin());
+            task();
+        }
+    }
+    std::vector<std::function<void()>> posted;
+
     int RunEventLoop() override { return exitCode; }
 
     void Quit(int code) override {
@@ -353,6 +366,7 @@ public:
         backgroundTimerCallback = nullptr;
         backgroundTimerIntervalMs = 0;
         sessionEndCallback = nullptr;
+        posted.clear();
     }
 
     // Test-only helpers to simulate what a real backend would deliver.

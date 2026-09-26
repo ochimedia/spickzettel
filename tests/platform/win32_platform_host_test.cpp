@@ -122,5 +122,29 @@ TEST(Win32PlatformHostTest, AHotkeyCallbackCanUnregisterItsOwnHotkey) {
     EXPECT_EQ(ranToTheEnd, word);
 }
 
+// A posted task waits for the message loop - it runs after whatever frame
+// or message posted it, not inside it - and tasks run in the order they
+// were posted, one posted by a task after those already waiting.
+TEST(Win32PlatformHostTest, PostedTasksRunFromTheLoopInOrder) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    std::vector<int> ran;
+    host.Post([&] { ran.push_back(1); });
+    host.Post([&] {
+        ran.push_back(2);
+        host.Post([&] { ran.push_back(4); });
+    });
+    host.Post([&] { ran.push_back(3); });
+    EXPECT_TRUE(ran.empty()) << "nothing runs where it is posted";
+
+    MSG msg;
+    for (int i = 0; i < 100 && PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE); ++i) {
+        DispatchMessageW(&msg);
+    }
+
+    EXPECT_EQ(ran, (std::vector<int>{1, 2, 3, 4}));
+}
+
 }  // namespace
 }  // namespace sz::platform::win32

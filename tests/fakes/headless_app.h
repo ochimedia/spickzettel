@@ -149,6 +149,8 @@ protected:
             host_.overlayWindow.frameCallback(ImGui::GetIO().DeltaTime);
         }
         ImGui::Render();
+        // What the frame asked to happen after it - see IPlatformHost::Post.
+        host_.RunPostedTasks();
     }
     void StepFrames(int count) {
         for (int i = 0; i < count; ++i) {

@@ -2402,11 +2402,14 @@ TEST_F(HeadlessAppTest, SavingASettingOverAnElevatedApplicationKeepsItsFocusTake
     ShowEditMode();
     StepFrame();
     ASSERT_FALSE(host_.overlayWindow.editModeNoActivate);
+    const int noActivateCalls = host_.overlayWindow.setEditModeNoActivateCallCount;
 
     controller_->GetSettings().Mutable().showItemBorders = !AppSettings().Stored().showItemBorders;
     controller_->GetSettings().Commit();
+    StepFrame();  // the window hears of it after the frame
 
     EXPECT_FALSE(host_.overlayWindow.editModeNoActivate);
+    EXPECT_EQ(host_.overlayWindow.setEditModeNoActivateCallCount, noActivateCalls) << "nothing to tell it";
 }
 
 // The HUD's number keys write into the profile that is running, and the two

@@ -149,8 +149,7 @@ public:
     bool IsPinnedOnly() const { return mode_ == OverlayMode::Pinned; }
     // Called once, from the frame in which a notice's message has faded,
     // to say there is nothing left to show. TrayController hides the
-    // window from it - safe mid-frame, since the renderer still ends the
-    // ImGui frame afterwards.
+    // window after that frame.
     void SetNoticeFinishedCallback(std::function<void()> callback) {
         noticeFinishedCallback_ = std::move(callback);
     }

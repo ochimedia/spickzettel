@@ -62,6 +62,13 @@ public:
     // last chance to write what is unsaved; see TrayController::OnSessionEnding.
     virtual void SetSessionEndCallback(std::function<void()> callback) = 0;
 
+    // Runs `task` on the app thread after the current frame or message, and
+    // before the next frame. For what is asked for from inside a frame but
+    // changes what the frame is part of - the overlay's state, the window
+    // (see docs/OVERLAY_STATES.md, section 8). Tasks run in the order they
+    // were posted; one posted by a task runs after the next message.
+    virtual void Post(std::function<void()> task) = 0;
+
     // Runs the OS event loop until Quit() is called; returns the exit code.
     virtual int RunEventLoop() = 0;
     virtual void Quit(int exitCode = 0) = 0;

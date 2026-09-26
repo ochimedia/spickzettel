@@ -502,6 +502,7 @@ TEST_F(OverlayStatesTest, SettingsDisplaysAndTheSessionEndingChangeNoState) {
 
         controller_->GetSettings().Mutable().showItemBorders = !AppSettings().Stored().showItemBorders;
         controller_->GetSettings().Commit();
+        host_.RunPostedTasks();
         host_.overlayWindow.displaysChangedCallback();
         host_.TriggerSessionEnd();
 
@@ -543,6 +544,55 @@ TEST_F(OverlayStatesTest, TheModeBeforeTheShowingEndsWhereTheShowingBeforeTheMod
     ShowEditMode();
     StepFrame();
     EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
+}
+
+// ===== Between frames (C5) =====
+
+// A request that arrives in a frame is carried out after it: the frame in
+// which the notice's message fades ends with the window still up, and the
+// window goes before the next one.
+TEST_F(OverlayStatesTest, ANoticeFadedInAFrameGoesAfterIt) {
+    TriggerHotkey(config_.hotkeySilentCapture);
+    ASSERT_EQ(Observed(), State::Notice);
+    bool visibleAtTheEndOfEveryFrame = true;
+    platform::FrameCallback frame = host_.overlayWindow.frameCallback;
+    host_.overlayWindow.frameCallback = [&](float dt) {
+        frame(dt);
+        visibleAtTheEndOfEveryFrame = visibleAtTheEndOfEveryFrame && host_.overlayWindow.visible;
+    };
+    int frames = 0;
+    while (Observed() == State::Notice && frames < kFramesPastAToast) {
+        StepFrame();
+        ++frames;
+    }
+
+    EXPECT_EQ(Observed(), State::Hidden);
+    EXPECT_TRUE(visibleAtTheEndOfEveryFrame) << "never hidden inside a frame";
+}
+
+// The same for a restart, and for the window's half of a setting.
+TEST_F(OverlayStatesTest, ARestartAndASettingAskedForInAFrameHappenAfterIt) {
+    AppConfig config = Config();
+    config.showInputOptionsHud = true;
+    Restart(config);
+    ShowEditMode();
+    StepFrame();
+    std::vector<std::vector<std::string>> callsInFrames;
+    platform::FrameCallback frame = host_.overlayWindow.frameCallback;
+    host_.overlayWindow.frameCallback = [&](float dt) {
+        host_.overlayWindow.calls.clear();
+        frame(dt);
+        callsInFrames.push_back(host_.overlayWindow.calls);
+    };
+    host_.overlayWindow.calls.clear();
+
+    PressKey(ImGuiKey_1);  // "Don't steal focus": a setting, and then a restart
+    StepFrames(4);
+
+    ASSERT_EQ(Observed(), State::Edit);
+    for (const std::vector<std::string>& calls : callsInFrames) {
+        EXPECT_TRUE(calls.empty()) << "the window is told nothing from inside a frame, and here got " << calls.front();
+    }
 }
 
 // ===== Away =====

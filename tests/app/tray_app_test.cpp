@@ -1248,10 +1248,10 @@ TEST(TrayControllerProfileTest, AProfileMayKeepHandsOffOneElevatedApplication) {
         << "the profile speaks for its own application only";
 }
 
-// The decision is made once per showing rather than once per mode, and
-// that is what makes view-only into edit mode work: EnsureMode switches
-// those two in place, without coming up from hidden and without asking
-// again. Deciding this per mode would leave the overlay deaf in exactly
+// The decision is made once per session rather than once per mode, and
+// that is what makes view-only into edit mode work: the two switch in
+// place within a session, without coming up from hidden and without
+// asking again. Deciding this per mode would leave the overlay deaf in exactly
 // the case it is here to fix, two keypresses in.
 TEST(TrayControllerProfileTest, EnteringEditModeFromViewOnlyKeepsTheFocusItTook) {
     test::FakePlatformHost host;
@@ -1568,6 +1568,7 @@ TEST(TrayControllerDisplayTest, ChoosingAnotherDisplayWhileTheOverlayIsUpMovesIt
     controller.GetSettings().Mutable().overlayDisplayId = "fake-left";
     controller.GetSettings().Mutable().overlayDisplayName = "Left Display";
     controller.GetSettings().Commit();
+    host.RunPostedTasks();  // after the frame the choice was made in
 
     EXPECT_EQ(host.overlayWindow.onDisplay.id, "fake-left");
 }

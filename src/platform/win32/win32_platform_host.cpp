@@ -20,6 +20,8 @@ namespace strings = sz::strings;
 namespace {
 constexpr const char* kWindowClassName = "SpickzettelHostWindowClass";
 constexpr UINT kTrayIconMessage = WM_APP + 1;
+// A task posted from the app thread - see Post.
+constexpr UINT kPostedTaskMessage = WM_APP + 2;
 constexpr UINT kTrayIconId = 1;
 
 // Whether this message must not go through TranslateMessage.
@@ -295,6 +297,14 @@ int Win32PlatformHost::RunEventLoop() {
     return exitCode_;
 }
 
+// A message of its own for each task, to the host window: the loop
+// dispatches every waiting message before it draws the next frame, and
+// wakes for one while it sleeps.
+void Win32PlatformHost::Post(std::function<void()> task) {
+    posted_.push_back(std::move(task));
+    PostMessageW(hwnd_, kPostedTaskMessage, 0, 0);
+}
+
 void Win32PlatformHost::Quit(int exitCode) {
     exitCode_ = exitCode;
     running_ = false;
@@ -373,6 +383,15 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
                 }
             } else if (LOWORD(lParam) == WM_RBUTTONUP) {
                 ShowTrayContextMenu();
+            }
+            return 0;
+        case kPostedTaskMessage:
+            // One task per message, the oldest: a task that posts another
+            // queues it behind whatever has been posted meanwhile.
+            if (!posted_.empty()) {
+                const std::function<void()> task = std::move(posted_.front());
+                posted_.pop_front();
+                task();
             }
             return 0;
         case WM_HOTKEY: {

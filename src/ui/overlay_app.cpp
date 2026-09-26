@@ -1719,7 +1719,7 @@ void OverlayApp::UpdateInputOptionsHud() {
             if (restartOverlayCallback_) {
                 restartOverlayCallback_();
             }
-            return;  // the overlay is being rebuilt; nothing else this frame
+            return;  // rebuilt after this frame - see IPlatformHost::Post
         }
     }
 }

@@ -2,6 +2,7 @@
 
 #include <windows.h>
 
+#include <deque>
 #include <string>
 #include <unordered_map>
 
@@ -34,6 +35,7 @@ public:
     std::filesystem::path GetLibraryPath() const override;
     void SetBackgroundTimer(int intervalMs, std::function<void()> callback) override;
     void SetSessionEndCallback(std::function<void()> callback) override;
+    void Post(std::function<void()> task) override;
     int RunEventLoop() override;
     void Quit(int exitCode) override;
 
@@ -54,6 +56,8 @@ private:
     std::unordered_map<int, HotkeyCallback> hotkeyCallbacks_;
     std::function<void()> backgroundTimerCallback_;
     std::function<void()> sessionEndCallback_;
+    // See Post: waiting for the message each one posted.
+    std::deque<std::function<void()>> posted_;
     int nextHotkeyId_ = 1;
     Win32OverlayWindow overlayWindow_;
     bool running_ = false;

@@ -2406,6 +2406,17 @@ pinned view handed focus to whatever had it when the pinned view came
 up. Each fault was reproduced on the real desktop before the change and
 gone after it (`docs/OVERLAY_STATES.md`, section 7).
 
+**Transitions happen between frames.** Two requests arrive inside a
+frame - a notice's message has faded, and the input options HUD asks
+for a restart - and a committed setting usually does too. Each is
+posted (`IPlatformHost::Post`) and carried out after the frame, before
+the next: Win32 queues it and posts the host window a message, which the
+loop dispatches before it draws. The notice used to hide itself, and the
+restart hide and show the window, from inside the frame callback, on the
+reasoning that the renderer ends the frame whatever happened in it - true,
+but something every change to the renderer had to keep true. The
+settings file is still written in the frame, where a failure is said.
+
 **View-only draws only now and then.** Its picture does not change by
 itself, and with pinned snippets it can sit over a game for hours, where
 drawing at the refresh rate cost 2% of a core. The overlay tells the
