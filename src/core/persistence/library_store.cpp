@@ -429,7 +429,7 @@ LibraryStore::OpenResult LibraryStore::Open() {
     return *openResult_;
 }
 
-bool LibraryStore::Ready() { return Open() == OpenResult::Opened && !broken_ && db_ != nullptr; }
+bool LibraryStore::Ready() { return Open() == OpenResult::Opened && db_ != nullptr; }
 
 LibraryStore::OpenResult LibraryStore::TryOpen() {
     std::error_code ec;
@@ -630,10 +630,15 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
     int rc = Exec(db_, "BEGIN") ? read() : sqlite3_extended_errcode(db_);
     Exec(db_, "COMMIT");
     if (rc != SQLITE_OK) {
+        // Damage partway is what damage at the open is. Anything else - the
+        // file held past the busy timeout, a read that failed - leaves a
+        // library this store could not read, and not a first run: nothing
+        // is read from it or written over it.
         if (IsDamage(rc)) {
             openResult_ = SetAsideAndStartOver();
         } else {
-            broken_ = true;
+            Close();
+            openResult_ = OpenResult::Unreadable;
         }
         return std::nullopt;
     }

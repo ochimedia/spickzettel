@@ -47,14 +47,52 @@ bool TrayController::Initialize() {
     }
     // A library a newer build wrote is not this one's to open: every row
     // it saved back would lose what the newer build put there. Nor is one
-    // that is there and cannot be read: a start over it would save an empty
-    // library where it was. Refused before the tray icon, like a second
+    // that is there and cannot be read, at the open or partway through the
+    // load: a start over it would begin an empty library where it was, and
+    // greet it as a first run. Refused before the tray icon, like a second
     // copy, and with a message of its own - see RefusedANewerLibrary.
+    //
+    // Empty path means "this host has nowhere to persist to" (e.g. a
+    // FakePlatformHost in a test that hasn't opted in) - leave the
+    // session without a library store entirely: nothing is written, and
+    // everything else works the same.
+    bool freshInstall = false;
     if (!host_.GetLibraryPath().empty()) {
+        // Load opens the file first; what either found is Open's to say.
+        std::optional<CanvasManagerSnapshot> snapshot = libraryStore_.Load();
         if (const auto opened = libraryStore_.Open(); opened != persistence::LibraryStore::OpenResult::Opened) {
             libraryRefusal_ = opened;
             return false;
         }
+        session_.SetLibraryStore(&libraryStore_);
+        if (snapshot.has_value()) {
+            session_.ImportLibrary(std::move(*snapshot));
+            // The retention period: only here, at startup, rather than on a
+            // clock as well - an instance left running for days keeps what
+            // it has until it is next started, which is soon enough.
+            if (settings_.Stored().purgeDeleted && !skipRetentionThisStart_) {
+                const int64_t day = 24 * 60 * 60;
+                const size_t erased = session_.EraseDeletedBefore(static_cast<int64_t>(std::time(nullptr)) -
+                                                                  settings_.Stored().purgeDeletedAfterDays * day);
+                overlayApp_.SayDeletedForGoodAtStart(erased, settings_.Stored().purgeDeletedAfterDays);
+            }
+        } else {
+            // Nothing to load: a genuinely first run. Distinct from a
+            // library someone deliberately emptied, which loads fine as an
+            // empty one - that person has already met the app and shouldn't
+            // be greeted again. Load() also returns nothing for a file it
+            // set aside, where showing the welcome note is the right call
+            // anyway. What the app starts with - a folder and a canvas - is
+            // written now, for every command after to write into.
+            freshInstall = true;
+            session_.WriteWholeLibrary();
+        }
+        // No eager display-size reconciliation here anymore - OverlayApp::OnFrame
+        // now does that live, every frame, against ImGui's own DisplaySize (see
+        // CanvasManager::SyncItemsToDisplaySize's own doc comment). Items
+        // simply sit at their last-saved rect until the overlay is first shown
+        // and a frame actually renders, which is also the first moment they'd
+        // ever be visible.
     }
     if (!host_.ShowTrayIcon()) {
         return false;
@@ -105,43 +143,6 @@ bool TrayController::Initialize() {
     overlayApp_.SetDisplayListCallback([this] { return host_.ListDisplays(); });
     overlayApp_.SetNoticeFinishedCallback([this] { host_.Post([this] { Request(OverlayRequest::NoticeFaded); }); });
     overlayApp_.SetAppCommandCallback([this](CommandId id) { RunAppCommand(id); });
-
-    // Empty path means "this host has nowhere to persist to" (e.g. a
-    // FakePlatformHost in a test that hasn't opted in) - leave the
-    // session without a library store entirely: nothing is written, and
-    // everything else works the same.
-    bool freshInstall = false;
-    if (!host_.GetLibraryPath().empty()) {
-        session_.SetLibraryStore(&libraryStore_);
-        if (std::optional<CanvasManagerSnapshot> snapshot = libraryStore_.Load()) {
-            session_.ImportLibrary(std::move(*snapshot));
-            // The retention period: only here, at startup, rather than on a
-            // clock as well - an instance left running for days keeps what
-            // it has until it is next started, which is soon enough.
-            if (settings_.Stored().purgeDeleted && !skipRetentionThisStart_) {
-                const int64_t day = 24 * 60 * 60;
-                const size_t erased = session_.EraseDeletedBefore(static_cast<int64_t>(std::time(nullptr)) -
-                                                                  settings_.Stored().purgeDeletedAfterDays * day);
-                overlayApp_.SayDeletedForGoodAtStart(erased, settings_.Stored().purgeDeletedAfterDays);
-            }
-        } else {
-            // Nothing to load: a genuinely first run. Distinct from a
-            // library someone deliberately emptied, which loads fine as an
-            // empty one - that person has already met the app and shouldn't
-            // be greeted again. Load() also returns nothing for a file it
-            // set aside, where showing the welcome note is the right call
-            // anyway. What the app starts with - a folder and a canvas - is
-            // written now, for every command after to write into.
-            freshInstall = true;
-            session_.WriteWholeLibrary();
-        }
-        // No eager display-size reconciliation here anymore - OverlayApp::OnFrame
-        // now does that live, every frame, against ImGui's own DisplaySize (see
-        // CanvasManager::SyncItemsToDisplaySize's own doc comment). Items
-        // simply sit at their last-saved rect until the overlay is first shown
-        // and a frame actually renders, which is also the first moment they'd
-        // ever be visible.
-    }
 
     // A first run shows the overlay rather than waiting to be summoned.
     // Every other start is a deliberate hotkey press, but on a first run

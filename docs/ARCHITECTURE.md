@@ -693,7 +693,11 @@ A file that is not a library this store can read - not a SQLite
 database, a damaged one, or someone else's - is set aside beside it as
 `library-unreadable-<time>.db`, with its journal, and a new library
 starts in its place. The app says so once, naming the file kept. A load
-that finds damage partway does the same.
+that finds damage partway does the same, and one that fails partway for
+any other reason - the file held past the wait below, a read error - is
+an unreadable file, refused before the tray icon. It used to leave a
+store that would write nothing, which the start took for a first run: the
+welcome over an empty library, and every change refused.
 
 Statements wait 250 ms for a lock another program holds - short,
 because writes run on the render thread, and a command whose write gives

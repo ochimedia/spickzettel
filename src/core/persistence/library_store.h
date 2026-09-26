@@ -75,7 +75,8 @@ public:
         // The file is there and could not be opened or read: another
         // program holding it, or not ours to read. Nothing is read or
         // written, so that a start over it cannot write an empty library
-        // where it was.
+        // where it was. What Open answers after a Load that could not read
+        // the library through, for any reason but damage, as well.
         Unreadable,
     };
     OpenResult Open();
@@ -87,11 +88,13 @@ public:
     const std::filesystem::path& SetAsideAs() const { return setAsideAs_; }
 
     // The library, or nullopt when there is none to load: the file was made
-    // by this Open (a first run), or could not be read. A library someone
-    // emptied loads as an empty snapshot, which is not a first run. A value
-    // a row carries that cannot be used - a coordinate that is not finite,
-    // a stroke blob cut short - is repaired rather than refused, and the
-    // repaired row is written back as it now reads.
+    // by this Open (a first run), or could not be read - and then Open says
+    // Unreadable from here on, so that the caller can tell the two apart. A
+    // damaged one is set aside and a new one started, as Open does. A
+    // library someone emptied loads as an empty snapshot, which is not a
+    // first run. A value a row carries that cannot be used - a coordinate
+    // that is not finite, a stroke blob cut short - is repaired rather than
+    // refused, and the repaired row is written back as it now reads.
     std::optional<CanvasManagerSnapshot> Load();
 
     // Pictures written with a change: a screenshot's pixels (width*height*4
@@ -138,8 +141,8 @@ private:
     // statement that fails.
     bool WriteRows(const LibraryView& view, const LibraryChanges& changes, const PictureWrites& pictures);
 
-    // Open, and whether the store may be used - opened, not a newer
-    // library, and not broken by a Load that failed.
+    // Open, and whether the store may be used - opened, and neither a
+    // newer library nor one that could not be read.
     bool Ready();
     OpenResult TryOpen();
     bool CreateSchema();
@@ -155,9 +158,6 @@ private:
     std::optional<OpenResult> openResult_;
     // Whether this Open made the schema, which makes Load a first run.
     bool createdByOpen_ = false;
-    // A Load that failed partway: the file is not what this store knows it
-    // to be, so nothing is written over it.
-    bool broken_ = false;
 };
 
 }  // namespace sz::core::persistence

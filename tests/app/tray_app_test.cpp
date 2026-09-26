@@ -717,6 +717,30 @@ TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryFileItCannotRead)
     EXPECT_FALSE(host.trayIconShown);
 }
 
+// A library that opens and then cannot be read through - here a table it
+// reads is missing - refuses the start as one the open could not read
+// does, before the tray icon. Taken for a first run, it started on an
+// empty library with every write refused, and the welcome over it.
+TEST_F(TrayControllerPersistenceTest, InitializeRefusesALibraryItCouldNotReadThrough) {
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(CanvasManager().ExportSnapshot()));
+    {
+        sqlite3* db = nullptr;
+        const std::u8string name = library_.u8string();
+        sqlite3_open(std::string(name.begin(), name.end()).c_str(), &db);
+        ASSERT_EQ(sqlite3_exec(db, "DROP TABLE meta", nullptr, nullptr, nullptr), SQLITE_OK);
+        sqlite3_close(db);
+    }
+    const std::string before = ReadFile(library_);
+
+    test::FakePlatformHost host;
+    host.libraryPath = library_;
+    TrayController controller(host, DefaultConfig());
+    EXPECT_FALSE(controller.Initialize());
+    EXPECT_TRUE(controller.RefusedAnUnreadableLibrary());
+    EXPECT_FALSE(host.trayIconShown);
+    EXPECT_EQ(ReadFile(library_), before);
+}
+
 // A file that is not a library at all is kept beside it, and the app
 // starts on an empty one - with the caller told where the file went.
 TEST_F(TrayControllerPersistenceTest, InitializeSetsAsideAFileThatIsNotALibrary) {

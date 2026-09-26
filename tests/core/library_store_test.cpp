@@ -532,6 +532,23 @@ TEST_F(LibraryStoreTest, AFileAnotherProgramHoldsIsUnreadable) {
     EXPECT_TRUE(LibraryStore(file_).Load().has_value());
 }
 
+// Opened, and then held by another program before it could be read: not a
+// first run, which would start an empty library over it, but a file that
+// cannot be read - and nothing is written over it afterwards, even once it
+// could be.
+TEST_F(LibraryStoreTest, ALibraryThatCannotBeReadThroughIsUnreadableRatherThanAFirstRun) {
+    ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
+    LibraryStore store(file_);
+    ASSERT_EQ(store.Open(), LibraryStore::OpenResult::Opened);
+    RawConnection other(file_);
+    ASSERT_TRUE(other.Exec("BEGIN EXCLUSIVE"));
+    EXPECT_FALSE(store.Load().has_value());
+    EXPECT_EQ(store.Open(), LibraryStore::OpenResult::Unreadable);
+    other.Exec("ROLLBACK");
+    EXPECT_FALSE(store.Save(CanvasManagerSnapshot{}));
+    EXPECT_EQ(other.Int("SELECT count(*) FROM items"), 2) << "untouched";
+}
+
 // A newer build's library is neither read nor written.
 TEST_F(LibraryStoreTest, ALibraryANewerVersionWroteIsNeitherReadNorWritten) {
     ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
