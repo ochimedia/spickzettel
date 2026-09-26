@@ -20,7 +20,6 @@ add_library(sz_ui STATIC
     overlay_app.cpp
     overlay_app_input.cpp
     overlay_app_items.cpp
-    overlay_app_popovers.cpp
     overlay_app_rasters.cpp
     selection_layout.cpp
     settings_widgets.cpp
@@ -30,6 +29,7 @@ add_library(sz_ui STATIC
     view/cheat_sheet.cpp
     view/messages.cpp
     view/overview_panel.cpp
+    view/pointer.cpp
     view/popups.cpp
     view/screen_chrome.cpp
     view/settings_page.cpp

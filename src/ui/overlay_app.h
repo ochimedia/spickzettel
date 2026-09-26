@@ -18,6 +18,7 @@
 #include "ui/view/cheat_sheet.h"
 #include "ui/view/messages.h"
 #include "ui/view/overview_panel.h"
+#include "ui/view/pointer.h"
 #include "ui/view/popups.h"
 #include "ui/view/screen_chrome.h"
 #include "ui/view/settings_page.h"
@@ -363,7 +364,7 @@ private:
         return panel != nullptr && panel->Kind() == kind;
     }
     void ClosePanel(PanelKind kind) override;
-    void ToolSized(bool pen) override;
+    void ToolSized(bool pen) override { pointer_.ToolSized(pen); }
     bool InputOptionsKey(const Event& event) override { return chrome_.HandleKey(event, !IsViewOnly()); }
     void LetGoOfWidget() override { popups_.LetGoOfWidget(); }
     bool PopupOpen() const override;
@@ -435,30 +436,6 @@ private:
     void OfferLifecycle(Lifecycle which);
 
     void RenderCanvasLayer(float displayW, float displayH);  // live layer + armed-item overlay + debug text
-    // Which pointer the canvas itself asks for, from what is under the mouse
-    // and what the tools would do there. Says nothing about what ImGui wants
-    // over its own windows and widgets; ApplyPointerShape settles that.
-    platform::CursorShape WantedPointerShape() const;
-    // Hands WantedPointerShape() to the platform window, or Default when
-    // something else owns the cursor this frame. Called once per frame, after
-    // the UI has been submitted (so ImGui's own cursor request for this frame
-    // is known) and before DrawSoftwareCursor. Only actually pushes when the
-    // answer has moved - see its definition for what "moved" has to mean.
-    void ApplyPointerShape();
-    // What the last push asked for. nullopt means "nothing known" - a fresh
-    // start, or the overlay having just been shown (see OnOverlayShown).
-    std::optional<platform::CursorShape> appliedPointerShape_;
-    // Two frames of ImGui's wanted cursor, not one, and the pointer position.
-    // See ApplyPointerShape for why the history has to be two deep - a
-    // one-frame view misses the frame ImGui's backend actually installs on.
-    ImGuiMouseCursor lastImGuiCursor_ = ImGuiMouseCursor_Arrow;
-    ImGuiMouseCursor previousImGuiCursor_ = ImGuiMouseCursor_Arrow;
-    float lastPointerX_ = 0.0f;
-    float lastPointerY_ = 0.0f;
-    // The overlay's own pointer, drawn while the mouse grab is taking input
-    // away from a game - which also means the OS cursor is hidden and left
-    // wherever that game is holding it. See the definition.
-    void DrawSoftwareCursor() const;
     // Every item on the current canvas, back to front, into one layer,
     // then the selection's outline, handles and bar over all of them, plus
     // the note editor and the dock above it. Decides once, from
@@ -500,23 +477,6 @@ private:
     // drag-resize, no Overview. See DrawItemContent (in the .cpp)
     // for the fill/stroke drawing shared with RenderItems.
     void RenderViewOnly(float displayW, float displayH);
-    // Beside the pointer while Draw or Erase is in hand over a snippet and
-    // a modifier changes what a press would make - a line or a rectangle -
-    // a small glyph of it, so the modifiers are not a secret.
-    void RenderToolModifierBadge();
-
-    void RenderRegionCaptureOverlay();
-    // RectEraser's own drag-preview overlay (see StrokeInFlight) -
-    // same visual language as RenderRegionCaptureOverlay (a translucent
-    // fill plus an outline and live dimensions), kept as its own function
-    // rather than sharing that one since the two track independent state
-    // and are never active at the same time for unrelated reasons (one's
-    // gated on the creation gesture, the other on the stroke gesture).
-    void RenderRectEraserOverlay();
-    // The mouse wheel's own feedback: a dot the exact size the active tool
-    // will draw (or erase) at, under the cursor, plus the number. See
-    // sizePreviewExpireAtSeconds_ for why it's transient.
-    void RenderBrushSizePreview();
 public:
     // A hotkey row armed, waiting for the combo the user wants, and the rest
     // of what a test asks of the Settings page's key rows - see SettingsPage.
@@ -646,7 +606,6 @@ private:
     // faded, and the color the chooser was left on when it closes (see
     // Popups) - and both when the overlay settles, before either could come
     // (see SettleForPersistence and SetMode).
-    void KeepPenWidth();
     void KeepPen();
 
 
@@ -766,10 +725,6 @@ private:
     std::function<void()> noticeFinishedCallback_;
     // See SetHotkeyChangeCallback's own doc comment.
     std::function<bool(HotkeySlot, platform::KeyCombo)> hotkeyChangeCallback_;
-    // Whether the wheel has changed the pen's width since it was last
-    // saved: it is kept as AppConfig::strokeWidth once the size preview has
-    // faded, so a burst of notches is one write (see KeepPenWidth).
-    bool drawWidthDirty_ = false;
 
     // The pacing last handed to the window - see OnFrame, which decides it
     // each frame and passes it on only when it changes.
@@ -781,20 +736,6 @@ private:
     // The interface scale the style was last built for, in percent - see
     // OnFrame.
     int appliedUiScalePercent_ = 0;
-
-    // Transient "this is how big it is now" preview at the cursor, armed
-    // by a mouse-wheel size change and expiring on its own shortly after
-    // - ImGui::GetTime() past this means nothing to draw (see
-    // RenderBrushSizePreview). Deliberately transient rather than a
-    // permanent brush-outline cursor: this overlay sits on top of a game,
-    // where a ring that follows the pointer forever is exactly the sort of
-    // always-there element that makes an overlay feel busy. No
-    // companion size/tool field - the renderer reads the live
-    // editor's tool and its size, so a burst of wheel steps shows
-    // the current value throughout rather than a snapshot of the first.
-    double sizePreviewExpireAtSeconds_ = 0.0;
-
-
 
     // See RequestWelcomeNote/PlaceWelcomeNotes. Cleared the moment the notes
     // are placed, so they can never be placed twice.
@@ -810,6 +751,7 @@ private:
     CanvasBar canvasBar_{session_, settings_, editor_, *this};
     ScreenChrome chrome_{session_, settings_, *this};
     Messages messages_{session_};
+    Pointer pointer_{settings_, editor_, *this};
 };
 
 }  // namespace sz::ui
