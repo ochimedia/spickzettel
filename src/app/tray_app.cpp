@@ -84,17 +84,11 @@ bool TrayController::Initialize() {
             unregisteredHotkeys_.emplace_back(slot, combo);
         }
     };
-    const auto hotkey = [this](HotkeySlot slot) { return [this, slot]() { OnHotkey(slot); }; };
-    editHotkeyId_ = host_.RegisterGlobalHotkey(settings_.Stored().hotkeyEditMode, hotkey(HotkeySlot::EditMode));
-    note(HotkeySlot::EditMode, settings_.Stored().hotkeyEditMode, editHotkeyId_);
-    viewHotkeyId_ = host_.RegisterGlobalHotkey(settings_.Stored().hotkeyViewMode, hotkey(HotkeySlot::ViewMode));
-    note(HotkeySlot::ViewMode, settings_.Stored().hotkeyViewMode, viewHotkeyId_);
-    quickCaptureHotkeyId_ =
-        host_.RegisterGlobalHotkey(settings_.Stored().hotkeyQuickCapture, hotkey(HotkeySlot::QuickCapture));
-    note(HotkeySlot::QuickCapture, settings_.Stored().hotkeyQuickCapture, quickCaptureHotkeyId_);
-    silentCaptureHotkeyId_ =
-        host_.RegisterGlobalHotkey(settings_.Stored().hotkeySilentCapture, hotkey(HotkeySlot::SilentCapture));
-    note(HotkeySlot::SilentCapture, settings_.Stored().hotkeySilentCapture, silentCaptureHotkeyId_);
+    for (const HotkeySlot slot : kAllHotkeySlots) {
+        const platform::KeyCombo& combo = settings_.Get(HotkeySetting(slot));
+        HotkeyId(slot) = host_.RegisterGlobalHotkey(combo, HotkeyCallback(slot));
+        note(slot, combo, HotkeyId(slot));
+    }
 
     session_.AttachWindow(&host_.GetOverlayWindow());
     overlayApp_.AttachTo(host_.GetOverlayWindow());
@@ -546,45 +540,18 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     // Disallowing a *plain letter/digit* with no modifier (as opposed to a
     // function key, which has no other use bound to it) may still be worth
     // adding later.
-    // One row per slot rather than a case per slot naming the others by
-    // hand: with four of them, "everything except me" written out three
-    // times each was four chances to forget one, and the collision check
-    // below wants that set anyway.
-    struct HotkeyRow {
-        HotkeySlot slot;
-        int* id;
-        platform::KeyCombo* configField;
-        platform::HotkeyCallback callback;
-    };
-    const HotkeyRow rows[] = {
-        {HotkeySlot::EditMode, &editHotkeyId_, &settings_.Mutable().hotkeyEditMode,
-         [this] { OnHotkey(HotkeySlot::EditMode); }},
-        {HotkeySlot::ViewMode, &viewHotkeyId_, &settings_.Mutable().hotkeyViewMode,
-         [this] { OnHotkey(HotkeySlot::ViewMode); }},
-        {HotkeySlot::QuickCapture, &quickCaptureHotkeyId_, &settings_.Mutable().hotkeyQuickCapture,
-         [this] { OnHotkey(HotkeySlot::QuickCapture); }},
-        {HotkeySlot::SilentCapture, &silentCaptureHotkeyId_, &settings_.Mutable().hotkeySilentCapture,
-         [this] { OnHotkey(HotkeySlot::SilentCapture); }},
-    };
-
-    int* hotkeyId = nullptr;
-    platform::KeyCombo* configField = nullptr;
-    platform::HotkeyCallback callback;
-    for (const HotkeyRow& row : rows) {
-        if (row.slot != slot) {
-            continue;
-        }
-        hotkeyId = row.id;
-        configField = row.configField;
-        callback = row.callback;
+    const GlobalSetting<HotkeyRule>& row = HotkeySetting(slot);
+    // What the row's rule refuses - a mouse button - is not offered to the
+    // OS at all.
+    const std::optional<platform::KeyCombo> held = Hold(row.rule, combo);
+    if (!held) {
+        return false;
     }
-    if (hotkeyId == nullptr) {
-        return false;  // unreachable: every slot has a row
-    }
+    combo = *held;
 
     // No actual change - unless the hotkey has no registration: one another
     // application held at the start is picked again to try again.
-    if (combo == *configField && (*hotkeyId != 0 || !combo.IsValid())) {
+    if (combo == settings_.Get(row) && (HotkeyId(slot) != 0 || !combo.IsValid())) {
         return true;
     }
     // A combo one of the app's own other hotkeys has moves over: that one
@@ -598,33 +565,32 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     // is unregistered here first rather than left to collide. An unset
     // combination is exempt - it registers nothing, so it can collide with
     // nothing.
-    const HotkeyRow* taken = nullptr;
-    for (const HotkeyRow& row : rows) {
-        if (row.slot != slot && combo.IsValid() && combo == *row.configField) {
-            taken = &row;
+    std::optional<HotkeySlot> taken;
+    for (const HotkeySlot other : kAllHotkeySlots) {
+        if (other != slot && combo.IsValid() && combo == settings_.Get(HotkeySetting(other))) {
+            taken = other;
         }
     }
-    if (taken != nullptr) {
-        host_.UnregisterGlobalHotkey(*taken->id);
-        *taken->id = 0;
+    if (taken.has_value()) {
+        host_.UnregisterGlobalHotkey(HotkeyId(*taken));
+        HotkeyId(*taken) = 0;
     }
 
-    const int newId = host_.RegisterGlobalHotkey(combo, std::move(callback));
+    const int newId = host_.RegisterGlobalHotkey(combo, HotkeyCallback(slot));
     if (newId == 0) {
         // Rejected by the OS (e.g. already taken by another app) - the old
         // hotkey stays live, and one taken from another row goes back.
-        if (taken != nullptr) {
-            *taken->id = host_.RegisterGlobalHotkey(*taken->configField, taken->callback);
+        if (taken.has_value()) {
+            HotkeyId(*taken) = host_.RegisterGlobalHotkey(settings_.Get(HotkeySetting(*taken)), HotkeyCallback(*taken));
         }
         return false;
     }
-    if (taken != nullptr) {
-        *taken->configField = platform::KeyCombo{};
-    }
-    host_.UnregisterGlobalHotkey(*hotkeyId);
-    *hotkeyId = newId;
-    *configField = combo;
-    PersistConfig();
+    host_.UnregisterGlobalHotkey(HotkeyId(slot));
+    HotkeyId(slot) = newId;
+    // Stored only now that it is registered, since a combination the OS
+    // refused must not be: an edit like any other, whose repair unbinds
+    // the hotkey it was taken from and whose commit writes the file.
+    settings_.Set(row, combo);
     return true;
 }
 

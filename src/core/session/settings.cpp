@@ -7,6 +7,20 @@
 
 namespace sz::core {
 
+const GlobalSetting<HotkeyRule>& HotkeySetting(HotkeySlot slot) {
+    switch (slot) {
+        case HotkeySlot::EditMode:
+            return setting::kHotkeyEditMode;
+        case HotkeySlot::ViewMode:
+            return setting::kHotkeyViewMode;
+        case HotkeySlot::QuickCapture:
+            return setting::kHotkeyQuickCapture;
+        case HotkeySlot::SilentCapture:
+            return setting::kHotkeySilentCapture;
+    }
+    return setting::kHotkeyEditMode;  // unreachable: the switch names every slot
+}
+
 Settings::Settings(AppConfig stored) : stored_(std::move(stored)) { Resolve(); }
 
 void Settings::Resolve() {
@@ -41,10 +55,10 @@ void Settings::RepairEdit(const GlobalSetting<HotkeyRule>& row, const platform::
     if (!combo.IsValid()) {
         return;  // unbound registers nothing, so it collides with nothing
     }
-    for (const GlobalSetting<HotkeyRule>* hotkey : {&setting::kHotkeyEditMode, &setting::kHotkeyViewMode,
-                                                    &setting::kHotkeyQuickCapture, &setting::kHotkeySilentCapture}) {
-        if (hotkey != &row && *hotkey->at(stored_) == combo) {
-            *hotkey->at(stored_) = platform::KeyCombo{};
+    for (const HotkeySlot slot : kAllHotkeySlots) {
+        const GlobalSetting<HotkeyRule>& hotkey = HotkeySetting(slot);
+        if (&hotkey != &row && *hotkey.at(stored_) == combo) {
+            *hotkey.at(stored_) = platform::KeyCombo{};
         }
     }
 }

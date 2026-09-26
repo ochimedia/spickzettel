@@ -2613,12 +2613,10 @@ void OverlayApp::RenderSettingsHotkeys(bool& anyChanged) {
     BeginSettingsScope(globalBox, SettingsScope::Global);
     SettingsHeading("hotkeyssummoningheading", strings::kHotkeysSummoningHeading,
                      strings::kHotkeysSummoningHelp);
-    RenderHotkeyEditor("hkedit", strings::kHotkeysEditMode, HotkeySlot::EditMode, Cfg().hotkeyEditMode, buttonX);
-    RenderHotkeyEditor("hkview", strings::kHotkeysViewMode, HotkeySlot::ViewMode, Cfg().hotkeyViewMode, buttonX);
-    RenderHotkeyEditor("hkquick", strings::kHotkeysQuickCapture, HotkeySlot::QuickCapture, Cfg().hotkeyQuickCapture,
-                       buttonX);
-    RenderHotkeyEditor("hksilent", strings::kHotkeysSilentCapture, HotkeySlot::SilentCapture,
-                       Cfg().hotkeySilentCapture, buttonX);
+    RenderHotkeyEditor("hkedit", strings::kHotkeysEditMode, HotkeySlot::EditMode, buttonX);
+    RenderHotkeyEditor("hkview", strings::kHotkeysViewMode, HotkeySlot::ViewMode, buttonX);
+    RenderHotkeyEditor("hkquick", strings::kHotkeysQuickCapture, HotkeySlot::QuickCapture, buttonX);
+    RenderHotkeyEditor("hksilent", strings::kHotkeysSilentCapture, HotkeySlot::SilentCapture, buttonX);
     anyChanged |= CheckboxWithHelp("hotkeyssaywhenhidden", strings::kHotkeysSayWhenHidden, &Cfg().showToastsWhileHidden,
         strings::kHotkeysSayWhenHiddenHelp);
     EndSettingsScope(globalBox);
@@ -2842,13 +2840,10 @@ void OverlayApp::RenderOverviewAboutPanel() {
     ImGui::PopTextWrapPos();
 }
 
-// `current` is passed by value, fresh every call, rather than read off
-// `this` directly - so a rejected edit (see TryChangeHotkey) has nothing
-// to undo: the next frame's `current` is still whatever was last actually
-// committed, and the widgets below just render that again, snapping the
-// UI back to it on their own.
-void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, platform::KeyCombo current,
-                                    float buttonX) {
+// What is shown is what is stored, read fresh every frame - so a rejected
+// edit (see TryChangeHotkey), which stores nothing, has nothing to undo.
+void OverlayApp::RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, float buttonX) {
+    const platform::KeyCombo current = settings_.Get(HotkeySetting(slot));
     ImGui::PushID(id);
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label);
@@ -2965,28 +2960,14 @@ void OverlayApp::BeginRenaming(std::optional<FolderId> folder, std::optional<Can
 // TrayController, which OverlayApp has no direct access to - can tell you
 // about.
 bool OverlayApp::TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
-    platform::KeyCombo* field = nullptr;
-    switch (slot) {
-        case HotkeySlot::EditMode:
-            field = &Cfg().hotkeyEditMode;
-            break;
-        case HotkeySlot::ViewMode:
-            field = &Cfg().hotkeyViewMode;
-            break;
-        case HotkeySlot::QuickCapture:
-            field = &Cfg().hotkeyQuickCapture;
-            break;
-        case HotkeySlot::SilentCapture:
-            field = &Cfg().hotkeySilentCapture;
-            break;
-    }
     // Offered even when unchanged: the combo it already has may be one
-    // that never registered, and picking it again is how to try again.
-    if (hotkeyChangeCallback_ && !hotkeyChangeCallback_(slot, combo)) {
-        return false;
+    // that never registered, and picking it again is how to try again. The
+    // callback stores it once it is registered; with nothing to register
+    // with, it is stored here.
+    if (hotkeyChangeCallback_) {
+        return hotkeyChangeCallback_(slot, combo);
     }
-    *field = combo;
-    return true;
+    return settings_.Set(HotkeySetting(slot), combo);
 }
 
 void OverlayApp::AskToDelete(ConfirmDeleteTarget target) {

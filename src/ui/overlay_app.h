@@ -345,14 +345,13 @@ public:
     // hotkey editor whenever the user picks a new combo for one of the
     // global hotkeys. Unlike every other setting, a hotkey has a real way to
     // fail that only the OS can tell you about (the combo's already taken
-    // by another app) - so, unlike Settings::Commit's "tell the host after
-    // the fact" shape, this is "ask the host first": the callback itself
+    // by another app) - so, unlike the commit's "tell the host after the
+    // fact" shape, this is "ask the host first": the callback itself
     // attempts the actual RegisterGlobalHotkey/UnregisterGlobalHotkey swap,
-    // stores the combo in the settings and persists them on success, and
-    // returns whether it took - see TryChangeHotkey, the Settings panel's
-    // only caller of this. Left null (e.g. a test), every requested change
-    // is written into the settings unconditionally - there's no real OS
-    // hotkey to fail against.
+    // makes the edit (Settings::Set) on success, and returns whether it
+    // took - see TryChangeHotkey, the Settings panel's only caller of this.
+    // Left null (e.g. a test), every requested change is made at once -
+    // there's no real OS hotkey to fail against.
     void SetHotkeyChangeCallback(std::function<bool(HotkeySlot, platform::KeyCombo)> callback) {
         hotkeyChangeCallback_ = std::move(callback);
     }
@@ -751,16 +750,15 @@ private:
     // captured combo takes effect.
     // `buttonX` is where the key's button starts, the same for every row
     // of the section - see KeyButtonColumn.
-    void RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, platform::KeyCombo current,
-                            float buttonX);
-    // Offers `combo` to hotkeyChangeCallback_ (see its own doc comment)
-    // before it is stored as the matching hotkey in the settings. Returns
-    // false (and leaves that hotkey untouched) if the callback rejects it -
-    // a real OS-level conflict - so RenderHotkeyEditor's widgets can show
-    // the edit didn't take rather than silently keeping a value nothing
-    // downstream actually agreed to. A collision with one of this app's
-    // own other hotkeys is not a rejection: that one is unbound instead
-    // (see TrayController::ChangeHotkey).
+    void RenderHotkeyEditor(const char* id, const char* label, HotkeySlot slot, float buttonX);
+    // Offers `combo` to hotkeyChangeCallback_ (see its own doc comment),
+    // which stores it once the OS has registered it. Returns false (and
+    // the hotkey is left untouched) if the callback rejects it - a real
+    // OS-level conflict - so RenderHotkeyEditor's widgets can show the edit
+    // didn't take rather than silently keeping a value nothing downstream
+    // actually agreed to. A collision with one of this app's own other
+    // hotkeys is not a rejection: that one is unbound instead (see
+    // TrayController::ChangeHotkey).
     bool TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo);
 
 public:

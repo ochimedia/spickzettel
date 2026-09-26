@@ -242,8 +242,10 @@ TEST(TrayControllerTest, ChangeHotkeyLeavesTheOldHotkeyLiveWhenRegistrationFails
     EXPECT_FALSE(controller.ChangeHotkey(HotkeySlot::QuickCapture, platform::KeyCombo{true, true, false, 'Z'}));
 
     // The old registration is still there and still works - a rejected
-    // edit must never leave the app with a broken/missing hotkey.
+    // edit must never leave the app with a broken/missing hotkey - and
+    // nothing was stored.
     EXPECT_EQ(FindHotkeyId(host, config.hotkeyQuickCapture), oldQuickCaptureId);
+    EXPECT_EQ(controller.GetSettings().Stored().hotkeyQuickCapture, config.hotkeyQuickCapture);
     host.registerHotkeySucceeds = true;  // restore, so TriggerHotkey below isn't itself affected
     host.TriggerHotkey(oldQuickCaptureId);
     EXPECT_TRUE(host.overlayWindow.IsVisible());
@@ -262,6 +264,21 @@ TEST(TrayControllerTest, ChangeHotkeyAllowsAComboWithNoModifierKey) {
     const platform::KeyCombo noModifierCombo{false, false, false, 'Z'};
     EXPECT_TRUE(controller.ChangeHotkey(HotkeySlot::EditMode, noModifierCombo));
     EXPECT_NE(FindHotkeyId(host, noModifierCombo), 0);
+}
+
+// A mouse button is no global hotkey (the row's rule): refused before the
+// OS is asked, and nothing stored.
+TEST(TrayControllerTest, ChangeHotkeyRefusesAMouseButtonWithoutAskingTheOs) {
+    test::FakePlatformHost host;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    const size_t registrations = host.registeredCombos.size();
+
+    EXPECT_FALSE(controller.ChangeHotkey(HotkeySlot::EditMode,
+                                         platform::KeyCombo{false, false, false, platform::KeyCombo::kMiddleButton}));
+    EXPECT_EQ(host.registeredCombos.size(), registrations);
+    EXPECT_EQ(controller.GetSettings().Stored().hotkeyEditMode, config.hotkeyEditMode);
 }
 
 TEST(TrayControllerTest, ChangeHotkeyAllowsABareFunctionKey) {

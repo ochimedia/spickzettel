@@ -10,9 +10,18 @@
 #include "core/config/profile.h"
 #include "core/config/setting.h"
 #include "core/config/shortcut_action.h"
+#include "core/session/actions.h"
 #include "platform/platform_types.h"
 
 namespace sz::core {
+
+// Every summon hotkey, in the order they are registered and listed.
+inline constexpr HotkeySlot kAllHotkeySlots[] = {HotkeySlot::EditMode, HotkeySlot::ViewMode,
+                                                 HotkeySlot::QuickCapture, HotkeySlot::SilentCapture};
+// A summon hotkey's row in the catalog: the one table from a slot to where
+// its combination is stored, which the tray, the command table and the
+// Settings panel all go through.
+const GlobalSetting<HotkeyRule>& HotkeySetting(HotkeySlot slot);
 
 // The settings, as one object with one owner: what config.json holds, and
 // what that resolves to over whatever application the overlay is up over.

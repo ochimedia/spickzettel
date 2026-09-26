@@ -1,5 +1,8 @@
 #include "ui/interaction/command.h"
 
+#include "core/config/settings_catalog.h"
+#include "core/session/settings.h"
+
 namespace sz::ui {
 
 std::optional<CommandId> CommandForShortcut(core::ShortcutAction action) {
@@ -60,17 +63,7 @@ int ComboKeyForMouseButton(platform::MouseButton button) {
 }
 
 const platform::KeyCombo& HotkeyCombo(const core::AppConfig& config, core::HotkeySlot slot) {
-    switch (slot) {
-        case core::HotkeySlot::EditMode:
-            return config.hotkeyEditMode;
-        case core::HotkeySlot::ViewMode:
-            return config.hotkeyViewMode;
-        case core::HotkeySlot::QuickCapture:
-            return config.hotkeyQuickCapture;
-        case core::HotkeySlot::SilentCapture:
-            return config.hotkeySilentCapture;
-    }
-    return config.hotkeyEditMode;  // unreachable: the switch names every slot
+    return core::ValueIn(core::HotkeySetting(slot), config);
 }
 
 std::vector<platform::KeyCombo> KeysFor(CommandId id, const core::AppConfig& config,

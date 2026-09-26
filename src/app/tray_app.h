@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <iterator>
 #include <optional>
 
 #include "app/overlay_states.h"
@@ -124,9 +126,9 @@ public:
     // registration (e.g. already taken by another app). A combo one of
     // this app's own other hotkeys has is taken from it: that hotkey is
     // unregistered and left unbound. On success, the previous hotkey is
-    // unregistered, the stored hotkey and the live registration both move
-    // to `combo`, and the settings are persisted to disk immediately - so
-    // a caller never needs a separate "now save it" step.
+    // unregistered, and the combination is stored by an edit like any
+    // other setting's (Settings::Set) - whose repair unbinds the hotkey it
+    // was taken from, and whose commit writes the file.
     bool ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo);
 
 private:
@@ -279,13 +281,14 @@ private:
     // and on the GPU. The overlay is a view of it.
     Session session_;
     OverlayApp overlayApp_;
-    int editHotkeyId_ = 0;
-    int viewHotkeyId_ = 0;
-    int quickCaptureHotkeyId_ = 0;
-    // 0 when the silent-capture hotkey could not be registered, which -
-    // unlike the three above - is survivable: see
-    // AppConfig::hotkeySilentCapture for why this one alone is optional.
-    int silentCaptureHotkeyId_ = 0;
+    // Each summon hotkey's registration, by slot: 0 for one that is unbound
+    // or that another application holds (see UnregisteredHotkeys).
+    std::array<int, std::size(kAllHotkeySlots)> hotkeyIds_{};
+    int& HotkeyId(HotkeySlot slot) { return hotkeyIds_[static_cast<size_t>(slot)]; }
+    // What a summon hotkey does when pressed, for its registration.
+    platform::HotkeyCallback HotkeyCallback(HotkeySlot slot) {
+        return [this, slot] { OnHotkey(slot); };
+    }
 };
 
 }  // namespace sz::app
