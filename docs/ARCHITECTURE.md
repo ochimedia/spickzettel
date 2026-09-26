@@ -1624,8 +1624,8 @@ ImGui's.
 ### One gesture engine on the raw pipeline
 
 Every way a snippet is selected, moved or resized is one gesture on the
-left button, in `HandleItemGesture`, fed by the platform mouse callback
-rather than by frame-time polling. Starting a gesture is gated on
+left button, in `HandleItemGesture`, fed by the platform's input stream
+rather than by frame-time polling (see "Input, in order"). Starting a gesture is gated on
 `!io.WantCaptureMouse`, so a click on a panel is the panel's; a gesture
 in flight is consumed regardless, so straying over a panel mid-drag
 cannot hand the event to it. The engine is a start snapshot plus the
@@ -1660,8 +1660,8 @@ How one is ended early is the next section's.
 The selection bar floats over the selection's bounding box, or below it
 when there is no room, or inside its top edge for a fullscreen snippet.
 Its buttons fire on release over the same button, ImGui's own rule. The
-Properties popover opens through a request flag rather than
-`ImGui::OpenPopup` from the release: the raw callback runs during the
+Properties popover opens through the effect queue rather than
+`ImGui::OpenPopup` from the release: the input stream runs during the
 message pump, before that frame's `NewFrame`, where `OpenPopup` has no
 current window and dereferences an empty id stack.
 
@@ -1799,8 +1799,8 @@ under), or a global hotkey. The table is checked at compile time to hold
 one row per id, in order. No ImGui in it: what a command is and what
 reaches it are the app's words, not its widgets'.
 
-Every way in ends at `OverlayApp::Dispatch`: `HandleCommandKeys` for the
-keys, the three context menus (each row names its command), the selection
+Every way in ends at `OverlayApp::Dispatch`: `HandleCommandKey` for the
+keys and the mouse buttons a shortcut may be, the three context menus (each row names its command), the selection
 bar (`CommandForBarButton`), and the tray, whose hotkeys and "Show" menu
 entry dispatch through the overlay and are handed back to it to run
 (`SetAppCommandCallback`) - the tray alone knows the window and the modes,
@@ -1846,6 +1846,47 @@ Three behaviors changed with this, each toward one rule:
 Delete, Backspace, the arrows), outside what a global hotkey or a key
 editor accepts - Escape, Backspace and Delete are what unbind a row
 there.
+
+### Input, in order
+
+The window hands the app one stream of input
+(`IOverlayWindow::SetInputCallback`): presses, moves and releases of all
+five buttons, the wheel, keys and modifier changes, each with its time
+and the modifiers held, in the order they happened - section 3 of
+`docs/INTERACTIONS.md`, whose phase 2 this is. Before, the pointer came
+from the message pump while keys, the wheel and the modifiers were read
+from ImGui at the next frame, so a key pressed between two moves of a
+drag was seen after both: the drag had gone on to the second move by the
+time the key ended it. Now each event is handled as it arrives, by the
+handlers that were there - `OnMouse` for the two gesture buttons,
+`HandleCommandKey` for keys and the other buttons, `HandleMouseWheel`.
+
+- The modifiers are the key state or'd with the input grab's record,
+  the two sources the frame already gave ImGui (see RenderFrame), and a
+  change no key message carried - no focus, no keyboard grab - is told
+  once a frame. The handlers read the stream's (`OverlayApp::held_`),
+  not ImGui's, which are last frame's.
+- A key's repeat is the window's to count, since the grab posts every
+  repeat as a fresh press. Undo and the arrows now repeat at the
+  system's keyboard rate rather than ImGui's.
+- A hidden window hands on nothing. Messages still arrive: the grab
+  passes on the key of the hotkey that hid the overlay, after the hide.
+- Moves under the grab are still sampled once a frame, never one per
+  mouse report - what countering needs (see "Taking input back from the
+  game" and `docs/INTERACTIONS.md`, "Phase 2 and the input grab").
+
+What only a frame can do - opening a popup, closing the top one on
+Escape - is queued as an effect (`OverlayApp::Effect`) and done in the
+next frame, just before the popups are drawn, where every popup's id is
+hashed at the top level. That replaced a request flag per popup. Done at
+the very start of the frame instead, the canvas bar's menu was closed
+again before it was drawn. Of two popups asked for before a frame, the
+one asked for last now comes up; before, it was whichever the frame
+drew last.
+
+The panels' own keys - the Overview's Escape, a key being captured in
+Settings, the input options HUD's digits - and every widget are still
+ImGui's. They become interactions of their own in phase 3.
 
 ### Item text
 
@@ -2724,8 +2765,10 @@ live compositor, in four tiers:
   platform, with nothing drawn anywhere. ImGui needs a context and a font
   atlas, not a window or a GPU, so every path the app has is reachable
   from an ordinary test. Input arrives the same two ways it does in the
-  real app: ImGui's own event queue, which widgets see, and the platform
-  mouse callback, which the raw drawing pipeline runs on.
+  real app: ImGui's own event queue, which widgets see, and the platform's
+  input stream, which the canvas, the commands and the wheel run on. A
+  key, a modifier or the wheel goes to both at once, as the real window
+  sends it.
 - **UI tests** (`tests/ui/`, debug preset only) add Dear ImGui's test
   engine, which drives widgets by name - "click the thing labeled
   Settings" - and fails when a widget is present but unreachable, the

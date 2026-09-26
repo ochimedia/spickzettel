@@ -13,12 +13,15 @@
 //
 // Input arrives the same two ways it does in the real app, and the
 // difference matters:
-//  - ImGui's own event queue (Move/Click/Key below) is what widgets see, and
+//  - ImGui's own event queue (MoveTo, Click) is what widgets see, and
 //    what decides io.WantCaptureMouse;
-//  - the platform input stream (RawMouse and friends) is the raw pipeline
-//    that drawing and item placement run on, deliberately decoupled from
-//    the frame rate - see OverlayApp's class comment.
-// A gesture on the canvas needs both, in step, which is what Drag does.
+//  - the platform input stream (RawMouse and friends) is what the canvas,
+//    the commands and the wheel run on, as each event arrives - see
+//    OverlayApp::OnInput.
+// A gesture on the canvas needs both, in step, which is what Drag does. A
+// key, a modifier, the wheel and the middle and side buttons go to both at
+// once (KeyEvent, MouseButtonEvent, WheelEvent), as the real window sends
+// them.
 
 #include <imgui.h>
 
@@ -30,6 +33,7 @@
 
 #include "app/tray_app.h"
 #include "fakes/fake_platform_host.h"
+#include "ui/overlay_app_internal.h"
 #include "ui/ui_scale.h"
 
 namespace sz::test {
@@ -79,6 +83,9 @@ protected:
         // that some backend should have built the atlas.
         io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 
+        modifiers_ = platform::Modifiers{};
+        sentModifiers_ = platform::Modifiers{};
+        pointer_ = platform::Vec2{};
         config_ = std::move(config);
         controller_ = std::make_unique<TrayController>(host_, config_);
         ASSERT_TRUE(controller_->Initialize());
@@ -125,6 +132,14 @@ protected:
     // ===== Frames =====
 
     void StepFrame() {
+        // A modifier changed with no event to carry it - let go of while the
+        // overlay was hidden, say - is told at the next frame, as the real
+        // window does (see Win32OverlayWindow::RenderFrame).
+        if (modifiers_ != sentModifiers_) {
+            platform::InputEvent event;
+            event.kind = platform::InputEventKind::Modifiers;
+            SendInput(event);
+        }
         ImGui::NewFrame();
         if (host_.overlayWindow.frameCallback) {
             host_.overlayWindow.frameCallback(ImGui::GetIO().DeltaTime);
@@ -140,7 +155,87 @@ protected:
     // ===== Input =====
 
     // Where ImGui thinks the mouse is. Takes effect on the next frame.
-    void MoveTo(float x, float y) { ImGui::GetIO().AddMousePosEvent(x, y); }
+    void MoveTo(float x, float y) {
+        ImGui::GetIO().AddMousePosEvent(x, y);
+        pointer_ = platform::Vec2{x, y};
+    }
+
+    // A key going down or up, as the window hands it on: to ImGui, and into
+    // the input stream - a modifier as what every event after it carries.
+    void KeyEvent(ImGuiKey key, bool down) {
+        ImGui::GetIO().AddKeyEvent(key, down);
+        platform::InputEvent event;
+        if (key == ImGuiMod_Ctrl || key == ImGuiMod_Shift || key == ImGuiMod_Alt || key == ImGuiMod_Super) {
+            bool& held = key == ImGuiMod_Ctrl    ? modifiers_.ctrl
+                         : key == ImGuiMod_Shift ? modifiers_.shift
+                         : key == ImGuiMod_Alt   ? modifiers_.alt
+                                                 : modifiers_.super;
+            held = down;
+            event.kind = platform::InputEventKind::Modifiers;
+            SendInput(event);
+            return;
+        }
+        event.key = KeyForImGuiKey(key);
+        if (event.key == 0) {
+            return;  // a key the window does not name - see InputEvent::key
+        }
+        event.kind = down ? platform::InputEventKind::KeyDown : platform::InputEventKind::KeyUp;
+        SendInput(event);
+    }
+
+    // A mouse button going down or up where ImGui's pointer is. The left
+    // and right ones to ImGui alone - a press on the canvas is RawMouse's -
+    // and the middle and side ones, which no gesture is made with, to the
+    // input stream as well.
+    void MouseButtonEvent(ImGuiMouseButton button, bool down) {
+        ImGui::GetIO().AddMouseButtonEvent(button, down);
+        if (button == ImGuiMouseButton_Left || button == ImGuiMouseButton_Right) {
+            return;
+        }
+        platform::InputEvent event;
+        event.kind = down ? platform::InputEventKind::PointerDown : platform::InputEventKind::PointerUp;
+        event.position = pointer_;
+        event.button = button == ImGuiMouseButton_Middle ? platform::MouseButton::Middle
+                       : button == 3                     ? platform::MouseButton::X1
+                                                         : platform::MouseButton::X2;
+        SendInput(event);
+    }
+
+    // Wheel notches, where the pointer is.
+    void WheelEvent(float notches) {
+        ImGui::GetIO().AddMouseWheelEvent(0.0f, notches);
+        platform::InputEvent event;
+        event.kind = platform::InputEventKind::Wheel;
+        event.position = pointer_;
+        event.wheel = notches;
+        SendInput(event);
+    }
+
+    // KeyCombo's name for an ImGui key, or 0 - the window's own
+    // KeyForVirtualKey, from the other side.
+    static int KeyForImGuiKey(ImGuiKey key) {
+        if (const std::optional<platform::KeyCombo> combo = overlay_detail::ComboForImGuiKey(key, false, false, false)) {
+            return combo->key;
+        }
+        switch (key) {
+            case ImGuiKey_Escape:
+                return platform::KeyCombo::kEscape;
+            case ImGuiKey_Delete:
+                return platform::KeyCombo::kDelete;
+            case ImGuiKey_Backspace:
+                return platform::KeyCombo::kBackspace;
+            case ImGuiKey_LeftArrow:
+                return platform::KeyCombo::kLeftArrow;
+            case ImGuiKey_RightArrow:
+                return platform::KeyCombo::kRightArrow;
+            case ImGuiKey_UpArrow:
+                return platform::KeyCombo::kUpArrow;
+            case ImGuiKey_DownArrow:
+                return platform::KeyCombo::kDownArrow;
+            default:
+                return 0;
+        }
+    }
 
     // A widget click. Two frames because ImGui splits a press and a release
     // that arrive together across frames rather than losing one of them, and
@@ -148,9 +243,9 @@ protected:
     void Click(float x, float y) {
         MoveTo(x, y);
         StepFrame();
-        ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+        MouseButtonEvent(ImGuiMouseButton_Left, true);
         StepFrame();
-        ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+        MouseButtonEvent(ImGuiMouseButton_Left, false);
         StepFrames(2);
     }
 
@@ -168,14 +263,14 @@ protected:
 
     // The mouse wheel, in notches, with the pointer where it is.
     void Wheel(float notches) {
-        ImGui::GetIO().AddMouseWheelEvent(0.0f, notches);
+        WheelEvent(notches);
         StepFrame();
     }
 
     void PressKey(ImGuiKey key) {
-        ImGui::GetIO().AddKeyEvent(key, true);
+        KeyEvent(key, true);
         StepFrame();
-        ImGui::GetIO().AddKeyEvent(key, false);
+        KeyEvent(key, false);
         StepFrame();
     }
 
@@ -196,9 +291,15 @@ protected:
         SendInput(event);
     }
 
-    // Into the platform's input stream, stamped with ImGui's clock.
+    // Into the platform's input stream, stamped with ImGui's clock and the
+    // modifiers held - while the window is up, as a real one does it.
     void SendInput(platform::InputEvent event) {
+        if (!host_.overlayWindow.visible) {
+            return;
+        }
         event.seconds = ImGui::GetTime();
+        event.modifiers = modifiers_;
+        sentModifiers_ = modifiers_;
         if (host_.overlayWindow.inputCallback) {
             host_.overlayWindow.inputCallback(event);
         }
@@ -224,34 +325,32 @@ protected:
     // A whole drag with a modifier held from before the press until after
     // the release, the way a hand does it - ImGuiMod_Shift, ImGuiMod_Ctrl.
     void DragWith(ImGuiKey modifier, float fromX, float fromY, float toX, float toY) {
-        ImGui::GetIO().AddKeyEvent(modifier, true);
+        KeyEvent(modifier, true);
         StepFrame();
         Drag(fromX, fromY, toX, toY);
-        ImGui::GetIO().AddKeyEvent(modifier, false);
+        KeyEvent(modifier, false);
         StepFrame();
     }
 
     // A key with Ctrl held - Ctrl+Z, Ctrl+Y.
     void PressCtrlKey(ImGuiKey key) {
-        ImGuiIO& io = ImGui::GetIO();
-        io.AddKeyEvent(ImGuiMod_Ctrl, true);
-        io.AddKeyEvent(key, true);
+        KeyEvent(ImGuiMod_Ctrl, true);
+        KeyEvent(key, true);
         StepFrame();
-        io.AddKeyEvent(key, false);
-        io.AddKeyEvent(ImGuiMod_Ctrl, false);
+        KeyEvent(key, false);
+        KeyEvent(ImGuiMod_Ctrl, false);
         StepFrame();
     }
 
     // A key with Ctrl and Shift held - Ctrl+Shift+N.
     void PressCtrlShiftKey(ImGuiKey key) {
-        ImGuiIO& io = ImGui::GetIO();
-        io.AddKeyEvent(ImGuiMod_Ctrl, true);
-        io.AddKeyEvent(ImGuiMod_Shift, true);
-        io.AddKeyEvent(key, true);
+        KeyEvent(ImGuiMod_Ctrl, true);
+        KeyEvent(ImGuiMod_Shift, true);
+        KeyEvent(key, true);
         StepFrame();
-        io.AddKeyEvent(key, false);
-        io.AddKeyEvent(ImGuiMod_Shift, false);
-        io.AddKeyEvent(ImGuiMod_Ctrl, false);
+        KeyEvent(key, false);
+        KeyEvent(ImGuiMod_Shift, false);
+        KeyEvent(ImGuiMod_Ctrl, false);
         StepFrame();
     }
 
@@ -304,10 +403,10 @@ protected:
     // until after it - ImGuiMod_Ctrl, ImGuiMod_Alt.
     template <class Gesture>
     void With(ImGuiKey modifier, Gesture gesture) {
-        ImGui::GetIO().AddKeyEvent(modifier, true);
+        KeyEvent(modifier, true);
         StepFrame();
         gesture();
-        ImGui::GetIO().AddKeyEvent(modifier, false);
+        KeyEvent(modifier, false);
         StepFrame();
     }
 
@@ -344,6 +443,11 @@ protected:
     static constexpr float kDisplayHeight = 768.0f;
 
     sz::test::FakePlatformHost host_;
+    // The modifiers held, and where the pointer is - what the input stream
+    // is told - and the modifiers it was last told.
+    platform::Modifiers modifiers_;
+    platform::Modifiers sentModifiers_;
+    platform::Vec2 pointer_;
     AppConfig config_;
     std::unique_ptr<TrayController> controller_;
     ImGuiContext* context_ = nullptr;

@@ -112,7 +112,7 @@ void OverlayApp::Run(const Command& command) {
     const auto toggleTool = [this](Tool tool) { PickTool(activeTool_ == tool ? Tool::Select : tool); };
     // A pixel a press, ten with Shift - the way every drawing program
     // nudges.
-    const float nudge = ImGui::GetCurrentContext() != nullptr && ImGui::GetIO().KeyShift ? 10.0f : 1.0f;
+    const float nudge = held_.shift ? 10.0f : 1.0f;
     switch (command.id) {
         case CommandId::Undo:
             Undo();
@@ -334,7 +334,7 @@ bool OverlayApp::KeyReaches(CommandId id) const {
         case CommandId::Redo:
             return !PanelOpen();
         // Not under a popup either, which Escape closes first (see
-        // HandleCommandKeys).
+        // HandleCommandKey).
         case CommandId::PutDown:
             return !PanelOpen() && !popupOpen;
         // And not in drawing mode, where the snippet is being worked in,
@@ -395,56 +395,47 @@ bool OverlayApp::KeyReaches(CommandId id) const {
     return false;  // unreachable: the switch names every command
 }
 
-bool OverlayApp::Pressed(const platform::KeyCombo& key, bool repeats) const {
-    if (const std::optional<ImGuiMouseButton> button = ImGuiMouseButtonForCombo(key)) {
-        // Reaching its command as a key would, over a panel too - no panel
-        // here does anything with these buttons, and taken for the panel's,
-        // the button that opened the cheat sheet could not close it. Only
-        // while a gesture is in flight does it wait: it is on the mouse
-        // holding the gesture (see Hand::ignoredButton).
-        return ImGui::IsMouseClicked(*button, false) && !GestureInFlight();
+void OverlayApp::HandleCommandKey(int key, bool repeat) {
+    if (key == 0) {
+        return;
     }
-    const ImGuiKey imguiKey = ImGuiKeyForCombo(key);
-    return imguiKey != ImGuiKey_None && ImGui::IsKeyPressed(imguiKey, repeats);
-}
-
-void OverlayApp::HandleCommandKeys() {
-    const ImGuiIO& io = ImGui::GetIO();
-    // An open popover takes Escape before any command sees it, and closes.
-    bool escapeTaken = false;
-    if (ImGui::IsKeyPressed(ImGuiKey_Escape) && !io.WantTextInput && !PanelOpen() && CloseTopmostPopover()) {
-        escapeTaken = true;
+    // Reaching its command as a key would, over a panel too, for a mouse
+    // button - no panel here does anything with those, and taken for the
+    // panel's, the button that opened the cheat sheet could not close it.
+    //
+    // An open popover takes Escape before any command sees it, and closes -
+    // on the next frame, which is where a popup can be closed (see Effect).
+    if (key == platform::KeyCombo::kEscape && !ImGui::GetIO().WantTextInput && !PanelOpen() &&
+        ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) {
+        Queue(Effect{Effect::Kind::CloseTopmostPopover});
+        return;
     }
     // Each key to one command: the first in the table that it is bound to,
     // which puts the fixed keys ahead of the chosen ones and, among those,
     // the table's order ahead of a profile that bound one key twice.
-    std::vector<platform::KeyCombo> taken;
     const ShortcutBindings& shortcuts = settings_.Live().shortcuts;
     for (const CommandInfo& info : kCommands) {
         if (info.hotkey.has_value()) {
             continue;  // the OS hands those to the tray, not to this window
         }
-        for (const platform::KeyCombo& key : KeysFor(info.id, Cfg(), shortcuts)) {
-            if (!Pressed(key, info.repeats)) {
-                continue;
-            }
+        for (const platform::KeyCombo& binding : KeysFor(info.id, Cfg(), shortcuts)) {
             // Exactly the modifiers the binding names, so a bare "P" does
             // not also fire on Ctrl+P - which is somebody else's chord, even
             // if nothing here claims it yet. The keys that never cared -
             // Escape, Delete, the arrows - still don't.
-            if (!info.anyModifiers && (io.KeyCtrl != key.ctrl || io.KeyAlt != key.alt || io.KeyShift != key.shift)) {
+            if (binding.key != key || (!info.anyModifiers && (held_.ctrl != binding.ctrl ||
+                                                              held_.alt != binding.alt ||
+                                                              held_.shift != binding.shift))) {
                 continue;
             }
-            if (std::find(taken.begin(), taken.end(), key) != taken.end()) {
-                continue;
-            }
-            taken.push_back(key);
-            if (key.key == platform::KeyCombo::kEscape && escapeTaken) {
-                continue;
-            }
-            if (KeyReaches(info.id)) {
+            if ((!repeat || info.repeats) && KeyReaches(info.id)) {
+                // Nothing acts on a snippet that has gone, before or after -
+                // an undo or a delete can take a selected one off the screen.
+                PruneSelection();
                 Dispatch(Command{info.id});
+                PruneSelection();
             }
+            return;
         }
     }
 }

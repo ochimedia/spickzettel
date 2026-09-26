@@ -448,8 +448,13 @@ public:
 private:
     void OnFrame(float deltaSeconds);
     // Every input event, in the order they happened - see IOverlayWindow::
-    // SetInputCallback. The two gesture buttons go to OnMouse.
+    // SetInputCallback. The two gesture buttons go to OnMouse, the keys and
+    // the other buttons to the commands, the wheel to HandleMouseWheel.
     void OnInput(const platform::InputEvent& event);
+    // The modifiers held, as the input stream last said: at an event, the
+    // ones it happened with. What the canvas's handlers read, rather than
+    // ImGui's, which are last frame's.
+    platform::Modifiers held_;
     void OnMouse(const platform::MouseEvent& event);
     // Ends the gesture in flight where it stands without anything a release
     // would newly make or fire: what it has already done is kept and filed
@@ -996,13 +1001,12 @@ private:
     // themselves, and two rows claiming one key is a state where only one
     // of them can ever fire. Pass a default-constructed combo to unbind.
     void SetToolShortcut(ShortcutAction action, platform::KeyCombo combo);
-    // Dispatches the command of every key pressed this frame, once per key
-    // (see KeysFor) - for those a key reaches from where it is pressed (see
-    // KeyReaches). Runs only while the overlay is showing edit mode.
-    void HandleCommandKeys();
-    // Whether `key` - a key, or a mouse button a shortcut may be - went down
-    // this frame, again as it repeats for one that `repeats`.
-    bool Pressed(const platform::KeyCombo& key, bool repeats) const;
+    // Dispatches the command `key` is bound to - a key's name as KeyCombo
+    // spells it, or a mouse button a shortcut may be - as it goes down, if
+    // the key reaches it from where it is pressed (see KeyReaches). Each
+    // key to one command: the first in the table it is bound to (see
+    // KeysFor). `repeat` for a key held down and repeating.
+    void HandleCommandKey(int key, bool repeat);
     // Whether a key for `id` gets through to it from here: not while text
     // is being typed, and not through a panel, a popup or drawing mode
     // where the command is not theirs. docs/INTERACTIONS.md, section 7,
@@ -1011,9 +1015,10 @@ private:
     bool KeyReaches(CommandId id) const;
     // What a command does, once Dispatch has settled what it covers.
     void Run(const Command& command);
-    // The wheel: with Alt it steps between the canvases of the current
-    // canvas's folder, plain it sizes the tool in hand - see the definition.
-    void HandleMouseWheel();
+    // The wheel, turned `notches`: with Alt it steps between the canvases of
+    // the current canvas's folder, plain it sizes the tool in hand - see
+    // the definition.
+    void HandleMouseWheel(float notches);
     // Cancel/Delete confirmation for a canvas or folder Delete button
     // clicked in the Overview - see confirmDeleteTarget_'s own doc
     // comment for why canvas/folder deletion gets this extra step while
@@ -1826,6 +1831,8 @@ private:
             OpenEmptyCanvasMenu,
             OpenColorChooser,
             OpenConfirmDelete,
+            // The popover or menu on top, as Escape does to it.
+            CloseTopmostPopover,
         };
         Kind kind = Kind::OpenItemProperties;
         ImVec2 at{0.0f, 0.0f};  // where a menu or the color chooser opens

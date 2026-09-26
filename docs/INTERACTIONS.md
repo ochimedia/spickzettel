@@ -89,7 +89,9 @@ widgets.
 Events are handled as they arrive, not queued for the frame: a hotkey has
 to act while the overlay is hidden and no frames run. What only a frame
 can do - opening a popup, clearing ImGui's drag - is queued as an effect
-and applied at the start of the next frame. That one queue replaces the
+and applied in the next frame, just before the popups are drawn (at the
+very start of the frame, ImGui closed a menu again before it was drawn).
+That one queue replaces the
 request flags the popups use today (`itemPropertiesPopoverRequested_`,
 `colorChooserRequested_`, `ContextMenu::RequestOpenAt`, ...), which exist
 because `OpenPopup` cannot be called between frames.
@@ -482,7 +484,9 @@ each.
 2. **One event stream.** The platform's input callback with time and
    modifiers; `OverlayApp` consumes it in place of `OnMouse` and the
    per-frame key reads, still with today's handlers behind it. The effect
-   queue replaces the request flags. No behavior changes.
+   queue replaces the request flags. No behavior changes. The panels' own
+   keys (the Overview's Escape, a key being captured, the HUD's digits)
+   stay ImGui's until phase 3 makes them interactions.
 3. **The stack.** Levels, routing, Pending, Spent, the recognizer's rules,
    the interactions one kind at a time, cancel on the session side,
    `Editor` split out. This is where the changes marked **Change** land,

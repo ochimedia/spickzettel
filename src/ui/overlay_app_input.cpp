@@ -27,16 +27,32 @@ namespace {
 // px, click-vs-drag gesture threshold for the region-capture drag.
 constexpr float kCreationDragThreshold = 6.0f;
 
-// The modifiers held right now, as what they would trigger on empty canvas
-// (see AppConfig::screenshotTrigger): none, Ctrl alone or Alt alone -
-// nothing for Shift, whose press there is the box that selects, or for two
-// held together.
-std::optional<CreationTrigger> HeldCreationTrigger() {
-    const ImGuiIO& io = ImGui::GetIO();
-    if (io.KeyShift || io.KeySuper || (io.KeyCtrl && io.KeyAlt)) {
+// The modifiers `held`, as what they would trigger on empty canvas (see
+// AppConfig::screenshotTrigger): none, Ctrl alone or Alt alone - nothing
+// for Shift, whose press there is the box that selects, or for two held
+// together.
+std::optional<CreationTrigger> CreationTriggerFor(const platform::Modifiers& held) {
+    if (held.shift || held.super || (held.ctrl && held.alt)) {
         return std::nullopt;
     }
-    return io.KeyCtrl ? CreationTrigger::Ctrl : io.KeyAlt ? CreationTrigger::Alt : CreationTrigger::Plain;
+    return held.ctrl ? CreationTrigger::Ctrl : held.alt ? CreationTrigger::Alt : CreationTrigger::Plain;
+}
+
+// The shortcut name of a mouse button a shortcut may be, or 0 for the two
+// gestures are made with.
+int ComboKeyForMouseButton(platform::MouseButton button) {
+    switch (button) {
+        case platform::MouseButton::Middle:
+            return platform::KeyCombo::kMiddleButton;
+        case platform::MouseButton::X1:
+            return platform::KeyCombo::kX1Button;
+        case platform::MouseButton::X2:
+            return platform::KeyCombo::kX2Button;
+        case platform::MouseButton::Left:
+        case platform::MouseButton::Right:
+            return 0;
+    }
+    return 0;
 }
 
 std::string ItemNameForKind(ItemCreationKind kind, const Canvas& canvas, bool fullscreen) {
@@ -142,7 +158,7 @@ void OverlayApp::SetToolShortcut(ShortcutAction action, platform::KeyCombo combo
         // Whatever else held this key loses it. The alternative - refusing
         // the change - leaves the user to go and find the other holder
         // themselves, and two rows claiming one key is a state where only
-        // the first of them could ever fire (see HandleToolShortcuts).
+        // the first of them could ever fire (see HandleCommandKey).
         //
         // Judged against what the *edited* target resolves to, not against
         // what is running: a collision inside a profile is a collision when
@@ -261,7 +277,7 @@ void OverlayApp::PickTool(Tool tool) {
     }
 }
 
-bool OverlayApp::PressPicksUp() const { return !drawingItem_.has_value() || ImGui::GetIO().KeyAlt; }
+bool OverlayApp::PressPicksUp() const { return !drawingItem_.has_value() || held_.alt; }
 
 bool OverlayApp::NoteDoubleClick(const platform::MouseEvent& event) {
     const double now = ImGui::GetTime();
@@ -270,7 +286,7 @@ bool OverlayApp::NoteDoubleClick(const platform::MouseEvent& event) {
     // for the modifier that picks what a press on empty canvas makes: with
     // it held, a double-click there makes that kind fullscreen, as a plain
     // one does the plain kind - and both presses have to have it.
-    const std::optional<CreationTrigger> held = HeldCreationTrigger();
+    const std::optional<CreationTrigger> held = CreationTriggerFor(held_);
     if (!held.has_value() || (*held != CreationTrigger::Plain && *held != Cfg().screenshotTrigger &&
                               *held != Cfg().drawingTrigger)) {
         hand_.lastPress.reset();
@@ -692,7 +708,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             if (gesture->resize) {
                 // Recomputed from the modifier on every event, so Shift
                 // pressed or let go mid-drag takes effect at once.
-                const bool lockAspect = KeepsAspectRatio(*item) != ImGui::GetIO().KeyShift;
+                const bool lockAspect = KeepsAspectRatio(*item) != held_.shift;
                 ApplyResizeHandleDelta(newRect, gesture->left, gesture->right, gesture->top, gesture->bottom, dx,
                                        dy, lockAspect);
             } else {
@@ -723,7 +739,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
         if (target.kind != PointerTarget::Kind::Body) {
             return false;
         }
-        if (drawingItem_ == target.item && !ImGui::GetIO().KeyAlt) {
+        if (drawingItem_ == target.item && !held_.alt) {
             // On the snippet being drawn on the right button is the eraser
             // (see OnMouse), unless Alt picks the snippet up.
             return false;
@@ -783,14 +799,14 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             if (!SelectionLive() || !PressPicksUp()) {
                 return false;  // a creation tool's press, or a stroke in drawing mode
             }
-            if (hand_.pressIsDouble && !ImGui::GetIO().KeyShift) {
+            if (hand_.pressIsDouble && !held_.shift) {
                 // The second press of a double-click on a snippet: drawing
                 // mode on it, rather than a move. The first press already
                 // selected it.
                 EnterDrawingMode(target.item);
                 return true;
             }
-            if (ImGui::GetIO().KeyShift) {
+            if (held_.shift) {
                 // Added to or taken out of the selection, and that is all
                 // the press does - a Shift-press is never a drag, and
                 // never restacks either: gathering snippets into a
@@ -831,7 +847,7 @@ bool OverlayApp::HandleItemGesture(const platform::MouseEvent& event) {
             // click makes nothing). Not in drawing mode, where the press
             // is for leaving it (see OnMouse).
             if (SelectionLive() && !drawingItem_.has_value()) {
-                if (ImGui::GetIO().KeyShift) {
+                if (held_.shift) {
                     // With Shift, the press is the start of a box to
                     // select by instead - consumed, so no snippet is
                     // framed under it, and the selection is left alone
@@ -1129,7 +1145,7 @@ bool OverlayApp::PressMakesASnippet(const platform::MouseEvent& event) const {
 }
 
 std::optional<ItemCreationKind> OverlayApp::EmptyCanvasCreationKind() const {
-    const std::optional<CreationTrigger> held = HeldCreationTrigger();
+    const std::optional<CreationTrigger> held = CreationTriggerFor(held_);
     if (!held.has_value()) {
         return std::nullopt;
     }
@@ -1293,6 +1309,7 @@ void OverlayApp::OnInput(const platform::InputEvent& event) {
     const auto gestureButton = [](MouseButton button) {
         return button == MouseButton::Left || button == MouseButton::Right;
     };
+    held_ = event.modifiers;
     switch (event.kind) {
         case InputEventKind::PointerDown:
         case InputEventKind::PointerUp:
@@ -1300,6 +1317,11 @@ void OverlayApp::OnInput(const platform::InputEvent& event) {
                 OnMouse(platform::MouseEvent{
                     event.position, event.button,
                     event.kind == InputEventKind::PointerDown ? MouseEventKind::Down : MouseEventKind::Up});
+            } else if (event.kind == InputEventKind::PointerDown && !viewOnly_ && !GestureInFlight()) {
+                // A shortcut the button may be. Not while a gesture is in
+                // flight: it is on the mouse holding the gesture, and waits
+                // for it as the other button does (see Hand::ignoredButton).
+                HandleCommandKey(ComboKeyForMouseButton(event.button), /*repeat=*/false);
             }
             return;
         case InputEventKind::PointerMove:
@@ -1312,10 +1334,18 @@ void OverlayApp::OnInput(const platform::InputEvent& event) {
             }
             return;
         case InputEventKind::Wheel:
+            if (!viewOnly_) {
+                HandleMouseWheel(event.wheel);
+            }
+            return;
         case InputEventKind::KeyDown:
+            if (!viewOnly_) {
+                HandleCommandKey(event.key, event.repeat);
+            }
+            return;
         case InputEventKind::KeyUp:
         case InputEventKind::Modifiers:
-            return;  // read from ImGui, at the frame, for now
+            return;  // nothing waits on a key's release; the modifiers are held_
     }
 }
 
@@ -1440,7 +1470,7 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
             }
             return;
         }
-        if (event.kind == platform::MouseEventKind::Down && drawingItem_.has_value() && !ImGui::GetIO().KeyAlt &&
+        if (event.kind == platform::MouseEventKind::Down && drawingItem_.has_value() && !held_.alt &&
             !ImGui::GetIO().WantCaptureMouse && !GestureInFlight()) {
             const PointerTarget target = ResolvePointerTarget(event.position.x, event.position.y);
             if (target.kind == PointerTarget::Kind::Body && target.item == *drawingItem_) {
@@ -1482,7 +1512,7 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
         return;  // a real ImGui widget (a popover, the canvas bar) owns this click
     }
 
-    if (drawingItem_.has_value() && !ImGui::GetIO().KeyAlt) {
+    if (drawingItem_.has_value() && !held_.alt) {
         // Drawing mode: a press on the snippet being drawn on draws with
         // the tool in hand; a press anywhere else - empty canvas, another
         // snippet - leaves the mode, and does nothing more, since that is
@@ -1519,12 +1549,11 @@ void OverlayApp::OnMouse(const platform::MouseEvent& event) {
 }
 
 DrawShape OverlayApp::ShapeForPress() const {
-    const ImGuiIO& io = ImGui::GetIO();
     if (activeTool_ == Tool::Erase) {
         // Ctrl for a rectangle; Shift means nothing to the eraser.
-        return ErasesRectangle(io.KeyCtrl) ? DrawShape::Rectangle : eraserShape_;
+        return ErasesRectangle(held_.ctrl) ? DrawShape::Rectangle : eraserShape_;
     }
-    return io.KeyCtrl || io.KeyShift ? DrawShapeFor(io.KeyCtrl, io.KeyShift) : penShape_;
+    return held_.ctrl || held_.shift ? DrawShapeFor(held_.ctrl, held_.shift) : penShape_;
 }
 
 void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
@@ -1556,7 +1585,6 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
     }
 
     const ItemId armed = *drawingItem_;
-    const ImGuiIO& io = ImGui::GetIO();
 
     // What a Draw or Erase press makes is decided as it starts, from the
     // modifiers held then - Ctrl for a rectangle with either tool, Shift for
@@ -1635,8 +1663,8 @@ void OverlayApp::HandleStrokeEvent(const platform::MouseEvent& event) {
                 session_.BeginShape(armed, sessionShape(stroke->shape), event.position.x, event.position.y,
                                     drawColorRGBA_, drawWidth_);
             } else if (event.kind == platform::MouseEventKind::Move) {
-                if (io.KeyCtrl || io.KeyShift) {
-                    stroke->shape = DrawShapeFor(io.KeyCtrl, io.KeyShift);
+                if (held_.ctrl || held_.shift) {
+                    stroke->shape = DrawShapeFor(held_.ctrl, held_.shift);
                     session_.SetShape(sessionShape(stroke->shape));
                 }
                 session_.UpdateShape(event.position.x, event.position.y);

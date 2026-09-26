@@ -446,6 +446,9 @@ void OverlayApp::ApplyEffects() {
             case Effect::Kind::OpenConfirmDelete:
                 OpenConfirmDelete();
                 break;
+            case Effect::Kind::CloseTopmostPopover:
+                CloseTopmostPopover();
+                break;
         }
     }
 }

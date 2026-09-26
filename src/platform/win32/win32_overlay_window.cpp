@@ -1180,7 +1180,7 @@ double Win32OverlayWindow::NowSeconds() const {
 }
 
 void Win32OverlayWindow::EmitModifiersIfChanged(const Modifiers& held, double seconds) {
-    if (held == emittedModifiers_) {
+    if (held == emittedModifiers_ || !visible_) {
         return;
     }
     emittedModifiers_ = held;
@@ -1193,7 +1193,14 @@ void Win32OverlayWindow::EmitModifiersIfChanged(const Modifiers& held, double se
     }
 }
 
+// Only while visible. Messages still arrive once the window is hidden - the
+// input grab hands on the very key of the hotkey that hid it, after the
+// hide (see OverlayApp::OnOverlayShown) - and what a hidden window was
+// told is nobody's input.
 void Win32OverlayWindow::Emit(InputEvent event) {
+    if (!visible_) {
+        return;
+    }
     event.seconds = NowSeconds();
     event.modifiers = HeldModifiers();
     EmitModifiersIfChanged(event.modifiers, event.seconds);

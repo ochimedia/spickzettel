@@ -174,9 +174,9 @@ TEST_F(HeadlessAppTest, AMouseButtonRunsTheCommandItIsBoundTo) {
     // A click of ImGui's button `button`, where the pointer is - the side
     // buttons are 3 and 4, which ImGui names no constant for.
     const auto click = [this](int button) {
-        ImGui::GetIO().AddMouseButtonEvent(button, true);
+        MouseButtonEvent(button, true);
         StepFrame();
-        ImGui::GetIO().AddMouseButtonEvent(button, false);
+        MouseButtonEvent(button, false);
         StepFrame();
     };
     StartWith(WithMouseButtonShortcuts());
@@ -202,9 +202,9 @@ TEST_F(HeadlessAppTest, AMouseButtonWaitsForTheGestureInFlight) {
     // A click of ImGui's button `button`, where the pointer is - the side
     // buttons are 3 and 4, which ImGui names no constant for.
     const auto click = [this](int button) {
-        ImGui::GetIO().AddMouseButtonEvent(button, true);
+        MouseButtonEvent(button, true);
         StepFrame();
-        ImGui::GetIO().AddMouseButtonEvent(button, false);
+        MouseButtonEvent(button, false);
         StepFrame();
     };
     StartWith(WithMouseButtonShortcuts());
@@ -213,7 +213,7 @@ TEST_F(HeadlessAppTest, AMouseButtonWaitsForTheGestureInFlight) {
     MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
     ASSERT_TRUE(App().DrawingItem().has_value());
 
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
     RawMouse(350.0f, 350.0f, platform::MouseEventKind::Down);
     StepFrame();
     RawMouse(450.0f, 400.0f, platform::MouseEventKind::Move);
@@ -223,7 +223,7 @@ TEST_F(HeadlessAppTest, AMouseButtonWaitsForTheGestureInFlight) {
     EXPECT_EQ(App().ActiveTool(), Tool::Draw);
     RawMouse(500.0f, 420.0f, platform::MouseEventKind::Move);
     RawMouse(500.0f, 420.0f, platform::MouseEventKind::Up);
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrame();
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u);
 
@@ -245,9 +245,9 @@ TEST_F(HeadlessAppTest, AMouseButtonClosesThePanelItOpened) {
     MoveTo(640.0f, 400.0f);
     StepFrame();
     const auto click = [this](int button) {
-        ImGui::GetIO().AddMouseButtonEvent(button, true);
+        MouseButtonEvent(button, true);
         StepFrame();
-        ImGui::GetIO().AddMouseButtonEvent(button, false);
+        MouseButtonEvent(button, false);
         StepFrames(2);
     };
     click(3);
@@ -819,10 +819,10 @@ TEST_F(HeadlessAppTest, CopyingASelectionPastesAllOfItKeepingItsLayout) {
     const Rect firstRect = Canvases().CurrentOrNull()->items[0].rect;
     const Rect secondRect = Canvases().CurrentOrNull()->items[1].rect;
     // Both selected: a click on one, Shift held for the other.
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, true);
+    KeyEvent(ImGuiMod_Shift, true);
     StepFrame();
     RawClick(firstRect.x + 40.0f, firstRect.y + 40.0f);
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, false);
+    KeyEvent(ImGuiMod_Shift, false);
     StepFrame();
     ASSERT_EQ(App().Selection().size(), 2u);
 
@@ -1124,7 +1124,7 @@ TEST_F(HeadlessAppTest, AShortcutThatSwitchesCanvasEndsTheStrokeInFlightFirst) {
 
     // A stroke pressed and moved, not let go of - ImGui told about the
     // button too, since settling asks it whether the button is down.
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
     RawMouse(150.0f, 150.0f, platform::MouseEventKind::Down);
     StepFrame();
     RawMouse(300.0f, 300.0f, platform::MouseEventKind::Move);
@@ -1142,7 +1142,7 @@ TEST_F(HeadlessAppTest, AShortcutThatSwitchesCanvasEndsTheStrokeInFlightFirst) {
 
     // The real release comes later and finds nothing in flight.
     RawMouse(300.0f, 300.0f, platform::MouseEventKind::Up);
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrames(2);
     EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
 }
@@ -1157,7 +1157,7 @@ TEST_F(HeadlessAppTest, APressAfterALostReleaseEndsWhatThatButtonWasDoing) {
     CanvasManager& manager = test::Model(controller_->GetSession());
     const ItemId drawing = manager.CurrentOrNull()->items[0].id;
 
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
     RawMouse(150.0f, 150.0f, platform::MouseEventKind::Down);
     StepFrame();
     RawMouse(300.0f, 300.0f, platform::MouseEventKind::Move);
@@ -1171,7 +1171,7 @@ TEST_F(HeadlessAppTest, APressAfterALostReleaseEndsWhatThatButtonWasDoing) {
     RawMouse(600.0f, 150.0f, platform::MouseEventKind::Move);
     StepFrame();
     RawMouse(600.0f, 150.0f, platform::MouseEventKind::Up);
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrame();
     const Item* item = manager.FindItemAnywhere(drawing);
     ASSERT_EQ(item->strokes.size(), 2u);
@@ -1272,20 +1272,19 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
         // A key as a hand presses it: its modifiers, the key, and all of it
         // let go again.
         const auto press = [&](const platform::KeyCombo& key) {
-            ImGuiIO& io = ImGui::GetIO();
             const std::pair<bool, ImGuiKey> mods[] = {
                 {key.ctrl, ImGuiMod_Ctrl}, {key.alt, ImGuiMod_Alt}, {key.shift, ImGuiMod_Shift}};
             for (const auto& [down, mod] : mods) {
                 if (down) {
-                    io.AddKeyEvent(mod, true);
+                    KeyEvent(mod, true);
                 }
             }
-            io.AddKeyEvent(overlay_detail::ImGuiKeyForCombo(key), true);
+            KeyEvent(overlay_detail::ImGuiKeyForCombo(key), true);
             StepFrame();
-            io.AddKeyEvent(overlay_detail::ImGuiKeyForCombo(key), false);
+            KeyEvent(overlay_detail::ImGuiKeyForCombo(key), false);
             for (const auto& [down, mod] : mods) {
                 if (down) {
-                    io.AddKeyEvent(mod, false);
+                    KeyEvent(mod, false);
                 }
             }
             StepFrame();
@@ -1335,7 +1334,7 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                 const Canvas* canvas = Canvases().CurrentOrNull();
                 if (!App().DrawingItem().has_value() && canvas != nullptr && !canvas->items.empty()) {
                     for (const ImGuiKey modifier : modifiers) {
-                        ImGui::GetIO().AddKeyEvent(modifier, false);
+                        KeyEvent(modifier, false);
                     }
                     modifiers.clear();
                     const Rect& rect = canvas->items[pick(canvas->items.size())].rect;
@@ -1348,7 +1347,7 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                     MoveTo(pointer.x, pointer.y);
                     StepFrame();
                     RawMouse(pointer.x, pointer.y, MouseEventKind::Down);
-                    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+                    MouseButtonEvent(ImGuiMouseButton_Left, true);
                     held.push_back(MouseButton::Left);
                     for (int i = 0; i < 3; ++i) {
                         pointer = ImVec2(pointer.x + 20.0f, pointer.y + 15.0f);
@@ -1362,7 +1361,7 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                 MoveTo(pointer.x, pointer.y);
                 StepFrame();
                 RawMouse(pointer.x, pointer.y, MouseEventKind::Down, button);
-                ImGui::GetIO().AddMouseButtonEvent(imguiButton(button), true);
+                MouseButtonEvent(imguiButton(button), true);
                 if (std::find(held.begin(), held.end(), button) == held.end()) {
                     held.push_back(button);
                 }
@@ -1380,19 +1379,19 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                     if (pick(4) != 0) {  // and otherwise the release is lost on the way
                         RawMouse(pointer.x, pointer.y, MouseEventKind::Up, button);
                     }
-                    ImGui::GetIO().AddMouseButtonEvent(imguiButton(button), false);
+                    MouseButtonEvent(imguiButton(button), false);
                 }
             } else if (what == 7) {
                 const ImGuiKey modifier = kModifiers[pick(3)];
                 const auto it = std::find(modifiers.begin(), modifiers.end(), modifier);
-                ImGui::GetIO().AddKeyEvent(modifier, it == modifiers.end());
+                KeyEvent(modifier, it == modifiers.end());
                 if (it == modifiers.end()) {
                     modifiers.push_back(modifier);
                 } else {
                     modifiers.erase(it);
                 }
             } else if (what == 8) {
-                ImGui::GetIO().AddMouseWheelEvent(0.0f, pick(2) == 0 ? 1.0f : -1.0f);
+                WheelEvent(pick(2) == 0 ? 1.0f : -1.0f);
             } else if (what == 9) {
                 StepFrames(35);  // long enough for a hold to mature
             } else if (what < 16) {
@@ -1408,7 +1407,7 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                     // A key wants exactly its own modifiers, so the ones the
                     // hand holds are let go of first.
                     for (const ImGuiKey modifier : modifiers) {
-                        ImGui::GetIO().AddKeyEvent(modifier, false);
+                        KeyEvent(modifier, false);
                     }
                     modifiers.clear();
                     StepFrame();
@@ -1460,10 +1459,10 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
         // whatever was lost on the way, the hand is at rest.
         for (const MouseButton button : held) {
             RawMouse(pointer.x, pointer.y, MouseEventKind::Up, button);
-            ImGui::GetIO().AddMouseButtonEvent(imguiButton(button), false);
+            MouseButtonEvent(imguiButton(button), false);
         }
         for (const ImGuiKey modifier : modifiers) {
-            ImGui::GetIO().AddKeyEvent(modifier, false);
+            KeyEvent(modifier, false);
         }
         StepFrame();
         if (!host_.overlayWindow.visible || App().IsViewOnly()) {
@@ -1622,7 +1621,7 @@ TEST_F(HeadlessAppTest, WithSelectInHandADragAnywhereOnASnippetPicksItUp) {
 // empty canvas a right click opens that menu instead (see the tests under
 // "Making a snippet"). Escape then closes the menu, and the *next* Escape clears
 // the selection: an open popover takes the first press (see
-// HandleSelectionKeys).
+// HandleCommandKey).
 TEST_F(HeadlessAppTest, ARightClickOnASnippetSelectsItAndOpensItsContextMenu) {
     ShowEditMode();
     StepFrame();
@@ -1705,10 +1704,10 @@ TEST_F(HeadlessAppTest, ARightDragOnTheSnippetBeingDrawnOnErasesAndARightClickLe
     EXPECT_EQ(App().ActiveTool(), Tool::Draw) << "the pen is still in hand";
 
     // With Alt, the resize from the nearest edge.
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Alt, true);
+    KeyEvent(ImGuiMod_Alt, true);
     StepFrame();
     Drag(680.0f, 330.0f, 780.0f, 330.0f, 10, platform::MouseButton::Right);
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Alt, false);
+    KeyEvent(ImGuiMod_Alt, false);
     StepFrame();
     // Grew, rather than by exactly the 100px of drag: the press landed in
     // a corner, and an aspect-locked corner follows the pointer projected
@@ -2250,26 +2249,28 @@ TEST_F(HeadlessAppTest, AKeyStrandedByHidingIsNotAPressOnTheWayBack) {
     ShowEditMode();  // the same hotkey again puts the overlay away
     ASSERT_FALSE(host_.overlayWindow.visible);
     // No frame in between, which is the whole point: hidden, there are none.
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_S, true);
-    ImGui::GetIO().AddKeyEvent(ImGuiKey_S, false);
+    KeyEvent(ImGuiKey_S, true);
+    KeyEvent(ImGuiKey_S, false);
 
     ShowEditMode();
     StepFrames(2);
     EXPECT_EQ(App().ActiveTool(), Tool::Select) << "that S belonged to the showing it ended";
 }
 
-// The same staleness the other way round: what ImGui believes is held is
-// whatever the last frame before the hiding saw. A modifier latched that
-// way would make the exact-modifier test in HandleToolShortcuts refuse an
-// ordinary key press on the way back.
+// The same staleness the other way round: a modifier let go of while the
+// overlay was away is heard of by nobody - ImGui still believes it held,
+// and so would the input stream, had the window not said otherwise on the
+// way back. Latched, it would make the exact-modifier test in
+// HandleCommandKey refuse an ordinary key press.
 TEST_F(HeadlessAppTest, AModifierHeldWhenTheOverlayWentAwayDoesNotOutliveIt) {
     ShowEditMode();
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Ctrl, true);
+    KeyEvent(ImGuiMod_Ctrl, true);
     StepFrame();  // the frame that records it as held
     ASSERT_TRUE(ImGui::GetIO().KeyCtrl);
 
-    ShowEditMode();  // away, with Ctrl still down as far as ImGui knows
-    ShowEditMode();  // and back
+    ShowEditMode();                  // away, with Ctrl down
+    KeyEvent(ImGuiMod_Ctrl, false);  // let go of while hidden
+    ShowEditMode();                  // and back
     StepFrame();
 
     PressKey(ImGuiKey_S);
@@ -2282,7 +2283,7 @@ TEST_F(HeadlessAppTest, AModifierHeldWhenTheOverlayWentAwayDoesNotOutliveIt) {
 TEST_F(HeadlessAppTest, AButtonHeldWhenTheOverlayWentAwayIsNotHeldOnTheWayBack) {
     ShowEditMode();
     ImGui::GetIO().AddMousePosEvent(200.0f, 200.0f);
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
     StepFrame();
     ASSERT_TRUE(ImGui::IsMouseDown(ImGuiMouseButton_Left));
 
@@ -2529,10 +2530,10 @@ protected:
     // A click with a modifier held from before the press until after the
     // release - ImGuiMod_Shift, ImGuiMod_Alt.
     void RawClickWith(ImGuiKey modifier, float x, float y) {
-        ImGui::GetIO().AddKeyEvent(modifier, true);
+        KeyEvent(modifier, true);
         StepFrame();
         RawClick(x, y);
-        ImGui::GetIO().AddKeyEvent(modifier, false);
+        KeyEvent(modifier, false);
         StepFrame();
     }
 };
@@ -3258,6 +3259,32 @@ TEST_F(OverlappingItemsTest, UndoMidDragTakesBackTheDragSoFar) {
     EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the first move is still there to undo";
 }
 
+// A key pressed between two moves of a drag acts between them, however
+// quickly they come - with no frame in between, as a fast hand manages.
+// Keys were read at the frame, after every move that came before it, and
+// the drag had gone on to the second move by the time the key ended it.
+TEST_F(OverlappingItemsTest, AKeyBetweenTwoMovesOfADragActsBetweenThem) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+
+    RawMouse(x, y, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(x, y + 100.0f, platform::MouseEventKind::Move);
+    KeyEvent(ImGuiKey_RightArrow, true);  // ends the drag where it is, and nudges
+    RawMouse(x, y + 250.0f, platform::MouseEventKind::Move);
+    KeyEvent(ImGuiKey_RightArrow, false);
+    StepFrame();
+    RawMouse(x, y + 250.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 100.0f) << "the rest of the drag moved nothing";
+    EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 1.0f);
+}
+
 TEST_F(OverlappingItemsTest, TheArrowKeysNudgeTheSelection) {
     ShowEditMode();
     StepFrame();
@@ -3267,9 +3294,9 @@ TEST_F(OverlappingItemsTest, TheArrowKeysNudgeTheSelection) {
     PressKey(ImGuiKey_RightArrow);
     EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 1.0f);
 
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, true);
+    KeyEvent(ImGuiMod_Shift, true);
     PressKey(ImGuiKey_DownArrow);
-    ImGui::GetIO().AddKeyEvent(ImGuiMod_Shift, false);
+    KeyEvent(ImGuiMod_Shift, false);
     StepFrame();
     EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y + 10.0f);
 }
@@ -3706,10 +3733,10 @@ TEST_F(HeadlessAppTest, CtrlAndShiftWithTheWheelSetTheSelectionsOpacities) {
     const Rect before = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
 
     const auto wheelWith = [this](ImGuiKey modifier, float notches) {
-        ImGui::GetIO().AddKeyEvent(modifier, true);
+        KeyEvent(modifier, true);
         StepFrame();
         Wheel(notches);
-        ImGui::GetIO().AddKeyEvent(modifier, false);
+        KeyEvent(modifier, false);
         StepFrame();
     };
     wheelWith(ImGuiMod_Ctrl, -2.0f);
@@ -3794,7 +3821,7 @@ TEST_F(HeadlessAppTest, TextPickedMidStrokeEndsTheStrokeWhereItIs) {
     CanvasManager& manager = test::Model(controller_->GetSession());
     const ItemId drawing = manager.CurrentOrNull()->items[0].id;
 
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
     RawMouse(350.0f, 350.0f, platform::MouseEventKind::Down);
     StepFrame();
     RawMouse(450.0f, 400.0f, platform::MouseEventKind::Move);
@@ -3806,7 +3833,7 @@ TEST_F(HeadlessAppTest, TextPickedMidStrokeEndsTheStrokeWhereItIs) {
     EXPECT_FALSE(AppSession().LiveLayer().ActiveStroke().has_value());
     RawMouse(500.0f, 420.0f, platform::MouseEventKind::Move);
     RawMouse(500.0f, 420.0f, platform::MouseEventKind::Up);
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrame();
     ASSERT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
     EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes[0].points.size(), points) << "the rest drew nothing";
@@ -4081,18 +4108,18 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     const auto strokeCount = [&] { return session.Manager().FindItemAnywhere(drawing)->strokes.size(); };
 
     // A first stroke, whole, and saved.
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
     RawMouse(300.0f, 300.0f, platform::MouseEventKind::Down);
     StepFrame();
     RawMouse(400.0f, 300.0f, platform::MouseEventKind::Move);
     StepFrame();
     RawMouse(400.0f, 300.0f, platform::MouseEventKind::Up);
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrame();
     ASSERT_EQ(strokeCount(), 1u);
 
     // A second, left mid-way.
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
     RawMouse(300.0f, 500.0f, platform::MouseEventKind::Down);
     StepFrame();
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Move);
@@ -4100,7 +4127,7 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     PressKey(ImGuiKey_Escape);
     ASSERT_FALSE(App().DrawingItem().has_value());
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Up);
-    ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrames(2);
     ASSERT_EQ(strokeCount(), 2u);
 

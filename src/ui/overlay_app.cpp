@@ -1093,7 +1093,7 @@ struct OverlayApp::MeshCacheFrame {
     MeshCacheFrame& operator=(const MeshCacheFrame&) = delete;
 };
 
-void OverlayApp::HandleMouseWheel() {
+void OverlayApp::HandleMouseWheel(float notches) {
     // What the wheel does is told apart by a modifier, and without one by
     // the mode. All of it is suppressed while the Overview is up: it has
     // its own canvas navigation and its own scroll, and having the wheel
@@ -1123,31 +1123,30 @@ void OverlayApp::HandleMouseWheel() {
     // does (see Hand::ignoredButton) - a notch nudged in the middle of a
     // stroke would switch the canvas under it, and one mid-drag would be
     // filed inside the drag, undone to a size the drag then wrote over.
-    const ImGuiIO& io = ImGui::GetIO();
-    if (io.MouseWheel == 0.0f || PanelOpen() || GestureInFlight()) {
+    if (notches == 0.0f || PanelOpen() || GestureInFlight()) {
         return;
     }
     {
-        if (io.KeyAlt) {
+        if (held_.alt) {
             // Wheel up goes back through the list, wheel down forward -
             // the direction a page scrolls, applied to canvases.
-            if (const int steps = TakeWheelSteps(canvasWheelRemainder_, io.MouseWheel); steps != 0) {
+            if (const int steps = TakeWheelSteps(canvasWheelRemainder_, notches); steps != 0) {
                 SwitchCanvasByOffset(-steps);
             }
-        } else if (io.WantCaptureMouse) {
+        } else if (ImGui::GetIO().WantCaptureMouse) {
             // A widget under the pointer has the wheel.
-        } else if (io.KeyCtrl != io.KeyShift) {
-            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, io.MouseWheel); steps != 0) {
-                StepSelectionOpacity(steps, /*background=*/io.KeyCtrl);
+        } else if (held_.ctrl != held_.shift) {
+            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
+                StepSelectionOpacity(steps, /*background=*/held_.ctrl);
             }
-        } else if (io.KeyCtrl) {
+        } else if (held_.ctrl) {
             // Both held: neither opacity is meant more than the other.
         } else if (!drawingItem_.has_value()) {
-            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, io.MouseWheel); steps != 0) {
+            if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
                 ScaleSelectionByWheel(steps);
             }
         } else {
-            const int steps = TakeWheelSteps(sizeWheelRemainder_, io.MouseWheel);
+            const int steps = TakeWheelSteps(sizeWheelRemainder_, notches);
             if (steps == 0) {
                 // Nothing whole came out of the accumulator yet (a
                 // high-resolution wheel mid-notch) - not a size change,
@@ -1348,16 +1347,8 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         }
     }
 
-    HandleMouseWheel();
-
-    // Nothing acts on a snippet that has gone - see selection_.
-    PruneSelection();
-    // Every key that runs a command - see HandleCommandKeys and
-    // ui/interaction/command.h. Above RefreshStrokeRasters below, because
-    // one of them (New canvas) changes which canvas the rest of the frame
-    // draws; and the selection pruned again after it, since an undo or a
-    // delete can take a selected snippet off the screen.
-    HandleCommandKeys();
+    // Nothing acts on a snippet that has gone - see selection_. The keys
+    // and the wheel have been handled as they came (see OnInput).
     PruneSelection();
 
     // Over a snippet a plain drag would pick up - the selection live, and
@@ -1546,12 +1537,12 @@ void OverlayApp::OnOverlayShown() {
     // key on deliberately). That last one is posted after the final frame
     // and nothing drains it: no frame is drawn while hidden, so ImGui's
     // event queue keeps it until the next showing reads it as a fresh
-    // press. Seen with Ctrl+Alt+S bound to edit mode: the overlay came back
-    // with the screenshot tool in hand, because "S" alone is that tool's
-    // key. Only intermittently, since HandleCommandKeys demands exactly
-    // the modifiers a binding names and ImGui knows a modifier is held only
-    // from a frame that recorded it - so the chord was harmless whenever a
-    // frame had run between the modifiers going down and the letter.
+    // press. Seen with Ctrl+Alt+S bound to edit mode, while the command
+    // keys were still read from ImGui: the overlay came back with the
+    // screenshot tool in hand, because "S" alone is that tool's key. They
+    // come through the input stream now, which a hidden window hands
+    // nothing (see IOverlayWindow::SetInputCallback); ImGui's queue is
+    // what the panels and their widgets still read.
     //
     // The key state as well as the queue, because it goes stale the same
     // way and in both directions: what ImGui believes is held is whatever
