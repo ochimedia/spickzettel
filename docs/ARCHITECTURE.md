@@ -1597,7 +1597,7 @@ construction. It is being split into one owner per surface
 (`docs/VIEW_LAYER.md`, section 7), each a class in `ui/view/` that holds
 its surface's state, draws from what it is handed, and asks for anything
 beyond its own through `ViewHost`, which `OverlayApp` implements; no
-owner knows another. The Settings tab is the first (`SettingsPage`). What every surface shares is in
+owner knows another. So far: the Overview (`OverviewPanel`) and its Settings tab (`SettingsPage`), which the Overview draws inside its body through a call `OverlayApp` hands it. What every surface shares is in
 files of its own: the palette, the accent and the style (`theme.*`), the
 buttons, the panel backdrop, the screen layers and the key names
 (`widgets.*`), and how a snippet is painted, on the canvas or in a
@@ -2746,8 +2746,8 @@ no focus at all while the keyboard is grabbed (below). Either way what
 was borrowed is handed back when the field closes, and a field can close
 two ways: ImGui deactivates it, or the Overview around it is closed from
 outside the frame by a mode switch, in which case the field is never
-rendered again and its own release never runs. `CloseOverview` releases
-for it; `ReleaseTextInput` is idempotent, so both routes running is
+rendered again and its own release never runs. `OverviewPanel::Close`
+ends the name edit, whose end releases for it; `ReleaseTextInput` is idempotent, so both routes running is
 harmless.
 
 ### Taking input back from the game: the input grab

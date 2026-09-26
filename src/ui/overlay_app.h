@@ -14,6 +14,7 @@
 #include "ui/context_menu.h"
 #include "ui/editor.h"
 #include "ui/item_painting.h"
+#include "ui/view/overview_panel.h"
 #include "ui/view/settings_page.h"
 #include "ui/view/view_host.h"
 #include "ui/view_action.h"
@@ -368,7 +369,7 @@ private:
     void OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) override;
     void OpenColorChooser(platform::Vec2 at) override;
     void AskToDeleteCanvas(CanvasId canvas) override;
-    void CanvasMade(CanvasId canvas) override { overviewScrollToCanvasId_ = canvas; }
+    void CanvasMade(CanvasId canvas) override { overview_.ScrollToCanvas(canvas); }
     void OpenItemMenu(ItemId item, platform::Vec2 at) override { OpenItemContextMenu(item, ImVec2(at.x, at.y)); }
     void OpenEmptyCanvasMenu(platform::Vec2 at) override;
     bool PointerOverView() const override;
@@ -432,6 +433,7 @@ private:
     platform::IOverlayWindow* Window() const override { return window_; }
     std::vector<platform::DisplayInfo> ListDisplays() override;
     bool ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) override;
+    PreviewDrawing Previews() override;
     void Do(const ViewAction& action);
     std::vector<ViewAction> actions_;
     // Every input event, in the order they happened - see IOverlayWindow::
@@ -629,51 +631,11 @@ private:
     // will draw (or erase) at, under the cursor, plus the number. See
     // sizePreviewExpireAtSeconds_ for why it's transient.
     void RenderBrushSizePreview();
-    // The Overview, in the order it is drawn (Escape is its interaction's -
-    // see Panel): the dimming backdrop, which closes the Overview on a click
-    // outside
-    // the panel; the header, which is the picker's prompt while a snippet
-    // is being sent somewhere and the tabs otherwise; the body - the
-    // folder sidebar and the canvas grid (with what is deleted in them, see
-    // ShowingDeleted), or the Settings or About panel; and the footer, whose buttons belong to
-    // whichever body is showing.
-    void RenderOverview(float displayW, float displayH);
-
     // Every key and gesture, grouped, with the keys as they are bound - see
     // BuildCheatSheet. A panel over a dimmed canvas like the Overview, but
     // with nothing in it to click: Escape, its own key again, or a click
     // outside it closes it.
     void RenderCheatSheet(float displayW, float displayH);
-    void RenderOverviewHeader();
-    // The sidebar and the grid, which ask for what they are clicked for as
-    // actions (see Act).
-    void RenderFolderSidebar();
-    void RenderCanvasGrid(float displayW, float displayH);
-    void RenderOverviewFooter(bool showCanvasesBody);
-    // Whether the Canvases tab shows what is deleted - showDeleted_, never
-    // while picking where a snippet goes, which is a place among the live
-    // ones.
-    bool ShowingDeleted() const { return showDeleted_ && !pickerItemId_.has_value(); }
-    // The folder the sidebar marks as open and the grid shows: the one
-    // being browsed, or a deleted one picked with Show deleted on.
-    FolderId OverviewFolderId() const;
-    // Lets go of deletedFolderShown_ once it is no longer something to
-    // show: Show deleted is off, the folder is gone, or it has been
-    // restored - in which case it is browsed as any live folder is.
-    void SettleDeletedFolderShown();
-    // The sidebar's width: wider with Show deleted on, where a row can
-    // carry two buttons rather than one.
-    float OverviewSidebarWidth() const;
-    // The picker's one outcome: the snippet it was opened for goes to
-    // `target` - moved or copied, as the picker was opened - and the
-    // picker closes, leaving the Overview open. Nothing moves when the
-    // target is the canvas the snippet is already on.
-    void SendPickedItemTo(CanvasId target);
-    // The Overview's third tab: which build this is (build::VersionLine)
-    // plus ABOUT.md, compiled in so it travels with the binary rather than
-    // living next to it as a file that can go missing - see
-    // build::AboutText.
-    void RenderOverviewAboutPanel();
 public:
     // A hotkey row armed, waiting for the combo the user wants, and the rest
     // of what a test asks of the Settings page's key rows - see SettingsPage.
@@ -795,10 +757,6 @@ private:
     // by the canvas grid, the canvas bar and the recently-deleted list.
     PreviewTextureFn PreviewTextureLookup();
 
-    // Overview: switch canvases, delete/reorder them, or (when opened from
-    // the context menu's Move to canvas) pick a target canvas for that
-    // item.
-    void CloseOverview();
     void ShowActionToast(std::string text);
 
     // What the popover's Delete does, and what a delete Settings > Behavior
@@ -810,7 +768,7 @@ private:
     // Settings > Behavior says not to ask, and then the delete itself, as an
     // action. A snippet on screen doesn't ask: its delete is undoable
     // instead (see Session::DeleteItem).
-    void AskToDelete(DeleteTarget target);
+    void AskToDelete(DeleteTarget target) override;
 
     // ===== The popup that is up (docs/VIEW_LAYER.md, section 4) =====
     //
@@ -1076,87 +1034,6 @@ private:
     void ApplyEffects();
     std::vector<Effect> effects_;
 
-    // Which of the Overview's two tabs is showing - Canvases (the
-    // original/default content: folder sidebar + canvas tile grid) or
-    // Settings (SettingsPage, added once there were enough
-    // in-app-relevant AppConfig fields - showDebugOverlay, the colors,
-    // etc. - to be worth a UI rather than only a hand-edited config.json
-    // line). Not persisted - purely which tab is showing right now, reset
-    // to Canvases every time OpenOverview runs (see its own doc comment)
-    // so the switcher's own primary purpose is always what greets you.
-    // Never shown at all while pickerItemId_ is set (see RenderOverview) -
-    // picking a move/copy destination has its own single-purpose header in
-    // its place, and Settings has no business being reachable mid-pick.
-    enum class OverviewTab { Canvases, Settings, About };
-    OverviewTab overviewTab_ = OverviewTab::Canvases;
-    // Switching tabs, plus the housekeeping that goes with it: the new tab
-    // starts at the top of its own content, and About starts on About
-    // rather than wherever its second page was left. One function so a
-    // fourth tab, if there is ever one, cannot forget either. Declared here
-    // rather than up with the other render helpers because a member
-    // function cannot name a nested type declared after it, and
-    // OverviewTab belongs with the state it describes.
-    void SwitchOverviewTab(OverviewTab tab);
-    // Whether the About tab is showing the third-party licenses instead of
-    // its usual contents. A second page of the same tab rather than a tab
-    // of its own: the licenses have to be *reachable*, not prominent, and a
-    // permanent fourth entry in the tab row would charge every visit to
-    // Canvases and Settings for something read once, if ever. Not persisted
-    // - a fresh About always opens on About.
-    bool aboutShowsNotices_ = false;
-    // Whether the Canvases tab shows what is deleted alongside what is not:
-    // deleted folders in the sidebar and deleted canvases in the grid,
-    // marked out in red with Restore and Delete permanently on each, and
-    // everything else dimmed. Not persisted, and off whenever the Overview
-    // opens. See ShowingDeleted.
-    bool showDeleted_ = false;
-    // A deleted folder picked in the sidebar while Show deleted is on, whose
-    // canvases the grid shows. Kept here rather than as the browsed folder:
-    // that is where a new canvas lands, and the manager never lets it be a
-    // deleted one (see CanvasManager::SettleOffDeleted). See
-    // SettleDeletedFolderShown for when it lets go.
-    std::optional<FolderId> deletedFolderShown_;
-    // Set by anything that changes what the body is showing; consumed by
-    // the body itself on its next frame. All three tabs and both About
-    // pages share one scrolling child, so a page arrived at from halfway
-    // down another one would otherwise open halfway down - and the switch
-    // is asked for from outside that child (a tab button above it, a
-    // footer button below it), where SetScrollY would scroll the panel
-    // instead. See SwitchOverviewTab.
-    bool overviewBodyScrollToTop_ = false;
-    // Set only when the Overview was opened via an item's Move/Copy pill
-    // button - picking a tile then moves/copies this item there instead of
-    // just switching to it.
-    std::optional<ItemId> pickerItemId_ = std::nullopt;
-    bool pickerIsCopy_ = false;
-
-    // In-place rename of a folder row or canvas tile name, triggered by a
-    // double-click on it (see RenderOverview). At most one of the two ids
-    // is ever set; `renameBuffer_` holds the in-progress edit for whichever
-    // one it is. `renameJustFocused_` is consumed the first frame after a
-    // rename starts, to call ImGui::SetKeyboardFocusHere() exactly once.
-    std::optional<FolderId> renamingFolderId_ = std::nullopt;
-    std::optional<CanvasId> renamingCanvasId_ = std::nullopt;
-    char renameBuffer_[128] = {};
-    bool renameJustFocused_ = false;
-    // Starts renaming a folder or a canvas, from `name` - and puts a
-    // NameEdit on the machine's Text level for as long as it lasts.
-    void BeginRenaming(std::optional<FolderId> folder, std::optional<CanvasId> canvas, const std::string& name);
-    // A canvas the Overview should bring into view the next time it draws
-    // its grid, then forget - set whenever one is created, since a new
-    // canvas goes to the end of its folder (see CanvasManager::AddCanvas)
-    // and a folder with more canvases than fit on screen would otherwise
-    // put it out of sight, below the fold, with nothing to say it worked.
-    // Consumed by the tile loop in RenderOverview, whether or not the
-    // canvas is in the folder currently being browsed.
-    std::optional<CanvasId> overviewScrollToCanvasId_ = std::nullopt;
-    // The same for the folder sidebar, and for the same reason: a new
-    // folder goes to the end of the list (see CanvasManager::AddFolder),
-    // which in a library with a few of them is past the bottom of a
-    // sidebar whose "New folder" button is right there under it.
-    std::optional<FolderId> overviewScrollToFolderId_ = std::nullopt;
-
-
     // Small transient "Moved to X" / "Copied to X" banner after a
     // move/copy - text empty or ImGui::GetTime() past the expiry means
     // nothing to draw (see RenderActionToast).
@@ -1200,6 +1077,7 @@ private:
     //
     // Last, so that everything they are handed is there before them.
     SettingsPage settingsPage_{settings_, editor_, *this};
+    OverviewPanel overview_{session_, settings_, editor_, *this};
 };
 
 }  // namespace sz::ui

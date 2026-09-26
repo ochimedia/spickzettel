@@ -555,7 +555,7 @@ void OverlayApp::DrawOverCanvas(float displayW, float displayH) {
 }
 
 void OverlayApp::DrawPanels(float displayW, float displayH) {
-    RenderOverview(displayW, displayH);
+    overview_.Draw(displayW, displayH, [this] { settingsPage_.Draw(); });
     RenderCheatSheet(displayW, displayH);
     RenderConfirmDeletePopover();
 }
@@ -624,9 +624,9 @@ void OverlayApp::Do(const ViewAction& action) {
                    [&](const action::SwitchCanvas& a) { editor_.SwitchCanvas(a.canvas); },
                    [&](const action::SwitchFolder& a) {
                        session_.SwitchToFolder(a.folder);
-                       deletedFolderShown_.reset();
+                       overview_.ForgetDeletedFolderShown();
                    },
-                   [&](const action::ShowDeletedFolder& a) { deletedFolderShown_ = a.folder; },
+                   [&](const action::ShowDeletedFolder& a) { overview_.ShowDeletedFolder(a.folder); },
                    [&](const action::ReorderFolder& a) { session_.ReorderFolder(a.folder, a.place); },
                    [&](const action::ReorderCanvas& a) { session_.ReorderCanvas(a.canvas, a.place); },
                    [&](const action::MoveCanvasToFolder& a) { session_.MoveCanvasToFolder(a.canvas, a.folder); },
@@ -637,8 +637,8 @@ void OverlayApp::Do(const ViewAction& action) {
                        // the end of the sidebar - which is where the eye goes
                        // after pressing a button at the bottom of it, and matches
                        // where a new canvas lands in its own list.
-                       overviewScrollToFolderId_ = session_.AddFolder(TimestampName());
-                       deletedFolderShown_.reset();
+                       overview_.ScrollToFolder(session_.AddFolder(TimestampName()));
+                       overview_.ForgetDeletedFolderShown();
                        // With a canvas already in it. A folder is where canvases
                        // live, so an empty one is a step rather than a result, and
                        // an empty folder reads as a dead end: no tile to click,
@@ -649,15 +649,15 @@ void OverlayApp::Do(const ViewAction& action) {
                    },
                    [&](const action::NewCanvas&) {
                        // At the end of the folder, so the grid may have to scroll
-                       // for it to be seen at all - see overviewScrollToCanvasId_,
-                       // which CreateCanvasInCurrentFolder sets either way: the
-                       // tile is what the click was about.
+                       // for it to be seen at all - see CanvasMade, which
+                       // CreateCanvasInCurrentFolder calls either way: the tile
+                       // is what the click was about.
                        const CanvasId id = editor_.CreateCanvasInCurrentFolder();
-                       if (pickerItemId_.has_value()) {
+                       if (overview_.Picking()) {
                            // A destination for the snippet being sent away, and not
                            // switched to: following it would take the user off the
                            // canvas they were working on.
-                           SendPickedItemTo(id);
+                           overview_.SendPickedItemTo(id);
                        } else {
                            // Switched to, with the Overview staying up. Making a
                            // canvas is asking for somewhere new to draw, so leaving
@@ -668,18 +668,18 @@ void OverlayApp::Do(const ViewAction& action) {
                            editor_.SwitchCanvas(id);
                        }
                    },
-                   [&](const action::SendPicked& a) { SendPickedItemTo(a.canvas); },
+                   [&](const action::SendPicked& a) { overview_.SendPickedItemTo(a.canvas); },
                    [&](const action::Restore& a) {
                        if (session_.Restore(a.id)) {
                            ShowActionToast(strings::kToastRestored);
-                           SettleDeletedFolderShown();
+                           overview_.SettleDeletedFolderShown();
                        }
                    },
                    [&](const action::Delete& a) { PerformDelete(a.target); },
                    [&](const action::RestoreMinimized& a) { session_.SetMinimized({a.item}, false); },
                    [&](const action::ClosePanel& a) {
                        if (a.panel == PanelKind::Overview) {
-                           CloseOverview();
+                           overview_.Close();
                        } else if (IsCheatSheetOpen()) {
                            editor_.Input().End(Level::Panel);
                        }

@@ -92,6 +92,11 @@ void OverlayApp::BeginOverviewPreviewFrame() {
     picturePreviewThumbnailBudget_ = wanted ? kOverviewThumbnailLoadsPerFrame : 0;
 }
 
+ViewHost::PreviewDrawing OverlayApp::Previews() {
+    BeginOverviewPreviewFrame();
+    return PreviewDrawing{PreviewTextureLookup(), PreviewMeshSlot(), PictureSampling()};
+}
+
 PreviewTextureFn OverlayApp::PreviewTextureLookup() {
     if (!Cfg().overviewShowsBitmaps) {
         return {};

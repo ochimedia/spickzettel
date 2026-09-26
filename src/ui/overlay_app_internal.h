@@ -113,45 +113,10 @@ struct CheatSheetSection {
 };
 std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const ShortcutBindings& shortcuts);
 
-// The folder list down the Overview's left side - the sidebar's width, and
-// where the footer's "New canvas" lines up (see
-// OverlayApp::OverviewSidebarWidth, which adds to it with Show deleted on).
-// Wide enough for a folder's default name, which is a full timestamp
-// ("2026-09-07 22:53:26" - see TimestampName). Narrower clips the last digit
-// of the seconds, which reads as a rendering bug rather than as a name that
-// is simply long. The row reserves 34 for the delete button and insets the
-// text by 10, so this is the name's width plus room to breathe.
-inline constexpr float kOverviewSidebarWidth = 200.0f;
-
 // How much of itself every snippet keeps while a new one is being made -
 // see OverlayApp::ItemsFadedForCreation. Enough to tell where things are,
 // little enough that what is being framed is what is seen.
 inline constexpr float kCreationFadeAlpha = 0.2f;
-
-// ----- Show deleted (see overlay_app_deleted.cpp) -----
-
-// Between a deleted thing's Restore and its Delete permanently.
-inline constexpr float kDeletedButtonGap = 4.0f;
-// How much of itself a folder or canvas with nothing deleted about it keeps
-// while Show deleted is on: there, still usable, and plainly not what the
-// view is about.
-inline constexpr float kDimmedAlpha = 0.4f;
-
-// "Deleted today, 14:05 - 32 min ago": the day in words while that is
-// shorter than a date, and how long ago while that is the quicker thing to
-// read - which is what "I deleted something half an hour ago" is looking
-// for. `now` is passed in, so a test can say when that is.
-std::string DeletedWhen(int64_t deletedAt, std::time_t now);
-// "Deleted permanently from <date> on": when the retention period, `days`
-// long, takes something deleted at `deletedAt` - the first start from that
-// day on (see TrayController::Initialize).
-std::string GoesOn(int64_t deletedAt, int days);
-
-// A deleted folder's or canvas's two buttons, side by side at the cursor:
-// Restore, and Delete permanently. Ids "##restore" and "##deleteforgood",
-// under whatever the caller has pushed.
-enum class DeletedButton { None, Restore, DeleteForGood };
-DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip);
 
 // What a folder or canvas is called until someone renames it is
 // TimestampName() - in core/util now, since CanvasManager names the ones

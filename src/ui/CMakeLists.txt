@@ -20,7 +20,6 @@ add_library(sz_ui STATIC
     overlay_app.cpp
     overlay_app_cheatsheet.cpp
     overlay_app_commands.cpp
-    overlay_app_deleted.cpp
     overlay_app_docks.cpp
     overlay_app_input.cpp
     overlay_app_items.cpp
@@ -31,6 +30,7 @@ add_library(sz_ui STATIC
     settings_widgets.cpp
     theme.cpp
     ui_scale.cpp
+    view/overview_panel.cpp
     view/settings_page.cpp
     widgets.cpp
 )

@@ -242,7 +242,7 @@ bool DangerButton(const char* strId, const Icon& icon, const char* text) {
 }
 
 // A plain text tab, active tab in accent, inactive tabs a quiet neutral -
-// the Overview's own Canvases/Settings switcher (see RenderOverview).
+// the Overview's own Canvases/Settings switcher (see OverviewPanel::Draw).
 // `text` doubles as both the visible label and the ImGui ID (safe here -
 // the two tab labels are the only buttons with that exact text anywhere
 // in the Overview's ID scope), so ordinary ImGui::Button already centers

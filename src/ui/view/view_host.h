@@ -11,7 +11,9 @@
 #include <vector>
 
 #include "core/session/actions.h"
+#include "core/drawing/stroke_mesh_cache.h"
 #include "platform/i_overlay_window.h"
+#include "ui/item_painting.h"
 #include "ui/view_action.h"
 
 namespace sz::ui {
@@ -31,6 +33,21 @@ public:
     // if the OS takes it - see OverlayApp::SetHotkeyChangeCallback. False
     // when it did not.
     virtual bool ChangeHotkey(core::HotkeySlot slot, platform::KeyCombo combo) = 0;
+    // A delete of `target`: the confirmation, unless Settings > Behavior
+    // says not to ask, and then the delete itself, as an action.
+    virtual void AskToDelete(DeleteTarget target) = 0;
+
+    // What a canvas's preview is drawn with - see DrawCanvasPreview: each
+    // picture's thumbnail-sized pixels, the previews' own mesh cache, and
+    // the picture filter. The textures and the caches are the canvas view's.
+    struct PreviewDrawing {
+        PreviewTextureFn textures;
+        core::StrokeMeshSlot meshes;
+        ImageSampling sampling;
+    };
+    // Asked once a frame by what draws previews, which starts that frame's
+    // budget for reading pictures over.
+    virtual PreviewDrawing Previews() = 0;
 
 protected:
     ~ViewHost() = default;
