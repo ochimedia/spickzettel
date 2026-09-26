@@ -10,7 +10,10 @@
 
 #include "core/config/display_choice.h"
 #include "ui/icons_generated.h"
-#include "ui/overlay_app_internal.h"
+#include "core/util/timestamp_name.h"
+#include "generated/ui_strings.h"
+#include "ui/theme.h"
+#include "ui/widgets.h"
 #include "ui/settings_widgets.h"
 
 #include <imgui.h>
@@ -21,7 +24,72 @@
 namespace sz::ui {
 
 using namespace ::sz::core;
-using namespace overlay_detail;
+
+const GalleryTool kGalleryTools[6] = {
+    {Tool::Draw, &icons::kPen, strings::kToolDraw, strings::kToolDrawTip},
+    {Tool::Erase, &icons::kEraser, strings::kToolErase, strings::kToolEraseTip},
+    {Tool::Text, &icons::kType, strings::kToolText, strings::kToolTextTip},
+    {Tool::Select, &icons::kSelect, strings::kToolSelect, strings::kToolSelectTip},
+    {Tool::NewScreenshot, &icons::kCamera, strings::kToolNewScreenshot, strings::kToolNewScreenshotTip},
+    {Tool::NewDrawing, &icons::kNote, strings::kToolNewDrawing, strings::kToolNewDrawingTip},
+};
+
+const CreateActionInfo kCreateActions[2] = {
+    {CreateAction::NewCanvas, &icons::kPlus, strings::kCreateNewCanvas, strings::kCreateNewCanvas},
+    {CreateAction::NewCanvasWithSelection, &icons::kPlus, strings::kCreateNewCanvasWithSelection,
+     strings::kCreateNewCanvasWithSelection},
+};
+
+const ClipboardActionInfo kClipboardActions[4] = {
+    {ClipboardAction::Copy, &icons::kCopy, strings::kClipboardCopy},
+    {ClipboardAction::Cut, &icons::kScissors, strings::kClipboardCut},
+    {ClipboardAction::Paste, &icons::kClipboard, strings::kClipboardPaste},
+    {ClipboardAction::Duplicate, &icons::kCopy, strings::kClipboardDuplicate},
+};
+
+ShortcutAction ShortcutForTool(Tool tool) {
+    switch (tool) {
+        case Tool::Draw:
+            return ShortcutAction::Draw;
+        case Tool::Erase:
+            return ShortcutAction::Erase;
+        case Tool::Text:
+            return ShortcutAction::Text;
+        case Tool::Select:
+            return ShortcutAction::Select;
+        case Tool::NewScreenshot:
+            return ShortcutAction::NewScreenshot;
+        case Tool::NewDrawing:
+            return ShortcutAction::NewDrawing;
+    }
+    return ShortcutAction::Draw;  // unreachable: the switch names every tool
+}
+
+ShortcutAction ShortcutForCreateAction(CreateAction action) {
+    switch (action) {
+        case CreateAction::NewCanvas:
+            return ShortcutAction::NewCanvas;
+        case CreateAction::NewCanvasWithSelection:
+            return ShortcutAction::NewCanvasWithSelection;
+    }
+    return ShortcutAction::NewCanvas;  // unreachable: the switch names every action
+}
+
+ShortcutAction ShortcutForClipboardAction(ClipboardAction action) {
+    switch (action) {
+        case ClipboardAction::Copy:
+            return ShortcutAction::Copy;
+        case ClipboardAction::Cut:
+            return ShortcutAction::Cut;
+        case ClipboardAction::Paste:
+            return ShortcutAction::Paste;
+        case ClipboardAction::Duplicate:
+            return ShortcutAction::Duplicate;
+    }
+    return ShortcutAction::Copy;  // unreachable: the switch names every action
+}
+
+
 
 SettingsPage::SettingsPage(Settings& settings, Editor& editor, ViewHost& host)
     : settings_(settings), editor_(editor), host_(host) {}

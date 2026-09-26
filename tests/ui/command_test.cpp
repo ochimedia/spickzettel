@@ -8,7 +8,7 @@
 
 #include "core/config/app_config.h"
 #include "core/config/shortcut_action.h"
-#include "ui/overlay_app_internal.h"
+#include "ui/view/settings_page.h"
 
 namespace sz::ui {
 namespace {
@@ -43,11 +43,11 @@ TEST(CommandTest, EverySettingsRowBindsTheKeyOfItsCommand) {
         {Tool::NewDrawing, CommandId::NewDrawingTool},
     };
     for (const auto& [tool, command] : tools) {
-        EXPECT_EQ(CommandForShortcut(overlay_detail::ShortcutForTool(tool)), command) << NameOf(command);
+        EXPECT_EQ(CommandForShortcut(ShortcutForTool(tool)), command) << NameOf(command);
     }
-    EXPECT_EQ(CommandForShortcut(overlay_detail::ShortcutForCreateAction(CreateAction::NewCanvas)),
+    EXPECT_EQ(CommandForShortcut(ShortcutForCreateAction(CreateAction::NewCanvas)),
               CommandId::NewCanvas);
-    EXPECT_EQ(CommandForShortcut(overlay_detail::ShortcutForCreateAction(CreateAction::NewCanvasWithSelection)),
+    EXPECT_EQ(CommandForShortcut(ShortcutForCreateAction(CreateAction::NewCanvasWithSelection)),
               CommandId::NewCanvasWithSelection);
     const std::pair<ClipboardAction, CommandId> clipboard[] = {
         {ClipboardAction::Copy, CommandId::Copy},
@@ -56,7 +56,7 @@ TEST(CommandTest, EverySettingsRowBindsTheKeyOfItsCommand) {
         {ClipboardAction::Duplicate, CommandId::Duplicate},
     };
     for (const auto& [action, command] : clipboard) {
-        EXPECT_EQ(CommandForShortcut(overlay_detail::ShortcutForClipboardAction(action)), command) << NameOf(command);
+        EXPECT_EQ(CommandForShortcut(ShortcutForClipboardAction(action)), command) << NameOf(command);
     }
 }
 

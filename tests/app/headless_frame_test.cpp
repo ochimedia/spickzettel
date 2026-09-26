@@ -17,7 +17,10 @@
 #include "core/util/uid.h"
 #include "support/held_library.h"
 #include "support/session_test_access.h"
-#include "ui/overlay_app_internal.h"
+#include "ui/theme.h"
+#include "ui/view/canvas_view.h"
+#include "ui/widgets.h"
+#include "generated/ui_strings.h"
 
 #include <imgui_internal.h>
 

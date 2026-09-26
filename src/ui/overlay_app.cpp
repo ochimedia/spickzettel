@@ -1,5 +1,10 @@
 #include "ui/overlay_app.h"
-#include "ui/overlay_app_internal.h"
+
+#include "core/util/timestamp_name.h"
+#include "generated/ui_strings.h"
+#include "ui/icons_generated.h"
+#include "ui/theme.h"
+#include "ui/widgets.h"
 
 #include <algorithm>
 #include <cmath>
@@ -30,77 +35,6 @@
 #include <imgui_internal.h>
 
 namespace sz::ui {
-
-using namespace overlay_detail;
-
-namespace overlay_detail {
-
-const GalleryTool kGalleryTools[6] = {
-    {Tool::Draw, &icons::kPen, strings::kToolDraw, strings::kToolDrawTip},
-    {Tool::Erase, &icons::kEraser, strings::kToolErase, strings::kToolEraseTip},
-    {Tool::Text, &icons::kType, strings::kToolText, strings::kToolTextTip},
-    {Tool::Select, &icons::kSelect, strings::kToolSelect, strings::kToolSelectTip},
-    {Tool::NewScreenshot, &icons::kCamera, strings::kToolNewScreenshot, strings::kToolNewScreenshotTip},
-    {Tool::NewDrawing, &icons::kNote, strings::kToolNewDrawing, strings::kToolNewDrawingTip},
-};
-
-const CreateActionInfo kCreateActions[2] = {
-    {CreateAction::NewCanvas, &icons::kPlus, strings::kCreateNewCanvas, strings::kCreateNewCanvas},
-    {CreateAction::NewCanvasWithSelection, &icons::kPlus, strings::kCreateNewCanvasWithSelection,
-     strings::kCreateNewCanvasWithSelection},
-};
-
-const ClipboardActionInfo kClipboardActions[4] = {
-    {ClipboardAction::Copy, &icons::kCopy, strings::kClipboardCopy},
-    {ClipboardAction::Cut, &icons::kScissors, strings::kClipboardCut},
-    {ClipboardAction::Paste, &icons::kClipboard, strings::kClipboardPaste},
-    {ClipboardAction::Duplicate, &icons::kCopy, strings::kClipboardDuplicate},
-};
-
-ShortcutAction ShortcutForTool(Tool tool) {
-    switch (tool) {
-        case Tool::Draw:
-            return ShortcutAction::Draw;
-        case Tool::Erase:
-            return ShortcutAction::Erase;
-        case Tool::Text:
-            return ShortcutAction::Text;
-        case Tool::Select:
-            return ShortcutAction::Select;
-        case Tool::NewScreenshot:
-            return ShortcutAction::NewScreenshot;
-        case Tool::NewDrawing:
-            return ShortcutAction::NewDrawing;
-    }
-    return ShortcutAction::Draw;  // unreachable: the switch names every tool
-}
-
-ShortcutAction ShortcutForCreateAction(CreateAction action) {
-    switch (action) {
-        case CreateAction::NewCanvas:
-            return ShortcutAction::NewCanvas;
-        case CreateAction::NewCanvasWithSelection:
-            return ShortcutAction::NewCanvasWithSelection;
-    }
-    return ShortcutAction::NewCanvas;  // unreachable: the switch names every action
-}
-
-ShortcutAction ShortcutForClipboardAction(ClipboardAction action) {
-    switch (action) {
-        case ClipboardAction::Copy:
-            return ShortcutAction::Copy;
-        case ClipboardAction::Cut:
-            return ShortcutAction::Cut;
-        case ClipboardAction::Paste:
-            return ShortcutAction::Paste;
-        case ClipboardAction::Duplicate:
-            return ShortcutAction::Duplicate;
-    }
-    return ShortcutAction::Copy;  // unreachable: the switch names every action
-}
-
-
-}  // namespace overlay_detail
 
 OverlayApp::OverlayApp(Settings& settings, Session& session)
     : editor_(settings, session), session_(session), settings_(settings) {
@@ -208,6 +142,125 @@ bool OverlayApp::PointerOverView() const {
 
 bool OverlayApp::PopupOpen() const {
     return ImGui::GetCurrentContext() != nullptr && ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId);
+}
+
+// ================= Input, and the first run =================
+
+namespace {
+// The backing a text note gets by default (ApplyCreationDefaults, and the
+// first-run welcome note). Half-transparent black: note text defaults to
+// white, and white on a light backing is poor contrast wherever the overlay
+// sits over something pale. Black behind white reads on anything.
+constexpr uint32_t kNoteBackgroundColorRGBA = 0x000000FFu;
+constexpr float kNoteBackgroundOpacity = 0.5f;
+}  // namespace
+
+void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
+    // Each sized to its text rather than to the screen - fitted to the
+    // hand-wrapped lines at their size, a hair wider than the longest -
+    // so none sits there mostly empty. The welcome is 10 lines at 18px;
+    // the two warnings 8 lines at 22px, larger because they are the two
+    // things a new user must not skip.
+    //
+    // All of it at the interface scale, although notes are content and
+    // content is not scaled: these are the app talking, made while it
+    // starts, and someone who reads at 150% should not have to find the
+    // text-size slider to read the note that tells them where it is.
+    const ImVec2 welcomeSize = Px(400.0f, 214.0f);
+    const ImVec2 warningSize = Px(300.0f, 214.0f);
+    const float gap = Px(24.0f);
+    // A light red: a warning, readable on the note's dark backing, and not
+    // the danger red of a delete button.
+    constexpr uint32_t kWarningTextRGBA = 0xFF8C80FFu;
+
+    // In a row, the welcome first, centered - or, on a screen too narrow
+    // for that, in a column. On one too small for either they overlap
+    // rather than going off screen, which ClampRectToViewport sees to.
+    const float rowW = welcomeSize.x + 2.0f * (warningSize.x + gap);
+    const bool row = rowW <= displayW * 0.95f;
+    const ImVec2 group = row ? ImVec2(rowW, welcomeSize.y)
+                             : ImVec2(welcomeSize.x, welcomeSize.y + 2.0f * (warningSize.y + gap));
+    ImVec2 at((displayW - group.x) * 0.5f, (displayH - group.y) * 0.5f);
+
+    editor_.EnsureCanvasForNewItem();
+    // Made as they are, text and all, and not on the history: nobody made
+    // them, so there is nothing for an undo to take back.
+    const auto place = [&](ImVec2 size, const char* name, std::string text, float textSizePx,
+                           uint32_t textColorRGBA) -> ItemId {
+        Item note;
+        note.name = name;
+        note.rect = ClampRectToViewport(Rect{at.x, at.y, size.x, size.y}, displayW, displayH);
+        (row ? at.x : at.y) += (row ? size.x : size.y) + gap;
+        // Boxes of text, whose shape is the point of resizing them: the text
+        // wraps to the new width rather than scaling with it.
+        note.keepAspect = false;
+        // A Text Note's backing (see kNoteBackgroundColorRGBA), but darker:
+        // these land on whatever the desktop happens to show, and half
+        // transparent over a white window left the red text washed out.
+        note.picture.tintColorRGBA = kNoteBackgroundColorRGBA;
+        note.picture.opacity = 0.8f;
+        note.noteText = std::move(text);
+        note.noteTextSizePx = std::min(textSizePx, kNoteTextSizeMax);
+        note.noteTextColorRGBA = textColorRGBA;
+        return session_.CreateItem(std::move(note), /*undoable=*/false);
+    };
+    // Deliberately short. This is the first thing anyone sees, and its job
+    // is only to get them to the point where the app can explain itself:
+    // one gesture, the right-click menus, the key that brings the overlay
+    // back, and the cheat sheet for everything else - with the keys as
+    // they are bound, which a config carried over from elsewhere may have
+    // changed. Wrapped by hand at a width the note's own rect fits, since
+    // Item::noteText is drawn as-is (DrawItemContent wraps too, but on its
+    // own boundaries - keeping the key lines intact reads better than
+    // letting them break wherever the item's width happens to fall).
+    const std::string showKey = FormatKeyComboLabel(Cfg().hotkeyEditMode);
+    const platform::KeyCombo& sheetKey =
+        settings_.Live().shortcuts[ShortcutActionIndex(ShortcutAction::CheatSheet)];
+    char text[512];
+    if (sheetKey.key != 0) {
+        std::snprintf(text, sizeof(text), strings::kWelcomeBody, showKey.c_str(),
+                      FormatKeyComboLabel(sheetKey).c_str());
+    } else {
+        std::snprintf(text, sizeof(text), strings::kWelcomeBodyNoCheatSheetKey, showKey.c_str());
+    }
+    if (place(welcomeSize, strings::kWelcomeName, text, Px(18.0f), Item{}.noteTextColorRGBA) == 0) {
+        return;
+    }
+
+    // Behavior and profiles, because the right input settings differ by
+    // game and the defaults will be wrong for some; anti-cheat, because
+    // hooking input and drawing over a game is what such a system looks
+    // for, and a ban is not something to find out about afterwards.
+    for (const auto& [name, body] : {std::pair{strings::kWelcomeBehaviorName, strings::kWelcomeBehaviorBody},
+                                     std::pair{strings::kWelcomeAntiCheatName, strings::kWelcomeAntiCheatBody}}) {
+        place(warningSize, name, body, Px(22.0f), kWarningTextRGBA);
+    }
+}
+
+void OverlayApp::OnHotkey(CommandId command, const platform::KeyCombo& combo) {
+    Event event;
+    event.kind = EventKind::Hotkey;
+    event.command = command;
+    event.combo = combo;
+    event.modifiers = editor_.Held();
+    editor_.Input().Offer(event);
+}
+
+void OverlayApp::OnInput(const platform::InputEvent& event) {
+    // Real OS-level click-through (see IOverlayWindow::Present)
+    // means view-only mode receives no input on Windows; guarded here too so
+    // it is read-only on every backend, not just the real one.
+    if (IsViewOnly()) {
+        return;
+    }
+    editor_.SetHeld(event.modifiers);
+    editor_.SetNow(event.seconds);
+    // The display as the last frame saw it, which is what the event's
+    // position is in.
+    if (ImGui::GetCurrentContext() != nullptr) {
+        editor_.SetDisplaySize(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+    }
+    editor_.Input().Offer(Event::FromInput(event));
 }
 
 // ================= What the owners and the editor ask =================

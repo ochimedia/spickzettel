@@ -1590,23 +1590,36 @@ caption written beside it by hand.
 ## The overlay UI
 
 `ui::OverlayApp` is the overlay as it is drawn, with Dear ImGui: a view
-of the session. Its definition is split across `overlay_app_*.cpp` by
-section of the UI (items, input, rasters, popovers, docks, overview,
-deleted) with `overlay_app.cpp` holding the per-frame entry points and
-construction. It is being split into one owner per surface
-(`docs/VIEW_LAYER.md`, section 7), each a class in `ui/view/` that holds
-its surface's state, draws from what it is handed, and asks for anything
-beyond its own through `ViewHost`, which `OverlayApp` implements; no
-owner knows another. So far: the Overview (`OverviewPanel`), its Settings tab (`SettingsPage`), which the Overview draws inside its body through a call `OverlayApp` hands it, the cheat sheet (`CheatSheet`), the app's popups with the effect queue (`Popups`), the canvas bar (`CanvasBar`), whose tile menu is asked for through `ViewHost` too, the screen chrome (`ScreenChrome`: the HUD, the border, the demo mark), the messages (`Messages`: the toast and the persistence warning), the pointer (`Pointer`: its shape, the software pointer, the drag previews, the size preview and the badge), and the canvas view (`CanvasView`: the canvas and items layers, the note editor, the dock, the view-only layer, with the stroke rasters, the mesh caches and the previews' pictures, which the Overview and the canvas bar reach through `ViewHost::Previews`). What every surface shares is in
-files of its own: the palette, the accent and the style (`theme.*`), the
-buttons, the panel backdrop, the screen layers and the key names
-(`widgets.*`), and how a snippet is painted, on the canvas or in a
-preview (`item_painting.*`). Helpers used by more than one of the class's
-files live in `overlay_app_internal.h` under `overlay_detail`; anything
-used by one file stays a file-local helper. `ui::ContextMenu`
-(`context_menu.*`) is the one piece drawn beside the class rather than
-inside it: it is a widget, not a view of the session, and depends on
-nothing but Dear ImGui and the icon tables.
+of the session, laid out in `docs/VIEW_LAYER.md`. `overlay_app.*` holds
+the frame and its stages, the mode, the actions and the routing; every
+surface has an owner of its own in `ui/view/`, which holds that surface's
+state, draws from what it is handed, and asks for anything beyond its own
+through `ViewHost`, which `OverlayApp` implements. No owner knows another,
+and `OverlayApp` is the one object that knows them all:
+
+- `CanvasView`: the canvas and items layers, the note editor, the dock and
+  the view-only layer, with the stroke rasters, both mesh caches and the
+  previews' pictures, which the Overview and the canvas bar reach through
+  `ViewHost::Previews`.
+- `CanvasBar`: the bar along the bottom edge, whose tile menu it asks for
+  through `ViewHost`.
+- `Popups`: the app's six popups, the record of the one that is up, and
+  the effect queue.
+- `OverviewPanel` and `SettingsPage`: the Overview, and its Settings tab,
+  which the Overview draws inside its body through a call `OverlayApp`
+  hands it.
+- `CheatSheet`, `ScreenChrome` (the HUD, the border, the demo mark),
+  `Messages` (the toast, the persistence warning) and `Pointer` (its
+  shape, the software pointer, the drag previews, the size preview, the
+  badge).
+
+What every surface shares is in files of its own: the palette, the accent
+and the style (`theme.*`), the buttons, the panel backdrop, the screen
+layers and the key names (`widgets.*`), how a snippet is painted, on the
+canvas or in a preview (`item_painting.*`), and a Settings row's widgets
+(`settings_widgets.*`). Anything used by one file stays a file-local
+helper. `ui::ContextMenu` (`context_menu.*`) is a widget, not a view of
+the session, and depends on nothing but Dear ImGui and the icon tables.
 
 What the hand works on is not the view's: `ui::Editor` (`editor.*`,
 `editor_commands.cpp`) holds the selection, the tool in hand and its

@@ -10,8 +10,7 @@
 // input options' tree - stays the panel's, written out by hand: its rows
 // are as many different explanations, not a list.
 //
-// Internal to the overlay, like overlay_app_internal.h: only the Settings
-// panel draws these.
+// Only the Settings page draws these.
 
 #include <cstddef>
 #include <optional>
@@ -20,9 +19,14 @@
 
 #include "core/config/setting.h"
 #include "core/session/settings.h"
-#include "ui/overlay_app_internal.h"
+#include "ui/theme.h"
+#include "ui/widgets.h"
 
-namespace sz::ui::overlay_detail {
+namespace sz::ui {
+
+// The settings are the core's, spoken of in its own vocabulary, as the rest
+// of the view does (see overlay_app.h).
+using namespace ::sz::core;
 
 // The "?" that carries a row's explanation - see the definition.
 void HelpMarker(const char* id, const char* title, const char* text);
@@ -115,4 +119,4 @@ void SettingCombo(Settings& settings, const GlobalSetting<ChoiceRule<E>>& row, c
     }
 }
 
-}  // namespace sz::ui::overlay_detail
+}  // namespace sz::ui

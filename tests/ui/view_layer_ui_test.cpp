@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "fakes/ui_test.h"
+#include "generated/ui_strings.h"
 #include "support/session_test_access.h"
 #include "support/view_stack.h"
 

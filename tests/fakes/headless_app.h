@@ -37,7 +37,7 @@
 
 #include "app/tray_app.h"
 #include "fakes/fake_platform_host.h"
-#include "ui/overlay_app_internal.h"
+#include "ui/widgets.h"
 #include "ui/ui_scale.h"
 
 namespace sz::test {

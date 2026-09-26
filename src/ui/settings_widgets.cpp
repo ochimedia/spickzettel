@@ -6,12 +6,13 @@
 #include <string>
 
 #include "ui/icons_generated.h"
+#include "generated/ui_strings.h"
 
 // For ImGui::GetCurrentWindow, which is how HelpMarker asks how tall the
 // row it is joining already is - see its own comment.
 #include <imgui_internal.h>
 
-namespace sz::ui::overlay_detail {
+namespace sz::ui {
 
 // The revert arrow that marks a settings row as set here rather than
 // inherited. Small and quiet enough to sit inside a checkbox row without
@@ -297,4 +298,4 @@ void SettingColor(Settings& settings, const GlobalSetting<ColorRule>& row, const
     ImGui::TextUnformatted(caption);
 }
 
-}  // namespace sz::ui::overlay_detail
+}  // namespace sz::ui

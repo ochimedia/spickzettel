@@ -13,12 +13,51 @@
 
 #include "core/config/profile.h"
 #include "core/config/settings_catalog.h"
+#include "core/config/shortcut_action.h"
 #include "core/session/settings.h"
 #include "ui/editor.h"
 #include "ui/icon_draw.h"
 #include "ui/view/view_host.h"
 
 namespace sz::ui {
+
+// Every tool, with the icon, name and tooltip it is offered under - the
+// marking tools and Select first, then the two creation tools, which is
+// the order the Settings page's Shortcuts section lists them in. One table, so a
+// tool is drawn and named the same way wherever it is shown.
+struct GalleryTool {
+    Tool tool;
+    const Icon* icon;
+    const char* name;
+    const char* tooltip;
+};
+// Every create action - things that happen at once rather than being a tool.
+struct CreateActionInfo {
+    CreateAction action;
+    const Icon* icon;
+    const char* tooltip;
+    const char* name;
+};
+// Defined once, in settings_page.cpp: the icons they point at are
+// per-translation-unit constants, so a table defined in the header would
+// hand each file a different set of addresses.
+// Copy, Cut, Paste and Duplicate, for the Shortcuts tab to list them by.
+struct ClipboardActionInfo {
+    ClipboardAction action;
+    const Icon* icon;
+    const char* name;
+};
+extern const GalleryTool kGalleryTools[6];
+extern const CreateActionInfo kCreateActions[2];
+extern const ClipboardActionInfo kClipboardActions[4];
+
+// The key a Settings row binds, for a tool, a create action and a
+// clipboard action - the rows are listed by those, and bind the
+// ShortcutAction config stores the key under. What the key then runs is
+// the command table's (see CommandForShortcut).
+ShortcutAction ShortcutForTool(Tool tool);
+ShortcutAction ShortcutForCreateAction(CreateAction action);
+ShortcutAction ShortcutForClipboardAction(ClipboardAction action);
 
 class SettingsPage {
 public:

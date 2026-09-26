@@ -10,7 +10,7 @@
 // Deliberately knows nothing about the app. It is handed rows, draws them,
 // and hands back the `action` of whichever was chosen; every color comes
 // out of the current ImGui style rather than the overlay's own palette
-// (see overlay_app_internal.h's theme namespace, which is where that style
+// (see theme.h, which is where that style
 // is set from). So this header depends on nothing but Dear ImGui and the
 // icon tables, and a menu themes itself with whatever it is dropped into.
 
