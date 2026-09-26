@@ -1510,8 +1510,8 @@ What the hand works on is not the view's: `ui::Editor` (`editor.*`,
 shapes, drawing mode, the clipboard, the note being typed, the drawing a
 stray click made, and every command, and makes snippets and canvases -
 with no ImGui in it. It is the Editor of `docs/INTERACTIONS.md`, section
-10: the state the interactions of phase 3 work on, which is why it can
-have no frame behind it. The view tells it the display size (each frame
+10: the state the interactions work on, which is why it can have no
+frame behind it. The view tells it the display size (each frame
 and each event) and the time and modifiers of the event being handled,
 and it asks the view, through `EditorViews`, for what only a view can
 do: a message, a panel or a popup opened. The hit test
@@ -1881,9 +1881,10 @@ until it is over. The second stays, as the end of an interaction the
 wheel has no other end for: a run of arrow presses within it is one
 undo, as it has always been.
 
-Where this is going is `docs/INTERACTIONS.md`: every input through one
-state machine - a stack of interactions, each offered every event first -
-in which every pair of state and event has a written answer. That
+All of this follows `docs/INTERACTIONS.md`, the reference for how input
+behaves: every input through one state machine - a stack of
+interactions, each offered every event first - in which every pair of
+state and event has a written answer. That
 structure is a decision in its own right. A new input behavior is added
 through its tables, commands and interactions; a change to the structure
 itself needs a well-founded reason, argued there first.

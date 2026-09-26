@@ -1,10 +1,17 @@
-# Interactions: a design
+# Interactions
 
-Status: **agreed** (phase 0, reviewed 2026-09-26); built in the phases of
-section 11. Every behavior below is either what the app does today (said
-so) or a change (marked **Change**). As the phases land, what each settles
-is described in `docs/ARCHITECTURE.md`; this file stays the design they
-follow.
+Status: **built.** Agreed on review (2026-09-26) and built in the four
+phases of section 11, the last finished 2026-09-26. This is the
+reference for how the app takes input: the tables and cases of sections
+4 to 9 are what the machine does, and a change to input behavior is made
+here first (see the principle below). `docs/ARCHITECTURE.md` says how the
+code carries it out, and why.
+
+The text was written before the build, as its plan. Where it says
+"today", it means the app before the build; a **Change** is what the
+build changed from that; and what building found wrong in a table is
+recorded where it was corrected ("Found while building phase 3", and
+phase 4).
 
 ## The principle
 
@@ -144,7 +151,7 @@ nothing, a wheel notch over nothing: dropping them is an answer too, and
 it is written down (the Canvas level's table ends with "anything else:
 drop").
 
-This is the rule from the last conversation, made general: the
+This is the rule from the design's first discussion, made general: the
 interaction in flight sees every event first, and decides whether it is
 its own business. An Escape during a drag reaches the drag before it
 reaches anything that would clear the selection.
@@ -223,7 +230,7 @@ today besides its views (section 10).
 ## 5. The rules, as tables
 
 The choices that are matters of taste are entries, per interaction, in
-one table. A behavior change is an edit to a row. Proposed defaults:
+one table. A behavior change is an edit to a row. The entries:
 
 | Interaction | Escape | Other button pressed | Wheel | Modifier change | Own button pressed again |
 |---|---|---|---|---|---|
@@ -247,14 +254,14 @@ one table. A behavior change is an edit to a row. Proposed defaults:
 | Mode: drawing | leave drawing mode | - | - | - | - |
 | Mode: creation tool | put it down | - | - | - | - |
 
-Three rows answer the questions from the last conversation:
+Three rows answer the questions the design began with:
 
 - **Escape cancels a stroke** (and every other gesture), restoring things
   as they were when it began.
 - **Escape during a slider drag restores the value.**
-- **A second button during a gesture is ignored, not a cancel.** This is
-  the one I would reverse from my earlier suggestion, found by writing it
-  down: Windows' touch press-and-hold injects a right press about 650 ms
+- **A second button during a gesture is ignored, not a cancel.** This
+  reversed the first suggestion, found by writing it down: Windows'
+  touch press-and-hold injects a right press about 650 ms
   into a finger held still (measured; see `kTabletGestureFlags`), and the
   platform cannot tell it from a real one - none of it is tagged as touch.
   A finger resting mid-stroke would cancel its own stroke. As a table
@@ -466,7 +473,7 @@ Two findings from writing the table:
 
 - **Rectangle erase, interrupted, erases today.** `EndGesture` ends it
   through its release handler, which performs the erase - the one gesture
-  where "keep what is done" makes something that was not there. Proposed:
+  where "keep what is done" makes something that was not there. Decided:
   interrupted, it erases nothing, like framing a snippet.
 - **The wheel's and the arrows' undo bursts need no clock.** Today a burst
   is recognized by time (`kBurstSeconds`) and by the history not having
@@ -496,21 +503,31 @@ nothing open to take back, so Escape goes on past it as if it were not
 there, rather than being spent on nothing.
 
 Every case fits the five answers and the six levels without an escape
-hatch. The ones I expected to need one - the hold, the touch injection,
+hatch. The ones expected to need one - the hold, the touch injection,
 the staged Escape, the capture of a hotkey in Settings - each came out as
 a state (Pending, Spent) or a level.
 
-## 10. Where the code goes
+## 10. Where the code is
 
-- `ui/interaction/`: the machine - the stack, the routing loop, the
-  recognizer and its rules, the interactions, the command and binding
-  tables. **No ImGui**: events in; session calls, editor changes and
-  effects out. Tested without a frame.
-- `Editor`: the state the interactions work on, moved out of `OverlayApp`
-  - selection, tool, drawing mode, clipboard, the untouched drawing, the
-  stack. `OverlayApp` keeps the views: it draws from `Editor`, applies the
-  effects, and tells the machine what ImGui knows (`WantCaptureMouse`,
-  `WantTextInput`, whether an ImGui drag is active).
+- `ui/interaction/`: the machine. **No ImGui**: events in; session calls,
+  editor changes and effects out, tested without a frame.
+  - `event.h`, `machine.*`: the events, the levels, the answers, the
+    stack and its routing, the scopes.
+  - `command.*`: the command table and its bindings.
+  - `recognizer.*`: the rules of section 6.5.
+  - `gestures.*`: the Gesture level's interactions - Pending, Spent and
+    each gesture of section 9, the Widget gesture among them.
+  - `bursts.*`: the nudge and wheel bursts, also on the Gesture level.
+  - `levels.*`: the Mode, Panel, Popup and Text levels' interactions.
+  - `canvas.*`: the Canvas level, always at the bottom.
+- `Editor` (`ui/editor.*`, `editor_commands.cpp`): the state the
+  interactions work on, moved out of `OverlayApp` - selection, tool,
+  drawing mode, clipboard, the untouched drawing, the note being typed -
+  and the machine itself (`Editor::Input`). `OverlayApp` keeps the views:
+  it draws from `Editor`, offers it the window's events, applies the
+  effects, and answers what only ImGui knows - whether the pointer is
+  over one of its windows, which popup or panel is showing - through
+  `EditorViews`.
 - The platform window: one input callback (section 3), in the Win32
   window and the fake one.
 
@@ -676,9 +693,9 @@ Settled on review (2026-09-26):
    under a context menu, the Properties popover or the color chooser, and
    the popup stays up over a canvas that has changed under it. The Popup
    level claims them. The same reasoning covers the tool, clipboard and
-   create keys, which also act on the canvas under the popup; proposed
-   rule: a popup passes only global hotkeys down, and claims every other
-   key (Escape closes it). Delete and the arrows are refused under a
+   create keys, which also act on the canvas under the popup; the rule:
+   a popup passes only global hotkeys down, and claims every other key
+   (Escape closes it). Delete and the arrows are refused under a
    popup already today.
 3. **Drawing mode survives being put away**, as today, and ends in
    view-only mode. That is what the Hand and All scopes say.
