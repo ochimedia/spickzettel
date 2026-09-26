@@ -31,6 +31,7 @@ add_library(sz_ui STATIC
     view/cheat_sheet.cpp
     view/overview_panel.cpp
     view/popups.cpp
+    view/screen_chrome.cpp
     view/settings_page.cpp
     widgets.cpp
 )

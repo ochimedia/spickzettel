@@ -39,6 +39,10 @@ public:
     // A delete of `target`: the confirmation, unless Settings > Behavior
     // says not to ask, and then the delete itself, as an action.
     virtual void AskToDelete(DeleteTarget target) = 0;
+    // The overlay hidden and shown again, after this frame - for an option
+    // that takes effect only on entry to edit mode (see OverlayApp::
+    // SetRestartOverlayCallback).
+    virtual void RestartOverlay() = 0;
     // A canvas bar tile's menu, for `canvas`, at `at`.
     virtual void OpenCanvasMenu(core::CanvasId canvas, ImVec2 at) = 0;
 

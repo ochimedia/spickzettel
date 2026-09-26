@@ -18,6 +18,7 @@
 #include "ui/view/cheat_sheet.h"
 #include "ui/view/overview_panel.h"
 #include "ui/view/popups.h"
+#include "ui/view/screen_chrome.h"
 #include "ui/view/settings_page.h"
 #include "ui/view/view_host.h"
 #include "ui/view_action.h"
@@ -362,7 +363,7 @@ private:
     }
     void ClosePanel(PanelKind kind) override;
     void ToolSized(bool pen) override;
-    bool InputOptionsKey(const Event& event) override { return HandleInputOptionsHudKey(event); }
+    bool InputOptionsKey(const Event& event) override { return chrome_.HandleKey(event, !IsViewOnly()); }
     void LetGoOfWidget() override { popups_.LetGoOfWidget(); }
     bool PopupOpen() const override;
     // Asked for, a popup is up - including the frames before one draws it,
@@ -415,6 +416,11 @@ private:
     std::vector<platform::DisplayInfo> ListDisplays() override;
     bool ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) override;
     void OpenCanvasMenu(CanvasId canvas, ImVec2 at) override { popups_.OpenCanvasMenu(canvas, at); }
+    void RestartOverlay() override {
+        if (restartOverlayCallback_) {
+            restartOverlayCallback_();
+        }
+    }
     PreviewDrawing Previews() override;
     void Do(const ViewAction& action);
     std::vector<ViewAction> actions_;
@@ -428,19 +434,6 @@ private:
     void OfferLifecycle(Lifecycle which);
 
     void RenderCanvasLayer(float displayW, float displayH);  // live layer + armed-item overlay + debug text
-    // The layers that sit over the canvas and under the Overview: the
-    // input options HUD, the edit-mode border, the demo mark. See its
-    // definition for the order and why each is where it is.
-    void RenderScreenChrome(float displayW, float displayH);
-    // See AppConfig::showEditModeBorder. Called from RenderScreenChrome -
-    // edit mode is the whole point of it.
-    void DrawEditModeBorder(ImDrawList* drawList, float displayW, float displayH) const;
-    // The demo build's permanent "Spickzettel / Demo Version" mark (see
-    // build::kDemoMode). Called from both RenderCanvasLayer and
-    // RenderViewOnly - it belongs wherever the overlay is visible. Not
-    // const: it moves itself around the screen on a timer (see its
-    // definition), and the three members below are where it stands.
-    void DrawDemoWatermark(ImDrawList* drawList, float displayW, float displayH);
     // Which pointer the canvas itself asks for, from what is under the mouse
     // and what the tools would do there. Says nothing about what ImGui wants
     // over its own windows and widgets; ApplyPointerShape settles that.
@@ -465,26 +458,6 @@ private:
     // away from a game - which also means the OS cursor is hidden and left
     // wherever that game is holding it. See the definition.
     void DrawSoftwareCursor() const;
-    // A debugging aid: the state of every capture/input option, top-left,
-    // with a number key per row that toggles it. These options interact in
-    // ways that are only discoverable by trying combinations, and reaching
-    // the Overview to change one is several clicks away from the situation
-    // being tested. See the definition for what each row is.
-    // Draws into whichever layer the caller hands it - see
-    // RenderScreenChrome, which is what decides how high that layer sits.
-    void DrawInputOptionsHud(ImDrawList* drawList) const;
-    // Keeps the window told how many number keys the HUD takes, and restarts
-    // the overlay once a toggle that needs it has had its key let go of -
-    // once a frame.
-    void UpdateInputOptionsHud();
-    // A number key the HUD advertises, as it goes down: toggles the option,
-    // persists it, and asks for edit mode to be re-entered for an option
-    // that only applies on entry. False for a key that is not the HUD's.
-    bool HandleInputOptionsHudKey(const Event& event);
-    // What a HUD row currently reads - the resolved value: the HUD reports
-    // what is running - and whether it can do anything.
-    bool InputOptionValue(int index) const;
-    bool InputOptionAvailable(int index) const;
     // Every item on the current canvas, back to front, into one layer,
     // then the selection's outline, handles and bar over all of them, plus
     // the note editor and the dock above it. Decides once, from
@@ -711,27 +684,6 @@ private:
     Settings& settings_;
     const AppConfig& Cfg() const { return settings_.Stored(); }
 
-    // The last count handed to IOverlayWindow::SetInputOptionsHudDigits, so
-    // that only an actual change reaches the platform - it can install or
-    // remove a keyboard hook, which is not something to ask for every frame.
-    int appliedInputOptionsHudDigits_ = 0;
-    // A HUD toggle that needs edit mode re-entered waits here until the key is
-    // released - see UpdateInputOptionsHud for why holding the restart is
-    // the difference between every press counting and one in three vanishing.
-    bool pendingOverlayRestart_ = false;
-
-    // What the HUD's last number key actually did, shown in the HUD itself.
-    //
-    // For a report that only reproduces on someone else's machine: "pressing
-    // 1 sometimes switches back" has two very different causes - the key
-    // acting twice, or acting once and something else undoing it - and from
-    // the outside they look identical. The toggle count tells them apart at
-    // a glance, and the rest says where the value was written and what it
-    // resolved to afterwards.
-    int hudToggleCount_ = 0;
-    int hudLastToggledRow_ = 0;       // 1-based, 0 for "nothing yet"
-    bool hudLastToggledTo_ = false;   // what that press asked for
-    bool hudLastWentToProfile_ = false;
     // How the stroke currently being drawn is rendered. Never Rasterized:
     // a live stroke isn't in item.strokes yet and so isn't in the raster,
     // and rebuilding one per mouse-move to include it would cost far more
@@ -829,15 +781,6 @@ private:
     // faded, so a burst of notches is one write (see KeepPenWidth).
     bool drawWidthDirty_ = false;
 
-    // Where the demo build's mark currently stands, and which ten-second
-    // step put it there - see DrawDemoWatermark. The cell is an index into
-    // its own 3x3 grid rather than a pixel position, so a resolution change
-    // moves the mark with the screen instead of stranding it off the edge.
-    // Dead weight in a non-demo build, and 20 bytes of it.
-    int64_t demoWatermarkMove_ = -1;
-    int demoWatermarkCell_ = 0;
-    ImVec2 demoWatermarkJitter_{0.5f, 0.5f};
-
     // Small transient "Moved to X" / "Copied to X" banner after a
     // move/copy - text empty or ImGui::GetTime() past the expiry means
     // nothing to draw (see RenderActionToast).
@@ -885,6 +828,7 @@ private:
     CheatSheet cheatSheet_{settings_, editor_, *this};
     Popups popups_{session_, settings_, editor_, *this};
     CanvasBar canvasBar_{session_, settings_, editor_, *this};
+    ScreenChrome chrome_{session_, settings_, *this};
 };
 
 }  // namespace sz::ui

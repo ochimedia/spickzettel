@@ -21,7 +21,7 @@ namespace sz::core::build {
 inline constexpr std::string_view kVersion{"@SPICKZETTEL_VERSION@"};
 
 // SPICKZETTEL_DEMO_MODE: draw a permanent, faint "Demo Version" mark over
-// the overlay in both modes. See ui::OverlayApp::DrawDemoWatermark.
+// the overlay in both modes. See ui::ScreenChrome::DrawDemoMark.
 inline constexpr bool kDemoMode = @SPICKZETTEL_DEMO_MODE_CXX@;
 
 // SPICKZETTEL_PRERELEASE_NOTICE: a build handed out ahead of a release. It
