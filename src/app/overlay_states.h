@@ -43,9 +43,6 @@ struct OverlayFacts {
     // "Say so when the overlay is hidden".
     bool messagesWhileHidden = false;
     bool firstRun = false;
-    // Whether a View is a session, which one entered in place from the
-    // pinned view or a notice is not, yet. Goes with C3, when every View is.
-    bool viewHasSession = true;
 };
 
 struct OverlayTransition {

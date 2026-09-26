@@ -229,8 +229,8 @@ private:
     // is. Changed while up only when the displays themselves change.
     platform::DisplayInfo overlayDisplay_;
     // What the session came up over: held exactly while there is a session
-    // (docs/OVERLAY_STATES.md, section 2) - in Edit, and in a View that
-    // came up from hidden - and forgotten when it ends.
+    // (docs/OVERLAY_STATES.md, section 2) - in view and edit mode - and
+    // forgotten when it ends.
     //
     // A restart is not a new show. The overlay hides and shows itself to
     // apply a setting that is only read on the way in, and asking again in

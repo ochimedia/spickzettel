@@ -276,7 +276,6 @@ OverlayFacts TrayController::Facts() const {
     OverlayFacts facts;
     facts.pinnedHere = session_.Manager().CurrentCanvasHasPinnedItems();
     facts.messagesWhileHidden = settings_.Stored().showToastsWhileHidden;
-    facts.viewHasSession = sessionApp_.has_value();
     return facts;
 }
 
@@ -369,9 +368,11 @@ void TrayController::Apply(const OverlayTransition& transition) {
     // it knows - see IOverlayWindow::Present.
     host_.GetOverlayWindow().Present(PresentationFor(to));
     state_ = to;
-    // 8. Anything the overlay remembers about state the OS owns is stale
-    // once it has been away - see OnOverlayShown.
-    if (comingUp && IsSessionState(to)) {
+    // 8. A session started: anything the overlay remembers about state the
+    // OS owns is stale, and a message waiting for the next showing is
+    // said now - see OnOverlayShown. Whenever one starts, in place from the
+    // pinned view or a notice too, and at a restart's showing.
+    if (transition.startsSession || transition.restart) {
         overlayApp_.OnOverlayShown();
     }
     // 9. The still picture edit mode shows instead of the live application

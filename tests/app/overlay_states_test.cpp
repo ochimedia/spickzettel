@@ -47,11 +47,6 @@ OverlayFacts Messages() {
     facts.messagesWhileHidden = true;
     return facts;
 }
-OverlayFacts NoSession() {
-    OverlayFacts facts;
-    facts.viewHasSession = false;
-    return facts;
-}
 OverlayFacts FirstRun() {
     OverlayFacts facts;
     facts.firstRun = true;
@@ -85,16 +80,16 @@ TEST(OverlayStatesNextTest, EveryCellOfTheTable) {
         {S::Pinned, R::Edit, Pinned(), S::Edit, Route::ThroughHidden, true, false},
         {S::Notice, R::Edit, none, S::Edit, Route::ThroughHidden, true, false},
         {S::View, R::Edit, none, S::Edit, Route::InPlace, false, false},
-        {S::View, R::Edit, NoSession(), S::Edit, Route::ThroughHidden, true, false},
         {S::Edit, R::Edit, none, S::Hidden, Route::Down, false, true},
-        {S::Edit, R::Edit, Pinned(), S::Pinned, Route::ThroughHidden, false, true},
+        // C7: in place.
+        {S::Edit, R::Edit, Pinned(), S::Pinned, Route::InPlace, false, true},
 
         {S::Hidden, R::View, none, S::View, Route::Up, true, false},
-        {S::Pinned, R::View, Pinned(), S::View, Route::InPlace, false, false},
-        {S::Notice, R::View, none, S::View, Route::InPlace, false, false},
+        // C3: a session starts in place.
+        {S::Pinned, R::View, Pinned(), S::View, Route::InPlace, true, false},
+        {S::Notice, R::View, none, S::View, Route::InPlace, true, false},
         {S::View, R::View, none, S::Hidden, Route::Down, false, true},
         {S::View, R::View, Pinned(), S::Pinned, Route::InPlace, false, true},
-        {S::View, R::View, NoSession(), S::Hidden, Route::Down, false, false},
         {S::Edit, R::View, none, S::View, Route::InPlace, false, false},
 
         {S::Hidden, R::QuickCapture, none, S::Edit, Route::Up, true, false},
@@ -149,12 +144,11 @@ TEST(OverlayStatesNextTest, EveryRouteAgreesWithItsEnds) {
                                        OverlayRequest::QuickCapture,  OverlayRequest::SilentCapture,
                                        OverlayRequest::NoticeFaded,   OverlayRequest::Restart,
                                        OverlayRequest::Start};
-    for (int bits = 0; bits < 16; ++bits) {
+    for (int bits = 0; bits < 8; ++bits) {
         OverlayFacts facts;
         facts.pinnedHere = (bits & 1) != 0;
         facts.messagesWhileHidden = (bits & 2) != 0;
         facts.firstRun = (bits & 4) != 0;
-        facts.viewHasSession = (bits & 8) != 0;
         for (const OverlayState state : states) {
             for (const OverlayRequest request : requests) {
                 const OverlayTransition t = Next(state, request, facts);
@@ -172,6 +166,12 @@ TEST(OverlayStatesNextTest, EveryRouteAgreesWithItsEnds) {
                 EXPECT_FALSE(t.to == OverlayState::Pinned && !facts.pinnedHere) << "nothing to pin";
                 EXPECT_FALSE(t.to == OverlayState::Notice && state != OverlayState::Hidden)
                     << "a notice only while nothing else is up";
+                const bool fromSession = state == OverlayState::View || state == OverlayState::Edit;
+                const bool toSession = t.to == OverlayState::View || t.to == OverlayState::Edit;
+                EXPECT_EQ(t.startsSession, !fromSession && toSession) << "every View and Edit is a session";
+                EXPECT_EQ(t.endsSession, fromSession && !toSession);
+                EXPECT_FALSE(t.route == Route::ThroughHidden && fromSession && toSession && !t.restart)
+                    << "within a session, nothing goes through hidden but a restart";
             }
         }
     }
@@ -386,10 +386,11 @@ const std::vector<Cell>& Table() {
         // From the pinned view: edit mode through hidden, for its profile.
         {From::Pinned, State::Pinned, Request::Edit, State::Edit,
          Then({"Present(Hidden)"}, Then(kUp, {"Present(Interactive)", "Capture"}))},
-        // In place, with no profile (C3). C2: the window stays as it is,
-        // where it used to hand focus to whatever had it when the pinned
-        // view came up.
-        {From::Pinned, State::Pinned, Request::View, State::View, {"Present(ClickThrough)"}},
+        // C3: in place, with a session - the profile resolved for what is
+        // underneath now. C2: the window stays as it is, where it used to
+        // hand focus to whatever had it when the pinned view came up.
+        {From::Pinned, State::Pinned, Request::View, State::View,
+         {"UnderlyingApplication", "NoActivate(on)", "EditModeInput", "Present(ClickThrough)"}},
         {From::Pinned, State::Pinned, Request::QuickCapture, State::Edit,
          Then({"EnsureCreated", "MoveToDisplay", "Capture", "Present(Hidden)"},
               Then(kUp, {"Present(Interactive)", "Capture"}))},
@@ -399,7 +400,8 @@ const std::vector<Cell>& Table() {
         // From a notice: the same as from the pinned view.
         {From::Notice, State::Notice, Request::Edit, State::Edit,
          Then({"Present(Hidden)"}, Then(kUp, {"Present(Interactive)", "Capture"}))},
-        {From::Notice, State::Notice, Request::View, State::View, {"Present(ClickThrough)"}},
+        {From::Notice, State::Notice, Request::View, State::View,
+         {"UnderlyingApplication", "NoActivate(on)", "EditModeInput", "Present(ClickThrough)"}},
         {From::Notice, State::Notice, Request::QuickCapture, State::Edit,
          Then({"EnsureCreated", "MoveToDisplay", "Capture", "Present(Hidden)"},
               Then(kUp, {"Present(Interactive)", "Capture"}))},
@@ -416,9 +418,9 @@ const std::vector<Cell>& Table() {
         {From::View, State::View, Request::SilentCapture, State::View, {"EnsureCreated", "MoveToDisplay", "Capture"}},
         // Put away into the pinned view in place: only what is drawn changes.
         {From::ViewWithAPinnedSnippet, State::View, Request::View, State::Pinned, {"Present(ClickThrough)"}},
-        // From view mode without one: edit mode through hidden (C3).
-        {From::ViewFromPinned, State::View, Request::Edit, State::Edit,
-         Then({"Present(Hidden)"}, Then(kUp, {"Present(Interactive)", "Capture"}))},
+        // C3: from a view mode entered from the pinned view, too - it is a
+        // session - where it went through hidden to get a profile.
+        {From::ViewFromPinned, State::View, Request::Edit, State::Edit, {"Present(Interactive)", "Capture"}},
         {From::ViewFromPinned, State::View, Request::View, State::Pinned, {"Present(ClickThrough)"}},
 
         // From edit mode.
@@ -428,9 +430,9 @@ const std::vector<Cell>& Table() {
         {From::Edit, State::Edit, Request::QuickCapture, State::Edit,
          {"EnsureCreated", "MoveToDisplay", "Present(Interactive)", "Capture"}},
         {From::Edit, State::Edit, Request::SilentCapture, State::Edit, {"EnsureCreated", "MoveToDisplay"}},
-        // Put away into the pinned view through hidden (C7).
-        {From::EditWithAPinnedSnippet, State::Edit, Request::Edit, State::Pinned,
-         {"Present(Hidden)", "EnsureCreated", "MoveToDisplay", "Present(ClickThrough)"}},
+        // C7: put away into the pinned view in place, where it went through
+        // hidden and the pinned snippets blinked.
+        {From::EditWithAPinnedSnippet, State::Edit, Request::Edit, State::Pinned, {"Present(ClickThrough)"}},
     };
     return cells;
 }
@@ -543,6 +545,102 @@ TEST_F(OverlayStatesTest, TheModeBeforeTheShowingEndsWhereTheShowingBeforeTheMod
     EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
 }
 
+// ===== Away =====
+
+// Put away into the pinned view, what edit mode left up is ended, as view
+// mode ends it - where put away into hidden, it is there again when the
+// overlay comes back (docs/INTERACTIONS.md, decision 3). The pinned view
+// draws frames, and ImGui does not keep a popup across a frame that does
+// not draw it; so everything ends together (docs/OVERLAY_STATES.md,
+// section 10).
+TEST_F(OverlayStatesTest, ThePinnedViewEndsWhatEditModeLeftUp) {
+    ShowEditMode();
+    StepFrame();
+    PinASnippet();  // at the top left, clear of what follows
+    MakeADrawing(500.0f, 350.0f, 900.0f, 600.0f);
+    Drag(550.0f, 450.0f, 850.0f, 450.0f);  // something in it, so it stays
+    ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::CheatSheet}));
+    StepFrame();
+    ASSERT_EQ(App().InputStack(), "Canvas / DrawingMode / CheatSheet / - / - / -");
+
+    ShowEditMode();  // put away
+    ASSERT_EQ(Observed(), State::Pinned);
+    StepFrames(3);
+    ShowEditMode();
+    StepFrame();
+
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
+    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().IsCheatSheetOpen());
+}
+
+// Why: a popup left up in the pinned view is gone after its first frames,
+// closed by ImGui itself. Hidden draws no frames, and keeps it.
+TEST_F(OverlayStatesTest, APopupSurvivesHiddenButNotFramesThatDoNotDrawIt) {
+    ShowEditMode();
+    StepFrame();
+    DoubleClick(640.0f, 400.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    PressKey(ImGuiKey_Escape);
+    RightClick(640.0f, 400.0f);
+    ASSERT_TRUE(App().IsItemContextMenuOpen());
+
+    ShowEditMode();  // put away, into hidden
+    ShowEditMode();
+    StepFrames(2);
+    EXPECT_TRUE(App().IsItemContextMenuOpen()) << "kept while hidden";
+
+    // The frames the pinned view would draw, with no popup in them - the
+    // way edit mode would be if the menu's own frame never came.
+    ImGui::NewFrame();
+    ImGui::Render();
+    ImGui::NewFrame();
+    ImGui::Render();
+    EXPECT_FALSE(ImGui::IsPopupOpen("", ImGuiPopupFlags_AnyPopupId)) << "closed by ImGui";
+}
+
+// ===== Sessions (C3) =====
+
+// View mode from the pinned view is a session like any other: edit mode
+// from it is in place, with no blink of the pinned snippets, and runs the
+// profile resolved for what was underneath when view mode began.
+TEST_F(OverlayStatesTest, EditModeFromAViewEnteredFromThePinnedViewIsInPlace) {
+    AppConfig config = Config();
+    Profile profile;
+    profile.name = "The Game";
+    profile.match.executables.push_back("game.exe");
+    profile.overrides.counterRawMouseInput = true;
+    config.profiles.push_back(profile);
+    Restart(config);
+    Reach(From::Pinned);
+    host_.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "The Game"};
+    const int hides = host_.overlayWindow.hideCallCount;
+
+    ShowViewMode();
+    StepFrame();
+    ASSERT_TRUE(AppSettings().ActiveProfile().has_value()) << "resolved as view mode began";
+    host_.overlayWindow.underlyingApp = platform::ForegroundApp{"other.exe", "Other"};
+    ShowEditMode();
+    StepFrame();
+
+    EXPECT_EQ(Observed(), State::Edit);
+    EXPECT_EQ(host_.overlayWindow.hideCallCount, hides) << "never hidden on the way";
+    EXPECT_TRUE(host_.overlayWindow.editModeInput.counterRawMouseInput) << "the game's profile, still";
+}
+
+// A message waiting for the next showing is said when such a session
+// starts, rather than at the next edit mode that comes up from hidden.
+TEST_F(OverlayStatesTest, AMessageForTheNextShowingIsSaidWhenViewModeBeginsInThePinnedView) {
+    Reach(From::Pinned);
+    controller_->Overlay().SayDeletedForGoodAtStart(3, 30);
+    ASSERT_TRUE(App().ActionToastText().empty());
+
+    ShowViewMode();
+    StepFrame();
+
+    EXPECT_FALSE(App().ActionToastText().empty());
+}
+
 // Any order of requests keeps section 3's invariants - the way the input
 // machine's randomized test holds its own. Pinned snippets come and go
 // too, since they decide where the overlay is put away to.
@@ -595,3 +693,4 @@ TEST_F(OverlayStatesTest, RandomRequestsKeepTheInvariants) {
 
 }  // namespace
 }  // namespace sz::test
+

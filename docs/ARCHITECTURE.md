@@ -2414,9 +2414,12 @@ every 250 ms plus one after any dispatched message, and sleeps in
 `MsgWaitForMultipleObjectsEx` in between. Measured: 31 ms of CPU per 10 s
 in the pinned view, against 203 ms before.
 
-**Profiles are resolved once, on the way up**, before `Show`, which is
-what makes the application underneath the answer rather than this
-window. A restart the overlay does to itself (for a setting only read on
+**Profiles are resolved once per session**, as view or edit mode begins
+and before the window is presented, which is what makes the application
+underneath the answer rather than this window. Every view mode is a
+session, the one entered from the pinned view or a notice too, so edit
+mode from any of them switches in place; the pinned view and a notice
+are not, and resolve nothing. A restart the overlay does to itself (for a setting only read on
 the way in) keeps the answer it already had: asked again in the middle
 of hiding itself, the overlay may have taken the foreground on the way
 out, the profile stops matching, and a toggle that went into it reads as

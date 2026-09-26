@@ -931,6 +931,14 @@ void OverlayApp::SetMode(OverlayMode mode) {
         return;
     }
     OfferLifecycle(IsViewOnly() ? Lifecycle::ViewOnly : Lifecycle::EditMode);
+    // Every mode but Edit, the pinned view and a notice included. Those two
+    // are the overlay put away, as hidden is, which keeps what edit mode
+    // left up - but unlike hidden they draw frames, and ImGui closes a
+    // popup that a frame does not draw: a focused window that was not
+    // active in the last frame loses focus at the next NewFrame, and losing
+    // it closes the popups over it. Ended here, everything ends together,
+    // rather than the popup alone behind the machine's back. See
+    // docs/OVERLAY_STATES.md, section 10.
     if (IsViewOnly()) {
         // Nothing should stay "in progress" while merely viewing, so the
         // All scope ends everything above the canvas, top down: the

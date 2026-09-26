@@ -208,10 +208,10 @@ the same order unless said otherwise.
 1. **Settle.**
    - Leaving View or Edit for Away, or for a restart: the Hidden lifecycle
      event and the Hand scope, and the untouched drawing settled
-     (`SettleForPersistence`). Away is Pinned as well as Hidden, and
-     entering Pinned or a Notice offers nothing more (**Change**, C6).
-   - Leaving Edit for View: this is done by the mode in step 5 (the
-     ViewOnly lifecycle event, All scope).
+     (`SettleForPersistence`).
+   - Leaving Edit for View, Pinned or a Notice: this is done by the mode
+     in step 5 (the ViewOnly lifecycle event, All scope). For Pinned and
+     a Notice that is a rule, not a leftover - section 10, finding 1.
 2. **Release the frozen screen**, when leaving Edit - for any state,
    including a restart and a quick capture's re-entry.
 3. **End the session**, when leaving View or Edit for a state without
@@ -221,12 +221,12 @@ the same order unless said otherwise.
 4. **Choose the display, and make sure the window exists**, when coming
    up from Hidden. Through hidden, the window goes down first, and comes
    up from here as from Hidden. If the window cannot be made, the
-   transition stops here and the state is Hidden. Only coming up can fail, since a
-   window that is up already exists.
+   transition stops here and the state is Hidden. Only coming up can
+   fail, since a window that is up already exists.
 5. **Tell the overlay its mode** (`OverlayApp::SetMode`): what it draws,
    and which lifecycle event the input machine is offered - ViewOnly on
-   entering View, EditMode on entering Edit, and nothing on entering
-   Pinned or a Notice (C6). Down, the mode stays as it was, except that a
+   leaving Edit for any other mode, EditMode on entering Edit. Down, the
+   mode stays as it was, except that a
    notice going down leaves plain View, as today: a notice's mode is what
    reports its fade.
 6. **Start the session**, when entering View or Edit from a state without
@@ -373,7 +373,7 @@ synchronous: its caller needs the answer.
 | C3 | Every View has a session: from Pinned or a Notice, the profile is resolved in place | Edit from such a View hides and reshows (the pinned snippets blink); `profileAppliedThisShowing_` goes | the view hotkey in the pinned view, then the edit hotkey |
 | C4 | ClickThrough to Interactive places the pointer and forgets keys | a first click that hovers nothing | View to Edit, clicking before moving |
 | C5 | Requests from a frame are applied after it | transitions inside a frame | a notice fading; a HUD restart |
-| C6 | Pinned and Notice are away: entering them settles the hand, not everything | drawing mode, a panel or a popup ended by being put away when something is pinned, and kept when nothing is | edit mode put away with a snippet pinned; a silent capture after edit mode was put away |
+| C6 | *Not made* (section 10, finding 1): Pinned and Notice as away, entering them settling the hand, not everything | - | - |
 | C7 | Edit to Pinned is in place | the pinned snippets blink off and on | the edit hotkey in edit mode, with a snippet pinned |
 
 C3 relies on C2. After Pinned → View → Edit in place, the focus taken in
@@ -396,21 +396,37 @@ then, rather than at the next edit mode that comes up from Hidden.
    away into Hidden keeps them (`docs/INTERACTIONS.md`, decision 3). So
    whether drawing mode survives being put away depends on whether the
    canvas has a pinned snippet, or whether a silent capture happened
-   since. Changed: C6.
+   since. **Kept, as a rule** - C6 was agreed on the condition that ImGui
+   keeps a popup and a panel across frames that do not draw them, and it
+   does not keep a popup. At the start of a frame, a focused window that
+   was not active in the last one loses focus, and losing it closes the
+   popups over it. The pinned view and a notice draw frames; edit mode's
+   windows are not in them. Hidden draws none, and so keeps a popup until
+   the next showing draws it. Settling the hand alone, the input machine
+   would have gone on holding a popup that ImGui had closed behind its
+   back. So entering the pinned view or a notice from edit mode ends
+   everything above the canvas, as view mode does, and the tests
+   `ThePinnedViewEndsWhatEditModeLeftUp` and
+   `APopupSurvivesHiddenButNotFramesThatDoNotDrawIt` hold both halves of
+   the reason. A panel does survive; ending only the popup was possible,
+   and not what was agreed.
 2. Edit to Pinned goes through hidden, so the pinned snippets blink off
    and on. It could be in place, like Edit to View. Changed: C7.
 3. A quick capture in Edit takes the frozen screen again, so the
    background under the user jumps to what the game shows now. Kept.
 4. The restart exists because "Don't steal focus" and "Freeze screen
    while editing" are read on entry. With the reconciliation of section
-   5, both could
-   be applied in place: the freeze taken or released, and focus handed
+   5, both could be applied in place: the freeze taken or released, and focus handed
    back when no-activate turns on while the window holds it. The restart,
    and the HUD's wait for its key to come up, would then go. This is not
    proposed now: releasing a frozen screen in place reveals the game, and
    that needs the camera settled first, which is the input grab's timing.
    It would be a later change, measured as the grab's changes are. Left
    for later.
+5. Found while building phase 4: with C3, the pinned view or a notice
+   to Edit could go in place too, resolving the profile there as the
+   view hotkey does. It still goes through hidden, as this document
+   proposed nothing else; it would be a cell change.
 
 **Documentation that is wrong today, corrected in phase 1:**
 
@@ -456,8 +472,8 @@ each:
    gets the care that input phase 2 got: the grab's own tests unchanged,
    then checked by hand in a game with the grab and countering on, and
    the focus faults of C2 and C4 reproduced before and after.
-4. **Sessions and away** (C3, C6, C7). C6 starts with a headless test
-   that a panel and a popup survive frames that do not draw them.
+4. **Sessions and away** (C3, C7; C6 was not made, see section 10,
+   finding 1).
 5. **Between frames** (C5).
 
 Tests grow with it:
@@ -482,7 +498,9 @@ Tests grow with it:
    as in Hidden. First a headless test has to show that ImGui keeps a
    popup or panel that frames stop drawing; if it does not, today's
    behavior stays and is written down as a rule.
-   **Answer: yes, as recommended** - C6, in phase 4.
+   **Answer: yes, as recommended** - C6, in phase 4. **Result:** the
+   condition failed, so today's behavior stays, as a rule (section 10,
+   finding 1).
 2. **Edit to Pinned in place** (finding 2)? Recommended yes: the same
    window steps as Edit to View, and no blink.
    **Answer: in place** - C7, in phase 4.
