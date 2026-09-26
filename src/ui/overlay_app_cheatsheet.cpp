@@ -183,8 +183,7 @@ void OverlayApp::RenderCheatSheet(float displayW, float displayH) {
     // Escape and its own key close it too, as its interaction's (see
     // Panel).
     if (RenderPanelBackdrop("##cheat_sheet_backdrop", displayW, displayH)) {
-        editor_.Input().End(Level::Panel);
-        return;
+        Act(action::ClosePanel{PanelKind::CheatSheet});
     }
 
     const std::vector<CheatSheetSection> sections = BuildCheatSheet(Cfg(), settings_.Live().shortcuts);

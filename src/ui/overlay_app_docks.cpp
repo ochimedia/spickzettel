@@ -228,12 +228,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     }
     const bool dragging = ImGui::GetDragDropPayload() != nullptr;
 
-    std::optional<CanvasId> clicked;
     std::optional<CanvasId> rightClicked;
-    // A tile dragged onto another takes that one's place, the rest shifting
-    // along - the order Alt+wheel walks. Applied after the loop, which
-    // reads the list the move changes.
-    std::optional<std::pair<CanvasId, size_t>> reorder;
     ImGui::PushClipRect(ImVec2(regionMinX, bar.y), ImVec2(regionMaxX, bar.y + bar.h), true);
     for (size_t i = 0; i < ids.size(); ++i) {
         const float x = regionMinX + static_cast<float>(i) * (tileW + Px(kBarGap)) - canvasBarScroll_;
@@ -258,7 +253,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         std::snprintf(tileId, sizeof(tileId), "##canvasbar_tile_%zu", i);
         ImGui::SetCursorScreenPos(tileMin);
         if (ImGui::InvisibleButton(tileId, ImVec2(tileW, Px(kBarTileHeight)))) {
-            clicked = canvas->id;
+            Act(action::SwitchCanvas{canvas->id});
         }
         const bool hovered = ImGui::IsItemHovered();
         // The tile's InvisibleButton answers the left button alone, so the
@@ -273,11 +268,13 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
             ImGui::TextUnformatted(canvas->name.c_str());
             ImGui::EndDragDropSource();
         }
+        // A tile dropped onto another takes that one's place, the rest
+        // shifting along - the order Alt+wheel walks.
         if (ImGui::BeginDragDropTarget()) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SZ_CANVAS_BAR_TILE")) {
                 const CanvasId draggedId = *static_cast<const CanvasId*>(payload->Data);
                 if (draggedId != canvas->id) {
-                    reorder = {draggedId, placeInFolder[i]};
+                    Act(action::ReorderCanvas{draggedId, placeInFolder[i]});
                 }
             }
             ImGui::EndDragDropTarget();
@@ -295,10 +292,15 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     }
     ImGui::PopClipRect();
 
-    // A new canvas, at the end of the row it will join.
+    // A new canvas, at the end of the row it will join: the NewCanvas
+    // command, which makes it beside the current canvas - in the folder
+    // the bar is showing, which need not be the one the Overview last
+    // browsed.
     const float buttonY = bar.y + (bar.h - Px(kCanvasBarButtonSize)) * 0.5f;
     ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap), buttonY));
-    const bool makeNew = PillIconButton("##canvasbar_new", icons::kPlus, false);
+    if (PillIconButton("##canvasbar_new", icons::kPlus, false)) {
+        Act(action::RunCommand{Command{CommandId::NewCanvas}});
+    }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarNewCanvasTip);
     }
@@ -307,7 +309,9 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     // this is the way to the Overview that needs nothing on screen and
     // nothing switched on.
     ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap) + Px(kCanvasBarButtonSize) + Px(kBarGap), buttonY));
-    const bool openOverview = PillIconButton("##canvasbar_overview", icons::kLayoutGrid, false);
+    if (PillIconButton("##canvasbar_overview", icons::kLayoutGrid, false)) {
+        Act(action::RunCommand{Command{CommandId::Overview}});
+    }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarOverviewTip);
     }
@@ -321,20 +325,6 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
 
     if (rightClicked.has_value()) {
         OpenCanvasContextMenu(*rightClicked, io.MousePos);
-    }
-    if (reorder.has_value()) {
-        session_.ReorderCanvas(reorder->first, reorder->second);
-    }
-    if (clicked.has_value()) {
-        editor_.SwitchCanvas(*clicked);
-    }
-    if (makeNew) {
-        // Into the folder the bar is showing - the current canvas's, which
-        // need not be the one the Overview last browsed.
-        editor_.SwitchCanvas(editor_.CreateCanvasBesideCurrent());
-    }
-    if (openOverview) {
-        OpenOverview();
     }
 }
 
@@ -371,7 +361,7 @@ void OverlayApp::RenderCanvasContextMenu() {
     if (drawn.chosen.has_value()) {
         Command command{static_cast<CommandId>(*drawn.chosen)};
         command.canvas = canvasId;
-        Dispatch(command);
+        Act(action::RunCommand{command});
     }
 }
 

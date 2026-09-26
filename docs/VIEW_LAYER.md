@@ -384,7 +384,7 @@ in-place changes of section 1 go through it too.
 | Restore | a Restore button | the session |
 | Delete; delete for good | the confirmation's Delete, or a delete button where Settings says not to ask | the session, once the canvas scope has ended |
 | Restore a minimized snippet | a dock chip | the session |
-| Close the Overview | the backdrop; the picker's Cancel; a tile clicked | the machine |
+| Close the Overview or the cheat sheet | the backdrop; the picker's Cancel, a tile clicked | the machine |
 | Finish a note edit | the note editor let go of | the editor |
 
 An action is a value: an id, an index, a name. It never holds a

@@ -268,7 +268,7 @@ void OverlayApp::RenderItemContextMenu() {
         if (id == CommandId::ToggleFullscreen && ImGui::GetIO().KeyShift) {
             id = CommandId::ToggleFullscreenStretched;
         }
-        Dispatch(Command{id, itemId});
+        Act(action::RunCommand{Command{id, itemId}});
     }
 }
 
@@ -329,7 +329,7 @@ void OverlayApp::RenderEmptyCanvasMenu() {
         });
     PopupDrawn(PopupKind::EmptyCanvasMenu, drawn.up);
     if (drawn.chosen.has_value()) {
-        Dispatch(Command{static_cast<CommandId>(*drawn.chosen)});
+        Act(action::RunCommand{Command{static_cast<CommandId>(*drawn.chosen)}});
     }
 }
 
@@ -506,10 +506,8 @@ void OverlayApp::ApplyEffects() {
                         break;
                     case PopupKind::ItemProperties:
                     case PopupKind::ColorChooser:
-                        ImGui::OpenPopup(PopupId(effect.popup));
-                        break;
                     case PopupKind::ConfirmDelete:
-                        OpenConfirmDelete();
+                        ImGui::OpenPopup(PopupId(effect.popup));
                         break;
                 }
                 break;

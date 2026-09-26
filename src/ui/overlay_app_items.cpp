@@ -66,11 +66,6 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // happened to be hovered last.
     debugHoveredResizeHandle_.clear();
 
-    // A note edit ended by a command from elsewhere - the session ends
-    // whatever gesture is open before any other (see
-    // Session::EndOpenGesture) - has its editor put away with it, rather
-    // than typing on into an edit that is over.
-    editor_.ForgetNoteEditEndedElsewhere();
     const Canvas* canvasPtr = Manager().CurrentOrNull();
     if (!canvasPtr) {
         return;  // no canvas, so no items to render
@@ -601,7 +596,7 @@ void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
         // typing" (the app's own Undo covers that), so both paths commit;
         // only the source of the text differs (see preCallBuffer's own
         // comment above).
-        editor_.EndEditingNote(preCallBuffer);
+        Act(action::FinishNoteEdit{preCallBuffer});
     }
     ImGui::PopStyleColor();
     ImGui::PopFont();
@@ -652,7 +647,6 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    std::optional<ItemId> restoreId;
     for (size_t i = 0; i < minimizedIds.size(); ++i) {
         const Item* item = nullptr;
         for (const Item& it : canvas.items) {
@@ -694,7 +688,7 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         std::snprintf(btnId, sizeof(btnId), "##dockchip%llu", static_cast<unsigned long long>(item->id));
         ImGui::SetCursorScreenPos(chipMin);
         if (ImGui::InvisibleButton(btnId, ImVec2(chipSize, chipSize))) {
-            restoreId = item->id;
+            Act(action::RestoreMinimized{item->id});
         }
         if (ImGui::IsItemHovered()) {
             const std::string label = item->name.empty() ? strings::kMoveCopyItemWord : item->name;
@@ -703,10 +697,6 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
     }
     ImGui::End();
     BringToFront("##dock");
-
-    if (restoreId.has_value()) {
-        session_.SetMinimized({*restoreId}, false);
-    }
 }
 
 

@@ -337,9 +337,10 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     if (!IsOverviewOpen()) {
         return;
     }
+    // A click on the backdrop closes it - after this frame, which draws it
+    // whole, as every action waits for the draw to finish (see Act).
     if (RenderPanelBackdrop("##overview_backdrop", displayW, displayH)) {
-        CloseOverview();
-        return;
+        Act(action::ClosePanel{PanelKind::Overview});
     }
 
     constexpr float kPanelMarginFrac = 0.08f;
@@ -368,14 +369,6 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     BringToFront("##overview_panel");
 
     RenderOverviewHeader();
-    // Closed from the header - the picker's Cancel: nothing more of the
-    // panel this frame. Drawn on, the body fell back to whichever tab was
-    // last open, a frame of Settings, and the grid read back the
-    // thumbnails CloseOverview had just let go of, to hold them unseen.
-    if (!IsOverviewOpen()) {
-        ImGui::End();
-        return;
-    }
     ImGui::Separator();
     BeginOverviewPreviewFrame();
 
@@ -387,7 +380,6 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     // hold from a previous, non-picker visit.
     const bool showCanvasesBody = pickerItemId_.has_value() || overviewTab_ == OverviewTab::Canvases;
 
-    OverviewActions actions;
     ImGui::BeginChild("##overview_body", ImVec2(0.0f, -Px(40.0f)), ImGuiChildFlags_None);
     // A new page starts at its beginning. All three tabs and both About
     // pages share this one scrolling child, so without this, opening the
@@ -404,9 +396,9 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
         RenderOverviewSettingsPanel();
     } else {
         SettleDeletedFolderShown();
-        RenderFolderSidebar(actions);
+        RenderFolderSidebar();
         ImGui::SameLine();
-        RenderCanvasGrid(displayW, displayH, actions);
+        RenderCanvasGrid(displayW, displayH);
     }
     ImGui::EndChild();  // ##overview_body
 
@@ -425,8 +417,6 @@ void OverlayApp::RenderOverview(float displayW, float displayH) {
     // meant for it landing on the panel. The properties popover carries the
     // same call for the same reason.
     KeepChildPopupsInFront();
-
-    ApplyOverviewActions(actions);
 }
 
 bool OverlayApp::RenderPanelBackdrop(const char* windowId, float displayW, float displayH) {
@@ -472,7 +462,7 @@ void OverlayApp::RenderOverviewHeader() {
         ImGui::TextColored(theme::Accent(), strings::kMoveCopyPrompt, pickerIsCopy_ ? strings::kMoveCopyCopy : strings::kMoveCopyMove, itemName.c_str());
         ImGui::SameLine();
         if (ImGui::SmallButton(Labeled(strings::kMoveCopyCancel, "pickercancel"))) {
-            CloseOverview();
+            Act(action::ClosePanel{PanelKind::Overview});
         }
         return;
     }
@@ -556,7 +546,7 @@ void OverlayApp::RenderOverviewHeader() {
     }
 }
 
-void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
+void OverlayApp::RenderFolderSidebar() {
     constexpr float kFolderRowHeight = 34.0f;
     constexpr float kFolderRowGap = 4.0f;
     const std::vector<Folder>& folders = Manager().Folders();
@@ -625,9 +615,9 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                 // A deleted folder is looked into, not browsed - see
                 // deletedFolderShown_.
                 if (deleted) {
-                    actions.showDeletedFolder = f.id;
+                    Act(action::ShowDeletedFolder{f.id});
                 } else {
-                    actions.switchToFolder = f.id;
+                    Act(action::SwitchFolder{f.id});
                 }
             }
             const bool rowHovered = ImGui::IsItemHovered();
@@ -661,12 +651,12 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_FOLDER_REORDER")) {
                         const FolderId draggedId = *static_cast<const FolderId*>(payload->Data);
                         if (draggedId != f.id) {
-                            actions.folderReorder = {draggedId, fi};
+                            Act(action::ReorderFolder{draggedId, fi});
                         }
                     }
                     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_CANVAS_REORDER")) {
                         const CanvasId draggedCanvasId = *static_cast<const CanvasId*>(payload->Data);
-                        actions.canvasToFolder = {draggedCanvasId, f.id};
+                        Act(action::MoveCanvasToFolder{draggedCanvasId, f.id});
                     }
                     ImGui::EndDragDropTarget();
                 }
@@ -683,7 +673,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
             }
             ImGui::InputText("##renamefolder", renameBuffer_, sizeof(renameBuffer_));
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                session_.RenameFolder(f.id, std::string(renameBuffer_));
+                Act(action::RenameFolder{f.id, std::string(renameBuffer_)});
                 renamingFolderId_.reset();
                 window_->ReleaseTextInput();
             } else if (ImGui::IsItemDeactivated()) {
@@ -712,12 +702,12 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                                        deleted ? strings::kDeletedDeleteForGoodTip
                                                : strings::kDeletedDeleteDeletedInFolderTip)) {
                     case DeletedButton::Restore:
-                        actions.restore = f.id;
+                        Act(action::Restore{f.id});
                         break;
                     case DeletedButton::DeleteForGood:
-                        AskToDelete(ConfirmDeleteTarget{
-                            deleted ? ConfirmDeleteTarget::Kind::Folder : ConfirmDeleteTarget::Kind::DeletedCanvasesIn,
-                            f.id, f.name, /*forGood=*/true});
+                        AskToDelete(DeleteTarget{deleted ? DeleteTarget::Kind::Folder
+                                                         : DeleteTarget::Kind::DeletedCanvasesIn,
+                                                 f.id, f.name, /*forGood=*/true});
                         break;
                     case DeletedButton::None:
                         break;
@@ -728,7 +718,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
                 const bool deletePressed = DangerIconButton("##delfolder", icons::kTrash);
                 ImGui::EndDisabled();
                 if (deletePressed) {
-                    AskToDelete(ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Folder, f.id, f.name});
+                    AskToDelete(DeleteTarget{DeleteTarget::Kind::Folder, f.id, f.name});
                 }
                 if (ImGui::IsItemHovered()) {
                     ImGui::SetTooltip("%s", strings::kOverviewDeleteFolder);
@@ -760,7 +750,7 @@ void OverlayApp::RenderFolderSidebar(OverviewActions& actions) {
     ImGui::EndChild();
 }
 
-void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewActions& actions) {
+void OverlayApp::RenderCanvasGrid(float displayW, float displayH) {
     const ImVec2 tileSize = Px(200.0f, 130.0f);
     constexpr float kSpacing = 14.0f;
     const std::vector<Canvas>& canvases = Manager().Canvases();
@@ -843,8 +833,15 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
                                Px(4.0f), ImDrawFlags_None, isActive ? PxWhole(2.0f) : 1.0f);
         }
 
+        // A tile is where a snippet being sent somewhere goes, or else the
+        // canvas to go to, with the Overview's job done.
         if (ImGui::InvisibleButton("##tile", tileSize) && !deleted) {
-            actions.clickedCanvas = c.id;
+            if (pickerItemId_.has_value()) {
+                Act(action::SendPicked{c.id});
+            } else {
+                Act(action::SwitchCanvas{c.id});
+                Act(action::ClosePanel{PanelKind::Overview});
+            }
         }
         if (deleted && ImGui::IsItemHovered()) {
             // Its own stamp, or its folder's when it went with the folder.
@@ -866,7 +863,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("HB_CANVAS_REORDER")) {
                 const CanvasId draggedId = *static_cast<const CanvasId*>(payload->Data);
                 if (draggedId != c.id) {
-                    actions.canvasReorder = {draggedId, folderCanvasPlaces[idxInFolder]};
+                    Act(action::ReorderCanvas{draggedId, folderCanvasPlaces[idxInFolder]});
                 }
             }
             ImGui::EndDragDropTarget();
@@ -881,7 +878,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
             }
             ImGui::InputText("##renamecanvas", renameBuffer_, sizeof(renameBuffer_));
             if (ImGui::IsItemDeactivatedAfterEdit()) {
-                session_.RenameCanvas(c.id, std::string(renameBuffer_));
+                Act(action::RenameCanvas{c.id, std::string(renameBuffer_)});
                 renamingCanvasId_.reset();
                 window_->ReleaseTextInput();
             } else if (ImGui::IsItemDeactivated()) {
@@ -909,11 +906,10 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
                                                  : strings::kDeletedRestoreCanvasTip,
                                    strings::kDeletedDeleteForGoodTip)) {
                 case DeletedButton::Restore:
-                    actions.restore = c.id;
+                    Act(action::Restore{c.id});
                     break;
                 case DeletedButton::DeleteForGood:
-                    AskToDelete(
-                        ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name, /*forGood=*/true});
+                    AskToDelete(DeleteTarget{DeleteTarget::Kind::Canvas, c.id, c.name, /*forGood=*/true});
                     break;
                 case DeletedButton::None:
                     break;
@@ -925,7 +921,7 @@ void OverlayApp::RenderCanvasGrid(float displayW, float displayH, OverviewAction
             const bool deletePressed = DangerIconButton("##delcanvas", icons::kTrash);
             ImGui::EndDisabled();
             if (deletePressed) {
-                AskToDelete(ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, c.id, c.name});
+                AskToDelete(DeleteTarget{DeleteTarget::Kind::Canvas, c.id, c.name});
             }
             if (ImGui::IsItemHovered()) {
                 ImGui::SetTooltip("%s", strings::kOverviewDeleteCanvas);
@@ -982,19 +978,7 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
     const bool newFolderPressed = PrimaryButton("##newfolder", icons::kPlus, strings::kOverviewNewFolder);
     ImGui::EndDisabled();
     if (newFolderPressed) {
-        // Named for when it was made (see TimestampName), and at the end
-        // of the sidebar - which is where the eye goes after pressing a
-        // button at the bottom of it, and matches where a new canvas
-        // lands in its own list.
-        overviewScrollToFolderId_ = session_.AddFolder(TimestampName());
-        deletedFolderShown_.reset();
-        // With a canvas already in it. A folder is where canvases live, so
-        // an empty one is a step rather than a result, and an empty folder
-        // reads as a dead end: no tile to click, nothing to drop an item
-        // onto. AddFolder has already made the new folder
-        // current, so this lands inside it - and, like the button next to
-        // it, the canvas it makes is switched to.
-        session_.SwitchToCanvas(editor_.CreateCanvasInCurrentFolder());
+        Act(action::NewFolder{});
     }
     // Lined up with the canvas grid above it, which starts past the
     // window's padding, the sidebar and the gap after it. SameLine counts
@@ -1009,57 +993,7 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
     const bool newCanvasPressed = PrimaryButton("##newcanvas", icons::kPlus, strings::kOverviewNewCanvas);
     ImGui::EndDisabled();
     if (newCanvasPressed) {
-        const CanvasId id = editor_.CreateCanvasInCurrentFolder();
-        // Made at the end of the folder, so the grid may have to scroll for
-        // it to be seen at all - see overviewScrollToCanvasId_, which is set
-        // on both paths below (picker or not): either way the tile is what
-        // the click was about.
-        if (pickerItemId_.has_value()) {
-            // The new canvas is a destination for the item being sent
-            // away, and is not switched to: following it would take the
-            // user off the canvas they were working on.
-            SendPickedItemTo(id);
-        } else {
-            // Switch to it, and stay open. Making a canvas is asking for
-            // somewhere new to draw, so leaving the app on the old one
-            // meant the button did half the job and the other half was a
-            // click on a tile that had just appeared. The Overview stays
-            // up: a panel that vanishes the instant a button is pressed is
-            // disorienting, and keeping it up leaves the grid there to
-            // carry on with.
-            session_.SwitchToCanvas(id);
-        }
-    }
-}
-
-void OverlayApp::ApplyOverviewActions(const OverviewActions& actions) {
-    if (actions.folderReorder.has_value()) {
-        session_.ReorderFolder(actions.folderReorder->first, actions.folderReorder->second);
-    }
-    if (actions.canvasToFolder.has_value()) {
-        session_.MoveCanvasToFolder(actions.canvasToFolder->first, actions.canvasToFolder->second);
-    }
-    if (actions.canvasReorder.has_value()) {
-        session_.ReorderCanvas(actions.canvasReorder->first, actions.canvasReorder->second);
-    }
-    if (actions.switchToFolder.has_value()) {
-        session_.SwitchToFolder(*actions.switchToFolder);
-        deletedFolderShown_.reset();
-    }
-    if (actions.showDeletedFolder.has_value()) {
-        deletedFolderShown_ = *actions.showDeletedFolder;
-    }
-    if (actions.restore.has_value() && session_.Restore(*actions.restore)) {
-        ShowActionToast(strings::kToastRestored);
-        SettleDeletedFolderShown();
-    }
-    if (actions.clickedCanvas.has_value()) {
-        if (pickerItemId_.has_value()) {
-            SendPickedItemTo(*actions.clickedCanvas);
-        } else {
-            session_.SwitchToCanvas(*actions.clickedCanvas);
-            CloseOverview();
-        }
+        Act(action::NewCanvas{});
     }
 }
 
@@ -2611,28 +2545,21 @@ bool OverlayApp::TryChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     return settings_.Set(HotkeySetting(slot), combo);
 }
 
-void OverlayApp::AskToDelete(ConfirmDeleteTarget target) {
-    // Queued even from inside a frame: the Overview's buttons ask from
-    // within its PushID nesting, and the popup belongs at the top level.
+void OverlayApp::AskToDelete(DeleteTarget target) {
+    // Not asked at all where Settings > Behavior says not to: deleted after
+    // the draw, as the confirmation's own Delete would be.
+    const bool forGood = target.forGood || target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
+    if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
+        Act(action::Delete{std::move(target)});
+        return;
+    }
+    // Opened at the next frame's Open even when asked from inside one: the
+    // Overview's buttons ask from within its PushID nesting, and the popup
+    // belongs at the top level.
     PopupRecord popup;
     popup.kind = PopupKind::ConfirmDelete;
     popup.deleteTarget = std::move(target);
     OpenPopup(std::move(popup));
-}
-
-void OverlayApp::OpenConfirmDelete() {
-    // Not asked at all where Settings > Behavior says not to: done here
-    // rather than at each button, where the Overview is still being drawn
-    // from what the delete changes.
-    const ConfirmDeleteTarget& target = *popup_->deleteTarget;
-    const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
-    if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
-        const ConfirmDeleteTarget unasked = target;
-        PopupClosed(PopupKind::ConfirmDelete);
-        PerformDelete(unasked);
-        return;
-    }
-    ImGui::OpenPopup(kConfirmDeletePopupId);
 }
 
 void OverlayApp::RenderConfirmDeletePopover() {
@@ -2650,9 +2577,9 @@ void OverlayApp::RenderConfirmDeletePopover() {
         ImGui::EndPopup();
         return;
     }
-    const ConfirmDeleteTarget target = *popup_->deleteTarget;
-    const bool isFolder = target.kind == ConfirmDeleteTarget::Kind::Folder;
-    const bool deletedIn = target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
+    const DeleteTarget target = *popup_->deleteTarget;
+    const bool isFolder = target.kind == DeleteTarget::Kind::Folder;
+    const bool deletedIn = target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
     const char* word = isFolder ? strings::kDeleteConfirmFolderWord : strings::kDeleteConfirmCanvasWord;
     // A delete marks the thing, which can be restored, and says so; a delete
     // of something deleted already is for good, and says that.
@@ -2685,24 +2612,22 @@ void OverlayApp::RenderConfirmDeletePopover() {
                                             forGood ? strings::kDeleteConfirmDeleteForGood : strings::kDeleteConfirmDelete);
     // CloseCurrentPopup must be called while this popup is still current -
     // i.e. before EndPopup, not after (it operates on the popup ID stack,
-    // which EndPopup pops) - the actual state mutation below happens after
-    // EndPopup instead, matching this file's established pattern of not
-    // touching canvas/folder data while a window built from it is still
-    // mid-render.
+    // which EndPopup pops). The delete itself is an action, done once the
+    // frame is drawn.
     if (cancelPressed || deletePressed) {
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
 
     if (deletePressed) {
-        PerformDelete(target);
+        Act(action::Delete{target});
     }
 }
 
-void OverlayApp::PerformDelete(const ConfirmDeleteTarget& target) {
+void OverlayApp::PerformDelete(const DeleteTarget& target) {
     editor_.Settle(Scope::Canvas);  // a command - see Scope
-    const bool forGood = target.forGood || target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
-    const bool deletedIn = target.kind == ConfirmDeleteTarget::Kind::DeletedCanvasesIn;
+    const bool forGood = target.forGood || target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
+    const bool deletedIn = target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
     // Its textures go as it leaves the screen, either way (see
     // TextureCache), and its history only with the thing itself, for good.
     if (forGood) {
@@ -2788,8 +2713,7 @@ void OverlayApp::OpenSettings() {
 
 void OverlayApp::AskToDeleteCanvas(CanvasId canvas) {
     const Canvas* found = Manager().FindCanvas(canvas);
-    AskToDelete(ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, canvas,
-                                    found != nullptr ? found->name : std::string()});
+    AskToDelete(DeleteTarget{DeleteTarget::Kind::Canvas, canvas, found != nullptr ? found->name : std::string()});
 }
 
 void OverlayApp::OpenPicker(ItemId itemId, bool isCopy) {

@@ -219,6 +219,54 @@ TEST_F(ViewLayerTest, ViewModeDrawsOneLayer) {
     EXPECT_EQ(Describe(SurfacesBackToFront()), "view only");
 }
 
+// ===== The frame (section 5) and actions (section 6) =====
+
+// A frame draws one library: what a widget asks for is done after the draw,
+// so nothing drawn after the widget is drawn from what it changed. Seen
+// through the edit-mode border set to show only on an empty canvas, which
+// is drawn after the canvas bar: switching from a canvas with a snippet to
+// an empty one by the bar's tile, the border comes up in the frame after
+// the snippet goes, not in the frame the snippet is still drawn in.
+TEST_F(ViewLayerTest, AFrameDrawsOneLibrary) {
+    AppConfig config = DefaultConfig();
+    config.showEditModeBorder = true;
+    config.editModeBorderOnlyWhenEmpty = true;
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    MakeASnippet(300.0f, 300.0f, 600.0f, 500.0f);
+    const CanvasId empty = test::Model(controller_->GetSession()).AddCanvas("Empty");
+    RevealTheBar();
+
+    // Whether the last frame drew a snippet, and whether it drew the border.
+    struct Drawn {
+        bool snippet = false;
+        bool border = false;
+    };
+    std::vector<Drawn> frames;
+    afterRender_ = [&frames] {
+        const ImGuiWindow* items = ImGui::FindWindowByName("##sz_items_layer");
+        const ImGuiWindow* chrome = ImGui::FindWindowByName("##sz_chrome_layer");
+        frames.push_back(Drawn{items != nullptr && items->Active && items->DrawList->VtxBuffer.Size > 0,
+                               chrome != nullptr && chrome->Active && chrome->DrawList->VtxBuffer.Size > 0});
+    };
+    const ImGuiWindow* bar = ImGui::FindWindowByName("##canvas_bar");
+    ASSERT_NE(bar, nullptr);
+    // The second tile: past the first one and the gap after it.
+    const float tileW = 64.0f * (kDisplayWidth / kDisplayHeight);
+    Click(bar->Pos.x + 8.0f + tileW + 8.0f + 20.0f, bar->Pos.y + 20.0f);
+    StepFrame();
+    afterRender_ = nullptr;
+    ASSERT_EQ(Canvases().CurrentCanvasId(), empty) << "the click switched nothing, so this test proves nothing";
+
+    ASSERT_FALSE(frames.empty());
+    EXPECT_FALSE(frames.front().border) << "a canvas with a snippet on it";
+    EXPECT_TRUE(frames.back().border) << "an empty one";
+    for (size_t i = 0; i < frames.size(); ++i) {
+        EXPECT_NE(frames[i].snippet, frames[i].border) << "frame " << i << " drew from two libraries";
+    }
+}
+
 // ===== What closing a popup does (section 4) =====
 
 // Escape, and a click outside: the menu is gone, and so is what it was

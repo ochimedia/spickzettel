@@ -1039,9 +1039,38 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // Function scope, so every path out of here - including view-only mode's
     // own early return - closes the frame out.
     const MeshCacheFrame meshCacheFrame(strokeMeshCache_, previewMeshCache_);
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+
+    Prepare(display.x, display.y);
+    if (IsViewOnly()) {
+        // A notice is this same click-through mode with the canvas left
+        // out: nothing of the library on screen, only the message. See
+        // OverlayMode::Notice.
+        if (!IsNoticeOnly()) {
+            RenderViewOnly(display.x, display.y);
+        }
+        DrawMessages();
+        Apply();
+        return;
+    }
+    DrawCanvas(display.x, display.y);
+    // 3. Open: what was asked for that only a frame can do - see Effect -
+    // just before the popups it opens are drawn.
+    ApplyEffects();
+    DrawPopups(display.x, display.y);
+    DrawOverCanvas(display.x, display.y);
+    DrawPanels(display.x, display.y);
+    DrawMessages();
+    // 8. The stack: for now each surface brings itself to the front as it
+    // is drawn, in this order - see BringToFront.
+    DrawPointer();
+    Apply();
+}
+
+void OverlayApp::Prepare(float displayW, float displayH) {
     // The display the canvas is on, for the editor - which draws nothing
     // and so has no other way to know it.
-    editor_.SetDisplaySize(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+    editor_.SetDisplaySize(displayW, displayH);
 
     // The interface scale, before anything is drawn, so a whole frame is
     // drawn at one scale. The setting, or Windows' own for the display the
@@ -1120,10 +1149,6 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     Textures().BeginFrame();
     KeepCurrentCanvasTextures();
 
-    const ImGuiIO& io = ImGui::GetIO();
-    const float displayW = io.DisplaySize.x;
-    const float displayH = io.DisplaySize.y;
-
     // Live, not just at startup - see
     // CanvasManager::SyncItemsToDisplaySize's own doc comment. Cheap: a
     // no-op comparison per item whenever the display hasn't changed since
@@ -1140,30 +1165,6 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     }
 
     if (IsViewOnly()) {
-        // A notice is this same click-through mode with the canvas left
-        // out: nothing of the library on screen, only the message. See
-        // OverlayMode::Notice.
-        if (!IsNoticeOnly()) {
-            RenderViewOnly(displayW, displayH);
-        }
-        // Drawn in view-only too, not just in edit mode where it started.
-        // A hotkey that acts while the overlay is merely being looked
-        // through still did something, and this is the only thing that
-        // says so - it costs a frame that was being drawn anyway, and
-        // click-through means it cannot get in the way of anything.
-        RenderActionToast();
-        RenderPersistenceWarning();
-        // A notice exists only to carry that message, so it is over when
-        // the message is - faded, or never set at all, which is the same
-        // condition RenderActionToast draws nothing on. Reported once (see
-        // noticeFinishedReported_); the window goes away on the other end.
-        if (IsNoticeOnly() && !noticeFinishedReported_ &&
-            (actionToastText_.empty() || ImGui::GetTime() >= actionToastExpireAtSeconds_)) {
-            noticeFinishedReported_ = true;
-            if (noticeFinishedCallback_) {
-                noticeFinishedCallback_();
-            }
-        }
         return;
     }
 
@@ -1176,12 +1177,19 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // keys and the wheel have been handled as they came (see OnInput).
     editor_.PruneSelection();
 
+    // A note edit ended by a command from elsewhere - the session ends
+    // whatever gesture is open before any other (see
+    // Session::EndOpenGesture) - has its editor put away with it, rather
+    // than typing on into an edit that is over.
+    editor_.ForgetNoteEditEndedElsewhere();
+
     // Over a snippet a plain drag would pick up - the selection live, and
     // not in drawing mode unless Alt is held - the four-way arrow says so.
     // Only over a snippet: on empty canvas a press clears the selection.
-    // Set before the render calls below rather than after, so anything
-    // more specific - a handle's own directional cursor, the dock chips'
-    // hand - still wins where it applies.
+    // Set before anything is drawn rather than after, so anything more
+    // specific - a handle's own directional cursor, the dock chips' hand -
+    // still wins where it applies.
+    const ImGuiIO& io = ImGui::GetIO();
     if (editor_.SelectionLive() && editor_.PressPicksUp() && !io.WantCaptureMouse) {
         const ImVec2 mouse = ImGui::GetMousePos();
         if (editor_.ResolvePointerTarget(mouse.x, mouse.y).kind == PointerTarget::Kind::Body) {
@@ -1192,23 +1200,22 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // In the rasterized mode, the bitmaps the strokes are drawn into. Last
     // thing before anything item-shaped is drawn: everything above this
     // line is input handling, and Alt+wheel canvas stepping lives up there.
-    // A picture needs nothing of the kind - its texture is asked for as it
-    // is drawn, so a canvas switched to mid-frame is drawn whole.
     RefreshStrokeRasters();
 
     // Where the panels docked against the screen's edges are this frame, and
     // how far out - before anything is drawn, since the minimized chips
     // RenderItems draws have to clear the ones on the bottom edge.
     UpdateEdgePanels(displayW, displayH);
+}
 
+void OverlayApp::DrawCanvas(float displayW, float displayH) {
     RenderCanvasLayer(displayW, displayH);
     RenderItems(displayW, displayH);
-    // Over the items: the canvas bar, and the popovers - the properties
-    // popover a snippet's More button opens, and the color chooser.
+    // Over the items, and under the popups.
     RenderCanvasBar(displayW, displayH);
-    // What was asked for that only a frame can do - see Effect - just
-    // before the popups it opens are drawn.
-    ApplyEffects();
+}
+
+void OverlayApp::DrawPopups(float displayW, float displayH) {
     RenderItemPropertiesPopover();
     // And the menu a right-click on a snippet opens - beside the popover
     // rather than inside it: the two hold the same actions and are opened
@@ -1222,10 +1229,12 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     RenderCanvasContextMenu();
     // And empty canvas's, the same way.
     RenderEmptyCanvasMenu();
-    // After both things that can open it, so it opens on the frame after
-    // either asked - and at the top level every frame, so the popup always
-    // belongs to the same window whichever of the two it came from.
+    // At the top level every frame, so the popup always belongs to the same
+    // window whichever of the two things that open it asked.
     RenderColorChooser(displayW, displayH);
+}
+
+void OverlayApp::DrawOverCanvas(float displayW, float displayH) {
     RenderRegionCaptureOverlay();
     RenderRectEraserOverlay();
     RenderBrushSizePreview();
@@ -1233,17 +1242,141 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // Over everything the canvas holds, under the Overview - see its own
     // doc comment for what is in it and in which order.
     RenderScreenChrome(displayW, displayH);
-    // Last, so it renders on top of everything above without needing its
-    // own BringToFront - see the include comment for why that'd otherwise
-    // be necessary.
+}
+
+void OverlayApp::DrawPanels(float displayW, float displayH) {
     RenderOverview(displayW, displayH);
     RenderCheatSheet(displayW, displayH);
     RenderConfirmDeletePopover();
+}
+
+void OverlayApp::DrawMessages() {
+    // Drawn in view-only too, not just in edit mode where it started. A
+    // hotkey that acts while the overlay is merely being looked through
+    // still did something, and this is the only thing that says so - it
+    // costs a frame that was being drawn anyway, and click-through means it
+    // cannot get in the way of anything.
     RenderActionToast();
     RenderPersistenceWarning();
-    UpdateInputOptionsHud();
+}
+
+void OverlayApp::DrawPointer() {
     ApplyPointerShape();
     DrawSoftwareCursor();
+}
+
+void OverlayApp::Apply() {
+    // Taken first, so that an action asking for another - a menu's Delete
+    // canvas, where Settings says not to ask, is a command that asks for the
+    // delete - waits for the next frame rather than growing the list being
+    // walked.
+    std::vector<ViewAction> actions;
+    actions.swap(actions_);
+    for (const ViewAction& action : actions) {
+        Do(action);
+    }
+
+    if (IsViewOnly()) {
+        // A notice exists only to carry its message, so it is over when the
+        // message is - faded, or never set at all, which is the same
+        // condition RenderActionToast draws nothing on. Reported once (see
+        // noticeFinishedReported_); the window goes away on the other end.
+        if (IsNoticeOnly() && !noticeFinishedReported_ &&
+            (actionToastText_.empty() || ImGui::GetTime() >= actionToastExpireAtSeconds_)) {
+            noticeFinishedReported_ = true;
+            if (noticeFinishedCallback_) {
+                noticeFinishedCallback_();
+            }
+        }
+        return;
+    }
+    // The preview gone, the width the wheel settled on is kept - once, not
+    // per notch (see drawWidthDirty_).
+    if (ImGui::GetTime() >= sizePreviewExpireAtSeconds_) {
+        KeepPenWidth();
+    }
+    UpdateInputOptionsHud();
+}
+
+namespace {
+// One lambda per alternative of a variant, for std::visit.
+template <class... Ts>
+struct Overloaded : Ts... {
+    using Ts::operator()...;
+};
+template <class... Ts>
+Overloaded(Ts...) -> Overloaded<Ts...>;
+}  // namespace
+
+void OverlayApp::Do(const ViewAction& action) {
+    std::visit(Overloaded{
+                   [&](const action::RunCommand& a) { Dispatch(a.command); },
+                   [&](const action::SwitchCanvas& a) { editor_.SwitchCanvas(a.canvas); },
+                   [&](const action::SwitchFolder& a) {
+                       session_.SwitchToFolder(a.folder);
+                       deletedFolderShown_.reset();
+                   },
+                   [&](const action::ShowDeletedFolder& a) { deletedFolderShown_ = a.folder; },
+                   [&](const action::ReorderFolder& a) { session_.ReorderFolder(a.folder, a.place); },
+                   [&](const action::ReorderCanvas& a) { session_.ReorderCanvas(a.canvas, a.place); },
+                   [&](const action::MoveCanvasToFolder& a) { session_.MoveCanvasToFolder(a.canvas, a.folder); },
+                   [&](const action::RenameFolder& a) { session_.RenameFolder(a.folder, a.name); },
+                   [&](const action::RenameCanvas& a) { session_.RenameCanvas(a.canvas, a.name); },
+                   [&](const action::NewFolder&) {
+                       // Named for when it was made (see TimestampName), and at
+                       // the end of the sidebar - which is where the eye goes
+                       // after pressing a button at the bottom of it, and matches
+                       // where a new canvas lands in its own list.
+                       overviewScrollToFolderId_ = session_.AddFolder(TimestampName());
+                       deletedFolderShown_.reset();
+                       // With a canvas already in it. A folder is where canvases
+                       // live, so an empty one is a step rather than a result, and
+                       // an empty folder reads as a dead end: no tile to click,
+                       // nothing to drop an item onto. AddFolder has already made
+                       // the new folder current, so this lands inside it - and,
+                       // like New canvas, the canvas it makes is switched to.
+                       editor_.SwitchCanvas(editor_.CreateCanvasInCurrentFolder());
+                   },
+                   [&](const action::NewCanvas&) {
+                       // At the end of the folder, so the grid may have to scroll
+                       // for it to be seen at all - see overviewScrollToCanvasId_,
+                       // which CreateCanvasInCurrentFolder sets either way: the
+                       // tile is what the click was about.
+                       const CanvasId id = editor_.CreateCanvasInCurrentFolder();
+                       if (pickerItemId_.has_value()) {
+                           // A destination for the snippet being sent away, and not
+                           // switched to: following it would take the user off the
+                           // canvas they were working on.
+                           SendPickedItemTo(id);
+                       } else {
+                           // Switched to, with the Overview staying up. Making a
+                           // canvas is asking for somewhere new to draw, so leaving
+                           // the app on the old one did half the job; and a panel
+                           // that vanishes the instant a button is pressed is
+                           // disorienting, where the grid left there can be carried
+                           // on with.
+                           editor_.SwitchCanvas(id);
+                       }
+                   },
+                   [&](const action::SendPicked& a) { SendPickedItemTo(a.canvas); },
+                   [&](const action::Restore& a) {
+                       if (session_.Restore(a.id)) {
+                           ShowActionToast(strings::kToastRestored);
+                           SettleDeletedFolderShown();
+                       }
+                   },
+                   [&](const action::Delete& a) { PerformDelete(a.target); },
+                   [&](const action::RestoreMinimized& a) { session_.SetMinimized({a.item}, false); },
+                   [&](const action::ClosePanel& a) {
+                       if (a.panel == PanelKind::Overview) {
+                           CloseOverview();
+                       } else if (IsCheatSheetOpen()) {
+                           editor_.Input().End(Level::Panel);
+                       }
+                   },
+                   [&](const action::FinishNoteEdit& a) { editor_.EndEditingNote(a.text); },
+               },
+               action);
 }
 
 // Which shape the OS cursor should wear, decided here at the end of the
@@ -2002,10 +2135,7 @@ void OverlayApp::RenderViewOnly(float displayW, float displayH) {
 void OverlayApp::RenderBrushSizePreview() {
     const double now = ImGui::GetTime();
     if (now >= sizePreviewExpireAtSeconds_) {
-        // The preview gone, the width the wheel settled on is kept - once,
-        // not per notch (see drawWidthDirty_).
-        KeepPenWidth();
-        return;
+        return;  // and the width it showed is kept - see Apply
     }
     if (PanelOpen()) {
         return;

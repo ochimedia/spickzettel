@@ -13,6 +13,7 @@
 
 #include "ui/context_menu.h"
 #include "ui/editor.h"
+#include "ui/view_action.h"
 #include "ui/interaction/gestures.h"
 #include "ui/icon_draw.h"
 #include "ui/interaction/command.h"
@@ -397,7 +398,39 @@ private:
     // draws from.
     Editor editor_;
 
+    // ===== The frame (docs/VIEW_LAYER.md, section 5) =====
+    //
+    // Every frame runs these stages in order - see OnFrame. Nothing is
+    // changed by being drawn: what the frame's own state calls for is done
+    // in Prepare, before anything is drawn from it, and what a widget asks
+    // for in Apply, after everything is.
     void OnFrame(float deltaSeconds);
+    // 1. The interface scale, the style, the pacing, the textures, the
+    // library fitted to the display, and in edit mode the hand's
+    // housekeeping and where the canvas bar is.
+    void Prepare(float displayW, float displayH);
+    // 2. The canvas, the snippets, the note editor, the dock, the canvas bar.
+    void DrawCanvas(float displayW, float displayH);
+    // 3. Open: the effect queue (see ApplyEffects). 4. The popups over the
+    // canvas.
+    void DrawPopups(float displayW, float displayH);
+    // 5. What sits over the canvas and takes no input: the drag previews,
+    // the size preview, the badge, the HUD, the border and the demo mark.
+    void DrawOverCanvas(float displayW, float displayH);
+    // 6. The Overview, the cheat sheet, the delete confirmation.
+    void DrawPanels(float displayW, float displayH);
+    // 7. The message and the persistence warning.
+    void DrawMessages();
+    // 9. The pointer's shape, and the software pointer.
+    void DrawPointer();
+    // 10. The actions recorded in 2 to 6, in order; the pen's width once its
+    // preview has faded; the HUD's restart; a notice's end.
+    void Apply();
+
+    // Records what a widget asks for, for Apply - see ViewAction.
+    void Act(ViewAction action) { actions_.push_back(std::move(action)); }
+    void Do(const ViewAction& action);
+    std::vector<ViewAction> actions_;
     // Every input event, in the order they happened - see IOverlayWindow::
     // SetInputCallback - offered to the editor's machine (see Machine),
     // with the editor told the modifiers, the time and the display first.
@@ -611,26 +644,10 @@ private:
     // outside it closes it.
     void RenderCheatSheet(float displayW, float displayH);
     void RenderOverviewHeader();
-    // What the sidebar and the grid ask for, applied once both have
-    // finished reading the folders and canvases rather than mutating the
-    // manager mid-loop - see ApplyOverviewActions. Deleting is not
-    // deferred this way: a Delete button opens the confirm popover (see
-    // RenderConfirmDeletePopover), which does the deleting on a later
-    // frame once the user confirms.
-    struct OverviewActions {
-        std::optional<CanvasId> clickedCanvas;
-        std::optional<FolderId> switchToFolder;
-        std::optional<std::pair<FolderId, size_t>> folderReorder;  // folder, new place in Folders()
-        std::optional<std::pair<CanvasId, size_t>> canvasReorder;  // canvas, new place in its folder
-        std::optional<std::pair<CanvasId, FolderId>> canvasToFolder;
-        // A deleted folder picked in the sidebar with Show deleted on - see
-        // deletedFolderShown_.
-        std::optional<FolderId> showDeletedFolder;
-        // A folder's or canvas's Restore - see CanvasManager::Restore.
-        std::optional<uint64_t> restore;
-    };
-    void RenderFolderSidebar(OverviewActions& actions);
-    void RenderCanvasGrid(float displayW, float displayH, OverviewActions& actions);
+    // The sidebar and the grid, which ask for what they are clicked for as
+    // actions (see Act).
+    void RenderFolderSidebar();
+    void RenderCanvasGrid(float displayW, float displayH);
     void RenderOverviewFooter(bool showCanvasesBody);
     // Whether the Canvases tab shows what is deleted - showDeleted_, never
     // while picking where a snippet goes, which is a place among the live
@@ -646,7 +663,6 @@ private:
     // The sidebar's width: wider with Show deleted on, where a row can
     // carry two buttons rather than one.
     float OverviewSidebarWidth() const;
-    void ApplyOverviewActions(const OverviewActions& actions);
     // The picker's one outcome: the snippet it was opened for goes to
     // `target` - moved or copied, as the picker was opened - and the
     // picker closes, leaving the Overview open. Nothing moves when the
@@ -880,33 +896,16 @@ private:
     void CloseOverview();
     void ShowActionToast(std::string text);
 
-    // A Delete button was clicked that asks first - a canvas or folder, or
-    // Delete permanently on one with Show deleted on - pending the user
-    // actually confirming in RenderConfirmDeletePopover. A snippet on screen
-    // doesn't ask: its delete is undoable instead (see Session::DeleteItem).
-    // `name` is captured at click time purely for the popup's own "Delete
-    // <name>?" text, so it doesn't need to re-look-up a possibly-renamed-since
-    // target.
-    struct ConfirmDeleteTarget {
-        // DeletedCanvasesIn is a folder that is not deleted itself, and
-        // what goes for good is the canvases in it that are - see
-        // Session::DeleteMarkedCanvasesPermanently. Always for good.
-        enum class Kind { Canvas, Folder, DeletedCanvasesIn };
-        Kind kind = Kind::Canvas;
-        uint64_t id = 0;  // CanvasId or FolderId depending on kind
-        std::string name;
-        // Deleted already, so this is Delete permanently rather than a mark.
-        bool forGood = false;
-    };
     // What the popover's Delete does, and what a delete Settings > Behavior
-    // says not to ask about does on the press (see AppConfig::confirmDelete).
-    void PerformDelete(const ConfirmDeleteTarget& target);
-    // Asks to delete `target`, through the popover unless Settings >
-    // Behavior says not to ask - see OpenConfirmDelete.
-    void AskToDelete(ConfirmDeleteTarget target);
-    // Opens the popover, when the effect AskToDelete queues is done - or,
-    // where Settings says not to ask, deletes.
-    void OpenConfirmDelete();
+    // says not to ask about does (see AppConfig::confirmDelete) - the Delete
+    // action's.
+    void PerformDelete(const DeleteTarget& target);
+    // A Delete button that asks first - a canvas or folder, or Delete
+    // permanently on one with Show deleted on: the confirmation, unless
+    // Settings > Behavior says not to ask, and then the delete itself, as an
+    // action. A snippet on screen doesn't ask: its delete is undoable
+    // instead (see Session::DeleteItem).
+    void AskToDelete(DeleteTarget target);
 
     // ===== The popup that is up (docs/VIEW_LAYER.md, section 4) =====
     //
@@ -920,7 +919,7 @@ private:
         // canvas tile menu's canvas, the delete confirmation's target.
         ItemId item = 0;
         CanvasId canvas = 0;
-        std::optional<ConfirmDeleteTarget> deleteTarget;
+        std::optional<DeleteTarget> deleteTarget;
         // Where it opens.
         ImVec2 at{0.0f, 0.0f};
         // Whether a frame has drawn it - which tells "closed by itself"

@@ -1629,6 +1629,27 @@ screen, whose order is the stack; a frame in named stages, in which
 nothing is changed by being drawn; one way for a widget to act, done
 after the draw; and `OverlayApp` split into owners, one per surface.
 
+A frame is those stages, one function each, called in order by
+`OnFrame`: Prepare, the canvas, the effect queue, the popups, what sits
+over the canvas, the panels, the messages, the pointer, and Apply. What a
+widget asks for - a tile clicked, a drop, a name let go of, a menu's row,
+a delete - is a value (`ui/view_action.h`) recorded as it is drawn and
+done in Apply, in the order recorded (`OverlayApp::Act`). Before, each
+widget acted one of four ways: in place in the middle of the draw, at the
+end of its own draw function, through the effect queue, or through
+`Dispatch`. A click on a canvas bar tile switched the canvas halfway
+through the frame, and everything drawn after the bar - the popups, the
+border that shows only on an empty canvas - was drawn from the other
+canvas. Now a frame draws the library Prepare left, and the change shows
+in the next frame. The same act also takes one path now: the Overview's
+tile goes through `Editor::SwitchCanvas`, which ends the canvas scope,
+as the bar's does, and the bar's "+" and Overview buttons are the
+NewCanvas and Overview commands rather than a copy of what they do. What
+stays in the draw is a widget's own value: a setting
+(`docs/SETTINGS.md`), a snippet's style or a note's text as the session
+previews it, the pen's color while the chooser is dragged. None of these
+adds, removes, reorders or switches anything a draw is walking.
+
 ### Making a snippet
 
 Making a snippet is the thing done most often, so it is a press on empty

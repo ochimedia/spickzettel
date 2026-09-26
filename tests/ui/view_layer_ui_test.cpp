@@ -256,6 +256,34 @@ TEST_F(ViewLayerUiTest, NewCanvasWhilePickingSendsTheSnippetThere) {
     EXPECT_TRUE(App().IsOverviewOpen());
 }
 
+// The canvas bar's "+" and Overview buttons are the NewCanvas and Overview
+// commands, and are counted as commands run.
+TEST_F(ViewLayerUiTest, TheCanvasBarsButtonsRunTheirCommands) {
+    ShowEditMode();
+    StepFrame();
+    const CanvasId first = Canvases().CurrentCanvasId();
+    const uint64_t before = App().CommandsRun();
+    RunUi("the bar's +", [this](ImGuiTestContext* ctx) {
+        ctx->MouseMoveToPos(ImVec2(kDisplayWidth * 0.5f, kDisplayHeight - 1.0f));
+        ctx->Yield(30);
+        ctx->SetRef("//##canvas_bar");
+        ctx->ItemClick("##canvasbar_new");
+        ctx->Yield(2);
+    });
+    EXPECT_EQ(App().CommandsRun(), before + 1);
+    EXPECT_EQ(App().LastCommand(), std::optional<CommandId>(CommandId::NewCanvas));
+    EXPECT_NE(Canvases().CurrentCanvasId(), first);
+
+    RunUi("the bar's Overview", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##canvas_bar");
+        ctx->ItemClick("##canvasbar_overview");
+        ctx->Yield(2);
+    });
+    EXPECT_EQ(App().CommandsRun(), before + 2);
+    EXPECT_EQ(App().LastCommand(), std::optional<CommandId>(CommandId::Overview));
+    EXPECT_TRUE(App().IsOverviewOpen());
+}
+
 // A dock chip brings its snippet back.
 TEST_F(ViewLayerUiTest, ADockChipRestoresItsSnippet) {
     ShowEditMode();
