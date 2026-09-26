@@ -162,10 +162,16 @@ and some reach further, so each command states its **scope**:
 
 | Scope | Ends | For |
 |---|---|---|
-| Hand | the Gesture level | most commands: undo, copy, a tool, a nudge |
+| Hand | the Gesture and Text levels | most commands: undo, copy, a tool, a nudge |
 | Canvas | Gesture, Text, Popup | anything that switches or empties the canvas: a canvas switch, a capture, moving the selection to a new canvas |
 | Showing | everything above Mode | the overlay put away |
 | All | everything above Canvas | view-only mode; the session ending |
+
+The Hand scope ends a note being typed as well as the gesture: every
+command commits one today, and one can still run while a note is open -
+a key cannot reach it, but a press on the selection bar outside the field
+can. (Found while building phase 3; the table first had the Gesture level
+alone.)
 
 Today these scopes exist as four hand-written functions (`SettleHand`,
 `SwitchToCanvasSettled`, `SettleForPersistence`, `SetViewOnly`); here they
@@ -224,7 +230,7 @@ one table. A behavior change is an edit to a row. Proposed defaults:
 | Spent button | pass | ignored | ignored | nothing | the release came after all |
 | Nudge burst | cancel: back to where it began | interrupt | interrupt | nothing | - |
 | Wheel burst | cancel: back to where it began | interrupt | continue (same kind) | kind changes: finish, start anew | - |
-| Text (note) | **finish: text kept** (today's decision) | press outside: finish, used up | ImGui's | ImGui's | - |
+| Text (note) | **finish: text kept** (today's decision) | press outside: passed on, the field lets go and keeps the text | ImGui's | ImGui's | - |
 | Popup | close | press outside: close, used up | ImGui's | - | - |
 | Panel | close | its own | its own | - | - |
 | Mode: drawing | leave drawing mode | - | - | - | - |
@@ -428,7 +434,7 @@ Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.
 | Bar button | rule 2 | lit only over its own button | release over it: its command | nothing | nothing |
 | Tile dragged (canvas bar, Overview) | rule 1: Widget | ImGui draws the drag | dropped on a tile: reorder command | nothing (nothing done yet) | ImGui's drag cleared; Spent |
 | Slider (Properties) | rule 1: Widget over the Popup level | the value previews | release: one step | filed | rolled back; ImGui's active item cleared; Spent |
-| Typing a note | the Text tool's press, pushed on the Text level | keys are the field's | press outside: kept, used up | kept (committed) | kept (today's choice) |
+| Typing a note | the Text tool's press, pushed on the Text level | keys are the field's | press outside: kept, and the press goes on (it makes no snippet) | kept (committed) | kept (today's choice) |
 | Held arrow key | KeyDown at Canvas: a nudge burst | a nudge per repeat | key up: one step | filed | rolled back |
 | Wheel spin | the first notch: a burst of its kind | a step per notch | a second without one: one step | filed | rolled back |
 | Hotkey mid-anything | passed to the root | - | its command, after its scope ended what it covers | - | - |
@@ -437,6 +443,13 @@ Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.
 | Put away | Lifecycle: Hidden | - | Showing scope ends what is above Mode | - | - |
 | Shown | Lifecycle: Shown | - | the Gesture level cleared; the recognizer forgets | - | - |
 | View-only | Lifecycle: ViewOnly | - | All scope | - | - |
+
+Found while building phase 3: the Text row first said a press outside a
+note is used up by closing it. Today that press also does what it does -
+leaves drawing mode, selects a snippet - and only making a snippet is
+held back, and the design changes nothing it does not mark as a change;
+so the note passes the press on, still open, which is what keeps it from
+making a snippet.
 
 Two findings from writing the table:
 
@@ -569,11 +582,14 @@ goes is never moved: what survives of `OverlayApp`'s input side goes into
 5. **The Popup level.** Every popup is an interaction, closed through the
    effect queue; `CloseTopmostPopover` goes, and a popup claims every key
    but the global hotkeys (decision 2).
-6. **The Text level and hotkeys.** A note being typed, a name being
-   edited, a key being captured; global hotkeys arrive as `Hotkey`
-   events. `CompletesAHotkeyCapture` goes.
+6. **The Text level and hotkeys.** A note being typed; global hotkeys
+   arrive as `Hotkey` events.
 7. **The Panel level.** The Overview and the cheat sheet, with their own
-   keys; `KeyReaches` goes, since reaching is now the stack's answer.
+   keys, and the Text interactions inside the Overview - a name being
+   edited, a key being captured - with it: while the Overview's Escape is
+   ImGui's, a capture on the Text level would unbind a key with the same
+   Escape that closes the panel. `KeyReaches` goes, since reaching is now
+   the stack's answer, and `CompletesAHotkeyCapture` with the capture.
 8. **The Mode level.** Drawing mode and a creation tool in hand; Escape's
    stages come from passing down, and `PutDown`'s chain goes. After the
    levels above it rather than before (as first planned): once drawing
