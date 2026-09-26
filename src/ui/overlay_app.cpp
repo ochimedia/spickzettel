@@ -952,6 +952,10 @@ void OverlayApp::SetMode(OverlayMode mode) {
         effects_.clear();
         editor_.Settle(Scope::All);
         editor_.SettleUntouchedDrawing();
+        // A slider or swatch in the middle of a drag is not drawn again to
+        // say it was let go of, which is where its preview is committed:
+        // what it was dragged to is committed here instead.
+        settings_.CommitPreviews();
         itemPropertiesPopoverItemId_.reset();
         confirmDeleteTarget_.reset();
         // Normally cleared at the top of every RenderItems call - which
@@ -983,6 +987,10 @@ void OverlayApp::SettleForPersistence(Lifecycle why) {
     // the drawing as an ordinary snippet: a fullscreen empty one, over the
     // canvas.
     editor_.SettleUntouchedDrawing();
+    // A drag put away with the overlay is not drawn again before the next
+    // showing, and not at all before an exit: committed now, as its end
+    // would have (see SetMode).
+    settings_.CommitPreviews();
 }
 
 bool OverlayApp::PointerOverView() const {

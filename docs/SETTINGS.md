@@ -1,6 +1,6 @@
 # Settings
 
-Status: **agreed** (2026-09-26); phases 1 to 3 of section 12 are built.
+Status: **agreed** (2026-09-26); phases 1 to 4 of section 12 are built.
 Every behavior below is either what the app does today (unmarked, or
 said so) or a change (marked **Change**). "Today" means the app as of
 `654fff5`. The questions it was reviewed with, and their answers, are in section 13.
@@ -699,9 +699,28 @@ throughout, and the file's text does not change until a phase says so.
    write that fails is said and retried like any other. With no step yet,
    a migrated file cannot be tested through the reader; the chain is
    tested with steps of its own.
-4. **One edit path (C5, C6, C3, C7).** `Settings::Set`, `Preview` and
+4. **One edit path (C5, C6, C3, C7)** (done). `Settings::Set`, `Preview` and
    `Commit`; the bound widgets; the HUD's rows; hotkeys through `Set`.
    C7 starts with the test that shows the lost drag.
+
+   *Found while building it:*
+   - `Commit()` is `CommitPreviews()`: every other edit commits itself,
+     so finishing the previews is all a caller ever asks of it.
+   - A rename is an edit of its own, `RenameProfile`, since it is the one
+     change to the profiles list that can be refused. `SetProfiles` holds
+     a list handed over whole to the load repair of the names, which a list
+     the Settings panel makes never needs.
+   - The HUD's rows name their row and keep a switch of their own for
+     what only the HUD asks: whether a row can do anything, and whether
+     flipping it restarts the overlay.
+   - Until phase 5 a display picked in Settings is two previews, of the id
+     and the name, which the latch commits together.
+   - The lost drag shows in the headless tests when edit mode is left for
+     view mode, which closes the panel. Put away to hidden loses it the same
+     way in the app, where a hidden overlay draws nothing, but the headless
+     harness goes on drawing frames while hidden, and one of those saw the
+     drag end. A preview is committed wherever the overlay settles: put
+     away, left for view mode, and at exit.
 5. **Effects (C8, C9).** The display latch and the release in the draw
    go. Headless tests check the Window and Display rows of section 7.
 6. **The docs.** Set this document's status to built, update

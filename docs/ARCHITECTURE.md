@@ -1056,7 +1056,10 @@ in the catalog (and, for an overridable one, whether the defaults or a
 profile is meant), holds the value to the row's rule, applies the edit
 repair of any invariant it touches, and commits. A slider or a color
 being dragged is a `Preview` - stored, so everything drawn shows it, but
-committed only when the drag ends. A commit re-resolves and calls the
+committed only when the drag ends. ImGui says a drag ended only in a
+frame that draws the widget, so a drag cut short by leaving edit mode or
+putting the overlay away was shown and never written; the overlay commits
+the previews wherever it settles. A commit re-resolves and calls the
 controller back, which applies what changed to the window and writes the
 file. The live values are derived, never assigned, so there is no path
 by which what runs and what is stored can disagree.
@@ -1073,6 +1076,11 @@ the Settings panel's widgets take a row (`ui/settings_widgets.h`). A
 summon hotkey is still registered with the OS first, since a combination
 another application owns must not be stored; the tray then makes the
 edit, and `HotkeySetting` is the one table from a hotkey to its row.
+A profile's rename is an edit of its own because it can be refused: a
+name another profile has is not taken, and the field says so while it is
+typed. Numbering it on the spot would change the text under the cursor,
+and taking it as typed left two profiles of one name, numbered behind
+the user's back at the next start.
 
 **`Session`** is what is being worked on, independent of how it is
 shown: the library and deleting and restoring in it; every command

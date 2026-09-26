@@ -963,6 +963,21 @@ TEST_F(TrayControllerPersistenceTest, AFileReadingLeftAsItWasIsNotWrittenAtStart
     EXPECT_EQ(ReadFile(dir_ / "config.json"), text);
 }
 
+// A value still being dragged in Settings when the app exits is written:
+// the drag's end, where a preview is committed, is never drawn (C7).
+TEST_F(TrayControllerPersistenceTest, ExitWritesAPreviewStillBeingDragged) {
+    std::filesystem::create_directories(dir_);
+    test::FakePlatformHost host;
+    host.configFilePath = dir_ / "config.json";
+    TrayController controller(host, DefaultConfig());
+    ASSERT_TRUE(controller.Initialize());
+
+    controller.GetSettings().Preview(setting::kEditModeBorderOpacity, 0.5f);
+    host.TriggerTrayCommand(platform::TrayCommand::Exit);
+    EXPECT_TRUE(host.quitCalled);
+    EXPECT_FLOAT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).editModeBorderOpacity, 0.5f);
+}
+
 TEST_F(TrayControllerPersistenceTest, ExitWritesASettingsFileStillOwed) {
     std::filesystem::create_directories(dir_ / "config.json");
     test::FakePlatformHost host;

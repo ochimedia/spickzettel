@@ -334,6 +334,45 @@ TEST_F(UiTest, AValueTypedIntoASliderIsHeldToItsRange) {
     EXPECT_FLOAT_EQ(AppSettings().Stored().noteTextSizePx, kNoteTextSizeMin);
 }
 
+// A slider is committed when ImGui says it was let go of, and that is said
+// only in a frame that draws it. Taken out of edit mode in the middle of a
+// drag - to view mode here, which closes the panel - the overlay draws the
+// slider no more: the dragged value was shown, since it is stored as it
+// moves, and never reached the file. The overlay settling commits it (C7).
+// Put away to hidden is the same in the app, where a hidden overlay draws
+// nothing; this harness goes on drawing frames while hidden, so the mode
+// switch is the case it can show.
+TEST_F(UiTest, ADragCutShortByLeavingEditModeIsCommitted) {
+    controller_->GetSettings().Set(setting::kShowEditModeBorder, true);
+    ShowEditMode();
+    StepFrame();
+    const float before = AppSettings().Stored().editModeBorderOpacity;
+
+    OpenOverviewUi();
+    RunUi("start dragging a slider", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionappearance");
+        const ImGuiID body = ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID;
+        ctx->MouseMove(ImHashStr("###editborderopacity", 0, body));
+        ctx->MouseDown(ImGuiMouseButton_Left);
+        const ImVec2 at = ImGui::GetIO().MousePos;
+        ctx->MouseMoveToPos(ImVec2(at.x - 60.0f, at.y));
+        ctx->Yield(2);
+        IM_CHECK(AppSettings().Stored().editModeBorderOpacity != before);  // shown as it moves
+        IM_CHECK(AppSettings().Previewing());
+        // View mode's hotkey, the button still down: edit mode left in place.
+        ShowViewMode();
+        ctx->Yield(3);
+        ctx->MouseUp(ImGuiMouseButton_Left);
+        ctx->Yield(2);
+    });
+    ASSERT_TRUE(App().IsViewOnly());
+    ASSERT_FALSE(App().IsOverviewOpen()) << "the slider is not drawn again";
+    EXPECT_FALSE(AppSettings().Previewing()) << "committed as the overlay settled";
+    EXPECT_NE(AppSettings().Stored().editModeBorderOpacity, before);
+}
+
 // A bar's buttons are reordered by dragging them along their own row. One
 // dropped on the other bar's row moves nothing there - it carried only its
 // place in its own row, and moved whatever sat at that place in the other.
