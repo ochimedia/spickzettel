@@ -490,7 +490,10 @@ where Ctrl and Shift for the two opacities are one burst, and a
 modifier pressed and let go of between two notches is no end of one.
 Only the wheel's steps that are filed are bursts: the selection's size
 and its opacity. A tool's size and a step between canvases file nothing,
-and stay what they are.
+and stay what they are. And a burst whose steps had nothing to change -
+the wheel over a fullscreen snippet, which has no size of its own - holds
+nothing open to take back, so Escape goes on past it as if it were not
+there, rather than being spent on nothing.
 
 Every case fits the five answers and the six levels without an escape
 hatch. The ones I expected to need one - the hold, the touch injection,
@@ -659,6 +662,8 @@ while building phase 3").
 4. **The cases as tests.** The two rows of section 9 as scripted tests,
    and the randomized test checks a cancelled burst as it checks a
    cancelled drag.
+
+Phase 4 was done on 2026-09-26, in these steps.
 
 ## 12. Decisions
 

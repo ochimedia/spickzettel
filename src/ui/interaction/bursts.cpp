@@ -25,6 +25,11 @@ uint8_t ArrowBit(int key) {
 // another - the wheel has no "up" to end it, and a run of arrow presses
 // is one undo, as it has been.
 bool Lapsed(const Event& event, double lastStep) { return event.seconds - lastStep >= kBurstSeconds; }
+
+// Whether a burst's steps hold anything open on the session to take back.
+bool HoldsOpen(Editor& editor, bool style) {
+    return style ? editor.GetSession().StyleEditOpen() : editor.GetSession().PlacementOpen();
+}
 }  // namespace
 
 // ================= NudgeBurst =================
@@ -56,7 +61,7 @@ Answer NudgeBurst::Offer(const Event& event, Editor& editor) {
             return Answer::Pass();
         case EventKind::KeyDown:
             if (event.key == platform::KeyCombo::kEscape) {
-                if (held_ != 0) {
+                if (held_ != 0 && HoldsOpen(editor, /*style=*/false)) {
                     return Answer::Cancel();
                 }
                 Interrupt(editor);
@@ -110,7 +115,14 @@ Answer WheelBurst::Offer(const Event& event, Editor& editor) {
         case EventKind::PointerUp:
             return Answer::Pass();
         case EventKind::KeyDown:
-            return event.key == platform::KeyCombo::kEscape ? Answer::Cancel() : Answer::Pass();
+            if (event.key == platform::KeyCombo::kEscape) {
+                if (HoldsOpen(editor, /*style=*/kind_ == Editor::WheelKind::SelectionOpacity)) {
+                    return Answer::Cancel();
+                }
+                Interrupt(editor);
+                return Answer::Finish(/*usedUp=*/false);
+            }
+            return Answer::Pass();
         case EventKind::Tick:
             if (Lapsed(event, lastStep_)) {
                 Interrupt(editor);

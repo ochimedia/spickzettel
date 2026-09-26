@@ -109,6 +109,27 @@ protected:
         event.command = command;
         Offer(event);
     }
+    // A key held down - repeating, as the OS repeats it - and let go of.
+    void KeyDown(int key, bool repeat = false) {
+        Event event;
+        event.kind = EventKind::KeyDown;
+        event.key = key;
+        event.repeat = repeat;
+        Offer(event);
+    }
+    void KeyUp(int key) {
+        Event event;
+        event.kind = EventKind::KeyUp;
+        event.key = key;
+        Offer(event);
+    }
+    void Wheel(float notches) {
+        Event event;
+        event.kind = EventKind::Wheel;
+        event.wheel = notches;
+        Offer(event);
+    }
+    void Undo() { editor_.Dispatch(Command{CommandId::Undo}); }
 
     // ===== The library =====
 
@@ -505,23 +526,161 @@ TEST_F(InteractionCasesTest, ShownForgetsWhatWasHeldAndViewOnlyEndsEverything) {
     EXPECT_EQ(Stack(), "Canvas / - / - / - / - / -");
 }
 
+// ===== Bursts =====
+
+TEST_F(InteractionCasesTest, AHeldArrowIsOneStepAndEscapeWhileItIsHeldTakesItBack) {
+    const ItemId a = MakeSnippet(Rect{200, 200, 300, 200});
+    editor_.SelectOnly(a);
+    KeyDown(KeyCombo::kRightArrow);
+    EXPECT_EQ(GestureLevel(), "NudgeBurst");
+    for (int i = 0; i < 4; ++i) {
+        KeyDown(KeyCombo::kRightArrow, /*repeat=*/true);
+    }
+    KeyUp(KeyCombo::kRightArrow);
+    EXPECT_EQ(ItemOf(a).rect.x, 205.0f);
+    EXPECT_FALSE(Filed()) << "held open until it is over";
+    Tick(0.5);
+    EXPECT_EQ(GestureLevel(), "NudgeBurst") << "a second without a nudge ends it, not the key's release";
+    Tick(0.6);
+    EXPECT_EQ(GestureLevel(), "-");
+    ASSERT_TRUE(Filed());
+    Undo();
+    EXPECT_EQ(ItemOf(a).rect.x, 200.0f) << "the whole burst, in one step";
+    EXPECT_FALSE(Filed());
+
+    KeyDown(KeyCombo::kDownArrow);
+    KeyDown(KeyCombo::kDownArrow, /*repeat=*/true);
+    held_.shift = true;
+    KeyDown(KeyCombo::kDownArrow, /*repeat=*/true);  // Shift, pressed mid-burst: ten pixels
+    held_ = platform::Modifiers{};
+    EXPECT_EQ(ItemOf(a).rect.y, 212.0f);
+    Escape();
+    EXPECT_EQ(ItemOf(a).rect.y, 200.0f) << "back to where it began";
+    EXPECT_EQ(GestureLevel(), "-");
+    EXPECT_FALSE(Filed()) << "and nothing filed";
+    EXPECT_EQ(editor_.Selection(), std::vector<ItemId>{a}) << "Escape went to the burst, not the selection";
+    KeyUp(KeyCombo::kDownArrow);
+}
+
+TEST_F(InteractionCasesTest, ARunOfArrowPressesIsOneStepAndEscapeAfterThemGoesOn) {
+    const ItemId a = MakeSnippet(Rect{200, 200, 300, 200});
+    editor_.SelectOnly(a);
+    Key(KeyCombo::kRightArrow);
+    Tick(0.5);
+    Key(KeyCombo::kRightArrow);
+    Key(KeyCombo::kUpArrow);
+    EXPECT_EQ(ItemOf(a).rect.x, 202.0f);
+    EXPECT_EQ(ItemOf(a).rect.y, 199.0f);
+    Escape();
+    EXPECT_EQ(ItemOf(a).rect.x, 202.0f) << "presses let go of are kept";
+    EXPECT_TRUE(editor_.Selection().empty()) << "Escape went on, and put the hand down";
+    EXPECT_EQ(GestureLevel(), "-");
+    Undo();
+    EXPECT_EQ(ItemOf(a).rect.x, 200.0f) << "the run, in one step";
+    EXPECT_EQ(ItemOf(a).rect.y, 200.0f);
+    EXPECT_FALSE(Filed());
+
+    // A press ends a burst, filed, and is its own.
+    editor_.SelectOnly(a);
+    Key(KeyCombo::kLeftArrow);
+    Click(900.0f, 600.0f);
+    EXPECT_NE(GestureLevel(), "NudgeBurst");
+    EXPECT_EQ(ItemOf(a).rect.x, 199.0f);
+    EXPECT_TRUE(Filed());
+    EXPECT_TRUE(editor_.Selection().empty()) << "the press on empty canvas";
+
+    // And a command ends it before it runs: an undo takes back the burst.
+    editor_.SelectOnly(a);
+    Key(KeyCombo::kLeftArrow);
+    Key(KeyCombo::kLeftArrow);
+    Undo();
+    EXPECT_EQ(ItemOf(a).rect.x, 199.0f);
+    EXPECT_EQ(GestureLevel(), "-");
+}
+
+TEST_F(InteractionCasesTest, ASpinOfTheWheelIsOneStepAndEscapeTakesItBack) {
+    const ItemId a = MakeSnippet(Rect{200, 200, 300, 200});
+    editor_.SelectOnly(a);
+    const Rect start = ItemOf(a).rect;
+    Wheel(1.0f);
+    EXPECT_EQ(GestureLevel(), "WheelBurst");
+    Wheel(1.0f);
+    Wheel(1.0f);
+    EXPECT_GT(ItemOf(a).rect.w, start.w * 1.3f);
+    Tick(0.9);
+    Escape();
+    EXPECT_EQ(ItemOf(a).rect, start) << "within the second: back to where it began";
+    EXPECT_FALSE(Filed());
+    EXPECT_EQ(editor_.Selection(), std::vector<ItemId>{a});
+
+    Wheel(1.0f);
+    Wheel(1.0f);
+    Tick(1.1);
+    EXPECT_EQ(GestureLevel(), "-") << "over";
+    ASSERT_TRUE(Filed());
+    Undo();
+    EXPECT_EQ(ItemOf(a).rect, start) << "the spin, in one step";
+    EXPECT_FALSE(Filed());
+
+    // A notch of another kind ends the burst, filed, and begins its own.
+    Wheel(1.0f);
+    const Rect scaled = ItemOf(a).rect;
+    held_.shift = true;
+    Wheel(-1.0f);
+    Wheel(-1.0f);
+    held_ = platform::Modifiers{};
+    EXPECT_FLOAT_EQ(ItemOf(a).foregroundOpacity, 0.9f);
+    Escape();
+    EXPECT_FLOAT_EQ(ItemOf(a).foregroundOpacity, 1.0f) << "the opacity burst taken back";
+    EXPECT_EQ(ItemOf(a).rect, scaled) << "the size burst before it filed";
+    Undo();
+    EXPECT_EQ(ItemOf(a).rect, start);
+    EXPECT_FALSE(Filed());
+}
+
+TEST_F(InteractionCasesTest, AToolsSizeAndACanvasStepAreNoBursts) {
+    const ItemId drawing = MakeSnippet(Rect{100, 100, 600, 400});
+    editor_.EnterDrawingMode(drawing);
+    Wheel(1.0f);
+    EXPECT_EQ(GestureLevel(), "-") << "the pen's size files nothing, and needs no burst";
+    editor_.ExitDrawingMode();
+    held_.alt = true;
+    Wheel(1.0f);
+    held_ = platform::Modifiers{};
+    EXPECT_EQ(GestureLevel(), "-");
+    editor_.ClearSelection();
+    Wheel(1.0f);
+    EXPECT_EQ(GestureLevel(), "-") << "nothing selected to change";
+
+    // A burst that changed nothing - a fullscreen snippet has no size of
+    // its own - has nothing for Escape to take back, and lets it go on.
+    editor_.SelectOnly(drawing);
+    editor_.ToggleFullscreenUndoably(drawing, /*stretch=*/false);
+    Wheel(1.0f);
+    ASSERT_EQ(GestureLevel(), "WheelBurst");
+    Escape();
+    EXPECT_EQ(GestureLevel(), "-");
+    EXPECT_TRUE(editor_.Selection().empty()) << "Escape went on to the selection";
+}
+
 // ===== Anything, anywhere =====
 
 // Presses of either button on snippets and off them, moves, releases - a
 // quarter of them lost - modifiers, time passing long enough for a hold,
-// every command by its key, its hotkey or dispatched as a menu row or a bar
-// button would, and Escape anywhere; against the machine and the editor
-// alone, for thousands of seeds. After every event the stack is well formed
+// the wheel, every command by its key - let go of or held - its hotkey or
+// dispatched as a menu row or a bar button would, and Escape anywhere;
+// against the machine and the editor alone, for thousands of seeds. After every event the stack is well formed
 // (Machine::CheckLevels, in a debug build). After a command that ran,
 // nothing is in flight but the rest of a press, and nothing is open on the
 // session. Whenever the hand is at rest, nothing is open on the session
-// but a note being typed. And whenever Escape cancels a move, a resize or
-// a mark, every snippet is exactly as that gesture found it.
+// but a note being typed. And whenever Escape cancels a move, a resize, a
+// mark or a burst, every snippet is exactly as it found them.
 TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
     constexpr uint32_t kSeeds = 2000;
     constexpr int kSteps = 150;
     std::vector<bool> ran(kCommandCount, false);
     size_t cancelsChecked = 0;
+    size_t burstCancelsChecked = 0;
     for (uint32_t seed = 1; seed <= kSeeds; ++seed) {
         SCOPED_TRACE(::testing::Message() << "seed " << seed);
         Settings settings{AppConfig{}};
@@ -563,10 +722,26 @@ TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
         };
         const auto changesTheLibrary = [](const Interaction* gesture) {
             return dynamic_cast<const Placement*>(gesture) != nullptr ||
-                   dynamic_cast<const Marking*>(gesture) != nullptr;
+                   dynamic_cast<const Marking*>(gesture) != nullptr ||
+                   dynamic_cast<const NudgeBurst*>(gesture) != nullptr ||
+                   dynamic_cast<const WheelBurst*>(gesture) != nullptr;
         };
-        // The move, the resize or the mark on top, and what the library held
-        // before the event that began it - which Escape must give back.
+        // Whether Escape would cancel it now, rather than let it end and go
+        // on: a burst only while it holds something open, and the arrows'
+        // only while one is held.
+        const auto escapeCancels = [&session](const Interaction* gesture) {
+            if (const auto* nudge = dynamic_cast<const NudgeBurst*>(gesture)) {
+                return nudge->ArrowHeld() && session.PlacementOpen();
+            }
+            if (const auto* wheel = dynamic_cast<const WheelBurst*>(gesture)) {
+                return wheel->Kind() == Editor::WheelKind::SelectionOpacity ? session.StyleEditOpen()
+                                                                           : session.PlacementOpen();
+            }
+            return gesture != nullptr;
+        };
+        // The move, the resize, the mark or the burst on top, and what the
+        // library held before the event that began it - which Escape must
+        // give back.
         uint64_t tracked = 0;
         std::vector<Item> foundIt;
         const auto serialOf = [](const Interaction* gesture) -> uint64_t {
@@ -577,8 +752,11 @@ TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
             const std::vector<Item> before = snippets();
             const uint64_t topBefore = serialOf(editor.Input().At(Level::Gesture));
             const bool changerBefore = changesTheLibrary(editor.Input().At(Level::Gesture));
+            const bool cancelsBefore = escapeCancels(editor.Input().At(Level::Gesture));
+            const bool burstBefore = editor.Input().As<NudgeBurst>(Level::Gesture) != nullptr ||
+                                     editor.Input().As<WheelBurst>(Level::Gesture) != nullptr;
             bool escaped = false;
-            const size_t what = pick(20);
+            const size_t what = pick(22);
             if (what < 4) {
                 const MouseButton button = pick(3) == 0 ? MouseButton::Right : MouseButton::Left;
                 pointer = somewhere();
@@ -626,6 +804,13 @@ TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
                 Event event;
                 event.kind = EventKind::Tick;
                 offer(event);
+            } else if (what >= 20) {
+                // A notch or a few, or part of one on a fine wheel.
+                Event event;
+                event.kind = EventKind::Wheel;
+                event.position = pointer;
+                event.wheel = (pick(2) == 0 ? 1.0f : -1.0f) * (pick(3) == 0 ? 0.5f : static_cast<float>(1 + pick(2)));
+                offer(event);
             } else {
                 // A command, by whatever reaches it.
                 const auto id = static_cast<CommandId>(pick(kCommandCount));
@@ -654,8 +839,13 @@ TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
                     } else {
                         event.kind = EventKind::KeyDown;
                         event.key = key.key;
+                        event.repeat = pick(3) == 0;
                     }
                     offer(event);
+                    if (event.kind == EventKind::KeyDown && pick(2) == 0) {  // and otherwise it is held
+                        event.kind = EventKind::KeyUp;
+                        offer(event);
+                    }
                     held = kept;
                 } else {
                     Command command{id};
@@ -688,8 +878,9 @@ TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
             // anything into, which a press elsewhere is allowed to discard.
             const Interaction* after = editor.Input().At(Level::Gesture);
             const uint64_t topAfter = serialOf(after);
-            if (escaped && changerBefore && topBefore == tracked && topAfter != topBefore) {
+            if (escaped && changerBefore && cancelsBefore && topBefore == tracked && topAfter != topBefore) {
                 ++cancelsChecked;
+                burstCancelsChecked += burstBefore ? 1 : 0;
                 for (const Item& item : snippets()) {
                     const auto was = std::find_if(foundIt.begin(), foundIt.end(),
                                                   [&](const Item& earlier) { return earlier.id == item.id; });
@@ -734,6 +925,7 @@ TEST(InteractionRandomTest, AnythingAnywhereEscapeIncluded) {
         EXPECT_EQ(editor.Input().Describe(), "Canvas / - / - / - / - / -");
     }
     EXPECT_GE(cancelsChecked, 100u) << "the cancel check has to run to mean anything";
+    EXPECT_GE(burstCancelsChecked, 50u) << "for bursts too";
     for (const CommandInfo& info : kCommands) {
         EXPECT_TRUE(ran[static_cast<size_t>(info.id)]) << info.name << " never ran";
     }

@@ -210,6 +210,9 @@ public:
     // Whether a placement is open holding exactly the snippets `ids`, in
     // that order - one a burst began, still going on.
     bool Placing(const std::vector<ItemId>& ids) const;
+    // Whether a placement, or a style edit, is open at all.
+    bool PlacementOpen() const { return placement_.has_value(); }
+    bool StyleEditOpen() const { return styleEdit_.has_value(); }
     void PreviewRect(ItemId id, Rect rect);
     // Takes a fullscreen snippet out of fullscreen as part of the gesture -
     // what taking hold of one does. No-op for one that is not fullscreen.

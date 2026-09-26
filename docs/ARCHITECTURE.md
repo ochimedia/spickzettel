@@ -1862,7 +1862,8 @@ level), a notch of another kind. Escape takes it back to where it began,
 through the same cancel a drag has - for the arrows only while one is
 held, since a run of presses already let go of is not what Escape is
 pressed about; with none held, Escape ends the burst and goes on to put
-the hand down.
+the hand down. So does a burst that holds nothing open, its steps having
+had nothing to change: Escape is not spent on it.
 
 The arrows stay commands. A burst runs each as its step
 (`Editor::Step`), which ends nothing first - the burst is the hand - and
@@ -1902,9 +1903,10 @@ that never ran, so neither check can quietly stop running.
 (`tests/ui/interaction_cases_test.cpp`) runs the same kind of input
 against the machine and `Editor` alone - no `OverlayApp`, no ImGui
 frame - which makes it fast enough for 2000 seeds of 150 events, and
-adds Escape anywhere. Whenever Escape cancels a move, a resize or a
-mark, every snippet is exactly as that gesture found it and the live
-layer is empty; it counts those checks too. A gesture that took over
+adds Escape anywhere, the wheel, and keys held as well as let go of.
+Whenever Escape cancels a move, a resize, a mark or a burst, every
+snippet is exactly as it found them and the live layer is empty; it
+counts those checks too, the bursts' on their own. A gesture that took over
 from another in the same event (a press that ended a stroke and began
 the next) is not checked that way: it found the library with the
 other's work in it, which the test has no snapshot of. Beside it, each

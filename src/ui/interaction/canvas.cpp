@@ -41,7 +41,7 @@ Answer CanvasLevel::Offer(const Event& event, Editor& editor) {
             // is a selection to change; the rest are steps of their own.
             const Editor::WheelKind kind = editor.KindOfWheel();
             if ((kind == Editor::WheelKind::SelectionSize || kind == Editor::WheelKind::SelectionOpacity) &&
-                editor.SelectionLive()) {
+                editor.SelectionLive() && !editor.Selection().empty()) {
                 return Answer::Start(std::nullopt, std::make_unique<WheelBurst>(kind));
             }
             editor.Wheel(event.wheel);

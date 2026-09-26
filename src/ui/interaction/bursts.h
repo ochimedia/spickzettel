@@ -5,7 +5,9 @@
 // held open on the session as one placement or one style edit, and filed
 // as one step when a second passes without another (section 5). What
 // else comes ends them: a press, a command, the wheel of another kind.
-// Escape takes one back to where it began.
+// Escape takes one back to where it began; one that holds nothing open
+// on the session, its steps having had nothing to change, lets Escape go
+// on.
 
 #include "ui/editor.h"
 #include "ui/interaction/machine.h"
@@ -26,13 +28,15 @@ public:
     Answer Offer(const Event& event, Editor& editor) override;
     void Interrupt(Editor& editor) override;
     void Cancel(Editor& editor) override;
+    // Whether an arrow is held down, which Escape cancels the burst under.
+    bool ArrowHeld() const { return held_ != 0; }
 
 private:
     // A nudge, if `event` is an arrow's: run, and the key noted as held.
     bool Nudge(const Event& event, Editor& editor);
 
     double lastStep_ = 0.0;
-    // The arrows held down, which Escape cancels the burst under.
+    // The arrows held down, a bit each.
     uint8_t held_ = 0;
 };
 
