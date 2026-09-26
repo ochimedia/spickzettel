@@ -229,7 +229,7 @@ Answer RecognizePress(const Event& press, Editor& editor) {
     // 1: a press on a panel of ImGui's own - a popover, the canvas bar, the
     // Overview, all above every item - is theirs alone.
     if (editor.PointerOverView()) {
-        return Answer::Claim();
+        return Answer::Start(std::nullopt, std::make_unique<Widget>(press));
     }
     const PointerTarget target = editor.ResolvePointerTarget(press.position.x, press.position.y);
     switch (press.button) {

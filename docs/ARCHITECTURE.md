@@ -1699,8 +1699,9 @@ asked not to.
 
 What the pointer is doing is one interaction on the Gesture level -
 `Pending`, `Spent`, `Placement` (a move or a resize), `BarPress`,
-`BoxSelect`, `Framing` or `Marking` (a stroke, a shape, the eraser's path
-or its rectangle, and the right button's erase) - or nothing
+`BoxSelect`, `Framing`, `Marking` (a stroke, a shape, the eraser's path
+or its rectangle, and the right button's erase) or `Widget` (a press on
+one of ImGui's windows, held: a slider, a tile dragged) - or nothing
 (`ui/interaction/gestures.*`). Before the machine it was a
 `std::variant` in `OverlayApp::Hand`, and before that a field per kind,
 which excluded each other only by the order `OnMouse` asked in; each
@@ -1825,9 +1826,13 @@ the press found it, a press still pending does nothing more. The session
 rolls the gesture back to the checkpoint it took when it began
 (`Session::CancelPlacement`, `CancelErase`, `CancelShape`), which is
 exact and costs no write, since previews change the model in memory and
-nothing is written until a step is filed. Only with nothing in flight
-does Escape go on to put the tool down, leave drawing mode, call off a
-cut or clear the selection.
+nothing is written until a step is filed. A slider in the Properties
+popover is a Widget gesture over the popup, so Escape mid-drag puts its
+value back (`Session::CancelStyleEdit`) and has the view let go of ImGui's
+active widget (an effect, since only a frame may touch it) - as it does a
+tile being dragged in the Overview or the canvas bar. Only with nothing
+in flight does Escape go on to put the tool down, leave drawing mode,
+call off a cut or clear the selection.
 
 The pointer's own device is the exception: input from the mouse holding
 the gesture is ignored until it ends rather than ending it. A second

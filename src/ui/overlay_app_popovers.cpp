@@ -401,6 +401,7 @@ bool OverlayApp::PopupShowing(PopupKind kind) const {
                 return kind == PopupKind::ConfirmDelete;
             case Effect::Kind::ClosePopup:
             case Effect::Kind::CloseInnermostPopup:
+            case Effect::Kind::LetGoOfWidget:
                 return false;
         }
         return false;
@@ -475,6 +476,10 @@ void OverlayApp::ApplyEffects() {
             }
             case Effect::Kind::CloseInnermostPopup:
                 CloseTopmostPopover();
+                break;
+            case Effect::Kind::LetGoOfWidget:
+                ImGui::ClearActiveID();
+                ImGui::ClearDragDrop();
                 break;
         }
     }

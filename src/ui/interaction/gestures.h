@@ -238,6 +238,24 @@ private:
     platform::Vec2 to_;
 };
 
+// A press on one of ImGui's windows, held - a slider dragged in the
+// Properties popover, a tile dragged in the Overview or the canvas bar, a
+// button held: the widget's, and the canvas's nothing (section 6.5, rule
+// 1). Escape calls it off: the view lets go of the widget, and a style it
+// was previewing goes back to what it was. Ended from outside, the view
+// lets go of it too, keeping what it had done.
+class Widget final : public Gesture {
+public:
+    explicit Widget(const Event& press) : Gesture(press.button) {}
+    const char* Name() const override { return "Widget"; }
+    void Interrupt(Editor& editor) override;
+    void Cancel(Editor& editor) override;
+
+protected:
+    Answer Moved(const Event& /*event*/, Editor& /*editor*/) override { return Answer::Claim(); }
+    Answer Released(const Event& /*event*/, Editor& /*editor*/) override { return Answer::Finish(); }
+};
+
 // A selection bar button held down, fired by a release over it - the rule
 // ImGui's own Button follows. Nothing else on the bar reacts meanwhile.
 class BarPress final : public Gesture {

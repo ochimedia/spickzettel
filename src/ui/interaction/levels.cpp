@@ -1,6 +1,7 @@
 #include "ui/interaction/levels.h"
 
 #include "ui/editor.h"
+#include "ui/interaction/gestures.h"
 
 namespace sz::ui {
 
@@ -86,6 +87,9 @@ Answer Panel::Offer(const Event& event, Editor& editor) {
                     CommandId::CheatSheet) {
                 return Answer::Pass();
             }
+            if (event.button == platform::MouseButton::Left || event.button == platform::MouseButton::Right) {
+                return Answer::Start(std::nullopt, std::make_unique<Widget>(event));  // its widgets'
+            }
             return Answer::Claim();
         case EventKind::PointerMove:
         case EventKind::PointerUp:
@@ -139,10 +143,15 @@ const char* PopupName(PopupKind kind) {
 Answer Popup::Offer(const Event& event, Editor& editor) {
     switch (event.kind) {
         case EventKind::PointerDown:
+            // Its widgets', or a click outside that closes it.
+            if (event.button == platform::MouseButton::Left || event.button == platform::MouseButton::Right) {
+                return Answer::Start(std::nullopt, std::make_unique<Widget>(event));
+            }
+            return Answer::Claim();
         case EventKind::PointerMove:
         case EventKind::PointerUp:
         case EventKind::Wheel:
-            return Answer::Claim();  // its widgets', or a click outside that closes it
+            return Answer::Claim();
         case EventKind::KeyDown:
             if (event.key == platform::KeyCombo::kEscape) {
                 editor.Views().CloseInnermostPopup();

@@ -104,6 +104,7 @@ public:
     void ClosePanel(PanelKind /*kind*/) override {}
     void ToolSized(bool /*pen*/) override {}
     bool InputOptionsKey(const Event& /*event*/) override { return false; }
+    void LetGoOfWidget() override {}
 };
 
 // Whole wheel notches out of `remainder`, which the caller keeps across

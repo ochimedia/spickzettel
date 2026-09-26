@@ -127,6 +127,9 @@ public:
     // A key the input options HUD takes, while it is up - a debugging aid
     // of the view's. False for one it does not.
     virtual bool InputOptionsKey(const Event& event) = 0;
+    // The widget held down let go of - a slider's drag, a tile's - as if
+    // the button had come up somewhere it means nothing.
+    virtual void LetGoOfWidget() = 0;
 };
 
 class Editor {

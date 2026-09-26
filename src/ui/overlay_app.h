@@ -384,6 +384,7 @@ private:
     void ClosePanel(PanelKind kind) override;
     void ToolSized(bool pen) override;
     bool InputOptionsKey(const Event& event) override { return HandleInputOptionsHudKey(event); }
+    void LetGoOfWidget() override { Queue(Effect{Effect::Kind::LetGoOfWidget}); }
     bool PopupOpen() const override;
     bool PopupShowing(PopupKind kind) const override;
     void ClosePopup(PopupKind kind) override;
@@ -1195,6 +1196,9 @@ private:
             // Escape does to it - which may be one of ImGui's own inside it.
             ClosePopup,
             CloseInnermostPopup,
+            // ImGui's active widget let go of, and a drag and drop dropped -
+            // see Widget.
+            LetGoOfWidget,
         };
         Kind kind = Kind::OpenItemProperties;
         ImVec2 at{0.0f, 0.0f};  // where a menu or the color chooser opens

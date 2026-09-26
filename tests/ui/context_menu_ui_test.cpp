@@ -144,6 +144,53 @@ TEST_F(UiTest, ThePropertiesPopoverHasPickersAndNoActionRow) {
     EXPECT_FALSE(hasActionRow);
 }
 
+// Escape with a slider still held in the Properties popover puts the value
+// back as it was before the drag, files nothing, and lets go of the
+// slider: the rest of the drag moves it no further (docs/INTERACTIONS.md,
+// section 5). The popover stays up.
+TEST_F(UiTest, EscapeMidSliderPutsTheValueBack) {
+    ShowEditMode();
+    StepFrame();
+    Drag(300.0f, 300.0f, 700.0f, 550.0f);  // a screenshot, selected as made
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const ItemId shot = Canvases().CurrentOrNull()->items[0].id;
+    const std::optional<ImVec2> more = App().SelectionBarButtonCenter(ChromeButton::More);
+    ASSERT_TRUE(more.has_value());
+    RawClick(more->x, more->y);
+
+    ImRect slider;
+    RunUi("find the foreground slider", [&](ImGuiTestContext* ctx) {
+        const ImGuiID window = ctx->WindowInfo("//$FOCUSED").ID;
+        const ImGuiTestItemInfo info = ctx->ItemInfo(ImHashStr("###opacityfg", 0, window));
+        IM_CHECK(info.ID != 0);
+        slider = info.RectFull;
+    });
+    const float before = Canvases().FindItemAnywhere(shot)->foregroundOpacity;
+    const float y = (slider.Min.y + slider.Max.y) * 0.5f;
+    // Pressed on the slider's left end and dragged right: a lower opacity,
+    // then a higher one, as a hand does it - to ImGui and to the stream.
+    MoveTo(slider.Min.x + 4.0f, y);
+    StepFrame();
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(slider.Min.x + 4.0f, y, platform::MouseEventKind::Down);
+    StepFrames(2);
+    RawMouse(slider.Min.x + slider.GetWidth() * 0.6f, y, platform::MouseEventKind::Move);
+    StepFrames(2);
+    ASSERT_NE(Canvases().FindItemAnywhere(shot)->foregroundOpacity, before) << "the drag previews";
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / ItemProperties / - / Widget");
+
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FLOAT_EQ(Canvases().FindItemAnywhere(shot)->foregroundOpacity, before) << "back as it was";
+    RawMouse(slider.Max.x - 4.0f, y, platform::MouseEventKind::Move);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(Canvases().FindItemAnywhere(shot)->foregroundOpacity, before) << "and the rest moved nothing";
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
+    RawMouse(slider.Max.x - 4.0f, y, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(Canvases().FindItemAnywhere(shot)->foregroundOpacity, before);
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / ItemProperties / - / -") << "the popover still up";
+}
+
 // ===== The canvas bar's tiles =====
 
 class CanvasBarMenuUiTest : public UiTest {

@@ -418,6 +418,18 @@ Answer Framing::Released(const Event& event, Editor& /*editor*/) {
     return Answer::Finish(/*usedUp=*/true, made);
 }
 
+// ================= Widget =================
+
+void Widget::Interrupt(Editor& editor) {
+    editor.GetSession().EndStyleEdit();
+    editor.Views().LetGoOfWidget();
+}
+
+void Widget::Cancel(Editor& editor) {
+    editor.GetSession().CancelStyleEdit();
+    editor.Views().LetGoOfWidget();
+}
+
 // ================= BarPress =================
 
 Answer BarPress::Released(const Event& event, Editor& editor) {
