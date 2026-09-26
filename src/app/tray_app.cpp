@@ -589,7 +589,7 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     }
     // A combo one of the app's own other hotkeys has moves over: that one
     // is unbound, the way a tool shortcut's key is taken from the row that
-    // had it (see OverlayApp::SetToolShortcut). Refusing it instead leaves
+    // had it (see Settings::SetShortcut). Refusing it instead leaves
     // the user to go and free the combo by hand - and since Windows hands a
     // registered combination to its hotkey and to nothing else, pressing it
     // while the editor waited would do the other hotkey's job rather than

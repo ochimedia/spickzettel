@@ -27,27 +27,6 @@ namespace {
 
 }  // namespace
 
-void OverlayApp::SetToolShortcut(ShortcutAction action, platform::KeyCombo combo) {
-    if (combo.key != 0) {
-        // Whatever else held this key loses it. The alternative - refusing
-        // the change - leaves the user to go and find the other holder
-        // themselves, and two rows claiming one key is a state where only
-        // the first of them could ever fire (see Editor::CommandForKey).
-        //
-        // Judged against what the *edited* target resolves to, not against
-        // what is running: a collision inside a profile is a collision when
-        // that profile is active, and a key the defaults use elsewhere is
-        // not this profile's problem to solve.
-        const ProfileableSettings edited = EditedSettings();
-        for (const ShortcutAction other : kAllShortcutActions) {
-            if (other != action && edited.shortcuts[ShortcutActionIndex(other)] == combo) {
-                SetEditedShortcut(other, platform::KeyCombo{});
-            }
-        }
-    }
-    SetEditedShortcut(action, combo);
-}
-
 void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
     // Each sized to its text rather than to the screen - fitted to the
     // hand-wrapped lines at their size, a hair wider than the longest -

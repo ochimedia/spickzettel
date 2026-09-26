@@ -668,7 +668,7 @@ private:
     // RenderOverviewSettingsPanel for what decides which settings live
     // where. `anyChanged` is the shared "something was edited, persist it"
     // flag; the shortcuts section has none because its rows persist
-    // themselves through SetToolShortcut.
+    // themselves through Settings::SetShortcut.
     void RenderSettingsAppearance(bool& anyChanged);
     void RenderSettingsInteraction(bool& anyChanged);
     // One bar's buttons as a row to arrange: each is a tile that switches
@@ -731,12 +731,9 @@ private:
     }
     void ClearProfileableOverride(const ProfileableIntField& field) { settings_.ClearOverride(editProfile_, field); }
     // The same two, for a shortcut binding.
-    void SetEditedShortcut(ShortcutAction action, platform::KeyCombo combo) {
-        settings_.SetShortcut(editProfile_, action, combo);
-    }
-    void ClearShortcutOverride(ShortcutAction action) { settings_.ClearShortcutOverride(editProfile_, action); }
+    void ClearShortcutOverride(ShortcutAction action) { settings_.ClearShortcutOverride(action, editProfile_); }
     bool IsShortcutOverriddenHere(ShortcutAction action) const {
-        return settings_.IsShortcutOverridden(editProfile_, action);
+        return settings_.IsShortcutOverridden(action, editProfile_);
     }
     // The Overview's third tab: which build this is (build::VersionLine)
     // plus ABOUT.md, compiled in so it travels with the binary rather than
@@ -805,11 +802,6 @@ private:
     // Backspace or Delete for none - see KeyCapture.
     void RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label, float buttonX);
     float KeyButtonColumn() const;
-    // Binds `combo` to `action`, taking it off whatever else held it -
-    // rejecting the change would leave the user to find the other holder
-    // themselves, and two rows claiming one key is a state where only one
-    // of them can ever fire. Pass a default-constructed combo to unbind.
-    void SetToolShortcut(ShortcutAction action, platform::KeyCombo combo);
     // Cancel/Delete confirmation for a canvas or folder Delete button
     // clicked in the Overview - see confirmDeleteTarget_'s own doc
     // comment for why canvas/folder deletion gets this extra step while

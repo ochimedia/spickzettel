@@ -4662,7 +4662,7 @@ TEST_F(HeadlessAppTest, TheWelcomeNotePointsAtTheCheatSheet) {
 }
 
 TEST_F(HeadlessAppTest, WithTheCheatSheetUnboundTheWelcomeNoteSendsYouToTheMenu) {
-    controller_->GetSettings().SetShortcut(std::nullopt, ShortcutAction::CheatSheet, platform::KeyCombo{});
+    controller_->GetSettings().SetShortcut(ShortcutAction::CheatSheet, platform::KeyCombo{}, std::nullopt);
     controller_->Overlay().RequestWelcomeNote();
     ShowEditMode();
     StepFrames(2);

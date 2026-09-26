@@ -2,6 +2,8 @@
 
 #include <gtest/gtest.h>
 
+#include "core/config/settings_catalog.h"
+
 namespace sz::core {
 namespace {
 
@@ -38,41 +40,41 @@ TEST(SettingsTest, LiveIsTheDefaultsUntilAProfileMatches) {
 TEST(SettingsTest, AnEditGoesWhereItIsAimed) {
     Settings settings(ConfigWithOneProfile());
     settings.SetUnderlyingApplication(Game());
-    const ProfileableField freeze{&ProfileableSettings::freezeScreen, &ProfileOverrides::freezeScreen};
     const bool defaultFreeze = DefaultConfig().profileable.freezeScreen;
 
-    settings.SetProfileable(0u, freeze, !defaultFreeze);
-    EXPECT_TRUE(settings.IsOverridden(0u, freeze));
+    EXPECT_TRUE(settings.Set(setting::kFreezeScreen, !defaultFreeze, 0u));
+    EXPECT_TRUE(settings.IsOverridden(setting::kFreezeScreen, 0u));
     EXPECT_EQ(settings.Stored().profileable.freezeScreen, defaultFreeze) << "the defaults are untouched";
     EXPECT_EQ(settings.Live().freezeScreen, !defaultFreeze) << "and what runs is the profile's";
+    EXPECT_EQ(settings.Get(setting::kFreezeScreen, 0u), !defaultFreeze);
+    EXPECT_EQ(settings.Get(setting::kFreezeScreen, std::nullopt), defaultFreeze);
 
-    settings.ClearOverride(0u, freeze);
-    EXPECT_FALSE(settings.IsOverridden(0u, freeze));
+    settings.ClearOverride(setting::kFreezeScreen, 0u);
+    EXPECT_FALSE(settings.IsOverridden(setting::kFreezeScreen, 0u));
     EXPECT_EQ(settings.Live().freezeScreen, defaultFreeze);
 
-    settings.SetProfileable(std::nullopt, freeze, !defaultFreeze);
+    settings.Set(setting::kFreezeScreen, !defaultFreeze, std::nullopt);
     EXPECT_EQ(settings.Stored().profileable.freezeScreen, !defaultFreeze) << "nullopt is the defaults";
-    EXPECT_FALSE(settings.IsOverridden(std::nullopt, freeze)) << "which override nothing";
+    EXPECT_FALSE(settings.IsOverridden(setting::kFreezeScreen, std::nullopt)) << "which override nothing";
 }
 
-TEST(SettingsTest, ANumberEditGoesWhereItIsAimed) {
+// An edit is held to its row's rule, as the file is: pulled into the band,
+// or rejected and nothing changed - and a rejected edit commits nothing.
+TEST(SettingsTest, AnEditIsHeldToItsRowsRule) {
     Settings settings(ConfigWithOneProfile());
-    settings.SetUnderlyingApplication(Game());
-    const ProfileableIntField threshold{&ProfileableSettings::counterThreshold, &ProfileOverrides::counterThreshold};
-    const int defaultThreshold = DefaultConfig().profileable.counterThreshold;
+    int commits = 0;
+    settings.SetChangedCallback([&commits] { ++commits; });
 
-    settings.SetProfileable(0u, threshold, 40);
-    EXPECT_TRUE(settings.IsOverridden(0u, threshold));
-    EXPECT_EQ(settings.Stored().profileable.counterThreshold, defaultThreshold);
-    EXPECT_EQ(settings.Live().counterThreshold, 40);
+    EXPECT_TRUE(settings.Set(setting::kPurgeDeletedAfterDays, 99999));
+    EXPECT_EQ(settings.Stored().purgeDeletedAfterDays, kPurgeDeletedAfterDaysMax);
+    EXPECT_TRUE(settings.Set(setting::kCounterThreshold, 1, 0u));
+    EXPECT_EQ(settings.Stored().profiles[0].overrides.counterThreshold,
+              platform::EditModeInputOptions::kCounterThresholdMin);
+    EXPECT_EQ(commits, 2);
 
-    settings.ClearOverride(0u, threshold);
-    EXPECT_FALSE(settings.IsOverridden(0u, threshold));
-    EXPECT_EQ(settings.Live().counterThreshold, defaultThreshold);
-
-    settings.SetProfileable(std::nullopt, threshold, 90);
-    EXPECT_EQ(settings.Stored().profileable.counterThreshold, 90);
-    EXPECT_EQ(settings.Live().counterThreshold, 90) << "a profile that says nothing inherits it";
+    EXPECT_FALSE(settings.Set(setting::kEditModeBorderWidth, 0.0f)) << "a zero width is no width";
+    EXPECT_EQ(settings.Stored().editModeBorderWidthPx, DefaultConfig().editModeBorderWidthPx);
+    EXPECT_EQ(commits, 2);
 }
 
 TEST(SettingsTest, EveryEditCommitsAndACommitResolvesAgain) {
@@ -83,9 +85,7 @@ TEST(SettingsTest, EveryEditCommitsAndACommitResolvesAgain) {
     settings.SetUnderlyingApplication(Game());
     EXPECT_EQ(commits, 0) << "what the overlay is up over is not an edit";
 
-    // A plain field, edited in place and then committed.
-    settings.Mutable().showItemBorders = !settings.Stored().showItemBorders;
-    settings.Commit();
+    settings.Set(setting::kShowItemBorders, !settings.Stored().showItemBorders);
     EXPECT_EQ(commits, 1);
 
     // Replacing the profiles can change which one matches.
@@ -96,19 +96,98 @@ TEST(SettingsTest, EveryEditCommitsAndACommitResolvesAgain) {
     EXPECT_EQ(settings.Live().dontStealFocus, settings.Stored().profileable.dontStealFocus);
 }
 
+// A value being dragged is stored as it moves, for everything drawn to show
+// it, and committed once, when the drag is finished.
+TEST(SettingsTest, APreviewIsShownAtOnceAndCommittedWhenFinished) {
+    Settings settings(DefaultConfig());
+    int commits = 0;
+    settings.SetChangedCallback([&commits] { ++commits; });
+
+    settings.Preview(setting::kAccentColor, 0x112233FFu);
+    settings.Preview(setting::kAccentColor, 0x445566FFu);
+    EXPECT_EQ(settings.Get(setting::kAccentColor), 0x445566FFu);
+    EXPECT_TRUE(settings.Previewing());
+    EXPECT_EQ(commits, 0);
+
+    settings.CommitPreviews();
+    EXPECT_EQ(commits, 1);
+    EXPECT_FALSE(settings.Previewing());
+    settings.CommitPreviews();
+    EXPECT_EQ(commits, 1) << "nothing left to finish";
+
+    // Any other edit's commit takes a preview with it.
+    settings.Preview(setting::kEditModeBorderOpacity, 0.5f);
+    settings.Set(setting::kShowCanvasBar, false);
+    EXPECT_EQ(commits, 2);
+    EXPECT_FALSE(settings.Previewing());
+}
+
+// One press cannot make both kinds: choosing the press the other has swaps
+// the two, and both may be off.
+TEST(SettingsTest, ChoosingTheOtherTriggersPressSwapsThem) {
+    Settings settings(DefaultConfig());
+    ASSERT_EQ(settings.Stored().screenshotTrigger, CreationTrigger::Plain);
+    ASSERT_EQ(settings.Stored().drawingTrigger, CreationTrigger::Ctrl);
+
+    settings.Set(setting::kScreenshotTrigger, CreationTrigger::Ctrl);
+    EXPECT_EQ(settings.Stored().screenshotTrigger, CreationTrigger::Ctrl);
+    EXPECT_EQ(settings.Stored().drawingTrigger, CreationTrigger::Plain);
+
+    settings.Set(setting::kDrawingTrigger, CreationTrigger::Off);
+    settings.Set(setting::kScreenshotTrigger, CreationTrigger::Off);
+    EXPECT_EQ(settings.Stored().screenshotTrigger, CreationTrigger::Off);
+    EXPECT_EQ(settings.Stored().drawingTrigger, CreationTrigger::Off);
+}
+
+// One combination summons one thing: the hotkey that had it is unbound.
+// Two unbound hotkeys share nothing.
+TEST(SettingsTest, AHotkeyGivenAnothersCombinationLeavesThatOneUnbound) {
+    Settings settings(DefaultConfig());
+    const platform::KeyCombo view = settings.Stored().hotkeyViewMode;
+
+    settings.Set(setting::kHotkeyEditMode, view);
+    EXPECT_EQ(settings.Stored().hotkeyEditMode, view);
+    EXPECT_FALSE(settings.Stored().hotkeyViewMode.IsValid());
+
+    settings.Set(setting::kHotkeyQuickCapture, platform::KeyCombo{});
+    EXPECT_FALSE(settings.Stored().hotkeyQuickCapture.IsValid());
+    EXPECT_EQ(settings.Stored().hotkeyEditMode, view) << "unbound collides with nothing";
+}
+
 TEST(SettingsTest, AShortcutOverrideIsPerProfile) {
     Settings settings(ConfigWithOneProfile());
     settings.SetUnderlyingApplication(Game());
     const ShortcutAction action = ShortcutAction::Draw;
     const platform::KeyCombo combo{/*ctrl=*/false, /*alt=*/false, /*shift=*/true, /*key=*/'Q'};
 
-    settings.SetShortcut(0u, action, combo);
-    EXPECT_TRUE(settings.IsShortcutOverridden(0u, action));
+    settings.SetShortcut(action, combo, 0u);
+    EXPECT_TRUE(settings.IsShortcutOverridden(action, 0u));
     EXPECT_EQ(settings.Live().shortcuts[ShortcutActionIndex(action)], combo);
     EXPECT_NE(settings.ResolvedFor(std::nullopt).shortcuts[ShortcutActionIndex(action)], combo);
 
-    settings.ClearShortcutOverride(0u, action);
-    EXPECT_FALSE(settings.IsShortcutOverridden(0u, action));
+    settings.ClearShortcutOverride(action, 0u);
+    EXPECT_FALSE(settings.IsShortcutOverridden(action, 0u));
+}
+
+// A key another action has in the same target moves over, and that action
+// is left unbound there - in a profile, as an override of its own, leaving
+// the defaults as they were.
+TEST(SettingsTest, AShortcutTakesItsKeyFromTheActionThatHadIt) {
+    Settings settings(ConfigWithOneProfile());
+    const platform::KeyCombo newScreenshotKey =
+        settings.Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewScreenshot)];
+    ASSERT_TRUE(newScreenshotKey.IsValid());
+
+    settings.SetShortcut(ShortcutAction::Text, newScreenshotKey, 0u);
+    const ProfileableSettings game = settings.ResolvedFor(0u);
+    EXPECT_EQ(game.shortcuts[ShortcutActionIndex(ShortcutAction::Text)], newScreenshotKey);
+    EXPECT_FALSE(game.shortcuts[ShortcutActionIndex(ShortcutAction::NewScreenshot)].IsValid());
+    EXPECT_TRUE(settings.IsShortcutOverridden(ShortcutAction::NewScreenshot, 0u));
+    EXPECT_EQ(settings.Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewScreenshot)], newScreenshotKey)
+        << "the defaults keep it";
+
+    settings.SetShortcut(ShortcutAction::Text, newScreenshotKey, std::nullopt);
+    EXPECT_FALSE(settings.Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewScreenshot)].IsValid());
 }
 
 }  // namespace

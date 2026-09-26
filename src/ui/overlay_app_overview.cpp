@@ -1307,7 +1307,7 @@ void OverlayApp::RenderOverviewSettingsPanel() {
     // one exception - see RenderHotkeyEditor/TryChangeHotkey's own doc
     // comments for why those go through a separate request/response
     // callback instead - as are the shortcut rows, which persist through
-    // SetToolShortcut.
+    // Settings::SetShortcut.
     bool anyChanged = false;
     switch (settingsSection_) {
         case SettingsSection::Appearance:
@@ -2884,7 +2884,10 @@ void OverlayApp::ArmHotkeyCapture(HotkeySlot slot) {
 
 void OverlayApp::ArmShortcutCapture(ShortcutAction action) {
     editor_.Input().Push(std::make_unique<KeyCapture>(
-                             action, [this, action](platform::KeyCombo combo) { SetToolShortcut(action, combo); }),
+                             action,
+                             [this, action](platform::KeyCombo combo) {
+                                 settings_.SetShortcut(action, combo, editProfile_);
+                             }),
                          Event{});
 }
 
