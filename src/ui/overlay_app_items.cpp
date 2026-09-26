@@ -32,381 +32,31 @@ namespace {
 // move/resize handling already enforces, so they're shared rather than
 // kept as two copies that could drift apart.
 
-// ----- Selection geometry -----
-//
-// Where a selected snippet's handles and the selection bar are, in pixels,
-// from the rects alone. This is what ResolvePointerTarget reads to say
-// what is under a point; PaintSelectionOutline and PaintSelectionBar draw
-// to the same rects.
-
-// Half-open on the far edges, the way ImGui's own ImRect::Contains is, so a
-// pixel exactly on the seam between two adjacent rects belongs to exactly
-// one of them.
-struct HitRect {
-    ImVec2 min;
-    ImVec2 max;
-    bool Contains(float x, float y) const { return x >= min.x && y >= min.y && x < max.x && y < max.y; }
-};
-
-// A handle is a small square centered *on* the border - a corner or the
-// middle of an edge - the way a drawing program draws them. It covers a
-// few of the snippet's own pixels, which is fine: handles show only while
-// the selection is live, when nothing can be drawn anyway. Its hit rect
-// reaches a little past what is drawn, so it needn't be hit dead on.
-constexpr float kHandleSizePx = 8.0f;
-constexpr float kHandleHitSlopPx = 3.0f;
-
-// One of the 8 handles: where its center is, the pointer it wears, and its
-// compass name as the debug overlay prints it.
-struct HandleSpec {
-    ResizeHandle handle;
-    const char* name;
-    ImVec2 center;
-    ImGuiMouseCursor cursor;
-};
-
-// The 8 handles of a rect, corners first, at whole pixels: every one is
-// tested against a whole-pixel pointer position, and a fractional edge
-// left a sub-pixel column that belonged to nothing.
-std::array<HandleSpec, 8> HandleSpecs(const Rect& r) {
-    const float x0 = std::round(r.x);
-    const float y0 = std::round(r.y);
-    const float x1 = std::round(r.x + r.w);
-    const float y1 = std::round(r.y + r.h);
-    const float xm = std::round((x0 + x1) * 0.5f);
-    const float ym = std::round((y0 + y1) * 0.5f);
-    return {{
-        {ResizeHandle::NW, "nw", ImVec2(x0, y0), ImGuiMouseCursor_ResizeNWSE},
-        {ResizeHandle::NE, "ne", ImVec2(x1, y0), ImGuiMouseCursor_ResizeNESW},
-        {ResizeHandle::SE, "se", ImVec2(x1, y1), ImGuiMouseCursor_ResizeNWSE},
-        {ResizeHandle::SW, "sw", ImVec2(x0, y1), ImGuiMouseCursor_ResizeNESW},
-        {ResizeHandle::N, "n", ImVec2(xm, y0), ImGuiMouseCursor_ResizeNS},
-        {ResizeHandle::S, "s", ImVec2(xm, y1), ImGuiMouseCursor_ResizeNS},
-        {ResizeHandle::E, "e", ImVec2(x1, ym), ImGuiMouseCursor_ResizeEW},
-        {ResizeHandle::W, "w", ImVec2(x0, ym), ImGuiMouseCursor_ResizeEW},
-    }};
-}
-
-HitRect HandleDrawRect(ImVec2 center) {
-    const float half = std::round(Px(kHandleSizePx) * 0.5f);
-    return HitRect{ImVec2(center.x - half, center.y - half), ImVec2(center.x + half, center.y + half)};
-}
-
-HitRect HandleHitRect(ImVec2 center) {
-    const float half = std::round(Px(kHandleSizePx) * 0.5f) + std::round(Px(kHandleHitSlopPx));
-    return HitRect{ImVec2(center.x - half, center.y - half), ImVec2(center.x + half, center.y + half)};
-}
-
-// The compass name the debug overlay prints for a handle, and the pointer
-// it wears - both straight off the same table the resolver walks.
-const char* ResizeHandleName(ResizeHandle handle) {
-    for (const HandleSpec& h : HandleSpecs(Rect{})) {
-        if (h.handle == handle) {
-            return h.name;
-        }
-    }
-    return "?";
-}
+// The pointer a resize handle wears.
 ImGuiMouseCursor ResizeHandleCursor(ResizeHandle handle) {
-    for (const HandleSpec& h : HandleSpecs(Rect{})) {
-        if (h.handle == handle) {
-            return h.cursor;
-        }
+    switch (handle) {
+        case ResizeHandle::NW:
+        case ResizeHandle::SE:
+            return ImGuiMouseCursor_ResizeNWSE;
+        case ResizeHandle::NE:
+        case ResizeHandle::SW:
+            return ImGuiMouseCursor_ResizeNESW;
+        case ResizeHandle::N:
+        case ResizeHandle::S:
+            return ImGuiMouseCursor_ResizeNS;
+        case ResizeHandle::E:
+        case ResizeHandle::W:
+            return ImGuiMouseCursor_ResizeEW;
     }
     return ImGuiMouseCursor_Arrow;
 }
 
-// The selection bar: [Pin][More][Minimize][Maximize/Restore][Close] - or,
-// in drawing mode, [Pen][Eraser][Text][Color] - buttons of this size, this
-// far apart, on a pill this much bigger than them, floating just above the
-// selection's bounding box - or below it when there is no room above, or
-// inside its top edge when there is no room either way (a fullscreen
-// snippet). Centered on the box and kept on screen.
-constexpr float kBarButtonSize = 28.0f;
-constexpr float kBarButtonGap = 2.0f;
-constexpr float kBarPad = 6.0f;
-constexpr float kBarGapPx = 8.0f;  // between the box and the bar
-constexpr float kBarHeight = kBarButtonSize + 2.0f * kBarPad;
-
-float BarWidth(size_t buttonCount) {
-    const auto n = static_cast<float>(buttonCount);
-    return n * Px(kBarButtonSize) + (n - 1.0f) * Px(kBarButtonGap) + 2.0f * Px(kBarPad);
-}
-
-struct BarLayout {
-    ImVec2 min;
-    ImVec2 max;
-};
-
-BarLayout LayoutBar(const Rect& bounds, float displayW, float displayH, size_t buttonCount) {
-    const float width = BarWidth(buttonCount);
-    float x = std::round(bounds.x + bounds.w * 0.5f - width * 0.5f);
-    x = std::clamp(x, 0.0f, std::max(0.0f, displayW - width));
-    const auto at = [&](float y) { return BarLayout{ImVec2(x, y), ImVec2(x + width, y + Px(kBarHeight))}; };
-    const BarLayout above = at(std::round(bounds.y) - Px(kBarGapPx) - Px(kBarHeight));
-    if (above.min.y >= 0.0f) {
-        return above;
-    }
-    const BarLayout below = at(std::round(bounds.y + bounds.h) + Px(kBarGapPx));
-    if (below.max.y <= displayH) {
-        return below;
-    }
-    return at(std::max(0.0f, std::round(bounds.y) + Px(kBarGapPx)));
-}
-
-HitRect BarButtonRect(const BarLayout& bar, const std::vector<ChromeButton>& buttons, ChromeButton button) {
-    float slot = 0.0f;
-    for (const ChromeButton candidate : buttons) {
-        if (candidate == button) {
-            break;
-        }
-        slot += 1.0f;
-    }
-    const float x = bar.min.x + Px(kBarPad) + slot * (Px(kBarButtonSize) + Px(kBarButtonGap));
-    const float y = bar.min.y + Px(kBarPad);
-    return HitRect{ImVec2(x, y), ImVec2(x + Px(kBarButtonSize), y + Px(kBarButtonSize))};
-}
+ImVec2 Im(platform::Vec2 v) { return ImVec2(v.x, v.y); }
 }  // namespace
 
-// Which buttons this bar is carrying, in the order they are drawn: the
-// settings' own list, minus whatever is switched off (see
-// AppConfig::snippetBar and Settings > Interaction). Empty is a legal
-// answer - everything switched off - and means no bar is drawn at all.
-std::vector<ChromeButton> OverlayApp::BarButtons() const {
-    const BarButtonList& configured = drawingItem_.has_value() ? Cfg().drawingBar : Cfg().snippetBar;
-    std::vector<ChromeButton> shown;
-    shown.reserve(configured.size());
-    for (const BarButtonSetting& entry : configured) {
-        if (entry.shown) {
-            shown.push_back(entry.button);
-        }
-    }
-    return shown;
-}
-
-// ----- The selection -----
-
-bool OverlayApp::IsSelected(ItemId id) const {
-    return std::find(selection_.begin(), selection_.end(), id) != selection_.end();
-}
-
-bool OverlayApp::SelectionLive() const { return !ArmedCreation().has_value(); }
-
-void OverlayApp::SelectOnly(ItemId id) {
-    selection_.clear();
-    selection_.push_back(id);
-}
-
-void OverlayApp::ToggleSelected(ItemId id) {
-    const auto it = std::find(selection_.begin(), selection_.end(), id);
-    if (it != selection_.end()) {
-        selection_.erase(it);
-    } else {
-        selection_.push_back(id);
-    }
-}
-
-void OverlayApp::ClearSelection() { selection_.clear(); }
-
-void OverlayApp::PruneSelection() {
-    if (selection_.empty()) {
-        return;
-    }
-    const Canvas* canvas = Manager().CurrentOrNull();
-    const auto onScreen = [&](ItemId id) {
-        if (canvas == nullptr) {
-            return false;
-        }
-        for (const Item& item : canvas->items) {
-            if (item.id == id) {
-                return !item.minimized && !Manager().IsDeleted(*canvas, item);
-            }
-        }
-        return false;
-    };
-    selection_.erase(std::remove_if(selection_.begin(), selection_.end(), [&](ItemId id) { return !onScreen(id); }),
-                     selection_.end());
-    // Drawing mode is on a selected snippet, so it goes the same way: a
-    // canvas switch, a delete, a minimize.
-    if (drawingItem_.has_value() && !IsSelected(*drawingItem_)) {
-        ExitDrawingMode();
-    }
-}
-
-std::optional<ItemId> OverlayApp::PrimarySelection() const {
-    if (selection_.empty()) {
-        return std::nullopt;
-    }
-    return selection_.back();
-}
-
-std::optional<Rect> OverlayApp::SelectionBounds() const {
-    const Canvas* canvas = Manager().CurrentOrNull();
-    if (canvas == nullptr) {
-        return std::nullopt;
-    }
-    std::optional<Rect> bounds;
-    for (const Item& item : canvas->items) {
-        if (!IsSelected(item.id)) {
-            continue;
-        }
-        if (!bounds.has_value()) {
-            bounds = item.rect;
-            continue;
-        }
-        const float x0 = std::min(bounds->x, item.rect.x);
-        const float y0 = std::min(bounds->y, item.rect.y);
-        const float x1 = std::max(bounds->x + bounds->w, item.rect.x + item.rect.w);
-        const float y1 = std::max(bounds->y + bounds->h, item.rect.y + item.rect.h);
-        bounds = Rect{x0, y0, x1 - x0, y1 - y0};
-    }
-    return bounds;
-}
-
-// ----- The clipboard -----
-
-void OverlayApp::CopySelectionToClipboard(bool cut) {
-    if (selection_.empty()) {
-        return;  // nothing selected is nothing to copy, and says so by
-                 // leaving whatever is on the clipboard alone
-    }
-    clipboard_ = selection_;
-    clipboardIsCut_ = cut;
-    ShowActionToast(cut ? strings::kToastCut : strings::kToastCopied);
-}
-
-bool OverlayApp::IsWaitingToBeCut(ItemId id) const {
-    return clipboardIsCut_ && std::find(clipboard_.begin(), clipboard_.end(), id) != clipboard_.end();
-}
-
-// What is on the clipboard, onto the canvas being looked at: copies of it,
-// or - after a Cut - the snippets themselves, moved here.
-//
-// Every snippet is looked up as this runs rather than trusted from when it
-// was copied: one deleted since is skipped, and a paste that finds nothing
-// left says so instead of pasting an empty selection. That check is the
-// whole reason the clipboard holds ids.
-//
-// A copy lands on top of its source when the source is on this canvas, so
-// there it is offset the way the Properties popover's own Copy is - far
-// enough to see that there are now two. Pasted onto another canvas it
-// keeps its place exactly, which is where the eye expects it. A cut pasted
-// back onto its own canvas is the snippet itself, and there is nothing to
-// tell apart: it stays exactly where it was.
-//
-// One undo takes the whole paste back: the copies go, and what a cut
-// moved here goes back where it came from - see Session::Paste.
-void OverlayApp::PasteFromClipboard() {
-    if (clipboard_.empty() || Manager().CurrentOrNull() == nullptr) {
-        return;
-    }
-    const bool cut = clipboardIsCut_;
-    const Session::Placed pasted = session_.Paste(clipboard_, cut);
-    if (pasted.items.empty()) {
-        // Nothing left to paste - or a paste whose write failed, which the
-        // line along the bottom says more of (see PersistenceWarning).
-        ShowActionToast(session_.LastWriteFailed() ? strings::kToastNotWritten : strings::kToastNothingToPaste);
-        return;
-    }
-    // What was pasted is what is selected, so it can be moved straight
-    // away - and, for a cut pasted onto another canvas, so that what
-    // arrived is the thing the bar is over.
-    selection_ = pasted.items;
-    if (cut) {
-        clipboard_.clear();
-        clipboardIsCut_ = false;
-    }
-    ShowActionToast(pasted.pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastPasted);
-}
-
-// A copy of every selected snippet, on this canvas, offset the way a
-// paste onto its own canvas is - Copy and Paste in one step, and what
-// Ctrl+D means everywhere else.
-//
-// Deliberately not routed through the clipboard: duplicating something is
-// not a reason to lose what was copied earlier, and the clipboard holds
-// ids rather than snippets (see PasteFromClipboard), so borrowing it here
-// would also mean deciding what a later paste of those ids should do.
-//
-// What was made is what ends up selected, so it can be dragged straight
-// off the original - the same rule a paste follows, and the reason the
-// copies are offset at all.
-void OverlayApp::DuplicateSelection() {
-    if (selection_.empty() || Manager().CurrentOrNull() == nullptr) {
-        return;
-    }
-    const Session::Placed made = session_.Duplicate(selection_);
-    if (made.items.empty()) {
-        return;
-    }
-    selection_ = made.items;
-    ShowActionToast(made.pictureLost ? strings::kToastCopiedWithoutPicture : strings::kToastDuplicated);
-}
-
-void OverlayApp::AddTouchedToSelection(const Rect& box) {
-    const Canvas* canvas = Manager().CurrentOrNull();
-    if (canvas == nullptr) {
-        return;
-    }
-    // Back to front, so a box over a stack of them leaves the frontmost
-    // selected last - which is the one the bar's single-snippet buttons
-    // then act on, and the one whose handles are found first.
-    for (const Item& item : canvas->items) {
-        if (item.minimized || Manager().IsDeleted(*canvas, item) || IsSelected(item.id)) {
-            continue;
-        }
-        // Touched, not enclosed: a box drawn across a row of snippets is
-        // meant to have caught the ones it was drawn across, and asking
-        // for the whole of a fullscreen snippet to be inside the box
-        // would put that one out of reach of any box at all.
-        if (RectsOverlap(box, item.rect)) {
-            selection_.push_back(item.id);
-        }
-    }
-}
-
-void OverlayApp::DeleteSelection() {
-    // A copy: deleting clears nothing itself, but the toast and the
-    // session are free to look at the selection while this runs.
-    const std::vector<ItemId> doomed = selection_;
-    DeleteItemsWithToast(doomed);
-    ClearSelection();
-}
-
-void OverlayApp::NudgeSelection(float dx, float dy) {
-    const ImVec2 display = ImGui::GetIO().DisplaySize;
-    // A run of presses - or a key held down, repeating - is one undo, back
-    // to where the run began.
-    std::vector<std::pair<ItemId, Rect>> rects;
-    for (const ItemId id : selection_) {
-        const Item* item = Manager().FindItemAnywhere(id);
-        if (item == nullptr || item->isFullscreen) {
-            continue;  // a fullscreen snippet has nowhere to go
-        }
-        KeepDrawingsPlaced({id});
-        rects.emplace_back(id, ClampRectToViewport(Rect{item->rect.x + dx, item->rect.y + dy, item->rect.w,
-                                                        item->rect.h},
-                                                   display.x, display.y));
-    }
-    RecordPlacementBurst(Burst::Nudge, rects);
-}
-
 std::optional<ImVec2> OverlayApp::SelectionBarButtonCenter(ChromeButton button) const {
-    if (!SelectionLive()) {
-        return std::nullopt;
-    }
-    const std::optional<Rect> bounds = SelectionBounds();
-    if (!bounds.has_value()) {
-        return std::nullopt;
-    }
-    const std::vector<ChromeButton> buttons = BarButtons();
-    if (std::find(buttons.begin(), buttons.end(), button) == buttons.end()) {
-        return std::nullopt;  // not on the bar the mode shows
-    }
-    const ImVec2 display = ImGui::GetIO().DisplaySize;
-    const HitRect rect =
-        BarButtonRect(LayoutBar(*bounds, display.x, display.y, buttons.size()), buttons, button);
-    return ImVec2((rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f);
+    const std::optional<platform::Vec2> center = editor_.SelectionBarButtonCenter(button);
+    return center.has_value() ? std::optional<ImVec2>(Im(*center)) : std::nullopt;
 }
 
 void OverlayApp::RenderItems(float displayW, float displayH) {
@@ -420,12 +70,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // whatever gesture is open before any other (see
     // Session::EndOpenGesture) - has its editor put away with it, rather
     // than typing on into an edit that is over.
-    if (editingNoteItemId_.has_value() && session_.TextEditItem() != editingNoteItemId_) {
-        editingNoteItemId_.reset();
-        if (window_) {
-            window_->ReleaseTextInput();
-        }
-    }
+    editor_.ForgetNoteEditEndedElsewhere();
     const Canvas* canvasPtr = Manager().CurrentOrNull();
     if (!canvasPtr) {
         return;  // no canvas, so no items to render
@@ -446,7 +91,7 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // one answer - this frame's - with no window hit-test of ImGui's in
     // between to be a frame late.
     const ImGuiIO& io = ImGui::GetIO();
-    const PointerTarget target = ResolvePointerTarget(io.MousePos.x, io.MousePos.y);
+    const PointerTarget target = editor_.ResolvePointerTarget(io.MousePos.x, io.MousePos.y);
     // Whether the selection's furniture may react to the pointer at all
     // this frame: not while a panel of ImGui's own is under it - a
     // popover, the canvas bar, the dock, the Overview, all of which sit above
@@ -534,8 +179,8 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
         if (Manager().IsDeleted(canvas, item)) {
             continue;  // deleted: hidden until it is restored
         }
-        PaintItemBody(drawList, item, drawingItem_ == item.id, highlightId == item.id, frontmostId == item.id);
-        if (itemsInteractive && editingNoteItemId_ == item.id) {
+        PaintItemBody(drawList, item, editor_.DrawingItem() == item.id, highlightId == item.id, frontmostId == item.id);
+        if (itemsInteractive && editor_.EditingNote() == item.id) {
             editingItem = &item;
             editingMin = ImVec2(std::round(item.rect.x), std::round(item.rect.y));
             editingMax = ImVec2(std::round(item.rect.x + item.rect.w), std::round(item.rect.y + item.rect.h));
@@ -544,11 +189,11 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
     // The selection, over every snippet - the primary last, so where two
     // selected snippets overlap the one selected last has its handles on
     // top, which is the one the resolver finds first.
-    if (SelectionLive()) {
-        for (const ItemId id : selection_) {
+    if (editor_.SelectionLive()) {
+        for (const ItemId id : editor_.Selection()) {
             for (const Item& item : canvas.items) {
                 if (item.id == id) {
-                    PaintSelectionOutline(drawList, item, drawingItem_ == id);
+                    PaintSelectionOutline(drawList, item, editor_.DrawingItem() == id);
                     break;
                 }
             }
@@ -597,83 +242,6 @@ void OverlayApp::RenderItems(float displayW, float displayH) {
 }
 
 
-// One walk over the current canvas, answering what a screen point is on -
-// see PointerTarget for what each answer is for:
-//  - the target: the frontmost thing that would take a press there - a
-//    selection bar button, a selected snippet's handle, or an item's body;
-//  - `body`: the frontmost item whose content rect holds the point.
-// The selection's furniture is drawn over every snippet, so it is asked
-// first, the bar before the handles and the snippet selected last before
-// the others - the same order it is painted in. It exists only while the
-// selection is live (see SelectionLive), and never on a fullscreen
-// snippet, which has no handles.
-PointerTarget OverlayApp::ResolvePointerTarget(float x, float y) const {
-    PointerTarget target;
-    const Canvas* canvasPtr = Manager().CurrentOrNull();
-    if (!canvasPtr) {
-        return target;  // no canvas, so nothing anywhere to hit
-    }
-    const Canvas& canvas = *canvasPtr;
-    for (size_t revIdx = canvas.items.size(); revIdx-- > 0;) {
-        const Item& item = canvas.items[revIdx];
-        // A minimized item keeps its last on-screen rect (only RenderItems'
-        // own skip-if-minimized stops it from actually rendering there -
-        // see Item::minimized's own doc comment), so it has to be skipped
-        // here too, or a stroke over the patch it last covered would go
-        // into the minimized item instead of whatever is visible there. A
-        // deleted one is nowhere.
-        if (item.minimized || Manager().IsDeleted(canvas, item)) {
-            continue;
-        }
-        const Rect& r = item.rect;
-        // Closed on the far edges, unlike the furniture's own rects: the
-        // item's outermost pixel column is drawable, and a stroke started
-        // exactly there has always landed in the item.
-        if (x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) {
-            target.body = item.id;
-            break;
-        }
-    }
-    if (SelectionLive() && !selection_.empty()) {
-        const ImVec2 display = ImGui::GetIO().DisplaySize;
-        if (const std::optional<Rect> bounds = SelectionBounds()) {
-            const std::vector<ChromeButton> buttons = BarButtons();
-            const BarLayout bar = LayoutBar(*bounds, display.x, display.y, buttons.size());
-            for (const ChromeButton button : buttons) {
-                if (BarButtonRect(bar, buttons, button).Contains(x, y)) {
-                    target.kind = PointerTarget::Kind::Button;
-                    target.button = button;
-                    return target;
-                }
-            }
-        }
-        for (auto it = selection_.rbegin(); it != selection_.rend(); ++it) {
-            const Item* item = nullptr;
-            for (const Item& candidate : canvas.items) {
-                if (candidate.id == *it) {
-                    item = &candidate;
-                    break;
-                }
-            }
-            if (item == nullptr || item->isFullscreen) {
-                continue;
-            }
-            for (const HandleSpec& h : HandleSpecs(item->rect)) {
-                if (HandleHitRect(h.center).Contains(x, y)) {
-                    target.kind = PointerTarget::Kind::Handle;
-                    target.item = item->id;
-                    target.handle = h.handle;
-                    return target;
-                }
-            }
-        }
-    }
-    if (target.body.has_value()) {
-        target.kind = PointerTarget::Kind::Body;
-        target.item = *target.body;
-    }
-    return target;
-}
 
 // An item's content, the stroke being drawn into it, and its border, into
 // `drawList` at the item's own (unrounded) rect.
@@ -684,7 +252,7 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
     drawList->PushClipRect(pMin, pMax, true);
 
     DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, PictureTexture(item),
-                    StrokeRasterTextureFor(item.id), /*skipNoteText=*/editingNoteItemId_ == item.id, CanvasMeshSlot(),
+                    StrokeRasterTextureFor(item.id), /*skipNoteText=*/editor_.EditingNote() == item.id, CanvasMeshSlot(),
                     PictureSampling());
 
     if (drawing) {
@@ -710,9 +278,9 @@ void OverlayApp::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
     }
     // Cut, and waiting for the paste that will move it: faded where it
     // stands, the way a file manager fades a file that has been cut. A
-    // cut takes nothing away until it is pasted (see clipboard_), so
+    // cut takes nothing away until it is pasted (see Editor::IsWaitingToBeCut), so
     // without this it looks like the key did nothing at all.
-    if (IsWaitingToBeCut(item.id)) {
+    if (editor_.IsWaitingToBeCut(item.id)) {
         drawList->AddRectFilled(pMin, pMax, IM_COL32(14, 16, 20, 130));
     }
     drawList->PopClipRect();
@@ -791,7 +359,7 @@ void OverlayApp::PaintSelectionOutline(ImDrawList* drawList, const Item& item, b
     }
     for (const HandleSpec& h : HandleSpecs(item.rect)) {
         const HitRect rect = HandleDrawRect(h.center);
-        drawList->AddRectFilled(rect.min, rect.max, ImGui::GetColorU32(theme::kWhite));
+        drawList->AddRectFilled(Im(rect.min), Im(rect.max), ImGui::GetColorU32(theme::kWhite));
         const float edge = PxWhole(2.0f);
         drawList->AddRect(ImVec2(rect.min.x + edge * 0.5f, rect.min.y + edge * 0.5f),
                           ImVec2(rect.max.x - edge * 0.5f, rect.max.y - edge * 0.5f), theme::AccentU32(), 0.0f, edge);
@@ -806,8 +374,8 @@ void OverlayApp::PaintSelectionOutline(ImDrawList* drawList, const Item& item, b
 // resolver (`hotButton`), and a press shows as pressed only while the
 // pointer is still on it, the way a held Button does.
 void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton) {
-    const std::optional<Rect> bounds = SelectionBounds();
-    const std::optional<ItemId> primaryId = PrimarySelection();
+    const std::optional<Rect> bounds = editor_.SelectionBounds();
+    const std::optional<ItemId> primaryId = editor_.PrimarySelection();
     if (!bounds.has_value() || !primaryId.has_value()) {
         return;
     }
@@ -819,19 +387,18 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
     // on when every selected snippet is pinned, since that is what a press
     // would take back.
     bool allPinned = true;
-    for (const ItemId id : selection_) {
+    for (const ItemId id : editor_.Selection()) {
         const Item* item = Manager().FindItemAnywhere(id);
         allPinned = allPinned && item != nullptr && item->pinned;
     }
 
-    const ImVec2 display = ImGui::GetIO().DisplaySize;
-    const std::vector<ChromeButton> buttons = BarButtons();
+    const std::vector<ChromeButton> buttons = editor_.BarButtons();
     if (buttons.empty()) {
         return;  // every button switched off: no pill either, not an empty one
     }
-    const BarLayout bar = LayoutBar(*bounds, display.x, display.y, buttons.size());
-    drawList->AddRectFilled(bar.min, bar.max, ImGui::GetColorU32(theme::kPanelBg), theme::kRadiusPill);
-    drawList->AddRect(bar.min, bar.max, ImGui::GetColorU32(theme::kPanelBorderStrong), theme::kRadiusPill);
+    const BarLayout bar = LayoutBar(*bounds, editor_.DisplayWidth(), editor_.DisplayHeight(), buttons.size());
+    drawList->AddRectFilled(Im(bar.min), Im(bar.max), ImGui::GetColorU32(theme::kPanelBg), theme::kRadiusPill);
+    drawList->AddRect(Im(bar.min), Im(bar.max), ImGui::GetColorU32(theme::kPanelBorderStrong), theme::kRadiusPill);
 
     for (const ChromeButton button : buttons) {
         const HitRect rect = BarButtonRect(bar, buttons, button);
@@ -842,23 +409,23 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         // drawing bar, the tool in hand does. The rest are plain pills.
         const bool danger = button == ChromeButton::Close;
         const bool active = (button == ChromeButton::Pin && allPinned) ||
-                            (button == ChromeButton::Pen && activeTool_ == Tool::Draw) ||
-                            (button == ChromeButton::Eraser && activeTool_ == Tool::Erase) ||
-                            (button == ChromeButton::Text && activeTool_ == Tool::Text);
+                            (button == ChromeButton::Pen && editor_.ActiveTool() == Tool::Draw) ||
+                            (button == ChromeButton::Eraser && editor_.ActiveTool() == Tool::Erase) ||
+                            (button == ChromeButton::Text && editor_.ActiveTool() == Tool::Text);
         ImVec4 fill = danger ? theme::kDangerSoft : active ? theme::Accent() : theme::kFieldBg;
         if (held && hovered) {
             fill = danger ? theme::kDanger : theme::AccentHover();
         } else if (hovered) {
             fill = danger ? theme::kDanger : active ? theme::AccentHover() : theme::kHoverWash;
         }
-        ImGui::RenderFrame(rect.min, rect.max, ImGui::GetColorU32(fill), true, theme::kRadiusPill);
+        ImGui::RenderFrame(Im(rect.min), Im(rect.max), ImGui::GetColorU32(fill), true, theme::kRadiusPill);
 
         if (button == ChromeButton::Color) {
             // The color itself, as a swatch, ringed in white so a dark
             // color reads on the pill.
             const ImVec2 center((rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f);
             const float swatchRadius = Px(7.0f);
-            drawList->AddCircleFilled(center, swatchRadius, ToImColor(drawColorRGBA_));
+            drawList->AddCircleFilled(center, swatchRadius, ToImColor(editor_.DrawColorRGBA()));
             drawList->AddCircle(center, swatchRadius, ImGui::GetColorU32(theme::kWhite), 0, Px(1.5f));
             if (hovered) {
                 ImGui::SetTooltip("%s", strings::kBarColorTip);
@@ -873,18 +440,18 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
             // cycled to (see ActivateBarButton), so the button reads as
             // what a drag will make.
             case ChromeButton::Pen:
-                icon = penShape_ == DrawShape::Line        ? &icons::kLine
-                       : penShape_ == DrawShape::Rectangle ? &icons::kRectangle
+                icon = editor_.PenShape() == DrawShape::Line        ? &icons::kLine
+                       : editor_.PenShape() == DrawShape::Rectangle ? &icons::kRectangle
                                                            : &icons::kPen;
-                tooltip = activeTool_ != Tool::Draw                ? strings::kBarPenTip
-                          : penShape_ == DrawShape::Line          ? strings::kBarLineTip
-                          : penShape_ == DrawShape::Rectangle     ? strings::kBarRectangleTip
+                tooltip = editor_.ActiveTool() != Tool::Draw                ? strings::kBarPenTip
+                          : editor_.PenShape() == DrawShape::Line          ? strings::kBarLineTip
+                          : editor_.PenShape() == DrawShape::Rectangle     ? strings::kBarRectangleTip
                                                                   : strings::kBarPenAgainTip;
                 break;
             case ChromeButton::Eraser:
-                icon = eraserShape_ == DrawShape::Rectangle ? &icons::kEraserRect : &icons::kEraser;
-                tooltip = activeTool_ != Tool::Erase                 ? strings::kBarEraserTip
-                          : eraserShape_ == DrawShape::Rectangle ? strings::kBarEraserRectTip
+                icon = editor_.EraserShape() == DrawShape::Rectangle ? &icons::kEraserRect : &icons::kEraser;
+                tooltip = editor_.ActiveTool() != Tool::Erase                 ? strings::kBarEraserTip
+                          : editor_.EraserShape() == DrawShape::Rectangle ? strings::kBarEraserRectTip
                                                                  : strings::kBarEraserAgainTip;
                 break;
             case ChromeButton::Text:
@@ -928,39 +495,6 @@ void OverlayApp::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
     }
 }
 
-// What a selection bar button does, on the release that completes its
-// press (see HandleItemGesture): its command, about the snippet selected
-// last. Runs from the raw mouse pipeline, between frames, so nothing here
-// has to be deferred past an item loop that is iterating canvas.items by
-// index.
-void OverlayApp::ActivateBarButton(ChromeButton button) {
-    const std::optional<ItemId> primaryId = PrimarySelection();
-    if (!primaryId.has_value()) {
-        return;
-    }
-    Command command{CommandForBarButton(button), *primaryId};
-    if (const std::optional<ImVec2> center = SelectionBarButtonCenter(button)) {
-        if (button == ChromeButton::More) {
-            // The popover opens below the button's bottom-right corner,
-            // paired with the pivot RenderItemPropertiesPopover opens with,
-            // so its right edge (not its left) tracks this point however
-            // wide it ends up - the bar can sit near the screen's right edge.
-            command.at = platform::Vec2{center->x + Px(kBarButtonSize) * 0.5f,
-                                        center->y + Px(kBarButtonSize) * 0.5f + Px(6.0f)};
-        } else {
-            command.at = platform::Vec2{center->x, center->y};
-        }
-    }
-    Dispatch(command);
-}
-
-// Which edges the handle moves - a corner two, an edge one.
-void OverlayApp::ResizeHandleEdges(ResizeHandle handle, bool& left, bool& right, bool& top, bool& bottom) {
-    left = handle == ResizeHandle::NW || handle == ResizeHandle::SW || handle == ResizeHandle::W;
-    right = handle == ResizeHandle::NE || handle == ResizeHandle::SE || handle == ResizeHandle::E;
-    top = handle == ResizeHandle::NW || handle == ResizeHandle::NE || handle == ResizeHandle::N;
-    bottom = handle == ResizeHandle::SW || handle == ResizeHandle::SE || handle == ResizeHandle::S;
-}
 
 // Text editing (Tool::Text, any item - see its own doc comment): the one
 // piece of an item that is a genuine ImGui widget, because it has to
@@ -1022,15 +556,14 @@ void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     // AddText as it is), so the scale is divided back out here.
     ImGui::PushFont(nullptr, item.noteTextSizePx / UiScale());
     ImGui::PushStyleColor(ImGuiCol_Text, ToImColor(item.noteTextColorRGBA));
-    if (noteEditJustFocused_) {
+    if (editor_.TakeNoteEditJustBegun()) {
         ImGui::SetKeyboardFocusHere();
-        noteEditJustFocused_ = false;
     }
     // Snapshotted *before* the widget call below, not read back out of
-    // noteEditBuffer_ afterwards - InputTextMultiline reverts its own
+    // the editor's buffer afterwards - InputTextMultiline reverts its own
     // buffer internally when Escape is pressed, in the same call that
     // reports the resulting deactivation, so by the time that call returns
-    // on an Escape frame noteEditBuffer_ already holds the stale
+    // on an Escape frame the buffer already holds the stale
     // pre-edit-session text again. This snapshot is always exactly what
     // the user had typed as of the start of this frame, which is what
     // EndEditingNote below actually needs to commit - see its own doc
@@ -1041,19 +574,19 @@ void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
-    const std::string preCallBuffer(noteEditBuffer_);
+    const std::string preCallBuffer(editor_.NoteEditBuffer());
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     // The widget edits the string's own storage and asks for more through
     // the resize callback - what ImGui's misc/cpp/imgui_stdlib does, done
     // here so the std::string is the buffer rather than a fixed array that
     // would cut a long note off at its end.
-    const bool typed =
-        ImGui::InputTextMultiline("##notetext", noteEditBuffer_.data(), noteEditBuffer_.capacity() + 1, avail,
-                                  ImGuiInputTextFlags_CallbackResize, &ResizeStringForInputText, &noteEditBuffer_);
+    std::string& buffer = editor_.NoteEditBuffer();
+    const bool typed = ImGui::InputTextMultiline("##notetext", buffer.data(), buffer.capacity() + 1, avail,
+                                                 ImGuiInputTextFlags_CallbackResize, &ResizeStringForInputText, &buffer);
     if (typed) {
         // The note is what has been typed so far - see
         // Session::PreviewText - so that whatever ends the edit keeps it.
-        session_.PreviewText(noteEditBuffer_);
+        session_.PreviewText(buffer);
     }
     ImGui::PopStyleVar();
     ImGui::PopStyleColor(3);
@@ -1063,7 +596,7 @@ void OverlayApp::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
         // typing" (the app's own Undo covers that), so both paths commit;
         // only the source of the text differs (see preCallBuffer's own
         // comment above).
-        EndEditingNote(preCallBuffer);
+        editor_.EndEditingNote(preCallBuffer);
     }
     ImGui::PopStyleColor();
     ImGui::PopFont();

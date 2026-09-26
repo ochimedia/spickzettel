@@ -50,68 +50,6 @@ bool ColorSwatchButton(ImU32 fillColor, bool selected) {
 
 }  // namespace
 
-// ================= Canvases =================
-
-CanvasId OverlayApp::CreateCanvasInCurrentFolder() {
-    const CanvasId id = session_.AddCanvas(TimestampName());
-    // It lands at the end of the folder, which in a long folder is off the
-    // bottom of the Overview's grid - see overviewScrollToCanvasId_.
-    overviewScrollToCanvasId_ = id;
-    return id;
-}
-
-CanvasId OverlayApp::CreateCanvasBesideCurrent() {
-    // The browsed folder and the current canvas's are deliberately
-    // decoupled (see CanvasManager's class comment); browsing elsewhere
-    // without opening anything is what tells them apart. A switch to the
-    // new canvas re-syncs the browsed folder anyway.
-    if (const Canvas* current = Manager().CurrentOrNull()) {
-        session_.SwitchToFolder(current->folderId);
-    }
-    return CreateCanvasInCurrentFolder();
-}
-
-void OverlayApp::CreateAndSwitchToNewCanvas() {
-    // Settled like any other switch: the shortcut can land mid-gesture.
-    // Nothing to settle when the new canvas is already current - the
-    // library had none, and the press that asked for a snippet is what is
-    // in flight (see EnsureCanvasForNewItem).
-    SwitchToCanvasSettled(CreateCanvasBesideCurrent());
-}
-
-// A new canvas that the selected snippets come along to - "these belong
-// somewhere of their own", which otherwise takes a new canvas, a switch
-// back, a cut, a switch forward and a paste.
-//
-// With nothing selected this is exactly CreateAndSwitchToNewCanvas, and
-// says so by doing nothing else: an empty selection is not a reason to
-// refuse the canvas.
-//
-// The moves happen before the switch, because MoveOrCopyItemToCanvas
-// takes snippets off the *current* canvas (see its header note), and the
-// switch happens even if every move failed - there is a new canvas either
-// way, and leaving the app on the old one would make the shortcut look
-// like it had done nothing.
-//
-// The hand is settled before the moves rather than at the switch: a
-// shortcut can land mid-gesture, and a stroke or a drag in flight on a
-// selected snippet has to end on the canvas it started on, before the
-// snippet leaves it.
-void OverlayApp::MoveSelectionToNewCanvas() {
-    SettleHand();
-    const CanvasId target = CreateCanvasBesideCurrent();
-    const std::vector<ItemId> moved = session_.SendItemsTo(selection_, target, /*copy=*/false).items;
-    session_.SwitchToCanvas(target);
-    // What arrived is what is selected, so it can be arranged straight
-    // away - and the canvas bar is over it rather than over nothing.
-    selection_ = moved;
-    if (!moved.empty()) {
-        const Canvas* canvas = Manager().FindCanvas(target);
-        ShowActionToast(std::string(strings::kToastMovedToPrefix) +
-                         (canvas != nullptr ? canvas->name : std::string()));
-    }
-}
-
 // ================= The properties popover =================
 
 void OverlayApp::RenderItemPropertiesPopover() {
@@ -455,10 +393,20 @@ void OverlayApp::ApplyEffects() {
 
 // ================= The color chooser =================
 
-void OverlayApp::OpenColorChooser(ImVec2 from) {
+void OverlayApp::OpenColorChooser(platform::Vec2 from) {
     // Only asked for here: the bar's color button fires from the input
     // stream between frames - see Effect.
-    Queue(Effect{Effect::Kind::OpenColorChooser, from});
+    Queue(Effect{Effect::Kind::OpenColorChooser, ImVec2(from.x, from.y)});
+}
+
+void OverlayApp::OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) {
+    // Opened on the next frame - see Effect: a bar button fires outside
+    // any frame.
+    itemPropertiesPopoverItemId_ = item;
+    if (at.has_value()) {
+        itemPropertiesPopoverAnchor_ = ImVec2(at->x, at->y);
+    }
+    Queue(Effect{Effect::Kind::OpenItemProperties});
 }
 
 void OverlayApp::RenderColorChooser(float displayW, float displayH) {
@@ -479,8 +427,8 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
             // Closed since the last frame. What it was left on is the
             // color from now on, and the next time the app starts.
             colorChooserOpen_ = false;
-            if (settings_.Stored().strokeColorRGBA != drawColorRGBA_) {
-                settings_.Mutable().strokeColorRGBA = drawColorRGBA_;
+            if (settings_.Stored().strokeColorRGBA != editor_.DrawColorRGBA()) {
+                settings_.Mutable().strokeColorRGBA = editor_.DrawColorRGBA();
                 settings_.Commit();
             }
         }
@@ -491,12 +439,12 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
     // as well, or the first snippet it overlaps covers it.
     KeepPopoverInFront();
     float rgb[3];
-    ColorRGBAToFloats(drawColorRGBA_, rgb);
+    ColorRGBAToFloats(editor_.DrawColorRGBA(), rgb);
     ImGui::SetNextItemWidth(Px(220.0f));
     if (ImGui::ColorPicker3("##picker", rgb,
                             ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs |
                                 ImGuiColorEditFlags_NoLabel)) {
-        SetDrawColor(FloatsToColorRGBA(rgb, 0xFF));
+        editor_.SetDrawColor(FloatsToColorRGBA(rgb, 0xFF));
     }
     ImGui::EndPopup();
 }

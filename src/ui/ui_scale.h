@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <cmath>
 
-#include <imgui.h>
-
 namespace sz::ui {
 
 // How large the interface is drawn: 1 at 100%, 1.5 at 150%. Everything the
@@ -23,7 +21,6 @@ void SetUiScale(float scale);
 
 // `px` pixels at 100%, at the current scale.
 inline float Px(float px) { return px * UiScale(); }
-inline ImVec2 Px(float x, float y) { return ImVec2(Px(x), Px(y)); }
 // The same, rounded to a whole pixel and never under one - for the width of
 // a line drawn along a pixel grid, which a fraction would blur across two.
 inline float PxWhole(float px) { return std::max(1.0f, std::round(Px(px))); }

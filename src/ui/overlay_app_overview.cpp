@@ -1182,7 +1182,7 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
         // onto. AddFolder has already made the new folder
         // current, so this lands inside it - and, like the button next to
         // it, the canvas it makes is switched to.
-        session_.SwitchToCanvas(CreateCanvasInCurrentFolder());
+        session_.SwitchToCanvas(editor_.CreateCanvasInCurrentFolder());
     }
     // Lined up with the canvas grid above it, which starts past the
     // window's padding, the sidebar and the gap after it. SameLine counts
@@ -1197,7 +1197,7 @@ void OverlayApp::RenderOverviewFooter(bool showCanvasesBody) {
     const bool newCanvasPressed = PrimaryButton("##newcanvas", icons::kPlus, strings::kOverviewNewCanvas);
     ImGui::EndDisabled();
     if (newCanvasPressed) {
-        const CanvasId id = CreateCanvasInCurrentFolder();
+        const CanvasId id = editor_.CreateCanvasInCurrentFolder();
         // Made at the end of the folder, so the grid may have to scroll for
         // it to be seen at all - see overviewScrollToCanvasId_, which is set
         // on both paths below (picker or not): either way the tile is what
@@ -1728,7 +1728,7 @@ bool OverlayApp::RenderBarButtonRow(const char* id, const char* label, BarButton
         // one through PillSwatchButton rather than the chooser's own
         // PillColorButton, which has no pill to light.
         const bool pressed = entry.button == ChromeButton::Color
-                                  ? PillSwatchButton(tileId, drawColorRGBA_, entry.shown)
+                                  ? PillSwatchButton(tileId, editor_.DrawColorRGBA(), entry.shown)
                                   : PillIconButton(tileId, BarButtonIcon(entry.button), entry.shown);
         if (!entry.shown) {
             ImGui::PopStyleVar();
@@ -3172,6 +3172,17 @@ void OverlayApp::OpenOverview() {
     }
 }
 
+void OverlayApp::OpenSettings() {
+    OpenOverview();
+    SwitchOverviewTab(OverviewTab::Settings);
+}
+
+void OverlayApp::AskToDeleteCanvas(CanvasId canvas) {
+    const Canvas* found = Manager().FindCanvas(canvas);
+    AskToDelete(ConfirmDeleteTarget{ConfirmDeleteTarget::Kind::Canvas, canvas,
+                                    found != nullptr ? found->name : std::string()});
+}
+
 void OverlayApp::OpenPicker(ItemId itemId, bool isCopy) {
     pickerItemId_ = itemId;
     pickerIsCopy_ = isCopy;
@@ -3222,28 +3233,6 @@ void OverlayApp::ShowActionToast(std::string text) {
     actionToastExpireAtSeconds_ = ImGui::GetTime() + 2.2;
 }
 
-void OverlayApp::DeleteItemsWithToast(const std::vector<ItemId>& itemIds) {
-    // Safe to call directly from the selection bar's Close button, which
-    // fires from the raw mouse pipeline (unlike an OpenPopup, which the
-    // bar defers via a request flag - see colorChooserRequested_'s own
-    // doc comment): nothing here touches
-    // ImGui's current-window/ID-stack state, only plain data
-    // (CanvasManager, undoStack_) and ImGui::GetTime() (a flat context
-    // field read, not window-stack-dependent - see ShowActionToast's own
-    // comment on why it's safe with no frame in progress).
-    // Marked, and onto the history as one step - see Session::DeleteItems.
-    if (session_.DeleteItems(itemIds) == 0) {
-        return;
-    }
-    ShowActionToast(strings::kToastDeleted);
-}
-
-void OverlayApp::ClearItemDrawing(ItemId itemId) {
-    // Every stroke, as one undoable step - see Session::ClearDrawing.
-    if (session_.ClearDrawing(itemId)) {
-        ShowActionToast(strings::kToastClearedDrawing);
-    }
-}
 
 
 }  // namespace sz::ui

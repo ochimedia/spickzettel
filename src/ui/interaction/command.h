@@ -3,7 +3,7 @@
 // Everything the app can be told to do in one step, and what reaches it -
 // see docs/INTERACTIONS.md, section 7. A key, a context menu row, a
 // button on the selection bar and a global hotkey all name a Command, and
-// every one of them is run by OverlayApp::Dispatch, which settles what the
+// every one of them is run by Editor::Dispatch, which settles what the
 // command's scope covers first. No ImGui in here: what a command is and
 // which keys reach it are the app's words, not its widgets'.
 

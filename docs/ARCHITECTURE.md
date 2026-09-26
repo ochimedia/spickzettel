@@ -1495,13 +1495,29 @@ caption written beside it by hand.
 `ui::OverlayApp` is the overlay as it is drawn, with Dear ImGui: a view
 of the session. Its definition is split across `overlay_app_*.cpp` by
 section of the UI (items, input, rasters, popovers, docks, overview,
-deleted, undo) with `overlay_app.cpp` holding the per-frame entry points
-and construction; it is still one class. Helpers used by more than one
+deleted) with `overlay_app.cpp` holding the per-frame entry points and
+construction; it is still one class. Helpers used by more than one
 file live in `overlay_app_internal.h` under `overlay_detail`; anything
 used by one file stays a file-local helper. `ui::ContextMenu`
 (`context_menu.*`) is the one piece drawn beside the class rather than
 inside it: it is a widget, not a view of the session, and depends on
 nothing but Dear ImGui and the icon tables.
+
+What the hand works on is not the view's: `ui::Editor` (`editor.*`,
+`editor_commands.cpp`) holds the selection, the tool in hand and its
+shapes, drawing mode, the clipboard, the note being typed, the drawing a
+stray click made, and every command, and makes snippets and canvases -
+with no ImGui in it. It is the Editor of `docs/INTERACTIONS.md`, section
+10: the state the interactions of phase 3 work on, which is why it can
+have no frame behind it. The view tells it the display size (each frame
+and each event) and the time and modifiers of the event being handled,
+and it asks the view, through `EditorViews`, for what only a view can
+do: a message, a panel or a popup opened. The hit test
+(`Editor::ResolvePointerTarget`) is the editor's too, over the same
+rects the view paints the handles and the bar to (`selection_layout.*`),
+so what is hit is what is drawn. Until the Gesture level holds the
+gestures, they stay in the view, and `EditorViews` asks it to settle
+them.
 
 Panels - popovers, the canvas bar, the dock, the note editor, the
 Overview - are ordinary ImGui windows and widgets. Items and the
@@ -1864,8 +1880,8 @@ handlers that were there - `OnMouse` for the two gesture buttons,
 - The modifiers are the key state or'd with the input grab's record,
   the two sources the frame already gave ImGui (see RenderFrame), and a
   change no key message carried - no focus, no keyboard grab - is told
-  once a frame. The handlers read the stream's (`OverlayApp::held_`),
-  not ImGui's, which are last frame's.
+  once a frame. The handlers read the stream's (`Editor::Held`), not
+  ImGui's, which are last frame's.
 - A key's repeat is the window's to count, since the grab posts every
   repeat as a fresh press. Undo and the arrows now repeat at the
   system's keyboard rate rather than ImGui's.

@@ -84,7 +84,7 @@ enum class CreateAction { NewCanvas, NewCanvasWithSelection };
 // Minimize sends it to the dock; Maximize and More take the snippet
 // selected last. The other four are the *drawing* bar, which the pill
 // shows instead while a snippet is in drawing mode (see
-// OverlayApp::drawingItem_): the marking tool to draw with, and the
+// Editor::DrawingItem): the marking tool to draw with, and the
 // color.
 //
 // Which of them each bar carries, in which order, and which are shown at

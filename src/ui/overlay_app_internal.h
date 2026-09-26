@@ -38,6 +38,12 @@
 #include "core/util/timestamp_name.h"
 #include "generated/ui_strings.h"
 
+namespace sz::ui {
+// Px for a size - see ui_scale.h, which stays free of ImGui for the
+// editor's sake.
+inline ImVec2 Px(float x, float y) { return ImVec2(Px(x), Px(y)); }
+}  // namespace sz::ui
+
 namespace sz::ui::overlay_detail {
 
 // The popups OverlayApp::ApplyEffects opens, by the ids their render
@@ -114,12 +120,6 @@ inline constexpr float kRadiusSm = 7.0f;
 // side adds any padding this constant doesn't already account for.
 inline constexpr float kNoteTextPad = 6.0f;
 }  // namespace theme
-
-// px, discard smaller region captures/erases/creations as a stray click
-// rather than a deliberate drag - shared between the item-creation
-// gesture (a region-capture drag too small to keep) and the raw
-// pen/eraser/tool mouse pipeline (RectEraser's own drag threshold).
-inline constexpr float kRegionMinSize = 24.0f;
 
 // The backing a text note gets by default (ApplyCreationDefaults, and the
 // first-run welcome note). Half-transparent black: note text defaults to
@@ -406,14 +406,6 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 // (New folder, New canvas). Defined in overlay_app_overview.cpp.
 bool PrimaryButton(const char* strId, const Icon& icon, const char* text);
 
-// Smallest positive integer N such that `prefix + std::to_string(N)` isn't
-// already exactly one of `existingNames` - see the definition's own doc
-// comment (overlay_app.cpp) for why this beats a plain "count existing +
-// 1". What an *item* is named after: "Drawing 3", "Note 2", "Screenshot 5"
-// - a kind and a number, which is as much as an item's name is ever asked
-// to carry (a tooltip in the dock, a line in a toast).
-int NextAvailableNumber(const std::string& prefix, const std::vector<std::string>& existingNames);
-
 // PillIconButton's and DangerIconButton's size.
 inline constexpr float kPillButtonSize = 28.0f;
 
@@ -426,14 +418,6 @@ inline constexpr float kPillButtonSize = 28.0f;
 // is simply long. The row reserves 34 for the delete button and insets the
 // text by 10, so this is the name's width plus room to breathe.
 inline constexpr float kOverviewSidebarWidth = 200.0f;
-
-// What a notch of the wheel does to the selection - see
-// OverlayApp::ScaleSelectionByWheel and StepSelectionOpacity.
-inline constexpr float kWheelScaleStep = 1.1f;
-inline constexpr float kWheelOpacityStep = 0.05f;
-// How long after one wheel notch or arrow-key nudge the next still belongs
-// to the same burst, and is taken back with it by one undo.
-inline constexpr double kBurstSeconds = 1.0;
 
 // How much of itself every snippet keeps while a new one is being made -
 // see OverlayApp::ItemsFadedForCreation. Enough to tell where things are,

@@ -43,7 +43,7 @@ constexpr double kCanvasChangeFlashSeconds = 1.2;
 constexpr float kBarTileHeight = 64.0f;
 constexpr float kBarPadding = 8.0f;
 constexpr float kBarGap = 8.0f;
-constexpr float kBarButtonSize = 28.0f;
+constexpr float kCanvasBarButtonSize = 28.0f;
 // The bar never runs closer than this to the sides of the screen; past
 // that its tiles scroll.
 constexpr float kBarSideMarginPx = 96.0f;
@@ -85,18 +85,6 @@ std::vector<CanvasId> OverlayApp::CanvasBarCanvases() const {
         }
     }
     return ids;
-}
-
-void OverlayApp::SwitchToCanvasSettled(CanvasId id) {
-    if (Manager().CurrentCanvasId() == id) {
-        return;
-    }
-    // Whatever the hand is in the middle of ends on the canvas it started
-    // on, and a note being typed is committed to the item it belongs to -
-    // RenderItems only walks the current canvas, so an editor left open
-    // across the switch would strand what was typed.
-    SettleHand();
-    session_.SwitchToCanvas(id);
 }
 
 void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
@@ -150,7 +138,7 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
                                        : static_cast<float>(count) * TileWidth(displayW, displayH) +
                                              static_cast<float>(count - 1) * Px(kBarGap);
         // Two buttons at the right end: a new canvas, and the Overview.
-        const float buttons = Px(kBarButtonSize) * 2.0f + Px(kBarGap);
+        const float buttons = Px(kCanvasBarButtonSize) * 2.0f + Px(kBarGap);
         const float content = Px(kBarPadding) * 2.0f + tiles + (count > 0 ? Px(kBarGap) : 0.0f) + buttons;
         const float narrowest = Px(kBarPadding) * 4.0f + buttons + TileWidth(displayW, displayH);
         const float width = std::min(content, std::max(narrowest, displayW - Px(kBarSideMarginPx) * 2.0f));
@@ -192,7 +180,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     // as it does everywhere); a change of canvas brings the current one
     // into view.
     const float regionMinX = bar.x + Px(kBarPadding);
-    const float regionMaxX = bar.x + bar.w - Px(kBarPadding) - (Px(kBarButtonSize) * 2.0f + Px(kBarGap)) - Px(kBarGap);
+    const float regionMaxX = bar.x + bar.w - Px(kBarPadding) - (Px(kCanvasBarButtonSize) * 2.0f + Px(kBarGap)) - Px(kBarGap);
     const float regionW = std::max(0.0f, regionMaxX - regionMinX);
     const float contentW =
         ids.empty() ? 0.0f : static_cast<float>(ids.size()) * tileW + static_cast<float>(ids.size() - 1) * Px(kBarGap);
@@ -309,7 +297,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     ImGui::PopClipRect();
 
     // A new canvas, at the end of the row it will join.
-    const float buttonY = bar.y + (bar.h - Px(kBarButtonSize)) * 0.5f;
+    const float buttonY = bar.y + (bar.h - Px(kCanvasBarButtonSize)) * 0.5f;
     ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap), buttonY));
     const bool makeNew = PillIconButton("##canvasbar_new", icons::kPlus, false);
     if (ImGui::IsItemHovered()) {
@@ -319,7 +307,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     // is the one panel that is always there (out of the bottom edge), so
     // this is the way to the Overview that needs nothing on screen and
     // nothing switched on.
-    ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap) + Px(kBarButtonSize) + Px(kBarGap), buttonY));
+    ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap) + Px(kCanvasBarButtonSize) + Px(kBarGap), buttonY));
     const bool openOverview = PillIconButton("##canvasbar_overview", icons::kLayoutGrid, false);
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarOverviewTip);
@@ -339,12 +327,12 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         session_.ReorderCanvas(reorder->first, reorder->second);
     }
     if (clicked.has_value()) {
-        SwitchToCanvasSettled(*clicked);
+        editor_.SwitchToCanvasSettled(*clicked);
     }
     if (makeNew) {
         // Into the folder the bar is showing - the current canvas's, which
         // need not be the one the Overview last browsed.
-        SwitchToCanvasSettled(CreateCanvasBesideCurrent());
+        editor_.SwitchToCanvasSettled(editor_.CreateCanvasBesideCurrent());
     }
     if (openOverview) {
         OpenOverview();

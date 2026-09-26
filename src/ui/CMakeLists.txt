@@ -6,6 +6,8 @@
 # The only library above the platform interface that links Dear ImGui.
 add_library(sz_ui STATIC
     context_menu.cpp
+    editor.cpp
+    editor_commands.cpp
     icon_draw.cpp
     interaction/command.cpp
     overlay_app.cpp
@@ -18,7 +20,7 @@ add_library(sz_ui STATIC
     overlay_app_overview.cpp
     overlay_app_popovers.cpp
     overlay_app_rasters.cpp
-    overlay_app_undo.cpp
+    selection_layout.cpp
     ui_scale.cpp
 )
 

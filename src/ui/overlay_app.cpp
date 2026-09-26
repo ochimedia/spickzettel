@@ -938,56 +938,16 @@ void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
     }
 }
 
-// Smallest positive integer N such that `prefix + std::to_string(N)` isn't
-// already exactly one of `existingNames`. Unlike "count existing + 1" this
-// can't collide with a sibling that is still around: deleting the *middle*
-// one of "Drawing 1/2/3" and adding a new one would otherwise produce a
-// second "Drawing 3". Fills the lowest *unused*
-// number rather than always climbing past the highest one ever used, so
-// deleting the last of a numbered run and adding a new one reuses that
-// just-freed number - matches what "Canvas 1/2/3", delete 3, add new ->
-// "Canvas 3" again (not "Canvas 4") intuitively suggests. `prefix`
-// includes its own trailing separator (e.g. "Canvas ") so a name has to
-// match it exactly, digits only, to count - "My Canvas 1" or "Canvas 1a"
-// don't.
-
-int NextAvailableNumber(const std::string& prefix, const std::vector<std::string>& existingNames) {
-    std::vector<int> used;
-    for (const std::string& name : existingNames) {
-        if (name.size() <= prefix.size() || name.compare(0, prefix.size(), prefix) != 0) {
-            continue;
-        }
-        const std::string suffix = name.substr(prefix.size());
-        const bool allDigits =
-            !suffix.empty() && std::all_of(suffix.begin(), suffix.end(), [](char c) { return c >= '0' && c <= '9'; });
-        if (allDigits) {
-            used.push_back(std::atoi(suffix.c_str()));
-        }
-    }
-    std::sort(used.begin(), used.end());
-    int n = 1;
-    for (int u : used) {
-        if (u == n) {
-            ++n;
-        } else if (u > n) {
-            break;
-        }
-    }
-    return n;
-}
-
 }  // namespace overlay_detail
 
 OverlayApp::OverlayApp(Settings& settings, Session& session)
-    : session_(session),
-      settings_(settings),
-      drawTool_(settings.Stored().strokeColorRGBA, settings.Stored().strokeWidth),
-      drawColorRGBA_(settings.Stored().strokeColorRGBA),
-      drawWidth_(settings.Stored().strokeWidth) {
+    : editor_(settings, session), session_(session), settings_(settings) {
+    editor_.SetViews(this);
 }
 
 void OverlayApp::AttachTo(platform::IOverlayWindow& window) {
     window_ = &window;
+    editor_.AttachWindow(&window);
     window.SetFrameCallback([this](float dt) { OnFrame(dt); });
     window.SetInputCallback([this](const platform::InputEvent& ev) { OnInput(ev); });
 }
@@ -1016,9 +976,9 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
         // later starts clean rather than resuming whatever popover happened
         // to be up.
         SettleHand();
-        PutDownCreationTool();
-        ExitDrawingMode();
-        SettleUntouchedDrawing();
+        editor_.PutDownCreationTool();
+        editor_.ExitDrawingMode();
+        editor_.SettleUntouchedDrawing();
         CloseOverview();
         itemPropertiesPopoverItemId_.reset();
         confirmDeleteTarget_.reset();
@@ -1032,37 +992,18 @@ void OverlayApp::SetViewOnly(bool viewOnly) {
     }
 }
 
-void OverlayApp::QuickCapture(float displayW, float displayH) {
-    // Whatever the hand is in the middle of ends on the canvas it started
-    // on, as before any other canvas switch (see SettleHand). A capture
-    // hotkey can arrive mid-stroke: it is global, and nothing about holding
-    // the mouse down stops it.
-    SettleHand();
-    // A canvas of its own, beside the one being worked on - a capture is
-    // about where you are, not where you were last looking - and we go to
-    // it: a screen full of captures piled on the canvas you were drawing
-    // on is hard to tell apart later, where one capture per canvas is a
-    // strip of tiles you can read at a glance in the Overview.
-    session_.SwitchToCanvas(CreateCanvasBesideCurrent());
-    const ItemId made = CreateFullscreenItem(ItemCreationKind::Screenshot, displayW, displayH);
-    // Not made when it could not be written - see Session::Land.
-    ShowActionToast(made != 0 ? strings::kToastCapturedScreenshot : strings::kToastNotWritten);
-}
-
 void OverlayApp::SettleForPersistence() {
     SettleHand();
     // Going away is moving on too, as the next showing would say (see
     // OnOverlayShown) - but exit has no next showing, and a restart loads
     // the drawing as an ordinary snippet: a fullscreen empty one, over the
     // canvas.
-    SettleUntouchedDrawing();
+    editor_.SettleUntouchedDrawing();
 }
 
 void OverlayApp::SettleHand() {
     EndGesture();
-    if (editingNoteItemId_.has_value()) {
-        EndEditingNote(noteEditBuffer_);
-    }
+    editor_.CommitNoteBeingEdited();
     // And the rest of the hand with it, whole - the press a hold or a
     // double-click would be judged on, and which buttons are down: as far
     // as this knows none is from here, and the release still to come finds
@@ -1127,23 +1068,24 @@ void OverlayApp::HandleMouseWheel(float notches) {
         return;
     }
     {
-        if (held_.alt) {
+        const platform::Modifiers& held = editor_.Held();
+        if (held.alt) {
             // Wheel up goes back through the list, wheel down forward -
             // the direction a page scrolls, applied to canvases.
             if (const int steps = TakeWheelSteps(canvasWheelRemainder_, notches); steps != 0) {
-                SwitchCanvasByOffset(-steps);
+                editor_.SwitchCanvasByOffset(-steps);
             }
         } else if (ImGui::GetIO().WantCaptureMouse) {
             // A widget under the pointer has the wheel.
-        } else if (held_.ctrl != held_.shift) {
+        } else if (held.ctrl != held.shift) {
             if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
-                StepSelectionOpacity(steps, /*background=*/held_.ctrl);
+                editor_.StepSelectionOpacity(steps, /*background=*/held.ctrl);
             }
-        } else if (held_.ctrl) {
+        } else if (held.ctrl) {
             // Both held: neither opacity is meant more than the other.
-        } else if (!drawingItem_.has_value()) {
+        } else if (!editor_.DrawingItem().has_value()) {
             if (const int steps = TakeWheelSteps(selectionWheelRemainder_, notches); steps != 0) {
-                ScaleSelectionByWheel(steps);
+                editor_.ScaleSelectionByWheel(steps);
             }
         } else {
             const int steps = TakeWheelSteps(sizeWheelRemainder_, notches);
@@ -1154,14 +1096,13 @@ void OverlayApp::HandleMouseWheel(float notches) {
             } else {
                 const auto step = static_cast<float>(steps);
                 bool sizeChanged = true;
-                switch (activeTool_) {
+                switch (editor_.ActiveTool()) {
                     case Tool::Draw:
-                        drawWidth_ = std::clamp(drawWidth_ + step, 1.0f, 24.0f);
-                        drawTool_.SetWidth(drawWidth_);
+                        editor_.SetDrawWidth(std::clamp(editor_.DrawWidth() + step, 1.0f, 24.0f));
                         drawWidthDirty_ = true;
                         break;
                     case Tool::Erase:
-                        eraserWidth_ = std::clamp(eraserWidth_ + step * 2.0f, 8.0f, 64.0f);
+                        editor_.SetEraserWidth(std::clamp(editor_.EraserWidth() + step * 2.0f, 8.0f, 64.0f));
                         break;
                     case Tool::Text:
                     case Tool::Select:
@@ -1186,6 +1127,9 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // Function scope, so every path out of here - including view-only mode's
     // own early return - closes the frame out.
     const MeshCacheFrame meshCacheFrame(strokeMeshCache_, previewMeshCache_);
+    // The display the canvas is on, for the editor - which draws nothing
+    // and so has no other way to know it.
+    editor_.SetDisplaySize(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
 
     // The interface scale, before anything is drawn, so a whole frame is
     // drawn at one scale. The setting, or Windows' own for the display the
@@ -1328,28 +1272,13 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     }
 
     // A drawing a stray click made goes once the hand has moved on from it
-    // (see untouchedDrawing_). A press elsewhere settles it as it happens
-    // (OnMouse); this catches moving on without one - another canvas, its
-    // own Close - on the frame after. And it stops being watched the frame
-    // after something has gone into it: from then on it is a drawing like
-    // any other, and an undo that empties it again is no reason to erase
-    // it for good, with the redo of what it held.
-    if (untouchedDrawing_.has_value()) {
-        const Canvas* current = Manager().CurrentOrNull();
-        const bool onScreen =
-            current != nullptr && std::any_of(current->items.begin(), current->items.end(), [&](const Item& item) {
-                return item.id == *untouchedDrawing_ && !Manager().IsDeleted(*current, item);
-            });
-        if (!onScreen) {
-            SettleUntouchedDrawing();
-        } else if (!session_.IsUntouched(*untouchedDrawing_)) {
-            untouchedDrawing_.reset();
-        }
-    }
+    // (see Editor::UntouchedDrawing). A press elsewhere settles it as it
+    // happens (OnMouse); this catches moving on without one.
+    editor_.WatchUntouchedDrawing();
 
-    // Nothing acts on a snippet that has gone - see selection_. The keys
-    // and the wheel have been handled as they came (see OnInput).
-    PruneSelection();
+    // Nothing acts on a snippet that has gone - see Editor::Selection. The
+    // keys and the wheel have been handled as they came (see OnInput).
+    editor_.PruneSelection();
 
     // Over a snippet a plain drag would pick up - the selection live, and
     // not in drawing mode unless Alt is held - the four-way arrow says so.
@@ -1357,9 +1286,9 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // Set before the render calls below rather than after, so anything
     // more specific - a handle's own directional cursor, the dock chips'
     // hand - still wins where it applies.
-    if (SelectionLive() && PressPicksUp() && !io.WantCaptureMouse) {
+    if (editor_.SelectionLive() && editor_.PressPicksUp() && !io.WantCaptureMouse) {
         const ImVec2 mouse = ImGui::GetMousePos();
-        if (ResolvePointerTarget(mouse.x, mouse.y).kind == PointerTarget::Kind::Body) {
+        if (editor_.ResolvePointerTarget(mouse.x, mouse.y).kind == PointerTarget::Kind::Body) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
         }
     }
@@ -1512,8 +1441,8 @@ void OverlayApp::OnOverlayShown() {
         actionToastExpireAtSeconds_ = ImGui::GetTime() + 8.0;
     }
     // Hiding is moving on too, and nothing ran while hidden to notice - see
-    // untouchedDrawing_.
-    SettleUntouchedDrawing();
+    // Editor::UntouchedDrawing.
+    editor_.SettleUntouchedDrawing();
     // Nothing is in the hand as the overlay comes up: what went down before
     // it was hidden has come up since, wherever that release went. Settled
     // already when it was put away, unless it went some other way.
@@ -1965,7 +1894,7 @@ platform::CursorShape OverlayApp::WantedPointerShape() const {
         return platform::CursorShape::Arrow;
     }
     const ImVec2 mouse = ImGui::GetMousePos();
-    const PointerTarget target = ResolvePointerTarget(mouse.x, mouse.y);
+    const PointerTarget target = editor_.ResolvePointerTarget(mouse.x, mouse.y);
     if (target.kind != PointerTarget::Kind::Body) {
         // Open canvas, a handle or the bar: nothing here for the tool to
         // mark. A handle has already asked ImGui for its own shape
@@ -1975,10 +1904,10 @@ platform::CursorShape OverlayApp::WantedPointerShape() const {
     }
     // A marking tool marks only the snippet in drawing mode, and not with
     // Alt held, when the press picks the snippet up instead.
-    if (drawingItem_ != target.item || PressPicksUp()) {
+    if (editor_.DrawingItem() != target.item || editor_.PressPicksUp()) {
         return platform::CursorShape::Arrow;
     }
-    switch (activeTool_) {
+    switch (editor_.ActiveTool()) {
         case Tool::Draw:
             return platform::CursorShape::Pen;
         case Tool::Erase:
@@ -1997,7 +1926,7 @@ platform::CursorShape OverlayApp::WantedPointerShape() const {
 
 void OverlayApp::RenderToolModifierBadge() {
     if (PanelOpen() || ArmedCreation().has_value() ||
-        (activeTool_ != Tool::Draw && activeTool_ != Tool::Erase)) {
+        (editor_.ActiveTool() != Tool::Draw && editor_.ActiveTool() != Tool::Erase)) {
         return;
     }
     const ImGuiIO& io = ImGui::GetIO();
@@ -2006,24 +1935,24 @@ void OverlayApp::RenderToolModifierBadge() {
     if (!dragging) {
         // Only where a press would make one: over the snippet in drawing
         // mode, not a panel, and not with Alt held.
-        const PointerTarget target = ResolvePointerTarget(io.MousePos.x, io.MousePos.y);
-        if (io.WantCaptureMouse || target.kind != PointerTarget::Kind::Body || drawingItem_ != target.item ||
-            PressPicksUp()) {
+        const PointerTarget target = editor_.ResolvePointerTarget(io.MousePos.x, io.MousePos.y);
+        if (io.WantCaptureMouse || target.kind != PointerTarget::Kind::Body || editor_.DrawingItem() != target.item ||
+            editor_.PressPicksUp()) {
             return;
         }
     }
     // Mid-drag, what the gesture is making; before one, what a press would
     // make now - the modifiers held, or the bar's cycled shape.
     const Icon* icon = nullptr;
-    if (activeTool_ == Tool::Draw) {
-        const DrawShape shape = dragging ? stroke->shape : ShapeForPress();
+    if (editor_.ActiveTool() == Tool::Draw) {
+        const DrawShape shape = dragging ? stroke->shape : editor_.ShapeForPress();
         if (dragging && stroke->kind != StrokeInFlight::Kind::Shape) {
             return;  // freehand, which needs no saying
         }
         icon = shape == DrawShape::Rectangle ? &icons::kRectangle
                : shape == DrawShape::Line    ? &icons::kLine
                                              : nullptr;
-    } else if (dragging ? stroke->kind == StrokeInFlight::Kind::EraseRect : ShapeForPress() == DrawShape::Rectangle) {
+    } else if (dragging ? stroke->kind == StrokeInFlight::Kind::EraseRect : editor_.ShapeForPress() == DrawShape::Rectangle) {
         icon = &icons::kEraserRect;
     }
     if (icon == nullptr) {
@@ -2191,79 +2120,6 @@ void OverlayApp::RenderViewOnly(float displayW, float displayH) {
     EndScreenLayer();
 }
 
-// Alt+wheel's other half: a quick canvas switcher, so moving between
-// canvases doesn't have to mean opening the whole Overview and closing it
-// again - see its declaration for the no-wrap contract.
-void OverlayApp::SwitchCanvasByOffset(int delta) {
-    const Canvas* current = Manager().CurrentOrNull();
-    if (!current || delta == 0) {
-        return;
-    }
-    // The folder the *current canvas* lives in, not CurrentFolderId().
-    // Those two are deliberately decoupled (browsing a folder in the
-    // Overview doesn't switch away from the canvas being edited - see
-    // CanvasManager's own class comment), so stepping relative to a merely
-    // *browsed* folder could jump somewhere with no relation to what's on
-    // screen.
-    const FolderId folderId = current->folderId;
-    std::vector<CanvasId> siblings;
-    size_t index = 0;
-    for (const Canvas& canvas : Manager().Canvases()) {
-        if (canvas.folderId != folderId || Manager().IsDeleted(canvas)) {
-            continue;
-        }
-        if (canvas.id == current->id) {
-            index = siblings.size();
-        }
-        siblings.push_back(canvas.id);
-    }
-    if (siblings.empty()) {
-        return;  // unreachable - `current` is one of them - but nothing below is safe on an empty list
-    }
-
-    // Clamped, not wrapped: at either end this resolves to where it
-    // already is.
-    const auto lastIndex = static_cast<long long>(siblings.size()) - 1;
-    const auto target = static_cast<size_t>(
-        std::clamp(static_cast<long long>(index) + delta, static_cast<long long>(0), lastIndex));
-
-    if (siblings[target] != current->id) {
-        SwitchToCanvasSettled(siblings[target]);
-        current = Manager().CurrentOrNull();
-    }
-
-    // Shown even when the position didn't change, so hitting either end
-    // reads as "you're at the last one" rather than as the gesture having
-    // stopped working - the same reasoning as the size preview arming at
-    // its own clamp.
-    // Parenthesized rather than just spaced apart: canvases are named
-    // "Canvas N" by default, so "Canvas 1 5/5" puts two unrelated numbers
-    // next to each other and reads like one of them is a typo.
-    char toast[160];
-    std::snprintf(toast, sizeof(toast), "%s  (%zu/%zu)", current->name.c_str(), target + 1, siblings.size());
-    ShowActionToast(toast);
-}
-
-std::optional<float> OverlayApp::ActiveToolSizePx() const {
-    switch (activeTool_) {
-        case Tool::Draw:
-            // Stroke thickness, which is the full width of the line
-            // AddPolyline draws - so a dot of exactly this diameter is
-            // exactly the mark the pen makes.
-            return drawWidth_;
-        case Tool::Erase:
-            // Diameter too: OnMouse passes eraserWidth_ / 2 as EraseAt's
-            // radius.
-            return eraserWidth_;
-        case Tool::Text:
-        case Tool::Select:
-        case Tool::NewDrawing:
-        case Tool::NewScreenshot:
-            return std::nullopt;
-    }
-    return std::nullopt;
-}
-
 // Feedback for the mouse wheel's size change, which otherwise altered the
 // tool silently and left "how big is it now?" to be answered by drawing a
 // test stroke and undoing it. Deliberately shows the *size itself* - a dot
@@ -2278,8 +2134,8 @@ void OverlayApp::RenderBrushSizePreview() {
         // not per notch (see drawWidthDirty_).
         if (drawWidthDirty_) {
             drawWidthDirty_ = false;
-            if (settings_.Stored().strokeWidth != drawWidth_) {
-                settings_.Mutable().strokeWidth = drawWidth_;
+            if (settings_.Stored().strokeWidth != editor_.DrawWidth()) {
+                settings_.Mutable().strokeWidth = editor_.DrawWidth();
                 settings_.Commit();
             }
         }
@@ -2288,7 +2144,7 @@ void OverlayApp::RenderBrushSizePreview() {
     if (PanelOpen()) {
         return;
     }
-    const std::optional<float> diameter = ActiveToolSizePx();
+    const std::optional<float> diameter = editor_.ActiveToolSizePx();
     if (!diameter.has_value()) {
         return;
     }
@@ -2310,7 +2166,7 @@ void OverlayApp::RenderBrushSizePreview() {
         return (color & ~IM_COL32_A_MASK) | (a << IM_COL32_A_SHIFT);
     };
 
-    if (activeTool_ == Tool::Erase) {
+    if (editor_.ActiveTool() == Tool::Erase) {
         // Hollow, and in RenderRectEraserOverlay's own cool blue rather
         // than the warm placement tone: the eraser takes ink away, and a
         // filled dot would read as something about to be painted.
@@ -2319,7 +2175,7 @@ void OverlayApp::RenderBrushSizePreview() {
     } else {
         // The pen's actual color, so this previews the mark itself and not
         // just its footprint.
-        dl->AddCircleFilled(center, radius, fade(ToImColor(drawColorRGBA_)));
+        dl->AddCircleFilled(center, radius, fade(ToImColor(editor_.DrawColorRGBA())));
         // A hairline at exactly `radius` (not outside it - the ring must
         // not make the dot look bigger than it is) keeps a dark color, or
         // a 1px width, findable against whatever is underneath.

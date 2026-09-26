@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "ui/context_menu.h"
+#include "ui/editor.h"
 #include "ui/icon_draw.h"
 #include "ui/interaction/command.h"
 #include "core/build_info/build_info.h"
@@ -56,30 +57,6 @@ struct EdgeReveal {
     double lastWanted = -1.0e9;
     void Update(bool wanted, double now, float deltaSeconds);
     void Flash(double now, double seconds) { holdUntil = std::max(holdUntil, now + seconds); }
-};
-
-// One of a selected snippet's eight resize handles, by compass point.
-enum class ResizeHandle { NW, NE, SE, SW, N, S, E, W };
-
-// What is under a screen point, as far as the canvas is concerned, decided
-// by one walk (see OverlayApp::ResolvePointerTarget). The selection's own
-// furniture - its bar and its handles - is drawn over every snippet and so
-// is asked first; then the snippets, front to back, so a fronter item's
-// body beats a backer item's, which is the whole of the occlusion rule.
-struct PointerTarget {
-    // The frontmost thing that would take a press at the point: a selection
-    // bar button, one of a selected snippet's handles, or an item's body -
-    // None for open canvas. Handles and buttons exist only while the
-    // selection is live (see OverlayApp::SelectionLive).
-    enum class Kind { None, Body, Handle, Button };
-    Kind kind = Kind::None;
-    ItemId item = 0;                            // whose, for Body and Handle
-    ResizeHandle handle = ResizeHandle::NW;     // which, when kind is Handle
-    ChromeButton button = ChromeButton::Close;  // which, when kind is Button
-    // The frontmost item whose content rect holds the point, handles and
-    // bar ignored: which item a stroke started there goes into, and which
-    // the hover highlight follows.
-    std::optional<ItemId> body;
 };
 
 // A move or resize in progress - see OverlayApp::HandleItemGesture. A move
@@ -149,12 +126,14 @@ struct BoxSelection {
 
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
 // attached to via Dear ImGui. Contains no OS-specific code: rendering is
-// entirely through ImGui's platform-agnostic API.
+// entirely through ImGui's platform-agnostic API. What it draws - the
+// selection, the tool, drawing mode, the commands - is the Editor's (see
+// editor_), which it is the view of.
 //
 // No always-visible chrome at the *canvas* level: snippets are objects
-// with a selection, the way a drawing program's are (see selection_), and
+// with a selection, the way a drawing program's are (see Editor::Selection), and
 // drawing on one is a mode entered by double-clicking or holding on it
-// (see drawingItem_); everything that acts on a snippet is on the bar that
+// (see Editor::DrawingItem); everything that acts on a snippet is on the bar that
 // floats over the selection (see PaintSelectionBar), and everything else
 // is a key or the Overview. Input arrives two ways accordingly:
 //  - Everything over the canvas - freehand pen/eraser strokes, the "double
@@ -174,7 +153,7 @@ struct BoxSelection {
 //    (or holds a press, or a popup is open), and gates all of the first
 //    group: a click landing on a widget doesn't also start a stroke, a
 //    gesture or a placement underneath it.
-class OverlayApp {
+class OverlayApp : private EditorViews {
 public:
     // A view of `session`, editing it and the `settings` - both outlive it;
     // TrayController owns all three. Nothing is copied out: every frame reads
@@ -271,16 +250,13 @@ public:
     //
     // Added for the headless UI tests, which had no way to see any of it
     // and had to be run by hand against screenshots instead.
-    Tool ActiveTool() const { return activeTool_; }
+    Tool ActiveTool() const { return editor_.ActiveTool(); }
     // The color the next stroke would use. Public for the same reason
     // ActiveTool is: it is what a test asks instead of reading pixels.
-    uint32_t DrawColorRGBA() const { return drawColorRGBA_; }
+    uint32_t DrawColorRGBA() const { return editor_.DrawColorRGBA(); }
     // What the next left press places, if anything: the creation gesture in
     // flight, or else what the tool in hand places (see CreationKindFor).
-    std::optional<ItemCreationKind> ArmedCreation() const {
-        const CreationGesture* creation = GestureIf<CreationGesture>();
-        return creation != nullptr ? std::optional<ItemCreationKind>(creation->kind) : CreationKindFor(activeTool_);
-    }
+    std::optional<ItemCreationKind> ArmedCreation() const { return editor_.ArmedCreation(); }
     // Whether the snippets are faded back so that what a new snippet is
     // made from shows through them: while a creation tool is in hand, and
     // while a region is being dragged out - not for a press that has not
@@ -288,7 +264,7 @@ public:
     // kCreationFadeAlpha.
     bool ItemsFadedForCreation() const {
         const CreationGesture* creation = GestureIf<CreationGesture>();
-        return CreationKindFor(activeTool_).has_value() || (creation != nullptr && creation->dragTo.has_value());
+        return CreationKindFor(editor_.ActiveTool()).has_value() || (creation != nullptr && creation->dragTo.has_value());
     }
     bool IsOverviewOpen() const { return overviewOpen_; }
     // Whether the cheat sheet is up - see RenderCheatSheet.
@@ -308,7 +284,7 @@ public:
     // UpdateEdgePanels.
     float CanvasBarReveal() const { return canvasBarReveal_.amount; }
     // Whether a note is being typed into, and which.
-    std::optional<ItemId> EditingNote() const { return editingNoteItemId_; }
+    std::optional<ItemId> EditingNote() const { return editor_.EditingNote(); }
     // Which resize handle of which item thinks the cursor is on it right
     // now, empty for none - the same string the debug overlay draws (see
     // debugHoveredResizeHandle_). Exposed because "whose handle is live
@@ -316,15 +292,15 @@ public:
     // screenshot answers badly and a test answers exactly.
     const std::string& DebugHoveredResizeHandle() const { return debugHoveredResizeHandle_; }
     // The selected snippets, in the order they were selected - see
-    // selection_.
-    const std::vector<ItemId>& Selection() const { return selection_; }
-    bool IsSelected(ItemId id) const;
-    // The snippet in drawing mode, if one is - see drawingItem_.
-    std::optional<ItemId> DrawingItem() const { return drawingItem_; }
+    // Editor::Selection.
+    const std::vector<ItemId>& Selection() const { return editor_.Selection(); }
+    bool IsSelected(ItemId id) const { return editor_.IsSelected(id); }
+    // The snippet in drawing mode, if one is - see Editor::DrawingItem.
+    std::optional<ItemId> DrawingItem() const { return editor_.DrawingItem(); }
     // What the drawing bar's pen and eraser draw or erase on a plain drag -
-    // see penShape_ and eraserShape_.
-    DrawShape PenShape() const { return penShape_; }
-    DrawShape EraserShape() const { return eraserShape_; }
+    // see Editor::PenShape.
+    DrawShape PenShape() const { return editor_.PenShape(); }
+    DrawShape EraserShape() const { return editor_.EraserShape(); }
     // Where the middle of a selection bar button is this frame, or nothing
     // while the bar is not showing - for a test to press it where it is
     // rather than where it computes it to be.
@@ -349,7 +325,7 @@ public:
     // was current: every capture is the same size and shape, so stacked
     // they hide each other, while one per canvas is a row of tiles in the
     // Overview that can be told apart at a glance. The user's own call.
-    void QuickCapture(float displayW, float displayH);
+    void QuickCapture(float displayW, float displayH) { editor_.QuickCapture(displayW, displayH); }
 
     // SettleHand, for the moments no frame follows - hiding, restarting,
     // exiting, the OS ending the session - where a drawing nothing went
@@ -365,7 +341,7 @@ public:
     // flight" is exactly what goes stale when a release is lost - ignored
     // for it, the hotkey that hides the overlay would be refused for good.
     // See docs/ARCHITECTURE.md, "The hand".
-    void SettleHand();
+    void SettleHand() override;
 
     // ===== Commands =====
     //
@@ -373,24 +349,24 @@ public:
     // its scope covers (see SettleHand, and Scope). Every key, context menu
     // row, selection bar button and global hotkey reaches the app through
     // here - see ui/interaction/command.h. True when it ran.
-    bool Dispatch(const Command& command);
+    bool Dispatch(const Command& command) { return editor_.Dispatch(command); }
     // Whether `command` would do anything now: what grays a menu row out,
     // and what a command is asked before it ends anything. Asked before
     // settling, so it never depends on what settling would file - undo is
     // always available, since a stroke in flight is on the history only
     // once it has been settled.
-    bool Available(const Command& command) const;
+    bool Available(const Command& command) const { return editor_.Available(command); }
     // Where the global hotkeys' commands run: the tray, which alone knows
     // the window and the modes. Left null - a test that drives the overlay
     // alone - they do nothing.
     void SetAppCommandCallback(std::function<void(CommandId)> callback) {
-        appCommandCallback_ = std::move(callback);
+        editor_.SetAppCommandCallback(std::move(callback));
     }
     // How many commands have run, and which ran last - what a test asks
     // to learn whether a key or a hotkey did anything, rather than reading
     // its effects.
-    uint64_t CommandsRun() const { return commandsRun_; }
-    std::optional<CommandId> LastCommand() const { return lastCommand_; }
+    uint64_t CommandsRun() const { return editor_.CommandsRun(); }
+    std::optional<CommandId> LastCommand() const { return editor_.LastCommand(); }
 
     // Whether the hand has nothing in flight: no gesture, no hold, no
     // button held. What a test asks after a command.
@@ -446,15 +422,29 @@ public:
 
 
 private:
+    // What the editor asks of the view - see EditorViews.
+    void Say(std::string text) override { ShowActionToast(std::move(text)); }
+    void OpenOverview() override;
+    void OpenSettings() override;
+    void OpenPicker(ItemId itemId, bool isCopy) override;
+    void ToggleCheatSheet() override { cheatSheetOpen_ = !cheatSheetOpen_; }
+    void OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) override;
+    void OpenColorChooser(platform::Vec2 at) override;
+    void AskToDeleteCanvas(CanvasId canvas) override;
+    void CanvasMade(CanvasId canvas) override { overviewScrollToCanvasId_ = canvas; }
+    void EndDrawingGesture() override;
+    std::optional<ItemCreationKind> CreationInFlight() const override;
+
+    // The canvas as the hand works on it: the selection, the tool, drawing
+    // mode, the clipboard, and every command - see Editor. What this class
+    // draws from.
+    Editor editor_;
+
     void OnFrame(float deltaSeconds);
     // Every input event, in the order they happened - see IOverlayWindow::
     // SetInputCallback. The two gesture buttons go to OnMouse, the keys and
     // the other buttons to the commands, the wheel to HandleMouseWheel.
     void OnInput(const platform::InputEvent& event);
-    // The modifiers held, as the input stream last said: at an event, the
-    // ones it happened with. What the canvas's handlers read, rather than
-    // ImGui's, which are last frame's.
-    platform::Modifiers held_;
     void OnMouse(const platform::MouseEvent& event);
     // Ends the gesture in flight where it stands without anything a release
     // would newly make or fire: what it has already done is kept and filed
@@ -549,120 +539,18 @@ private:
     // pointer is over and allowed to light up this frame, if any - see
     // RenderItems for what "allowed" means while something is held.
     void PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton);
-    // Runs a selection bar button's command, on the release that completes
-    // a press on it (see HandleItemGesture): the command it is (see
-    // CommandForBarButton), about the snippet selected last and from where
-    // the button sits.
-    void ActivateBarButton(ChromeButton button);
-    // Which edges a resize handle moves - a corner two, an edge one.
-    static void ResizeHandleEdges(ResizeHandle handle, bool& left, bool& right, bool& top, bool& bottom);
-    // ----- The selection -----
-    // Whether the selection's furniture - the bar, the handles - is on
-    // screen and takes presses this frame: no creation tool in hand.
-    // Selecting is the hand at rest, so this is almost
-    // always true; in drawing mode the bar shows the drawing buttons
-    // instead, and a press on the snippet's body draws rather than moves
-    // (see PressPicksUp).
-    bool SelectionLive() const;
-    // Whether a left press on a snippet's body picks it up - selects and
-    // moves it - rather than drawing on it: not in drawing mode, or Alt
-    // held, which is the way to move the snippet being drawn on without
-    // leaving drawing mode.
-    bool PressPicksUp() const;
-    // ----- Drawing mode -----
-    // Puts `id` into drawing mode: selected alone, outlined for it, its bar
-    // showing Pen/Eraser/Text and the color, and `tool` (the pen, if none
-    // is given) in hand, so a left press on it draws. See drawingItem_.
-    void EnterDrawingMode(ItemId id, std::optional<Tool> tool = std::nullopt);
-    // Back to the hand at rest: no snippet in drawing mode, Select in hand.
-    // The selection is left as it was.
-    void ExitDrawingMode();
-    // What picking a tool from the drawing bar or a key does - the one
-    // place a tool is chosen, above SetTool, which only sets it. Select
-    // leaves drawing mode; a marking tool switches the tool in drawing
-    // mode, or enters it on the snippet selected last, and does nothing
-    // with no snippet to draw on; a creation tool leaves drawing mode and
-    // is picked up.
-    void PickTool(Tool tool);
-    // The buttons the bar shows this frame: the item buttons, or the
-    // drawing buttons in drawing mode.
-    std::vector<ChromeButton> BarButtons() const;
-    void SelectOnly(ItemId id);
-    void ToggleSelected(ItemId id);
-    void ClearSelection();
-    // Drops whatever is no longer on the current canvas, or is deleted or
-    // minimized there - run at the top of every frame, so nothing acts on
-    // a snippet that has gone.
-    void PruneSelection();
-    // The snippet selected last, which the single-snippet actions (More,
-    // Maximize) take. Nothing when nothing is selected.
-    std::optional<ItemId> PrimarySelection() const;
-    // The selected snippets' union rect, for the bar to float over.
-    std::optional<Rect> SelectionBounds() const;
-    // Deletes every selected snippet, undoably, as Close does.
-    void DeleteSelection();
     // What a resize started on `item` carries: that snippet alone, or -
     // when it is one of several selected - every selected snippet and
     // the box around them, which the drag then scales.
     void SnapshotResizeTargets(ItemGesture& gesture, ItemId item);
-    // ----- The clipboard -----
-    // Copy and Cut put the selection on the clipboard - as ids, so
-    // nothing is taken away or duplicated until a paste. Paste puts what
-    // is on it onto the canvas being looked at, skipping whatever has
-    // gone since.
-    void CopySelectionToClipboard(bool cut);
-    void PasteFromClipboard();
-    // The two of those in one step, without going through the clipboard -
-    // see its definition.
-    void DuplicateSelection();
-    // Whether this snippet is waiting for the paste that will move it,
-    // which is what it is drawn faded for.
-    bool IsWaitingToBeCut(ItemId id) const;
-    // Every snippet the box touches, added to the selection - see
-    // HandleBoxSelection for why it adds rather than replaces. A snippet
-    // is caught by any overlap at all, however slight.
-    void AddTouchedToSelection(const Rect& box);
     // A resize carrying the whole selection: every snippet in it scaled
     // by one factor about the corner or edge the drag leaves fixed, so
     // the group keeps its shape and its spacing. `dx`/`dy` are the whole
     // drag, from the press to now, as every other resize is computed.
     void ResizeSelectionAsAGroup(float dx, float dy);
-    // The wheel over a selection outside drawing mode: every selected
-    // snippet scaled by kWheelScaleStep per notch, as a group about the
-    // middle of the box around them - the same scaling a corner handle
-    // does, so shapes and spacing are kept, and the smallest snippet's
-    // floor stops all of them. A fullscreen snippet is left as it is.
-    void ScaleSelectionByWheel(int steps);
     // Opens the session's placement gesture over what a move or resize
     // may change, as the press starts it - see Session::BeginPlacement.
     void BeginPlacementRecord(const ItemGesture& gesture);
-    // Files a placement change made in one step - a fullscreen toggle, a
-    // reset to the original size - as its own undo entry.
-    void ToggleFullscreenUndoably(ItemId id, bool stretch);
-    void ResetToNativeSizeUndoably(ItemId id);
-    // Files a wheel notch or an arrow-key nudge, folded into the burst the
-    // last one began when it continues it: the same kind of step, soon
-    // enough after it, with nothing filed, undone or redone in between - a
-    // drag of the same snippets, or an undo that left an older step of
-    // theirs on top, would otherwise be taken into the burst. What decides
-    // that a burst is one undo (see Session::EndPlacement).
-    enum class Burst { None, Wheel, Nudge, Opacity };
-    void RecordPlacementBurst(Burst kind, const std::vector<std::pair<ItemId, Rect>>& rects);
-    // The same for the opacity wheel's steps.
-    void RecordStyleBurst(Burst kind, const std::vector<std::pair<ItemId, ItemStyle>>& styles);
-    // Whether a step of `kind` now continues the burst the last one began,
-    // and noting that one was filed - the two halves of both of the above.
-    bool BurstContinues(Burst kind) const;
-    void NoteBurst(Burst kind);
-    // Ctrl or Shift with the wheel: the selection's background or
-    // foreground opacity, kWheelOpacityStep per notch, within the ranges
-    // the Properties popover's sliders have. Says the new value in a toast.
-    void StepSelectionOpacity(int steps, bool background);
-    // Moves every selected snippet by (dx, dy), clamped on screen - the
-    // arrow keys.
-    void NudgeSelection(float dx, float dy);
-    // Escape: puts the hand down one stage - see the definition.
-    void PutDown();
     // The live text editor over an item whose note is being edited - the
     // one piece of an item that is a real ImGui widget, in a window of its
     // own above the items layer. See the definition.
@@ -689,10 +577,6 @@ private:
     void RenderCanvasBar(float displayW, float displayH);
     // Those canvases, in the folder's order.
     std::vector<CanvasId> CanvasBarCanvases() const;
-    // Switches canvas, first ending whatever the hand is doing and
-    // committing a note being typed - what every way of switching from the
-    // canvas itself has to do.
-    void SwitchToCanvasSettled(CanvasId id);
     // The context menu a right-click on a canvas bar tile opens. Rendered
     // at the top level of the frame rather than inside the bar's own
     // window, like every other popup here; the bar is held out for as long
@@ -708,7 +592,6 @@ private:
     // frame, and it opens on the next one (see Effect). What
     // was picked is kept as AppConfig::strokeColorRGBA when the chooser
     // closes.
-    void OpenColorChooser(ImVec2 from);
     void RenderColorChooser(float displayW, float displayH);
     // Beside the pointer while Draw or Erase is in hand over a snippet and
     // a modifier changes what a press would make - a line or a rectangle -
@@ -770,20 +653,6 @@ private:
     // will draw (or erase) at, under the cursor, plus the number. See
     // sizePreviewExpireAtSeconds_ for why it's transient.
     void RenderBrushSizePreview();
-    // Steps `delta` canvases along the folder the *current canvas* lives
-    // in (negative = toward the front of the list, which is where the
-    // newest canvas sits and where the Overview draws leftmost), switches
-    // to whatever lands there, and reports the new position. Deliberately
-    // does not wrap: running off either end stops there rather than
-    // teleporting to the far side, so holding the gesture is a safe way to
-    // reach the first or last canvas. Still shows the position even when
-    // it didn't move - see its definition.
-    void SwitchCanvasByOffset(int delta);
-    // The active tool's own size in px, or nullopt for the two tools that
-    // don't have one (RectEraser drags out its own region, Text isn't
-    // stroke-based at all) - the same split the wheel handler applies, in
-    // one place both it and the preview read.
-    std::optional<float> ActiveToolSizePx() const;
     // The Overview, in the order it is drawn: Escape first, which closes
     // the innermost open thing and ends the frame's Overview when it did;
     // the dimming backdrop, which closes the Overview on a click outside
@@ -1013,8 +882,6 @@ private:
     // calls this reaching, and the stack of phase 3 answers it; until then
     // it is these rules.
     bool KeyReaches(CommandId id) const;
-    // What a command does, once Dispatch has settled what it covers.
-    void Run(const Command& command);
     // The wheel, turned `notches`: with Alt it steps between the canvases of
     // the current canvas's folder, plain it sizes the tool in hand - see
     // the definition.
@@ -1028,28 +895,6 @@ private:
     // See SetConfigWriteFailed.
     void RenderPersistenceWarning();
 
-    void SetTool(Tool tool);
-    // Sets the draw color (see drawColorRGBA_'s own doc comment) - the
-    // single place that color actually changes.
-    void SetDrawColor(uint32_t colorRGBA);
-    // A new snippet of `kind` as Settings > Defaults says it starts, at
-    // `rect` - what the session makes it from (see Session::CreateItem).
-    // Shared by the fullscreen and region-drag creation paths so the two
-    // can't drift.
-    Item PrototypeForKind(ItemCreationKind kind, Rect rect, std::string name);
-    // What the hand does with a snippet just made: a screenshot is
-    // selected, a drawing entered with the pen.
-    void HandOverNewItem(ItemCreationKind kind, ItemId id);
-    // Hands back the tool that was in hand before a creation tool, if one is
-    // in hand now - after a screenshot is placed, and wherever nothing may
-    // be made (view-only).
-    void PutDownCreationTool();
-    // The current canvas, creating one first if the library is empty (a
-    // state CanvasManager allows - see its class comment). Never returns
-    // a dangling reference: the create path always produces a canvas.
-    // Shared by both item-creation paths so neither has to decide what an
-    // empty library means on its own.
-    const Canvas& EnsureCanvasForNewItem();
     // Places the first-run notes, centered as a group: the welcome, and the
     // two warnings beside it - see RequestWelcomeNote.
     // Ordinary items, deliberately: each can be moved, edited, or closed
@@ -1058,37 +903,6 @@ private:
     // have to be dismissed before the app could be touched at all, and
     // would teach nothing about how the app actually works.
     void PlaceWelcomeNotes(float displayW, float displayH);
-    ItemId CreateFullscreenItem(ItemCreationKind kind, float displayW, float displayH);
-    struct CreationGesture;
-    ItemId FinishRegionCapture(const CreationGesture& gesture);
-    // The one hit test: what is under a screen point, front to back - see
-    // PointerTarget. Pure in position and model (no ImGui state), so the
-    // frame and the raw mouse pipeline get the same answer for the same
-    // pixel.
-    PointerTarget ResolvePointerTarget(float x, float y) const;
-    // Enters live text editing for a Note item - copies its current
-    // noteText into noteEditBuffer_, arms RenderNoteEditor's
-    // editor window to grab keyboard focus the next frame it renders
-    // (noteEditJustFocused_), and requests real OS focus (see
-    // IOverlayWindow::RequestTextInput's own doc comment for why that's
-    // needed regardless of SetEditModeNoActivate). Commits whatever was
-    // being edited before, if anything and if it's a different item -
-    // clicking straight from one note into another without an
-    // intermediate click-away shouldn't silently drop the first edit.
-    void BeginEditingNote(ItemId id);
-    // Ends live text editing and commits `text` into the item's noteText.
-    // Called from the note-editor window's own IsItemDeactivated() check
-    // (see RenderNoteEditor) with a *pre-this-frame* snapshot of the edit
-    // buffer, not noteEditBuffer_ itself - InputTextMultiline reverts its
-    // own buffer internally on Escape before reporting deactivation, so by
-    // the time this runs on an Escape frame noteEditBuffer_ already holds
-    // the stale pre-edit-session value again. The snapshot the caller
-    // passes is what the user actually typed, which is what should be
-    // kept: Escape here means "stop editing," not "undo my typing" - the
-    // user has the app's own Undo for that if they want it, which this
-    // makes literally true: the session files the edit as one undo entry
-    // whenever the text changed (see Session::EndTextEdit).
-    void EndEditingNote(const std::string& text);
     // The box-selection gesture's moves and its release - started in
     // HandleItemGesture, which is also where the press that starts one is
     // decided. Always consumes the event.
@@ -1111,23 +925,14 @@ private:
     // on purpose, a click is fullscreen too). Returns true if the event
     // was the gesture's.
     bool HandleCreationGesture(const platform::MouseEvent& event);
-    // What a left press on empty canvas makes with the modifiers held right
-    // now, by AppConfig::screenshotTrigger and drawingTrigger - nothing if
-    // neither is set to them.
-    std::optional<ItemCreationKind> EmptyCanvasCreationKind() const;
     // A right press on empty canvas, press to release: a click opens the
     // empty canvas's menu where it landed, and a drag does nothing.
     void HandleEmptyCanvasRightPress(const platform::MouseEvent& event);
     // A stroke, an erase or a note opened, on the snippet in drawing mode
     // - the marking tools' whole gesture, Down to Up. Only ever called in
-    // drawing mode: the Down arms drawingItem_, and the Move and Up that
+    // drawing mode: the Down arms the snippet in drawing mode, and the Move and Up that
     // follow continue whatever it started.
     void HandleStrokeEvent(const platform::MouseEvent& event);
-    // The shape a Draw or Erase press would make now: the modifiers' if
-    // one is held (see DrawShapeFor), else the drawing bar's cycled shape
-    // for the tool. What HandleStrokeEvent fixes at the press and the
-    // modifier badge shows before one, from one rule.
-    DrawShape ShapeForPress() const;
     // Remembers this press for the next one to be judged a double-click
     // against, and says whether it is one: the same button, within
     // kDoubleClickSeconds and kDoubleClickPx of the last press, with the
@@ -1151,37 +956,9 @@ private:
     // canvas that should make a snippet - nothing under it, nothing open
     // that a click outside of is meant to close.
     bool PressMakesASnippet(const platform::MouseEvent& event) const;
-    // Discards untouchedDrawing_ if nothing has been put into it by now,
-    // and stops watching it either way.
-    void SettleUntouchedDrawing();
-    // Stops watching untouchedDrawing_ if the gesture in flight moves or
+    // Stops watching the untouched drawing if the gesture in flight moves or
     // resizes it - see its own doc comment.
     void KeepPlacedDrawings();
-    // Stops watching untouchedDrawing_ if it is among `ids`, placed on
-    // purpose other than by hand: nudged, scaled by the wheel, made
-    // fullscreen, set back to its size. Each files a step on the drawing
-    // itself; watched on, an undo took it for a step made elsewhere, took
-    // the drawing away for it - and then undid the step before.
-    void KeepDrawingsPlaced(const std::vector<ItemId>& ids);
-
-    // A new empty canvas at the end of the browsed folder, named for when
-    // it was made (see TimestampName), and *not* switched to - every
-    // caller that wants that says so. Returns its id, or 0 if the library
-    // couldn't take one.
-    CanvasId CreateCanvasInCurrentFolder();
-    // The same, in the folder the current canvas lives in - where the work
-    // is - rather than the one the Overview happens to be browsing, which
-    // is only the same folder until someone browses elsewhere and closes
-    // the Overview without switching. What every way of making a canvas
-    // from the canvas itself uses; the Overview's own button means the
-    // browsed folder, which is the one on screen there.
-    CanvasId CreateCanvasBesideCurrent();
-    // New canvas (its shortcut): create a new canvas beside the current
-    // one and switch straight to it - jumping there immediately is the
-    // useful default when there's no Overview grid open to decide from.
-    void CreateAndSwitchToNewCanvas();
-    // That, taking the selected snippets along - see its definition.
-    void MoveSelectionToNewCanvas();
 
     // ===== Rasterized vector strokes (StrokeRenderMode::Rasterized) =====
 
@@ -1280,27 +1057,8 @@ private:
     // Overview: switch canvases, delete/reorder them, or (when opened from
     // the context menu's Move to canvas) pick a target canvas for that
     // item.
-    void OpenOverview();
-    void OpenPicker(ItemId itemId, bool isCopy);
     void CloseOverview();
     void ShowActionToast(std::string text);
-    // Delete on the selection: one undoable delete of them all (see
-    // Session::DeleteItems). Those not on the current canvas are passed over.
-    void DeleteItemsWithToast(const std::vector<ItemId>& itemIds);
-    // Removes every stroke from the item (its captured screenshot is
-    // untouched - this only ever clears ink drawn
-    // on top) as one undoable step - see Session::ClearDrawing - and says
-    // so. No-op if `itemId` doesn't exist or has nothing drawn on it.
-    void ClearItemDrawing(ItemId itemId);
-
-    // Undo and redo, as Ctrl+Z and Ctrl+Y reach them: the session steps
-    // the current canvas's history (see Session::Undo), and this says
-    // what happened.
-    void Undo();
-    void Redo();
-    void ShowUndoStep(const std::optional<Session::UndoStep>& step);
-    // Whether there is anything to undo - see Session::CanUndo.
-    bool CanUndo() const { return session_.CanUndo(); }
 
     // A Delete button was clicked that asks first - a canvas or folder, or
     // Delete permanently on one with Show deleted on - pending the user
@@ -1365,7 +1123,6 @@ private:
     AppConfig& Cfg() { return settings_.Mutable(); }
     const AppConfig& Cfg() const { return settings_.Stored(); }
 
-    DrawTool drawTool_;
     // The last count handed to IOverlayWindow::SetInputOptionsHudDigits, so
     // that only an actual change reaches the platform - it can install or
     // remove a keyboard hook, which is not something to ask for every frame.
@@ -1476,45 +1233,6 @@ private:
     // disarms whichever was already armed (see RenderHotkeyEditor's own
     // body) rather than tracking capture state per row.
     std::optional<HotkeySlot> hotkeyCaptureSlot_ = std::nullopt;
-    // The selected snippets, in the order they were selected - the last
-    // one is the primary (see PrimarySelection). Transient UI state, never
-    // persisted, and only ever snippets on the current canvas that are on
-    // screen (see PruneSelection). A click selects one, Shift+click adds or
-    // removes one, a click on empty canvas or Escape clears it; Delete, the
-    // arrow keys and the selection bar act on it. In drawing mode the
-    // selection is the snippet being drawn on.
-    std::vector<ItemId> selection_;
-    // What Copy or Cut last put on the clipboard, in the order it was
-    // selected, and which of the two it was.
-    //
-    // Ids, not copies of the snippets: a paste acts on them as they are
-    // at the moment it happens, and a snippet deleted in between is
-    // simply not pasted - the alternative, holding a snapshot, quietly
-    // resurrects things the user has since thrown away. It is also what
-    // makes Cut take nothing away until the paste that moves it: what was
-    // cut is still there to change its mind about, drawn faded until then
-    // (see IsWaitingToBeCut). A cut clears the clipboard once pasted -
-    // those snippets have moved, and pasting again would move them from
-    // where they now are - while a copy stays, to be pasted as often as
-    // wanted.
-    std::vector<ItemId> clipboard_;
-    bool clipboardIsCut_ = false;
-    // The snippet in drawing mode, if one is. Selecting and moving are the
-    // hand at rest; drawing on a snippet is a mode entered by
-    // double-clicking or holding on it (or picking a marking tool by key
-    // with it selected, or making a new drawing, which is made to be
-    // drawn in) and left by a left press anywhere else or Escape. In it
-    // the snippet wears a stronger outline, its bar shows the drawing
-    // buttons (see ChromeButton), the pen is in hand (activeTool_; a key
-    // can enter with another marking tool), a left press on the
-    // snippet draws with it, and a right-drag on it erases whatever the
-    // tool (see RightErase); Alt held moves or resizes it instead. A left
-    // press anywhere else, or a right click on the snippet itself, leaves
-    // the mode and does nothing more - the press was for leaving. Only
-    // ever a snippet on the current canvas
-    // that is on screen, kept in step with the selection by
-    // PruneSelection.
-    std::optional<ItemId> drawingItem_;
     // The right button's erase on the snippet being drawn on (see OnMouse):
     // where it was pressed, and whether it has become a drag - and so an
     // erase - yet. A press that never does is a right click, which leaves
@@ -1580,35 +1298,11 @@ private:
     std::function<void()> noticeFinishedCallback_;
     // See SetHotkeyChangeCallback's own doc comment.
     std::function<bool(HotkeySlot, platform::KeyCombo)> hotkeyChangeCallback_;
-    // See SetAppCommandCallback.
-    std::function<void(CommandId)> appCommandCallback_;
-    // See CommandsRun.
-    uint64_t commandsRun_ = 0;
-    std::optional<CommandId> lastCommand_;
-
-    // The tool in hand, Select to start with - see the Tool enum. A marking
-    // tool is in hand exactly while a snippet is in drawing mode (see
-    // drawingItem_); picked from the drawing bar or a key, through
-    // PickTool.
-    Tool activeTool_ = Tool::Select;
-    // Shared by every stroke-based tool (Pen/Rectangle/Line - see the Tool
-    // enum's own doc comment) rather than each having its own: they're the
-    // same underlying operation (lay down a colored line of some width),
-    // just differing in what points make up the stroke, so switching
-    // between them mid-session keeps whatever color/width was last set
-    // instead of resetting. Eraser has its own eraserWidth_ instead (a
-    // radius, not a stroke width, and no color at all).
-    uint32_t drawColorRGBA_;
-    float drawWidth_;
-    // Whether the wheel has changed drawWidth_ since it was last saved: it
-    // is kept as AppConfig::strokeWidth once the size preview has faded,
-    // so a burst of notches is one write (see RenderBrushSizePreview).
+    // Whether the wheel has changed the pen's width since it was last
+    // saved: it is kept as AppConfig::strokeWidth once the size preview has
+    // faded, so a burst of notches is one write (see RenderBrushSizePreview).
     bool drawWidthDirty_ = false;
-    float eraserWidth_ = 28.0f;
 
-    // The tool that was in hand before a creation tool was picked - what a
-    // screenshot hands back once placed. See SetTool.
-    Tool toolBeforeCreation_ = Tool::Select;
 
     // The creation gesture in flight: what it places, then a click
     // (fullscreen) or a drag (region) - started by a creation tool's press or
@@ -1626,23 +1320,9 @@ private:
         bool isDouble = false;
         // Whether it began as a press on empty canvas rather than with a
         // creation tool in hand - what decides that a drawing it makes is
-        // untouchedDrawing_.
+        // Editor::UntouchedDrawing.
         bool fromEmptyCanvas = false;
     };
-    // A drawing a press on empty canvas made, with nothing put into it yet.
-    // It goes - erased, not merely marked deleted - once the hand moves on
-    // without using it: a press anywhere else, another canvas, its own
-    // Close, the overlay going away, or an undo (see SettleUntouchedDrawing). What
-    // makes a snippet on every click on empty space harmless to miss with.
-    // Moving, resizing or nudging it is using it (see KeepPlacedDrawings
-    // and KeepDrawingsPlaced):
-    // a box someone has placed is a box they want, empty or not. And so is
-    // putting anything into it: once it has held a stroke it is watched no
-    // longer (see OnFrame), so an undo that empties it again leaves it as
-    // an empty drawing rather than erasing it, redo and all.
-    std::optional<ItemId> untouchedDrawing_;
-    // The history as it stood once untouchedDrawing_ was made - see Undo.
-    uint64_t untouchedDrawingRevision_ = 0;
 
     // RectEraser's own placement gesture (see OnMouse): unlike Rectangle/
     // Line above, nothing is drawn into the live layer while dragging - the
@@ -1776,15 +1456,6 @@ private:
     // last frame, which is how its closing is noticed, and where it opens.
     bool colorChooserOpen_ = false;
     ImVec2 colorChooserAnchor_ = ImVec2(0.0f, 0.0f);
-    // What the pen draws and the eraser erases on a plain drag, with no
-    // modifier held: the drawing bar's own button cycles the tool in hand
-    // through its shapes (pen, line, rectangle; eraser, rectangle eraser -
-    // see ActivateBarButton), so a hand with no keyboard can draw a line
-    // with a drag alone. A modifier held still wins for that stroke. Both
-    // go back to plain when the tool changes (see SetTool): the shape is
-    // the tool's for as long as it is in hand, and no longer.
-    DrawShape penShape_ = DrawShape::Freehand;
-    DrawShape eraserShape_ = DrawShape::Freehand;  // Freehand or Rectangle
     // The canvas bar, docked against the bottom edge - see UpdateEdgePanels.
     // How far out it is, and where it was drawn this frame (none while it
     // is all the way in).
@@ -1941,17 +1612,6 @@ private:
     // sidebar whose "New folder" button is right there under it.
     std::optional<FolderId> overviewScrollToFolderId_ = std::nullopt;
 
-    // Live text editing of a Note item's body - the same shape as the
-    // rename state just above (at most one item being edited at a time,
-    // an edit buffer, a just-focused flag consumed once), see
-    // BeginEditingNote/EndEditingNote and RenderNoteEditor's editor
-    // window. The buffer is a string the widget grows as it types (see
-    // RenderNoteEditor), not a fixed array: a note is whatever its record
-    // says it is, and a fixed 8 KB buffer silently truncated a longer one
-    // the moment it was opened for editing.
-    std::optional<ItemId> editingNoteItemId_ = std::nullopt;
-    std::string noteEditBuffer_;
-    bool noteEditJustFocused_ = false;
 
     // Small transient "Moved to X" / "Copied to X" banner after a
     // move/copy - text empty or ImGui::GetTime() past the expiry means
@@ -1982,7 +1642,7 @@ private:
     // where a ring that follows the pointer forever is exactly the sort of
     // always-there element that makes an overlay feel busy. No
     // companion size/tool field - the renderer reads the live
-    // drawWidth_/eraserWidth_/activeTool_, so a burst of wheel steps shows
+    // editor's tool and its size, so a burst of wheel steps shows
     // the current value throughout rather than a snapshot of the first.
     double sizePreviewExpireAtSeconds_ = 0.0;
 
@@ -2002,10 +1662,6 @@ private:
     // modifier held for the whole spin.
     float selectionWheelRemainder_ = 0.0f;
 
-    // See RecordPlacementBurst and RecordStyleBurst.
-    Burst lastBurst_ = Burst::None;
-    double lastBurstAtSeconds_ = 0.0;
-    uint64_t lastBurstRevision_ = 0;
 
     // See RequestWelcomeNote/PlaceWelcomeNotes. Cleared the moment the notes
     // are placed, so they can never be placed twice.
