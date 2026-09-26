@@ -197,11 +197,12 @@ void TrayController::OnHotkey(HotkeySlot slot) {
     if (CompletesAHotkeyCapture(HotkeyCombo(settings_.Stored(), slot))) {
         return;
     }
-    // A command like any other, and dispatched like one: the overlay ends
-    // what the hand is doing first, then hands it back here (see
+    // A command like any other, and dispatched like one: the overlay's
+    // input machine offers it to what is open, which passes it on, ends
+    // what the command's scope covers, and hands it back here to run (see
     // RunAppCommand).
     if (const std::optional<CommandId> command = CommandForHotkey(slot)) {
-        overlayApp_.Dispatch(Command{*command});
+        overlayApp_.OnHotkey(*command, HotkeyCombo(settings_.Stored(), slot));
     }
 }
 

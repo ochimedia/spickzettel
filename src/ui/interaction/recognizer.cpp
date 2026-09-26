@@ -5,6 +5,7 @@
 
 #include "ui/editor.h"
 #include "ui/interaction/gestures.h"
+#include "ui/interaction/levels.h"
 
 namespace sz::ui {
 
@@ -78,8 +79,7 @@ Answer RecognizeLeft(const Event& press, const PointerTarget& target, bool isDou
         // opened for typing with Text, which is no stroke at all.
         if (target.kind == PointerTarget::Kind::Body && target.item == *drawing) {
             if (editor.ActiveTool() == core::Tool::Text) {
-                editor.BeginEditingNote(*drawing);
-                return Answer::Claim();
+                return Answer::Start(std::nullopt, std::make_unique<TypingNote>(*drawing));
             }
             return Answer::Start(std::nullopt, Marking::ForTool(press, *drawing, editor));
         }

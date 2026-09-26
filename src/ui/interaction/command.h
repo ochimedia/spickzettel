@@ -86,10 +86,10 @@ enum class CommandId {
     FrameSnippet,      // of `kind`, at `rect` - a drag on empty canvas, or with a creation tool
 };
 
-// What a command ends before it runs - see OverlayApp::SettleHand, and
-// docs/INTERACTIONS.md, section 4.2. Both end the hand and a note being
-// typed today; Canvas is kept apart because it is the scope of whatever
-// switches or empties the canvas, which will end more than the hand.
+// What a command ends before it runs - see Machine::EndFor, and
+// docs/INTERACTIONS.md, section 4.2: Hand the gesture and a note being
+// typed; Canvas, the scope of whatever switches or empties the canvas, a
+// popup as well.
 enum class Scope { Hand, Canvas };
 
 // Who asked for a snippet to be made: a menu row or a key, the creation

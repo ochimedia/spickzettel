@@ -1852,7 +1852,9 @@ keys and the mouse buttons a shortcut may be, the three context menus (each row 
 bar (`CommandForBarButton`), and the tray, whose hotkeys and "Show" menu
 entry dispatch through the overlay and are handed back to it to run
 (`SetAppCommandCallback`) - the tray alone knows the window and the modes,
-but the hand is the overlay's to settle. `Dispatch` asks `Available`,
+but the hand is the overlay's to settle. A hotkey reaches it as an event
+of the input machine (`OverlayApp::OnHotkey`), which every level passes
+on to the command - hidden or not, with no frame needed. `Dispatch` asks `Available`,
 ends what the command's scope covers, and runs it. So settling
 first is no longer something each command has to remember: nothing runs
 a command any other way, and `Run` is one exhaustive switch.
@@ -1969,6 +1971,15 @@ command whose scope covers popups - it asks the view to close it
 one asked for last is up. Escape closes the innermost popup open, which
 may be one of ImGui's own inside it (a color picker in the Properties
 popover), and the popup finishes when it is itself gone.
+
+A note being typed into is the Text level's (`TypingNote`), pushed by
+the press that opens it. Every key is the field's; a press on the field,
+or on any of ImGui's windows, is ImGui's; a press anywhere else is passed
+on, still with the note open - which is what keeps that press from making
+a snippet - and the field, let go of, keeps what was typed. Escape ends
+the typing and keeps the text too. It replaced `Hand::noteOpenAtPress`,
+which existed because settling the untouched drawing could close the note
+before the press asked whether one was open; the recognizer asks first.
 
 The panels' own keys - the Overview's Escape, a key being captured in
 Settings, the input options HUD's digits - and every widget are still

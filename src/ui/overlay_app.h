@@ -286,6 +286,11 @@ public:
     // row, selection bar button and global hotkey reaches the app through
     // here - see ui/interaction/command.h. True when it ran.
     bool Dispatch(const Command& command) { return editor_.Dispatch(command); }
+    // A global hotkey, bound to `combo`, which runs `command`: offered to
+    // the machine as an event of its own (docs/INTERACTIONS.md, section 7),
+    // which every level passes on to the command. May come while the
+    // overlay is hidden, with no frames.
+    void OnHotkey(CommandId command, const platform::KeyCombo& combo);
     // Whether `command` would do anything now: what grays a menu row out,
     // and what a command is asked before it ends anything. Asked before
     // settling, so it never depends on what settling would file - undo is

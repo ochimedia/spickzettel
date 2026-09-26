@@ -119,9 +119,9 @@ TEST_F(MachineTest, StartingSomethingEndsWhatIsAboveIt) {
     EXPECT_EQ(Stack().Describe(), "Canvas / - / - / - / Text / -");
 }
 
-// A command's scope says what it ends first: the hand's commands only the
-// gesture, the canvas's the gesture, the text and the popup - never the
-// mode or a panel.
+// A command's scope says what it ends first: the hand's commands the
+// gesture and the text, the canvas's the popup as well - never the mode or
+// a panel.
 TEST_F(MachineTest, AScopeEndsWhatItCovers) {
     const auto fill = [&] {
         for (const auto& [level, name] : {std::pair{Level::Mode, "Mode"}, std::pair{Level::Panel, "Panel"},
@@ -134,7 +134,7 @@ TEST_F(MachineTest, AScopeEndsWhatItCovers) {
     };
     fill();
     Stack().EndFor(Scope::Hand);
-    EXPECT_EQ(Stack().Describe(), "Canvas / Mode / Panel / Popup / Text / -");
+    EXPECT_EQ(Stack().Describe(), "Canvas / Mode / Panel / Popup / - / -");
     fill();
     log_.clear();
     Stack().EndFor(Scope::Canvas);
@@ -146,7 +146,7 @@ TEST_F(MachineTest, AScopeEndsWhatItCovers) {
     fill();
     ASSERT_TRUE(editor_.Dispatch(Command{CommandId::Undo}));
     EXPECT_EQ(Stack().At(Level::Gesture), nullptr);
-    EXPECT_NE(Stack().At(Level::Text), nullptr);
+    EXPECT_NE(Stack().At(Level::Popup), nullptr);
 }
 
 // A button held with nothing on the Gesture level has had its say: the

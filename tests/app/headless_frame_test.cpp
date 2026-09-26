@@ -4044,6 +4044,35 @@ TEST_F(HeadlessAppTest, WithTextInHandAClickOnTheDrawingOpensItForTyping) {
     EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(note.id)) << "open for typing";
 }
 
+// While a note is being typed into, every key is the note's - a tool's key
+// types a letter rather than picking the tool, Delete deletes no snippet -
+// and Escape ends the typing, keeping what was typed (docs/INTERACTIONS.md,
+// decision 1); Undo then takes it back.
+TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText) {
+    StartWith(WithTextOnT());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
+    PressKey(ImGuiKey_T);
+    RawClick(400.0f, 400.0f);
+    const ItemId note = Canvases().CurrentOrNull()->items[0].id;
+    ASSERT_EQ(App().EditingNote(), std::optional<ItemId>(note));
+    EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / TypingNote / -");
+
+    ImGui::GetIO().AddInputCharacter('p');
+    PressKey(ImGuiKey_P);
+    EXPECT_EQ(App().ActiveTool(), Tool::Text) << "no tool picked under the field";
+    PressKey(ImGuiKey_Delete);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "and no snippet deleted either";
+
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(App().EditingNote().has_value());
+    EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "p") << "Escape keeps what was typed";
+    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(note)) << "and ends only the typing";
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "");
+}
+
 // The key for Text pressed halfway through a stroke: a command, so the
 // stroke ends where the key found it and is kept (see
 // OverlayApp::SettleHand), and the rest of the drag draws nothing. Taken

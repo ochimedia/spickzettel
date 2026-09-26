@@ -1,11 +1,12 @@
 #pragma once
 
 // The levels of docs/INTERACTIONS.md between the canvas and the gesture:
-// what is open over the canvas - a popup so far - as interactions of the
-// machine. Each is the machine's record of something a view draws; the
-// view opens and closes the real thing, and tells the machine when it has
-// closed by itself (see EditorViews).
+// what is open over the canvas - a popup, a note being typed - as
+// interactions of the machine. Each is the machine's record of something a
+// view draws; the view opens and closes the real thing, and tells the
+// machine when it has closed by itself (see EditorViews).
 
+#include "core/canvas/item.h"
 #include "ui/interaction/machine.h"
 
 namespace sz::ui {
@@ -37,6 +38,29 @@ public:
 
 private:
     PopupKind kind_;
+};
+
+// A note being typed into (section 5): every key is the text field's, and
+// a press is too while it lands on the field - or on any of ImGui's
+// windows. A press anywhere else is passed on, and the field, let go of,
+// keeps the text. Escape ends the typing, keeping the text too - Undo is
+// the way to take typing back (decision 1) - and so does ending it from
+// outside. It finishes once the note is no longer being typed into,
+// however that ended: the field let go of, the session ending the edit for
+// a command.
+class TypingNote final : public Interaction {
+public:
+    explicit TypingNote(core::ItemId item) : item_(item) {}
+    Level level() const override { return Level::Text; }
+    const char* Name() const override { return "TypingNote"; }
+    core::ItemId Item() const { return item_; }
+    void Begin(const Event& event, Editor& editor) override;
+    Answer Offer(const Event& event, Editor& editor) override;
+    void Interrupt(Editor& editor) override;
+    void Cancel(Editor& editor) override { Interrupt(editor); }
+
+private:
+    core::ItemId item_;
 };
 
 }  // namespace sz::ui

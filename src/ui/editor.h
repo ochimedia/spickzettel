@@ -218,10 +218,9 @@ public:
     // a double is never the first half of the next one.
     void RememberClick(const Event& press);
     bool TakeDoubleClick(const Event& press);
-    // What every command ends first, as far as the hand goes: the gesture
-    // in flight, kept, and a note being typed, committed - see Dispatch.
-    // For the moments no command follows: the overlay going away, view-only
-    // mode.
+    // The gesture in flight ended, kept, and a note being typed committed
+    // - for the moments no command follows: the overlay going away,
+    // view-only mode.
     void SettleHand();
     // The overlay has just come up: nothing is in the hand, whatever was
     // held when it went away - see Machine::Forget - and no click is

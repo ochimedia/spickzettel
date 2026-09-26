@@ -15,10 +15,8 @@ bool Editor::Dispatch(const Command& command) {
     if (!Available(command)) {
         return false;
     }
-    // What the scope covers ends first - see Scope. A note being typed is
-    // not on the stack yet, and is committed for either scope.
+    // What the scope covers ends first - see Scope.
     machine_.EndFor(InfoFor(command.id).scope);
-    CommitNoteBeingEdited();
     ++commandsRun_;
     lastCommand_ = command.id;
     Run(command);

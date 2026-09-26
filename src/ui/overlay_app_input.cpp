@@ -198,6 +198,15 @@ private:
 
 void OverlayApp::InstallCanvasRoot() { editor_.Input().SetRoot(std::make_unique<CanvasRoot>(*this)); }
 
+void OverlayApp::OnHotkey(CommandId command, const platform::KeyCombo& combo) {
+    Event event;
+    event.kind = EventKind::Hotkey;
+    event.command = command;
+    event.combo = combo;
+    event.modifiers = editor_.Held();
+    editor_.Input().Offer(event);
+}
+
 void OverlayApp::OnInput(const platform::InputEvent& event) {
     // Real OS-level click-through (see IOverlayWindow::SetInputPassthrough)
     // means view-only mode receives no input on Windows; guarded here too so

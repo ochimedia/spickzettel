@@ -145,6 +145,7 @@ void Machine::EndFor(Scope scope) {
     switch (scope) {
         case Scope::Hand:
             End(Level::Gesture);
+            End(Level::Text);
             return;
         case Scope::Canvas:
             End(Level::Gesture);
