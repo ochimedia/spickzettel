@@ -2,11 +2,10 @@
 // screen and slides out when it is wanted.
 //
 // Where it is this frame, and how far out, is decided once, before
-// anything is drawn - UpdateEdgePanels - so that the minimized snippets'
+// anything is drawn - Update - so that the minimized snippets'
 // chips that have to clear it and the bar's own window read the same
 // answer.
-#include "ui/overlay_app.h"
-#include "ui/overlay_app_internal.h"
+#include "ui/view/canvas_bar.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -16,13 +15,18 @@
 #include <utility>
 #include <vector>
 
+#include "generated/ui_strings.h"
 #include "ui/icons_generated.h"
+#include "ui/interaction/levels.h"
+#include "ui/item_painting.h"
+#include "ui/theme.h"
+#include "ui/widgets.h"
 
 #include <imgui.h>
 
 namespace sz::ui {
 
-using namespace overlay_detail;
+using namespace ::sz::core;
 
 namespace {
 // How close to an edge the pointer has to come for what is docked there to
@@ -73,7 +77,12 @@ void EdgeReveal::Update(bool wanted, double now, float deltaSeconds) {
     amount = out ? std::min(1.0f, amount + step) : std::max(0.0f, amount - step);
 }
 
-std::vector<CanvasId> OverlayApp::CanvasBarCanvases() const {
+CanvasBar::CanvasBar(Session& session, Settings& settings, Editor& editor, ViewHost& host)
+    : session_(session), settings_(settings), editor_(editor), host_(host) {}
+
+bool CanvasBar::PanelOpen() const { return editor_.Input().At(Level::Panel) != nullptr; }
+
+std::vector<CanvasId> CanvasBar::CanvasBarCanvases() const {
     // The folder the *current canvas* is in, as Alt+wheel steps through -
     // not the one the Overview happens to be browsing.
     const Canvas* current = Manager().CurrentOrNull();
@@ -87,7 +96,7 @@ std::vector<CanvasId> OverlayApp::CanvasBarCanvases() const {
     return ids;
 }
 
-void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
+void CanvasBar::Update(float displayW, float displayH, bool menuUp) {
     const ImGuiIO& io = ImGui::GetIO();
     const double now = ImGui::GetTime();
     const AppConfig& cfg = Cfg();
@@ -122,7 +131,7 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     // having slid away would be a puzzle. The menu closes itself on the
     // click that chooses or dismisses it, so this cannot hold the bar out.
     const bool barWanted =
-        cfg.showCanvasBar && !busy && (atBottom || onBar || popups_.Up(PopupKind::CanvasMenu));
+        cfg.showCanvasBar && !busy && (atBottom || onBar || menuUp);
     canvasBarReveal_.Update(barWanted, now, io.DeltaTime);
     if (!cfg.showCanvasBar) {
         canvasBarReveal_ = EdgeReveal{};
@@ -151,7 +160,7 @@ void OverlayApp::UpdateEdgePanels(float displayW, float displayH) {
     bottomPanelsTop_ = bottomTop;
 }
 
-void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
+void CanvasBar::Draw(float displayW, float displayH) {
     if (!canvasBarRect_.has_value()) {
         return;
     }
@@ -205,8 +214,8 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
 
     // The same thumbnails the Overview draws, from the same cache - the two
     // are never out at once (the bar stays in while the Overview is open).
-    BeginOverviewPreviewFrame();
-    const PreviewTextureFn previewTexture = PreviewTextureLookup();
+    const ViewHost::PreviewDrawing previews = host_.Previews();
+    const PreviewTextureFn& previewTexture = previews.textures;
 
     // Each tile's place among *all* its folder's canvases, deleted ones
     // included - what ReorderCanvas counts in, as the Overview's grid does.
@@ -247,13 +256,13 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
         const ImVec2 tileMin(x, bar.y + Px(kBarPadding));
         const ImVec2 tileMax(x + tileW, tileMin.y + Px(kBarTileHeight));
         DrawCanvasPreview(dl, *canvas, tileMin, tileMax, displayW, displayH, Cfg().strokeRenderMode,
-                          Cfg().overviewShowsStrokes, previewTexture, PreviewMeshSlot(), PictureSampling());
+                          Cfg().overviewShowsStrokes, previewTexture, previews.meshes, previews.sampling);
 
         char tileId[48];
         std::snprintf(tileId, sizeof(tileId), "##canvasbar_tile_%zu", i);
         ImGui::SetCursorScreenPos(tileMin);
         if (ImGui::InvisibleButton(tileId, ImVec2(tileW, Px(kBarTileHeight)))) {
-            Act(action::SwitchCanvas{canvas->id});
+            host_.Act(action::SwitchCanvas{canvas->id});
         }
         const bool hovered = ImGui::IsItemHovered();
         // The tile's InvisibleButton answers the left button alone, so the
@@ -274,7 +283,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("SZ_CANVAS_BAR_TILE")) {
                 const CanvasId draggedId = *static_cast<const CanvasId*>(payload->Data);
                 if (draggedId != canvas->id) {
-                    Act(action::ReorderCanvas{draggedId, placeInFolder[i]});
+                    host_.Act(action::ReorderCanvas{draggedId, placeInFolder[i]});
                 }
             }
             ImGui::EndDragDropTarget();
@@ -299,7 +308,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     const float buttonY = bar.y + (bar.h - Px(kCanvasBarButtonSize)) * 0.5f;
     ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap), buttonY));
     if (PillIconButton("##canvasbar_new", icons::kPlus, false)) {
-        Act(action::RunCommand{Command{CommandId::NewCanvas}});
+        host_.Act(action::RunCommand{Command{CommandId::NewCanvas}});
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarNewCanvasTip);
@@ -310,7 +319,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     // nothing switched on.
     ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap) + Px(kCanvasBarButtonSize) + Px(kBarGap), buttonY));
     if (PillIconButton("##canvasbar_overview", icons::kLayoutGrid, false)) {
-        Act(action::RunCommand{Command{CommandId::Overview}});
+        host_.Act(action::RunCommand{Command{CommandId::Overview}});
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarOverviewTip);
@@ -321,7 +330,7 @@ void OverlayApp::RenderCanvasBar(float displayW, float displayH) {
     ImGui::PopStyleVar(2);
 
     if (rightClicked.has_value()) {
-        popups_.OpenCanvasMenu(*rightClicked, io.MousePos);
+        host_.OpenCanvasMenu(*rightClicked, io.MousePos);
     }
 }
 

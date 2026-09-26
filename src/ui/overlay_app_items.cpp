@@ -632,7 +632,7 @@ void OverlayApp::RenderDock(float displayW, float displayH) {
         static_cast<float>(minimizedIds.size()) * chipSize + static_cast<float>(minimizedIds.size() - 1) * gap;
     // Above whatever is out on the bottom edge - the canvas bar, a strip
     // docked there - rather than under it.
-    const float chipsBottom = std::min(displayH - bottomMargin, bottomPanelsTop_ - gap);
+    const float chipsBottom = std::min(displayH - bottomMargin, canvasBar_.BottomPanelsTop() - gap);
     const ImVec2 dockMin((displayW - totalW) * 0.5f, chipsBottom - chipSize);
 
     ImGui::SetNextWindowPos(dockMin);

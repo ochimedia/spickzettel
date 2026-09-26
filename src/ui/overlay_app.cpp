@@ -515,14 +515,14 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     // Where the panels docked against the screen's edges are this frame, and
     // how far out - before anything is drawn, since the minimized chips
     // RenderItems draws have to clear the ones on the bottom edge.
-    UpdateEdgePanels(displayW, displayH);
+    canvasBar_.Update(displayW, displayH, popups_.Up(PopupKind::CanvasMenu));
 }
 
 void OverlayApp::DrawCanvas(float displayW, float displayH) {
     RenderCanvasLayer(displayW, displayH);
     RenderItems(displayW, displayH);
     // Over the items, and under the popups.
-    RenderCanvasBar(displayW, displayH);
+    canvasBar_.Draw(displayW, displayH);
 }
 
 void OverlayApp::DrawPopups(float displayW, float displayH) { popups_.DrawOverCanvas(displayW, displayH); }
@@ -771,7 +771,7 @@ void OverlayApp::OnOverlayShown() {
     editor_.ForgetTheHand();
     // The panels docked against the edges come out for a moment, so they
     // are seen where they are - asked for here, done on the first frame.
-    edgePanelsFlashPending_ = true;
+    canvasBar_.Flash();
     // While the overlay was away, whatever is underneath owned the pointer
     // and will have installed its own shape. What ApplyPointerShape last
     // asked for therefore says nothing about what is on screen now, and

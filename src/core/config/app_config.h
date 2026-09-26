@@ -218,7 +218,7 @@ struct AppConfig {
     // The canvas bar along the bottom edge: the canvases of the folder being
     // worked in, to switch between them or start a new one. It hides against
     // the edge and slides out when the pointer reaches it, and for a moment
-    // whenever the canvas changes. See OverlayApp::RenderCanvasBar.
+    // whenever the canvas changes. See CanvasBar.
     bool showCanvasBar = true;
     // true (default): while the overlay is up in *edit* mode, a border is
     // drawn around the whole screen - the "you are in edit mode, your

@@ -1,4 +1,4 @@
-// The canvas bar, driven by widget name - see RenderCanvasBar.
+// The canvas bar, driven by widget name - see CanvasBar.
 #include "fakes/ui_test.h"
 #include "support/session_test_access.h"
 

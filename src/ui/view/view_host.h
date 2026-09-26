@@ -10,8 +10,11 @@
 #include <string>
 #include <vector>
 
-#include "core/session/actions.h"
+#include <imgui.h>
+
+#include "core/canvas/canvas.h"
 #include "core/drawing/stroke_mesh_cache.h"
+#include "core/session/actions.h"
 #include "platform/i_overlay_window.h"
 #include "ui/item_painting.h"
 #include "ui/view_action.h"
@@ -36,6 +39,8 @@ public:
     // A delete of `target`: the confirmation, unless Settings > Behavior
     // says not to ask, and then the delete itself, as an action.
     virtual void AskToDelete(DeleteTarget target) = 0;
+    // A canvas bar tile's menu, for `canvas`, at `at`.
+    virtual void OpenCanvasMenu(core::CanvasId canvas, ImVec2 at) = 0;
 
     // What a canvas's preview is drawn with - see DrawCanvasPreview: each
     // picture's thumbnail-sized pixels, the previews' own mesh cache, and

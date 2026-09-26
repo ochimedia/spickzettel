@@ -14,6 +14,7 @@
 #include "ui/context_menu.h"
 #include "ui/editor.h"
 #include "ui/item_painting.h"
+#include "ui/view/canvas_bar.h"
 #include "ui/view/cheat_sheet.h"
 #include "ui/view/overview_panel.h"
 #include "ui/view/popups.h"
@@ -62,21 +63,6 @@ enum class OverlayMode {
     Notice,
 };
 
-
-// How far out a panel that hides against an edge of the screen is: 0 all
-// the way in, 1 all the way out. It slides out while it is wanted or until
-// `holdUntil` (a flash), and back in once it has gone unwanted for
-// kEdgeRevealLingerSeconds - long enough that crossing a gap between the
-// edge and the panel doesn't send it away. See UpdateEdgePanels.
-inline constexpr float kEdgeRevealSlideSeconds = 0.14f;
-inline constexpr double kEdgeRevealLingerSeconds = 0.45;
-struct EdgeReveal {
-    float amount = 0.0f;
-    double holdUntil = 0.0;
-    double lastWanted = -1.0e9;
-    void Update(bool wanted, double now, float deltaSeconds);
-    void Flash(double now, double seconds) { holdUntil = std::max(holdUntil, now + seconds); }
-};
 
 // Owns the canvas/item UI and renders it into whatever IOverlayWindow it's
 // attached to via Dear ImGui. Contains no OS-specific code: rendering is
@@ -215,9 +201,8 @@ public:
     std::optional<CanvasId> CanvasContextMenuCanvas() const { return popups_.CanvasOf(PopupKind::CanvasMenu); }
     // And for empty canvas.
     bool IsEmptyCanvasMenuOpen() const { return popups_.Up(PopupKind::EmptyCanvasMenu); }
-    // How far out the canvas bar is, 0 to 1 - see EdgeReveal and
-    // UpdateEdgePanels.
-    float CanvasBarReveal() const { return canvasBarReveal_.amount; }
+    // How far out the canvas bar is, 0 to 1 - see CanvasBar.
+    float CanvasBarReveal() const { return canvasBar_.Reveal(); }
     // Whether a note is being typed into, and which.
     std::optional<ItemId> EditingNote() const { return editor_.EditingNote(); }
     // Which resize handle of which item thinks the cursor is on it right
@@ -429,6 +414,7 @@ private:
     platform::IOverlayWindow* Window() const override { return window_; }
     std::vector<platform::DisplayInfo> ListDisplays() override;
     bool ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) override;
+    void OpenCanvasMenu(CanvasId canvas, ImVec2 at) override { popups_.OpenCanvasMenu(canvas, at); }
     PreviewDrawing Previews() override;
     void Do(const ViewAction& action);
     std::vector<ViewAction> actions_;
@@ -540,18 +526,6 @@ private:
     // drag-resize, no Overview. See DrawItemContent (in the .cpp)
     // for the fill/stroke drawing shared with RenderItems.
     void RenderViewOnly(float displayW, float displayH);
-    // Where the canvas bar is this frame and how far out, from whether it
-    // is wanted - the pointer at the bottom edge or on the bar -
-    // and from what has happened (the overlay coming up, the canvas
-    // changing). Once per frame, before anything is drawn; see
-    // overlay_app_docks.cpp.
-    void UpdateEdgePanels(float displayW, float displayH);
-    // The canvas bar along the bottom edge: the canvases of the folder the
-    // current canvas is in, as thumbnails, the current one outlined, and a
-    // button for a new one. Drawn where UpdateEdgePanels put it.
-    void RenderCanvasBar(float displayW, float displayH);
-    // Those canvases, in the folder's order.
-    std::vector<CanvasId> CanvasBarCanvases() const;
     // Beside the pointer while Draw or Erase is in hand over a snippet and
     // a modifier changes what a press would make - a line or a rectangle -
     // a small glyph of it, so the modifiers are not a secret.
@@ -855,22 +829,6 @@ private:
     // faded, so a burst of notches is one write (see KeepPenWidth).
     bool drawWidthDirty_ = false;
 
-    // The canvas bar, docked against the bottom edge - see UpdateEdgePanels.
-    // How far out it is, and where it was drawn this frame (none while it
-    // is all the way in).
-    EdgeReveal canvasBarReveal_;
-    std::optional<Rect> canvasBarRect_;
-    // The top of whatever is out on the bottom edge this frame, or the
-    // display's height - what the minimized chips have to stay above.
-    float bottomPanelsTop_ = 0.0f;
-    // The canvas bar's tiles, scrolled this far; the canvas it last saw, to
-    // notice a change; and whether to bring the current tile into view.
-    float canvasBarScroll_ = 0.0f;
-    std::optional<CanvasId> canvasBarLastCanvas_;
-    bool canvasBarScrollToCurrent_ = true;
-    // Set when the overlay comes up, for the panels to come out for a moment
-    // on the first frame after.
-    bool edgePanelsFlashPending_ = false;
     // Where the demo build's mark currently stands, and which ten-second
     // step put it there - see DrawDemoWatermark. The cell is an index into
     // its own 3x3 grid rather than a pixel position, so a resolution change
@@ -926,6 +884,7 @@ private:
     OverviewPanel overview_{session_, settings_, editor_, *this};
     CheatSheet cheatSheet_{settings_, editor_, *this};
     Popups popups_{session_, settings_, editor_, *this};
+    CanvasBar canvasBar_{session_, settings_, editor_, *this};
 };
 
 }  // namespace sz::ui
