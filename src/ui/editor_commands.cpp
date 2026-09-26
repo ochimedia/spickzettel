@@ -123,7 +123,7 @@ bool Editor::Available(const Command& command) const {
         case CommandId::DrawingMode:
             return item != nullptr;
         case CommandId::LeaveDrawingMode:
-            return drawingItem_.has_value();
+            return DrawingItem().has_value();
         case CommandId::ItemMenu:
             return item != nullptr && command.at.has_value();
         case CommandId::EmptyCanvasMenu:
@@ -138,7 +138,7 @@ void Editor::Run(const Command& command) {
     // The key of the tool already in hand puts it down again - back to
     // Select, the hand at rest (see the Tool enum), which for a marking
     // tool means leaving drawing mode.
-    const auto toggleTool = [this](Tool tool) { PickTool(activeTool_ == tool ? Tool::Select : tool); };
+    const auto toggleTool = [this](Tool tool) { PickTool(ActiveTool() == tool ? Tool::Select : tool); };
     // A pixel a press, ten with Shift - the way every drawing program
     // nudges.
     const float nudge = held_.shift ? 10.0f : 1.0f;
@@ -271,19 +271,19 @@ void Editor::Run(const Command& command) {
         // rectangle; eraser, rectangle eraser - so a plain drag makes them,
         // for a hand with no modifier key to hold (see PenShape).
         case CommandId::PenButton:
-            if (activeTool_ != Tool::Draw) {
-                PickTool(Tool::Draw);
+            if (DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
+                drawing != nullptr && drawing->GetTool() == Tool::Draw) {
+                drawing->CyclePenShape();
             } else {
-                penShape_ = penShape_ == DrawShape::Freehand ? DrawShape::Line
-                            : penShape_ == DrawShape::Line   ? DrawShape::Rectangle
-                                                             : DrawShape::Freehand;
+                PickTool(Tool::Draw);
             }
             return;
         case CommandId::EraserButton:
-            if (activeTool_ != Tool::Erase) {
-                PickTool(Tool::Erase);
+            if (DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
+                drawing != nullptr && drawing->GetTool() == Tool::Erase) {
+                drawing->CycleEraserShape();
             } else {
-                eraserShape_ = eraserShape_ == DrawShape::Rectangle ? DrawShape::Freehand : DrawShape::Rectangle;
+                PickTool(Tool::Erase);
             }
             return;
         case CommandId::TextButton:
@@ -321,7 +321,7 @@ void Editor::Run(const Command& command) {
                     // handed over to Draw (see HandOverNewItem); a
                     // screenshot hands back the tool that was in hand
                     // before it.
-                    if (activeTool_ == Tool::NewScreenshot) {
+                    if (ActiveTool() == Tool::NewScreenshot) {
                         PutDownCreationTool();
                     }
                     break;
@@ -375,17 +375,13 @@ void Editor::Run(const Command& command) {
     }
 }
 
-// Escape puts the hand down, in stages: a creation tool in hand goes
-// back to Select, the hand at rest (see the Tool enum), then drawing mode
-// ends, then a cut waiting to be pasted is called off, then a selection
-// clears. What a stroke or a drag in flight does with it is Dispatch's:
-// it is settled first, as for every command.
+// Escape, once everything above the Canvas level has passed it: a creation
+// tool in hand has been put down and drawing mode left by then (see
+// CreationTool and DrawingMode), and what is left is the canvas's - a cut
+// waiting to be pasted is called off, then the selection clears. What a
+// stroke or a drag in flight does with it is its own: it is cancelled.
 void Editor::PutDown() {
-    if (CreationKindFor(activeTool_).has_value()) {
-        PickTool(Tool::Select);
-    } else if (drawingItem_.has_value()) {
-        ExitDrawingMode();
-    } else if (clipboardIsCut_ && !clipboard_.empty()) {
+    if (clipboardIsCut_ && !clipboard_.empty()) {
         // Never mind the cut: the snippets are still where they were, so
         // this only has to stop them waiting to be moved - the selection
         // they are part of is the next press of Escape's.

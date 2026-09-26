@@ -52,9 +52,14 @@ TEST_F(EditorTest, AMarkingToolKeyEntersDrawingModeOnTheSelection) {
     ASSERT_TRUE(editor_.Dispatch(Command{CommandId::EraseTool}));
     EXPECT_EQ(editor_.DrawingItem(), a);
     EXPECT_EQ(editor_.ActiveTool(), Tool::Erase);
-    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PutDown}));
+    // Escape is drawing mode's to answer: it leaves it (see DrawingMode).
+    Event escape;
+    escape.kind = EventKind::KeyDown;
+    escape.key = platform::KeyCombo::kEscape;
+    editor_.Input().Offer(escape);
     EXPECT_FALSE(editor_.DrawingItem().has_value());
     EXPECT_EQ(editor_.ActiveTool(), Tool::Select);
+    EXPECT_EQ(editor_.Selection(), std::vector<ItemId>{a}) << "the selection is the next Escape's";
 }
 
 }  // namespace

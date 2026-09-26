@@ -4,6 +4,76 @@
 
 namespace sz::ui {
 
+// ================= DrawingMode =================
+
+void DrawingMode::SetTool(core::Tool tool) {
+    if (tool != tool_) {
+        penShape_ = core::DrawShape::Freehand;
+        eraserShape_ = core::DrawShape::Freehand;
+    }
+    tool_ = tool;
+}
+
+void DrawingMode::CyclePenShape() {
+    penShape_ = penShape_ == core::DrawShape::Freehand ? core::DrawShape::Line
+                : penShape_ == core::DrawShape::Line   ? core::DrawShape::Rectangle
+                                                       : core::DrawShape::Freehand;
+}
+
+void DrawingMode::CycleEraserShape() {
+    eraserShape_ =
+        eraserShape_ == core::DrawShape::Rectangle ? core::DrawShape::Freehand : core::DrawShape::Rectangle;
+}
+
+Answer DrawingMode::Offer(const Event& event, Editor& editor) {
+    switch (event.kind) {
+        case EventKind::KeyDown: {
+            if (event.key == platform::KeyCombo::kEscape) {
+                Interrupt(editor);
+                return Answer::Finish();
+            }
+            const std::optional<CommandId> command = editor.CommandForKey(event.key, event.modifiers, event.repeat);
+            const bool onTheSnippet =
+                command == CommandId::DeleteSelection || command == CommandId::NudgeLeft ||
+                command == CommandId::NudgeRight || command == CommandId::NudgeUp || command == CommandId::NudgeDown;
+            return onTheSnippet ? Answer::Claim() : Answer::Pass();
+        }
+        case EventKind::PointerDown:
+        case EventKind::PointerMove:
+        case EventKind::PointerUp:
+        case EventKind::Wheel:
+        case EventKind::KeyUp:
+        case EventKind::Modifiers:
+        case EventKind::Tick:
+        case EventKind::Hotkey:
+        case EventKind::Lifecycle:
+            return Answer::Pass();
+    }
+    return Answer::Pass();
+}
+
+void DrawingMode::Interrupt(Editor& editor) { editor.GetSession().LiveLayer().Clear(); }
+
+// ================= CreationTool =================
+
+Answer CreationTool::Offer(const Event& event, Editor& /*editor*/) {
+    switch (event.kind) {
+        case EventKind::KeyDown:
+            return event.key == platform::KeyCombo::kEscape ? Answer::Finish() : Answer::Pass();
+        case EventKind::PointerDown:
+        case EventKind::PointerMove:
+        case EventKind::PointerUp:
+        case EventKind::Wheel:
+        case EventKind::KeyUp:
+        case EventKind::Modifiers:
+        case EventKind::Tick:
+        case EventKind::Hotkey:
+        case EventKind::Lifecycle:
+            return Answer::Pass();
+    }
+    return Answer::Pass();
+}
+
 // ================= Panel =================
 
 Answer Panel::Offer(const Event& event, Editor& editor) {

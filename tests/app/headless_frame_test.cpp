@@ -4098,7 +4098,7 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
     RawClick(400.0f, 400.0f);
     const ItemId note = Canvases().CurrentOrNull()->items[0].id;
     ASSERT_EQ(App().EditingNote(), std::optional<ItemId>(note));
-    EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / TypingNote / -");
+    EXPECT_EQ(App().InputStack(), "Canvas / DrawingMode / - / - / TypingNote / -");
 
     ImGui::GetIO().AddInputCharacter('p');
     PressKey(ImGuiKey_P);

@@ -237,8 +237,10 @@ public:
 
     // The tool in hand, Select to start with - see the Tool enum. A marking
     // tool is in hand exactly while a snippet is in drawing mode (see
-    // DrawingItem); picked from the drawing bar or a key, through PickTool.
-    Tool ActiveTool() const { return activeTool_; }
+    // DrawingItem), and a creation tool while one is on the Mode level
+    // (see CreationTool); picked from the drawing bar or a key, through
+    // PickTool.
+    Tool ActiveTool() const;
     // The snippet in drawing mode, if one is. Selecting and moving are the
     // hand at rest; drawing on a snippet is a mode entered by
     // double-clicking or holding on it (or picking a marking tool by key
@@ -251,8 +253,9 @@ public:
     // resizes it instead. A left press anywhere else, or a right click on
     // the snippet itself, leaves the mode and does nothing more - the press
     // was for leaving. Only ever a snippet on the current canvas that is on
-    // screen, kept in step with the selection by PruneSelection.
-    std::optional<ItemId> DrawingItem() const { return drawingItem_; }
+    // screen, kept in step with the selection by PruneSelection. The Mode
+    // level's - see DrawingMode.
+    std::optional<ItemId> DrawingItem() const;
     // Puts `id` into drawing mode: selected alone, outlined for it, its bar
     // showing Pen/Eraser/Text and the color, and `tool` (the pen, if none
     // is given) in hand, so a left press on it draws.
@@ -261,26 +264,22 @@ public:
     // The selection is left as it was.
     void ExitDrawingMode();
     // What picking a tool from the drawing bar or a key does - the one
-    // place a tool is chosen, above SetTool, which only sets it. Select
-    // leaves drawing mode; a marking tool switches the tool in drawing
+    // place a tool is chosen. Select leaves drawing mode and puts a
+    // creation tool down; a marking tool switches the tool in drawing
     // mode, or enters it on the snippet selected last, and does nothing
     // with no snippet to draw on; a creation tool leaves drawing mode and
     // is picked up.
     void PickTool(Tool tool);
-    void SetTool(Tool tool);
-    // Hands back the tool that was in hand before a creation tool, if one is
-    // in hand now - after a screenshot is placed, and wherever nothing may
-    // be made (view-only).
+    // Puts down the creation tool in hand, if one is - after a screenshot
+    // is placed, and wherever nothing may be made (view-only). Select is
+    // in hand after it.
     void PutDownCreationTool();
     // What the pen draws and the eraser erases on a plain drag, with no
-    // modifier held: the drawing bar's own button cycles the tool in hand
-    // through its shapes (pen, line, rectangle; eraser, rectangle eraser),
-    // so a hand with no keyboard can draw a line with a drag alone. A
-    // modifier held still wins for that stroke. Both go back to plain when
-    // the tool changes (see SetTool): the shape is the tool's for as long
-    // as it is in hand, and no longer.
-    DrawShape PenShape() const { return penShape_; }
-    DrawShape EraserShape() const { return eraserShape_; }
+    // modifier held - see DrawingMode::PenShape. So a hand with no keyboard
+    // can draw a line with a drag alone; a modifier held still wins for
+    // that stroke. Plain outside drawing mode.
+    DrawShape PenShape() const;
+    DrawShape EraserShape() const;
     // The shape a Draw or Erase press would make now: the modifiers' if
     // one is held (see DrawShapeFor), else the drawing bar's cycled shape
     // for the tool. What a stroke fixes at its press and the modifier
@@ -566,13 +565,6 @@ private:
     std::vector<ItemId> clipboard_;
     bool clipboardIsCut_ = false;
 
-    std::optional<ItemId> drawingItem_;
-    Tool activeTool_ = Tool::Select;
-    // The tool that was in hand before a creation tool was picked - what a
-    // screenshot hands back once placed. See SetTool.
-    Tool toolBeforeCreation_ = Tool::Select;
-    DrawShape penShape_ = DrawShape::Freehand;
-    DrawShape eraserShape_ = DrawShape::Freehand;  // Freehand or Rectangle
     DrawTool drawTool_;
     uint32_t drawColorRGBA_;
     float drawWidth_;

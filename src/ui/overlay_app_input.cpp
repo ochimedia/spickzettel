@@ -186,15 +186,6 @@ private:
         if (!id.has_value()) {
             return Answer::Claim();
         }
-        // Delete and the arrows are not drawing mode's: there the snippet is
-        // being worked in, not on. The Mode level's to say, once drawing mode
-        // is on it.
-        const bool onTheSnippet = *id == CommandId::DeleteSelection || *id == CommandId::NudgeLeft ||
-                                  *id == CommandId::NudgeRight || *id == CommandId::NudgeUp ||
-                                  *id == CommandId::NudgeDown;
-        if (onTheSnippet && editor.DrawingItem().has_value()) {
-            return Answer::Claim();
-        }
         return Answer::Start(Command{*id});
     }
 

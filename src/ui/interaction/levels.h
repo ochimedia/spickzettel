@@ -1,8 +1,9 @@
 #pragma once
 
 // The levels of docs/INTERACTIONS.md between the canvas and the gesture:
-// what is open over the canvas - a panel, a popup, text being typed, a key
-// being captured - as interactions of the machine. Each is the machine's record of something a
+// what the canvas is in - drawing mode, a creation tool in hand - and what
+// is open over it - a panel, a popup, text being typed, a key being
+// captured - as interactions of the machine. Each is the machine's record of something a
 // view draws; the view opens and closes the real thing, and tells the
 // machine when it has closed by itself (see EditorViews).
 
@@ -17,6 +18,56 @@
 #include "ui/interaction/machine.h"
 
 namespace sz::ui {
+
+// A snippet in drawing mode (section 5): the tool in hand is a marking tool
+// - the pen, the eraser or Text - and what a press on the snippet does is
+// the recognizer's to say (see RecognizePress, rules 4, 5 and 12), asking
+// this. Escape leaves it; Delete and the arrows do nothing in it, the
+// snippet being worked in rather than on. Everything else goes on down.
+// Ended, it leaves nothing of a stroke on the live layer.
+class DrawingMode final : public Interaction {
+public:
+    DrawingMode(core::ItemId item, core::Tool tool) : item_(item), tool_(tool) {}
+    Level level() const override { return Level::Mode; }
+    const char* Name() const override { return "DrawingMode"; }
+    core::ItemId Item() const { return item_; }
+    core::Tool GetTool() const { return tool_; }
+    // Another marking tool in hand. A shape the drawing bar cycled the pen
+    // or the eraser to is that tool's for as long as it stays in hand.
+    void SetTool(core::Tool tool);
+    // What the pen draws and the eraser erases on a plain drag: the drawing
+    // bar's button pressed again cycles the tool through its shapes - pen,
+    // line, rectangle; eraser, rectangle eraser.
+    core::DrawShape PenShape() const { return penShape_; }
+    core::DrawShape EraserShape() const { return eraserShape_; }
+    void CyclePenShape();
+    void CycleEraserShape();
+    Answer Offer(const Event& event, Editor& editor) override;
+    void Interrupt(Editor& editor) override;
+    void Cancel(Editor& editor) override { Interrupt(editor); }
+
+private:
+    core::ItemId item_;
+    core::Tool tool_;
+    core::DrawShape penShape_ = core::DrawShape::Freehand;
+    core::DrawShape eraserShape_ = core::DrawShape::Freehand;  // Freehand or Rectangle
+};
+
+// A creation tool in hand: the next left press places a snippet of its
+// kind, anywhere (rule 6). Escape puts it down.
+class CreationTool final : public Interaction {
+public:
+    explicit CreationTool(core::ItemCreationKind kind) : kind_(kind) {}
+    Level level() const override { return Level::Mode; }
+    const char* Name() const override { return "CreationTool"; }
+    core::ItemCreationKind Kind() const { return kind_; }
+    Answer Offer(const Event& event, Editor& editor) override;
+    void Interrupt(Editor& /*editor*/) override {}
+    void Cancel(Editor& /*editor*/) override {}
+
+private:
+    core::ItemCreationKind kind_;
+};
 
 // The panels that cover the canvas.
 enum class PanelKind { Overview, CheatSheet };

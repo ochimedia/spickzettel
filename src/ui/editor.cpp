@@ -164,7 +164,7 @@ void Editor::PruneSelection() {
                      selection_.end());
     // Drawing mode is on a selected snippet, so it goes the same way: a
     // canvas switch, a delete, a minimize.
-    if (drawingItem_.has_value() && !IsSelected(*drawingItem_)) {
+    if (const std::optional<ItemId> drawing = DrawingItem(); drawing.has_value() && !IsSelected(*drawing)) {
         ExitDrawingMode();
     }
 }
@@ -223,7 +223,7 @@ void Editor::AddTouchedToSelection(const Rect& box) {
 
 bool Editor::SelectionLive() const { return !ArmedCreation().has_value(); }
 
-bool Editor::PressPicksUp() const { return !drawingItem_.has_value() || held_.alt; }
+bool Editor::PressPicksUp() const { return !DrawingItem().has_value() || held_.alt; }
 
 std::optional<ItemCreationKind> Editor::ArmedCreation() const {
     if (const Framing* framing = machine_.As<Framing>(Level::Gesture)) {
@@ -234,7 +234,7 @@ std::optional<ItemCreationKind> Editor::ArmedCreation() const {
             return pending->GetMeaning().framing;
         }
     }
-    return CreationKindFor(activeTool_);
+    return CreationKindFor(ActiveTool());
 }
 
 // ================= The hand =================
@@ -286,27 +286,36 @@ bool Editor::HandAtRest() const {
 
 // ================= The tool, and drawing mode =================
 
-void Editor::SetTool(Tool tool) {
-    if (CreationKindFor(tool).has_value()) {
-        // Remembered for a screenshot to hand back once it is placed - only
-        // coming from a tool that isn't one of the two, so that going from
-        // Drawing to Screenshot doesn't make Drawing the one to return to.
-        if (!CreationKindFor(activeTool_).has_value()) {
-            toolBeforeCreation_ = activeTool_;
-        }
+Tool Editor::ActiveTool() const {
+    if (const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode)) {
+        return drawing->GetTool();
     }
-    if (tool != activeTool_) {
-        // A shape the bar cycled the pen or the eraser to is that tool's
-        // for as long as it stays in hand - see PenShape.
-        penShape_ = DrawShape::Freehand;
-        eraserShape_ = DrawShape::Freehand;
+    if (const CreationTool* creation = machine_.As<CreationTool>(Level::Mode)) {
+        return creation->Kind() == ItemCreationKind::Screenshot ? Tool::NewScreenshot : Tool::NewDrawing;
     }
-    activeTool_ = tool;
+    return Tool::Select;
+}
+
+std::optional<ItemId> Editor::DrawingItem() const {
+    if (const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode)) {
+        return drawing->Item();
+    }
+    return std::nullopt;
+}
+
+DrawShape Editor::PenShape() const {
+    const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
+    return drawing != nullptr ? drawing->PenShape() : DrawShape::Freehand;
+}
+
+DrawShape Editor::EraserShape() const {
+    const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
+    return drawing != nullptr ? drawing->EraserShape() : DrawShape::Freehand;
 }
 
 void Editor::PutDownCreationTool() {
-    if (CreationKindFor(activeTool_).has_value()) {
-        SetTool(toolBeforeCreation_);
+    if (machine_.As<CreationTool>(Level::Mode) != nullptr) {
+        machine_.End(Level::Mode);
     }
 }
 
@@ -324,27 +333,25 @@ void Editor::EnterDrawingMode(ItemId id, std::optional<Tool> tool) {
     if (Manager().FindItemAnywhere(id) == nullptr) {
         return;
     }
-    if (drawingItem_.has_value() && *drawingItem_ != id) {
-        ExitDrawingMode();
-    }
     // The snippet being drawn on is the selection - alone, and in front
     // while raising is on, as any selected snippet is.
     SelectOnly(id);
     if (Cfg().raiseSelectedSnippet) {
         session_.BringItemsToFront({id});
     }
-    drawingItem_ = id;
-    // The pen, unless a tool was asked for by name (a key): the
-    // mode is entered to draw, and the eraser is a right-drag away in it.
-    SetTool(tool.value_or(Tool::Draw));
+    // The pen, unless a tool was asked for by name (a key): the mode is
+    // entered to draw, and the eraser is a right-drag away in it. Put on the
+    // Mode level, it ends drawing mode on another snippet, or a creation
+    // tool in hand.
+    machine_.Push(std::make_unique<DrawingMode>(id, tool.value_or(Tool::Draw)), Event{});
 }
 
 void Editor::ExitDrawingMode() {
-    if (!drawingItem_.has_value()) {
+    if (machine_.As<DrawingMode>(Level::Mode) == nullptr) {
         return;
     }
-    // A press elsewhere is the usual way out, with nothing in flight - but
-    // Escape and the view-only hotkey can come with the button still held.
+    // A press elsewhere is the usual way out, with nothing in flight - but a
+    // key and the view-only hotkey can come with the button still held.
     // What it was doing ends here, kept: a stroke as a release would end
     // it, filed as its undo step, and a right-drag erase likewise.
     //
@@ -355,22 +362,20 @@ void Editor::ExitDrawingMode() {
     if (machine_.As<Marking>(Level::Gesture) != nullptr) {
         machine_.End(Level::Gesture);
     }
-    session_.LiveLayer().Clear();
-    drawingItem_.reset();
-    SetTool(Tool::Select);
+    machine_.End(Level::Mode);
 }
 
 void Editor::PickTool(Tool tool) {
     switch (tool) {
         case Tool::Select:
             ExitDrawingMode();
-            SetTool(Tool::Select);
+            PutDownCreationTool();
             return;
         case Tool::Draw:
         case Tool::Erase:
         case Tool::Text:
-            if (drawingItem_.has_value()) {
-                SetTool(tool);
+            if (DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode)) {
+                drawing->SetTool(tool);
                 return;
             }
             // Not drawing yet: the tool is picked *for* the snippet selected
@@ -381,22 +386,23 @@ void Editor::PickTool(Tool tool) {
             return;
         case Tool::NewDrawing:
         case Tool::NewScreenshot:
+            // On the Mode level, where it ends drawing mode.
             ExitDrawingMode();
-            SetTool(tool);
+            machine_.Push(std::make_unique<CreationTool>(*CreationKindFor(tool)), Event{});
             return;
     }
 }
 
 DrawShape Editor::ShapeForPress() const {
-    if (activeTool_ == Tool::Erase) {
+    if (ActiveTool() == Tool::Erase) {
         // Ctrl for a rectangle; Shift means nothing to the eraser.
-        return ErasesRectangle(held_.ctrl) ? DrawShape::Rectangle : eraserShape_;
+        return ErasesRectangle(held_.ctrl) ? DrawShape::Rectangle : EraserShape();
     }
-    return held_.ctrl || held_.shift ? DrawShapeFor(held_.ctrl, held_.shift) : penShape_;
+    return held_.ctrl || held_.shift ? DrawShapeFor(held_.ctrl, held_.shift) : PenShape();
 }
 
 std::vector<ChromeButton> Editor::BarButtons() const {
-    const BarButtonList& configured = drawingItem_.has_value() ? Cfg().drawingBar : Cfg().snippetBar;
+    const BarButtonList& configured = DrawingItem().has_value() ? Cfg().drawingBar : Cfg().snippetBar;
     std::vector<ChromeButton> shown;
     shown.reserve(configured.size());
     for (const BarButtonSetting& entry : configured) {
@@ -408,7 +414,7 @@ std::vector<ChromeButton> Editor::BarButtons() const {
 }
 
 std::optional<float> Editor::ActiveToolSizePx() const {
-    switch (activeTool_) {
+    switch (ActiveTool()) {
         case Tool::Draw:
             // Stroke thickness, which is the full width of the line drawn -
             // so a dot of exactly this diameter is exactly the mark the pen

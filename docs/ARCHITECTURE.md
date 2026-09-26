@@ -1614,6 +1614,18 @@ drawing the default, every click on a snippet made a mark, and with a
 Select tool the hand had to be switched to move anything and switched
 back to draw.
 
+Drawing mode is an interaction on the machine's Mode level
+(`DrawingMode`), and so is a creation tool in hand (`CreationTool`); the
+tool in hand is read from there (`Editor::ActiveTool`), Select when the
+level is empty, rather than kept beside it. Each answers Escape - drawing
+mode is left, the tool put down - so Escape's stages fall out of it
+passing down the stack: a gesture cancelled, then a popup, a note or a
+panel closed, then drawing mode or the creation tool, and only then, at
+the Canvas level, a cut called off and the selection cleared. That order
+was an `if` chain in `PutDown`. Drawing mode also claims Delete and the
+arrow keys, which act on a snippet from outside and not on the one being
+worked in.
+
 ### Nothing over the canvas is hit-tested by ImGui
 
 This is the one rule the selection rests on. An item's chrome was once an
