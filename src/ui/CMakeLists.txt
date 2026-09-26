@@ -10,6 +10,7 @@ add_library(sz_ui STATIC
     editor_commands.cpp
     icon_draw.cpp
     interaction/command.cpp
+    interaction/machine.cpp
     overlay_app.cpp
     overlay_app_cheatsheet.cpp
     overlay_app_commands.cpp

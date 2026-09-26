@@ -25,6 +25,7 @@
 #include "platform/i_overlay_window.h"
 #include "platform/platform_types.h"
 #include "ui/interaction/command.h"
+#include "ui/interaction/machine.h"
 #include "ui/selection_layout.h"
 
 namespace sz::ui {
@@ -135,6 +136,11 @@ public:
     // ones it happened with.
     void SetHeld(const platform::Modifiers& held) { held_ = held; }
     const platform::Modifiers& Held() const { return held_; }
+
+    // The stack of interactions every input event goes through - see
+    // docs/INTERACTIONS.md, section 4.
+    Machine& Input() { return machine_; }
+    const Machine& Input() const { return machine_; }
 
     Session& GetSession() { return session_; }
     const CanvasManager& Manager() const { return session_.Manager(); }
@@ -479,6 +485,7 @@ private:
 
     Settings& settings_;
     Session& session_;
+    Machine machine_{*this};
     EditorViews* views_ = nullptr;
     platform::IOverlayWindow* window_ = nullptr;
 

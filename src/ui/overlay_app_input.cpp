@@ -890,13 +890,45 @@ std::optional<ItemCreationKind> OverlayApp::CreationInFlight() const {
     return creation != nullptr ? std::optional<ItemCreationKind>(creation->kind) : std::nullopt;
 }
 
+// The Canvas level, until the levels above it take over what it hands on
+// here: each event goes to the handler that took it before the machine
+// was there - see docs/INTERACTIONS.md, "Phase 3, in steps".
+class OverlayApp::CanvasRoot : public Interaction {
+public:
+    explicit CanvasRoot(OverlayApp& app) : app_(app) {}
+    Level level() const override { return Level::Canvas; }
+    const char* Name() const override { return "Canvas"; }
+    Answer Offer(const Event& event, Editor& /*editor*/) override {
+        switch (event.kind) {
+            case EventKind::PointerDown:
+            case EventKind::PointerMove:
+            case EventKind::PointerUp:
+            case EventKind::Wheel:
+            case EventKind::KeyDown:
+                app_.OnCanvasEvent(event);
+                return Answer::Claim();
+            case EventKind::KeyUp:
+            case EventKind::Modifiers:
+            case EventKind::Tick:
+                return Answer::Claim();  // nothing waits on these here yet
+            case EventKind::Hotkey:
+                return Answer::Start(Command{event.command});
+            case EventKind::Lifecycle:
+                return Answer::Claim();  // the tray still tells the app directly
+        }
+        return Answer::Claim();
+    }
+    // The root is never ended.
+    void Interrupt(Editor& /*editor*/) override {}
+    void Cancel(Editor& /*editor*/) override {}
+
+private:
+    OverlayApp& app_;
+};
+
+void OverlayApp::InstallCanvasRoot() { editor_.Input().SetRoot(std::make_unique<CanvasRoot>(*this)); }
+
 void OverlayApp::OnInput(const platform::InputEvent& event) {
-    using platform::InputEventKind;
-    using platform::MouseButton;
-    using platform::MouseEventKind;
-    const auto gestureButton = [](MouseButton button) {
-        return button == MouseButton::Left || button == MouseButton::Right;
-    };
     editor_.SetHeld(event.modifiers);
     editor_.SetNow(event.seconds);
     // The display as the last frame saw it, which is what the event's
@@ -904,21 +936,30 @@ void OverlayApp::OnInput(const platform::InputEvent& event) {
     if (ImGui::GetCurrentContext() != nullptr) {
         editor_.SetDisplaySize(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
     }
+    editor_.Input().Offer(Event::FromInput(event));
+}
+
+void OverlayApp::OnCanvasEvent(const Event& event) {
+    using platform::MouseButton;
+    using platform::MouseEventKind;
+    const auto gestureButton = [](MouseButton button) {
+        return button == MouseButton::Left || button == MouseButton::Right;
+    };
     switch (event.kind) {
-        case InputEventKind::PointerDown:
-        case InputEventKind::PointerUp:
+        case EventKind::PointerDown:
+        case EventKind::PointerUp:
             if (gestureButton(event.button)) {
-                OnMouse(platform::MouseEvent{
-                    event.position, event.button,
-                    event.kind == InputEventKind::PointerDown ? MouseEventKind::Down : MouseEventKind::Up});
-            } else if (event.kind == InputEventKind::PointerDown && !viewOnly_ && !GestureInFlight()) {
+                OnMouse(platform::MouseEvent{event.position, event.button,
+                                             event.kind == EventKind::PointerDown ? MouseEventKind::Down
+                                                                                  : MouseEventKind::Up});
+            } else if (event.kind == EventKind::PointerDown && !viewOnly_ && !GestureInFlight()) {
                 // A shortcut the button may be. Not while a gesture is in
                 // flight: it is on the mouse holding the gesture, and waits
                 // for it as the other button does (see Hand::ignoredButton).
                 HandleCommandKey(ComboKeyForMouseButton(event.button), /*repeat=*/false);
             }
             return;
-        case InputEventKind::PointerMove:
+        case EventKind::PointerMove:
             // A move is each held gesture button's - both, when both are
             // down - and nobody's with neither.
             for (const MouseButton button : {MouseButton::Left, MouseButton::Right}) {
@@ -927,19 +968,22 @@ void OverlayApp::OnInput(const platform::InputEvent& event) {
                 }
             }
             return;
-        case InputEventKind::Wheel:
+        case EventKind::Wheel:
             if (!viewOnly_) {
                 HandleMouseWheel(event.wheel);
             }
             return;
-        case InputEventKind::KeyDown:
+        case EventKind::KeyDown:
             if (!viewOnly_) {
                 HandleCommandKey(event.key, event.repeat);
             }
             return;
-        case InputEventKind::KeyUp:
-        case InputEventKind::Modifiers:
-            return;  // nothing waits on a key's release; the modifiers are the editor's
+        case EventKind::KeyUp:
+        case EventKind::Modifiers:
+        case EventKind::Tick:
+        case EventKind::Hotkey:
+        case EventKind::Lifecycle:
+            return;  // not handed on - see CanvasRoot
     }
 }
 

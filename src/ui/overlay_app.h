@@ -442,9 +442,14 @@ private:
 
     void OnFrame(float deltaSeconds);
     // Every input event, in the order they happened - see IOverlayWindow::
-    // SetInputCallback. The two gesture buttons go to OnMouse, the keys and
-    // the other buttons to the commands, the wheel to HandleMouseWheel.
+    // SetInputCallback - offered to the editor's machine (see Machine),
+    // with the editor told the modifiers, the time and the display first.
     void OnInput(const platform::InputEvent& event);
+    // The machine's Canvas level, for now handing events to the handlers
+    // below - see its definition.
+    class CanvasRoot;
+    void InstallCanvasRoot();
+    void OnCanvasEvent(const Event& event);
     void OnMouse(const platform::MouseEvent& event);
     // Ends the gesture in flight where it stands without anything a release
     // would newly make or fire: what it has already done is kept and filed

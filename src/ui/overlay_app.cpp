@@ -943,6 +943,7 @@ void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 OverlayApp::OverlayApp(Settings& settings, Session& session)
     : editor_(settings, session), session_(session), settings_(settings) {
     editor_.SetViews(this);
+    InstallCanvasRoot();
 }
 
 void OverlayApp::AttachTo(platform::IOverlayWindow& window) {

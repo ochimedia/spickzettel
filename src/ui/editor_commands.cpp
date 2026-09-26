@@ -15,14 +15,11 @@ bool Editor::Dispatch(const Command& command) {
     if (!Available(command)) {
         return false;
     }
-    // Both scopes end the hand and a note being typed today - see Scope.
-    switch (InfoFor(command.id).scope) {
-        case Scope::Hand:
-        case Scope::Canvas:
-            if (views_ != nullptr) {
-                views_->SettleHand();
-            }
-            break;
+    // What the scope covers ends first - see Scope. The gestures and a note
+    // being typed are still the view's, which ends them for either scope.
+    machine_.EndFor(InfoFor(command.id).scope);
+    if (views_ != nullptr) {
+        views_->SettleHand();
     }
     ++commandsRun_;
     lastCommand_ = command.id;

@@ -32,6 +32,7 @@ add_executable(sz_core_tests
     ui/cheat_sheet_test.cpp
     ui/command_test.cpp
     ui/editor_test.cpp
+    ui/machine_test.cpp
     ui/ui_strings_file_test.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

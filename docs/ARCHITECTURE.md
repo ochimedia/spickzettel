@@ -1890,6 +1890,22 @@ handlers that were there - `OnMouse` for the two gesture buttons,
 - Moves under the grab are still sampled once a frame, never one per
   mouse report - what countering needs (see "Taking input back from the
   game" and `docs/INTERACTIONS.md`, "Phase 2 and the input grab").
+- Once a frame, after that sample, the window says the time: a `Tick`,
+  on the stream's own clock, which is what a press held still is judged
+  by. ImGui's clock is another one, and a hold measured from an event's
+  time to ImGui's would be measuring between two clocks.
+
+Every event goes through the machine of `docs/INTERACTIONS.md`, section
+4 (`ui/interaction/machine.*`): a stack of interactions, one per level,
+offered each event from the top down, each answering Claim, Pass,
+Finish, Cancel or Start. The machine is the editor's (`Editor::Input`),
+since the interactions work on the editor; nothing in it knows ImGui.
+Its routing is tested alone, with interactions that do nothing but
+answer (`tests/ui/machine_test.cpp`). A command's scope is ended through
+it before the command runs (`Machine::EndFor`). Until the levels above
+take over, the Canvas level hands every event to the handlers that took
+it before - `OverlayApp::CanvasRoot` - so the machine changes nothing
+yet; each step of phase 3 moves one kind of interaction onto it.
 
 What only a frame can do - opening a popup, closing the top one on
 Escape - is queued as an effect (`OverlayApp::Effect`) and done in the
