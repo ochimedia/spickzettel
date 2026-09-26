@@ -238,10 +238,6 @@ SQLite is the other: its source lives in Fossil, not on GitHub, and it
 is fetched as the release's amalgamation zip from sqlite.org - the whole
 library as one C file - after checking it against the SHA3-256 the
 download page publishes.
-The archives were compared with the clones they replaced: the same
-files, apart from the line endings Git's `core.autocrlf` had converted
-and the ImPlot submodule the test engine's test suite pulls in, which
-nothing here builds.
 
 Bumping a dependency is therefore: pick the tag, resolve it (`git
 ls-remote <repo> refs/tags/<tag>^{}`, or the un-peeled line for a
@@ -434,8 +430,7 @@ left, and the library saves and loads empty.
 Every item has one `Picture`, with strokes and the caption on top: its
 screenshot, or a fill for a drawing, transparent until given a color. A
 picture's pixels are stored once, when they are captured, and never
-changed after; everything drawn over them is strokes. It was a list of
-layers while pixels could be painted on top of it (see "Dead ends").
+changed after; everything drawn over them is strokes.
 
 A picture is content only. The texture it is drawn with is kept by
 `TextureCache` under the snippet's id (see "Textures"), so copying an
@@ -508,13 +503,10 @@ other.
 
 Whether a handle keeps the shape is `Item::keepAspect`, set from the
 defaults when the snippet is made and changed in its popover; Shift does
-the other. It used to follow from whether the snippet had text, on the
-reasoning that a box of text is a box whose shape is the point of
-resizing it. But text is a caption any snippet can carry, so typing one
-into a screenshot changed what its handles did, with nothing on screen
-to say so. A property says it, and can be set either way on purpose. A
-record from before the field reads back as the old rule had it (no text:
-kept), so nothing already made starts behaving differently.
+the other. Not whether the snippet has text, which it once followed:
+text is a caption any snippet can carry, so typing one into a
+screenshot changed what its handles did, with nothing on screen to say
+so. A property says it, and can be set either way on purpose.
 
 ### What a new snippet starts with
 
@@ -579,25 +571,18 @@ deleted folder or canvas says from which day it goes, and what a start
 deleted for good is counted in a message the next time the overlay comes
 up, since the start itself happens while nobody is looking.
 
-Two designs preceded this. A reserved Trash folder inside the library
-grouped three structurally different things under one "dig through the
-bin" model that fit none of them. A trash that was a second library of
-the same shape needed a delete to transfer records, directories and
-textures into it with scaffolding containers on the far side, ids
-reserved across both, a tab that switched which library the whole
-overlay viewed, and a staging rule for a capture deleted before its
-first save. A stamp in the record replaces all of it without moving
-anything.
+A trash folder and then a trash library came before (see "Dead ends"):
+a delete that moves things somewhere else has to move them back whole,
+and a stamp in the record moves nothing.
 
 ### Ids and names
 
-Ids are random six-character base36 uids, checked against everything
-the library holds. Random rather than counted because every counted
-library starts at 1, so two libraries built independently collide on
-nearly every id, and anything that ever moves things from one into the
-other would be a guaranteed conflict. They were chosen when the library
-was a directory tree, one directory per id; they stay because they cost
-nothing and keep that door open.
+Ids are random numbers below 36^6, checked against everything the
+library holds (`MakeUid`). Random rather than counted because every
+counted library starts at 1, so two libraries built independently
+collide on nearly every id, and anything that ever moves things from one
+into the other would be a guaranteed conflict. They cost nothing and
+keep that door open.
 
 A folder or canvas nobody has named is called for the moment it was
 made, "2026-09-07 22:36:14": a counted "Folder 2, Folder 5" says nothing
@@ -614,18 +599,13 @@ happens once, at startup.
 
 ### Why a database
 
-The library used to be a directory tree: a directory per folder, canvas
-and snippet, a JSON record in each, order files beside them, and each
-snippet's pictures in its own directory. It was meant to be rearranged
-by hand in a file manager, and it made every change several filesystem
-steps - write a record, rename a directory, move a picture, delete a
-tree - any of which a crash, a full disk or another program holding a
-file could stop between two others. Most of the store, and most of its
-bugs, were about surviving that: a pending-removals file, a staging
-directory for pictures without a directory yet, a retired directory for
-what a save found gone, a load that reconciled whatever it found, and a
-fault-injecting file system with crash and randomized tests to check it
-all. Two review rounds in a row found real data loss in it.
+The library was a directory tree once, meant to be rearranged by hand in
+a file manager, and every change to it was several filesystem steps - a
+record written, a directory renamed, a picture moved - any of which a
+crash, a full disk or another program holding a file could stop between
+two others. Most of that store, and most of its bugs, were about
+surviving it (see "Dead ends"), and two review rounds in a row found
+real data loss in it.
 
 A transaction removes the "between two steps" state altogether: a save
 lands whole or not at all. SQLite also brings, already done, what the
@@ -730,10 +710,7 @@ The store remembers nothing of what it wrote: which rows a command
 touched is the command's to say, through its checkpoint, and nothing is
 compared at write time. `Save(view)` is the same write with everything
 named - every row, and every one the model does not hold taken out - for
-a library made rather than changed: a first run's, a test's. The store
-used to diff every row against what it had last written, serializing
-and hashing every snippet on every save to find the one that changed;
-see "Dead ends" for the tree's field-by-field hash before that.
+a library made rather than changed: a first run's, a test's.
 
 ### Reading what cannot be used
 
@@ -763,8 +740,7 @@ Decoding is what a canvas switch pays; encoding is what every screenshot
 pays, synchronously, while the user waits. Both are lossless, and QOI
 comes out ~30% smaller because stb's encoder is a weak one. Raw pixels
 were measured too and are a trap: reading 8 MB costs more than reading
-1.6 MB and decoding it. stb's PNG codec stayed for a while for importing
-and exporting pictures, and went unused; see "Dead ends". A 256px thumbnail is stored with every picture,
+1.6 MB and decoding it. A 256px thumbnail is stored with every picture,
 so the Overview never decodes a fullscreen capture to draw a 200px tile.
 
 In the file rather than beside it, because nearly every bug of the tree
@@ -792,29 +768,22 @@ costs the busy timeout each time.
 ## Configuration
 
 `AppConfig` is every user-editable setting, read from and written to
-`config.json` by `ParseConfig`/`SerializeConfig`. Parsing is pure core
+`config.json` by `TryParseConfig`/`SerializeConfig`. Parsing is pure core
 logic; only *where* the file lives is platform-specific.
 
 **Every setting is one row of a catalog** (`settings_catalog.h`, and
 `docs/SETTINGS.md` for the whole plan). A row says where the setting is
 in the file, what values it may hold (its rule), when a change to it
 takes effect, and where its value lives, and reading and writing the file
-are loops over the rows. Before, the reader and the writer listed every
-setting in two shapes, a profile's reading and writing listed the
-overridable ones twice more, and each choice had a pair of functions
-spelling its names both ways: one setting was named in up to seven
-files, and nothing failed when a copy was missed. A rule's `Hold` is the
-one answer to what a setting keeps given a value - held to a band, or
-rejected - and the parser asks it, as every edit does. So a number past a
-float's range is rejected by every float, where the banded ones used to
-read it as their maximum and the others as nothing.
+are loops over the rows. Written out by hand, as it was, one setting was
+named in up to seven places, and nothing failed when a copy was missed.
+A rule's `Hold` is the one answer to what a setting keeps given a value -
+held to a band, or rejected - and the parser asks it, as every edit does.
 
 The overridable settings are held once, as `AppConfig::profileable`, a
-`ProfileableSettings` named as the file names them. `AppConfig` used to
-keep its own copies under other names (`editModeNoActivate` for
-`dontStealFocus`), copied to and from the profile's struct on every read
-and edit, on the grounds that the file nests them differently; the rows
-say where each is in the file, so the second copy had nothing left to do.
+`ProfileableSettings` named as the file names them - not also as copies
+under names of `AppConfig`'s own, copied back and forth: the rows say
+where each is in the file.
 
 C++ cannot list a struct's fields, so a field without a row would be a
 setting nothing reads or writes, and no test of the rows could see it.
@@ -831,7 +800,7 @@ non-ASCII, and any flat encoding of "a list of arbitrary strings" grows
 a bespoke escaping scheme with its own bugs. nlohmann/json was already
 in the binary for the library.
 
-Three things about the file are deliberate:
+Four things about the file are deliberate:
 
 - **Groups, not a flat namespace** (`hotkeys`, `drawing`, `appearance`,
   `bars`, `overview`, `defaults`, `deleted`, `display`, `behavior`,
@@ -851,13 +820,12 @@ Three things about the file are deliberate:
   hotkeys one combination has the later one unbound as it is read.
   Every setting is written, defaults included, so the file documents
   what can be set.
-- **A hotkey another application owns does not stop the start.** It
-  used to: a screenshot tool on Ctrl+Alt+C was enough for the app to
-  refuse to start, with a message that named nothing, and a hand edit of
-  `config.json` as the only way back in. The hotkey is left unregistered
-  instead, and a message box names each one with its combination; the
-  tray menu reaches the overlay without any, and Settings > Hotkeys can
-  pick another.
+- **A hotkey another application owns does not stop the start.** A
+  screenshot tool on Ctrl+Alt+C would otherwise cost the whole app, with
+  a hand edit of `config.json` as the only way back in. The hotkey is
+  left unregistered, and a message box names each one with its
+  combination; the tray menu reaches the overlay without any, and
+  Settings > Hotkeys can pick another.
 - **`ordered_json`, and floats rounded to six decimals**, because the
   file is meant to be opened and read: alphabetical keys interleave
   settings by spelling, and `0.22f` promoted to double writes as
@@ -866,35 +834,30 @@ Three things about the file are deliberate:
 Malformed input is never an error: a value of the wrong type or out of
 range leaves that setting at its default, the same contract the library
 has. A file that is not settings at all - not JSON, or too big to be -
-is not a first run either. Read as defaults, it was written over by the
-next settings change, and a stray comma cost every hotkey and profile.
-`LoadOrCreateConfig` renames it to `config-unreadable-<stamp>.json`
-instead, and one that cannot be opened is left where it is and not
-written over for that run. Either way the app starts on the defaults,
-says so in a message box, and skips the retention period for that start,
-since whether it was on is what could not be read. Skipping it for one
-start was not enough: the next start found no file, or the defaults a
-settings change had written, and both turn a 14-day retention back on
-over a library whose owner may have switched it off. So a file set aside
-is replaced at once by the defaults with retention switched off, and it
-stays off until switched on again. That write can fail too, a full disk
-say, and then the next start found no file after all. So the tray
-writes the stand-in again as it starts, and a write that fails is owed
-and retried from the background timer, like any settings write. The
-stand-in has retention off even when the file could not be moved aside.
-The file is written
-through temp-then-rename, since truncating it in place leaves a window
-in which every setting is a half-written file.
+is not a first run either: read as defaults, it would be written over by
+the next settings change, and a stray comma would cost every hotkey and
+profile. `LoadOrCreateConfig` renames it to
+`config-unreadable-<stamp>.json`, and one that cannot be opened is left
+where it is and not written over for that run. Either way the app starts
+on the defaults, says so in a message box, and skips the retention
+period, since whether it was on is what could not be read. Skipping one
+start is not enough - the next finds no file, or the defaults, and both
+turn a 14-day retention back on over a library whose owner may have
+switched it off - so the stand-in written in its place has retention off
+until it is switched on again, even when the file could not be moved
+aside. The tray writes the stand-in again as it starts, in case that
+write failed, and a write that fails is owed and retried from the
+background timer, like any settings write. The file is written through
+temp-then-rename, since truncating it in place leaves a window in which
+every setting is a half-written file.
 
 What a file can say that no one setting's rule rules out, and the app
 cannot run with, is repaired as it is read, in one place
 (`RepairOnLoad`): both creation triggers on one press go back to their
 defaults, a later duplicate of an earlier summon hotkey is unbound, and
 profile names are made non-empty and unique. A file that needed any of
-these is written back as the app starts, so that it says what runs.
-Before, the hotkey repair was the tray's, at startup, and the only one
-written back; the others waited for the next settings change, and until
-then the file said one thing and the app did another. A value held to
+these is written back as the app starts, so that the file says what runs
+rather than one thing while the app does another. A value held to
 its rule is not a repair: out of range or missing, it reads the same at
 every start, and the next settings change writes it anyway.
 
@@ -910,8 +873,8 @@ current build's, which changes under it; and once a build writing its
 target version is out, it is never edited. Adding or dropping a key is
 not a version, since an absent key reads as its default and an unknown
 one is ignored. A file a newer build wrote is read as well as this build
-can, and not written over for the run: the first settings change used to
-write it over and lose whatever the newer build had stored. It is the
+can, and not written over for the run, which would lose whatever the
+newer build had stored. It is the
 arrangement a file that cannot be read already had, message and skipped
 retention period included - a newer build may have moved the retention
 keys, and read as defaults they turn a 14-day purge back on. Refusing to
@@ -966,8 +929,8 @@ new canvas rather than one that reads the selection, so the canvas bar's
 own "+" keeps meaning only what its icon says. With nothing selected the
 two do the same thing, because an empty selection is no reason to refuse
 the canvas. These are not OS hotkeys and
-are stored apart from the summon hotkeys: the UI reads them off its own
-frame, they only do anything while the overlay takes input, and nothing
+are stored apart from the summon hotkeys: the overlay reads them from
+its own input, they only do anything while it takes input, and nothing
 about them can fail the way registering a global hotkey can, which is
 also why a bare letter is allowed here and questionable there.
 
@@ -984,14 +947,10 @@ order, so "which profile am I in" has one answer; and everything it does
 not state comes from the defaults, so "where did this value come from"
 has two possible answers and no chain to trace.
 
-There was a third level once: a profile could be `basedOn` another, so
-one input recipe could serve a dozen games. The resolver was fine and
-the idea was not. The rule that made it comprehensible - a recipe may
-not itself be based on something - existed only in conversation, so
-nothing stopped a chain four deep; a list where every entry names what
-it derives from has to be read rather than scanned; and the sharing it
-bought is speculative, since typing the same three settings into a
-second profile costs seconds, once.
+A third level - a profile `basedOn` another - was tried and dropped: a
+list where every entry names what it derives from has to be read rather
+than scanned, nothing stopped a chain four deep, and typing the same
+three settings into a second profile costs seconds, once.
 
 `ProfileOverrides` is `std::optional` throughout because "says nothing"
 must be distinct from "says false". For a shortcut that is three states:
@@ -1067,14 +1026,12 @@ controller back, which applies what changed to the window and writes the
 file. The live values are derived, never assigned, so there is no path
 by which what runs and what is stored can disagree.
 
-There used to be three ways in: plain fields were written in place
-through `Mutable()` and committed, overridable ones through setters, and
-hotkeys by the tray, which wrote the field and the file itself while the
-overlay wrote the same field again. `Mutable()` also reached the
-overridable fields, around the profile path, and nothing held what it
-wrote to a rule: the Settings panel restated each band beside its widget.
-One edit path means the rule is asked in one place, the file is written
-by one commit, and a new setting needs no code of its own to be edited:
+There is one way in. There were three - fields written in place and
+committed, overridable ones through setters, hotkeys by the tray - and
+nothing held what the first wrote to a rule, so the Settings panel
+restated each band beside its widget. One edit path means the rule is
+asked in one place, the file is written by one commit, and a new setting
+needs no code of its own to be edited:
 the Settings panel's widgets take a row (`ui/settings_widgets.h`). A
 summon hotkey is still registered with the OS first, since a combination
 another application owns must not be stored; the tray then makes the
@@ -1106,9 +1063,8 @@ popover state, toasts, and GPU caches that exist only for drawing.
 The UI holds the model as `const CanvasManager&`. Every change it makes -
 a pin, a rename, a slider, a drag, a paste - is a session command, so a
 change reaches the history, the disk and the GPU in one place, and the
-compiler refuses one that tries to go around them. Before, the UI wrote
-fields through references in some forty places and then called
-`MarkChanged`, and each of those sites had to remember, separately, to
+compiler refuses one that tries to go around them. When the UI wrote
+fields in place, some forty sites each had to remember, separately, to
 file an undo entry, to forget history when a snippet left its canvas, or
 to sync textures - which is where the history's gaps came from.
 
@@ -1133,13 +1089,8 @@ a friend of the session; nothing in `src` can reach it.
 Each command the session runs is written to the library before it
 returns, in one transaction: the file holds what the model holds at
 every moment but the middle of a gesture, and there is nothing to save.
-This replaced a debounced autosave (2 s of quiet, 15 s at most), with a
-flush at every point no frame followed, a retry clock of its own for a
-failed save, a background timer for the retries while hidden, pixels
-kept in memory for a capture whose picture could not be written, and a
-recovery copy written beside the library at exit when it still could
-not be - and the store's diffing of every row against what it had last
-written, to find what a save had to write. All of it existed to carry
+The debounced autosave it replaced (see "Dead ends") needed flushes,
+retries, a recovery copy and a store that diffed every row, all to carry
 changes that were in memory and not yet on disk; there are none.
 
 **What a command writes** is worked out, not said: before it runs, the
@@ -1169,9 +1120,8 @@ the history for it, and an undo or redo whose write fails puts its step
 back on its stack as it was. A disk that is full or a file another
 program holds loses the change being made, visibly, and nothing else: a
 screenshot that cannot be written is not taken, rather than kept in
-memory looking captured. Before, the same failure kept every change
-since in memory, and an exit while it lasted lost all of them unless the
-recovery copy could be written somewhere else.
+memory looking captured. Under the autosave, the same failure kept every
+change since in memory, for an exit to lose.
 
 A gesture - a drag, a slider, a note being typed, the eraser - is
 previewed in the model and written once, as the command it ends in; its
@@ -1212,17 +1162,16 @@ once more before the app goes.
 Exit and the OS ending the session (`WM_QUERYENDSESSION`, answered TRUE
 after settling, and `WM_ENDSESSION` again for good measure) reach the
 app as a broadcast to every *top-level* window, and Windows leaves
-message-only (`HWND_MESSAGE`) windows off that list - which the host
-window was when the handling was first written, so no logoff could have
-reached it. It is now an ordinary hidden top-level window, and the test
-finds it with `FindWindow`, which likewise sees only top-level windows,
-and sends it the query. Being top-level, it also receives `WM_CLOSE` -
-`taskkill` without `/f` posts it - which `DefWindowProc` answered by
-destroying the window and nothing else: the process ran on with no tray
-icon and no hotkeys, still holding the single-instance mutex. A close
-from outside, and the Restart Manager's `ENDSESSION_CLOSEAPP`, now take
-the tray menu's Exit, and a close-app runs no session-end settling
-before the exit's own. So does a `WM_CLOSE` sent to the overlay take the
+message-only (`HWND_MESSAGE`) windows off that list. So the host window
+is an ordinary hidden top-level window - as a message-only one, no
+logoff reached it - and the test finds it with `FindWindow`, which
+likewise sees only top-level windows, and sends it the query. Being
+top-level, it also receives `WM_CLOSE` - `taskkill` without `/f` posts
+it - which `DefWindowProc` would answer by destroying the window and
+nothing else, leaving a process with no tray icon and no hotkeys, still
+holding the single-instance mutex. A close from outside, and the Restart
+Manager's `ENDSESSION_CLOSEAPP`, take the tray menu's Exit, and a
+close-app runs no session-end settling before the exit's own. So does a `WM_CLOSE` sent to the overlay take the
 Exit, which is where `taskkill` sends it while the overlay is up - it
 closes the windows it can see, and the host window is hidden. Alt+F4
 over the overlay arrives as `SC_CLOSE` instead, and stays swallowed.
@@ -1236,20 +1185,11 @@ raster, the frozen screen - at the moment it is drawn, and made from its
 pixels when there is none: a picture read from the library, a thumbnail
 read or scaled down, a raster uploaded from its bitmap, the frozen
 screen from the pixels the session keeps. A handle is good for the frame
-it was asked for in, and nothing keeps one past it.
-
-Before, a handle was a field of the picture, in the model, and four
-owners kept their own: the pictures, the frozen screen, the Overview's
-thumbnails and the stroke rasters. Each released on occasions of its own
-- a canvas switch, a delete, an erase for good, a failed write's
-rollback - and a replaced device had to be answered by each of them,
-from a list in the frame that a fifth owner would not have been on,
-and would have drawn a dead texture after a driver reset: a crash, and
-only in the rare case. The model carried the GPU through all of it: a
-checkpoint compared snippets "in all but the texture", a rollback handed
-textures back to release, a copy reset its handle so as not to release
-it twice. The picture is content only now, and none of that is anyone's
-concern.
+it was asked for in, and nothing keeps one past it. With four owners
+of their own, each releasing on occasions of its own, a replaced device
+had to be answered by each of them, from a list a fifth owner would not
+have been on (see "Dead ends"); and the model carried the GPU through
+every checkpoint, rollback and copy.
 
 **What is not drawn goes.** A texture no one asked for through a whole
 frame is released at the start of the next (`TextureCache::BeginFrame`).
@@ -1259,14 +1199,10 @@ whose write failed - each gives its textures back without anyone saying
 so. What must stay while it is not drawn is asked for all the same:
 each frame begins by asking for the textures of every snippet on the
 current canvas (`CanvasView::KeepCurrentCanvasTextures`), minimized ones
-and those the pinned view leaves out included. That is the budget there
-was before: only the current canvas is on the GPU, since a library of
-fifty 4K captures would otherwise pin ~1.6 GB of VRAM behind a game. The
-frame of grace covers a canvas switched away from after something of it
-was drawn. And since a picture's texture is asked for as it is drawn, a
-canvas switched to in the middle of a frame - Alt+wheel is handled from
-the frame - is drawn whole, where a load gated on the canvas having
-changed once drew a frame of placeholder gradients.
+and those the pinned view leaves out included: only the current canvas
+is on the GPU, since a library of fifty 4K captures would otherwise pin
+~1.6 GB of VRAM behind a game. The frame of grace covers a canvas
+switched away from after something of it was drawn.
 
 **A failure is remembered.** A texture that could not be made - no
 pixels, or an upload that failed - is kept as 0, so that a picture that
@@ -1279,7 +1215,8 @@ shows the new snippet does not decode the picture just written.
 
 **A release waits for the frame.** A texture may be released mid-frame
 after it has already been drawn into that frame: the frozen screen
-dropped as the overlay goes, a texture made again in place of another. ImGui's draw commands hold the raw pointer without a
+dropped as the overlay goes, a texture made again in place of another.
+ImGui's draw commands hold the raw pointer without a
 reference and are only submitted at the end of the frame, so the D3D11
 renderer holds releases made between `NewFrame` and `RenderAndPresent`
 until the frame has been handed to D3D, which keeps what it uses alive
@@ -1288,11 +1225,11 @@ asking each of them to order its mutations before its drawing.
 
 **A lost device is replaced in place.** The driver can take the D3D11
 device away: an update, or a restart after it stopped responding, which
-a game underneath can cause. Before this was handled, every later frame
-failed silently, so the overlay was blank for the rest of the process
-while its input grab still took the input. And a resize that could not
-make its render target left none, which the next frame cleared: an
-access violation inside d3d11.dll. `ReadyToRender`, at the start of each
+a game underneath can cause. Unanswered, every later frame fails
+silently - the overlay blank for the rest of the process while its
+input grab still takes the input - and a resize that cannot make its
+render target leaves none for the next frame to clear: an access
+violation inside d3d11.dll. `ReadyToRender`, at the start of each
 frame, checks the device and replaces a lost one, with the swapchain,
 the filter shaders and ImGui's backend. The ImGui context stays, and
 ImGui makes its font atlas again by itself. While no device can be made,
@@ -1324,13 +1261,6 @@ shown, the overlay put away, the device replaced and uploads failing -
 with every frame's draw lists checked against the textures the fake
 window has live on its current device, none released twice, and the
 window holding exactly the textures the cache does.
-
-A window nobody can see is skipped the same way. With the screen locked
-or the secure desktop up, `Present` returns `DXGI_STATUS_OCCLUDED` at
-once instead of waiting for vsync, and a frame loop drawing every frame
-used a whole core until unlock. Once a present has said so, each frame
-first asks with `DXGI_PRESENT_TEST`, which draws nothing, and waits
-while the answer is still occluded.
 
 **A copy owns its pixels.** The clipboard holds ids, not pixels, and a
 copy made from them (paste, duplicate, copy to another canvas) must not
@@ -1653,17 +1583,13 @@ what the frame's own state calls for is done in Prepare, before anything
 is drawn from it, and what a widget asks for in Apply, after. What a
 widget asks for - a tile clicked, a drop, a name let go of, a menu's row,
 a delete - is a value (`ui/view_action.h`) recorded as it is drawn and
-done in Apply, in the order recorded (`OverlayApp::Act`). Before, each
-widget acted one of four ways: in place in the middle of the draw, at the
-end of its own draw function, through the effect queue, or through
-`Dispatch`. A click on a canvas bar tile switched the canvas halfway
-through the frame, and everything drawn after the bar - the popups, the
-border that shows only on an empty canvas - was drawn from the other
-canvas. Now a frame draws the library Prepare left, and the change shows
-in the next frame. The same act also takes one path now: the Overview's
-tile goes through `Editor::SwitchCanvas`, which ends the canvas scope,
-as the bar's does, and the bar's "+" and Overview buttons are the
-NewCanvas and Overview commands rather than a copy of what they do. What
+done in Apply, in the order recorded (`OverlayApp::Act`). A widget that
+acted in the middle of the draw - a canvas bar tile switching the canvas
+halfway through the frame - left everything drawn after it drawn from
+the other canvas. A frame draws the library Prepare left, and the change
+shows in the next frame; and one act takes one path, wherever it is
+asked (a tile in the Overview and on the bar both go through
+`Editor::SwitchCanvas`, the bar's "+" is the NewCanvas command). What
 stays in the draw is a widget's own value: a setting
 (`docs/SETTINGS.md`), a snippet's style or a note's text as the session
 previews it, the pen's color while the chooser is dragged. None of these
@@ -1671,13 +1597,11 @@ adds, removes, reorders or switches anything a draw is walking.
 
 The stack is set once a frame, after the draw (`StackSurfaces`): each
 surface brought to the front in the order of `docs/VIEW_LAYER.md`,
-section 3, and each popup ImGui opened inside one just above it. Before,
-19 calls in eight files each brought a window to the front as it was
-drawn, and since the last call in a frame wins, the order was that of
-the calls: two faults - a Settings dropdown that opened behind the panel
-and could not be clicked, a color picker that flashed up and vanished -
-were each fixed by moving a call, and the order that resulted was
-written down nowhere.
+section 3, and each popup ImGui opened inside one just above it. With a
+call beside each window's draw, the last call in a frame won, so the
+order was that of the calls, written down nowhere: a Settings dropdown
+that opened behind the panel and a color picker that flashed up and
+vanished were each fixed by moving a call.
 
 ### Making a snippet
 
@@ -1742,13 +1666,9 @@ changes nothing. Drawing and Screenshot place a new snippet with the
 next press, anywhere, then hand over: a drawing to Draw, a screenshot to
 the tool that was in hand before.
 
-There were seven tools once - Pen, Rectangle, Line, Eraser, RectEraser,
-Text and Move - with three favorite slots of them on a right-click ring
-menu, so the tool wanted was usually not on a slot and the slots were
-rebound all the time. The ring and the flat tool strip that mirrored it
-went: with the selection bar carrying every action on a snippet and the
-canvas bar reaching the Overview, they added a gesture to learn and
-nothing to reach.
+A ring menu of favorite tool slots came before (see "Dead ends"): with
+the selection bar carrying every action on a snippet and the canvas bar
+reaching the Overview, it added a gesture to learn and nothing to reach.
 
 ### Drawing is a mode, entered on one snippet
 
@@ -1773,8 +1693,7 @@ level is empty, rather than kept beside it. Each answers Escape - drawing
 mode is left, the tool put down - so Escape's stages fall out of it
 passing down the stack: a gesture canceled, then a popup, a note or a
 panel closed, then drawing mode or the creation tool, and only then, at
-the Canvas level, a cut called off and the selection cleared. That order
-was an `if` chain in `PutDown`. Drawing mode also claims Delete and the
+the Canvas level, a cut called off and the selection cleared. Drawing mode also claims Delete and the
 arrow keys, which act on a snippet from outside and not on the one being
 worked in.
 
@@ -1807,10 +1726,9 @@ What a press on the canvas means is decided in one place,
 `RecognizePress` (`ui/interaction/recognizer.*`): the rules of
 `docs/INTERACTIONS.md`, section 6.5, tried in order, the first that
 matches deciding what the press does at once and which interaction it
-starts on the Gesture level of the machine (see "Input, in order"). The
-same decisions were spread over `OnMouse`, `HandleItemGesture`,
-`HandleCreationGesture` and `HandleStrokeEvent`, and depended on the
-order they were asked in. A press over one of ImGui's windows is the
+starts on the Gesture level of the machine (see "Input, in order"),
+rather than in several handlers whose answers depended on the order
+they were asked in. A press over one of ImGui's windows is the
 window's (rule 1, `io.WantCaptureMouse`); a gesture in flight takes its
 moves and its release wherever they land, so straying over a panel
 mid-drag cannot hand the event to it. A move or resize is a snapshot
@@ -1824,10 +1742,9 @@ nothing until one of them happens. It does at once only what every
 meaning shares: the first click on a snippet selects it, and a
 double-click then extends that into drawing mode, so no click waits the
 double-click time for its answer. The move begins only once the press
-is a drag, with the snapshot taken from the press; it used to begin at
-the press, and a hold dropped it again. A double-click on empty canvas
-makes its snippet on the second press, as one on a snippet enters
-drawing mode on it, where it waited for the release. When a gesture
+is a drag, with the snapshot taken from the press. A double-click acts
+on its second press: on empty canvas it makes its snippet, on a snippet
+it enters drawing mode. When a gesture
 ends with its button still down - canceled, interrupted, a hold that
 acted, a double-click acted on at its press - the rest of the press is
 `Spent`, which swallows it and any other button until the release: the
@@ -1854,17 +1771,12 @@ What the pointer is doing is one interaction on the Gesture level -
 `BoxSelect`, `Framing`, `Marking` (a stroke, a shape, the eraser's path
 or its rectangle, and the right button's erase) or `Widget` (a press on
 one of ImGui's windows, held: a slider, a tile dragged) - or nothing
-(`ui/interaction/gestures.*`). Before the machine it was a
-`std::variant` in `OverlayApp::Hand`, and before that a field per kind,
-which excluded each other only by the order `OnMouse` asked in; each
-place that forgot one was a bug. A drag went on moving a snippet a Delete
-had hidden and filed that move after the delete, so the first undo did
-nothing to be seen; an undo mid-drag restored a placement the drag then
-wrote over, losing that step; a stroke outlived the Escape that left its
-drawing mode; and a canvas switch settled the left button's gestures
-only, so a right-drag resize went on across it. Each gesture answers
-every event kind in one switch (`Gesture::Offer`), so there is no event
-a gesture has no answer for. How one is ended early is the next
+(`ui/interaction/gestures.*`). As a field per kind, the gestures
+excluded each other only by the order a handler asked in, and each place
+that forgot one was a bug: a drag moving a snippet a Delete had hidden,
+a stroke outliving the Escape that left its drawing mode. Each gesture
+answers every event kind in one switch (`Gesture::Offer`), so there is
+no event a gesture has no answer for. How one is ended early is the next
 section's.
 
 The selection bar floats over the selection's bounding box, or below it
@@ -1907,10 +1819,8 @@ room either side of a point halfway down, and flipping alone moved it
 off the top instead of the bottom.
 
 The menu is the one place a snippet's actions live. The Properties
-popover (the bar's More button) had a row of the same actions as icon
-buttons, and kept it for a while after the menu arrived; it went, and
-the popover is left with what describes a snippet rather than what is
-done to it - the two opacities, the background color and the text's
+popover (the bar's More button) holds what describes a snippet rather
+than what is done to it - the two opacities, the background color and the text's
 size and color. Its colors are a picker each, with no preset swatches
 beside them: the picker does the whole job, and a row of presets was a
 second way to do part of it. The background keeps one swatch, white,
@@ -1955,11 +1865,10 @@ happens, so no snippet being framed is made, no held bar button fires, no
 right click opens a menu, and a rectangle erase erases nothing. A note
 being typed is committed. The rest of the held button's press is Spent,
 and its release ends that. An undo pressed mid-stroke therefore takes
-back the stroke so far, the most recent thing done. There used to be a
-second way to end a gesture, a synthesized release through `OnMouse`,
-for canvas switches and hiding; it made a region being framed and fired a
-held bar button - things nobody asked for, over a canvas they had not
-clicked on.
+back the stroke so far, the most recent thing done. Ending a gesture as
+a release would have - which is how it was once done - makes a region
+being framed and fires a held bar button: things nobody asked for, over
+a canvas they had not clicked on.
 
 What ends is said in one place, the scope (`Editor::Settle`), for the
 commands and for the moments no command follows. The overlay put away -
@@ -1971,8 +1880,7 @@ exiting, end everything above the canvas. All of these go through one
 sequence, `OverlayApp::Settle`: the scope, then the drawing a stray click
 made - after the gesture, which may have put a stroke into it - then
 what only a frame of edit mode would otherwise keep, a slider's preview
-and the pen. These were four hand-written functions, each with its own
-list of what to reset.
+and the pen.
 
 Escape is not such a command while a gesture is in flight: the gesture
 sees it first and is *canceled* - a stroke, a shape or an erase leaves
@@ -2024,15 +1932,12 @@ has the nudge preview into the burst's placement rather than file a step
 of its own (`Editor::Filing`). The wheel's size and opacity are not
 commands, and only a burst reaches them.
 
-Bursts used to be recognized after the fact: a step filed within a
-second of the last one of its kind, with the history's revision
-unchanged, was merged into the step on top. That needed the revision
-check to keep a drag or an undo in between from being merged into, and
-could not be canceled, since the steps were already filed. As an
-interaction, what comes in between ends the burst, and nothing is filed
-until it is over. The second stays, as the end of an interaction the
-wheel has no other end for: a run of arrow presses within it is one
-undo, as it has always been.
+As an interaction, what comes in between ends the burst, and nothing is
+filed until it is over; merged into the step on top after the fact, as
+bursts once were, a step could be neither kept apart from a drag in
+between nor canceled (see "Dead ends"). The second stays, as the end of
+an interaction the wheel has no other end for: a run of arrow presses
+within it is one undo.
 
 All of this follows `docs/INTERACTIONS.md`, the reference for how input
 behaves: every input through one state machine - a stack of
@@ -2088,7 +1993,7 @@ but the hand is the overlay's to settle. A hotkey reaches it as an event
 of the input machine (`OverlayApp::OnHotkey`), which every level passes
 on to the command - hidden or not, with no frame needed. `Dispatch` asks `Available`,
 ends what the command's scope covers, and runs it. So settling
-first is no longer something each command has to remember: nothing runs
+first is not something each command has to remember: nothing runs
 a command any other way, and `Run` is one exhaustive switch.
 
 `Available` is the model's answer - Delete with nothing selected does
@@ -2104,12 +2009,10 @@ Whether a key *reaches* its command from where it is pressed is a
 separate question, and the stack's answer: a key reaches the Canvas level
 only if every level above passed it. A note being typed, a name being
 edited or a row waiting for a key claims every key; a popup every key
-but the global hotkeys, so no undo, tool or clipboard key acts on the
-canvas under a menu (before, they did, and the menu stayed up over a
-canvas that had changed); a panel every key but the global hotkeys and
-its own, so the cheat sheet's key closes the cheat sheet. That replaced
-`KeyReaches`, one switch of conditions per command that had been three
-key handlers before it. Delete and the arrows do nothing in drawing
+but the global hotkeys, so no undo, tool or clipboard key changes the
+canvas under a menu left up over it; a panel every key but the global
+hotkeys and its own, so the cheat sheet's key closes the cheat sheet.
+Delete and the arrows do nothing in drawing
 mode, where the snippet is being worked in rather than on - the Mode
 level's to say, once drawing mode is on the stack.
 
@@ -2119,16 +2022,9 @@ profile that bound one key twice. A fixed key matches exactly the
 modifiers it names, except Escape, Delete and the arrows, which never
 cared (a nudge reads Shift itself, for ten pixels). The cheat sheet's
 rows and the menus' key labels are read from the same table, so they
-show what is bound, not what a string says is.
-
-Three behaviors changed with this, each toward one rule:
-
-- A menu row runs the same command as its key. Empty canvas's "New
-  screenshot" row picked the tool even when it was in hand already; it
-  now puts it down again, as its key does.
-- An unavailable command does not settle. `Ctrl+V` with nothing to paste
-  used to end a stroke in flight; now it does nothing.
-- Undo and redo match their keys exactly: `Ctrl+Alt+Z` no longer undoes.
+show what is bound, not what a string says is; and a menu row runs the
+very command its key does, so the two cannot differ ("New screenshot"
+with the tool in hand puts it down, as `S` does).
 
 `KeyCombo` grew a range of named keys for the fixed bindings (Escape,
 Delete, Backspace, the arrows), outside what a global hotkey or a key
@@ -2141,11 +2037,9 @@ The window hands the app one stream of input
 (`IOverlayWindow::SetInputCallback`): presses, moves and releases of all
 five buttons, the wheel, keys and modifier changes, each with its time
 and the modifiers held, in the order they happened - section 3 of
-`docs/INTERACTIONS.md`, whose phase 2 this is. Before, the pointer came
-from the message pump while keys, the wheel and the modifiers were read
-from ImGui at the next frame, so a key pressed between two moves of a
-drag was seen after both: the drag had gone on to the second move by the
-time the key ended it. Now each event is handled as it arrives.
+`docs/INTERACTIONS.md` - and each is handled as it arrives. Read from
+ImGui at the next frame instead, as keys once were, a key pressed
+between two moves of a drag is seen after both.
 
 - The modifiers are the key state or'd with the input grab's record,
   the two sources the frame already gave ImGui (see RenderFrame), and a
@@ -2153,8 +2047,8 @@ time the key ended it. Now each event is handled as it arrives.
   once a frame. The handlers read the stream's (`Editor::Held`), not
   ImGui's, which are last frame's.
 - A key's repeat is the window's to count, since the grab posts every
-  repeat as a fresh press. Undo and the arrows now repeat at the
-  system's keyboard rate rather than ImGui's.
+  repeat as a fresh press. Undo and the arrows repeat at the system's
+  keyboard rate.
 - A hidden window hands on nothing. Messages still arrive: the grab
   passes on the key of the hotkey that hid the overlay, after the hide.
 - Moves under the grab are still sampled once a frame, never one per
@@ -2187,11 +2081,9 @@ a press Spent, and what the overlay coming up forgets
 What only a frame can do - opening a popup, closing the top one on
 Escape - is queued as an effect (`Popups::Effect`) and done in the
 next frame, just before the popups are drawn, where every popup's id is
-hashed at the top level. That replaced a request flag per popup. Done at
-the very start of the frame instead, the canvas bar's menu was closed
-again before it was drawn. Of two popups asked for before a frame, the
-one asked for last now comes up; before, it was whichever the frame
-drew last.
+hashed at the top level. Done at the very start of the frame instead,
+the canvas bar's menu was closed again before it was drawn. Of two
+popups asked for before a frame, the one asked for last comes up.
 
 Every popup the app opens - the three context menus, the Properties
 popover, the color chooser, the delete confirmation - is an interaction
@@ -2213,30 +2105,22 @@ The view keeps one record of the popup that is up
 (`Popups::PopupRecord`, `ui/view/popups.*`): its kind, what it is about, where it opens,
 and whether a frame has drawn it - set as it is asked for, let go of as
 it closes (`docs/VIEW_LAYER.md`, section 4). The machine allows one popup
-at a time, so one record is enough; there used to be a copy per kind,
-each under a name of its own, and `PopupShowing` read six of them. What
-closing a popup does (`Popups::Closed`) is done once, however it closes: by
-the draw that finds ImGui without a popup the record says was drawn, or
-at once when the machine ends it from outside. Before, only the draw
-noticing did it, so a popup ended while nothing drew it closed late or
-never: the color chooser, put away with the overlay and then the app
-exited from the tray, lost the color picked in it. And Properties'
-closing ran on every frame it was not up, which ended the style edit a
-spin of Ctrl and the wheel holds open after every notch - three undo
-steps for one spin, and nothing for Escape to call off. The pen's width
-and color are also kept when the overlay settles (`KeepPen`), as a
-settings preview is committed: the width was kept only once the wheel's
-size preview had faded, drawn, and put away within that second it was
-lost at exit too.
+at a time, so one record is enough. What closing a popup does
+(`Popups::Closed`) is done once, however it closes: by the draw that
+finds ImGui without a popup the record says was drawn, or at once when
+the machine ends it from outside. Done only by a draw noticing, a popup
+ended while nothing drew it closed late or never - the color chooser,
+put away and the app then exited from the tray, lost the color picked
+in it. The pen's width and color are also kept when the overlay settles
+(`KeepPen`), as a settings preview is committed, since the wheel's size
+preview keeps the width only once it has faded, drawn.
 
 A note being typed into is the Text level's (`TypingNote`), pushed by
 the press that opens it. Every key is the field's; a press on the field,
 or on any of ImGui's windows, is ImGui's; a press anywhere else is passed
 on, still with the note open - which is what keeps that press from making
 a snippet - and the field, let go of, keeps what was typed. Escape ends
-the typing and keeps the text too. It replaced `Hand::noteOpenAtPress`,
-which existed because settling the untouched drawing could close the note
-before the press asked whether one was open; the recognizer asks first.
+the typing and keeps the text too.
 
 The Overview and the cheat sheet are the Panel level's (`Panel`): pushed
 as they open, ended by their own widgets (the backdrop, a canvas picked),
@@ -2245,11 +2129,9 @@ is started below them. A name being edited in the Overview (`NameEdit`)
 and a Settings row waiting for a key (`KeyCapture`) are Text interactions
 above it, so Escape reaches them first: on a waiting row it binds nothing
 to a chosen key, and only stops a hotkey's row waiting, without closing
-the Overview - before, Escape on a hotkey's row closed the whole panel.
-A row takes its key from the input stream rather than from ImGui, and a
-global hotkey that fires while a hotkey's row waits is the key it takes
-(the tray used to ask the overlay first, `CompletesAHotkeyCapture`). The
-input options HUD's number keys are the Canvas level's, ahead of any
+the Overview. A row takes its key from the input stream rather than from
+ImGui, and a global hotkey that fires while a hotkey's row waits is the
+key it takes. The input options HUD's number keys are the Canvas level's, ahead of any
 command they might be bound to.
 
 ### Item text
@@ -2380,10 +2262,9 @@ Every key and gesture on one panel, `Ctrl+H` by default and in the
 empty canvas's menu. It exists mostly for what nothing else shows: a
 tool key is on its button's tooltip, but Alt-drag in drawing mode, a
 right-drag that resizes or the modifier that makes a press a drawing are
-nowhere on screen. The welcome note shrank to match: one gesture, the
+nowhere on screen. So the welcome note carries only one gesture, the
 right-click menus, the key that brings the overlay back and the sheet's
-own key. The other hotkeys moved to the sheet, where they can be kept
-current.
+own key, and the sheet the rest, where they can be kept current.
 
 Rows are built from the bindings as they are (`BuildCheatSheet`): the
 summon hotkeys, the shortcuts the active profile resolves to and the
@@ -2427,14 +2308,10 @@ the live folders and canvases around it stay fully usable, only dimmed.
 Snippets are left out: a deleted snippet comes back by undo or not at
 all (see Deletion is a mark).
 
-Two designs came before. The first showed deleted things in place in a
-mode that let them be looked at but not changed, which needed a
-read-only check at every edit and a banner for a deleted canvas. The
-second was a list of everything with a stamp of its own, newest first,
-with a preview, what it held and when it went. It answered "what did I
-delete half an hour ago", but not where a restore would put a thing, and
-snippets - which undo already covers - crowded out the folders and
-canvases it was for.
+A mode that showed deleted things in place but read-only, and then a
+list of everything deleted, newest first, came before (see "Dead ends"):
+the first needed a read-only check at every edit, and the second could
+not show where a restore would put a thing.
 
 ### Cursors and the demo mark
 
@@ -2453,8 +2330,8 @@ snippet and every popup over the canvas, and below only the panels, the
 delete confirmation and what ImGui's foreground list carries: a mark a
 snippet can be parked on top of is not one. It wanders every ten seconds across a 3x3 grid, never
 landing where it was, so it cannot be hidden permanently under a snippet
-that is never moved again. It needs no special handling for capture:
-the platform hides the whole overlay before grabbing pixels.
+that is never moved again. It needs no special handling for capture,
+which leaves the whole overlay out (see "Screen capture").
 
 ### ImGui gotchas worth knowing before touching this code
 
@@ -2541,17 +2418,12 @@ in every state, and what the window is told on the way, is
 The controller holds the state, and changes it in one place:
 `Apply(Next(state, request, facts))`, where `Next` (`app/overlay_states`)
 is the table and `Apply` carries a transition out in the one order the
-document gives. It used to keep no state of its own, reading the
-window's `IsVisible()` and the overlay's view-only flag instead, so that
-no `mode_` member could go stale. That held for three states; with five,
-the flags - view-only, notice, pinned, and whether the showing had a
-profile - were what went stale, and every caller combined them its own
-way. The overlay's flags are one `OverlayMode` now, which the controller
-sets, and a debug build checks after every transition that it, the
-window and the session agree with the state. (Found while writing
-`docs/OVERLAY_STATES.md`: this section said two hotkeys drive three
-states, which stopped being true when the pinned view and the notice
-came.)
+document gives. Reading the state back from the window and the overlay's
+flags instead, so that no member could go stale, held for three states;
+with five, the flags were what went stale, and every caller combined
+them its own way. The overlay's mode is one `OverlayMode`, which the
+controller sets, and a debug build checks after every transition that
+it, the window and the session agree with the state.
 
 **Pinned snippets.** Whenever the current canvas has a pinned snippet,
 "hidden" is the pinned view instead: view-only with every other snippet
@@ -2568,9 +2440,8 @@ watching it fail on the real thing: showing a window activates it
 window given `WS_EX_LAYERED` before its first show draws nothing, so the
 order is show first, click-through styles second - with the window
 already counted click-through for the input grab, which a show in edit
-mode starts and the passthrough a moment later took down again. Those
-are now the window's own rules for every change it is told to make (see
-"The window is told what to be", below); and
+mode would start. Those are the window's own rules for every change it
+is told to make (see "The window is told what to be", below); and
 ImGui's clock is not the app's clock, so the first frame after an hour
 in the tray carries an hour's delta and puts every expiry set while
 hidden in the past - the renderer caps the delta at 0.1 s.
@@ -2579,38 +2450,31 @@ hidden in the past - the renderer caps the delta at 0.1 s.
 hidden, click-through or interactive, and the window gets there in the
 order only it knows: a plan of steps from `PresentationSteps`
 (`platform/presentation.h`), pure and tested on every pair, which the
-Win32 window carries out. It replaced four calls - show, show
-click-through, hide, passthrough - whose order each caller chose, and
-view mode came up the way that went wrong: shown as edit mode and made
-click-through a moment later, which started the input grab and, with
-"Don't steal focus" off, took focus from the game only to hand it back.
-Focus is taken by one step, which notes the window it was taken from,
-and handed back only while the overlay holds it. Noted at the show
-instead, as it was, the note could be hours old: view mode from the
-pinned view handed focus to whatever had it when the pinned view came
-up. Each fault was reproduced on the real desktop before the change and
-gone after it (`docs/OVERLAY_STATES.md`, section 7).
+Win32 window carries out. With the order each caller's to choose, view
+mode came up as edit mode made click-through a moment later, which
+started the input grab and, with "Don't steal focus" off, took focus
+from the game only to hand it back. Focus is taken by one step, which
+notes the window it was taken from, and handed back only while the
+overlay holds it: noted at the show instead, the note could be hours
+old (`docs/OVERLAY_STATES.md`, section 7, has the faults and how each
+was reproduced).
 
 **Transitions happen between frames.** Two requests arrive inside a
 frame - a notice's message has faded, and the input options HUD asks
 for a restart - and a committed setting usually does too. Each is
 posted (`IPlatformHost::Post`) and carried out after the frame, before
 the next: Win32 queues it and posts the host window a message, which the
-loop dispatches before it draws. The notice used to hide itself, and the
-restart hide and show the window, from inside the frame callback, on the
-reasoning that the renderer ends the frame whatever happened in it - true,
-but something every change to the renderer had to keep true. The
-settings file is still written in the frame, where a failure is said.
+loop dispatches before it draws. Hiding or restarting the window from
+inside the frame callback relied on the renderer ending the frame
+whatever happened in it - true, but something every change to the
+renderer would have to keep true. The settings file is still written in
+the frame, where a failure is said.
 
 **What a setting does to the window is decided after the frame, in one
 place.** `ApplySettingsToWindow` compares what the settings running want
 with what the window was last given: no-activate, the input options,
-whether a frozen screen is held, and the display. The Settings panel
-used to let go of the frozen screen from inside its draw, on every frame
-it was shown, and to commit a picked monitor through a one-frame latch,
-so that the move came before the frame drew. Both were effects of
-drawing that the tray already decided elsewhere, and the latch's reason
-went when the window's half of a commit moved after the frame. Switching
+whether a frozen screen is held, and the display - rather than the
+Settings panel doing it from inside its draw. Switching
 the frozen screen on still waits for the next entry into edit mode
 (`docs/SETTINGS.md`, section 7).
 
@@ -2645,9 +2509,7 @@ if the OS accepts. A set combination that cannot be registered - another
 application owns it - is left unregistered and named at the start, for
 any of the four: the tray menu reaches the overlay without one (see "A
 hotkey another application owns does not stop the start", under
-Configuration). (Found while writing `docs/OVERLAY_STATES.md`: this still
-said such a hotkey was fatal for the three that bring the overlay up,
-after that had changed.) A first run - nothing on disk at all - shows the overlay in edit
+Configuration). A first run - nothing on disk at all - shows the overlay in edit
 mode with a welcome note, since an app that installs a tray icon and then
 waits for a chord it never mentioned is indistinguishable from one that
 did not start.
@@ -2677,6 +2539,13 @@ teardown, so fast repeated toggling has no re-creation latency. While
 hidden the event loop blocks in `GetMessage` and nothing is rendered,
 which is what delivers near-zero idle CPU. `Destroy` happens once, on
 exit.
+
+A window nobody can see is not drawn either. With the screen locked or
+the secure desktop up, `Present` returns `DXGI_STATUS_OCCLUDED` at once
+instead of waiting for vsync, and a frame loop drawing every frame used
+a whole core until unlock. Once a present has said so, each frame first
+asks with `DXGI_PRESENT_TEST`, which draws nothing, and waits while the
+answer is still occluded.
 
 ### Text is UTF-8, and so is the code page
 
@@ -3253,8 +3122,10 @@ one twice.
   or a screenshot; replaced by a caption any item can carry.
 - **A trash folder, then a trash library.** Replaced by a deletion mark
   in place and a Recently deleted list.
-- **A Recently deleted list.** Newest first, snippets and all; could not
-  show where a restore puts a thing. Replaced by Show deleted, in place.
+- **Deleted things shown in a read-only mode**, then **a Recently
+  deleted list**, newest first, snippets and all. The first needed a
+  read-only check at every edit; the second could not show where a
+  restore puts a thing. Replaced by Show deleted, in place.
 - **Profiles based on other profiles.** A third level nobody could see;
   replaced by exactly two levels.
 - **One library file of JSON.** 42 MB rewritten every two seconds at
@@ -3270,6 +3141,19 @@ one twice.
   database"). It compared snippets to what it had written by a hash of
   their fields, which had to be kept in step with the serializer by
   hand; each command now says which rows it changed (see "A write").
+- **A debounced autosave** (2 s of quiet, 15 s at most), with a flush
+  wherever no frame followed, a retry clock and a background timer of its
+  own, pixels kept in memory for a capture not yet written, a recovery
+  copy beside the library at exit, and a store that diffed every row
+  against what it had last written. All of it carried changes that were
+  in memory and not on disk; replaced by writing every command as it is
+  made.
+- **Texture handles in the model**, kept by four owners - the pictures,
+  the frozen screen, the Overview's thumbnails, the stroke rasters -
+  each releasing on occasions of its own and each to be told of a
+  replaced device, with checkpoints, rollbacks and copies carrying them
+  along. Replaced by one cache that lets go of whatever went a frame
+  undrawn.
 - **PNG for captures.** Six to twenty times slower than QOI on this
   app's own screenshots. The PNG codec (stb) was kept for importing and
   exporting pictures that nothing ever imported or exported, and went
@@ -3287,6 +3171,29 @@ one twice.
   game for fifty 4K captures; replaced by per-canvas residency.
 - **A global undo stack.** Undid strokes on canvases not on screen;
   replaced by a stack per canvas.
+- **Bursts merged after the fact**: a step filed within a second of the
+  last of its kind, with the history's revision unchanged, merged into
+  the step on top. It needed the revision to keep a drag in between from
+  being merged into, and could not be canceled. Replaced by a burst as an
+  interaction, filed once it is over.
+- **Gestures as a field per kind**, excluding each other only by the
+  order the handlers asked in, then as a variant in `OverlayApp::Hand`,
+  ended early by a synthesized release that made what a release makes.
+  Replaced by interactions on the input machine's Gesture level,
+  interrupted or canceled.
+- **Where a key reaches, one switch of conditions per command**
+  (`KeyReaches`, three key handlers before it), and a request flag per
+  popup. Replaced by the stack of levels, and by the effect queue.
+- **Lifecycle events** offered to the input machine as the overlay went
+  away, came up or turned view-only. No level answered them; the scope
+  did the work, and does it alone (`OverlayApp::Settle`).
+- **The stack set by the draw**: nineteen calls in eight files each
+  bringing a window to the front as it was drawn, the order being that
+  of the calls. Replaced by one pass after the draw, in the order of
+  `docs/VIEW_LAYER.md`.
+- **Settings written in place** (`Mutable()`), beside the overridable
+  ones' setters and the tray's own writes of the hotkeys. Replaced by
+  one edit path through the catalog's rows.
 - **`SetCursorPos` to drive the real cursor under a grab**, fractional
   pointer drawing, an integral term for counter-injection, a dedicated
   sink thread, `BlockInput`, and a null-device-handle fallback for
