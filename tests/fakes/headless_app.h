@@ -140,6 +140,10 @@ protected:
             event.kind = platform::InputEventKind::Modifiers;
             SendInput(event);
         }
+        // The frame's time passing, as the real window tells it.
+        platform::InputEvent tick;
+        tick.kind = platform::InputEventKind::Tick;
+        SendInput(tick);
         ImGui::NewFrame();
         if (host_.overlayWindow.frameCallback) {
             host_.overlayWindow.frameCallback(ImGui::GetIO().DeltaTime);

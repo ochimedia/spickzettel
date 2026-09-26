@@ -39,7 +39,8 @@ TEST(Win32OverlayWindowTest, EveryInputMessageArrivesAsOneEventInOrder) {
     window.ShowClickThrough();
     std::vector<InputEvent> events;
     window.SetInputCallback([&events](const InputEvent& event) {
-        if (event.kind != InputEventKind::Modifiers) {  // whatever the real keyboard holds
+        // Not whatever the real keyboard holds, nor the frames' ticks.
+        if (event.kind != InputEventKind::Modifiers && event.kind != InputEventKind::Tick) {
             events.push_back(event);
         }
     });

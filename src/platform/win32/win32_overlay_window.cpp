@@ -1139,6 +1139,11 @@ void Win32OverlayWindow::RenderFrame() {
         renderer_->SetMousePositionOverride(false, 0.0f, 0.0f);
         seedPointerFromCursor_ = false;
     }
+    // The frame's time on the stream's own clock, after whatever moved -
+    // see InputEventKind::Tick.
+    InputEvent tick;
+    tick.kind = InputEventKind::Tick;
+    Emit(tick);
 
     renderer_->NewFrame();
     if (frameCallback_) {

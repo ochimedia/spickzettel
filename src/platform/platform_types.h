@@ -67,6 +67,9 @@ enum class InputEventKind {
     KeyDown,      // key, repeat
     KeyUp,        // key
     Modifiers,    // only when they change; every event carries them anyway
+    // Once a frame, after the frame's own pointer sample: the time passing
+    // with nothing else happening, which a press held still is judged on.
+    Tick,
 };
 
 // One thing the hand did, in the order it did it - see IOverlayWindow::
