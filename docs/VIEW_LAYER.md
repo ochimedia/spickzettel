@@ -1,10 +1,11 @@
 # The view layer
 
-Status: **proposed**, for review (2026-09-26). Nothing here is built yet.
+Status: **agreed** (2026-09-26); nothing here is built yet.
 Every behavior below is either what the app does today (unmarked, or
 said so) or a change (marked **Change**). "Today" means the app as of
-`73e091c`. Once agreed, it is built in the phases of section 10, and
-becomes the reference for how the overlay is drawn, as
+`73e091c`. The questions it was reviewed with, and their answers, are in
+section 11. It is built in the phases of section 10, and becomes the
+reference for how the overlay is drawn, as
 `docs/INTERACTIONS.md` is for input, `docs/OVERLAY_STATES.md` for the
 overlay's states and `docs/SETTINGS.md` for settings.
 
@@ -583,21 +584,22 @@ green throughout.
   makes at most one, but a drop and a field let go of can land in the
   same frame. That is the order today's in-place changes run in.
 
-## 11. Questions for review
+## 11. Questions for review, and the answers
 
 1. **Actions as values, or as closures?** Recommended: values, a
    `std::variant` of small structs. A closure is shorter to write, but it
    can capture a reference into the list being drawn, which is exactly
    what the deferral is there to prevent. A value can also be read by a
-   test.
+   test. *Answer:* as recommended.
 2. **The Overview's actions as commands?** Recommended: no (section 6,
    "Considered and not proposed"). They go through the editor instead,
    which ends the canvas scope for a switch as a command does. Where a
    command already does the same work, the command is used (C7).
+   *Answer:* as recommended.
 3. **How far the split goes.** Recommended: the ten owners of section 7.
    The alternative is three owners (the canvas, the panels, the chrome),
    which would leave the Overview and the Settings page together at about
-   2,300 lines.
+   2,300 lines. *Answer:* as recommended.
 4. **The border and the demo mark above the popups** (finding 3).
    Recommended: keep today's order. The stack's table records it, and
-   changing it would be a decision of its own.
+   changing it would be a decision of its own. *Answer:* as recommended.
