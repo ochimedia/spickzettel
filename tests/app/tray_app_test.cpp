@@ -645,8 +645,7 @@ TEST_F(TrayControllerPersistenceTest, StandInSettingsEraseNothingAndLeaveTheFile
     ASSERT_TRUE(controller.Initialize());
     EXPECT_NE(test::Model(controller.GetSession()).FindCanvas(3), nullptr);
 
-    controller.GetSettings().Mutable().strokeWidth = 12.0f;
-    controller.GetSettings().Commit();
+    controller.GetSettings().Set(setting::kStrokeWidth, 12.0f);
     EXPECT_EQ(ReadFile(dir_ / "config.json"), "not settings");
 }
 
@@ -1592,9 +1591,9 @@ TEST(TrayControllerDisplayTest, ChoosingAnotherDisplayWhileTheOverlayIsUpMovesIt
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
     ASSERT_EQ(host.overlayWindow.onDisplay.id, "fake-primary");
 
-    controller.GetSettings().Mutable().overlayDisplayId = "fake-left";
-    controller.GetSettings().Mutable().overlayDisplayName = "Left Display";
-    controller.GetSettings().Commit();
+    controller.GetSettings().Preview(setting::kDisplayId, std::string("fake-left"));
+    controller.GetSettings().Preview(setting::kDisplayName, std::string("Left Display"));
+    controller.GetSettings().CommitPreviews();
     host.RunPostedTasks();  // after the frame the choice was made in
 
     EXPECT_EQ(host.overlayWindow.onDisplay.id, "fake-left");

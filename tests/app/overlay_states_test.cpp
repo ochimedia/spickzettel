@@ -500,8 +500,7 @@ TEST_F(OverlayStatesTest, SettingsDisplaysAndTheSessionEndingChangeNoState) {
         const bool frozen = HoldsFrozenScreen(controller_->GetSession());
         host_.overlayWindow.calls.clear();
 
-        controller_->GetSettings().Mutable().showItemBorders = !AppSettings().Stored().showItemBorders;
-        controller_->GetSettings().Commit();
+        controller_->GetSettings().Set(setting::kShowItemBorders, !AppSettings().Stored().showItemBorders);
         host_.RunPostedTasks();
         host_.overlayWindow.displaysChangedCallback();
         host_.TriggerSessionEnd();

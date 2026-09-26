@@ -206,9 +206,8 @@ TEST_F(UiTest, DeletingPermanentlyWithShowDeletedErasesIt) {
 // does what it says at once: the delete marks it, and the second deletes it
 // for good.
 TEST_F(UiTest, WithoutConfirmationsEachDeleteHappensOnThePress) {
-    controller_->GetSettings().Mutable().confirmDelete = false;
-    controller_->GetSettings().Mutable().confirmDeleteForGood = false;
-    controller_->GetSettings().Commit();
+    controller_->GetSettings().Set(setting::kConfirmDelete, false);
+    controller_->GetSettings().Set(setting::kConfirmDeleteForGood, false);
     ShowEditMode();
     StepFrame();
     OpenOverviewUi();

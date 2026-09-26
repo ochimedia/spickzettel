@@ -534,9 +534,8 @@ void OverlayApp::RenderColorChooser(float displayW, float displayH) {
             // Closed since the last frame. What it was left on is the
             // color from now on, and the next time the app starts.
             colorChooserOpen_ = false;
-            if (settings_.Stored().strokeColorRGBA != editor_.DrawColorRGBA()) {
-                settings_.Mutable().strokeColorRGBA = editor_.DrawColorRGBA();
-                settings_.Commit();
+            if (settings_.Get(setting::kStrokeColor) != editor_.DrawColorRGBA()) {
+                settings_.Set(setting::kStrokeColor, editor_.DrawColorRGBA());
             }
         }
         return;

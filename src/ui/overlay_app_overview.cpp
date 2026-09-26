@@ -693,17 +693,20 @@ void OverlayApp::RenderOverviewHeader() {
     // "Vector", not "Strokes": in bitmap mode a stroke *is* pixels, so a
     // box labeled Strokes that leaves them showing when it is unchecked
     // reads as a bug rather than as the two halves of the drawing model.
-    bool changed = ImGui::Checkbox(Labeled(strings::kOverviewPreviewsVector, "prevvector"), &Cfg().overviewShowsStrokes);
+    bool strokes = settings_.Get(setting::kOverviewShowsStrokes);
+    if (ImGui::Checkbox(Labeled(strings::kOverviewPreviewsVector, "prevvector"), &strokes)) {
+        settings_.Set(setting::kOverviewShowsStrokes, strokes);
+    }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kOverviewPreviewsVectorHelp);
     }
     ImGui::SameLine();
-    changed |= ImGui::Checkbox(Labeled(strings::kOverviewPreviewsBitmap, "prevbitmap"), &Cfg().overviewShowsBitmaps);
+    bool bitmaps = settings_.Get(setting::kOverviewShowsBitmaps);
+    if (ImGui::Checkbox(Labeled(strings::kOverviewPreviewsBitmap, "prevbitmap"), &bitmaps)) {
+        settings_.Set(setting::kOverviewShowsBitmaps, bitmaps);
+    }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kOverviewPreviewsBitmapHelp);
-    }
-    if (changed) {
-        settings_.Commit();
     }
 }
 
@@ -1385,17 +1388,19 @@ void OverlayApp::RenderSettingsAppearance(bool& anyChanged) {
             if (ImGui::IsWindowAppearing() && displayListCallback_) {
                 displays_ = displayListCallback_();
             }
+            // The two rows are one choice, so both are previewed and the
+            // latch commits them together.
             if (ImGui::Selectable(Labeled(primaryText, "displayprimary"), chosenId.empty())) {
-                Cfg().overlayDisplayId.clear();
-                Cfg().overlayDisplayName.clear();
+                settings_.Preview(setting::kDisplayId, std::string());
+                settings_.Preview(setting::kDisplayName, std::string());
                 displayChoiceCommitPending_ = true;
             }
             for (size_t i = 0; i < displays_.size(); ++i) {
                 const std::string id = "display" + std::to_string(i);
                 const bool selected = chosenAttached && displays_[i].id == inUse.id;
                 if (ImGui::Selectable(Labeled(describe(displays_[i]).c_str(), id.c_str()), selected)) {
-                    Cfg().overlayDisplayId = displays_[i].id;
-                    Cfg().overlayDisplayName = displays_[i].name;
+                    settings_.Preview(setting::kDisplayId, displays_[i].id);
+                    settings_.Preview(setting::kDisplayName, displays_[i].name);
                     displayChoiceCommitPending_ = true;
                 }
             }

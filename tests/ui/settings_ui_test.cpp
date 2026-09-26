@@ -288,8 +288,7 @@ TEST_F(UiTest, AShortcutRowTakesAMouseButton) {
 // switch is off, and once it is on they step a day at a time - both saved
 // as settings are.
 TEST_F(UiTest, TheRetentionPeriodIsSwitchedOnAndItsDaysSet) {
-    controller_->GetSettings().Mutable().purgeDeleted = false;  // on by default
-    controller_->GetSettings().Commit();
+    controller_->GetSettings().Set(setting::kPurgeDeleted, false);  // on by default
     ShowEditMode();
     StepFrame();
     const int days = AppSettings().Stored().purgeDeletedAfterDays;
@@ -313,8 +312,7 @@ TEST_F(UiTest, TheRetentionPeriodIsSwitchedOnAndItsDaysSet) {
 // typed there as it is unless told to clamp. A border 5000 px wide covered
 // the screen, and a negative text size reached the font code.
 TEST_F(UiTest, AValueTypedIntoASliderIsHeldToItsRange) {
-    controller_->GetSettings().Mutable().showEditModeBorder = true;
-    controller_->GetSettings().Commit();
+    controller_->GetSettings().Set(setting::kShowEditModeBorder, true);
     ShowEditMode();
     StepFrame();
 

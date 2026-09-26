@@ -1051,9 +1051,7 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // which is the same thing unless someone has already set the other.
     if (Cfg().noteTextSizePx <= 0.0f && window_ != nullptr) {
         const float scale = static_cast<float>(window_->ScalePercent()) / 100.0f;
-        Cfg().noteTextSizePx =
-            std::clamp(std::round(kDefaultNoteTextSizePx * scale), kNoteTextSizeMin, kNoteTextSizeMax);
-        settings_.Commit();
+        settings_.Set(setting::kNoteTextSize, std::round(kDefaultNoteTextSizePx * scale));
     }
     if (!styleApplied_) {
         // No imgui.ini. ImGui writes one next to the working directory to
@@ -1089,7 +1087,7 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     // displayChoiceCommitPending_.
     if (displayChoiceCommitPending_) {
         displayChoiceCommitPending_ = false;
-        settings_.Commit();
+        settings_.CommitPreviews();
     }
     // Every display refresh, or only now and then - see
     // IOverlayWindow::SetFramePacing. Decided at the start of a frame from
@@ -1400,9 +1398,13 @@ namespace {
 // about which key means which option.
 struct InputOptionRow {
     const char* label;
-    // Which live setting the row reflects, reached through the accessor
-    // below rather than a pointer-to-member so the options that live inside
-    // the input options can sit in the same table as the two that don't.
+    // The setting the row shows and a number key flips - its row in the
+    // catalog, which says where it is stored and what a profile says about
+    // it.
+    const ProfileSetting<BoolRule>* setting;
+    // What decides whether the row can do anything - see
+    // InputOptionAvailable - and whether flipping it needs edit mode
+    // entered again.
     enum class Which {
         NoActivate,
         SoftwarePointer,
@@ -1439,36 +1441,15 @@ constexpr bool RowNeedsOverlayRestart(InputOptionRow::Which which) {
 }
 
 constexpr InputOptionRow kInputOptionRows[] = {
-    {strings::kHudDontStealFocus, InputOptionRow::Which::NoActivate},
-    {strings::kHudDontForwardKeystrokes, InputOptionRow::Which::DontForwardKeystrokes},
-    {strings::kHudUseRawMouseInput, InputOptionRow::Which::RawMouseInput},
-    {strings::kHudCounterRawMouseInput, InputOptionRow::Which::CounterRawMouseInput},
-    {strings::kHudUseSoftwarePointer, InputOptionRow::Which::SoftwarePointer},
-    {strings::kHudFreezeScreenWhileEditing, InputOptionRow::Which::FreezeScreen},
+    {strings::kHudDontStealFocus, &setting::kDontStealFocus, InputOptionRow::Which::NoActivate},
+    {strings::kHudDontForwardKeystrokes, &setting::kDontForwardKeystrokes,
+     InputOptionRow::Which::DontForwardKeystrokes},
+    {strings::kHudUseRawMouseInput, &setting::kRawMouseInput, InputOptionRow::Which::RawMouseInput},
+    {strings::kHudCounterRawMouseInput, &setting::kCounterRawMouseInput, InputOptionRow::Which::CounterRawMouseInput},
+    {strings::kHudUseSoftwarePointer, &setting::kSoftwarePointer, InputOptionRow::Which::SoftwarePointer},
+    {strings::kHudFreezeScreenWhileEditing, &setting::kFreezeScreen, InputOptionRow::Which::FreezeScreen},
 };
 }  // namespace
-
-// Which setting a HUD row addresses, as the pair the profile machinery
-// speaks in - see ProfileableField. Not a pointer into the live values:
-// those are derived, and a write to one would be overwritten by the next
-// resolve and stored nowhere.
-ProfileableField OverlayApp::InputOptionField(int index) {
-    switch (kInputOptionRows[index].which) {
-        case InputOptionRow::Which::SoftwarePointer:
-            return {&ProfileableSettings::softwarePointer, &ProfileOverrides::softwarePointer};
-        case InputOptionRow::Which::DontForwardKeystrokes:
-            return {&ProfileableSettings::dontForwardKeystrokes, &ProfileOverrides::dontForwardKeystrokes};
-        case InputOptionRow::Which::RawMouseInput:
-            return {&ProfileableSettings::rawMouseInput, &ProfileOverrides::rawMouseInput};
-        case InputOptionRow::Which::CounterRawMouseInput:
-            return {&ProfileableSettings::counterRawMouseInput, &ProfileOverrides::counterRawMouseInput};
-        case InputOptionRow::Which::FreezeScreen:
-            return {&ProfileableSettings::freezeScreen, &ProfileOverrides::freezeScreen};
-        case InputOptionRow::Which::NoActivate:
-            break;
-    }
-    return {&ProfileableSettings::dontStealFocus, &ProfileOverrides::dontStealFocus};
-}
 
 bool OverlayApp::InputOptionValue(int index) const {
     if (index < 0 || index >= static_cast<int>(std::size(kInputOptionRows))) {
@@ -1476,21 +1457,7 @@ bool OverlayApp::InputOptionValue(int index) const {
     }
     // The resolved value: the HUD reports what is running, which is the
     // whole reason it exists.
-    switch (kInputOptionRows[index].which) {
-        case InputOptionRow::Which::NoActivate:
-            return settings_.Live().dontStealFocus;
-        case InputOptionRow::Which::SoftwarePointer:
-            return settings_.Live().InputOptions().useSoftwarePointer;
-        case InputOptionRow::Which::DontForwardKeystrokes:
-            return settings_.Live().InputOptions().dontForwardKeystrokes;
-        case InputOptionRow::Which::RawMouseInput:
-            return settings_.Live().InputOptions().useRawMouseInput;
-        case InputOptionRow::Which::CounterRawMouseInput:
-            return settings_.Live().InputOptions().counterRawMouseInput;
-        case InputOptionRow::Which::FreezeScreen:
-            return settings_.Live().freezeScreen;
-    }
-    return false;
+    return settings_.Live().*kInputOptionRows[index].setting->value;
 }
 
 // Whether a row's option can currently do anything - the same preconditions
@@ -1744,7 +1711,7 @@ bool OverlayApp::HandleInputOptionsHudKey(const Event& event) {
         // that profile's. Deliberately not the Settings panel's own edit
         // target, which may be some other profile entirely.
         const bool wanted = !InputOptionValue(i);
-        settings_.SetProfileable(settings_.ActiveProfile(), InputOptionField(i), wanted);
+        settings_.Set(*kInputOptionRows[i].setting, wanted, settings_.ActiveProfile());
         // Recorded for the HUD, which is the only place this can be seen
         // happening - see hudToggleCount_.
         ++hudToggleCount_;
@@ -2036,9 +2003,8 @@ void OverlayApp::RenderBrushSizePreview() {
         // not per notch (see drawWidthDirty_).
         if (drawWidthDirty_) {
             drawWidthDirty_ = false;
-            if (settings_.Stored().strokeWidth != editor_.DrawWidth()) {
-                settings_.Mutable().strokeWidth = editor_.DrawWidth();
-                settings_.Commit();
+            if (settings_.Get(setting::kStrokeWidth) != editor_.DrawWidth()) {
+                settings_.Set(setting::kStrokeWidth, editor_.DrawWidth());
             }
         }
         return;

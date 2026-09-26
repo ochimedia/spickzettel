@@ -77,7 +77,7 @@ TEST_F(HeadlessAppTest, TheAccentColorRecolorsTheThemeAndTheStyle) {
     EXPECT_FLOAT_EQ(theme::Accent().y, 0x6C / 255.0f) << "teal by default";
     EXPECT_GT(theme::AccentInk().x, 0.5f) << "light ink on the dark default";
 
-    controller_->GetSettings().Mutable().accentColorRGBA = 0xFF6A3DFFu;
+    controller_->GetSettings().Set(setting::kAccentColor, 0xFF6A3DFFu);
     StepFrame();
 
     EXPECT_FLOAT_EQ(theme::Accent().x, 1.0f);
@@ -104,12 +104,12 @@ TEST_F(HeadlessAppTest, TheInterfaceScaleFollowsWindowsUnlessOneIsSet) {
     EXPECT_FLOAT_EQ(ImGui::GetStyle().FontScaleDpi, 1.5f);
     EXPECT_FLOAT_EQ(ImGui::GetStyle().WindowPadding.x, padding * 1.5f);
 
-    controller_->GetSettings().Mutable().uiScalePercent = 200;
+    controller_->GetSettings().Set(setting::kUiScale, 200);
     StepFrame();
     EXPECT_FLOAT_EQ(UiScale(), 2.0f) << "the setting, over Windows' 150";
     EXPECT_FLOAT_EQ(ImGui::GetStyle().WindowPadding.x, padding * 2.0f) << "scaled from the base, not from 150%";
 
-    controller_->GetSettings().Mutable().uiScalePercent = 0;
+    controller_->GetSettings().Set(setting::kUiScale, 0);
     host_.overlayWindow.scalePercent = 100;
     StepFrame();
     EXPECT_FLOAT_EQ(UiScale(), 1.0f);
@@ -736,7 +736,7 @@ TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
     ASSERT_NE(picture, 0u);
     EXPECT_EQ(FilterDrawnWith(picture), platform::ImageFilter::Lanczos);
 
-    controller_->GetSettings().Mutable().imageFilter = platform::ImageFilter::Bilinear;
+    controller_->GetSettings().Set(setting::kImageFilter, platform::ImageFilter::Bilinear);
     StepFrame();
     EXPECT_EQ(FilterDrawnWith(picture), std::nullopt);
 }
@@ -2404,8 +2404,7 @@ TEST_F(HeadlessAppTest, SavingASettingOverAnElevatedApplicationKeepsItsFocusTake
     ASSERT_FALSE(host_.overlayWindow.editModeNoActivate);
     const int noActivateCalls = host_.overlayWindow.setEditModeNoActivateCallCount;
 
-    controller_->GetSettings().Mutable().showItemBorders = !AppSettings().Stored().showItemBorders;
-    controller_->GetSettings().Commit();
+    controller_->GetSettings().Set(setting::kShowItemBorders, !AppSettings().Stored().showItemBorders);
     StepFrame();  // the window hears of it after the frame
 
     EXPECT_FALSE(host_.overlayWindow.editModeNoActivate);
@@ -4886,10 +4885,10 @@ TEST_F(HeadlessSaveTest, EveryTextureDrawnIsLiveWhateverHappens) {
                     window.uploadsSucceed = !window.uploadsSucceed;
                     break;
                 case 15:
-                    controller_->GetSettings().Mutable().strokeRenderMode =
-                        AppSettings().Stored().strokeRenderMode == StrokeRenderMode::Rasterized
-                            ? StrokeRenderMode::Tessellated
-                            : StrokeRenderMode::Rasterized;
+                    controller_->GetSettings().Set(setting::kStrokeRenderMode,
+                                                   AppSettings().Stored().strokeRenderMode == StrokeRenderMode::Rasterized
+                                                       ? StrokeRenderMode::Tessellated
+                                                       : StrokeRenderMode::Rasterized);
                     break;
                 case 16:
                     // Out to the bottom edge, where the canvas bar and its
@@ -4916,7 +4915,7 @@ TEST_F(HeadlessSaveTest, EveryTextureDrawnIsLiveWhateverHappens) {
         // all; switched off, it is gone at once.
         window.uploadsSucceed = true;
         session.SwitchToCanvas(session.AddCanvas("Nothing"));
-        controller_->GetSettings().Mutable().showCanvasBar = false;
+        controller_->GetSettings().Set(setting::kShowCanvasBar, false);
         StepFrames(3);
         const bool frozen = session.FrozenScreenTexture() != 0;
         EXPECT_EQ(window.liveTextures.size(), frozen ? 1u : 0u);

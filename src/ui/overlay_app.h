@@ -20,6 +20,7 @@
 #include "core/canvas/canvas_manager.h"
 #include "core/canvas/item.h"
 #include "core/config/app_config.h"
+#include "core/config/settings_catalog.h"
 #include "core/drawing/draw_tool.h"
 #include "core/drawing/stroke.h"
 #include "core/drawing/stroke_bitmap.h"
@@ -463,11 +464,8 @@ private:
     // persists it, and asks for edit mode to be re-entered for an option
     // that only applies on entry. False for a key that is not the HUD's.
     bool HandleInputOptionsHudKey(const Event& event);
-    // The option a HUD row addresses, or nullptr for an out-of-range index.
-    // Which setting a HUD row addresses, and what it currently reads - see
-    // the definitions. The value is the resolved one: the HUD reports what
-    // is running.
-    static ProfileableField InputOptionField(int index);
+    // What a HUD row currently reads - the resolved value: the HUD reports
+    // what is running - and whether it can do anything.
     bool InputOptionValue(int index) const;
     bool InputOptionAvailable(int index) const;
     // Every item on the current canvas, back to front, into one layer,
