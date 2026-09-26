@@ -1551,6 +1551,14 @@ void AttachDisplayOnTheLeft(test::FakePlatformHost& host) {
 platform::DisplayInfo& PrimaryOf(test::FakePlatformHost& host) {
     return *std::find_if(host.displays.begin(), host.displays.end(), [](const auto& d) { return d.primary; });
 }
+
+// As the Settings panel's monitor list makes the choice: two rows, one
+// commit.
+void PickDisplay(TrayController& controller, const char* id, const char* name) {
+    controller.GetSettings().Preview(setting::kDisplayId, std::string(id));
+    controller.GetSettings().Preview(setting::kDisplayName, std::string(name));
+    controller.GetSettings().CommitPreviews();
+}
 }  // namespace
 
 TEST(TrayControllerDisplayTest, TheOverlayComesUpOnThePrimaryDisplayByDefault) {
@@ -1623,12 +1631,46 @@ TEST(TrayControllerDisplayTest, ChoosingAnotherDisplayWhileTheOverlayIsUpMovesIt
     host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
     ASSERT_EQ(host.overlayWindow.onDisplay.id, "fake-primary");
 
-    controller.GetSettings().Preview(setting::kDisplayId, std::string("fake-left"));
-    controller.GetSettings().Preview(setting::kDisplayName, std::string("Left Display"));
-    controller.GetSettings().CommitPreviews();
-    host.RunPostedTasks();  // after the frame the choice was made in
+    PickDisplay(controller, "fake-left", "Left Display");
+    EXPECT_EQ(host.overlayWindow.onDisplay.id, "fake-primary") << "not in the frame the choice was made in";
+    host.RunPostedTasks();  // after it
 
     EXPECT_EQ(host.overlayWindow.onDisplay.id, "fake-left");
+}
+
+// Chosen while hidden - from the tray's Settings item - it waits for the
+// next showing (docs/SETTINGS.md, section 7: Display).
+TEST(TrayControllerDisplayTest, ADisplayChosenWhileHiddenIsWhereTheOverlayNextComesUp) {
+    test::FakePlatformHost host;
+    AttachDisplayOnTheLeft(host);
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.overlayWindow.calls.clear();
+
+    PickDisplay(controller, "fake-left", "Left Display");
+    host.RunPostedTasks();
+    EXPECT_TRUE(host.overlayWindow.calls.empty()) << "nothing told to a hidden window";
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    EXPECT_EQ(host.overlayWindow.onDisplay.id, "fake-left");
+}
+
+TEST(TrayControllerDisplayTest, AFrozenScreenIsTakenAgainOnADisplayChosenInSettings) {
+    test::FakePlatformHost host;
+    AttachDisplayOnTheLeft(host);
+    AppConfig config = DefaultConfig();
+    config.profileable.freezeScreen = true;
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    ASSERT_EQ(host.overlayWindow.captureCallCount, 1);
+
+    PickDisplay(controller, "fake-left", "Left Display");
+    host.RunPostedTasks();
+
+    EXPECT_EQ(host.overlayWindow.captureCallCount, 2);
+    EXPECT_FLOAT_EQ(host.overlayWindow.lastCaptureRect.w, 2560.0f);
 }
 
 TEST(TrayControllerDisplayTest, WhenItsDisplayChangesTheOverlayFollows) {
@@ -1679,6 +1721,50 @@ TEST(TrayControllerDisplayTest, AChangeToAnotherDisplayLeavesAFrozenScreenAlone)
 
     EXPECT_EQ(host.overlayWindow.captureCallCount, 1);
     EXPECT_EQ(host.overlayWindow.onDisplay.id, "fake-primary");
+}
+
+// ===== When a settings edit reaches the window =====
+//
+// docs/SETTINGS.md, section 7: after the frame of the commit, compared with
+// what the window was last given.
+
+TEST(TrayControllerSettingsEffectTest, AWindowSettingReachesTheWindowAfterTheFrame) {
+    test::FakePlatformHost host;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    const int inputCalls = host.overlayWindow.setEditModeInputCallCount;
+    const int noActivateCalls = host.overlayWindow.setEditModeNoActivateCallCount;
+
+    controller.GetSettings().Set(setting::kDontForwardKeystrokes, !config.profileable.dontForwardKeystrokes,
+                                 std::nullopt);
+    controller.GetSettings().Set(setting::kDontStealFocus, !config.profileable.dontStealFocus, std::nullopt);
+    EXPECT_EQ(host.overlayWindow.setEditModeInputCallCount, inputCalls) << "not in the frame";
+    EXPECT_EQ(host.overlayWindow.setEditModeNoActivateCallCount, noActivateCalls) << "not in the frame";
+    host.RunPostedTasks();
+
+    EXPECT_EQ(host.overlayWindow.editModeInput.dontForwardKeystrokes, !config.profileable.dontForwardKeystrokes);
+    EXPECT_EQ(host.overlayWindow.editModeNoActivate, !config.profileable.dontStealFocus);
+}
+
+// The defaults changed under a profile that states the setting for itself:
+// nothing running changed, so the window is told nothing - no input hooks
+// torn down and put back up.
+TEST(TrayControllerSettingsEffectTest, AnEditThatChangesNothingRunningLeavesTheWindowAlone) {
+    test::FakePlatformHost host;
+    host.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "The Game"};
+    const AppConfig config = ConfigWithGameProfile();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    ASSERT_FALSE(host.overlayWindow.editModeInput.counterRawMouseInput) << "the game's profile";
+    const int inputCalls = host.overlayWindow.setEditModeInputCallCount;
+
+    controller.GetSettings().Set(setting::kCounterRawMouseInput, false, std::nullopt);
+    host.RunPostedTasks();
+
+    EXPECT_EQ(host.overlayWindow.setEditModeInputCallCount, inputCalls);
 }
 
 
