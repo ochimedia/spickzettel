@@ -537,6 +537,30 @@ TEST_F(LibraryStoreTest, AWriteThatFailsPartwayLeavesNoneOfItself) {
     EXPECT_EQ(loaded->canvases[0].name, "Allowed");
 }
 
+// A write that throws partway is rolled back on the way out, and the store
+// writes again. Nothing in the app catches an exception, but whatever did
+// found the transaction still open, and every write after it failing to
+// begin its own. A snippet named in bytes that are not UTF-8 is such a
+// write: its record's JSON refuses them.
+TEST_F(LibraryStoreTest, AWriteThatThrowsPartwayIsRolledBack) {
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    LibraryStore store(file_);
+    ASSERT_TRUE(store.Save(snapshot));
+
+    snapshot.folders[0].name = "Written first";
+    snapshot.canvases[0].items[0].name = "\xC3";  // half a character
+    LibraryChanges changes;
+    changes.foldersAndCanvases = true;
+    changes.items = {3};
+    EXPECT_ANY_THROW(store.Write(ViewOf(snapshot), changes));
+
+    snapshot.canvases[0].items[0].name = "Whole";
+    ASSERT_TRUE(store.Write(ViewOf(snapshot), changes)) << "the store writes again";
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    ExpectSameLibrary(snapshot, *loaded);
+}
+
 // A table the file no longer has - another program dropped it - fails the
 // statements naming it as they are prepared, and a write that meets one
 // fails, rolled back whole. It crashed: the statement that was never made

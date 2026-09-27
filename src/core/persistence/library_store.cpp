@@ -86,6 +86,32 @@ std::string Utf8(const std::filesystem::path& path) {
 
 bool Exec(sqlite3* db, const char* sql) { return sqlite3_exec(db, sql, nullptr, nullptr, nullptr) == SQLITE_OK; }
 
+// A write's transaction, rolled back unless it is committed: by a failure
+// returning early, and by an exception on its way through, which had left
+// it open - and every write after it failing to begin one.
+class WriteTransaction {
+public:
+    explicit WriteTransaction(sqlite3* db) : db_(db), open_(Exec(db, "BEGIN IMMEDIATE")) {}
+    ~WriteTransaction() {
+        if (open_) {
+            Exec(db_, "ROLLBACK");
+        }
+    }
+    WriteTransaction(const WriteTransaction&) = delete;
+    WriteTransaction& operator=(const WriteTransaction&) = delete;
+
+    bool Begun() const { return open_; }
+    // A commit that fails leaves it to be rolled back.
+    bool Commit() {
+        open_ = !Exec(db_, "COMMIT");
+        return !open_;
+    }
+
+private:
+    sqlite3* db_;
+    bool open_;
+};
+
 // What the file itself is wrong with - not a database, or a damaged one -
 // as against a moment's trouble reaching it.
 bool IsDamage(int rc) {
@@ -726,11 +752,12 @@ bool LibraryStore::Write(const LibraryView& view, const LibraryChanges& changes,
     // write the folders and canvases.
     LibraryChanges everything;
     everything.everything = true;
-    if (!Ready() || !Exec(db_, "BEGIN IMMEDIATE")) {
+    if (!Ready()) {
         return false;
     }
-    if (!WriteRows(view, unwritten_ ? everything : changes, pictures) || !Exec(db_, "COMMIT")) {
-        Exec(db_, "ROLLBACK");
+    WriteTransaction transaction(db_);
+    if (!transaction.Begun() || !WriteRows(view, unwritten_ ? everything : changes, pictures) ||
+        !transaction.Commit()) {
         return false;
     }
     // What this store wrote is a library now, and a Load of it is not a

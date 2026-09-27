@@ -750,6 +750,13 @@ crash. And the read of the ids already in a table, which the rows the
 view no longer holds are found among, could stop short unseen; the write
 then committed with the rows past that point left in.
 
+The transaction is an object that rolls back unless it is committed
+(`WriteTransaction`). An exception partway through a write went past the
+rollback, which ran only on a failure returned, and left the transaction
+open: every write after it failed to begin its own. Nothing in the app
+catches an exception today - the process ends, and the journal takes the
+write back at the next open - so this is for whatever will.
+
 ### Reading what cannot be used
 
 A value a row carries that cannot be used is repaired rather than
