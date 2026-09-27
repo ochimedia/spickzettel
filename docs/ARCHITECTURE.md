@@ -2860,6 +2860,17 @@ Consequences that shape `Win32InputGrab`:
   its button comes up. Measured with injected input against the build
   before these: left Alt stayed down after AltGr+O, a repeated key stayed
   down, and the held hotkey left the overlay closed.
+- **Held while it hides the overlay, a hotkey brings it back once** -
+  known, and left so. The grab took the letter's down, and hands back
+  only the modifiers when it ends, so Windows has not seen the letter go
+  down: its first auto-repeat is a fresh press of the chord to
+  `RegisterHotKey`, which `MOD_NOREPEAT` cannot tell apart. The grab that
+  starts then counts the letter as held from before it, so its later
+  repeats are swallowed without firing and its up reaches Windows: the
+  overlay stays up, and nothing is left held. It costs one extra showing
+  (and screenshot, with Freeze screen on). Keeping the hook until the key
+  comes up, or ignoring a second hotkey within a second of the first,
+  would stop it, at more cost than it has.
 - **The hooks stand down when the app thread stops.** They swallow the
   machine's mouse and, with forwarding off, its keyboard, whatever the app
   thread is doing, and the way out - the hotkey - is posted to that same
