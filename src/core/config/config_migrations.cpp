@@ -31,10 +31,15 @@ static_assert(std::ranges::none_of(kSteps, [](ConfigMigration step) { return ste
 
 std::span<const ConfigMigration> ConfigMigrations() { return kSteps; }
 
-void MigrateConfig(nlohmann::ordered_json& doc, int version, std::span<const ConfigMigration> steps) {
-    for (size_t step = static_cast<size_t>(std::max(version, 1)) - 1; step < steps.size(); ++step) {
-        steps[step](doc);
+bool MigrateConfig(nlohmann::ordered_json& doc, int version, std::span<const ConfigMigration> steps) {
+    try {
+        for (size_t step = static_cast<size_t>(std::max(version, 1)) - 1; step < steps.size(); ++step) {
+            steps[step](doc);
+        }
+    } catch (const nlohmann::ordered_json::exception&) {
+        return false;
     }
+    return true;
 }
 
 }  // namespace sz::core

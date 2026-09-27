@@ -574,7 +574,9 @@ std::optional<ParsedConfig> TryParseConfig(std::string_view text) {
     // (ConfigSource::Newer).
     parsed.version = FileVersion(doc);
     if (parsed.version < kConfigVersion) {
-        MigrateConfig(doc, parsed.version);
+        if (!MigrateConfig(doc, parsed.version)) {
+            return std::nullopt;
+        }
         parsed.changed = true;
     }
 

@@ -28,7 +28,12 @@ std::span<const ConfigMigration> ConfigMigrations();
 // current one, which would have every conversion rewritten at every new
 // version, against a shape nobody had looked at in a while; a step is
 // written once, while the two shapes it sits between are fresh.
-void MigrateConfig(nlohmann::ordered_json& doc, int version,
+//
+// False when a step threw, which a step written as `doc["a"]["b"] = x` does
+// on a hand-edited file where "a" is a string: the file is then one that is
+// not settings (docs/SETTINGS.md, section 8), rather than the app ending
+// at every start.
+bool MigrateConfig(nlohmann::ordered_json& doc, int version,
                    std::span<const ConfigMigration> steps = ConfigMigrations());
 
 }  // namespace sz::core

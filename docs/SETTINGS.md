@@ -526,6 +526,13 @@ The rules that keep a chain sound:
   `kConfigVersion`, so a version raised without its step still compiled,
   with a null step in the gap, called at the first older file read. A
   `static_assert` refuses that build.
+- **A step that throws fails the migration.** `MigrateConfig` catches a
+  JSON exception and says so, and the file is then one that is not
+  settings: set aside, as below. A step written as
+  `doc["hotkeys"]["x"] = ...` throws on a hand-edited file where
+  `hotkeys` is a string, and a step need not check every shape it
+  meets. Found in review on 2026-09-27, before any step existed: nothing
+  caught it, and the app would have ended at every start.
 
 **Known, and left: an older build drops the keys a newer one added.** A
 key added without a version, as above, leaves a file an older build

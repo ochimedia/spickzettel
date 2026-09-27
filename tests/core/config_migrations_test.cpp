@@ -31,5 +31,22 @@ TEST(ConfigMigrationsTest, AFileRunsEveryStepFromItsVersionOnInOrder) {
     EXPECT_EQ(migrated(9), json::array()) << "a newer file is read as it is";
 }
 
+// A step that throws on a shape it did not expect - a hand-edited file
+// with a string where it goes into an object - fails the migration, which
+// sets the file aside as not settings. It went through TryParseConfig, and
+// nothing caught it: the app ended at every start.
+TEST(ConfigMigrationsTest, AStepThatThrowsFailsTheMigration) {
+    const std::array<ConfigMigration, 2> steps = {
+        [](json& doc) { doc["hotkeys"]["editMode"] = "Ctrl+Alt+E"; },
+        [](json& doc) { doc["ran"] = true; },
+    };
+    json doc = {{"hotkeys", "hand-edited"}};
+    EXPECT_FALSE(MigrateConfig(doc, 1, steps));
+    EXPECT_FALSE(doc.contains("ran")) << "no step after it";
+
+    json fine = {{"hotkeys", json::object()}};
+    EXPECT_TRUE(MigrateConfig(fine, 1, steps));
+}
+
 }  // namespace
 }  // namespace sz::core
