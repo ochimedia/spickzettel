@@ -985,6 +985,12 @@ void OverviewPanel::SwitchOverviewTab(OverviewTab tab) {
     }
     overviewTab_ = tab;
     overviewBodyScrollToTop_ = true;
+    // A Settings row waiting for its key goes out of sight with the tab,
+    // and stops waiting: left to wait, Escape pressed to close the Overview
+    // went to it and unbound a shortcut, and a letter bound that letter.
+    if (editor_.Input().As<KeyCapture>(Level::Text) != nullptr) {
+        editor_.Input().End(Level::Text);
+    }
     // Leaving About also leaves its license page: coming back to a tab
     // that is still showing somebody else's MIT text, several tabs later,
     // is not a place anyone meant to return to.

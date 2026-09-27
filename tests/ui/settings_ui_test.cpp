@@ -367,6 +367,48 @@ TEST_F(UiTest, AShortcutRowTakesAMouseButton) {
               (platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button}));
 }
 
+// A row waiting for its key stops waiting when it goes out of sight - the
+// Settings section left, or the Overview's tab. Left waiting, the next
+// key went to a row no one could see: Escape, pressed to close the
+// Overview, unbound the shortcut, and a letter bound that letter.
+TEST_F(UiTest, AWaitingRowStopsWaitingWhenItsSectionOrTabIsLeft) {
+    ShowEditMode();
+    StepFrame();
+    const size_t copy = ShortcutActionIndex(ShortcutAction::Copy);
+    const platform::KeyCombo bound = AppSettings().Stored().profileable.shortcuts[copy];
+    ASSERT_TRUE(bound.IsValid());
+    OpenOverviewUi();
+    RunUi("open the hotkeys", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionhotkeys");
+    });
+
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    ASSERT_TRUE(App().IsCapturingShortcut());
+    RunUi("another section", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###sectionappearance");
+    });
+    EXPECT_FALSE(App().IsCapturingShortcut()) << "the section left";
+
+    RunUi("back to the hotkeys", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###sectionhotkeys");
+    });
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    ASSERT_TRUE(App().IsCapturingShortcut());
+    RunUi("another tab", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabcanvases");
+    });
+    EXPECT_FALSE(App().IsCapturingShortcut()) << "the tab left";
+
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(App().IsOverviewOpen()) << "Escape closes the Overview";
+    EXPECT_EQ(AppSettings().Stored().profileable.shortcuts[copy], bound) << "and unbinds nothing";
+}
+
 // The retention period's row: the days are there but disabled while the
 // switch is off, and once it is on they step a day at a time - both saved
 // as settings are.

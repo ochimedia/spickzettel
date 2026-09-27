@@ -2288,7 +2288,11 @@ edited in the Overview (`NameEdit`) and a Settings row waiting for a key
 note still open - which is what keeps that press from making a snippet.
 A row takes its key from the input stream rather than from ImGui, and a
 global hotkey that fires while a hotkey's row waits is the key it takes.
-The input options HUD's number keys are the Canvas level's, ahead of any
+A row stops waiting when it goes out of sight - its Settings section
+left, the Overview's tab, or the profile it edits - as it does when the
+Overview closes: left waiting, Escape pressed to close the Overview went
+to the row no one could see and unbound its shortcut, and a letter bound
+that letter. Found in review on 2026-09-27. The input options HUD's number keys are the Canvas level's, ahead of any
 command they might be bound to.
 
 ### Item text

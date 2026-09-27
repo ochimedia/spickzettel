@@ -285,7 +285,12 @@ void SettingsPage::Draw() {
     constexpr float kSectionListWidth = 150.0f;
     ImGui::BeginChild("##settings_sections", ImVec2(Px(kSectionListWidth), 0.0f), ImGuiChildFlags_None);
     for (const SectionRow& row : kSections) {
-        if (SettingsSectionButton(row.id, row.label, settingsSection_ == row.section)) {
+        if (SettingsSectionButton(row.id, row.label, settingsSection_ == row.section) &&
+            settingsSection_ != row.section) {
+            // A row waiting for its key goes out of sight with its section,
+            // and stops waiting: left to wait, the next key - Escape to
+            // close the Overview - went to a row no one could see.
+            DisarmCapture();
             settingsSection_ = row.section;
         }
     }
@@ -1017,13 +1022,17 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
     // other name ending the same way. Rows are told apart by index, which
     // two profiles of one name do not share either.
     if (ImGui::BeginCombo("##edittarget", nullptr, ImGuiComboFlags_CustomPreview)) {
+        // A row waiting for its key would have taken it into whatever the
+        // target is when the key comes: another target is another row.
         if (ImGui::Selectable(Labeled(strings::kProfilesDefaults, "targetdefaults"), !editProfile_.has_value())) {
+            DisarmCapture();
             editProfile_.reset();
         }
         for (size_t i = 0; i < settings_.Profiles().size(); ++i) {
             ImGui::PushID(static_cast<int>(i));
             const ImVec2 at = ImGui::GetCursorPos();
             if (ImGui::Selectable("##target", editProfile_ && *editProfile_ == i)) {
+                DisarmCapture();
                 editProfile_ = i;
             }
             ImGui::SetCursorPos(at);
