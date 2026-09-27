@@ -2760,6 +2760,13 @@ a whole core until unlock. Once a present has said so, each frame first
 asks with `DXGI_PRESENT_TEST`, which draws nothing, and waits while the
 answer is still occluded.
 
+DXGI's own Alt+Enter is turned off (`DXGI_MWA_NO_ALT_ENTER`, asked of the
+factory that made the swap chain, at each device made). Found in review
+on 2026-09-27: with the overlay holding focus, Alt+Enter would have
+taken the swap chain to exclusive fullscreen - opaque over the game,
+and nothing here handles it. No test: nothing reads the association
+back, and trying the key on the old build would take the screen.
+
 ### Text is UTF-8, and so is the code page
 
 Every string in the app is UTF-8, but on Windows the narrow side of a

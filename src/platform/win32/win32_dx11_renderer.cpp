@@ -225,7 +225,17 @@ bool Win32Dx11Renderer::CreateDeviceAndSwapChain() {
         nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createFlags, featureLevels,
         static_cast<UINT>(std::size(featureLevels)), D3D11_SDK_VERSION, &desc, &swapChain_, &device_,
         &featureLevel, &context_);
-    return SUCCEEDED(hr);
+    if (FAILED(hr)) {
+        return false;
+    }
+    // DXGI's own Alt+Enter - exclusive fullscreen, opaque, which nothing
+    // here handles - off. Asked of the factory that made the swap chain,
+    // the only one it listens to; failing costs only that.
+    ComPtr<IDXGIFactory> factory;
+    if (SUCCEEDED(swapChain_->GetParent(IID_PPV_ARGS(&factory)))) {
+        factory->MakeWindowAssociation(hwnd_, DXGI_MWA_NO_ALT_ENTER);
+    }
+    return true;
 }
 
 bool Win32Dx11Renderer::CreateFilterShaders() {
