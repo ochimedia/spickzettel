@@ -214,12 +214,12 @@ void OverviewPanel::OpenSettings() {
     SwitchOverviewTab(OverviewTab::Settings);
 }
 
+// Opened as Open opens it, on the Canvases tab with nothing deleted shown -
+// see "The Overview" in docs/ARCHITECTURE.md.
 void OverviewPanel::OpenPicker(ItemId itemId, bool isCopy) {
+    Open();
     pickerItemId_ = itemId;
     pickerIsCopy_ = isCopy;
-    if (!IsOpen()) {
-        editor_.Input().Push(std::make_unique<Panel>(PanelKind::Overview), Event{});
-    }
 }
 
 void OverviewPanel::Close() {

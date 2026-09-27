@@ -93,6 +93,12 @@ private:
     // while picking where a snippet goes, which is a place among the live
     // ones.
     bool ShowingDeleted() const { return showDeleted_ && !pickerItemId_.has_value(); }
+
+public:
+    // Whether it is up on its Settings tab.
+    bool OnSettingsTab() const { return IsOpen() && overviewTab_ == OverviewTab::Settings; }
+
+private:
     // The folder the sidebar marks as open and the grid shows: the one
     // being browsed, or a deleted one picked with Show deleted on.
     core::FolderId OverviewFolderId() const;

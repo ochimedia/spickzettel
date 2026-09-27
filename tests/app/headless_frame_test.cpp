@@ -1782,6 +1782,29 @@ TEST_F(HeadlessAppTest, AWaitingRowTakesTheNextKeyAndEscapeStopsIt) {
     EXPECT_FALSE(App().IsOverviewOpen()) << "with nothing waiting, Escape closes the Overview";
 }
 
+// Picking where a snippet goes, the Overview comes up as it always does:
+// on the Canvases tab. It kept the tab a previous visit left, and a pick
+// after a visit to Settings came up on Settings.
+TEST_F(HeadlessAppTest, TheCanvasPickerComesUpOnTheCanvases) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 500.0f, 400.0f);  // a screenshot, selected as it is made
+    const ItemId item = Canvases().CurrentOrNull()->items.back().id;
+    test::Model(controller_->GetSession()).AddCanvas("Second");  // somewhere to move it to
+    ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::Settings}));
+    StepFrame();
+    ASSERT_TRUE(App().IsOverviewOnSettings());
+    PressKey(ImGuiKey_Escape);
+    ASSERT_FALSE(App().IsOverviewOpen());
+
+    Command move{CommandId::MoveToCanvas};
+    move.item = item;
+    ASSERT_TRUE(controller_->Overlay().Dispatch(move));
+    StepFrame();
+    ASSERT_TRUE(App().IsOverviewOpen());
+    EXPECT_FALSE(App().IsOverviewOnSettings());
+}
+
 // ===== The hand at rest: Select =====
 
 // A marking tool is in hand only in drawing mode, so putting it down -

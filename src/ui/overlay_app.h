@@ -197,6 +197,8 @@ public:
     // level (see Panel).
     bool IsOverviewOpen() const { return PanelUp(PanelKind::Overview); }
     bool IsCheatSheetOpen() const { return PanelUp(PanelKind::CheatSheet); }
+    // Whether the Overview is up on its Settings tab.
+    bool IsOverviewOnSettings() const { return overview_.OnSettingsTab(); }
     // Whether the color chooser is up - see Popups.
     bool IsColorChooserOpen() const { return popups_.Up(PopupKind::ColorChooser); }
     // Whether the snippet context menu is up, and over which snippet.

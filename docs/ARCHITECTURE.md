@@ -2453,7 +2453,10 @@ mutation would reallocate. "New canvas" and "New folder" switch to what they mad
 and leave the panel up; closing it the instant a button is pressed was
 disorienting, and stopping at "it exists" left half the job to a click
 on a tile that had just appeared. The move/copy picker deliberately does
-not follow the item to its destination.
+not follow the item to its destination. It comes up as the Overview
+always does, on the Canvases tab with nothing deleted shown. Found in
+the next review on 2026-09-27: it kept the tab a previous visit left, so
+a pick after a visit to Settings came up on Settings.
 
 Thumbnails draw strokes by default (nearly free at tile size) and
 bitmaps only when asked, because a bitmap means decoding a picture for a
