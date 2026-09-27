@@ -53,7 +53,18 @@ public:
     // tray icon cannot be registered, another copy is running, or the
     // library cannot be opened (see LibraryStore::Open). A hotkey another
     // application owns is not one of those - see UnregisteredHotkeys.
+    // Leaves the overlay hidden: see Start.
     bool Initialize();
+    // Brings the overlay to where a start puts it (OverlayRequest::Start):
+    // up in edit mode with the welcome notes on a first run, otherwise
+    // Away. After a successful Initialize, and after the caller has said
+    // what it found there - a library set aside, hotkeys taken. A message
+    // box shown once a first run's overlay is up sits under it, which is
+    // fullscreen and topmost and has the keyboard, and draws no frame
+    // before the event loop runs: a box that can be neither seen nor
+    // answered, over a screen that does not move. A start on a library
+    // set aside is always a first run.
+    void Start();
     // After a failed Initialize: whether it was the library that refused,
     // and why - a newer build wrote it, or it could not be read - which the
     // person has to be told apart from a hotkey held elsewhere, and from
@@ -272,6 +283,8 @@ private:
     bool configFileKept_ = false;
     // See WriteConfigAtStart.
     bool writeConfigAtStart_ = false;
+    // Whether Initialize found no library to load, which Start greets.
+    bool firstRun_ = false;
     // Constructed up front (from host.GetLibraryPath(), possibly empty) but
     // only ever used - Load()'d from, attached to overlayApp_ - when that
     // path is non-empty; see Initialize().

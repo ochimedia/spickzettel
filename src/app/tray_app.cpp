@@ -56,7 +56,6 @@ bool TrayController::Initialize() {
     // FakePlatformHost in a test that hasn't opted in) - leave the
     // session without a library store entirely: nothing is written, and
     // everything else works the same.
-    bool freshInstall = false;
     if (!host_.GetLibraryPath().empty()) {
         // Load opens the file first; what either found is Open's to say.
         std::optional<CanvasManagerSnapshot> snapshot = libraryStore_.Load();
@@ -84,7 +83,7 @@ bool TrayController::Initialize() {
             // set aside, where showing the welcome note is the right call
             // anyway. What the app starts with - a folder and a canvas - is
             // written now, for every command after to write into.
-            freshInstall = true;
+            firstRun_ = true;
             session_.WriteWholeLibrary();
         }
         // No eager display-size reconciliation here anymore - OverlayApp::OnFrame
@@ -143,7 +142,10 @@ bool TrayController::Initialize() {
     overlayApp_.SetDisplayListCallback([this] { return host_.ListDisplays(); });
     overlayApp_.SetNoticeFinishedCallback([this] { host_.Post([this] { Request(OverlayRequest::NoticeFaded); }); });
     overlayApp_.SetAppCommandCallback([this](CommandId id) { RunAppCommand(id); });
+    return true;
+}
 
+void TrayController::Start() {
     // A first run shows the overlay rather than waiting to be summoned.
     // Every other start is a deliberate hotkey press, but on a first run
     // nobody knows the hotkey yet - an app that installs a tray icon and
@@ -152,15 +154,14 @@ bool TrayController::Initialize() {
     // not view-only: the note explains how to interact, so interaction has
     // to be possible. Any other start is Away: pinned snippets are on
     // screen whenever the overlay is away, and having just started is one
-    // of those times.
-    if (freshInstall) {
+    // of those times. From anything but Hidden - brought up from the tray
+    // or a hotkey while the caller's message was up - Start stays.
+    if (firstRun_) {
         overlayApp_.RequestWelcomeNote();
     }
     OverlayFacts facts = Facts();
-    facts.firstRun = freshInstall;
+    facts.firstRun = firstRun_;
     Apply(Next(state_, OverlayRequest::Start, facts));
-
-    return true;
 }
 
 void TrayController::OnHotkey(HotkeySlot slot) {

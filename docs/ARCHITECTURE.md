@@ -163,6 +163,18 @@ its input. A second copy started by mistake shows the notice before it
 finds the first one running and stops; that is the price of the
 ordering.
 
+The boxes about what the start itself found - a library set aside, or
+hotkeys another application owns - follow the same rule, although they
+can only be shown once the controller has looked. `Initialize` loads the
+library and registers the hotkeys but leaves the overlay hidden;
+`WinMain` shows the boxes; `TrayController::Start` then brings the
+overlay to where a start puts it. They were once shown after it, and a
+start on a library set aside is always a first run: the box sat under
+the edit overlay, fullscreen and topmost and holding the keyboard, and
+that overlay drew no frame until the box was answered, since frames
+come from the event loop. A box nobody could see or reach, over a
+screen that did not move.
+
 The version lives in `VERSION` at the repo root, read by CMake and fed to
 both `project()` and the header, so a release script can bump it without
 parsing CMake. (A file named `VERSION` can shadow `#include <version>` on

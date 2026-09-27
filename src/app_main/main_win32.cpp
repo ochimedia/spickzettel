@@ -121,6 +121,9 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING);
         return 1;
     }
+    // What the start found is said before the overlay comes up - see
+    // TrayController::Start, and ShowPrereleaseNotice for the same reason.
+    //
     // Started on an empty library because the file there could not be read:
     // said once, with where it was kept.
     if (!trayController.LibrarySetAsideAs().empty()) {
@@ -128,7 +131,7 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         std::snprintf(body, sizeof(body), sz::strings::kStartupLibrarySetAside,
                       trayController.LibraryPath().string().c_str(),
                       trayController.LibrarySetAsideAs().filename().string().c_str());
-        MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING);
+        MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
     }
 
     // Started without some of its hotkeys: said once, naming each and the
@@ -145,8 +148,9 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         }
         char body[1024];
         std::snprintf(body, sizeof(body), sz::strings::kStartupHotkeysTaken, list.c_str());
-        MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND);
+        MessageBoxA(nullptr, body, "Spickzettel", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
     }
 
+    trayController.Start();
     return host->RunEventLoop();
 }

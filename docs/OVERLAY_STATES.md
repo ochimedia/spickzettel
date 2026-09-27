@@ -125,7 +125,7 @@ These hold after every transition and are checked in debug builds:
 | Displays changed | the OS | as a message | |
 | Session ending | `WM_QUERYENDSESSION`; `WM_ENDSESSION` for a logoff | as a message | |
 | Exit | tray Exit; `WM_CLOSE`; the Restart Manager | as a message | |
-| Start | `Initialize` | once | a first run, or not |
+| Start | `TrayController::Start`, after `WinMain` has said what `Initialize` found | once | a first run, or not |
 
 Hotkeys the input grab takes from the keyboard are posted to the host
 window by the grab, so they arrive as messages too.

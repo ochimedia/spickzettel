@@ -103,6 +103,7 @@ protected:
         config_ = std::move(config);
         controller_ = std::make_unique<TrayController>(host_, config_);
         ASSERT_TRUE(controller_->Initialize());
+        controller_->Start();
         OnStarted();
     }
 

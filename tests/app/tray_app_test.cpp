@@ -1079,6 +1079,27 @@ TEST_F(TrayControllerPersistenceTest, InitializeLeavesDefaultStateWhenNothingSav
 
 // A first run writes the library it begins with, and every change after
 // is in the file as it is made - a capture before the overlay is hidden.
+// What a start found is said before the overlay comes up: Initialize leaves
+// it hidden even on a first run, and Start brings it up. A message box
+// shown once a first run's overlay was up sat under it - fullscreen,
+// topmost, with the keyboard - where it could be neither seen nor
+// answered. A library set aside, the likeliest thing to say, is always a
+// first run.
+TEST_F(TrayControllerPersistenceTest, AFirstRunsOverlayComesUpAtStartAfterWhatInitializeFoundIsSaid) {
+    std::filesystem::create_directories(dir_);
+    std::ofstream(library_, std::ios::binary) << "not a library";
+    test::FakePlatformHost host;
+    host.libraryPath = library_;
+    TrayController controller(host, DefaultConfig());
+    ASSERT_TRUE(controller.Initialize());
+    ASSERT_FALSE(controller.LibrarySetAsideAs().empty()) << "something to say";
+    EXPECT_FALSE(host.overlayWindow.IsVisible()) << "nothing over it while it is said";
+
+    controller.Start();
+    EXPECT_TRUE(host.overlayWindow.IsVisible());
+    EXPECT_EQ(controller.State(), app::OverlayState::Edit) << "a first run";
+}
+
 TEST_F(TrayControllerPersistenceTest, AFirstRunsLibraryAndACaptureAreOnDiskAsTheyAreMade) {
     test::FakePlatformHost host;
     host.libraryPath = library_;
@@ -1555,6 +1576,7 @@ TEST_F(TrayControllerPersistenceTest, PinnedSnippetsAreOnScreenFromTheStart) {
     host.libraryPath = library_;
     TrayController controller(host, DefaultConfig());
     ASSERT_TRUE(controller.Initialize());
+    controller.Start();
 
     EXPECT_TRUE(host.overlayWindow.IsVisible());
     EXPECT_TRUE(controller.Overlay().IsPinnedOnly());
