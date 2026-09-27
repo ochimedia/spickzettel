@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 
@@ -13,6 +15,7 @@
 
 #include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
+#include "generated/ui_strings.h"
 #include "support/failing_writes.h"
 #include "support/held_library.h"
 #include "support/session_test_access.h"
@@ -659,12 +662,44 @@ TEST_F(TrayControllerPersistenceTest, StandInSettingsEraseNothingAndLeaveTheFile
     AppConfig config = DefaultConfig();
     ASSERT_TRUE(config.purgeDeleted);
     TrayController controller(host, config);
-    controller.StartOnStandInSettings(/*keepFile=*/true);
+    controller.StartOnStandInSettings(ConfigSource::SetAside, /*keepFile=*/true);
     ASSERT_TRUE(controller.Initialize());
     EXPECT_NE(test::Model(controller.GetSession()).FindCanvas(3), nullptr);
 
     controller.GetSettings().Set(setting::kStrokeWidth, 12.0f);
     EXPECT_EQ(ReadFile(dir_ / "config.json"), "not settings");
+}
+
+// With the file kept, what is changed in Settings applies and is not
+// saved, and Settings says so above every section: the message box at the
+// start said so too, but the app runs for days after it, and a change that
+// looks saved and is gone at the next start is not connected to a box
+// dismissed long before.
+TEST_F(TrayControllerPersistenceTest, SettingsSaysWhatIsChangedThereIsNotSavedWhileTheFileIsKept) {
+    const std::filesystem::path file = dir_ / "config.json";
+    const auto noticeFor = [&](std::optional<ConfigSource> source, bool keepFile) {
+        test::FakePlatformHost host;
+        host.configFilePath = file;
+        TrayController controller(host, DefaultConfig());
+        if (source.has_value()) {
+            controller.StartOnStandInSettings(*source, keepFile);
+        }
+        EXPECT_TRUE(controller.Initialize());
+        return controller.Overlay().ConfigFileKeptNotice();
+    };
+    const auto said = [&](const char* format) {
+        const std::u8string path = file.u8string();
+        char line[1024];
+        std::snprintf(line, sizeof(line), format, std::string(path.begin(), path.end()).c_str());
+        return std::string(line);
+    };
+
+    EXPECT_EQ(noticeFor(ConfigSource::Newer, true), said(strings::kSettingsNotSavedNewer));
+    EXPECT_EQ(noticeFor(ConfigSource::Unreadable, true), said(strings::kSettingsNotSavedUnreadable));
+    EXPECT_EQ(noticeFor(ConfigSource::SetAside, true), said(strings::kSettingsNotSavedUnreadable))
+        << "not settings, and could not be moved aside";
+    EXPECT_EQ(noticeFor(ConfigSource::SetAside, false), "") << "moved aside: the stand-in in its place is saved";
+    EXPECT_EQ(noticeFor(std::nullopt, false), "");
 }
 
 // A library a newer build wrote refuses the start, before the tray icon,
@@ -938,7 +973,7 @@ TEST_F(TrayControllerPersistenceTest, TheStandInForASettingsFileSetAsideIsWritte
     AppConfig config = DefaultConfig();
     config.purgeDeleted = false;  // as LoadOrCreateConfig hands the stand-in over
     TrayController controller(host, config);
-    controller.StartOnStandInSettings(/*keepFile=*/false);
+    controller.StartOnStandInSettings(ConfigSource::SetAside, /*keepFile=*/false);
     ASSERT_TRUE(controller.Initialize());
     EXPECT_FALSE(controller.Overlay().PersistenceWarning().empty());
     ASSERT_GT(host.backgroundTimerIntervalMs, 0) << "owed";

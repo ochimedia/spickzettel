@@ -527,6 +527,15 @@ void TrayController::ApplySettingsToWindow() {
     }
 }
 
+void TrayController::StartOnStandInSettings(core::ConfigSource source, bool keepFile) {
+    skipRetentionThisStart_ = true;
+    configFileKept_ = keepFile;
+    if (keepFile) {
+        const std::u8string path = host_.GetConfigFilePath().u8string();
+        overlayApp_.SetConfigFileKept(source, std::string(path.begin(), path.end()));
+    }
+}
+
 void TrayController::PersistConfig() {
     const std::filesystem::path path = host_.GetConfigFilePath();
     if (path.empty() || configFileKept_) {

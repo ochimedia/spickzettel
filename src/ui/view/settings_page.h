@@ -92,6 +92,16 @@ public:
     void ArmHotkeyCapture(core::HotkeySlot slot);
     void ArmShortcutCapture(core::ShortcutAction action);
 
+    // For as long as this runs, the settings file is left as it is - one a
+    // newer version wrote, or one that could not be read (see
+    // TrayController::StartOnStandInSettings) - so nothing changed here is
+    // saved. Said above every section, where the changes are made: the
+    // message box at the start said so too, but the app runs for days
+    // after it. `path` in UTF-8.
+    void SetFileKept(core::ConfigSource why, const std::string& path);
+    // That line as it is drawn, or empty while settings are saved as usual.
+    const std::string& FileKeptNotice() const { return fileKeptNotice_; }
+
 private:
     const core::AppConfig& Cfg() const { return settings_.Stored(); }
 
@@ -198,6 +208,8 @@ private:
     std::optional<std::pair<size_t, std::string>> takenProfileName_;
     // The host's displays, as last listed - see OnPanelOpened.
     std::vector<platform::DisplayInfo> displays_;
+    // See SetFileKept.
+    std::string fileKeptNotice_;
 };
 
 }  // namespace sz::ui

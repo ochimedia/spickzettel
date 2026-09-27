@@ -89,17 +89,16 @@ public:
 
     // Before Initialize, when the config this was given is the defaults
     // standing in for a config.json that could not be read, or what this
-    // build could read of one a newer build wrote (see LoadOrCreateConfig).
-    // The retention period is not applied at this start: whether the person
-    // had it on, and for how long, is exactly what could not be read. And
-    // with keepFile, nothing is written over that file for as long as this
-    // runs - it is still where it was, and may be the only copy of their
-    // settings. Without it, the file was set aside, and the stand-in is
-    // written in its place at Initialize, and tried again until it lands.
-    void StartOnStandInSettings(bool keepFile) {
-        skipRetentionThisStart_ = true;
-        configFileKept_ = keepFile;
-    }
+    // build could read of one a newer build wrote (see LoadOrCreateConfig);
+    // `source` says which. The retention period is not applied at this
+    // start: whether the person had it on, and for how long, is exactly
+    // what could not be read. And with keepFile, nothing is written over
+    // that file for as long as this runs - it is still where it was, and
+    // may be the only copy of their settings - and Settings says that what
+    // is changed there is not saved. Without it, the file was set aside,
+    // and the stand-in is written in its place at Initialize, and tried
+    // again until it lands.
+    void StartOnStandInSettings(core::ConfigSource source, bool keepFile);
     // Before Initialize, when reading config.json changed what it says - a
     // load repair (see LoadedConfig::writeBack). The file is written once at
     // Initialize, so that it says what runs, and a write that fails is owed

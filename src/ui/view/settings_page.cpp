@@ -300,6 +300,11 @@ void SettingsPage::Draw() {
     ImGui::BeginChild("##settings_body", ImVec2(0.0f, 0.0f), ImGuiChildFlags_None);
     ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x);
 
+    if (!fileKeptNotice_.empty()) {
+        ImGui::TextColored(theme::kDeletedInk, "%s", fileKeptNotice_.c_str());
+        ImGui::Spacing();
+    }
+
     // Every row makes its own edit as it is changed (see settings_widgets.h),
     // so nothing is collected here to commit afterwards.
     switch (settingsSection_) {
@@ -328,6 +333,15 @@ void SettingsPage::Draw() {
 
     ImGui::PopTextWrapPos();
     ImGui::EndChild();
+}
+
+void SettingsPage::SetFileKept(core::ConfigSource why, const std::string& path) {
+    char line[1024];
+    std::snprintf(line, sizeof(line),
+                  why == core::ConfigSource::Newer ? strings::kSettingsNotSavedNewer
+                                                   : strings::kSettingsNotSavedUnreadable,
+                  path.c_str());
+    fileKeptNotice_ = line;
 }
 
 void SettingsPage::RenderSettingsAppearance() {

@@ -100,7 +100,7 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     // for how long, is what this build cannot be sure it read.
     if (config.source == sz::core::ConfigSource::SetAside || config.source == sz::core::ConfigSource::Unreadable ||
         config.source == sz::core::ConfigSource::Newer) {
-        trayController.StartOnStandInSettings(/*keepFile=*/config.setAsideAs.empty());
+        trayController.StartOnStandInSettings(config.source, /*keepFile=*/config.setAsideAs.empty());
     }
     if (config.writeBack) {
         trayController.WriteConfigAtStart();

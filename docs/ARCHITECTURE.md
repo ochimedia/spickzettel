@@ -959,6 +959,16 @@ keys, and read as defaults they turn a 14-day purge back on. Refusing to
 start, as for a newer library, would have cost the whole app over
 settings, which unlike a library can be read in part.
 
+A file kept for the run - one a newer build wrote, one that cannot be
+opened, one that is not settings and could not be moved aside - leaves
+every settings change applied and unsaved. The message box says so, at
+the start; Settings says so too, above every section, for as long as it
+lasts (`SettingsPage::SetFileKept`). The app runs in the tray for days,
+and a change that looked saved and was gone at the next start was not
+connected to a box dismissed long before. Not the line along the bottom
+that a failed write gets: nothing has failed, and it would stand over
+the canvas for the whole run.
+
 The files a release wrote are kept as test fixtures
 (`tests/core/config_files/`): `v0.1.0`'s with the defaults and with every
 setting it had changed, produced by that release's own serializer. Each

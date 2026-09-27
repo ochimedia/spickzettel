@@ -166,6 +166,12 @@ public:
     // The warning as it would be drawn this frame, or empty when there is
     // nothing wrong - for a test, and for anything else that has to know.
     std::string PersistenceWarning() const { return messages_.PersistenceWarning(); }
+    // A settings file left as it is for the run - see
+    // TrayController::StartOnStandInSettings - which is no failure to say
+    // along the bottom: Settings says that what is changed there is not
+    // saved (see SettingsPage::SetFileKept).
+    void SetConfigFileKept(core::ConfigSource why, const std::string& path) { settingsPage_.SetFileKept(why, path); }
+    const std::string& ConfigFileKeptNotice() const { return settingsPage_.FileKeptNotice(); }
     // What the overlay is currently set to do, for anything that needs to
     // ask rather than watch: the tool a stroke would use, whether a create
     // action is armed and waiting for a click, and whether the Overview is

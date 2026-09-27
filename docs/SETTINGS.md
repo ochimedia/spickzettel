@@ -495,7 +495,8 @@ answers and does not settle them (question 4 here).
   period for that start as that does. A newer build may have moved the
   retention keys, and read as defaults they would turn a 14-day purge
   back on. Settings changes still work for the session and are not
-  saved.
+  saved, and Settings says so above every section - as it does for a
+  file that cannot be read, or cannot be moved aside.
 
 **Migrations.** One step per version, from n to n+1 only. A file of
 version n reaches version n+k by running all k steps in order. The

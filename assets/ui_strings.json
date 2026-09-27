@@ -332,6 +332,8 @@
   "settings.tabHotkeys": "Hotkeys",
   "settings.tabProfiles": "Profiles",
   "settings.tabDebug": "Debug",
+  "settings.notSavedNewer": "Changes made here apply until Spickzettel exits, and are not saved: the settings file, %s, was saved by a newer version of Spickzettel and is left as it is.",
+  "settings.notSavedUnreadable": "Changes made here apply until Spickzettel exits, and are not saved: the settings file, %s, could not be read and is left as it is.",
 
   "_appearance": "Settings > Appearance.",
   "_defaults": "Settings > Defaults: what a new snippet starts with.",
