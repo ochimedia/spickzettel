@@ -7,6 +7,7 @@
 #include <ctime>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -57,16 +58,6 @@ constexpr float kDeletedButtonGap = 4.0f;
 // view is about.
 constexpr float kDimmedAlpha = 0.4f;
 
-// "Deleted today, 14:05 - 32 min ago": the day in words while that is
-// shorter than a date, and how long ago while that is the quicker thing to
-// read - which is what "I deleted something half an hour ago" is looking
-// for.
-std::string DeletedWhen(int64_t deletedAt, std::time_t now);
-// "Deleted permanently from <date> on": when the retention period, `days`
-// long, takes something deleted at `deletedAt` - the first start from that
-// day on (see TrayController::Initialize).
-std::string GoesOn(int64_t deletedAt, int days);
-
 // A deleted folder's or canvas's two buttons, side by side at the cursor:
 // Restore, and Delete permanently. Ids "##restore" and "##deleteforgood",
 // under whatever the caller has pushed.
@@ -74,8 +65,12 @@ enum class DeletedButton { None, Restore, DeleteForGood };
 DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip);
 
 // A local calendar time, copied out of the buffer std::localtime shares -
-// see TimestampName for why that spelling, and the pragma.
-std::tm LocalTime(std::time_t when) {
+// see TimestampName for why that spelling, and the pragma. None for a time
+// the C runtime has no date for: before 1970, or past the year 3000 with
+// Microsoft's. That was a zeroed std::tm, whose day 0 strftime refuses -
+// and the invalid-parameter handler takes a refusal for a crash (see
+// platform/win32/win32_crash_dump.cpp), so a tooltip ended the app.
+std::optional<std::tm> LocalTime(std::time_t when) {
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable : 4996)
@@ -84,25 +79,35 @@ std::tm LocalTime(std::time_t when) {
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
-    return local != nullptr ? *local : std::tm{};
+    if (local == nullptr) {
+        return std::nullopt;
+    }
+    return *local;
 }
 
+}  // namespace
+
 std::string DeletedWhen(int64_t deletedAt, std::time_t now) {
-    const std::tm at = LocalTime(static_cast<std::time_t>(deletedAt));
-    const std::tm today = LocalTime(now);
-    const std::tm yesterday = LocalTime(now - 24 * 60 * 60);
-    const auto sameDay = [](const std::tm& a, const std::tm& b) {
-        return a.tm_year == b.tm_year && a.tm_yday == b.tm_yday;
+    const std::optional<std::tm> at = LocalTime(static_cast<std::time_t>(deletedAt));
+    if (!at.has_value()) {
+        char line[96];
+        std::snprintf(line, sizeof(line), strings::kDeletedAt, strings::kDeletedAtUnknownTime);
+        return line;
+    }
+    const std::optional<std::tm> today = LocalTime(now);
+    const std::optional<std::tm> yesterday = LocalTime(now - 24 * 60 * 60);
+    const auto sameDay = [](const std::tm& a, const std::optional<std::tm>& b) {
+        return b.has_value() && a.tm_year == b->tm_year && a.tm_yday == b->tm_yday;
     };
     char clock[16] = "";
-    std::strftime(clock, sizeof(clock), "%H:%M", &at);
+    std::strftime(clock, sizeof(clock), "%H:%M", &*at);
     char day[64] = "";
-    if (sameDay(at, today)) {
+    if (sameDay(*at, today)) {
         std::snprintf(day, sizeof(day), strings::kDeletedToday, clock);
-    } else if (sameDay(at, yesterday)) {
+    } else if (sameDay(*at, yesterday)) {
         std::snprintf(day, sizeof(day), strings::kDeletedYesterday, clock);
     } else {
-        std::strftime(day, sizeof(day), "%Y-%m-%d %H:%M", &at);
+        std::strftime(day, sizeof(day), "%Y-%m-%d %H:%M", &*at);
     }
     constexpr int64_t kMinute = 60;
     constexpr int64_t kHour = 60 * kMinute;
@@ -126,13 +131,18 @@ std::string DeletedWhen(int64_t deletedAt, std::time_t now) {
 }
 
 std::string GoesOn(int64_t deletedAt, int days) {
-    const std::tm on = LocalTime(static_cast<std::time_t>(deletedAt + int64_t{days} * 24 * 60 * 60));
+    const std::optional<std::tm> on = LocalTime(static_cast<std::time_t>(deletedAt + int64_t{days} * 24 * 60 * 60));
+    if (!on.has_value()) {
+        return strings::kDeletedGoesOnUnknownDate;
+    }
     char date[32] = "";
-    std::strftime(date, sizeof(date), "%Y-%m-%d", &on);
+    std::strftime(date, sizeof(date), "%Y-%m-%d", &*on);
     char line[96];
     std::snprintf(line, sizeof(line), strings::kDeletedGoesOn, date);
     return line;
 }
+
+namespace {
 
 DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip) {
     DeletedButton pressed = DeletedButton::None;

@@ -9,6 +9,7 @@
 // name being edited, and the scroll requests.
 
 #include <cstdint>
+#include <ctime>
 #include <functional>
 #include <optional>
 #include <string>
@@ -169,5 +170,17 @@ private:
     std::optional<core::CanvasId> overviewScrollToCanvasId_;
     std::optional<core::FolderId> overviewScrollToFolderId_;
 };
+
+// The Show deleted tooltip's lines, public for the tests.
+//
+// "Deleted today, 14:05 - 32 min ago": the day in words while that is
+// shorter than a date, and how long ago while that is the quicker thing to
+// read - which is what "I deleted something half an hour ago" is looking
+// for. "Deleted at an unknown time" for a stamp with no date.
+std::string DeletedWhen(int64_t deletedAt, std::time_t now);
+// "Deleted permanently from <date> on": when the retention period, `days`
+// long, takes something deleted at `deletedAt` - the first start from that
+// day on (see TrayController::Initialize) - or that this date is unknown.
+std::string GoesOn(int64_t deletedAt, int days);
 
 }  // namespace sz::ui

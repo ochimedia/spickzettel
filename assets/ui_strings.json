@@ -82,6 +82,8 @@
   "deleted.goesOn": "Deleted permanently from %s on",
   "deleted.at": "Deleted %s",
   "deleted.atAgo": "Deleted %s - %s",
+  "deleted.atUnknownTime": "at an unknown time",
+  "deleted.goesOnUnknownDate": "Deleted permanently on an unknown date",
   "deleted.today": "today, %s",
   "deleted.yesterday": "yesterday, %s",
   "deleted.justNow": "just now",

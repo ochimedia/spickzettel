@@ -832,7 +832,8 @@ or past the year 3000, and the formatting then failed on a zeroed date,
 which the invalid-parameter handler takes for a crash. It was also
 purged at the first start as long since deleted, and a snippet with one
 went with ImportLibrary. Not deleted is the side that loses nothing:
-what shows again can be deleted again.
+what shows again can be deleted again. The tooltip copes with such a
+time on its own as well (see "Show deleted").
 
 None current is not a pointer naming nothing, and a load keeps it.
 Deleting a folder's last canvas leaves no canvas on screen and that
@@ -2489,6 +2490,16 @@ A mode that showed deleted things in place but read-only, and then a
 list of everything deleted, newest first, came before (see "Dead ends"):
 the first needed a read-only check at every edit, and the second could
 not show where a restore would put a thing.
+
+The hover tooltip tells when a thing was deleted and, with retention on,
+when it goes (`DeletedWhen`, `GoesOn`). A time the C runtime has no date
+for - before 1970, or past the year 3000 with Microsoft's - is told as
+unknown. Found in review on 2026-09-27: `std::localtime` gives nothing
+for one, the zeroed date put in its place has day 0, and `strftime`
+refuses that as an invalid parameter - which the crash handler dumps and
+ends the process on (see platform/win32/win32_crash_dump.cpp). The load
+no longer lets such a stamp in (see "Reading what cannot be used"), so
+what is left to reach it is a clock set near the year 3000.
 
 ### Cursors and the demo mark
 

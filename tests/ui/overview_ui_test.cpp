@@ -1,12 +1,15 @@
 // The Overview's canvas list, driven by widget name.
 #include <algorithm>
 #include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <string>
 
 #include "fakes/ui_test.h"
+#include "generated/ui_strings.h"
+#include "ui/view/overview_panel.h"
 
 namespace sz::test {
 namespace {
@@ -329,6 +332,24 @@ TEST_F(ShowDeletedUiTest, AFoldersDeletePermanentlyErasesOnlyItsDeletedCanvases)
     ASSERT_NE(Canvases().FindFolder(made.folder), nullptr);
     EXPECT_EQ(Canvases().FindFolder(made.folder)->deletedAt, 0);
     EXPECT_NE(Canvases().FindCanvas(made.second), nullptr);
+}
+
+// A stamp the C runtime has no date for - before 1970, or past the year
+// 3000 - is told as unknown. It was formatted as a zeroed date, which
+// strftime refuses, and the invalid-parameter handler ended the app on
+// the hover. The load reads such a stamp as not deleted since, so this is
+// what a clock set to the year 3000 would still reach.
+TEST(ShowDeletedTooltipTest, AStampWithNoDateIsToldAsUnknown) {
+    const std::time_t now = std::time(nullptr);
+    char unknown[96];
+    std::snprintf(unknown, sizeof(unknown), strings::kDeletedAt, strings::kDeletedAtUnknownTime);
+    EXPECT_EQ(ui::DeletedWhen(-5, now), unknown);
+    EXPECT_EQ(ui::DeletedWhen(99999999999, now), unknown);
+    // Deleted late in the year 3000: the retention period ends past it.
+    EXPECT_EQ(ui::GoesOn(32535000000, 30), strings::kDeletedGoesOnUnknownDate);
+
+    EXPECT_NE(ui::DeletedWhen(static_cast<int64_t>(now) - 90, now).find("1 min ago"), std::string::npos);
+    EXPECT_EQ(ui::GoesOn(static_cast<int64_t>(now), 30).rfind("Deleted permanently from ", 0), 0u);
 }
 
 // The same delete with a neighbor to fall back on: no canvas is created,
