@@ -1035,6 +1035,33 @@ TEST_F(WrittenSessionTest, AFailureStandsThroughACommandWithNothingToWrite) {
     EXPECT_FALSE(session_.LastWriteFailed()) << "a write that landed";
 }
 
+// A stroke being drawn belongs to the canvas, not to the command whose
+// write failed beside it: a note committed while the stroke was drawn - its
+// field let go of by the press that began the stroke - and not written
+// leaves the stroke to go on and be made.
+TEST_F(WrittenSessionTest, AStrokeBeingDrawnOutlastsAFailedWriteBesideIt) {
+    const ItemId note = session_.CreateItem(false, Rect{0, 0, 100, 100}, "Note");
+    const ItemId drawing = session_.CreateItem(false, Rect{200, 0, 100, 100}, "Drawing");
+    session_.BeginTextEdit(note);
+    session_.PreviewText("typed");
+    session_.LiveLayer().BeginStroke(StrokePoint{210.0f, 10.0f}, 0xFF0000FFu, 3.0f);
+    {
+        FailingWrites failing(File());
+        failing.FailAll();
+        session_.EndTextEdit();
+        failing.Stop();
+    }
+    ASSERT_TRUE(session_.LastWriteFailed());
+    EXPECT_TRUE(ItemById(session_.Manager(), note)->noteText.empty()) << "the note, not made";
+    ASSERT_TRUE(session_.LiveLayer().ActiveStroke().has_value()) << "the stroke, still being drawn";
+
+    session_.LiveLayer().ExtendStroke(StrokePoint{260.0f, 60.0f});
+    session_.LiveLayer().EndStroke();
+    session_.CommitLiveStroke(drawing);
+    EXPECT_EQ(ItemById(session_.Manager(), drawing)->strokes.size(), 1u);
+    EXPECT_EQ(OnDisk().canvases[0].items[1].strokes.size(), 1u);
+}
+
 // A gesture called off writes nothing: the file holds what it held before
 // the press, and what was filed before the gesture is still there.
 TEST_F(WrittenSessionTest, ACanceledDragWritesNothing) {

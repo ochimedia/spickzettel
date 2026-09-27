@@ -42,8 +42,14 @@ bool Session::Land(const Checkpoint& before) {
     lastWriteFailed_ = true;
     ++failedWrites_;
     migrations_.clear();
+    const CanvasId current = Model().CurrentCanvasId();
     Model().RollBack(before);
-    liveLayer_.Clear();
+    // A stroke being drawn is the current canvas's, and goes with a switch
+    // of it only (see LiveLayer): a note whose commit failed while a stroke
+    // was drawn beside it is no reason to drop the stroke.
+    if (Model().CurrentCanvasId() != current) {
+        liveLayer_.Clear();
+    }
     return false;
 }
 
