@@ -838,31 +838,40 @@ TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
     EXPECT_EQ(FilterDrawnWith(picture), std::nullopt);
 }
 
-// A drawing that was not meant costs nothing: it goes as soon as the hand
-// moves on from it without putting anything in. And the press that moves
-// on from it is only that, with the modifier that makes a drawing held or
-// not - the same modifier draws a rectangle in it, and one begun a little
-// outside must not make another drawing.
-TEST_F(HeadlessAppTest, AnUntouchedDrawingGoesWhenTheHandMovesOn) {
+// A drawing is kept empty, whatever the hand does next: it may be one made
+// ready ahead of the moment it is for. It used to go - erased - once the
+// hand moved on without putting anything in, and in a game that was the
+// drawing gone by the time it was wanted; a dot drawn in to keep it was the
+// workaround. The press that moves on from it is only that, with the
+// modifier that makes a drawing held or not - the same modifier draws a
+// rectangle in it, and one begun a little outside must not make another.
+TEST_F(HeadlessAppTest, AnEmptyDrawingStaysWhenTheHandMovesOn) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 300.0f, 300.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    CanvasManager& manager = test::Model(controller_->GetSession());
+    const CanvasId canvas = manager.CurrentCanvasId();
+    const ItemId drawing = manager.CurrentOrNull()->items[0].id;
 
     MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "only moved on";
-    EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty()) << "gone, not merely deleted";
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "moved on from, and kept";
     EXPECT_FALSE(App().DrawingItem().has_value());
 
     MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(Canvases().CurrentOrNull()->items[0].id))
-        << "and the next press makes the next one";
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "and the next press makes the next one";
+
+    RawClick(1100.0f, 100.0f);  // out of drawing mode
+    ShowEditMode();             // put away
+    ShowEditMode();             // and back
+    PressCtrlShiftKey(ImGuiKey_N);
+    ASSERT_NE(manager.CurrentCanvasId(), canvas) << "on another canvas";
+    const Item* item = manager.FindItemAnywhere(drawing);
+    ASSERT_NE(item, nullptr);
+    EXPECT_EQ(item->deletedAt, 0) << "and still there, empty";
 }
 
-// Exit is moving on too, with no next showing to notice: the drawing is
-// not saved, to come back after a restart as an ordinary empty snippet.
-TEST_F(HeadlessAppTest, AnUntouchedDrawingIsNotSavedOnTheWayOut) {
+TEST_F(HeadlessAppTest, AnEmptyDrawingIsKeptOnTheWayOut) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 300.0f, 300.0f);
@@ -870,13 +879,11 @@ TEST_F(HeadlessAppTest, AnUntouchedDrawingIsNotSavedOnTheWayOut) {
 
     host_.TriggerTrayCommand(platform::TrayCommand::Exit);
 
-    EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty());
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
-// Coming up settles what went some other way than being put away, in the
-// order going away does: the stroke first, into the drawing it is on, and
-// only then the drawing, no longer untouched. The other way round the
-// drawing went for good with the stroke in flight on it.
+// Coming up settles what went some other way than being put away: the
+// stroke in flight is filed into the drawing it is on.
 TEST_F(HeadlessAppTest, ComingUpKeepsAStrokeInFlightOnANewDrawing) {
     ShowEditMode();
     StepFrame();
@@ -893,61 +900,9 @@ TEST_F(HeadlessAppTest, ComingUpKeepsAStrokeInFlightOnANewDrawing) {
     EXPECT_EQ(Canvases().CurrentOrNull()->items[0].strokes.size(), 1u);
 }
 
-// A paste made by key after a stray drawing is the most recent thing done,
-// and the first undo takes the paste back, not the drawing.
-TEST_F(HeadlessAppTest, UndoAfterAPasteTakesThePasteBackNotAnUntouchedDrawing) {
-    ShowEditMode();
-    StepFrame();
-    Drag(100.0f, 100.0f, 400.0f, 300.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    PressCtrlKey(ImGuiKey_C);
-    RawClick(900.0f, 650.0f);  // empty canvas: the selection goes
-    StepFrames(30);
-    MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
-    PressCtrlKey(ImGuiKey_V);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u);
-
-    PressCtrlKey(ImGuiKey_Z);
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "the paste taken back, and the stray drawing gone as moved on from";
-    PressCtrlKey(ImGuiKey_Z);
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "and the step before the drawing is next";
-}
-
-TEST_F(HeadlessAppTest, ADrawingWithSomethingInItStays) {
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(100.0f, 100.0f, 400.0f, 400.0f);
-    Drag(150.0f, 150.0f, 300.0f, 300.0f);  // a stroke into it
-    RawClick(900.0f, 650.0f);              // moving on
-    MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u);
-}
-
-// A drawing something has gone into is no longer a stray click, even once
-// an undo has taken that something back out: moving on leaves it there,
-// empty, and the stroke can be redone into it.
-TEST_F(HeadlessAppTest, ADrawingEmptiedByUndoIsKeptWhenTheHandMovesOn) {
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(100.0f, 100.0f, 400.0f, 400.0f);
-    Drag(150.0f, 150.0f, 300.0f, 300.0f);  // a stroke into it
-    const ItemId drawing = Canvases().CurrentOrNull()->items[0].id;
-    ASSERT_EQ(Canvases().CurrentOrNull()->items[0].strokes.size(), 1u);
-
-    PressCtrlKey(ImGuiKey_Z);
-    ASSERT_TRUE(Canvases().CurrentOrNull()->items[0].strokes.empty()) << "the stroke, not the drawing";
-    RawClick(900.0f, 650.0f);  // empty canvas: the hand moves on
-
-    ASSERT_EQ(Canvases().CurrentOrNull()->items.size(), 1u) << "kept, empty";
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    PressCtrlKey(ImGuiKey_Y);
-    const Item* item = Canvases().CurrentOrNull()->items.data();
-    ASSERT_EQ(item->id, drawing);
-    EXPECT_EQ(item->strokes.size(), 1u) << "and the stroke is redone into it";
-}
-
-TEST_F(HeadlessAppTest, UndoTakesBackAStrayDrawingWithoutLeavingItDeleted) {
+// Taking back the making of an empty drawing leaves it deleted, as it does
+// any snippet's, where it can be found - and redo brings it back.
+TEST_F(HeadlessAppTest, UndoDeletesAnEmptyDrawingAndRedoBringsItBack) {
     ShowEditMode();
     StepFrame();
     With(ImGuiMod_Ctrl, [&] { DoubleClick(640.0f, 400.0f); });
@@ -955,8 +910,11 @@ TEST_F(HeadlessAppTest, UndoTakesBackAStrayDrawingWithoutLeavingItDeleted) {
 
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u);
-    EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty()) << "erased, not kept deleted";
+    EXPECT_EQ(Canvases().CurrentOrNull()->items.size(), 1u) << "kept, deleted";
     EXPECT_FALSE(App().DrawingItem().has_value());
+
+    PressCtrlKey(ImGuiKey_Y);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
 TEST_F(HeadlessAppTest, UndoDeletesAScreenshotAndRedoBringsItBack) {
@@ -4061,77 +4019,6 @@ TEST_F(HeadlessAppTest, TheBarFloatsAboveTheSelectionOrBelowItWhenThereIsNoRoom)
     EXPECT_GT(close->y, 150.0f) << "below the snippet, since there is no room above";
 }
 
-// A drawing a press on empty canvas made goes again once the hand moves on
-// without putting anything into it - unless it was moved or resized first:
-// a box someone has placed is a box they want, empty or not.
-TEST_F(HeadlessAppTest, AnEmptyDrawingThatWasMovedStays) {
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    PressKey(ImGuiKey_Escape);  // out of drawing mode, still selected
-    Drag(500.0f, 425.0f, 600.0f, 475.0f);
-
-    // The hand moves on: a screenshot taken elsewhere.
-    Drag(1000.0f, 200.0f, 1400.0f, 500.0f);
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "the moved drawing stayed";
-    EXPECT_EQ(App().Selection(), std::vector<ItemId>{Canvases().CurrentOrNull()->items[1].id})
-        << "the selection moved on to the screenshot just made";
-}
-
-// The same for one scaled with the wheel, made fullscreen or set back to
-// its size: each files a step on the drawing itself, and an undo takes
-// back that step alone - not the drawing, and not the step before it.
-TEST_F(HeadlessAppTest, AnEmptyDrawingThatWasScaledStaysAndTheScalingIsUndoneAlone) {
-    ShowEditMode();
-    StepFrame();
-    Drag(1000.0f, 100.0f, 1300.0f, 300.0f);  // a screenshot: the step before
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    ASSERT_TRUE(App().DrawingItem().has_value());
-    const ItemId id = *App().DrawingItem();
-    const Rect before = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
-    PressKey(ImGuiKey_Escape);  // out of drawing mode, still selected
-    ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
-    MoveTo(500.0f, 400.0f);
-    StepFrames(2);
-    Wheel(2.0f);
-    ASSERT_GT(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w);
-
-    PressCtrlKey(ImGuiKey_Z);
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "the drawing and the screenshot, both";
-    ASSERT_NE(test::Model(controller_->GetSession()).FindItemAnywhere(id), nullptr);
-    EXPECT_NEAR(test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect.w, before.w, 0.5f) << "the scaling taken back";
-}
-
-TEST_F(HeadlessAppTest, AnEmptyDrawingThatWasOnlySelectedStillGoes) {
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    PressKey(ImGuiKey_Escape);
-    RawClick(500.0f, 425.0f);
-    ASSERT_EQ(App().Selection().size(), 1u);
-
-    RawClick(1100.0f, 100.0f);
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "nothing was put into it, and nothing was done with it";
-    EXPECT_TRUE(App().Selection().empty());
-}
-
-// Leaving drawing mode by a click elsewhere is the hand moving on too: an
-// empty drawing goes with it.
-TEST_F(HeadlessAppTest, AnEmptyDrawingGoesWhenDrawingModeIsLeftByAClickElsewhere) {
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    ASSERT_TRUE(App().DrawingItem().has_value());
-
-    RawClick(1100.0f, 100.0f);
-    EXPECT_FALSE(App().DrawingItem().has_value());
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u);
-}
-
 // The wheel's width change is kept in the config - once the size preview
 // has faded, not per notch, so a burst of notches is one write.
 TEST_F(HeadlessAppTest, TheWheelsPenWidthIsKeptOnceThePreviewFades) {
@@ -4337,7 +4224,7 @@ TEST_F(HeadlessAppTest, TextPickedMidStrokeEndsTheStrokeWhereItIs) {
     EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(drawing)) << "the next press is Text's";
 }
 
-TEST_F(HeadlessAppTest, ANoteNothingWasTypedIntoGoesWhenTheHandMovesOn) {
+TEST_F(HeadlessAppTest, ANoteNothingWasTypedIntoClosesAndTheDrawingStays) {
     StartWith(WithTextOnT());
     ShowEditMode();
     StepFrame();
@@ -4347,14 +4234,14 @@ TEST_F(HeadlessAppTest, ANoteNothingWasTypedIntoGoesWhenTheHandMovesOn) {
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     ASSERT_TRUE(App().EditingNote().has_value());
 
-    // A click elsewhere: it closes the note, leaves drawing mode, the empty
-    // drawing goes, and the click makes nothing new of its own.
+    // A click elsewhere: it closes the note, leaves drawing mode, and makes
+    // nothing new of its own.
     RawClick(900.0f, 600.0f);
 
-    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u);
     EXPECT_FALSE(App().EditingNote().has_value());
     EXPECT_FALSE(App().DrawingItem().has_value());
-    EXPECT_TRUE(Canvases().CurrentOrNull()->items.empty()) << "erased, not kept deleted";
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u) << "the drawing stays, empty";
+    EXPECT_TRUE(Canvases().CurrentOrNull()->items[0].noteText.empty());
 }
 
 // Hiding and exiting both settle, and a note being typed is the note as it
@@ -4475,8 +4362,7 @@ TEST_F(HeadlessAppTest, EditingALongNoteKeepsAllOfIt) {
     ImGui::GetIO().AddInputCharacter('b');
     StepFrames(2);
     // A click elsewhere that ImGui sees, which deactivates the field and so
-    // closes the note - the drawing has text already, so it is not the
-    // stray click a raw press alone would settle.
+    // closes the note.
     Click(1100.0f, 100.0f);
     ASSERT_FALSE(App().EditingNote().has_value());
 

@@ -617,57 +617,6 @@ void Editor::HandOverNewItem(ItemCreationKind kind, ItemId id) {
     }
 }
 
-// ----- The drawing a stray click made -----
-
-void Editor::WatchAsUntouched(ItemId id) {
-    untouchedDrawing_ = id;
-    untouchedDrawingRevision_ = session_.HistoryRevision();
-}
-
-void Editor::SettleUntouchedDrawing() {
-    if (!untouchedDrawing_.has_value()) {
-        return;
-    }
-    const ItemId id = *untouchedDrawing_;
-    untouchedDrawing_.reset();
-    // A note still being typed into is committed first, so what counts is
-    // whatever was typed - the press that settles it would end the edit a
-    // frame later anyway.
-    if (editingNoteItemId_ == id) {
-        EndEditingNote(noteEditBuffer_);
-    }
-    // Does nothing to a snippet something went into, or one that is gone.
-    session_.DiscardIfUntouched(id);
-}
-
-void Editor::KeepDrawingsPlaced(const std::vector<ItemId>& ids) {
-    if (untouchedDrawing_.has_value() && std::find(ids.begin(), ids.end(), *untouchedDrawing_) != ids.end()) {
-        untouchedDrawing_.reset();
-    }
-}
-
-void Editor::WatchUntouchedDrawing() {
-    // A press elsewhere settles it as it happens; this catches moving on
-    // without one - another canvas, its own Close - on the frame after.
-    // And it stops being watched the frame after something has gone into
-    // it: from then on it is a drawing like any other, and an undo that
-    // empties it again is no reason to erase it for good, with the redo of
-    // what it held.
-    if (!untouchedDrawing_.has_value()) {
-        return;
-    }
-    const Canvas* current = Manager().CurrentOrNull();
-    const bool onScreen =
-        current != nullptr && std::any_of(current->items.begin(), current->items.end(), [&](const Item& item) {
-            return item.id == *untouchedDrawing_ && !Manager().IsDeleted(*current, item);
-        });
-    if (!onScreen) {
-        SettleUntouchedDrawing();
-    } else if (!session_.IsUntouched(*untouchedDrawing_)) {
-        untouchedDrawing_.reset();
-    }
-}
-
 // ================= Canvases =================
 
 CanvasId Editor::CreateCanvasInCurrentFolder() {
@@ -840,15 +789,9 @@ void Editor::QuickCapture(float displayW, float displayH) {
 
 // ================= Placing and changing the selection =================
 
-void Editor::ToggleFullscreenUndoably(ItemId id, bool stretch) {
-    session_.ToggleFullscreen(id, stretch);
-    KeepDrawingsPlaced({id});
-}
+void Editor::ToggleFullscreenUndoably(ItemId id, bool stretch) { session_.ToggleFullscreen(id, stretch); }
 
-void Editor::ResetToNativeSizeUndoably(ItemId id) {
-    session_.ResetItemToNativeSize(id);
-    KeepDrawingsPlaced({id});
-}
+void Editor::ResetToNativeSizeUndoably(ItemId id) { session_.ResetItemToNativeSize(id); }
 
 void Editor::PreviewPlacement(const std::vector<std::pair<ItemId, Rect>>& rects) {
     std::vector<ItemId> ids;
@@ -872,7 +815,6 @@ void Editor::NudgeSelection(float dx, float dy, Filing filing) {
         if (item == nullptr || item->isFullscreen) {
             continue;  // a fullscreen snippet has nowhere to go
         }
-        KeepDrawingsPlaced({id});
         rects.emplace_back(id, ClampRectToViewport(Rect{item->rect.x + dx, item->rect.y + dy, item->rect.w,
                                                         item->rect.h},
                                                    displayW_, displayH_));
@@ -927,17 +869,12 @@ void Editor::ScaleSelectionByWheel(int steps) {
     }
     const float anchorX = minX + boxW * 0.5f;
     const float anchorY = minY + boxH * 0.5f;
-    std::vector<ItemId> ids;
     std::vector<std::pair<ItemId, Rect>> rects;
     for (const Item* item : items) {
-        ids.push_back(item->id);
         const Rect scaled{anchorX + (item->rect.x - anchorX) * scale, anchorY + (item->rect.y - anchorY) * scale,
                           item->rect.w * scale, item->rect.h * scale};
         rects.emplace_back(item->id, ClampRectToViewport(scaled, displayW_, displayH_));
     }
-    // A drawing placed and then scaled is one someone wants, as one moved
-    // or resized by hand is.
-    KeepDrawingsPlaced(ids);
     // A spin of the wheel is one undo, back to the size it started at: a
     // burst's (see WheelBurst).
     PreviewPlacement(rects);
@@ -1188,21 +1125,6 @@ void Editor::Undo() {
     // had done so far is the most recent thing done, and this takes it
     // back. Carried on, a drag would overwrite whatever the undo restored
     // and drop that step from the history unseen.
-    //
-    // A drawing a click made and nothing was put into is taken back by
-    // going, not by leaving an empty snippet behind, marked deleted - when
-    // it is the most recent thing done on its canvas. A press anywhere else
-    // settles it as it happens, but a key does not: a paste made after it
-    // is the step to take back, and the hand has moved on from the drawing
-    // - which goes the way moving on takes it, without being the undo.
-    if (untouchedDrawing_.has_value() && session_.HistoryRevision() != untouchedDrawingRevision_) {
-        SettleUntouchedDrawing();
-    }
-    if (untouchedDrawing_.has_value() && session_.DiscardIfUntouched(*untouchedDrawing_)) {
-        untouchedDrawing_.reset();
-        ShowUndoStep(Session::UndoStep{Session::UndoWhat::Create, /*undone=*/true});
-        return;
-    }
     ShowUndoStep(session_.Undo());
 }
 

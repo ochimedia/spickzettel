@@ -114,12 +114,6 @@ void OverlayApp::Settle(Scope scope) {
     // be drawn again to hear that it closed; and, for All, a popup, a
     // panel, drawing mode or the creation tool in hand.
     editor_.Settle(scope);
-    // After the gesture, which may have put a stroke into it: going away is
-    // moving on, and so is coming up, which nothing ran while hidden to
-    // notice. Exit has no next showing, and a restart would load the
-    // drawing as an ordinary snippet - a fullscreen empty one, over the
-    // canvas.
-    editor_.SettleUntouchedDrawing();
     // A slider or swatch in the middle of a drag is not drawn again to say
     // it was let go of, which is where its preview is committed - not
     // before the next showing, and not at all before an exit or in
@@ -545,10 +539,6 @@ void OverlayApp::Prepare(float displayW, float displayH) {
         return;
     }
 
-    // A drawing a stray click made goes once the hand has moved on from it
-    // (see Editor::UntouchedDrawing). A press elsewhere settles it as it
-    // happens (RecognizePress); this catches moving on without one.
-    editor_.WatchUntouchedDrawing();
 
     // Nothing acts on a snippet that has gone - see Editor::Selection. The
     // keys and the wheel have been handled as they came (see OnInput).

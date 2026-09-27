@@ -170,12 +170,6 @@ class History {
 public:
     bool CanUndo(CanvasId canvas) const;
     bool CanRedo(CanvasId canvas) const;
-    // Counts the changes to a history that move its top - a step filed,
-    // undone or redone - so that a caller can tell whether anything came
-    // between two of its own edits. A snippet's history moving or being
-    // forgotten counts for nothing, and so does the oldest falling off the
-    // end.
-    uint64_t Revision() const { return revision_; }
 
     // Files `step`, just done on `canvas`, on top of its undo stack.
     void Record(CanvasId canvas, Step step);
@@ -235,7 +229,6 @@ private:
 
     std::unordered_map<CanvasId, Stacks> stacks_;
     uint64_t nextSeq_ = 1;
-    uint64_t revision_ = 0;
 };
 
 }  // namespace sz::core::history

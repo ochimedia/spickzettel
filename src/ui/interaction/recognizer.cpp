@@ -212,20 +212,6 @@ Answer RecognizePress(const Event& press, Editor& editor) {
     // is open is for closing it, whatever happens to the note on the way.
     const bool noteOpen = editor.EditingNote().has_value();
     const bool isDouble = editor.TakeDoubleClick(press);
-    // A press anywhere but on the drawing a stray click made is the hand
-    // moving on from it. Not a press on a panel, which is as likely to be
-    // picking a color to draw in it with; nor one on the selection bar,
-    // which is the selection's - the drawing may be in it: its Pin, its
-    // drawing buttons, and its Close, which settles it itself.
-    if (const std::optional<core::ItemId> untouched = editor.UntouchedDrawing();
-        untouched.has_value() && !editor.PointerOverView() && !editor.PanelOpen()) {
-        const PointerTarget target = editor.ResolvePointerTarget(press.position.x, press.position.y);
-        const bool onIt = (target.kind != PointerTarget::Kind::None && target.item == *untouched) ||
-                          target.body == untouched || target.kind == PointerTarget::Kind::Button;
-        if (!onIt) {
-            editor.SettleUntouchedDrawing();
-        }
-    }
     // 1: a press on a panel of ImGui's own - a popover, the canvas bar, the
     // Overview, all above every item - is theirs alone.
     if (editor.PointerOverView()) {

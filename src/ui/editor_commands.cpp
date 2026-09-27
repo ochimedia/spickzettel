@@ -330,27 +330,11 @@ void Editor::Run(const Command& command, Filing filing) {
             if (made == 0) {
                 return;  // too small to be meant, or not written: the tool stays in hand to try again
             }
-            switch (command.madeBy) {
-                case MadeBy::Asking:
-                    break;
-                case MadeBy::Tool:
-                    // A creation tool places once. A drawing has already
-                    // handed over to Draw (see HandOverNewItem); a
-                    // screenshot hands back the tool that was in hand
-                    // before it.
-                    if (ActiveTool() == Tool::NewScreenshot) {
-                        PutDownCreationTool();
-                    }
-                    break;
-                case MadeBy::Press:
-                    // A drawing a press on empty canvas made is watched
-                    // until something goes into it - see UntouchedDrawing.
-                    // One asked for, from a menu or with a creation tool,
-                    // is not.
-                    if (kind == ItemCreationKind::Drawing) {
-                        WatchAsUntouched(made);
-                    }
-                    break;
+            // A creation tool places once. A drawing has already handed
+            // over to Draw (see HandOverNewItem); a screenshot hands back
+            // the tool that was in hand before it.
+            if (command.madeBy == MadeBy::Tool && ActiveTool() == Tool::NewScreenshot) {
+                PutDownCreationTool();
             }
             return;
         }

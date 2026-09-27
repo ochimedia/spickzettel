@@ -313,7 +313,7 @@ Every frame of edit mode runs these stages, in order:
 
 | Stage | What it does | What it may change | Today |
 |---|---|---|---|
-| 1. Prepare | tells the editor the display size; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the welcome notes placed; an untouched drawing let go; the selection pruned; a note edit ended elsewhere put away (C5); the stroke rasters; where the canvas bar is | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
+| 1. Prepare | tells the editor the display size; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the welcome notes placed; the selection pruned; a note edit ended elsewhere put away (C5); the stroke rasters; where the canvas bar is | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
 | 2. Canvas | surfaces 1 to 5 | a widget's own value (section 6); records actions | `RenderCanvasLayer`, `RenderItems`, `RenderCanvasBar` |
 | 3. Open | the effect queue: popups opened and closed, ImGui's active widget let go | ImGui's popups and focus | `ApplyEffects` |
 | 4. Popups | surface 6 | as stage 2 | the five popups' `Render...` functions |

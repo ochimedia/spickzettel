@@ -33,9 +33,7 @@
 namespace sz::ui {
 
 // The Canvas level's answer to a left or right press, as the rules above
-// say. Also what every press on the canvas does first: a drawing a stray
-// click made goes, once a press lands elsewhere (see
-// Editor::UntouchedDrawing).
+// say.
 Answer RecognizePress(const Event& press, Editor& editor);
 
 }  // namespace sz::ui

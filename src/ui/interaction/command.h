@@ -94,9 +94,8 @@ enum class Scope { Hand, Canvas, All };
 
 // Who asked for a snippet to be made: a menu row or a key, the creation
 // tool in hand, or a press on empty canvas - which decides what happens
-// around it (see Editor::Run): the screenshot tool is put down once it has
-// placed, and a drawing a press made is watched until something goes
-// into it (see Editor::UntouchedDrawing).
+// around it (see Editor::Run): a press leaves drawing mode first, and the
+// screenshot tool is put down once it has placed.
 enum class MadeBy { Asking, Tool, Press };
 
 // One command, with what it is about. Most take the selection as it is

@@ -250,10 +250,9 @@ public:
     // Whatever is in flight, finished as the overlay goes away, comes up or
     // turns view-only - one sequence for all of them, in one order: what
     // `scope` covers ended, top down (see Editor::Settle and
-    // docs/ARCHITECTURE.md, "The hand"); a drawing nothing went into
-    // discarded (see Editor::SettleUntouchedDrawing); and what only a frame
-    // of edit mode would otherwise have kept, kept now - a slider's
-    // preview, the pen as the hand left it. Hand for the overlay put away,
+    // docs/ARCHITECTURE.md, "The hand"); and what only a frame of edit mode
+    // would otherwise have kept, kept now - a slider's preview, the pen as
+    // the hand left it. Hand for the overlay put away,
     // restarted or coming up, which leaves drawing mode, a panel and a
     // popup as they were; All for view-only mode and for good, at exit and
     // at the end of the OS session.

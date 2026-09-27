@@ -171,9 +171,7 @@ public:
     // and when there is, it is done: nothing on a stack is ever refused.
     bool CanUndo() const;
     bool CanRedo() const;
-    // See history::History::Revision - what tells the editor whether an
-    // untouched drawing is still the most recent thing done.
-    uint64_t HistoryRevision() const { return history_.Revision(); }
+
     // The history itself, to read - for the tests.
     const history::History& History() const { return history_; }
 
@@ -290,15 +288,7 @@ public:
     // - the Overview's picker, and the new canvas the selection is taken
     // to. None to the current canvas or a deleted one.
     Placed SendItemsTo(const std::vector<ItemId>& ids, CanvasId target, bool copy);
-    // Removes a snippet nothing has been put into - no strokes, no text, no
-    // picture of its own - as if it had never been
-    // made: erased rather than marked, and off the history. For a snippet a
-    // click made that turned out not to be meant. False, doing nothing, for
-    // a snippet with anything in it or no snippet by that id.
-    bool DiscardIfUntouched(ItemId itemId);
-    // Whether nothing has been put into the snippet yet - the question
-    // DiscardIfUntouched asks, on its own. False for no snippet by that id.
-    bool IsUntouched(ItemId itemId) const;
+
     // Every stroke on a snippet, cleared as one undoable step. False if there was nothing to clear.
     bool ClearDrawing(ItemId itemId);
     // A text edit of a snippet's note, as a gesture: Begin remembers what

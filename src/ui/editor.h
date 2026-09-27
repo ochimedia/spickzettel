@@ -379,36 +379,6 @@ public:
     // was none and the one made could not be written.
     const Canvas* EnsureCanvasForNewItem();
 
-    // ----- The drawing a stray click made -----
-    //
-    // A drawing a press on empty canvas made, with nothing put into it yet.
-    // It goes - erased, not merely marked deleted - once the hand moves on
-    // without using it: a press anywhere else, another canvas, its own
-    // Close, the overlay going away, or an undo (see
-    // SettleUntouchedDrawing). What makes a snippet on every click on empty
-    // space harmless to miss with. Moving, resizing or nudging it is using
-    // it (see KeepDrawingsPlaced): a box someone has placed is a box they
-    // want, empty or not. And so is putting anything into it: once it has
-    // held a stroke it is watched no longer (see WatchUntouchedDrawing), so
-    // an undo that empties it again leaves it as an empty drawing rather
-    // than erasing it, redo and all.
-    std::optional<ItemId> UntouchedDrawing() const { return untouchedDrawing_; }
-    // Starts watching `id`, just made by a press on empty canvas.
-    void WatchAsUntouched(ItemId id);
-    // Discards the drawing if nothing has been put into it by now, and
-    // stops watching it either way.
-    void SettleUntouchedDrawing();
-    // Stops watching it if it is among `ids`, placed on purpose - moved,
-    // nudged, scaled by the wheel, made fullscreen, set back to its size.
-    // Each files a step on the drawing itself; watched on, an undo took it
-    // for a step made elsewhere, took the drawing away for it - and then
-    // undid the step before.
-    void KeepDrawingsPlaced(const std::vector<ItemId>& ids);
-    // Once a frame: settles it once the hand has moved on without a press -
-    // another canvas, its own Close - and stops watching it once something
-    // has gone into it.
-    void WatchUntouchedDrawing();
-
     // ===== Canvases =====
 
     // A new empty canvas at the end of the browsed folder, named for when
@@ -605,10 +575,6 @@ private:
     std::optional<ItemId> editingNoteItemId_;
     std::string noteEditBuffer_;
     bool noteEditJustBegun_ = false;
-
-    std::optional<ItemId> untouchedDrawing_;
-    // The history as it stood once untouchedDrawing_ was made - see Undo.
-    uint64_t untouchedDrawingRevision_ = 0;
 
     struct Click {
         platform::MouseButton button = platform::MouseButton::Left;

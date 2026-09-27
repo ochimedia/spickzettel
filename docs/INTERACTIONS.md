@@ -543,8 +543,8 @@ a state (Pending, Spent) or a level.
   - `canvas.*`: the Canvas level, always at the bottom.
 - `Editor` (`ui/editor.*`, `editor_commands.cpp`): the state the
   interactions work on, moved out of `OverlayApp` - selection, tool,
-  drawing mode, clipboard, the untouched drawing, the note being typed -
-  and the machine itself (`Editor::Input`). `OverlayApp` keeps the views:
+  drawing mode, clipboard, the note being typed - and the machine itself
+  (`Editor::Input`). `OverlayApp` keeps the views:
   it draws from `Editor`, offers it the window's events, applies the
   effects, and answers what only ImGui knows - whether the pointer is
   over one of its windows, which popup or panel is showing - through

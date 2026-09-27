@@ -570,37 +570,6 @@ TEST(SessionTest, MakingASnippetIsUndoneIntoDeletedAndRedoneOutOfIt) {
     EXPECT_FALSE(Model(session).IsItemDeleted(item));
 }
 
-TEST(SessionTest, AnUntouchedSnippetIsDiscardedWithoutATrace) {
-    Session session;
-    const ItemId kept = session.CreateItem(false, Rect{0, 0, 100, 100}, "Kept");
-    DrawStrokeInto(session, kept);
-    const ItemId empty = session.CreateItem(false, Rect{200, 0, 100, 100}, "Empty");
-
-    EXPECT_TRUE(session.DiscardIfUntouched(empty));
-    EXPECT_EQ(ItemById(Model(session), empty), nullptr) << "erased, not marked deleted";
-    // Its own making is off the history; the rest of the canvas's is not.
-    const std::optional<Session::UndoStep> undone = session.Undo();
-    ASSERT_TRUE(undone.has_value());
-    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
-}
-
-TEST(SessionTest, ASnippetWithAnythingInItIsNotDiscarded) {
-    Session session;
-    const ItemId drawn = session.CreateItem(false, Rect{0, 0, 100, 100}, "Drawn");
-    DrawStrokeInto(session, drawn);
-    const ItemId noted = session.CreateItem(false, Rect{200, 0, 100, 100}, "Noted");
-    session.BeginTextEdit(noted);
-    session.EndTextEdit(std::string("text"));
-    const ItemId shot = session.CreateItem(true, Rect{400, 0, 100, 100}, "Shot");
-
-    EXPECT_FALSE(session.DiscardIfUntouched(drawn));
-    EXPECT_FALSE(session.DiscardIfUntouched(noted));
-    EXPECT_FALSE(session.DiscardIfUntouched(shot)) << "a capture is content, even one that failed";
-    EXPECT_FALSE(session.DiscardIfUntouched(424242));
-    EXPECT_NE(ItemById(Model(session), drawn), nullptr);
-    EXPECT_NE(ItemById(Model(session), noted), nullptr);
-    EXPECT_NE(ItemById(Model(session), shot), nullptr);
-}
 
 // Deleting a snippet for good takes its own entries with it, and nothing
 // else of its canvas's history.

@@ -22,11 +22,6 @@ namespace {
 // spelled as.
 int64_t DeletionStampNow() { return std::max<int64_t>(static_cast<int64_t>(std::time(nullptr)), 1); }
 
-// Nothing put into it: no ink, no text, and no picture of its own - a
-// screenshot is content even when the capture failed.
-bool ItemIsUntouched(const Item& item) {
-    return !item.hasBackground && item.strokes.empty() && item.noteText.empty();
-}
 
 size_t IndexOn(const Canvas& canvas, ItemId id) {
     size_t index = 0;
@@ -248,20 +243,6 @@ ItemId Session::CreateItem(bool hasBackground, Rect rect, std::string name) {
     return CreateItem(std::move(prototype));
 }
 
-bool Session::IsUntouched(ItemId itemId) const {
-    const Item* item = Model().FindItemAnywhere(itemId);
-    return item != nullptr && ItemIsUntouched(*item);
-}
-
-bool Session::DiscardIfUntouched(ItemId itemId) {
-    if (!IsUntouched(itemId)) {
-        return false;
-    }
-    // Erased rather than marked - there is nothing in it to find again - and
-    // its own changes go with it: its making, and any stroke taken back off
-    // it. The rest of the canvas's history stays.
-    return DeletePermanently(itemId);
-}
 
 // ================= Where snippets are =================
 

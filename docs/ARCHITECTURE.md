@@ -1529,17 +1529,25 @@ placement or a style edit open on the session while it goes on, and it
 is filed when the burst ends (see "Bursts"). A spin of the wheel is
 taken back in one step, to where it started.
 
-### Making a snippet is on the history, and an untouched one goes
+### Making a snippet is on the history, and an empty one stays
 
-Snippets are made through `Session::CreateItem`, so a screenshot taken
-by mistake can be undone into its deletion mark and redone out of it. A
-drawing a press made is watched until the hand moves on, and
-`DiscardIfUntouched` erases it for good if nothing was put into it: no
-strokes, no text, no picture. A screenshot is content even when
-its capture failed. The watch ends the frame after something first goes
-in, not when the hand moves on: a drawing that has held a stroke is a
-drawing, and an undo that empties it again must leave an empty drawing
-behind rather than erase it - which took the redo of the stroke with it.
+Snippets are made through `Session::CreateItem`, so a snippet made by
+mistake - a screenshot, a drawing - can be undone into its deletion mark
+and redone out of it.
+
+An empty drawing stays, as any snippet does, until it is deleted or its
+making undone. It used to go: a drawing a press on empty canvas made was
+watched, and erased for good once the hand moved on - a press elsewhere,
+another canvas, the overlay put away - with nothing put into it. That
+kept drawings made by accident from piling up. In use it took drawings
+made on purpose, ready ahead of the moment they were for: in a game, the
+drawing was gone by the time it was wanted, and a dot drawn into it to
+keep it was the workaround. Making one takes the drawing trigger and a
+drag, a double-click or a hold, and one made by accident is an undo or a
+Delete away, while one lost was not noticed until it was needed. The
+watch also had corners of its own: a move or a burst canceled with
+Escape had already counted as placing the drawing, and kept it where a
+click elsewhere would not have.
 
 ### Freezing the screen
 
@@ -1693,8 +1701,8 @@ the session, and depends on nothing but Dear ImGui and the icon tables.
 
 What the hand works on is not the view's: `ui::Editor` (`editor.*`,
 `editor_commands.cpp`) holds the selection, the tool in hand and its
-shapes, drawing mode, the clipboard, the note being typed, the drawing a
-stray click made, and every command, and makes snippets and canvases -
+shapes, drawing mode, the clipboard, the note being typed, and every
+command, and makes snippets and canvases -
 with no ImGui in it. It is the Editor of `docs/INTERACTIONS.md`, section
 10: the state the interactions work on, which is why it can have no
 frame behind it. The view tells it the display size (each frame
@@ -1775,11 +1783,10 @@ right drag there does nothing, and a canvas switch or a capture during
 the press drops it rather than releasing it into a menu over a canvas
 nobody clicked on.
 
-Two things make it cheap to hit by accident. A drawing a press made is
-watched until the hand moves on or something goes into it, and discarded
-for good if nothing was put into it. And making one is on the history:
-undo marks the snippet deleted, where a screenshot taken by mistake can
-still be found.
+One made by accident is cheap to take back: making one is on the
+history, and undo marks the snippet deleted, where a screenshot taken by
+mistake can still be found. An empty drawing is not taken away on its
+own (see "Making a snippet is on the history, and an empty one stays").
 
 While one is being made the others fade to a fifth of themselves - with
 a creation tool in hand, and while a region is dragged out - so what is
@@ -2003,10 +2010,8 @@ mode, a panel and a popup are still up at the next showing; the overlay
 coming up ends it again, for whatever went some other way, and forgets
 which buttons were down (`Machine::Forget`); view-only mode, and the app
 exiting, end everything above the canvas. All of these go through one
-sequence, `OverlayApp::Settle`: the scope, then the drawing a stray click
-made - after the gesture, which may have put a stroke into it - then
-what only a frame of edit mode would otherwise keep, a slider's preview
-and the pen.
+sequence, `OverlayApp::Settle`: the scope, then what only a frame of
+edit mode would otherwise keep, a slider's preview and the pen.
 
 Escape is not such a command while a gesture is in flight: the gesture
 sees it first and is *canceled*, leaving things as the press found them

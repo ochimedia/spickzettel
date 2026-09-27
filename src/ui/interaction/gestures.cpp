@@ -244,8 +244,6 @@ void Placement::Begin(const Event& event, Editor& editor) {
     // Where the snippets it may touch are now is the session's, which files
     // the gesture as one undo entry when it ends, if anything moved.
     editor.GetSession().BeginPlacement(ids);
-    // A drawing placed is one someone wants, empty or not.
-    editor.KeepDrawingsPlaced(ids);
     last_ = event.position;
     if (!fromDrag_) {
         return;  // a handle, pressed: nothing has moved yet

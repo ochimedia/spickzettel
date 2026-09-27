@@ -472,8 +472,12 @@ private:
                 }
                 break;
             case 2:
-                if (const ItemId item = AnyHere()) {
-                    session_.DiscardIfUntouched(item);
+                // An empty snippet erased for good, as the editor once did
+                // to an empty drawing - kept, so that each seed still
+                // makes the session it was measured on.
+                if (const Item* item = session_.Manager().FindItemAnywhere(AnyHere());
+                    item != nullptr && !item->hasBackground && item->strokes.empty() && item->noteText.empty()) {
+                    session_.DeletePermanently(item->id);
                 }
                 break;
         }

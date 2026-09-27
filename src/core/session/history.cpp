@@ -222,7 +222,6 @@ void History::Record(CanvasId canvas, Step step) {
     }
     step.seq = nextSeq_++;
     PushCapped(stacks.undo, std::move(step));
-    ++revision_;
 }
 
 Step History::TakeUndo(CanvasId canvas) {
@@ -244,7 +243,6 @@ void History::Undone(CanvasId canvas, Step step) {
         DropRedoOf(change.item, canvas);
     }
     PushCapped(stacks_[canvas].redo, std::move(step));
-    ++revision_;
 }
 
 void History::Redone(CanvasId canvas, Step step) {
@@ -253,7 +251,6 @@ void History::Redone(CanvasId canvas, Step step) {
     }
     step.seq = nextSeq_++;
     PushCapped(stacks_[canvas].undo, std::move(step));
-    ++revision_;
 }
 
 void History::PutBack(CanvasId canvas, Step step, bool undo) {
