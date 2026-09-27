@@ -1,6 +1,7 @@
 #include "core/canvas/canvas_manager.h"
 
 #include <algorithm>
+#include <ctime>
 
 #include <gtest/gtest.h>
 
@@ -1097,6 +1098,40 @@ TEST(CanvasManagerTest, DuplicateItemAddsASecondItemOnTheSameCanvasWithDeepCopie
     // the copy is a deep copy, not a shared reference.
     manager.CurrentOrNull()->items.back().strokes.front().points.push_back(StrokePoint{3, 3});
     EXPECT_EQ(manager.CurrentOrNull()->items.front().strokes.front().points.size(), 2u);
+}
+
+// Each folder, canvas and snippet is stamped with when it was made - a
+// copy with when it was copied, not its source's stamp. None was stamped,
+// and every one read 0.
+TEST(CanvasManagerTest, WhatIsMadeIsStampedWithWhenItWasMade) {
+    const int64_t before = static_cast<int64_t>(std::time(nullptr));
+    CanvasManager manager;
+    manager.AddFolder("F");
+    manager.AddCanvas("C");
+    const ItemId id = manager.CreateItem(false, Rect{10, 20, 300, 200}, "A");
+    const auto made = [&manager](ItemId item) -> Item& {
+        auto& items = manager.CurrentOrNull()->items;
+        return *std::find_if(items.begin(), items.end(), [item](const Item& i) { return i.id == item; });
+    };
+    made(id).createdAt = 5;  // made long ago
+    const ItemId copy = manager.DuplicateItem(id);
+    Item pasted;
+    pasted.createdAt = 5;
+    const ItemId fromPrototype = manager.CreateItem(pasted);
+    const int64_t after = static_cast<int64_t>(std::time(nullptr));
+
+    const auto madeNow = [&](int64_t stamp) { return stamp >= before && stamp <= after; };
+    ASSERT_EQ(manager.Folders().size(), 2u);
+    for (const Folder& folder : manager.Folders()) {
+        EXPECT_TRUE(madeNow(folder.createdAt)) << folder.name << ": " << folder.createdAt;
+    }
+    ASSERT_EQ(manager.Canvases().size(), 2u);
+    for (const Canvas& canvas : manager.Canvases()) {
+        EXPECT_TRUE(madeNow(canvas.createdAt)) << canvas.name << ": " << canvas.createdAt;
+    }
+    EXPECT_TRUE(madeNow(made(copy).createdAt)) << "a copy is a new thing";
+    EXPECT_TRUE(madeNow(made(fromPrototype).createdAt));
+    EXPECT_EQ(made(id).createdAt, 5) << "its own stamp, kept";
 }
 
 TEST(CanvasManagerTest, DuplicateItemLeavesTheCopyWithoutAStoredPicture) {

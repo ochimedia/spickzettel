@@ -713,6 +713,12 @@ is an object of two keys, and an ordinary canvas holds tens of thousands
 of them. Folders, canvases and snippets keep their random uids as row
 ids (see "Ids and names").
 
+`created_at` - and `createdAt` in a snippet's record - is when the thing
+was made, a copy included: a copy is a new thing. Found in review on
+2026-09-27: it was stored and documented from the start and never set,
+so every row said 0, and when something was made could not be told
+later. Nothing reads it yet.
+
 A snippet's picture is keyed by the snippet and lives in the same file,
 so the two cannot disagree about where either is. Foreign keys keep a
 canvas in a folder and a snippet on a canvas, with a cascade, and a

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <ctime>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -19,6 +20,10 @@ namespace {
 // (see Session::ClonePicturesForCopy); this class has no store.
 void DetachPictureForCopy(Item& copied) { copied.picture.stored = false; }
 
+// When a folder, canvas or snippet made now was made - a copy included,
+// which is a new thing (see Folder::createdAt).
+int64_t CreatedNow() { return static_cast<int64_t>(std::time(nullptr)); }
+
 }  // namespace
 
 CanvasManager::CanvasManager(std::string initialCanvasName) {
@@ -27,6 +32,7 @@ CanvasManager::CanvasManager(std::string initialCanvasName) {
     Folder folder;
     folder.id = NewId();
     folder.name = TimestampName();
+    folder.createdAt = CreatedNow();
     folders_.push_back(folder);
     currentFolderId_ = folder.id;
     AddCanvas(initialCanvasName.empty() ? TimestampName() : std::move(initialCanvasName));
@@ -70,6 +76,7 @@ CanvasId CanvasManager::AddCanvas(std::string name) {
     canvas.id = NewId();
     canvas.name = std::move(name);
     canvas.folderId = currentFolderId_;
+    canvas.createdAt = CreatedNow();
     const CanvasId newId = canvas.id;
     // After the last canvas already in this folder, so a new one lands at
     // the end of its own folder and every other folder's canvases stay
@@ -176,6 +183,7 @@ FolderId CanvasManager::AddFolder(std::string name) {
     Folder folder;
     folder.id = NewId();
     folder.name = std::move(name);
+    folder.createdAt = CreatedNow();
     // At the end, like a new canvas within its folder: a list you keep
     // adding to reads in the order things were made, and the sidebar's own
     // "New folder" button sits at the bottom, which is where the eye
@@ -314,6 +322,7 @@ ItemId CanvasManager::CreateItem(Item prototype) {
     }
     Item item = std::move(prototype);
     item.id = NewId();
+    item.createdAt = CreatedNow();
     item.deletedAt = 0;
     item.picture.showsPlaceholder = item.hasBackground;
     item.picture.stored = false;
@@ -644,6 +653,7 @@ ItemId CanvasManager::PlaceItemOnCanvas(ItemId id, CanvasId targetCanvasId, bool
         // arrived marked would be invisible where it landed, and listed
         // among the deleted with a stamp from before it existed.
         copied.deletedAt = 0;
+        copied.createdAt = CreatedNow();
         const ItemId newId = copied.id;
         DetachPictureForCopy(copied);
         // Read off `source` before this, which may be the very vector

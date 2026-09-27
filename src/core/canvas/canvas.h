@@ -17,9 +17,11 @@ struct Folder {
     FolderId id = 0;
     std::string name;
     // When it was made and, while it is deleted, when it was deleted - both
-    // seconds since the epoch, 0 for "never". The stamp is the whole of
-    // being deleted: a deleted thing stays where it is, marked, and
-    // restoring it clears the mark (see CanvasManager::MarkDeleted).
+    // seconds since the epoch. 0 for not deleted, and for made before this
+    // was stamped (see docs/ARCHITECTURE.md, "Schema"). The deletion stamp
+    // is the whole of being deleted: a deleted thing stays where it is,
+    // marked, and restoring it clears the mark (see
+    // CanvasManager::MarkDeleted).
     int64_t createdAt = 0;
     int64_t deletedAt = 0;
 
