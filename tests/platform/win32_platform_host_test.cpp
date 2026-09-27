@@ -8,6 +8,7 @@
 #include <windows.h>
 
 #include <sddl.h>
+#include <shellapi.h>
 
 namespace sz::platform::win32 {
 namespace {
@@ -100,6 +101,40 @@ TEST(Win32PlatformHostTest, ACloseSentToTheOverlayExitsToo) {
     EXPECT_TRUE(IsWindow(overlay));
     SendMessageA(overlay, WM_SYSCOMMAND, SC_CLOSE, 0);
     EXPECT_EQ(exits, 1) << "Alt+F4 over the overlay is not a way out";
+}
+
+// Explorer restarting takes every tray icon with it, and says so to every
+// top-level window once the new taskbar is up: "TaskbarCreated". The icon
+// is put back then; it was gone, and the menu's Exit with it, until the
+// app was restarted.
+TEST(Win32PlatformHostTest, TheTrayIconIsPutBackWhenExplorerRestarts) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    if (!host.ShowTrayIcon()) {
+        GTEST_SKIP() << "no taskbar to put an icon on";
+    }
+    const HWND hwnd = FindWindowA(nullptr, name.c_str());
+    ASSERT_NE(hwnd, nullptr);
+    NOTIFYICONDATAA icon{};
+    icon.cbSize = sizeof(icon);
+    icon.hWnd = hwnd;
+    icon.uID = kTrayIconId;
+    // A change to no field of it, which the shell takes only for an icon
+    // it has.
+    const auto shown = [&icon] { return Shell_NotifyIconA(NIM_MODIFY, &icon) != FALSE; };
+    ASSERT_TRUE(shown());
+    const UINT taskbarCreated = RegisterWindowMessageA("TaskbarCreated");
+
+    // What a restart leaves: the icon gone, not by the host's hand.
+    ASSERT_TRUE(Shell_NotifyIconA(NIM_DELETE, &icon));
+    ASSERT_FALSE(shown());
+    SendMessageA(hwnd, taskbarCreated, 0, 0);
+    EXPECT_TRUE(shown()) << "put back";
+
+    // A taskbar that kept it: still one.
+    SendMessageA(hwnd, taskbarCreated, 0, 0);
+    EXPECT_TRUE(shown());
 }
 
 // A hotkey's callback may unregister that same hotkey while it runs - a

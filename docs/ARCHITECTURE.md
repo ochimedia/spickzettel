@@ -2610,6 +2610,14 @@ hidden the event loop blocks in `GetMessage` and nothing is rendered,
 which is what delivers near-zero idle CPU. `Destroy` happens once, on
 exit.
 
+The tray icon is Explorer's to keep, and Explorer restarting - a crash,
+or ended in Task Manager - drops every icon it had. Once the new taskbar
+is up it says so to every top-level window with the registered message
+`TaskbarCreated`, and the host adds its icon again. It did not listen:
+the icon was gone until the app was restarted, and the tray menu's Exit
+with it. An elevated copy is above Explorer, where UIPI drops the
+broadcast unless the window lets it through (`ChangeWindowMessageFilterEx`).
+
 A window nobody can see is not drawn either. With the screen locked or
 the secure desktop up, `Present` returns `DXGI_STATUS_OCCLUDED` at once
 instead of waiting for vsync, and a frame loop drawing every frame used

@@ -52,6 +52,8 @@ private:
     // ends - Windows abandons it for us.
     HANDLE instanceMutex_ = nullptr;
     bool trayIconVisible_ = false;
+    // "TaskbarCreated", as registered - see Initialize.
+    UINT taskbarCreatedMessage_ = 0;
     TrayCommandCallback trayCallback_;
     std::unordered_map<int, HotkeyCallback> hotkeyCallbacks_;
     std::function<void()> backgroundTimerCallback_;
@@ -67,5 +69,9 @@ private:
 // The name of the mutex AcquireSingleInstance claims for appName: in this
 // session's namespace, and named for the user this process runs as.
 std::wstring InstanceMutexName(const std::string& appName);
+
+// The host's one tray icon, as the shell knows it: this id on the host
+// window.
+inline constexpr UINT kTrayIconId = 1;
 
 }  // namespace sz::platform::win32

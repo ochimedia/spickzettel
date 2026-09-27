@@ -24,7 +24,6 @@ constexpr const char* kWindowClassName = "SpickzettelHostWindowClass";
 constexpr UINT kTrayIconMessage = WM_APP + 1;
 // A task posted from the app thread - see Post.
 constexpr UINT kPostedTaskMessage = WM_APP + 2;
-constexpr UINT kTrayIconId = 1;
 
 // Whether this message must not go through TranslateMessage.
 //
@@ -96,6 +95,13 @@ bool Win32PlatformHost::Initialize(const std::string& appName) {
     if (!hwnd_) {
         return false;
     }
+
+    // Broadcast by Explorer once a taskbar is up - after it restarts, with
+    // every tray icon it had gone; each program puts its own back. An
+    // elevated copy is above Explorer, and the broadcast is only let up
+    // to it when asked for.
+    taskbarCreatedMessage_ = RegisterWindowMessageA("TaskbarCreated");
+    ChangeWindowMessageFilterEx(hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
 
     overlayWindow_.Initialize(instance);
     // A close asked of the overlay is one asked of the app - see WM_CLOSE.
@@ -408,6 +414,16 @@ LRESULT CALLBACK Win32PlatformHost::WndProcThunk(HWND hwnd, UINT msg, WPARAM wPa
 }
 
 LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    // Explorer restarted (see Initialize). Without this the icon was gone
+    // until the app was, and with it the menu's Exit. Taken out first,
+    // should this taskbar have kept it, so that the add is of a new icon.
+    if (msg == taskbarCreatedMessage_ && msg != 0) {
+        if (trayIconVisible_) {
+            RemoveTrayIcon();
+            ShowTrayIcon();
+        }
+        return 0;
+    }
     switch (msg) {
         case kTrayIconMessage:
             // Left is the icon's primary action, which for this app is the
