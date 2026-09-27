@@ -3196,7 +3196,11 @@ Consequences that shape `Win32InputGrab`:
   letter would come out unshifted), the overlay window is registered
   wide so a posted `WM_CHAR` carries a UTF-16 unit, and
   `TranslateMessage` is skipped for the key-downs the grab posts or every
-  letter arrives twice. IME composition genuinely needs a focused window
+  letter arrives twice. A chord with Ctrl alone, Alt alone or a Win key
+  makes no character; only Ctrl and Alt together do, which is AltGr.
+  Found in the next review on 2026-09-27, and seen by hand: only Ctrl
+  was left out, and Alt+E or Win+E typed an "e" - Windows makes a
+  `WM_SYSCHAR` of Alt+E, which no text field takes. IME composition genuinely needs a focused window
   and still borrows one. The event loop takes and dispatches its
   messages with the wide calls too. Found in the next review on
   2026-09-27, and seen by hand: through the ANSI ones every `WM_CHAR`

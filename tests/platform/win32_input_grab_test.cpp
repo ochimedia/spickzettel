@@ -363,6 +363,51 @@ TEST(Win32InputGrabTest, TheHudLeavesTheRepeatsOfTheGamesKeysAlone) {
     DestroyWindow(overlay);
 }
 
+// Alt or a Win key held with a letter is a chord, not text, and the grab
+// makes no character of it, as Windows would make none a text field takes.
+// The grab made characters of every chord but Ctrl's: Alt+E and Win+E
+// typed an "e" into a name.
+TEST(Win32InputGrabTest, AnAltOrWinChordTypesNothing) {
+    HWND overlay = CreateWindowExW(0, L"STATIC", L"overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleW(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.dontForwardKeystrokes = true;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);  // not active: no hook, the keys are handed in
+    const auto charsPosted = [overlay] {
+        std::vector<WPARAM> chars;
+        MSG msg;
+        while (PeekMessageW(&msg, overlay, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_CHAR) {
+                chars.push_back(msg.wParam);
+            }
+        }
+        return chars;
+    };
+    const auto chord = [&grab](UINT modifier) {
+        grab.KeyEventForTesting(modifier, true);
+        grab.KeyEventForTesting('E', true);
+        grab.KeyEventForTesting('E', false);
+        grab.KeyEventForTesting(modifier, false);
+    };
+
+    grab.KeyEventForTesting('E', true);
+    grab.KeyEventForTesting('E', false);
+    ASSERT_EQ(charsPosted(), std::vector<WPARAM>{L'e'}) << "a bare letter types";
+    chord(VK_LMENU);
+    EXPECT_TRUE(charsPosted().empty()) << "Alt+E";
+    chord(VK_LWIN);
+    EXPECT_TRUE(charsPosted().empty()) << "Win+E";
+    chord(VK_RWIN);
+    EXPECT_TRUE(charsPosted().empty()) << "Win+E, the right one";
+
+    grab.SetOptions(EditModeInputOptions{});
+    grab.SetOverlayWindow(nullptr);
+    DestroyWindow(overlay);
+}
+
 // A modifier held since before the grab reached Windows itself, and has
 // nothing to be handed back.
 TEST(Win32InputGrabTest, NothingSwallowedIsNothingHandedBack) {

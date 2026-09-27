@@ -1201,12 +1201,19 @@ void Win32InputGrab::PostCharactersToOverlay(UINT vk, const KBDLLHOOKSTRUCT& eve
         return;
     }
     // Ctrl without Alt is a shortcut, not text - Ctrl+A would otherwise
-    // produce U+0001. AltGr arrives as Ctrl+Alt together and *is* text on
-    // layouts that use it (the German @ and \ live there), so only the
-    // Ctrl-alone case is excluded.
+    // produce U+0001 - and so is Alt without Ctrl, which Windows makes a
+    // WM_SYSCHAR that no text field takes, and a Win key chord. AltGr
+    // arrives as Ctrl+Alt together and *is* text on layouts that use it
+    // (the German @ and \ live there), so that one is kept. Alt+E and
+    // Win+E typed an "e". The Win key is no modifier the record keeps:
+    // swallowed like any key, or held since before the grab.
     const bool ctrl = modifiers_.Ctrl();
     const bool alt = modifiers_.Alt();
-    if (ctrl && !alt) {
+    const auto held = [this](UINT key) {
+        return swallowedDown_[key].load(std::memory_order_relaxed) ||
+               (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) != 0;
+    };
+    if (ctrl != alt || held(VK_LWIN) || held(VK_RWIN)) {
         return;
     }
 
