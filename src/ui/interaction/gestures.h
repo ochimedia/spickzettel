@@ -246,14 +246,20 @@ private:
 // lets go of it too, keeping what it had done.
 class Widget final : public Gesture {
 public:
-    explicit Widget(const Event& press) : Gesture(press.button) {}
+    explicit Widget(const Event& press) : Gesture(press.button), pressedAt_(press.position) {}
     const char* Name() const override { return "Widget"; }
     void Interrupt(Editor& editor) override;
     void Cancel(Editor& editor) override;
+    // Where the press went down - which window it is, for a view that
+    // cares whether it was its own.
+    platform::Vec2 PressedAt() const { return pressedAt_; }
 
 protected:
     Answer Moved(const Event& /*event*/, Editor& /*editor*/) override { return Answer::Claim(); }
     Answer Released(const Event& /*event*/, Editor& /*editor*/) override { return Answer::Finish(); }
+
+private:
+    platform::Vec2 pressedAt_;
 };
 
 // A selection bar button held down, fired by a release over it - the rule

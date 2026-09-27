@@ -2380,12 +2380,16 @@ canvas and the Overview. It hides below the edge and slides out when the
 pointer reaches it, for a moment when the canvas changes, and for a
 moment when the overlay comes up; it stays in while a gesture is in
 flight, so a stroke run into the bottom of the screen cannot pull a bar
-out from under the pointer. A press on one of ImGui's windows - a
-`Widget` - is not such a gesture (`Editor::PointerInUse`): the press is
-that window's, and when the window is the bar, counting it had the bar
-slide away half a second into a tile being dragged to a new place.
-Found in review on 2026-09-27; the test-engine tests of the bar never
-went through the input machine, where the `Widget` is pushed.
+out from under the pointer. A press on the bar itself is not such a
+gesture: counting it had the bar slide away half a second into a tile
+being dragged to a new place. Found in review on 2026-09-27; the
+test-engine tests of the bar never went through the input machine,
+where that press - a `Widget` - is pushed. The first fix left out every
+`Widget`, and so a press on any other window - the color chooser's
+square, a slider in the Properties popover - dragged into the bottom
+edge slid the bar out around it. Found in the next review on
+2026-09-27: the bar now leaves out only a `Widget` whose press went down
+on it (`Editor::WidgetPressedAt`).
 
 A tile's own context menu is a right click on it, which does not also
 switch to that canvas: a menu is opened to act on something, not to go

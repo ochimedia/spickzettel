@@ -122,10 +122,15 @@ void CanvasBar::Update(float displayW, float displayH, bool menuUp) {
     // screen must not pull the bar out from under it - and not while the
     // Overview is up, which covers it. A press on the bar itself - a tile
     // held, or dragged to a new place - is not busy elsewhere: counted
-    // so, it slid the bar away from under the tile being dragged.
+    // so, it slid the bar away from under the tile being dragged. A press
+    // on any other window is, though: a slider or the color chooser's
+    // square dragged into the bottom edge had the bar slide out around it.
     const bool pointerKnown = ImGui::IsMousePosValid(&io.MousePos);
     const ImVec2 pointer = io.MousePos;
-    const bool busy = PanelOpen() || editor_.PointerInUse();
+    const std::optional<platform::Vec2> widgetPress = editor_.WidgetPressedAt();
+    const bool pressOnBar =
+        widgetPress.has_value() && Near(canvasBarRect_, ImVec2(widgetPress->x, widgetPress->y), Px(kHoverSlackPx));
+    const bool busy = PanelOpen() || (editor_.PointerInUse() && !pressOnBar);
     const bool atBottom = pointerKnown && pointer.y >= displayH - Px(kRevealZonePx);
     const bool onBar = pointerKnown && Near(canvasBarRect_, pointer, Px(kHoverSlackPx));
     // And while a tile's context menu is up: the pointer has left the bar

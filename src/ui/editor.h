@@ -245,11 +245,14 @@ public:
     // Nothing in flight: no gesture, no press waiting to be understood,
     // and no burst. The rest of a press that has had its say is at rest.
     bool HandAtRest() const;
-    // A button held down to some purpose on the canvas: a gesture, or a
-    // press waiting to be understood - not the rest of one, not a burst,
-    // which the keys or the wheel make, and not a press on one of ImGui's
-    // windows (a Widget), which is that window's business.
+    // A button held down to some purpose: a gesture, or a press waiting
+    // to be understood - not the rest of one, and not a burst, which the
+    // keys or the wheel make.
     bool PointerInUse() const;
+    // Where the press went down, while the gesture is a press on one of
+    // ImGui's windows (a Widget) - so a view can tell a press on itself
+    // from one on another window dragged across it.
+    std::optional<platform::Vec2> WidgetPressedAt() const;
 
     // ===== The tool, and drawing mode =====
 

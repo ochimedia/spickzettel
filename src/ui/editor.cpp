@@ -306,9 +306,13 @@ bool Editor::HandAtRest() const {
     return gesture == nullptr || dynamic_cast<const Spent*>(gesture) != nullptr;
 }
 
-bool Editor::PointerInUse() const {
-    const Interaction* gesture = machine_.At(Level::Gesture);
-    return dynamic_cast<const Gesture*>(gesture) != nullptr && dynamic_cast<const Widget*>(gesture) == nullptr;
+bool Editor::PointerInUse() const { return dynamic_cast<const Gesture*>(machine_.At(Level::Gesture)) != nullptr; }
+
+std::optional<platform::Vec2> Editor::WidgetPressedAt() const {
+    if (const Widget* widget = machine_.As<Widget>(Level::Gesture)) {
+        return widget->PressedAt();
+    }
+    return std::nullopt;
 }
 
 // ================= The tool, and drawing mode =================

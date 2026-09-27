@@ -167,6 +167,44 @@ TEST_F(ViewLayerTest, TheCanvasBarStaysOutUnderAPressOnIt) {
     EXPECT_GE(App().CanvasBarReveal(), 1.0f);
 }
 
+// A control dragged into the bottom edge - the pen color chooser's square,
+// a slider - does not bring the bar out: the hand is busy elsewhere. Only
+// a press on the bar itself leaves the bar out, and leaving out every
+// press on one of ImGui's windows slid the bar out under the drag.
+TEST_F(ViewLayerTest, TheCanvasBarStaysInUnderAControlDraggedToTheBottomEdge) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    const std::optional<ImVec2> color = App().SelectionBarButtonCenter(ChromeButton::Color);
+    ASSERT_TRUE(color.has_value());
+    RawClick(color->x, color->y);
+    StepFrames(300);
+    ASSERT_TRUE(App().IsColorChooserOpen());
+    ASSERT_EQ(App().CanvasBarReveal(), 0.0f);
+
+    const ImGuiContext& g = *ImGui::GetCurrentContext();
+    ASSERT_FALSE(g.OpenPopupStack.empty());
+    const ImRect square = g.OpenPopupStack.back().Window->InnerRect;
+    const float x = square.Min.x + 30.0f;
+    MoveTo(x, square.Min.y + 30.0f);
+    RawMouse(x, square.Min.y + 30.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(x, square.Min.y + 30.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    ASSERT_NE(App().InputStack().find("Widget"), std::string::npos) << App().InputStack();
+    MoveTo(x, kDisplayHeight - 1.0f);
+    RawMouse(x, kDisplayHeight - 1.0f, platform::MouseEventKind::Move);
+    StepFrames(90);
+    EXPECT_EQ(App().CanvasBarReveal(), 0.0f) << "came out under the drag";
+
+    // Let go there, and the bar comes out as it always does.
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
+    RawMouse(x, kDisplayHeight - 1.0f, platform::MouseEventKind::Up);
+    StepFrames(90);
+    EXPECT_GE(App().CanvasBarReveal(), 1.0f);
+}
+
 TEST_F(ViewLayerTest, PropertiesSitOverTheSnippetsAndUnderTheChrome) {
     ShowEditMode();
     StepFrame();
