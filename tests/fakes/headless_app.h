@@ -29,13 +29,17 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 #include "app/tray_app.h"
+#include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
 #include "ui/widgets.h"
 #include "ui/ui_scale.h"
@@ -50,7 +54,13 @@ using namespace ::sz::app;
 class HeadlessAppTest : public ::testing::Test {
 protected:
     void SetUp() override { StartWith(DefaultConfig()); }
-    void TearDown() override { Shutdown(); }
+    void TearDown() override {
+        Shutdown();
+        if (libraryDir_.has_value()) {
+            std::error_code ec;
+            std::filesystem::remove_all(*libraryDir_, ec);
+        }
+    }
 
     // Everything StartWith and TearDown both have to undo. Virtual because
     // a subclass may own something bound to the ImGui context (the test
@@ -100,6 +110,22 @@ protected:
     // context before any frame is drawn - the test engine counts frames
     // from the moment it is bound and complains if it has missed some.
     virtual void OnStarted() {}
+
+    // A start on a library file of its own, in a directory made for the
+    // test and removed with it: for a test that looks at what is written,
+    // or makes the writes fail (see FailingWrites). Written as a first run
+    // leaves it, so that the start is not greeted as one. The file's path.
+    std::filesystem::path StartWithLibrary(AppConfig config = DefaultConfig()) {
+        Shutdown();  // the controller running holds a file of its own
+        libraryDir_ = std::filesystem::temp_directory_path() /
+                      (std::string("spickzettel_headless_") +
+                       ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        std::filesystem::remove_all(*libraryDir_);
+        host_.libraryPath = *libraryDir_ / "library.db";
+        EXPECT_TRUE(persistence::LibraryStore(host_.libraryPath).Save(CanvasManager().ExportSnapshot()));
+        StartWith(std::move(config));
+        return host_.libraryPath;
+    }
 
     // A library with nothing in it at all - legal, reachable by deleting
     // the last canvas (see CanvasManager's class comment), and the state
@@ -486,6 +512,8 @@ protected:
     // Run by StepFrame once the frame is rendered and before what it posted
     // runs: its draw lists are then what the window would present.
     std::function<void()> afterRender_;
+    // See StartWithLibrary.
+    std::optional<std::filesystem::path> libraryDir_;
 };
 
 }  // namespace sz::test

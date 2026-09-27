@@ -233,8 +233,11 @@ public:
     bool TakeDoubleClick(const Event& press);
     // Ends what `scope` covers - see Machine::EndFor - and commits a note
     // being typed, whatever ended it: what a command does first, and what
-    // the overlay going away, coming up and going view-only do.
-    void Settle(Scope scope);
+    // the overlay going away, coming up and going view-only do. False when
+    // what it ended could not be written, and so went back as it was: a
+    // command then does not run, for the reasons Session::EndOpenGesture
+    // gives.
+    bool Settle(Scope scope);
     // The overlay has just come up: nothing is in the hand, whatever was
     // held when it went away - see Machine::Forget - and no click is
     // remembered.
@@ -515,9 +518,10 @@ public:
     // ===== Commands =====
     //
     // Runs `command` if it can act now (see Available), after ending what
-    // its scope covers (see Scope). Every key, context menu row, selection
-    // bar button and global hotkey reaches the app through here - see
-    // ui/interaction/command.h. True when it ran.
+    // its scope covers (see Scope) - unless that could not be written (see
+    // Settle). Every key, context menu row, selection bar button and global
+    // hotkey reaches the app through here - see ui/interaction/command.h.
+    // True when it ran.
     bool Dispatch(const Command& command);
     // Whether `command` would do anything now: what grays a menu row out,
     // and what a command is asked before it ends anything. Asked before

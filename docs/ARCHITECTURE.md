@@ -1123,6 +1123,16 @@ screenshot that cannot be written is not taken, rather than kept in
 memory looking captured. Under the autosave, the same failure kept every
 change since in memory, for an exit to lose.
 
+**Nor is what comes after it in the same command.** Every command first
+ends what is open - `Editor::Settle` for the hand, and
+`Session::EndOpenGesture` under it - and that write can fail too. What
+it ended then goes back as it was, and the command does nothing more:
+Ctrl+Z mid-drag with the drag's write failing took back the step before
+the drag as well, a second thing gone for one key, and the undo's own
+write, landing, took the line down before the drag's failure had been
+drawn. `Session::FailedWrites` counts the failures, which is how a
+caller tells across a call whether anything it wrote failed.
+
 A gesture - a drag, a slider, a note being typed, the eraser - is
 previewed in the model and written once, as the command it ends in; its
 checkpoint is taken when it begins. A crash in the middle of one loses
@@ -1976,7 +1986,8 @@ entry dispatch through the overlay and are handed back to it to run
 but the hand is the overlay's to settle. A hotkey reaches it as an event
 of the input machine (`OverlayApp::OnHotkey`), which every level passes
 on to the command - hidden or not, with no frame needed. `Dispatch` asks `Available`,
-ends what the command's scope covers, and runs it. So settling
+ends what the command's scope covers, and runs it - unless what it ended
+could not be written (see "Every command is written as it is made"). So settling
 first is not something each command has to remember: nothing runs
 a command any other way, and `Run` is one exhaustive switch.
 

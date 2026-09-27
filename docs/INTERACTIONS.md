@@ -439,6 +439,13 @@ so canceling one is clearing it.
 `Session::EndOpenGesture` stays as the safety net it is: with the machine
 right, no command ever finds a gesture open.
 
+An Interrupt whose write fails is not made, like any command whose write
+fails: the gesture goes back as it was. The command that interrupted it
+then does not run - `Editor::Settle` answers false, and `Dispatch` stops
+there. (Found after the build, in the review of 2026-09-27: Ctrl+Z
+mid-drag, with the drag's write failing, took back the step before the
+drag as well.)
+
 ## 9. The cases, worked through
 
 Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.

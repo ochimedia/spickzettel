@@ -34,7 +34,9 @@ std::vector<StrokePoint> ShapePoints(Session::Shape shape, float startX, float s
 
 void Session::BeginShape(ItemId itemId, Shape shape, float screenX, float screenY, uint32_t colorRGBA,
                          float widthScreenPx) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     if (Model().CurrentOrNull() == nullptr || Model().FindItemAnywhere(itemId) == nullptr) {
         return;
     }

@@ -73,6 +73,10 @@ public:
     // made - with none landing since: for a UI to say so, and keep saying
     // so until one does.
     bool LastWriteFailed() const { return lastWriteFailed_; }
+    // How many writes have failed since the session began: compared across
+    // a call, whether anything it wrote failed - where LastWriteFailed says
+    // only whether the last write did.
+    uint64_t FailedWrites() const { return failedWrites_; }
     // Writes the whole library as it is: for one begun in memory - a first
     // run's, a folder and a canvas - before its first command, which writes
     // only what it changes and would find what holds it missing. True
@@ -402,7 +406,13 @@ private:
     // calls this first; a gesture's own calls continue it instead. One
     // gesture at a time is what keeps a step from being filed in the middle
     // of another's changes, where undoing it would undo part of those.
-    void EndOpenGesture();
+    //
+    // False when the gesture's write failed, so it was not made - and then
+    // the command does nothing more: it would act on a library the hand
+    // did not leave it in, an undo taking back a second thing where the
+    // failed one had already gone back, and its own write would land and
+    // clear LastWriteFailed before the failure was ever seen.
+    [[nodiscard]] bool EndOpenGesture();
     // Where each of these snippets is now. Ids that name nothing are left
     // out.
     using Placements = std::vector<std::pair<ItemId, history::Placement>>;
@@ -439,8 +449,9 @@ private:
     platform::IOverlayWindow* window_ = nullptr;
     CanvasManager manager_;
     persistence::LibraryStore* store_ = nullptr;
-    // See LastWriteFailed.
+    // See LastWriteFailed and FailedWrites.
     bool lastWriteFailed_ = false;
+    uint64_t failedWrites_ = 0;
     // What the command in progress has for Land to write besides rows: the
     // pixels of the screenshots it captured, and the pictures its copies
     // take from their sources. Emptied by every Land, landed or not.

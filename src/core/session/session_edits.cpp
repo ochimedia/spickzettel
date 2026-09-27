@@ -44,7 +44,8 @@ bool Session::CanUndo() const { return history_.CanUndo(Model().CurrentCanvasId(
 
 bool Session::CanRedo() const { return history_.CanRedo(Model().CurrentCanvasId()); }
 
-void Session::EndOpenGesture() {
+bool Session::EndOpenGesture() {
+    const uint64_t failures = failedWrites_;
     EndTextEdit();
     EndPlacement();
     EndStyleEdit();
@@ -52,12 +53,16 @@ void Session::EndOpenGesture() {
     if (shapeItemId_.has_value()) {
         EndShape(shapeLastX_, shapeLastY_);
     }
+    return failedWrites_ == failures;
 }
 
 std::optional<Session::UndoStep> Session::StepHistory(bool undo) {
     // Whatever the hand is in the middle of is the most recent thing done,
-    // and is filed first - it is what this takes back.
-    EndOpenGesture();
+    // and is filed first - it is what this takes back. One that could not
+    // be written has gone back already, and nothing more is taken back.
+    if (!EndOpenGesture()) {
+        return std::nullopt;
+    }
     const CanvasId canvas = Model().CurrentCanvasId();
     const Step* next = undo ? history_.NextUndo(canvas) : history_.NextRedo(canvas);
     if (next == nullptr) {
@@ -132,7 +137,10 @@ std::optional<Session::UndoStep> Session::Redo() { return StepHistory(/*undo=*/f
 // ================= Strokes =================
 
 void Session::CommitLiveStroke(ItemId itemId) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        liveLayer_.Clear();  // not made, as its write failing would leave it
+        return;
+    }
     const Checkpoint before = Before({itemId});
     Canvas* canvasPtr = Model().CurrentOrNull();
     if (!canvasPtr || liveLayer_.Strokes().empty()) {
@@ -155,7 +163,9 @@ void Session::CommitLiveStroke(ItemId itemId) {
 }
 
 bool Session::ClearDrawing(ItemId itemId) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return false;
+    }
     const Checkpoint before = Before({itemId});
     Item* item = Model().FindItemAnywhere(itemId);
     if (!item || item->strokes.empty()) {
@@ -181,7 +191,9 @@ bool Session::ClearDrawing(ItemId itemId) {
 bool Session::DeleteItem(ItemId itemId) { return DeleteItems({itemId}) == 1; }
 
 size_t Session::DeleteItems(const std::vector<ItemId>& itemIds) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return 0;
+    }
     // Only snippets on this canvas: the step is filed under it. Marked where
     // they are, and one step for all of them is what an undo restores - one
     // per snippet made one Delete that many undos, and past the history's
@@ -207,7 +219,9 @@ size_t Session::DeleteItems(const std::vector<ItemId>& itemIds) {
 }
 
 ItemId Session::CreateItem(Item prototype, bool undoable) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return 0;
+    }
     const Checkpoint before = Before({});
     const ItemId itemId = Model().CreateItem(std::move(prototype));
     if (itemId == 0) {
@@ -284,7 +298,9 @@ bool Session::CommitPlacements(const Checkpoint& checkpoint, const Placements& b
 }
 
 void Session::BeginPlacement(const std::vector<ItemId>& ids) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     placement_ = PlacementGesture{PlacementsOf(ids), Before(ids)};
 }
 
@@ -349,7 +365,9 @@ bool Session::SetRects(const std::vector<std::pair<ItemId, Rect>>& rects) {
 }
 
 void Session::ToggleFullscreen(ItemId id, bool stretch) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint checkpoint = Before({id});
     const Placements before = PlacementsOf({id});
     Model().ToggleFullscreen(id, Model().DisplayWidth(), Model().DisplayHeight(), stretch);
@@ -357,7 +375,9 @@ void Session::ToggleFullscreen(ItemId id, bool stretch) {
 }
 
 void Session::ResetItemToNativeSize(ItemId id) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint checkpoint = Before({id});
     const Placements before = PlacementsOf({id});
     Model().ResetItemToNativeSize(id);
@@ -379,13 +399,16 @@ void Session::PreviewStyles(const std::vector<std::pair<ItemId, ItemStyle>>& sty
                std::equal(ids.begin(), ids.end(), edit.before.begin(),
                           [](ItemId id, const std::pair<ItemId, ItemStyle>& was) { return id == was.first; });
     };
+    // What was open ends first, and one whose write fails ends this as well
+    // - see EndOpenGesture.
+    const uint64_t failures = failedWrites_;
     if (styleEdit_.has_value() && !sameSnippets(*styleEdit_)) {
         EndStyleEdit();
     }
-    if (!styleEdit_.has_value()) {
-        EndOpenGesture();
+    if (failedWrites_ != failures || (!styleEdit_.has_value() && !EndOpenGesture())) {
+        return;
     }
-    // Found only now, after what was open has ended: an end whose write
+    // Found only now, and not held across the ends above: a write that
     // fails puts the library back as it was, which moves every snippet in
     // it (see CanvasManager::RollBack).
     std::vector<std::pair<Item*, const ItemStyle*>> items;
@@ -448,7 +471,9 @@ void Session::CancelStyleEdit() {
 }
 
 bool Session::SetStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return false;
+    }
     PreviewStyles(styles);
     return EndStyleEdit();
 }
@@ -484,7 +509,9 @@ std::optional<Change> Session::MoveItemTo(ItemId itemId, CanvasId target) {
 }
 
 Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return {};
+    }
     Placed placed;
     if (Model().CurrentOrNull() == nullptr) {
         return placed;
@@ -533,7 +560,9 @@ Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
 }
 
 Session::Placed Session::Duplicate(const std::vector<ItemId>& ids) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return {};
+    }
     Placed placed;
     const Checkpoint before = Before({});
     Step step{0, What::Duplicate, {}};
@@ -560,7 +589,9 @@ Session::Placed Session::Duplicate(const std::vector<ItemId>& ids) {
 }
 
 Session::Placed Session::SendItemsTo(const std::vector<ItemId>& ids, CanvasId target, bool copy) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return {};
+    }
     Placed placed;
     const CanvasId source = Model().CurrentCanvasId();
     const Canvas* targetCanvas = Model().FindCanvas(target);
@@ -597,7 +628,9 @@ Session::Placed Session::SendItemsTo(const std::vector<ItemId>& ids, CanvasId ta
 // ================= Text =================
 
 void Session::BeginTextEdit(ItemId itemId) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Item* item = Model().FindItemAnywhere(itemId);
     if (!item) {
         return;
@@ -680,7 +713,9 @@ void Session::NoteEraseOutcome(const std::vector<size_t>& outcome) {
 void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx) {
     // A gesture still open is over, and filed whole. Without this its
     // strokes' snapshot was taken over by this one's.
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     // The item's whole stroke list as the gesture starts, followed through
     // every call to one step for the whole gesture - see
     // eraseGestureStartSnapshot_.
@@ -718,7 +753,9 @@ void Session::CancelErase() {
 }
 
 void Session::EraseRect(ItemId itemId, float minX, float minY, float maxX, float maxY) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     // A whole gesture in one call: nothing changes the item between the
     // press that started the rectangle and the release that ends it, so the
     // snapshot taken here is the one the press would have taken.

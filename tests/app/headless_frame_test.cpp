@@ -15,6 +15,7 @@
 #include "core/canvas/item_geometry.h"  // kItemMinWidth/kItemMinHeight, for the group-resize floor
 #include "core/persistence/library_store.h"
 #include "core/util/uid.h"
+#include "support/failing_writes.h"
 #include "support/held_library.h"
 #include "support/session_test_access.h"
 #include "ui/theme.h"
@@ -3516,6 +3517,41 @@ TEST_F(OverlappingItemsTest, UndoMidDragTakesBackTheDragSoFar) {
 
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the first move is still there to undo";
+}
+
+// The same with the drag's write failing: the drag goes back as it was,
+// which is what the undo was for, and the undo does nothing more. It took
+// back the step before the drag as well - the front snippet's making -
+// and landing, cleared the line saying the drag had failed.
+TEST_F(OverlappingItemsTest, UndoMidDragWhoseDragCannotBeWrittenTakesBackOnlyTheDrag) {
+    const std::filesystem::path library = StartWithLibrary();
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const float x = items.back.x + 60.0f;
+    const float y = items.back.y + 100.0f;
+    StepFrames(30);  // past the double-click window: a press, not a second click
+
+    test::FailingWrites failing(library);
+    failing.FailSnippet(backId_);
+    RawMouse(x, y, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(x, y + 150.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    PressCtrlKey(ImGuiKey_Z);
+    failing.Stop();
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the drag, not made";
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "and nothing else taken back";
+    EXPECT_TRUE(AppSession().LastWriteFailed());
+
+    RawMouse(x, y + 300.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(x, y + 300.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(BackItem().rect.y, items.back.y) << "the rest of the drag moved nothing";
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "the next undo takes back what was before";
 }
 
 // Escape with the button still down calls the drag off: the snippet is

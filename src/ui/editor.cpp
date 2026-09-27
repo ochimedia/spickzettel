@@ -289,9 +289,11 @@ bool Editor::TakeDoubleClick(const Event& press) {
     return std::sqrt(dx * dx + dy * dy) <= kDoubleClickPx;
 }
 
-void Editor::Settle(Scope scope) {
+bool Editor::Settle(Scope scope) {
+    const uint64_t failures = session_.FailedWrites();
     machine_.EndFor(scope);
     CommitNoteBeingEdited();
+    return session_.FailedWrites() == failures;
 }
 
 void Editor::ForgetTheHand() {
@@ -729,8 +731,11 @@ void Editor::SwitchCanvas(CanvasId id) {
     // Whatever the hand is in the middle of ends on the canvas it started
     // on, and a note being typed is committed to the item it belongs to -
     // only the current canvas is drawn, so an editor left open across the
-    // switch would strand what was typed.
-    Settle(Scope::Canvas);
+    // switch would strand what was typed. What could not be written went
+    // back as it was, on this canvas, which is where it is seen to.
+    if (!Settle(Scope::Canvas)) {
+        return;
+    }
     session_.SwitchToCanvas(id);
 }
 

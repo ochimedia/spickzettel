@@ -267,7 +267,9 @@ void OverlayApp::AskToDelete(DeleteTarget target) {
 }
 
 void OverlayApp::PerformDelete(const DeleteTarget& target) {
-    editor_.Settle(Scope::Canvas);  // a command - see Scope
+    if (!editor_.Settle(Scope::Canvas)) {  // a command - see Scope
+        return;
+    }
     const bool forGood = target.forGood || target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
     const bool deletedIn = target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
     // Its textures go as it leaves the screen, either way (see

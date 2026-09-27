@@ -961,10 +961,10 @@ TEST_F(WrittenSessionTest, ACopysPictureIsWrittenWithTheCopy) {
 }
 
 // A style preview about other snippets ends the edit open first. An end
-// that cannot be written puts the library back as it was, which moves every
-// snippet in it: the new preview is made on the snippets as they are now,
-// not on where they were.
-TEST_F(WrittenSessionTest, AStylePreviewAfterAnEditThatCannotBeWrittenIsMadeOnTheSnippetsAsTheyAre) {
+// that cannot be written puts the library back as it was, moving every
+// snippet in it, and the new preview is not begun: nothing is left open,
+// and the next preview begins it as usual.
+TEST_F(WrittenSessionTest, AStylePreviewAfterAnEditThatCannotBeWrittenIsNotBegun) {
     const ItemId a = session_.CreateItem(false, Rect{0, 0, 100, 100}, "A");
     const ItemId b = session_.CreateItem(false, Rect{200, 0, 100, 100}, "B");
     ItemStyle half = ItemStyle::Of(*ItemById(session_.Manager(), a));
@@ -978,14 +978,41 @@ TEST_F(WrittenSessionTest, AStylePreviewAfterAnEditThatCannotBeWrittenIsMadeOnTh
     session_.PreviewStyles({{a, faint}});
     failing.Stop();
     EXPECT_TRUE(session_.LastWriteFailed());
+    EXPECT_FALSE(session_.StyleEditOpen());
+    EXPECT_FLOAT_EQ(ItemById(session_.Manager(), a)->foregroundOpacity, 1.0f);
     EXPECT_FLOAT_EQ(ItemById(session_.Manager(), b)->foregroundOpacity, 1.0f) << "the edit of both, not made";
-    EXPECT_FLOAT_EQ(ItemById(session_.Manager(), a)->foregroundOpacity, 0.2f) << "the new one, previewed";
 
+    session_.PreviewStyles({{a, faint}});
     EXPECT_TRUE(session_.EndStyleEdit());
     const CanvasManagerSnapshot disk = OnDisk();
     ASSERT_EQ(ItemsIn(disk), 2u);
     EXPECT_FLOAT_EQ(disk.canvases[0].items[0].foregroundOpacity, 0.2f);
     EXPECT_FLOAT_EQ(disk.canvases[0].items[1].foregroundOpacity, 1.0f);
+}
+
+// Every command ends the gesture open first. One whose write fails has
+// gone back as it was, and the command does nothing more: an undo would
+// take back a second thing, the step before the drag, with the drag's
+// failure never said.
+TEST_F(WrittenSessionTest, ACommandAfterAGestureThatCannotBeWrittenDoesNothingMore) {
+    const ItemId a = session_.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId b = session_.CreateItem(false, Rect{200, 0, 100, 100}, "B");
+    DrawStrokeInto(session_, a);
+    session_.BeginPlacement({b});
+    session_.PreviewRect(b, Rect{200, 150, 100, 100});
+
+    FailingWrites failing(File());
+    failing.FailSnippet(b);
+    EXPECT_FALSE(session_.Undo().has_value());
+    failing.Stop();
+    EXPECT_TRUE(session_.LastWriteFailed());
+    EXPECT_EQ(ItemById(session_.Manager(), b)->rect, (Rect{200, 0, 100, 100})) << "the drag, not made";
+    EXPECT_EQ(ItemById(session_.Manager(), a)->strokes.size(), 1u) << "and nothing else taken back";
+
+    const std::optional<Session::UndoStep> undone = session_.Undo();
+    ASSERT_TRUE(undone.has_value());
+    EXPECT_EQ(undone->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(ItemById(session_.Manager(), a)->strokes.empty());
 }
 
 // A gesture called off writes nothing: the file holds what it held before

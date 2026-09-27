@@ -33,6 +33,7 @@ bool Session::Land(const Checkpoint& before) {
     // A texture the command made - a capture's - is asked for by no one
     // from here, and goes with the next frame (see TextureCache).
     lastWriteFailed_ = true;
+    ++failedWrites_;
     migrations_.clear();
     Model().RollBack(before);
     liveLayer_.Clear();
@@ -44,6 +45,7 @@ bool Session::WriteWholeLibrary() {
         return true;
     }
     lastWriteFailed_ = !Store()->Save(Model().View());
+    failedWrites_ += lastWriteFailed_ ? 1 : 0;
     return !lastWriteFailed_;
 }
 
@@ -106,7 +108,9 @@ void Session::SwitchToCanvas(CanvasId id) {
     if (id == Model().CurrentCanvasId()) {
         return;
     }
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().SwitchToCanvas(id);
     if (Model().CurrentCanvasId() == id) {
@@ -116,14 +120,18 @@ void Session::SwitchToCanvas(CanvasId id) {
 }
 
 void Session::SwitchToFolder(FolderId id) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().SwitchToFolder(id);
     Land(before);
 }
 
 CanvasId Session::AddCanvas(std::string name) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return 0;
+    }
     const Checkpoint before = Before({});
     const CanvasId current = Model().CurrentCanvasId();
     const CanvasId id = Model().AddCanvas(std::move(name));
@@ -135,49 +143,63 @@ CanvasId Session::AddCanvas(std::string name) {
 }
 
 FolderId Session::AddFolder(std::string name) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return 0;
+    }
     const Checkpoint before = Before({});
     const FolderId id = Model().AddFolder(std::move(name));
     return Land(before) ? id : 0;
 }
 
 void Session::RenameFolder(FolderId id, std::string name) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().RenameFolder(id, std::move(name));
     Land(before);
 }
 
 void Session::RenameCanvas(CanvasId id, std::string name) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().RenameCanvas(id, std::move(name));
     Land(before);
 }
 
 void Session::ReorderFolder(FolderId id, size_t newIndex) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().ReorderFolder(id, newIndex);
     Land(before);
 }
 
 void Session::ReorderCanvas(CanvasId id, size_t newIndex) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().ReorderCanvas(id, newIndex);
     Land(before);
 }
 
 void Session::MoveCanvasToFolder(CanvasId canvasId, FolderId folderId) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().MoveCanvasToFolder(canvasId, folderId);
     Land(before);
 }
 
 void Session::SetPinned(const std::vector<ItemId>& ids, bool pinned) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before(ids);
     for (const ItemId id : ids) {
         if (Item* item = Model().FindItemAnywhere(id); item != nullptr && item->pinned != pinned) {
@@ -189,7 +211,9 @@ void Session::SetPinned(const std::vector<ItemId>& ids, bool pinned) {
 }
 
 void Session::SetMinimized(const std::vector<ItemId>& ids, bool minimized) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before(ids);
     for (const ItemId id : ids) {
         if (Item* item = Model().FindItemAnywhere(id); item != nullptr && item->minimized != minimized) {
@@ -201,14 +225,18 @@ void Session::SetMinimized(const std::vector<ItemId>& ids, bool minimized) {
 }
 
 void Session::BringItemsToFront(const std::vector<ItemId>& ids) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().BringItemsToFront(ids);
     Land(before);
 }
 
 void Session::MoveItemLayer(ItemId id, int direction) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return;
+    }
     const Checkpoint before = Before({});
     Model().MoveItemLayer(id, direction);
     Land(before);
@@ -224,7 +252,9 @@ void Session::ImportLibrary(CanvasManagerSnapshot snapshot) {
 }
 
 bool Session::Delete(uint64_t id) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return false;
+    }
     if (Model().FindFolder(id) == nullptr && Model().FindCanvas(id) == nullptr) {
         return false;
     }
@@ -233,7 +263,9 @@ bool Session::Delete(uint64_t id) {
 }
 
 bool Session::Restore(uint64_t id) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return false;
+    }
     if (Model().FindFolder(id) == nullptr && Model().FindCanvas(id) == nullptr) {
         return false;
     }
@@ -242,12 +274,16 @@ bool Session::Restore(uint64_t id) {
 }
 
 bool Session::DeletePermanently(uint64_t id) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return false;
+    }
     return EraseForGood({id}) != 0;
 }
 
 bool Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
-    EndOpenGesture();
+    if (!EndOpenGesture()) {
+        return false;
+    }
     const std::vector<CanvasId> marked = Model().MarkedCanvasesIn(folderId);
     return !marked.empty() && EraseForGood(marked) != 0;
 }

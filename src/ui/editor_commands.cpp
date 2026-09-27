@@ -18,8 +18,12 @@ bool Editor::Dispatch(const Command& command) {
     if (!Available(command)) {
         return false;
     }
-    // What the scope covers ends first - see Scope.
-    Settle(InfoFor(command.id).scope);
+    // What the scope covers ends first - see Scope - and a command whose
+    // settling could not be written does not run (see Settle).
+    if (!Settle(InfoFor(command.id).scope)) {
+        PruneSelection();
+        return false;
+    }
     ++commandsRun_;
     lastCommand_ = command.id;
     Run(command, Filing::Step);
