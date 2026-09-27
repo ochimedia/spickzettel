@@ -120,7 +120,9 @@ void CanvasBar::Update(float displayW, float displayH, bool menuUp) {
     // rect, which is where it was drawn). Not while the hand is busy with
     // something else - a stroke or a drag run into the bottom of the
     // screen must not pull the bar out from under it - and not while the
-    // Overview is up, which covers it.
+    // Overview is up, which covers it. A press on the bar itself - a tile
+    // held, or dragged to a new place - is not busy elsewhere: counted
+    // so, it slid the bar away from under the tile being dragged.
     const bool pointerKnown = ImGui::IsMousePosValid(&io.MousePos);
     const ImVec2 pointer = io.MousePos;
     const bool busy = PanelOpen() || editor_.PointerInUse();

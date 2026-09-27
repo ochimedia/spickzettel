@@ -139,6 +139,34 @@ TEST_F(ViewLayerTest, TheCanvasTileMenuSitsOverTheBarItCameFrom) {
     ExpectStack({"canvas", "items", "canvas bar", "canvas tile menu", "hud", "chrome"}, "canvas tile menu");
 }
 
+// A tile held on the bar - the start of a drag to reorder it - is a press
+// on the bar, not a stroke run into the bottom edge: the bar stays out
+// under it, however long it is held. The press goes both ways, as the
+// window sends it: to ImGui, and into the input stream.
+TEST_F(ViewLayerTest, TheCanvasBarStaysOutUnderAPressOnIt) {
+    ShowEditMode();
+    StepFrame();
+    RevealTheBar();
+    const ImGuiWindow* bar = ImGui::FindWindowByName("##canvas_bar");
+    ASSERT_NE(bar, nullptr);
+    const float x = bar->Pos.x + 20.0f;
+    const float y = bar->Pos.y + 20.0f;
+    MoveTo(x, y);
+    StepFrame();
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(x, y, platform::MouseEventKind::Down);
+    StepFrame();
+    ASSERT_NE(App().InputStack().find("Widget"), std::string::npos) << App().InputStack();
+
+    StepFrames(90);
+    EXPECT_GE(App().CanvasBarReveal(), 1.0f);
+
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
+    RawMouse(x, y, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_GE(App().CanvasBarReveal(), 1.0f);
+}
+
 TEST_F(ViewLayerTest, PropertiesSitOverTheSnippetsAndUnderTheChrome) {
     ShowEditMode();
     StepFrame();

@@ -306,7 +306,10 @@ bool Editor::HandAtRest() const {
     return gesture == nullptr || dynamic_cast<const Spent*>(gesture) != nullptr;
 }
 
-bool Editor::PointerInUse() const { return dynamic_cast<const Gesture*>(machine_.At(Level::Gesture)) != nullptr; }
+bool Editor::PointerInUse() const {
+    const Interaction* gesture = machine_.At(Level::Gesture);
+    return dynamic_cast<const Gesture*>(gesture) != nullptr && dynamic_cast<const Widget*>(gesture) == nullptr;
+}
 
 // ================= The tool, and drawing mode =================
 
