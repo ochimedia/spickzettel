@@ -35,6 +35,7 @@ add_executable(sz_core_tests
     platform/pointer_ballistics_test.cpp
     platform/presentation_test.cpp
     ui/icon_draw_test.cpp
+    ui/item_painting_test.cpp
     ui/cheat_sheet_test.cpp
     ui/command_test.cpp
     ui/editor_test.cpp

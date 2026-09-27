@@ -364,6 +364,19 @@ pixel from a slightly darker one. A one-pixel anti-aliasing fringe is
 carried in screen space so it stays a pixel wide whatever an item is
 scaled to.
 
+A stroke's mesh goes into the draw list in one piece, and ImGui is built
+with 32-bit indices (`ImDrawIdx`, set in `cmake/FetchImGui.cmake`),
+because one piece can pass the 65536 vertices 16 bits reach. The pen
+adds a point every 2 px it travels and holding still adds none; measured
+on straight lines, circles, zigzags, shading scribbles and loops, a
+stroke comes to 1.7-2.0 vertices per pixel whatever its width, so the
+ceiling was 32,000-39,000 px drawn without lifting the pen - half a
+minute of shading. Past it the indices wrapped and the stroke drew
+triangles across the screen. ImGui can split a draw list between two
+reservations but not inside one, and 32-bit indices cost a larger index
+buffer and nothing else: the DX11 backend takes its index format from
+`sizeof(ImDrawIdx)`.
+
 `StrokeMeshCache` keeps each stroke's mesh between frames, keyed by item
 and stroke index. Two things make it work. The mesh is built around the
 origin and translated as it is written into the draw list, so dragging

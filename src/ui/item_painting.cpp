@@ -108,9 +108,11 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
     const ImU32 transparent = color & ~IM_COL32_A_MASK;
     const ImVec2 uv = drawList->_Data->TexUvWhitePixel;
 
+    // One reservation for the whole mesh, which a stroke drawn for half a
+    // minute without lifting the pen takes past 65536 vertices: ImGui's
+    // indices are 32 bits here for that (see cmake/FetchImGui.cmake).
     drawList->PrimReserve(static_cast<int>(mesh->indices.size()), static_cast<int>(mesh->vertices.size()));
-    // After PrimReserve, which is what may start a fresh draw command (and
-    // reset this) when a mesh crosses the 16-bit index ceiling.
+    // After PrimReserve, which may start a fresh draw command and reset it.
     const unsigned int base = drawList->_VtxCurrentIdx;
     for (const StrokeVertex& v : mesh->vertices) {
         drawList->PrimWriteVtx(ImVec2(offsetX + v.x, offsetY + v.y), uv, v.coverage >= 1.0f ? color : transparent);

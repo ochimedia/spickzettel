@@ -19,5 +19,11 @@ add_library(imgui_core STATIC
 )
 target_include_directories(imgui_core SYSTEM PUBLIC ${imgui_SOURCE_DIR})
 target_compile_features(imgui_core PUBLIC cxx_std_17)
+# 32-bit indices, in every target that includes imgui.h - see
+# docs/ARCHITECTURE.md, "Tessellation, and its cache". A variable because
+# the test engine takes ImGui's headers without linking this target, and
+# has to agree on the type.
+set(IMGUI_DRAW_INDEX_DEFINITION "ImDrawIdx=unsigned int" CACHE INTERNAL "")
+target_compile_definitions(imgui_core PUBLIC "${IMGUI_DRAW_INDEX_DEFINITION}")
 
 set(IMGUI_BACKENDS_DIR ${imgui_SOURCE_DIR}/backends CACHE INTERNAL "")

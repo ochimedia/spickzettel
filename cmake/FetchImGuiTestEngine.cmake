@@ -42,6 +42,9 @@ target_include_directories(imgui_test_engine PUBLIC
 # std::function test bodies, so a test can capture the fixture it belongs
 # to instead of smuggling it through a void*.
 target_compile_definitions(imgui_test_engine PUBLIC IMGUI_ENABLE_TEST_ENGINE
+                            # The index type ImGui is built with - see
+                            # FetchImGui.cmake.
+                            "${IMGUI_DRAW_INDEX_DEFINITION}"
                             IMGUI_TEST_ENGINE_ENABLE_STD_FUNCTION=1
                             # The engine runs a test body on its own
                             # coroutine so it can yield a frame mid-test;
