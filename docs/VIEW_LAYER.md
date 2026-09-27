@@ -274,6 +274,14 @@ Instead, each kind has one place for it, run from one of two points:
 So a popup ended while nothing draws it, as when edit mode is left or the
 app exits, does its closing then.
 
+A third point: by `ApplyEffects`, when a popup it opened is closed again
+in the same pass - Escape in the same gap between two frames as the
+click that asked for it. The draw after it finds the popup not open, and
+a popup not yet drawn is taken there as not drawn *yet*, not closed, so
+nothing closed it: the record stayed, the machine's Popup level with it,
+and every key and click was claimed until a canvas switch. *Found in
+review on 2026-09-27.*
+
 | Popup | Closing does |
 |---|---|
 | Snippet menu, canvas tile menu | forget what it was about |

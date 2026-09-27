@@ -489,6 +489,7 @@ void Popups::KeepChooserColor() {
 void Popups::ApplyEffects() {
     std::vector<Effect> effects;
     effects.swap(effects_);
+    std::optional<PopupKind> opened;
     for (const Effect& effect : effects) {
         switch (effect.kind) {
             case Effect::Kind::OpenPopup:
@@ -496,6 +497,7 @@ void Popups::ApplyEffects() {
                 if (!Up(effect.popup)) {
                     break;
                 }
+                opened = effect.popup;
                 switch (effect.popup) {
                     case PopupKind::ItemMenu:
                         itemContextMenu_.Open();
@@ -545,6 +547,14 @@ void Popups::ApplyEffects() {
                 ImGui::ClearDragDrop();
                 break;
         }
+    }
+    // Opened and closed again in this one pass - an Escape in the same gap
+    // between frames as the click that asked for it - it is not open at its
+    // first draw, which reads that as not drawn yet rather than closed (see
+    // Drawn). Closed here, or its record stayed, and with it the machine's
+    // Popup level, claiming every key and click after it.
+    if (opened.has_value() && Up(*opened) && !popup_->drawn && !ImGui::IsPopupOpen(PopupId(*opened))) {
+        Closed(*opened);
     }
 }
 

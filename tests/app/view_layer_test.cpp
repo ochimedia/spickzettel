@@ -336,6 +336,32 @@ TEST_F(ViewLayerTest, TheEmptyCanvasMenuClosesByEscapeOrAClickOutside) {
     EXPECT_EQ(App().InputStack(), NothingUp());
 }
 
+// Escape before a popup has been drawn at all - in the same gap between
+// two frames as the click that asked for it - closes it, and nothing is
+// left up: the popup was opened and closed again in one go before its
+// first draw, which never saw it, and its record stayed, claiming every
+// key and click after it.
+TEST_F(ViewLayerTest, EscapeBeforeAPopupsFirstFrameLeavesNothingUp) {
+    ShowEditMode();
+    StepFrame();
+    MoveTo(640.0f, 400.0f);
+    StepFrame();
+    RawMouse(640.0f, 400.0f, platform::MouseEventKind::Down, platform::MouseButton::Right);
+    StepFrame();
+    RawMouse(640.0f, 400.0f, platform::MouseEventKind::Up, platform::MouseButton::Right);
+    KeyEvent(ImGuiKey_Escape, true);  // no frame between
+    StepFrame();
+    KeyEvent(ImGuiKey_Escape, false);
+    StepFrames(2);
+    EXPECT_FALSE(App().IsEmptyCanvasMenuOpen());
+    EXPECT_EQ(App().InputStack(), NothingUp());
+
+    // And the canvas answers again: a drag frames a screenshot.
+    const size_t before = Canvases().CurrentOrNull()->items.size();
+    Drag(200.0f, 200.0f, 500.0f, 400.0f);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items.size(), before + 1);
+}
+
 // Properties, closed by Escape or a click outside, leaves no style edit
 // open and no popup on the machine.
 TEST_F(ViewLayerTest, ClosingPropertiesEndsItsStyleEdit) {
