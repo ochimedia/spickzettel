@@ -88,13 +88,15 @@ public:
     const std::filesystem::path& SetAsideAs() const { return setAsideAs_; }
 
     // The library, or nullopt when there is none to load: the file was made
-    // by this Open (a first run), or could not be read - and then Open says
-    // Unreadable from here on, so that the caller can tell the two apart. A
-    // damaged one is set aside and a new one started, as Open does. A
-    // library someone emptied loads as an empty snapshot, which is not a
-    // first run. A value a row carries that cannot be used - a coordinate
-    // that is not finite, a stroke blob cut short - is repaired rather than
-    // refused, and the repaired row is written back as it now reads.
+    // by this Open (a first run), or was made and never written (a first
+    // run whose first Save failed, and so a first run still), or could not
+    // be read - and then Open says Unreadable from here on, so that the
+    // caller can tell these apart. A damaged one is set aside and a new one
+    // started, as Open does. A library someone emptied loads as an empty
+    // snapshot, which is not a first run. A value a row carries that cannot
+    // be used - a coordinate that is not finite, a stroke blob cut short -
+    // is repaired rather than refused, and the repaired row is written back
+    // as it now reads.
     std::optional<CanvasManagerSnapshot> Load();
 
     // Pictures written with a change: a screenshot's pixels (width*height*4
@@ -116,7 +118,9 @@ public:
     // `changes` names, read from `view`, and `pictures`. True when it
     // landed; false when it did not, and then nothing did - the caller puts
     // its model back (see CanvasManager::RollBack). Nothing to write is a
-    // write that landed.
+    // write that landed. Until a library has been written whole once - a
+    // first run's first Save may fail - each write is of the whole of it,
+    // whatever `changes` names.
     bool Write(const LibraryView& view, const LibraryChanges& changes, const PictureWrites& pictures = {});
     // Writes the whole library: every row, and every one it does not hold
     // taken out. For a library made rather than changed - a test's.
@@ -156,8 +160,10 @@ private:
     std::filesystem::path setAsideAs_;
     sqlite3* db_ = nullptr;
     std::optional<OpenResult> openResult_;
-    // Whether this Open made the schema, which makes Load a first run.
-    bool createdByOpen_ = false;
+    // Whether the file holds a schema that has never been written whole:
+    // made by this Open, or found so by Load. Load is then a first run, and
+    // Write writes everything.
+    bool unwritten_ = false;
 };
 
 }  // namespace sz::core::persistence

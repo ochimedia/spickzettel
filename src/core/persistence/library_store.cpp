@@ -495,7 +495,7 @@ bool LibraryStore::CreateSchema() {
         return false;
     }
     Exec(db_, "PRAGMA foreign_keys = ON");
-    createdByOpen_ = true;
+    unwritten_ = true;
     return true;
 }
 
@@ -536,7 +536,7 @@ LibraryStore::OpenResult LibraryStore::SetAsideAndStartOver() {
 // ================= Loading =================
 
 std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
-    if (!Ready() || createdByOpen_) {
+    if (!Ready() || unwritten_) {
         return std::nullopt;
     }
     CanvasManagerSnapshot snapshot;
@@ -642,6 +642,17 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
         }
         return std::nullopt;
     }
+    // Nothing at all, not even the rows saying which canvas is current,
+    // which every whole write leaves and nothing takes out: a library made
+    // and never written. The schema is committed by the Open that makes it,
+    // before a first run's first write, and should that write fail, this
+    // is what is left - which loaded as a library someone had emptied: no
+    // folder, no canvas and no welcome, at every start from then on. A
+    // first run still, and written whole by whatever write comes next.
+    if (snapshot.folders.empty() && snapshot.canvases.empty() && !currentFolder && !currentCanvas) {
+        unwritten_ = true;
+        return std::nullopt;
+    }
 
     // Which folder and canvas are current, as far as they still name one -
     // a pointer naming nothing opens on something that exists rather than
@@ -684,16 +695,23 @@ bool LibraryStore::Write(const LibraryView& view, const LibraryChanges& changes,
     if (changes.Empty() && pictures.Empty()) {
         return true;
     }
+    // A library not yet written whole is written whole by the next write,
+    // whatever it names: after a first run's Save failed, a snippet written
+    // alone would be on a canvas the file does not have, and the foreign
+    // key refused it - and every write after it, until one happened to
+    // write the folders and canvases.
+    LibraryChanges everything;
+    everything.everything = true;
     if (!Ready() || !Exec(db_, "BEGIN IMMEDIATE")) {
         return false;
     }
-    if (!WriteRows(view, changes, pictures) || !Exec(db_, "COMMIT")) {
+    if (!WriteRows(view, unwritten_ ? everything : changes, pictures) || !Exec(db_, "COMMIT")) {
         Exec(db_, "ROLLBACK");
         return false;
     }
     // What this store wrote is a library now, and a Load of it is not a
     // first run.
-    createdByOpen_ = false;
+    unwritten_ = false;
     return true;
 }
 

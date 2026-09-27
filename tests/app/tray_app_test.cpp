@@ -13,6 +13,7 @@
 
 #include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
+#include "support/failing_writes.h"
 #include "support/held_library.h"
 #include "support/session_test_access.h"
 
@@ -1098,6 +1099,39 @@ TEST_F(TrayControllerPersistenceTest, AFirstRunsOverlayComesUpAtStartAfterWhatIn
     controller.Start();
     EXPECT_TRUE(host.overlayWindow.IsVisible());
     EXPECT_EQ(controller.State(), app::OverlayState::Edit) << "a first run";
+}
+
+// A first run whose library could not be written leaves the file with its
+// tables and nothing in them - the schema is made as it is opened - and
+// the next start is a first run too: greeted, and written whole. It used
+// to load that file as a library someone had emptied, with no folder, no
+// canvas and no welcome, at every start from then on.
+TEST_F(TrayControllerPersistenceTest, AFirstRunThatCouldNotWriteItsLibraryIsAFirstRunAgain) {
+    // The file as that first run made it, before its write failed.
+    ASSERT_EQ(persistence::LibraryStore(library_).Open(), persistence::LibraryStore::OpenResult::Opened);
+    test::FailingWrites failing(library_);
+    failing.FailAll();
+    {
+        test::FakePlatformHost host;
+        host.libraryPath = library_;
+        TrayController controller(host, DefaultConfig());
+        ASSERT_TRUE(controller.Initialize());
+        controller.Start();
+        EXPECT_EQ(controller.State(), app::OverlayState::Edit) << "a first run";
+        EXPECT_TRUE(controller.GetSession().LastWriteFailed()) << "whose library could not be written";
+    }
+    failing.Stop();
+
+    test::FakePlatformHost host;
+    host.libraryPath = library_;
+    TrayController controller(host, DefaultConfig());
+    ASSERT_TRUE(controller.Initialize());
+    controller.Start();
+    EXPECT_EQ(controller.State(), app::OverlayState::Edit) << "a first run again, not an emptied library";
+    const std::optional<CanvasManagerSnapshot> written = persistence::LibraryStore(library_).Load();
+    ASSERT_TRUE(written.has_value());
+    EXPECT_EQ(written->folders.size(), 1u);
+    EXPECT_EQ(written->canvases.size(), 1u);
 }
 
 TEST_F(TrayControllerPersistenceTest, AFirstRunsLibraryAndACaptureAreOnDiskAsTheyAreMade) {

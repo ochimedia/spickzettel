@@ -11,6 +11,8 @@
 #include <gtest/gtest.h>
 #include <sqlite3.h>
 
+#include "support/failing_writes.h"
+
 namespace sz::core::persistence {
 namespace {
 
@@ -194,6 +196,23 @@ TEST_F(LibraryStoreTest, SaveThenLoadRoundTripsEverything) {
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
     ASSERT_TRUE(loaded.has_value());
     ExpectSameLibrary(original, *loaded);
+}
+
+// The schema is committed by the Open that makes it, before a first run's
+// first write. A file whose first write failed holds tables and nothing in
+// them, which is a first run still - not a library someone emptied, which
+// keeps the rows saying which canvas is current (below).
+TEST_F(LibraryStoreTest, ALibraryWhoseFirstWriteFailedIsAFirstRunAgain) {
+    {
+        LibraryStore store(file_);
+        ASSERT_FALSE(store.Load().has_value());
+        test::FailingWrites failing(file_);
+        failing.FailAll();
+        EXPECT_FALSE(store.Save(MakeSampleSnapshot()));
+    }
+    LibraryStore store(file_);
+    EXPECT_EQ(store.Open(), LibraryStore::OpenResult::Opened);
+    EXPECT_FALSE(store.Load().has_value());
 }
 
 // A library someone emptied is still a library, not a first run - that
@@ -516,6 +535,38 @@ TEST_F(LibraryStoreTest, AWriteThatFailsPartwayLeavesNoneOfItself) {
     ASSERT_TRUE(loaded.has_value());
     EXPECT_EQ(loaded->folders[0].name, "Written first");
     EXPECT_EQ(loaded->canvases[0].name, "Allowed");
+}
+
+// After a first write that failed, the next write writes the whole
+// library, whatever it names: one snippet written alone would be on a
+// canvas the file does not have, which its foreign key refuses - as it
+// refused every write after, until one wrote the folders and canvases.
+TEST_F(LibraryStoreTest, TheWriteAfterAFailedFirstOneWritesTheWholeLibrary) {
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    LibraryStore store(file_);
+    ASSERT_FALSE(store.Load().has_value());
+    test::FailingWrites failing(file_);
+    failing.FailAll();
+    EXPECT_FALSE(store.Save(snapshot));
+    failing.Stop();
+
+    snapshot.canvases[0].items[0].name = "Changed";
+    LibraryChanges changes;
+    changes.items = {3};
+    ASSERT_TRUE(store.Write(ViewOf(snapshot), changes));
+
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    ExpectSameLibrary(snapshot, *loaded);
+
+    // Written whole once, a write is of what it names again.
+    snapshot.canvases[0].items[0].name = "Named";
+    snapshot.canvases[0].items[1].name = "Not named";
+    ASSERT_TRUE(store.Write(ViewOf(snapshot), changes));
+    const std::optional<CanvasManagerSnapshot> after = LibraryStore(file_).Load();
+    ASSERT_TRUE(after.has_value());
+    EXPECT_EQ(after->canvases[0].items[0].name, "Named");
+    EXPECT_EQ(after->canvases[0].items[1].name, "Shot 1");
 }
 
 // Held by another program as the app starts: not opened, and not written

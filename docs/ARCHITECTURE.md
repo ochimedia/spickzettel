@@ -675,7 +675,12 @@ asks before the tray icon, so a refusal is a message box and no start:
 - **Opened** - including a file that was not there yet, which is made,
   directory and all. `Load` of a library this `Open` made returns
   nothing, which is what a first run is; a library someone emptied loads
-  as an empty one.
+  as an empty one. So does a file that holds nothing at all - no folder,
+  no canvas, and not the `meta` rows every whole write leaves and nothing
+  takes out: the schema is committed by the `Open` that makes it, so a
+  first run whose first write failed leaves just that. It was loaded as
+  an emptied library, and every start after it had no folder, no canvas
+  and no welcome.
 - **Written by a newer version** - `user_version` above this build's.
   Every row it saved back would lose what the newer build put there, so
   the store reads and writes nothing at all, and the app does not start.
@@ -1155,6 +1160,11 @@ checkpoint is taken when it begins. A crash in the middle of one loses
 that gesture and nothing before it. A first run writes the library it
 begins with (`Session::WriteWholeLibrary`) before the first command,
 which writes only what it changes and would find what holds it missing.
+Should that first write fail, the store writes the whole library with
+whatever write comes next, until one lands: a snippet written alone
+onto a canvas the file does not have is refused by the foreign key, and
+so was every write after a failed first one, until one happened to
+write the folders and canvases.
 
 What each costs is in docs/PERF.md: a stroke, the heaviest ordinary
 command, is one transaction of the snippet's record and strokes; with
