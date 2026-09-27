@@ -152,9 +152,22 @@ private:
     // Properties'. Each widget previews its change through the session (see
     // Session::PreviewStyle), and the edit ends as the hand lets go of it.
     void RenderItemPropertiesPopover();
-    void RenderItemOpacity(const core::Item& item);
-    void RenderItemBackgroundColor(const core::Item& item);
-    void RenderItemTextStyle(const core::Item& item);
+    // What Properties shows of its snippet, taken once a frame and not read
+    // from the snippet again: any widget may ask the session for a preview,
+    // and a preview can end the edit open before it, whose write failing
+    // puts the library back as it was - which moves every snippet in it.
+    struct PopoverItem {
+        core::ItemId id = 0;
+        core::ItemStyle style;
+        bool pictureStored = false;
+        bool hasNote = false;
+    };
+    // Previews `style` on it, and keeps it as what the rest of the frame
+    // shows.
+    void PreviewPopoverStyle(PopoverItem& item, const core::ItemStyle& style);
+    void RenderItemOpacity(PopoverItem& item);
+    void RenderItemBackgroundColor(PopoverItem& item);
+    void RenderItemTextStyle(PopoverItem& item);
     // The snippet menu: Properties' actions as a list of named rows with
     // their shortcuts beside them, plus the ones that only have a key. The
     // rows are rebuilt every frame it is up, so "nothing to clear" and

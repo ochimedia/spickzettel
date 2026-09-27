@@ -457,8 +457,7 @@ std::optional<float> Editor::ActiveToolSizePx() const {
 // ================= A note being typed =================
 
 void Editor::BeginEditingNote(ItemId id) {
-    const Item* item = Manager().FindItemAnywhere(id);
-    if (!item) {
+    if (Manager().FindItemAnywhere(id) == nullptr) {
         return;
     }
     if (editingNoteItemId_.has_value() && *editingNoteItemId_ != id) {
@@ -466,6 +465,12 @@ void Editor::BeginEditingNote(ItemId id) {
         // frame), so it holds whatever was actually typed - safe to commit
         // as-is, same as EndEditingNote's own doc comment describes.
         EndEditingNote(noteEditBuffer_);
+    }
+    // Found after that edit has ended, not before: a write of it that fails
+    // puts the library back as it was, moving every snippet in it.
+    const Item* item = Manager().FindItemAnywhere(id);
+    if (!item) {
+        return;
     }
     editingNoteItemId_ = id;
     noteEditBuffer_ = item->noteText;

@@ -113,13 +113,13 @@ void Popups::RenderItemPropertiesPopover() {
         ImGui::EndPopup();
         return;
     }
-    const Item& item = *it;
+    PopoverItem item{it->id, ItemStyle::Of(*it), it->picture.stored, !it->noteText.empty()};
     RenderItemOpacity(item);
-    bool keepAspect = item.keepAspect;
+    bool keepAspect = item.style.keepAspect;
     if (ImGui::Checkbox(Labeled(strings::kPopoverKeepAspect, "keepaspect"), &keepAspect)) {
-        ItemStyle style = ItemStyle::Of(item);
+        ItemStyle style = item.style;
         style.keepAspect = keepAspect;
-        session_.PreviewStyle(item.id, style);
+        PreviewPopoverStyle(item, style);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverKeepAspectTip);
@@ -134,7 +134,12 @@ void Popups::RenderItemPropertiesPopover() {
     ImGui::EndPopup();
 }
 
-void Popups::RenderItemOpacity(const Item& item) {
+void Popups::PreviewPopoverStyle(PopoverItem& item, const ItemStyle& style) {
+    session_.PreviewStyle(item.id, style);
+    item.style = style;
+}
+
+void Popups::RenderItemOpacity(PopoverItem& item) {
     // Foreground (strokes) and background (captured image / color fill)
     // opacity are independent - see Item::foregroundOpacity/
     // Picture::opacity's own doc comments. Background can go all the way
@@ -142,7 +147,7 @@ void Popups::RenderItemOpacity(const Item& item) {
     // fully invisible drawing surface still has strokes to see, but there
     // being nothing left to *tell* whether it's an item at all is only a
     // real state for the background.
-    int foregroundPct = static_cast<int>(std::round(item.foregroundOpacity * 100.0f));
+    int foregroundPct = static_cast<int>(std::round(item.style.foregroundOpacity * 100.0f));
     ImGui::SetNextItemWidth(Px(160.0f));
     // An id of its own, not shared with the background slider below: both
     // are visible at once on any snippet with a picture in it, and ###
@@ -150,28 +155,28 @@ void Popups::RenderItemOpacity(const Item& item) {
     // widget as far as ImGui is concerned - which is an ID conflict it
     // warns about, and a drag it can attribute to the wrong slider.
     if (ImGui::SliderInt(Labeled(strings::kPopoverForeground, "opacityfg"), &foregroundPct, 10, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
-        ItemStyle style = ItemStyle::Of(item);
+        ItemStyle style = item.style;
         style.foregroundOpacity = static_cast<float>(foregroundPct) / 100.0f;
-        session_.PreviewStyle(item.id, style);
+        PreviewPopoverStyle(item, style);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverForegroundTip);
     }
 
-    int backgroundPct = static_cast<int>(std::round(item.picture.opacity * 100.0f));
+    int backgroundPct = static_cast<int>(std::round(item.style.pictureOpacity * 100.0f));
     ImGui::SetNextItemWidth(Px(160.0f));
     if (ImGui::SliderInt(Labeled(strings::kPopoverBackground, "opacitybg"), &backgroundPct, 0, 100, strings::kFormatPercent, ImGuiSliderFlags_AlwaysClamp)) {
-        ItemStyle style = ItemStyle::Of(item);
+        ItemStyle style = item.style;
         style.pictureOpacity = static_cast<float>(backgroundPct) / 100.0f;
-        session_.PreviewStyle(item.id, style);
+        PreviewPopoverStyle(item, style);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", item.picture.stored ? strings::kPopoverBackgroundShotTip
-                                                    : strings::kPopoverBackgroundFillTip);
+        ImGui::SetTooltip("%s", item.pictureStored ? strings::kPopoverBackgroundShotTip
+                                                   : strings::kPopoverBackgroundFillTip);
     }
 }
 
-void Popups::RenderItemBackgroundColor(const Item& item) {
+void Popups::RenderItemBackgroundColor(PopoverItem& item) {
     // White, and the picker for everything else. White gets a swatch of
     // its own because it is the one color with a meaning here: a no-op
     // multiply tint on a real capture (see Picture::tintColorRGBA), the way
@@ -181,11 +186,11 @@ void Popups::RenderItemBackgroundColor(const Item& item) {
     ImGui::TextUnformatted(strings::kPopoverBackgroundColor);
     constexpr uint32_t kWhiteBackground = 0xFFFFFFFFu;
     const auto setTint = [&](uint32_t tintRGBA) {
-        ItemStyle style = ItemStyle::Of(item);
+        ItemStyle style = item.style;
         style.pictureTintRGBA = tintRGBA;
-        session_.PreviewStyle(item.id, style);
+        PreviewPopoverStyle(item, style);
     };
-    if (ColorSwatchButton(IM_COL32(255, 255, 255, 255), item.picture.tintColorRGBA == kWhiteBackground)) {
+    if (ColorSwatchButton(IM_COL32(255, 255, 255, 255), item.style.pictureTintRGBA == kWhiteBackground)) {
         setTint(kWhiteBackground);
     }
     if (ImGui::IsItemHovered()) {
@@ -193,14 +198,14 @@ void Popups::RenderItemBackgroundColor(const Item& item) {
     }
     ImGui::SameLine(0.0f, Px(6.0f));
     float rgb[3];
-    ColorRGBAToFloats(item.picture.tintColorRGBA, rgb);
+    ColorRGBAToFloats(item.style.pictureTintRGBA, rgb);
     if (ImGui::ColorEdit3("##bgcolor", rgb, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel)) {
         setTint(FloatsToColorRGBA(rgb, static_cast<uint8_t>(0xFF)));
     }
     ImGui::PopID();
 }
 
-void Popups::RenderItemTextStyle(const Item& item) {
+void Popups::RenderItemTextStyle(PopoverItem& item) {
     // Per item rather than app-wide (see Item::noteTextColorRGBA/
     // noteTextSizePx for why). Shown whether or not this item currently
     // has any text: the alternative - appearing only once something's been
@@ -210,17 +215,17 @@ void Popups::RenderItemTextStyle(const Item& item) {
     ImGui::Spacing();
     ImGui::PushID("##note_text_section");
     ImGui::TextUnformatted(strings::kPopoverText);
-    if (item.noteText.empty()) {
+    if (!item.hasNote) {
         ImGui::SameLine();
         ImGui::TextColored(theme::kGraphite200, "%s", strings::kPopoverTextNoneYet);
     }
     ImGui::SetNextItemWidth(Px(160.0f));
-    float textSizePx = item.noteTextSizePx;
+    float textSizePx = item.style.noteTextSizePx;
     if (ImGui::SliderFloat(Labeled(strings::kPopoverTextSize, "notetextsize"), &textSizePx, kNoteTextSizeMin, kNoteTextSizeMax,
                             strings::kFormatPixels, ImGuiSliderFlags_AlwaysClamp)) {
-        ItemStyle style = ItemStyle::Of(item);
+        ItemStyle style = item.style;
         style.noteTextSizePx = textSizePx;
-        session_.PreviewStyle(item.id, style);
+        PreviewPopoverStyle(item, style);
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kPopoverTextSizeTip);
@@ -230,15 +235,15 @@ void Popups::RenderItemTextStyle(const Item& item) {
     // live (text has no separate opacity field), so a caption can be faded
     // from here.
     float rgba[4];
-    ColorRGBAToFloats(item.noteTextColorRGBA, rgba);
-    rgba[3] = static_cast<float>(item.noteTextColorRGBA & 0xFFu) / 255.0f;
+    ColorRGBAToFloats(item.style.noteTextColorRGBA, rgba);
+    rgba[3] = static_cast<float>(item.style.noteTextColorRGBA & 0xFFu) / 255.0f;
     if (ImGui::ColorEdit4("##notetextcolor", rgba,
                            ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar |
                                ImGuiColorEditFlags_AlphaPreview)) {
-        ItemStyle style = ItemStyle::Of(item);
+        ItemStyle style = item.style;
         style.noteTextColorRGBA =
             FloatsToColorRGBA(rgba, static_cast<uint8_t>(std::clamp(rgba[3], 0.0f, 1.0f) * 255.0f + 0.5f));
-        session_.PreviewStyle(item.id, style);
+        PreviewPopoverStyle(item, style);
     }
     ImGui::PopID();
 }

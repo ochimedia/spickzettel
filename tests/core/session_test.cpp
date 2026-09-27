@@ -12,6 +12,7 @@
 
 #include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
+#include "support/failing_writes.h"
 #include "support/held_library.h"
 #include "support/removed_at_end.h"
 #include "support/session_test_access.h"
@@ -19,6 +20,7 @@
 namespace sz::core {
 namespace {
 
+using test::FailingWrites;
 using test::HeldLibrary;
 using test::Model;
 using test::RemovedAtEnd;
@@ -956,6 +958,34 @@ TEST_F(WrittenSessionTest, ACopysPictureIsWrittenWithTheCopy) {
         ASSERT_TRUE(picture.has_value());
         EXPECT_EQ(picture->pixelsRGBA, kPixels);
     }
+}
+
+// A style preview about other snippets ends the edit open first. An end
+// that cannot be written puts the library back as it was, which moves every
+// snippet in it: the new preview is made on the snippets as they are now,
+// not on where they were.
+TEST_F(WrittenSessionTest, AStylePreviewAfterAnEditThatCannotBeWrittenIsMadeOnTheSnippetsAsTheyAre) {
+    const ItemId a = session_.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId b = session_.CreateItem(false, Rect{200, 0, 100, 100}, "B");
+    ItemStyle half = ItemStyle::Of(*ItemById(session_.Manager(), a));
+    half.foregroundOpacity = 0.5f;
+    session_.PreviewStyles({{a, half}, {b, half}});
+
+    FailingWrites failing(File());
+    failing.FailAll();
+    ItemStyle faint = half;
+    faint.foregroundOpacity = 0.2f;
+    session_.PreviewStyles({{a, faint}});
+    failing.Stop();
+    EXPECT_TRUE(session_.LastWriteFailed());
+    EXPECT_FLOAT_EQ(ItemById(session_.Manager(), b)->foregroundOpacity, 1.0f) << "the edit of both, not made";
+    EXPECT_FLOAT_EQ(ItemById(session_.Manager(), a)->foregroundOpacity, 0.2f) << "the new one, previewed";
+
+    EXPECT_TRUE(session_.EndStyleEdit());
+    const CanvasManagerSnapshot disk = OnDisk();
+    ASSERT_EQ(ItemsIn(disk), 2u);
+    EXPECT_FLOAT_EQ(disk.canvases[0].items[0].foregroundOpacity, 0.2f);
+    EXPECT_FLOAT_EQ(disk.canvases[0].items[1].foregroundOpacity, 1.0f);
 }
 
 // A gesture called off writes nothing: the file holds what it held before

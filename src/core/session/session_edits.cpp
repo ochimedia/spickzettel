@@ -368,11 +368,9 @@ void Session::ResetItemToNativeSize(ItemId id) {
 
 void Session::PreviewStyles(const std::vector<std::pair<ItemId, ItemStyle>>& styles) {
     // The snippets there are, of those named: the edit is about them.
-    std::vector<std::pair<Item*, const ItemStyle*>> items;
     std::vector<ItemId> ids;
     for (const auto& [id, style] : styles) {
-        if (Item* item = Model().FindItemAnywhere(id)) {
-            items.emplace_back(item, &style);
+        if (Model().FindItemAnywhere(id) != nullptr) {
             ids.push_back(id);
         }
     }
@@ -386,6 +384,17 @@ void Session::PreviewStyles(const std::vector<std::pair<ItemId, ItemStyle>>& sty
     }
     if (!styleEdit_.has_value()) {
         EndOpenGesture();
+    }
+    // Found only now, after what was open has ended: an end whose write
+    // fails puts the library back as it was, which moves every snippet in
+    // it (see CanvasManager::RollBack).
+    std::vector<std::pair<Item*, const ItemStyle*>> items;
+    ids.clear();
+    for (const auto& [id, style] : styles) {
+        if (Item* item = Model().FindItemAnywhere(id)) {
+            items.emplace_back(item, &style);
+            ids.push_back(id);
+        }
     }
     if (items.empty()) {
         return;

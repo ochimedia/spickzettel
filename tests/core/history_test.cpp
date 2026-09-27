@@ -8,10 +8,10 @@
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <sqlite3.h>
 
 #include "core/persistence/library_store.h"
 #include "core/session/session.h"
+#include "support/failing_writes.h"
 #include "support/removed_at_end.h"
 #include "support/session_test_access.h"
 
@@ -535,38 +535,10 @@ TEST(HistoryTest, EveryStepAppliesWhateverHappensInBetween) {
 // ===== The file holds what the model holds =====
 //
 // The same random session, written to a library as it goes, with some of
-// its writes made to fail: every command is written as it is made, and one
+// its writes made to fail (see FailingWrites): every command is written as it is made, and one
 // whose write fails is not made - so at every moment but the middle of a
 // gesture, the file holds exactly what the model holds, and the history's
 // rules still hold of what was made.
-
-// Every write to the library fails while `failing` holds a row: a trigger
-// on every table the library writes aborts the statement, and with it the
-// write's transaction. Instant, where a lock held elsewhere would cost the
-// store's busy timeout each time.
-class Failures {
-public:
-    explicit Failures(const std::filesystem::path& file) {
-        const std::u8string name = file.u8string();
-        sqlite3_open(std::string(name.begin(), name.end()).c_str(), &db_);
-        std::string sql = "CREATE TABLE failing (x INTEGER);";
-        for (const char* table : {"folders", "canvases", "items", "pictures", "meta"}) {
-            for (const char* change : {"INSERT", "UPDATE", "DELETE"}) {
-                sql += std::string("CREATE TRIGGER fail_") + change + "_" + table + " BEFORE " + change + " ON " +
-                       table + " WHEN EXISTS (SELECT 1 FROM failing) BEGIN SELECT RAISE(ABORT, 'failing'); END;";
-            }
-        }
-        Exec(sql);
-    }
-    ~Failures() { sqlite3_close(db_); }
-    void Set(bool on) { Exec(on ? "INSERT INTO failing VALUES (1)" : "DELETE FROM failing"); }
-
-private:
-    void Exec(const std::string& sql) {
-        ASSERT_EQ(sqlite3_exec(db_, sql.c_str(), nullptr, nullptr, nullptr), SQLITE_OK) << sqlite3_errmsg(db_);
-    }
-    sqlite3* db_ = nullptr;
-};
 
 void ExpectTheFileHoldsTheModel(const Session& session, const std::filesystem::path& file) {
     std::optional<CanvasManagerSnapshot> disk = persistence::LibraryStore(file).Load();
@@ -587,7 +559,7 @@ TEST(HistoryTest, TheFileHoldsWhatTheModelHoldsWhateverFailsToBeWritten) {
         ASSERT_EQ(store->Open(), persistence::LibraryStore::OpenResult::Opened);
         RandomSession random(seed);
         ASSERT_NO_FATAL_FAILURE(random.Attach(*store));
-        Failures failures(file);
+        test::FailingWrites failures(file);
         std::mt19937 fail(seed * 7919u);
         size_t failed = 0;
         for (int op = 0; op < 120; ++op) {
