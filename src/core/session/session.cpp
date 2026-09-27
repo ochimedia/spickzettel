@@ -25,7 +25,14 @@ bool Session::Land(const Checkpoint& before) {
         pictures.captured.push_back({picture.item, picture.pixelsRGBA.data(), picture.width, picture.height});
     }
     pictures.copies = std::move(copies);
-    if (Store()->Write(Model().View(), Model().ChangesSince(before), pictures)) {
+    const auto changes = Model().ChangesSince(before);
+    // Nothing to write - a click that selected and moved nothing - says
+    // nothing of whether the file can be written: a failure before it
+    // stands.
+    if (changes.Empty() && pictures.Empty()) {
+        return true;
+    }
+    if (Store()->Write(Model().View(), changes, pictures)) {
         lastWriteFailed_ = false;
         return true;
     }

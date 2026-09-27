@@ -71,7 +71,7 @@ public:
 
     // Whether the last command's write failed - so that command was not
     // made - with none landing since: for a UI to say so, and keep saying
-    // so until one does.
+    // so until one does. A command with nothing to write lands nothing.
     bool LastWriteFailed() const { return lastWriteFailed_; }
     // How many writes have failed since the session began: compared across
     // a call, whether anything it wrote failed - where LastWriteFailed says

@@ -1015,6 +1015,26 @@ TEST_F(WrittenSessionTest, ACommandAfterAGestureThatCannotBeWrittenDoesNothingMo
     EXPECT_TRUE(ItemById(session_.Manager(), a)->strokes.empty());
 }
 
+// A failure is said until a write lands. A command with nothing to write
+// - a click that selected and moved nothing - lands nothing, and says
+// nothing of whether the file can be written now.
+TEST_F(WrittenSessionTest, AFailureStandsThroughACommandWithNothingToWrite) {
+    const ItemId id = session_.CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    {
+        FailingWrites failing(File());
+        failing.FailAll();
+        session_.SetPinned({id}, true);
+        failing.Stop();
+    }
+    ASSERT_TRUE(session_.LastWriteFailed());
+    session_.BeginPlacement({id});
+    EXPECT_FALSE(session_.EndPlacement());
+    EXPECT_TRUE(session_.LastWriteFailed()) << "nothing landed";
+
+    session_.SetPinned({id}, true);
+    EXPECT_FALSE(session_.LastWriteFailed()) << "a write that landed";
+}
+
 // A gesture called off writes nothing: the file holds what it held before
 // the press, and what was filed before the gesture is still there.
 TEST_F(WrittenSessionTest, ACanceledDragWritesNothing) {

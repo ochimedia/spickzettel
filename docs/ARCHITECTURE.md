@@ -1115,7 +1115,8 @@ checkpoint (`CanvasManager::RollBack`) - a capture gone again, a
 moved snippet back where it was, a snippet deleted for good back with
 its history - and a line along the bottom of the screen says the
 library could not be written and the last change was not made, drawn
-from `Session::LastWriteFailed` until a write lands. Nothing is filed on
+from `Session::LastWriteFailed` until a write lands - which a command
+with nothing to write, a click that selected, does not. Nothing is filed on
 the history for it, and an undo or redo whose write fails puts its step
 back on its stack as it was. A disk that is full or a file another
 program holds loses the change being made, visibly, and nothing else: a
