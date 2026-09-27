@@ -331,7 +331,7 @@ public:
     // the screen-space rectangle [minX, maxX] x [minY, maxY] instead of a
     // circle. The rect's own two corners are each transformed into the
     // item's native space
-    // independently via ScreenToNative (unlike EraseAt's single averaged
+    // independently via ScreenToNative (unlike EraseAt's one
     // radius scale, an axis-aligned rect's corners transform exactly
     // under its per-axis scale, with no approximation needed).
     std::vector<size_t> EraseRectAt(ItemId id, float minX, float minY, float maxX, float maxY);

@@ -502,6 +502,19 @@ still looks right after the item is resized. `ScreenToNative` is the one
 transform for everything that lands a gesture on an item - the pen and
 the erasers - so they cannot disagree about where the pen is.
 
+A width has no axis of its own, so on a snippet stretched unevenly it
+travels by one factor made of both: their geometric mean
+(`LengthScale`), into the snippet's space and back out when drawn. The
+average of the two was used before, and one way times the other came to
+(a+b)²/4ab rather than 1, so a stroke let go of on a snippet stretched
+to twice its width grew to 1.125 times what it was while drawn - 1.33 at
+three times. The geometric mean is the one that undoes itself exactly.
+Strokes kept from before on a stretched snippet draw a little thinner
+than they used to, by the same factor. Rasterized strokes are the
+snippet's own space stretched, so on an uneven stretch a line along the
+wider axis still draws thinner than one across it. Found in review on
+2026-09-27.
+
 ### Resolution-relative item sizing
 
 `rect` is always in absolute pixels for every runtime consumer, but it

@@ -105,10 +105,19 @@ Rect FitAspectRatioIntoViewport(float aspectRatio, float viewportW, float viewpo
 // drawn along the seam, and neither does a rect with no area at all.
 bool RectsOverlap(const Rect& a, const Rect& b);
 
+// The one factor a length with no axis of its own - a stroke's width, the
+// eraser's radius - travels by between two spaces that scale their axes
+// by `scaleX` and `scaleY`: their geometric mean. The one mean whose
+// factor one way times the factor back is 1 however unevenly the snippet
+// is stretched, so a stroke baked into a snippet's space (see
+// CanvasManager::BakeStrokeToNative) is drawn back out as wide as it was
+// drawn. The average of the two, used before, gave (a+b)^2/4ab of it back:
+// 1.125 times as wide at 2:1.
+float LengthScale(float scaleX, float scaleY);
+
 // A screen-space point carried into an item's native space (see
-// Item::nativeW/nativeH), plus the factor a length travels by on the way -
-// the average of the two axes' scales, which is what a stroke width or an
-// eraser radius uses, since neither has an axis of its own.
+// Item::nativeW/nativeH), plus the factor a length travels by on the way
+// (see LengthScale).
 struct NativePoint {
     float x = 0.0f;
     float y = 0.0f;

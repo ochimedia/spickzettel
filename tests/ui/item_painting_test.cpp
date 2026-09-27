@@ -9,6 +9,8 @@
 
 #include <imgui.h>
 
+#include "core/canvas/canvas_manager.h"
+
 namespace sz::ui {
 namespace {
 
@@ -67,6 +69,40 @@ TEST_F(ItemPaintingTest, AStrokePastSixteenBitIndicesDrawsWithAllOfItsVertices) 
         highest = std::max(highest, vertex);
     }
     EXPECT_EQ(highest, static_cast<unsigned int>(drawList->VtxBuffer.Size - 1)) << "its last vertices are in no triangle";
+}
+
+// A stroke drawn on a snippet stretched unevenly - twice as wide as its
+// own size, and as high - is as wide once it is let go of as it was while
+// it was drawn: baked into the snippet's own space and drawn back out, its
+// width comes back to what it was. Scaled by the average of the axes each
+// way, it came back wider, 1.125 times at 2:1.
+TEST_F(ItemPaintingTest, AStrokeOnAStretchedSnippetKeepsItsWidthOnceDrawn) {
+    core::Item item;
+    item.rect = core::Rect{0.0f, 0.0f, 200.0f, 100.0f};
+    item.nativeW = 100.0f;
+    item.nativeH = 100.0f;
+    core::Stroke live;
+    live.colorRGBA = 0xFF0000FFu;
+    live.width = 10.0f;
+    live.points = {core::StrokePoint{20.0f, 50.0f}, core::StrokePoint{180.0f, 50.0f}};
+    const core::Stroke baked = core::CanvasManager::BakeStrokeToNative(item, live);
+
+    // A level line's height on screen is its width.
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    const auto heightDrawn = [drawList](const core::Stroke& stroke, float scaleX, float scaleY) {
+        const int first = drawList->VtxBuffer.Size;
+        DrawStroke(drawList, stroke, core::StrokeRenderMode::Tessellated, 0.0f, 0.0f, scaleX, scaleY);
+        float top = drawList->VtxBuffer[first].pos.y;
+        float bottom = top;
+        for (int i = first; i < drawList->VtxBuffer.Size; ++i) {
+            top = std::min(top, drawList->VtxBuffer[i].pos.y);
+            bottom = std::max(bottom, drawList->VtxBuffer[i].pos.y);
+        }
+        return bottom - top;
+    };
+    const float whileDrawn = heightDrawn(live, 1.0f, 1.0f);
+    const float once = heightDrawn(baked, item.rect.w / item.nativeW, item.rect.h / item.nativeH);
+    EXPECT_NEAR(once, whileDrawn, 0.01f);
 }
 
 }  // namespace

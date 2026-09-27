@@ -193,7 +193,7 @@ TEST(ItemGeometryTest, RectsOverlapOnlyWhereTheyShareArea) {
     EXPECT_FALSE(RectsOverlap(square, Rect{50.0f, 50.0f, 0.0f, 0.0f})) << "a rect with no area touches nothing";
 }
 
-TEST(ItemGeometryTest, ScreenToNativeScalesEachAxisAndAveragesThemForLengths) {
+TEST(ItemGeometryTest, ScreenToNativeScalesEachAxisAndTakesTheirGeometricMeanForLengths) {
     // Shown at half its native width and a quarter of its native height.
     Item item;
     item.rect = Rect{0.0f, 0.0f, 200.0f, 75.0f};
@@ -202,7 +202,10 @@ TEST(ItemGeometryTest, ScreenToNativeScalesEachAxisAndAveragesThemForLengths) {
     const NativePoint p = ScreenToNative(item, 100.0f, 30.0f);
     EXPECT_FLOAT_EQ(p.x, 200.0f);
     EXPECT_FLOAT_EQ(p.y, 120.0f);
-    EXPECT_FLOAT_EQ(p.scale, 3.0f);  // (2 + 4) / 2: what a width or radius is multiplied by
+    // sqrt(2 * 4): what a width or radius is multiplied by - and back out,
+    // sqrt(1/2 * 1/4), which undoes it exactly (see LengthScale).
+    EXPECT_FLOAT_EQ(p.scale, std::sqrt(8.0f));
+    EXPECT_FLOAT_EQ(p.scale * LengthScale(0.5f, 0.25f), 1.0f);
 }
 
 TEST(ItemGeometryTest, ScreenToNativeTreatsAZeroSizedRectAsUnscaled) {

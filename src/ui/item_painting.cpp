@@ -7,6 +7,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include "core/canvas/item_geometry.h"
 #include "core/drawing/stroke_mesh.h"
 #include "ui/theme.h"
 
@@ -34,8 +35,10 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
     if (stroke.points.empty() || opacity <= 0.0f) {
         return;
     }
-    const float scaleAvg = (std::abs(scaleX) + std::abs(scaleY)) / 2.0f;
-    const float halfWidth = stroke.width * scaleAvg * 0.5f;
+    // The width's own factor - see core::LengthScale, which the pen baked
+    // it into the snippet's space with.
+    const float widthScale = core::LengthScale(scaleX, scaleY);
+    const float halfWidth = stroke.width * widthScale * 0.5f;
     const ImU32 color = ToImColor(stroke.colorRGBA, opacity);
 
     if (rendering == StrokeRenderMode::Polyline) {
@@ -67,7 +70,7 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
                 polyline.push_back(ImVec2(p.x, p.y));
             }
             drawList->AddPolyline(polyline.data(), static_cast<int>(polyline.size()), color,
-                                   stroke.width * scaleAvg);
+                                   stroke.width * widthScale);
         }
         drawList->AddCircleFilled(ImVec2(screenPoints.front().x, screenPoints.front().y), halfWidth, color);
         drawList->AddCircleFilled(ImVec2(screenPoints.back().x, screenPoints.back().y), halfWidth, color);
