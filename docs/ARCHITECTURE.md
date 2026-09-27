@@ -2838,6 +2838,12 @@ process's code page (Windows 10 1903 and later): `path::string()` and
 `path(std::string)` then round-trip exactly, and the `-A` Windows calls
 take the same UTF-8 the UI strings are in.
 
+The sources are UTF-8 too, without a BOM, and compiled with `/utf-8`.
+Found in the next review on 2026-09-27: MSVC read them in the build
+machine's code page, so on an English Windows the test's `u8"ü 日本"`
+became other characters, all inside that page, and the test of a
+name outside every code page tested none.
+
 A string stays UTF-8 only while nothing cuts it. A text field over a
 fixed array is handed a copy made to fit the array, and `snprintf` fits
 it by bytes, through the middle of a character; an edit then saves the

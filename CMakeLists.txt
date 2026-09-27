@@ -22,6 +22,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # a binary built with a newer toolset. Before any target is made, the
 # fetched ones included, so that everything links against the same one.
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# The sources are UTF-8 without a BOM, which MSVC otherwise reads in the
+# build machine's code page: a u8"" literal became another string on one
+# machine than on the next. Everything, the fetched code included.
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 # A release build with symbols, so that a crash dump from someone else's
 # machine can be read (see win32_crash_dump.h). /Z7 keeps the debug info
 # in the objects, so parallel compiles share no PDB; /DEBUG turns off

@@ -842,7 +842,11 @@ TEST_F(LibraryStoreTest, NoCanvasCurrentIsKept) {
 // A path with characters outside every code page: %APPDATA% is under the
 // user's profile, whose name can be anything.
 TEST_F(LibraryStoreTest, ALibraryUnderANameOutsideTheCodePageOpens) {
-    const std::filesystem::path file = dir_ / std::filesystem::path(u8"Bibliothek ü 日本") / "library.db";
+    const std::filesystem::path name(u8"Bibliothek ü 日本");
+    // Read in the build machine's code page, the name was another one,
+    // inside it.
+    ASSERT_EQ(name.wstring(), L"Bibliothek \u00FC \u65E5\u672C") << "the source read as UTF-8 (see /utf-8)";
+    const std::filesystem::path file = dir_ / name / "library.db";
     ASSERT_TRUE(LibraryStore(file).Save(MakeSampleSnapshot()));
     EXPECT_TRUE(std::filesystem::exists(file));
     EXPECT_TRUE(LibraryStore(file).Load().has_value());
