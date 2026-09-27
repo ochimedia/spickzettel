@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "core/build_info/build_info.h"
 
@@ -773,6 +774,51 @@ TEST_F(UiTest, AProfileIsNotRenamedToANameAnotherHas) {
     ASSERT_EQ(AppSettings().Profiles().size(), 2u);
     EXPECT_EQ(AppSettings().Profiles()[0].name, "Test Game");
     EXPECT_EQ(AppSettings().Profiles()[1].name, "Other");
+}
+
+// A profile named after a long window title, and matching on it. The name
+// field held a copy of the name cut to 127 bytes and an entry's field one
+// cut to 259, through the middle of a character when the title's are
+// several bytes each, and an edit saved the cut: all of the title but a
+// piece of it, and a string config.json could not be written with.
+TEST_F(UiTest, AnEditOfALongProfileNameOrEntryKeepsAllOfIt) {
+    // A hundred characters of three bytes each: past both sizes.
+    std::string title;
+    for (int i = 0; i < 100; ++i) {
+        title += "\xE6\xBC\xA2";
+    }
+    AppConfig config = DefaultConfig();
+    Profile profile;
+    profile.name = title;
+    profile.match.titleContains.push_back(title);
+    config.profiles.push_back(profile);
+    StartWith(config);
+
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("edit a long name and entry", [&title](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionprofiles");
+        const ImGuiTestItemInfo row = ctx->ItemInfo(("**/" + title).c_str());
+        IM_CHECK(row.ID != 0);
+        ctx->SetRef(row.ID);
+        ctx->ItemOpen(row.ID);
+        // Each one's first character taken off: an edit that keeps the
+        // rest of what the field was given.
+        for (const char* field : {"##name", "titles/$$0/##entry"}) {
+            ctx->ItemClick(field);
+            ctx->KeyPress(ImGuiKey_Home);
+            ctx->KeyPress(ImGuiKey_Delete);
+            ctx->KeyPress(ImGuiKey_Enter);
+        }
+    });
+
+    const std::string rest = title.substr(3);
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u);
+    EXPECT_EQ(AppSettings().Profiles()[0].name, rest);
+    EXPECT_EQ(AppSettings().Profiles()[0].match.titleContains, std::vector<std::string>{rest});
 }
 
 TEST_F(UiTest, TheOverviewMakesACanvasAndSwitchesToIt) {

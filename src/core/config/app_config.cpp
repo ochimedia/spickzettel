@@ -626,7 +626,13 @@ std::string SerializeConfig(const AppConfig& config) {
     }
     doc["profiles"] = std::move(profiles);
 
-    return doc.dump(2) + "\n";
+    // A string that is not UTF-8 is written with U+FFFD where it breaks
+    // rather than thrown over. nlohmann throws by default, and nothing
+    // between a settings edit and here catches it: a profile name cut
+    // through a character by the field that edited it ended the app. The
+    // fields edit whole strings now, but a setting saved a little wrong is
+    // not worth the app.
+    return doc.dump(2, ' ', false, json::error_handler_t::replace) + "\n";
 }
 
 LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_view stamp) {

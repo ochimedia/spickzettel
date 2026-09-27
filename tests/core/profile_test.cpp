@@ -239,6 +239,22 @@ TEST(ProfileTest, AProfileWithoutANameIsKeptAndNamed) {
     EXPECT_EQ(reparsed.profiles[1].overrides, nameless.overrides);
 }
 
+// A name that is not UTF-8 - cut through the middle of a character - is
+// written with U+FFFD where it breaks. Writing it threw, and nothing on the
+// way from a settings edit caught that: the app ended.
+TEST(ProfileTest, ANameCutThroughACharacterIsStillWritten) {
+    AppConfig config = DefaultConfig();
+    // "Café", cut after the first of the two bytes of its "é".
+    config.profiles = {GameProfile("Caf\xC3", "game.exe")};
+
+    std::string written;
+    ASSERT_NO_THROW(written = SerializeConfig(config));
+    const AppConfig reparsed = ParseConfig(written);
+    ASSERT_EQ(reparsed.profiles.size(), 1u);
+    EXPECT_EQ(reparsed.profiles[0].name, "Caf\xEF\xBF\xBD");
+    EXPECT_EQ(reparsed.profiles[0].match, config.profiles[0].match);
+}
+
 // Two profiles of one name - typed so by hand - come back as two that can
 // be told apart, each with its own match and overrides.
 TEST(ProfileTest, AProfileNamedLikeAnotherIsRenamed) {

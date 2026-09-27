@@ -2566,6 +2566,22 @@ process's code page (Windows 10 1903 and later): `path::string()` and
 `path(std::string)` then round-trip exactly, and the `-A` Windows calls
 take the same UTF-8 the UI strings are in.
 
+A string stays UTF-8 only while nothing cuts it. A text field over a
+fixed array is handed a copy made to fit the array, and `snprintf` fits
+it by bytes, through the middle of a character; an edit then saves the
+cut. The profile fields did that. A new profile is named after the
+window's title, and a title in characters of three bytes each overran
+the name field's 128 bytes at the forty-third. `json::dump` throws on a
+string that is not UTF-8, and nothing between a settings edit and
+`SerializeConfig` catches it, so renaming that profile ended the app. A
+field that edits a string made elsewhere is now `InputString` over the
+string itself, grown through the resize callback as the note editor's
+is. The Overview's rename fields keep their array: the names they edit
+are only ever made there or from a timestamp, and ImGui cuts what is
+typed or pasted into one at a character's edge. `SerializeConfig` also
+writes a broken character as U+FFFD instead of throwing, since a
+setting saved slightly wrong is not worth the app.
+
 ### In front of the taskbar
 
 `WS_EX_TOPMOST` puts the overlay in the topmost band but not at its front,

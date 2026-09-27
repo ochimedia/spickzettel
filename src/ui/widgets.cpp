@@ -234,6 +234,20 @@ bool TabButton(const char* id, const char* text, bool active) {
     return pressed;
 }
 
+bool InputString(const char* label, std::string& text) {
+    return ImGui::InputText(label, text.data(), text.capacity() + 1, ImGuiInputTextFlags_CallbackResize,
+                            &ResizeStringForInputText, &text);
+}
+
+int ResizeStringForInputText(ImGuiInputTextCallbackData* data) {
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+        auto* text = static_cast<std::string*>(data->UserData);
+        text->resize(static_cast<size_t>(data->BufTextLen));
+        data->Buf = text->data();
+    }
+    return 0;
+}
+
 bool PanelBackdrop(const char* windowId, float displayW, float displayH) {
     ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
     ImGui::SetNextWindowSize(ImVec2(displayW, displayH));

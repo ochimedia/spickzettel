@@ -73,6 +73,18 @@ bool DangerButton(const char* strId, const Icon& icon, const char* text);
 // the Overview's Canvases/Settings/About switcher.
 bool TabButton(const char* id, const char* text, bool active);
 
+// A one-line text field that edits a std::string whole: the string is the
+// field's buffer, grown through ImGui's resize callback, where a fixed
+// array would hold a copy cut to its own size - through the middle of a
+// character, as often as not, and an edit then saves the cut. Returns what
+// ImGui::InputText does: whether the text changed this frame.
+bool InputString(const char* label, std::string& text);
+// ImGuiInputTextFlags_CallbackResize's contract, against a std::string:
+// the widget reports the length it needs, the string is resized to hold
+// it, and the widget is pointed at the (possibly moved) storage. For a
+// field InputString does not cover, with `&text` as the user data.
+int ResizeStringForInputText(ImGuiInputTextCallbackData* data);
+
 // Dims the whole screen behind a panel - the Overview, the cheat sheet -
 // and is true for a click on it, outside the panel, which closes it.
 bool PanelBackdrop(const char* windowId, float displayW, float displayH);

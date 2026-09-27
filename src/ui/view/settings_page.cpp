@@ -1124,8 +1124,6 @@ bool EditStringList(const char* label, const char* addLabel, const char* id, std
     ImGui::TextColored(theme::kGraphite200, "%s", label);
     for (size_t entry = 0; entry < list.size(); ++entry) {
         ImGui::PushID(static_cast<int>(entry));
-        char text[260] = {};
-        std::snprintf(text, sizeof(text), "%s", list[entry].c_str());
         // The first field shares the label's line; every one after it
         // starts its own, lined up under the first.
         if (entry == 0) {
@@ -1134,8 +1132,9 @@ bool EditStringList(const char* label, const char* addLabel, const char* id, std
             ImGui::SetCursorPosX(Px(kProfileFieldX));
         }
         ImGui::SetNextItemWidth(Px(kProfileFieldWidth));
-        if (ImGui::InputText("##entry", text, sizeof(text))) {
-            list[entry] = text;
+        // The entry itself, whole - a window title can be longer than any
+        // array sized for one. See InputString.
+        if (InputString("##entry", list[entry])) {
             changed = true;
         }
         ImGui::SameLine();
@@ -1320,8 +1319,10 @@ bool SettingsPage::RenderProfileRow(size_t index, Profile& profile, bool& remove
         return changed;
     }
     ImGui::Spacing();
-    char name[128] = {};
-    std::snprintf(name, sizeof(name), "%s", profile.name.c_str());
+    // The whole name, not a copy cut to a fixed size: a new profile is
+    // named after the window's title, and that can be longer than any
+    // size chosen for a name. See InputString.
+    std::string name = profile.name;
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kProfilesName);
     ImGui::SameLine(Px(kProfileFieldX));
@@ -1332,12 +1333,12 @@ bool SettingsPage::RenderProfileRow(size_t index, Profile& profile, bool& remove
     // the profile keeps its old one, and a field left like that shows it
     // again once it lets go. A taken name is said under the field while it
     // is typed, since the refusal is otherwise invisible.
-    if (ImGui::InputText("##name", name, sizeof(name))) {
+    if (InputString("##name", name)) {
         if (settings_.RenameProfile(index, name)) {
             profile.name = name;
             takenProfileName_.reset();
-        } else if (name[0] != '\0' && IsProfileNameTaken(settings_.Profiles(), index, name)) {
-            takenProfileName_ = std::make_pair(index, std::string(name));
+        } else if (!name.empty() && IsProfileNameTaken(settings_.Profiles(), index, name)) {
+            takenProfileName_ = std::make_pair(index, name);
         } else {
             takenProfileName_.reset();
         }

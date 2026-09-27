@@ -570,20 +570,6 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
 // one short line comfortably. Being an input-capturing window, it makes
 // io.WantCaptureMouse true over the item while editing, which is what
 // keeps a stroke from starting under the caret.
-namespace {
-// ImGuiInputTextFlags_CallbackResize's contract, against a std::string:
-// the widget reports the length it needs, the string is resized to hold
-// it, and the widget is pointed at the (possibly moved) storage.
-int ResizeStringForInputText(ImGuiInputTextCallbackData* data) {
-    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
-        auto* text = static_cast<std::string*>(data->UserData);
-        text->resize(static_cast<size_t>(data->BufTextLen));
-        data->Buf = text->data();
-    }
-    return 0;
-}
-}  // namespace
-
 void CanvasView::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     constexpr ImGuiWindowFlags kNoteWindowFlags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
