@@ -154,6 +154,23 @@ TEST(TrayControllerTest, ChangeHotkeySwapsTheRegistrationAndTriggersTheNewCombo)
     EXPECT_NE(FindHotkeyId(host, config.hotkeyQuickCapture), 0);
 }
 
+// An unset combo is no change a hotkey can take: Windows registers
+// nothing for one, so the hotkey keeps the combo it had. The Settings row
+// offers none - Backspace and Delete unbind a shortcut, not a hotkey. The
+// fake host registered one all the same, so a test could unbind what the
+// app cannot.
+TEST(TrayControllerTest, AnUnsetComboLeavesTheHotkeyAsItWas) {
+    test::FakePlatformHost host;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+
+    EXPECT_FALSE(controller.ChangeHotkey(HotkeySlot::EditMode, platform::KeyCombo{}));
+    EXPECT_EQ(controller.GetSettings().Stored().hotkeyEditMode, config.hotkeyEditMode);
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    EXPECT_TRUE(host.overlayWindow.IsVisible());
+}
+
 TEST(TrayControllerTest, ChangeHotkeyPersistsTheNewComboToDisk) {
     const std::filesystem::path path =
         std::filesystem::temp_directory_path() / "spickzettel_tray_app_change_hotkey_test_config.json";

@@ -289,9 +289,11 @@ public:
 
     // Supports any number of simultaneously-registered hotkeys (like every
     // real backend does), each independently triggerable via
-    // TriggerHotkey(id) - id is whatever this call returns.
+    // TriggerHotkey(id) - id is whatever this call returns. An unset combo
+    // is refused, as Win32PlatformHost refuses it: accepted here, a test
+    // could unbind a hotkey through ChangeHotkey that the app cannot.
     int RegisterGlobalHotkey(const platform::KeyCombo& combo, platform::HotkeyCallback callback) override {
-        if (!registerHotkeySucceeds) {
+        if (!registerHotkeySucceeds || !combo.IsValid()) {
             return 0;
         }
         const int id = nextHotkeyId++;
