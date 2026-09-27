@@ -282,5 +282,25 @@ TEST_F(Win32Dx11RendererTest, ALostDeviceIsReplacedAndDrawnWithAgain) {
     renderer_.ReleaseTexture(after);
 }
 
+// While a lost device cannot be replaced yet - the driver still on its way
+// back - no texture can be made, and the generation moves once the new
+// device is there. Moved as the old one went, a texture asked for in
+// between - a capture's - was kept by the app as one that could not be
+// made, under the new device's generation, and never asked for again
+// while it was on screen.
+TEST_F(Win32Dx11RendererTest, TheGenerationMovesWhenTheNewDeviceIsMade) {
+    const std::vector<uint8_t> stripes = Stripes(48, 1);
+    renderer_.LoseDeviceForTesting();
+    renderer_.FailDeviceCreationForTesting(2);
+    ASSERT_FALSE(renderer_.ReadyToRender());
+    ASSERT_FALSE(renderer_.ReadyToRender());
+    const uint64_t between = renderer_.DeviceGeneration();
+    EXPECT_EQ(renderer_.CreateTextureFromRGBA(stripes.data(), 48, 1), nullptr) << "nothing to make it on";
+
+    ASSERT_TRUE(renderer_.ReadyToRender()) << "the driver back";
+    EXPECT_NE(renderer_.DeviceGeneration(), between) << "what could not be made in between is made again";
+    EXPECT_EQ(renderer_.DeviceGeneration(), 1u) << "one replacement";
+}
+
 }  // namespace
 }  // namespace sz::platform::win32

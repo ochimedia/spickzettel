@@ -1369,6 +1369,13 @@ read from the library once the device is replaced. A freeze keeps its
 pixels the same way: shots are cut from what was frozen, and the frozen
 screen shows once the device is back.
 
+The generation moves once the new device is made, not as the old one is
+let go of. A capture taken while the driver is still on its way back -
+the capture hotkey works while frames are skipped - cannot be uploaded,
+and is kept as a failure until the generation moves. Moved already, it
+never did: the new device came up under the same generation, and the
+snippet showed its placeholder for as long as its canvas was on screen.
+
 `HeadlessSaveTest.EveryTextureDrawnIsLiveWhateverHappens` holds all of
 this to account: random commands, undo and redo, canvases switched,
 deleted and erased, the renderer switched, the canvas bar's previews

@@ -205,6 +205,10 @@ bool Win32Dx11Renderer::Initialize(HWND hwnd) {
 }
 
 bool Win32Dx11Renderer::CreateDeviceAndSwapChain() {
+    if (failDeviceCreations_ > 0) {
+        --failDeviceCreations_;
+        return false;
+    }
     DXGI_SWAP_CHAIN_DESC desc{};
     desc.BufferCount = 2;
     desc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -296,7 +300,7 @@ bool Win32Dx11Renderer::ReadyToRender() {
     if (device_) {
         ReleaseDevice();
         deviceLost_ = false;
-        ++deviceGeneration_;
+        replacing_ = true;
     }
     if (!CreateDeviceAndSwapChain() || !CreateRenderTarget() ||
         !ImGui_ImplDX11_Init(device_.Get(), context_.Get())) {
@@ -307,6 +311,15 @@ bool Win32Dx11Renderer::ReadyToRender() {
     imguiBackendInitialized_ = true;
     resizePending_ = false;  // a new swapchain is made at the window's size
     CreateFilterShaders();
+    // Once the new device is there, not as the old one goes. A texture
+    // asked for in between - a capture's, taken while the driver was on
+    // its way back - could not be made, and the app keeps one that could
+    // not be made until the generation moves; moved already, it never did,
+    // and the picture stayed blank while it was on screen.
+    if (replacing_) {
+        replacing_ = false;
+        ++deviceGeneration_;
+    }
     return true;
 }
 

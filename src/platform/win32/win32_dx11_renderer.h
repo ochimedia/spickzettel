@@ -37,12 +37,16 @@ public:
     // test present says has not changed: Present returns at once then,
     // without waiting for vsync, and drawing on would spin a core.
     bool ReadyToRender();
-    // How many times ReadyToRender has replaced the device. Every texture
-    // from before a change is lost - see IOverlayWindow::TextureGeneration.
+    // How many times ReadyToRender has replaced the device, counted as each
+    // new one is made. Every texture from before a change is lost - see
+    // IOverlayWindow::TextureGeneration.
     uint64_t DeviceGeneration() const { return deviceGeneration_; }
     // Treats the device as lost, as a removed one is, for the next
     // ReadyToRender. For tests: nothing short of a driver can remove one.
     void LoseDeviceForTesting() { deviceLost_ = true; }
+    // Fails the next `attempts` device creations, as while the driver that
+    // removed the device is still on its way back.
+    void FailDeviceCreationForTesting(int attempts) { failDeviceCreations_ = attempts; }
     // As if the last Present had found the window occluded.
     void OccludeForTesting() { occluded_ = true; }
     // As a WM_SIZE whose ResizeBuffers failed leaves it.
@@ -148,7 +152,11 @@ private:
     bool imguiBackendInitialized_ = false;
     // See ReadyToRender.
     bool deviceLost_ = false;
+    // A lost device let go of, and no new one made yet.
+    bool replacing_ = false;
     uint64_t deviceGeneration_ = 0;
+    // See FailDeviceCreationForTesting.
+    int failDeviceCreations_ = 0;
     bool occluded_ = false;
     // A resize whose ResizeBuffers failed, tried again by every frame until
     // it works; drawn at the old size, stretched, meanwhile. Not retried,
