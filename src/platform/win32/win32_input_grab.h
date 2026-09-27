@@ -265,8 +265,9 @@ public:
     // EVENT_SYSTEM_DESKTOPSWITCH; public to be tested without one.
     void KeysLeftOnAnotherDesktop();
     // A key going down or up, as the keyboard hook would be handed it -
-    // for tests, which cannot press keys.
-    LRESULT KeyEventForTesting(UINT vk, bool isDown);
+    // for tests, which cannot press keys. `heldByWindows` is a down of a
+    // key Windows has down already: an auto-repeat.
+    LRESULT KeyEventForTesting(UINT vk, bool isDown, bool heldByWindows = false);
 
 private:
     Win32InputGrab() = default;
@@ -488,6 +489,8 @@ private:
     // cleared from the app thread as a grab ends.
     static constexpr UINT kVirtualKeyCount = 256;
     std::atomic<bool> swallowedDown_[kVirtualKeyCount] = {};
+    // See KeyEventForTesting: the one key it says Windows has down, or 0.
+    std::atomic<UINT> heldByWindowsForTesting_{0};
     // See SetGameKeepsFocus. Defaults false so nothing is grabbed until the
     // window has said which way it was shown.
     bool gameKeepsFocus_ = false;

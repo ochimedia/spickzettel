@@ -1272,12 +1272,15 @@ void Win32InputGrab::KeysLeftOnAnotherDesktop() {
     ReleaseSwallowedKeys();
 }
 
-LRESULT Win32InputGrab::KeyEventForTesting(UINT vk, bool isDown) {
+LRESULT Win32InputGrab::KeyEventForTesting(UINT vk, bool isDown, bool heldByWindows) {
     KBDLLHOOKSTRUCT event{};
     event.vkCode = vk;
     event.scanCode = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
     event.flags = (vk == VK_RCONTROL || vk == VK_RMENU ? LLKHF_EXTENDED : 0) | (isDown ? 0 : LLKHF_UP);
-    return OnKeyboard(isDown ? WM_KEYDOWN : WM_KEYUP, event);
+    heldByWindowsForTesting_.store(heldByWindows ? vk : 0, std::memory_order_relaxed);
+    const LRESULT result = OnKeyboard(isDown ? WM_KEYDOWN : WM_KEYUP, event);
+    heldByWindowsForTesting_.store(0, std::memory_order_relaxed);
+    return result;
 }
 
 // Ends every key the hook is still holding down on the overlay's behalf, and
@@ -1496,11 +1499,14 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // after the overlay was gone, and a held Shift stayed held. Swallowed and
     // not recorded, and not handed to the overlay, which never saw the key go
     // down either. A modifier held that way is in the grab's record already,
-    // from BeginGrabbedKeyboard.
+    // from BeginGrabbedKeyboard. Only for a key the grab takes: asked
+    // ahead of the HUD's digits below, it swallowed the repeats of every
+    // key the game kept, and a Backspace or an arrow held there acted once.
     const bool isRepeat = isDown && vk < kVirtualKeyCount && swallowedDown_[vk].load(std::memory_order_relaxed);
-    if (isDown && vk < kVirtualKeyCount && !isRepeat && (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0) {
-        return 1;
-    }
+    const bool heldFromBefore =
+        isDown && vk < kVirtualKeyCount && !isRepeat &&
+        (vk == heldByWindowsForTesting_.load(std::memory_order_relaxed) ||
+         (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0);
 
     // Debug scaffolding, and the reason this hook is installed for the whole
     // of edit mode rather than only while grabbing: the input options HUD
@@ -1520,11 +1526,17 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
         // has them. A review had taken it for a state that never changes.
         const bool bare = (GetKeyState(VK_CONTROL) & 0x8000) == 0 &&
                           (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
-        if (!isHudDigit || !bare) {
+        // A digit held since before the edit mode is the game's too: its
+        // down went there.
+        if (!isHudDigit || !bare || heldFromBefore) {
             return 0;  // everyone else's key, left alone
         }
         PostKeyToOverlay(vk, event, isDown);
         return SwallowKey(vk, isDown);
+    }
+
+    if (heldFromBefore) {
+        return 1;
     }
 
     if (TrackModifier(SidedModifier(vk, event.scanCode, (event.flags & LLKHF_EXTENDED) != 0), isDown)) {

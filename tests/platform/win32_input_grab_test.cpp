@@ -325,6 +325,44 @@ TEST(Win32InputGrabTest, ASwitchOfDesktopIsHeardWhileTheGrabRuns) {
     DestroyWindow(overlay);
 }
 
+// With only the input options HUD's digits taken, the keyboard stays the
+// game's: a key held there repeats there, and so does a digit held since
+// before, whose down went there. Only a fresh digit is the HUD's. The rule
+// for keys held from before was asked first and swallowed every repeat: a
+// Backspace or an arrow held in the game acted once.
+TEST(Win32InputGrabTest, TheHudLeavesTheRepeatsOfTheGamesKeysAlone) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.dontForwardKeystrokes = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);  // not active: no hook, the keys are handed in
+    grab.SetInputOptionsHudDigits(3);
+
+    EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, true), 0);
+    EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, true, /*heldByWindows=*/true), 0) << "its repeats";
+    EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, false), 0);
+    EXPECT_EQ(grab.KeyEventForTesting('2', true, /*heldByWindows=*/true), 0) << "a digit held since before";
+    EXPECT_EQ(grab.KeyEventForTesting('2', false), 0);
+    EXPECT_EQ(grab.KeyEventForTesting('2', true), 1) << "a fresh one";
+    EXPECT_EQ(grab.KeyEventForTesting('2', true, /*heldByWindows=*/true), 1) << "and its repeats";
+    EXPECT_EQ(grab.KeyEventForTesting('2', false), 1);
+
+    // Every key the overlay's: the repeat of one held from before is still
+    // taken, and its up left to Windows.
+    options.dontForwardKeystrokes = true;
+    grab.SetOptions(options);
+    EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, true, /*heldByWindows=*/true), 1);
+    EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, false), 0);
+
+    grab.SetInputOptionsHudDigits(0);
+    grab.SetOptions(EditModeInputOptions{});
+    grab.SetOverlayWindow(nullptr);
+    DestroyWindow(overlay);
+}
+
 // A modifier held since before the grab reached Windows itself, and has
 // nothing to be handed back.
 TEST(Win32InputGrabTest, NothingSwallowedIsNothingHandedBack) {

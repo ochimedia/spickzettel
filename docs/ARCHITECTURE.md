@@ -3112,7 +3112,11 @@ Consequences that shape `Win32InputGrab`:
   take, is the repeat of a key held since before it began, and is
   swallowed without being recorded. Recorded, it made the key's up the
   grab's to swallow, and a W held to walk kept walking after the overlay
-  was gone. A hotkey fires on a press, never on its repeat, as
+  was gone. Only for a key the grab takes, though: with just the input
+  options HUD's digits taken, every other key and a digit held from
+  before are the game's, repeats and all. Found in the next review on
+  2026-09-27: the rule was asked ahead of the HUD's, and a Backspace or
+  an arrow held in the game acted once. A hotkey fires on a press, never on its repeat, as
   `RegisterHotKey`'s `MOD_NOREPEAT` does; held a moment too long, the
   edit hotkey opened the overlay and closed it again. Mouse buttons follow
   the same rule, so a drag in the application underneath ends there when
