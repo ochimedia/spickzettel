@@ -145,10 +145,6 @@ void Pointer::ApplyPointerShape() {
 // desktop where nothing would be drawn.
 
 platform::CursorShape Pointer::WantedPointerShape() const {
-    // Placing a snippet: the click puts a corner somewhere exact.
-    if (editor_.ArmedCreation().has_value()) {
-        return platform::CursorShape::Crosshair;
-    }
     // Everything below is about what the pointer is *over*. Over the
     // overview, a popover or the selection's handles and bar, ImGui owns the
     // pointer and this must not argue with it - the arrow here is only
@@ -157,6 +153,12 @@ platform::CursorShape Pointer::WantedPointerShape() const {
     // all.
     if (ImGui::GetIO().WantCaptureMouse || PanelOpen()) {
         return platform::CursorShape::Arrow;
+    }
+    // Placing a snippet: the click puts a corner somewhere exact. Not over
+    // a panel, which the click is for instead: asked first, a menu or the
+    // Overview wore the crosshair.
+    if (editor_.ArmedCreation().has_value()) {
+        return platform::CursorShape::Crosshair;
     }
     const ImVec2 mouse = ImGui::GetMousePos();
     const PointerTarget target = editor_.ResolvePointerTarget(mouse.x, mouse.y);

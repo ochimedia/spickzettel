@@ -3016,6 +3016,32 @@ TEST_F(OverlappingItemsTest, AStillPointerStopsAskingTheOsForACursor) {
         << "and the shape should still be the one it settled on";
 }
 
+// A creation tool in hand puts a crosshair over the canvas, where a click
+// places the snippet, and not over a panel, where the click is the
+// panel's. The crosshair was asked for first, and a menu wore it.
+TEST_F(HeadlessAppTest, TheCrosshairOfACreationToolStaysOffThePanels) {
+    AppConfig config = DefaultConfig();
+    config.profileable.softwarePointer = false;  // see ThePointerKeepsItsShapeCrossingAnOccludedBorder
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    MoveTo(500.0f, 400.0f);
+    StepFrame();
+    PressKey(ImGuiKey_D);
+    ASSERT_TRUE(App().ArmedCreation().has_value());
+    StepFrames(3);
+    ASSERT_EQ(host_.overlayWindow.cursorShape, platform::CursorShape::Crosshair);
+
+    MoveTo(kDisplayWidth * 0.5f, kDisplayHeight - 1.0f);
+    StepFrames(30);
+    const ImGuiWindow* bar = ImGui::FindWindowByName("##canvas_bar");
+    ASSERT_NE(bar, nullptr);
+    MoveTo(bar->Pos.x + 20.0f, bar->Pos.y + 20.0f);
+    StepFrames(3);
+    ASSERT_TRUE(App().ArmedCreation().has_value());
+    EXPECT_EQ(host_.overlayWindow.cursorShape, platform::CursorShape::Arrow);
+}
+
 // ===== The selection =====
 
 TEST_F(OverlappingItemsTest, AClickSelectsAndShiftClickAddsAndRemoves) {

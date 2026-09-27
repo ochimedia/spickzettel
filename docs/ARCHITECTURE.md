@@ -2571,6 +2571,11 @@ in either of the last two frames - the backend's own cursor push lands
 one frame late - and not otherwise: pushing it every frame was measured
 at a quarter of an idle frame (see `Pointer::ApplyPointerShape`).
 
+Over a panel the pointer is ImGui's, whatever tool is in hand: the
+crosshair of a creation tool is asked for only over the canvas, where
+the click places the snippet. Found in the next review on 2026-09-27:
+it was asked for first, and a menu or the Overview wore it.
+
 The demo watermark is drawn wherever the overlay is visible, above every
 snippet and every popup over the canvas, and below only the panels, the
 delete confirmation and what ImGui's foreground list carries: a mark a
