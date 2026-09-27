@@ -326,6 +326,18 @@ into. Both shapes share one walk (`ClipStrokeOutsideRegion`) and differ
 only in an inside test and a crossing finder, so they cannot disagree
 about what erasing means.
 
+A drag with the eraser clips against the capsule from its last position
+to its new one (`ClipStrokeOutsideCapsule`), the circle swept along the
+way, not against a circle at each. Movement comes once a frame (see
+"Movement is never posted"), and a quick scrub moves the eraser farther
+than its width between two: at 60 frames a second the default 28 px
+eraser skips at about 1700 px a second, and a thin line crossed between
+two circles was left whole - the pen joins its samples, and the eraser
+now does too. The capsule is convex, so the same walk takes it; its
+crossings are where the segment's line meets the band along the pass or
+either end's circle, the least start to the greatest end. Found in
+review on 2026-09-27.
+
 Why not rasterize instead: a bitmap erase gives up resolution
 independence and turns undo into pixel diffs, for a problem that a
 bounded piece of segment geometry solves while keeping every stroke a

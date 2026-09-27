@@ -703,6 +703,7 @@ void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widt
     eraseCheckpoint_ = Before({itemId});
     SnapshotStrokesForErase(itemId);
     eraseItemId_ = itemId;
+    eraseLast_ = StrokePoint{screenX, screenY};
     NoteEraseOutcome(Model().EraseAt(itemId, screenX, screenY, widthScreenPx * 0.5f));
 }
 
@@ -710,7 +711,11 @@ void Session::ExtendErase(float screenX, float screenY, float widthScreenPx) {
     if (!eraseItemId_.has_value()) {
         return;
     }
-    NoteEraseOutcome(Model().EraseAt(*eraseItemId_, screenX, screenY, widthScreenPx * 0.5f));
+    // Along the way from the last position, not only at this one - see
+    // ClipStrokeOutsideCapsule.
+    NoteEraseOutcome(
+        Model().EraseAlong(*eraseItemId_, eraseLast_.x, eraseLast_.y, screenX, screenY, widthScreenPx * 0.5f));
+    eraseLast_ = StrokePoint{screenX, screenY};
 }
 
 void Session::EndErase() {

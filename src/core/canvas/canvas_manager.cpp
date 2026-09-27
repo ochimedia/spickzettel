@@ -726,7 +726,8 @@ std::vector<size_t> ClipStrokesInPlace(Item& item, const Clip& clip) {
 }
 }  // namespace
 
-std::vector<size_t> CanvasManager::EraseAt(ItemId id, float screenX, float screenY, float radiusScreenPx) {
+std::vector<size_t> CanvasManager::EraseAlong(ItemId id, float fromX, float fromY, float toX, float toY,
+                                              float radiusScreenPx) {
     // Marked changed whether or not anything came away: simpler than
     // threading a "did this actually change anything" result out just to
     // decide whether to mark, and a spurious bump costs a cache a look (see
@@ -736,10 +737,11 @@ std::vector<size_t> CanvasManager::EraseAt(ItemId id, float screenX, float scree
     if (!item) {
         return {};
     }
-    const NativePoint native = ScreenToNative(*item, screenX, screenY);
-    const float nativeRadius = radiusScreenPx * native.scale;
+    const NativePoint from = ScreenToNative(*item, fromX, fromY);
+    const NativePoint to = ScreenToNative(*item, toX, toY);
+    const float nativeRadius = radiusScreenPx * to.scale;
     return ClipStrokesInPlace(*item, [&](const Stroke& stroke) {
-        return ClipStrokeOutsideCircle(stroke, StrokePoint{native.x, native.y}, nativeRadius);
+        return ClipStrokeOutsideCapsule(stroke, StrokePoint{from.x, from.y}, StrokePoint{to.x, to.y}, nativeRadius);
     });
 }
 

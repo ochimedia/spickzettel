@@ -316,7 +316,14 @@ public:
     // by its fragments where it was. That is what lets the session compose
     // a whole eraser drag into one exact undo entry (see
     // Session::NoteEraseOutcome). Empty if the item was not found.
-    std::vector<size_t> EraseAt(ItemId id, float screenX, float screenY, float radiusScreenPx);
+    std::vector<size_t> EraseAt(ItemId id, float screenX, float screenY, float radiusScreenPx) {
+        return EraseAlong(id, screenX, screenY, screenX, screenY, radiusScreenPx);
+    }
+    // The same along the screen-space segment from (fromX, fromY) to (toX,
+    // toY): everything within the radius of it (see
+    // ClipStrokeOutsideCapsule) - where the eraser passed between two of
+    // its positions.
+    std::vector<size_t> EraseAlong(ItemId id, float fromX, float fromY, float toX, float toY, float radiusScreenPx);
     static constexpr size_t kStrokeUntouched = static_cast<size_t>(-1);
 
     // The rectangular-eraser equivalent of EraseAt - the same "clip, don't

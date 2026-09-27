@@ -2,6 +2,9 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+#include <utility>
+
 namespace sz::core {
 namespace {
 
@@ -312,6 +315,81 @@ TEST(StrokeClipTest, ErasingTheSamePlaceAgainChangesNothing) {
     for (const Stroke& fragment : *first) {
         EXPECT_FALSE(ClipStrokeOutsideCircle(fragment, StrokePoint{0, 0}, 5.0f).has_value());
     }
+}
+
+// ===== The capsule: the eraser's pass between two positions =====
+
+// The two cut points of a stroke split in two, as (end of the first
+// fragment, start of the second) along `coordinate`.
+std::pair<float, float> Gap(const std::optional<std::vector<Stroke>>& clipped, float StrokePoint::* coordinate) {
+    EXPECT_TRUE(clipped.has_value());
+    if (!clipped.has_value() || clipped->size() != 2u) {
+        ADD_FAILURE() << "not split in two";
+        return {0.0f, 0.0f};
+    }
+    return {(*clipped)[0].points.back().*coordinate, (*clipped)[1].points.front().*coordinate};
+}
+
+// Through the band between the ends, across it: cut where it enters and
+// leaves, a radius either side of the pass.
+TEST(StrokeClipTest, CapsuleCutsALineCrossingItsBand) {
+    const Stroke stroke = MakeStroke({StrokePoint{10, -20}, StrokePoint{10, 20}});
+    const auto [end, start] = Gap(ClipStrokeOutsideCapsule(stroke, {0, 0}, {20, 0}, 5.0f), &StrokePoint::y);
+    EXPECT_NEAR(end, -5.0f, 1e-3f);
+    EXPECT_NEAR(start, 5.0f, 1e-3f);
+}
+
+// Past the pass's end, where only the round cap reaches.
+TEST(StrokeClipTest, CapsuleCutsALineThroughItsRoundEnd) {
+    const Stroke stroke = MakeStroke({StrokePoint{23, -20}, StrokePoint{23, 20}});
+    const auto [end, start] = Gap(ClipStrokeOutsideCapsule(stroke, {0, 0}, {20, 0}, 5.0f), &StrokePoint::y);
+    EXPECT_NEAR(end, -4.0f, 1e-3f);
+    EXPECT_NEAR(start, 4.0f, 1e-3f);
+}
+
+// Along the pass, off its middle: in through one cap, along the band and
+// out through the other - one cut each side.
+TEST(StrokeClipTest, CapsuleCutsALineRunningAlongIt) {
+    const Stroke stroke = MakeStroke({StrokePoint{-20, 3}, StrokePoint{40, 3}});
+    const auto [end, start] = Gap(ClipStrokeOutsideCapsule(stroke, {0, 0}, {20, 0}, 5.0f), &StrokePoint::x);
+    EXPECT_NEAR(end, -4.0f, 1e-3f);
+    EXPECT_NEAR(start, 24.0f, 1e-3f);
+}
+
+// A slanted pass across a level line: cut where the line is within the
+// radius of the pass - here |2x| / sqrt(5) <= 2.
+TEST(StrokeClipTest, CapsuleCutsALineASlantedPassCrosses) {
+    const Stroke stroke = MakeStroke({StrokePoint{-50, 0}, StrokePoint{50, 0}});
+    const auto [end, start] = Gap(ClipStrokeOutsideCapsule(stroke, {-10, -20}, {10, 20}, 2.0f), &StrokePoint::x);
+    EXPECT_NEAR(end, -std::sqrt(5.0f), 1e-3f);
+    EXPECT_NEAR(start, std::sqrt(5.0f), 1e-3f);
+}
+
+// Beside the pass, farther than the radius, and beyond its ends: untouched.
+TEST(StrokeClipTest, CapsuleLeavesWhatItDidNotReach) {
+    const auto untouched = [](std::vector<StrokePoint> points) {
+        return !ClipStrokeOutsideCapsule(MakeStroke(std::move(points)), {0, 0}, {20, 0}, 5.0f).has_value();
+    };
+    EXPECT_TRUE(untouched({StrokePoint{-20, 6}, StrokePoint{40, 6}}));
+    EXPECT_TRUE(untouched({StrokePoint{26, -20}, StrokePoint{26, 20}}));
+    EXPECT_TRUE(untouched({StrokePoint{30, 0}}));
+}
+
+// A whole stroke inside the pass goes; a dot on it goes whole.
+TEST(StrokeClipTest, CapsuleTakesAllThatLiesInside) {
+    const auto line =
+        ClipStrokeOutsideCapsule(MakeStroke({StrokePoint{2, 1}, StrokePoint{18, -1}}), {0, 0}, {20, 0}, 5.0f);
+    ASSERT_TRUE(line.has_value());
+    EXPECT_TRUE(line->empty());
+    const auto dot = ClipStrokeOutsideCapsule(MakeStroke({StrokePoint{10, 4}}), {0, 0}, {20, 0}, 5.0f);
+    ASSERT_TRUE(dot.has_value());
+    EXPECT_TRUE(dot->empty());
+}
+
+// No pass at all - the two positions one - is the circle.
+TEST(StrokeClipTest, CapsuleOfOnePointIsTheCircle) {
+    const Stroke stroke = MakeStroke({StrokePoint{-20, 0}, StrokePoint{20, 0}});
+    EXPECT_EQ(ClipStrokeOutsideCapsule(stroke, {0, 0}, {0, 0}, 5.0f), ClipStrokeOutsideCircle(stroke, {0, 0}, 5.0f));
 }
 
 }  // namespace

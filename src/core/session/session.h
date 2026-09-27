@@ -478,6 +478,9 @@ private:
     // The item the circular eraser gesture in progress is erasing, if any,
     // and the library as it was when the gesture began.
     std::optional<ItemId> eraseItemId_;
+    // Where the eraser last was, on screen - where the next position's
+    // pass begins.
+    StrokePoint eraseLast_;
     Checkpoint eraseCheckpoint_;
     // The placement gesture in progress: where its snippets were when it
     // began - see BeginPlacement - and the library as it was then.

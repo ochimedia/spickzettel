@@ -316,6 +316,30 @@ TEST(SessionTest, AnUndoWithTheNoteOpenClosesItFirst) {
     EXPECT_FALSE(session.CanUndo());
 }
 
+// The eraser takes what it passed over between two of its positions, not
+// only what lies under each: movement comes once a frame, and a quick
+// stroke of the hand crosses a line between two of them. Here neither
+// position touches the line, and the pass between them cuts it in two -
+// one undo step, which puts it back.
+TEST(SessionTest, TheEraserTakesWhatItPassedOverBetweenTwoPositions) {
+    Session session;
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    DrawLineInto(session, item, 50.0f);
+    const std::vector<Stroke> drawn = ItemById(Model(session), item)->strokes;
+
+    session.BeginErase(item, 50.0f, 20.0f, 10.0f);
+    session.ExtendErase(50.0f, 80.0f, 10.0f);
+    session.EndErase();
+
+    const std::vector<Stroke>& left = ItemById(Model(session), item)->strokes;
+    ASSERT_EQ(left.size(), 2u);
+    EXPECT_NEAR(left[0].points.back().x, 45.0f, 1e-3f);
+    EXPECT_NEAR(left[1].points.front().x, 55.0f, 1e-3f);
+
+    ASSERT_TRUE(session.Undo().has_value());
+    EXPECT_EQ(ItemById(Model(session), item)->strokes, drawn);
+}
+
 // An erase begun while another is still open ends that one first, filed
 // whole: one undo puts back what each took.
 TEST(SessionTest, AnEraseBegunOverAnOpenOneFilesThatOneFirst) {
@@ -432,8 +456,11 @@ TEST(SessionTest, AStrokeClippedTwiceInOneDragComesBackWhole) {
     DrawLineInto(session, item, 30.0f);
     DrawLineInto(session, item, 100.0f);
     // One drag, two bites out of the first stroke - the second bite clips a
-    // fragment the first one left.
+    // fragment the first one left. Off the line and back between them, so
+    // the eraser's pass takes nothing between the two.
     session.BeginErase(item, 30.0f, 30.0f, 10.0f);
+    session.ExtendErase(30.0f, 60.0f, 10.0f);
+    session.ExtendErase(70.0f, 60.0f, 10.0f);
     session.ExtendErase(70.0f, 30.0f, 10.0f);
     session.EndErase();
     ASSERT_EQ(StrokeHeights(Model(session), item), (std::vector<float>{30.0f, 30.0f, 30.0f, 100.0f}));

@@ -35,6 +35,16 @@ namespace sz::core {
 // was the one mark the eraser could not remove.
 std::optional<std::vector<Stroke>> ClipStrokeOutsideCircle(const Stroke& stroke, StrokePoint center, float radius);
 
+// The same, against everything within `radius` of the segment from `from`
+// to `to` - the circle swept along it, a capsule: where the eraser passed
+// between two of its positions. Movement comes once a frame, and a quick
+// hand moves the eraser farther than its width between two; clipped
+// against a circle at each, a line crossed in between was never touched.
+// A capsule is convex, as the circle and the rectangle are, so the same
+// walk does it. `from` and `to` the same point is the circle.
+std::optional<std::vector<Stroke>> ClipStrokeOutsideCapsule(const Stroke& stroke, StrokePoint from, StrokePoint to,
+                                                            float radius);
+
 // The rectangular-eraser equivalent of ClipStrokeOutsideCircle - same
 // contract (nullopt if the region never touches the stroke; otherwise the
 // surviving fragments, a present empty vector meaning the whole stroke

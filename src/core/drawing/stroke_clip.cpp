@@ -1,6 +1,8 @@
 #include "core/drawing/stroke_clip.h"
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace sz::core {
@@ -201,6 +203,106 @@ std::vector<float> SegmentRectCrossings(const StrokePoint& a, const StrokePoint&
     return result;
 }
 
+// Whether `p` lies within `radius` of the segment a->b (radiusSq is its
+// square): the distance to the nearest point of the segment.
+bool IsInsideCapsule(const StrokePoint& p, StrokePoint a, StrokePoint b, float radiusSq) {
+    const float abx = b.x - a.x;
+    const float aby = b.y - a.y;
+    const float lengthSq = abx * abx + aby * aby;
+    float t = 0.0f;
+    if (lengthSq > 0.0f) {
+        t = std::clamp(((p.x - a.x) * abx + (p.y - a.y) * aby) / lengthSq, 0.0f, 1.0f);
+    }
+    return IsInsideCircle(p, StrokePoint{a.x + abx * t, a.y + aby * t}, radiusSq);
+}
+
+// Narrows [lo, hi] to where c + k*t >= 0 - one half-plane of a
+// Liang-Barsky clip, on the line's unbounded parameter.
+void KeepWhereNotNegative(float& lo, float& hi, float c, float k) {
+    if (k == 0.0f) {
+        if (c < 0.0f) {
+            lo = 1.0f;
+            hi = 0.0f;  // parallel to this boundary and outside it: nothing
+        }
+        return;
+    }
+    const float r = -c / k;
+    if (k > 0.0f) {
+        lo = std::max(lo, r);
+    } else {
+        hi = std::min(hi, r);
+    }
+}
+
+// t-values in (0, 1), ascending, where segment p0->p1 crosses the boundary
+// of the capsule around a->b - at most two, the capsule being convex. The
+// capsule is the band along a->b and a circle at each end; each meets the
+// segment's line in an interval, and since their union is convex, the
+// line is inside it over the one interval from the least of their starts
+// to the greatest of their ends. Reported as the circle's and the
+// rectangle's are, for ClipStrokeOutsideRegion to classify.
+std::vector<float> SegmentCapsuleCrossings(const StrokePoint& p0, const StrokePoint& p1, StrokePoint a, StrokePoint b,
+                                            float radius) {
+    const float dx = p1.x - p0.x;
+    const float dy = p1.y - p0.y;
+    const float coeffA = dx * dx + dy * dy;
+    if (coeffA <= 1e-12f) {
+        return {};
+    }
+    constexpr float kUnbounded = std::numeric_limits<float>::infinity();
+    float from = kUnbounded;
+    float to = -kUnbounded;
+    const auto take = [&](float lo, float hi) {
+        if (lo <= hi) {
+            from = std::min(from, lo);
+            to = std::max(to, hi);
+        }
+    };
+
+    // The circle at each end: where the line is within `radius` of it.
+    for (const StrokePoint& center : {a, b}) {
+        const float fx = p0.x - center.x;
+        const float fy = p0.y - center.y;
+        const float coeffB = 2.0f * (fx * dx + fy * dy);
+        const float coeffC = fx * fx + fy * fy - radius * radius;
+        const float discriminant = coeffB * coeffB - 4.0f * coeffA * coeffC;
+        if (discriminant >= 0.0f) {
+            const float sqrtDisc = std::sqrt(discriminant);
+            take((-coeffB - sqrtDisc) / (2.0f * coeffA), (-coeffB + sqrtDisc) / (2.0f * coeffA));
+        }
+    }
+
+    // The band: along a->b between its ends, and within `radius` across.
+    const float abx = b.x - a.x;
+    const float aby = b.y - a.y;
+    const float length = std::sqrt(abx * abx + aby * aby);
+    if (length > 1e-6f) {
+        const float ux = abx / length;
+        const float uy = aby / length;
+        const float along0 = (p0.x - a.x) * ux + (p0.y - a.y) * uy;
+        const float alongK = dx * ux + dy * uy;
+        const float across0 = (p0.y - a.y) * ux - (p0.x - a.x) * uy;
+        const float acrossK = dy * ux - dx * uy;
+        float lo = -kUnbounded;
+        float hi = kUnbounded;
+        KeepWhereNotNegative(lo, hi, along0, alongK);
+        KeepWhereNotNegative(lo, hi, length - along0, -alongK);
+        KeepWhereNotNegative(lo, hi, radius + across0, acrossK);
+        KeepWhereNotNegative(lo, hi, radius - across0, -acrossK);
+        take(lo, hi);
+    }
+
+    constexpr float kEpsilon = 1e-6f;
+    std::vector<float> result;
+    if (from > kEpsilon && from < 1.0f - kEpsilon) {
+        result.push_back(from);
+    }
+    if (to > kEpsilon && to < 1.0f - kEpsilon && (result.empty() || to - result.back() > kEpsilon)) {
+        result.push_back(to);
+    }
+    return result;
+}
+
 }  // namespace
 
 std::optional<std::vector<Stroke>> ClipStrokeOutsideCircle(const Stroke& stroke, StrokePoint center, float radius) {
@@ -208,6 +310,17 @@ std::optional<std::vector<Stroke>> ClipStrokeOutsideCircle(const Stroke& stroke,
     return ClipStrokeOutsideRegion(
         stroke, [&](const StrokePoint& p) { return IsInsideCircle(p, center, radiusSq); },
         [&](const StrokePoint& a, const StrokePoint& b) { return SegmentCircleCrossings(a, b, center, radius); });
+}
+
+std::optional<std::vector<Stroke>> ClipStrokeOutsideCapsule(const Stroke& stroke, StrokePoint from, StrokePoint to,
+                                                            float radius) {
+    if (from.x == to.x && from.y == to.y) {
+        return ClipStrokeOutsideCircle(stroke, from, radius);
+    }
+    const float radiusSq = radius * radius;
+    return ClipStrokeOutsideRegion(
+        stroke, [&](const StrokePoint& p) { return IsInsideCapsule(p, from, to, radiusSq); },
+        [&](const StrokePoint& a, const StrokePoint& b) { return SegmentCapsuleCrossings(a, b, from, to, radius); });
 }
 
 std::optional<std::vector<Stroke>> ClipStrokeOutsideRect(const Stroke& stroke, float minX, float minY, float maxX,
