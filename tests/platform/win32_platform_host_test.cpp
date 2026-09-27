@@ -203,6 +203,26 @@ TEST(Win32PlatformHostTest, AHotkeyCallbackCanUnregisterItsOwnHotkey) {
     EXPECT_EQ(ranToTheEnd, word);
 }
 
+// The background timer's callback may set the timer again while it runs
+// - the config retry does, from the save it retries - and runs on to the
+// end with what it captured intact.
+TEST(Win32PlatformHostTest, ABackgroundTimerCallbackCanSetTheTimerAgain) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    std::string ranToTheEnd;
+    const std::string word = "all of it, and well past what a small string holds in place";
+    host.SetBackgroundTimer(60000, [&host, &ranToTheEnd, word] {
+        host.SetBackgroundTimer(60000, [] {});
+        ranToTheEnd = word;
+    });
+
+    SendMessageA(FindWindowA(nullptr, name.c_str()), WM_TIMER, kBackgroundTimerId, 0);
+
+    EXPECT_EQ(ranToTheEnd, word);
+    host.SetBackgroundTimer(0, nullptr);
+}
+
 // A posted task waits for the message loop - it runs after whatever frame
 // or message posted it, not inside it - and tasks run in the order they
 // were posted, one posted by a task after those already waiting.

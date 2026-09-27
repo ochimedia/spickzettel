@@ -86,6 +86,9 @@ std::wstring InstanceMutexName(const std::string& appName);
 // The host's one tray icon, as the shell knows it: this id on the host
 // window.
 inline constexpr UINT kTrayIconId = 1;
+// See SetBackgroundTimer: a WM_TIMER on the message window, which is
+// pumped whether or not the overlay is up.
+inline constexpr UINT_PTR kBackgroundTimerId = 1;
 // The WM_TIMER that tries a failed tray icon add again, and how often.
 inline constexpr UINT_PTR kTrayRetryTimerId = 2;
 inline constexpr UINT kTrayRetryMs = 5000;

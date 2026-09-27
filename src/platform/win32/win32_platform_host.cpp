@@ -48,9 +48,6 @@ bool SkipCharacterTranslation(const MSG& msg) {
 }
 constexpr UINT kMenuIdToggle = 1;
 constexpr UINT kMenuIdExit = 2;
-// See SetBackgroundTimer: a WM_TIMER on the message window, which is
-// pumped whether or not the overlay is up.
-constexpr UINT_PTR kBackgroundTimerId = 1;
 }  // namespace
 
 Win32PlatformHost::~Win32PlatformHost() {
@@ -501,7 +498,11 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
         }
         case WM_TIMER:
             if (wParam == kBackgroundTimerId && backgroundTimerCallback_) {
-                backgroundTimerCallback_();
+                // Called on a copy, as a hotkey's is: the callback can set
+                // the timer again - the config retry does, when it saves -
+                // and the one held here is destroyed then.
+                const std::function<void()> callback = backgroundTimerCallback_;
+                callback();
             }
             if (wParam == kTrayRetryTimerId && trayIconWanted_) {
                 AddTrayIcon();

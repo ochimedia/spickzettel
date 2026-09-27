@@ -1367,6 +1367,11 @@ the host window, the one clock the app has while hidden) tries it again
 every ten seconds, whether or not the overlay is up, and exit tries it
 once more before the app goes.
 
+The timer's callback is called on a copy, as a hotkey's is. Found in the
+next review on 2026-09-27: the retry that saves the file sets the timer
+again from inside the callback, which destroyed the running closure;
+harmless only because nothing it captured was touched afterwards.
+
 Exit and the OS ending the session (`WM_QUERYENDSESSION`, answered TRUE
 after settling, and `WM_ENDSESSION` again for good measure) reach the
 app as a broadcast to every *top-level* window, and Windows leaves
