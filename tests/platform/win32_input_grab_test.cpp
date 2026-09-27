@@ -10,6 +10,7 @@
 // Windows lets them be; a failing run costs a second or two of dead mouse.
 #include "platform/win32/win32_input_grab.h"
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
 #include <thread>
@@ -241,6 +242,87 @@ TEST(Win32InputGrabTest, TheHooksStandDownWhenTheAppThreadStopsBeating) {
     EXPECT_FALSE(Win32InputGrab::IsStalled(beat + Win32InputGrab::kStalledAfterMs, beat));
     EXPECT_TRUE(Win32InputGrab::IsStalled(beat + Win32InputGrab::kStalledAfterMs + 1, beat));
     EXPECT_FALSE(Win32InputGrab::IsStalled(beat - 1, beat)) << "a beat newer than the clock read before it";
+}
+
+// Ctrl and Alt held until the Ctrl+Alt+Del screen came up go up there,
+// where no hook of this desktop is called. The record kept them held: a
+// bare S matched Ctrl+Alt+S and hid the overlay, and the downs handed back
+// as it hid stayed down system-wide. A switch of desktop forgets them.
+TEST(Win32InputGrabTest, KeysLeftOnAnotherDesktopAreTakenAsReleased) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.dontForwardKeystrokes = true;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);  // not active: no hook, the keys are handed in
+    constexpr int kHotkeyId = 77;
+    grab.AddHotkey(kHotkeyId, KeyCombo{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'S'}, overlay);
+
+    EXPECT_EQ(grab.KeyEventForTesting(VK_LCONTROL, true), 1) << "swallowed";
+    EXPECT_EQ(grab.KeyEventForTesting(VK_LMENU, true), 1);
+    bool ctrl = false;
+    bool shift = false;
+    bool alt = false;
+    grab.HeldModifiers(ctrl, shift, alt);
+    EXPECT_TRUE(ctrl && alt);
+
+    grab.KeysLeftOnAnotherDesktop();
+    grab.HeldModifiers(ctrl, shift, alt);
+    EXPECT_FALSE(ctrl || alt || shift);
+    grab.KeyEventForTesting('S', true);
+    grab.KeyEventForTesting('S', false);
+
+    std::vector<WPARAM> keyUps;
+    int hotkeys = 0;
+    MSG msg;
+    while (PeekMessageA(&msg, overlay, 0, 0, PM_REMOVE)) {
+        if (msg.message == WM_KEYUP) {
+            keyUps.push_back(msg.wParam);
+        } else if (msg.message == WM_HOTKEY) {
+            ++hotkeys;
+        }
+    }
+    EXPECT_EQ(hotkeys, 0) << "a bare S is a bare S";
+    EXPECT_NE(std::find(keyUps.begin(), keyUps.end(), static_cast<WPARAM>(VK_LCONTROL)), keyUps.end())
+        << "the overlay is told Ctrl came up";
+    EXPECT_NE(std::find(keyUps.begin(), keyUps.end(), static_cast<WPARAM>(VK_LMENU)), keyUps.end());
+
+    grab.RemoveHotkey(kHotkeyId);
+    grab.SetOptions(EditModeInputOptions{});
+    grab.SetOverlayWindow(nullptr);
+    DestroyWindow(overlay);
+}
+
+// The switch reaches the grab: Windows raises EVENT_SYSTEM_DESKTOPSWITCH,
+// heard on the hook thread while it runs. Raised here by hand, since a
+// test cannot switch desktops.
+TEST(Win32InputGrabTest, ASwitchOfDesktopIsHeardWhileTheGrabRuns) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = false;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    const auto limit = std::chrono::milliseconds(1500);
+
+    grab.SetActive(true);
+    ASSERT_TRUE(Eventually([] { return QueryRawMouse().targetIsAWindow; }, limit)) << "the hook thread is up";
+    const int before = grab.Diagnostics().desktopSwitches;
+    NotifyWinEvent(EVENT_SYSTEM_DESKTOPSWITCH, GetDesktopWindow(), OBJID_WINDOW, CHILDID_SELF);
+    EXPECT_TRUE(Eventually([&] { return grab.Diagnostics().desktopSwitches > before; }, limit));
+
+    grab.SetActive(false);
+    grab.Shutdown();
+    grab.SetOverlayWindow(nullptr);
+    DestroyWindow(overlay);
 }
 
 // A modifier held since before the grab reached Windows itself, and has

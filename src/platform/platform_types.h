@@ -319,6 +319,11 @@ struct InputGrabDiagnostics {
     float correctionLagMsLast = 0.0f;
     float correctionLagMsMax = 0.0f;
     int correctionsInjected = 0;
+
+    // How many switches of the active desktop the grab has heard of - each
+    // one forgets the keys it held (see Win32InputGrab::
+    // KeysLeftOnAnotherDesktop).
+    int desktopSwitches = 0;
 };
 
 // What IOverlayWindow::CaptureRegion returns: the pixels captured, empty

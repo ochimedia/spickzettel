@@ -255,6 +255,19 @@ public:
     // HandHeldModifiersToSystem. Public to be tested without injecting.
     static std::vector<INPUT> ModifierHandBack(const bool (&swallowed)[256]);
 
+    // Every key the hook took the down of is taken as released: the
+    // overlay is told each came up, and the Ctrl/Shift/Alt record goes
+    // blank. For a switch of the active desktop - the Ctrl+Alt+Del screen,
+    // the lock screen, a UAC prompt - where the keys come up with no hook
+    // of this desktop called: the record kept Ctrl+Alt held, a bare S
+    // matched Ctrl+Alt+S, and hiding handed Windows the downs, which stayed
+    // down system-wide. Called on the hook thread for
+    // EVENT_SYSTEM_DESKTOPSWITCH; public to be tested without one.
+    void KeysLeftOnAnotherDesktop();
+    // A key going down or up, as the keyboard hook would be handed it -
+    // for tests, which cannot press keys.
+    LRESULT KeyEventForTesting(UINT vk, bool isDown);
+
 private:
     Win32InputGrab() = default;
 
@@ -270,6 +283,10 @@ private:
     static LRESULT CALLBACK MouseProc(int code, WPARAM wParam, LPARAM lParam);
     static LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam);
     static LRESULT CALLBACK RawInputSinkWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+    // EVENT_SYSTEM_DESKTOPSWITCH, on the hook thread - see
+    // KeysLeftOnAnotherDesktop.
+    static void CALLBACK DesktopSwitchProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG object, LONG child,
+                                           DWORD thread, DWORD time);
 
     LRESULT OnMouse(WPARAM message, const MSLLHOOKSTRUCT& event);
     // Everything the overlay is told about the mouse comes from here, from
@@ -574,6 +591,8 @@ private:
     std::atomic<float> correctionLagMsLast_{0.0f};
     std::atomic<float> correctionLagMsMax_{0.0f};
     std::atomic<int> correctionsInjected_{0};
+    // See InputGrabDiagnostics::desktopSwitches.
+    std::atomic<int> desktopSwitches_{0};
 
     // What Refresh last decided, for the hot path that would otherwise take
     // the state lock on every mouse event system-wide. Reading a stale

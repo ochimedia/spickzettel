@@ -452,6 +452,10 @@ DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
     // waiting to hear so before it lets anyone post here.
     MSG msg;
     PeekMessageA(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
+    // Out of context, so called here, between messages, like the hooks.
+    const HWINEVENTHOOK desktopSwitch =
+        SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, nullptr,
+                        &Win32InputGrab::DesktopSwitchProc, 0, 0, WINEVENT_OUTOFCONTEXT);
     if (grab.hookThreadReady_) {
         SetEvent(grab.hookThreadReady_);
     }
@@ -475,6 +479,9 @@ DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
     // thread. Under a grab that is a dead mouse: the hook goes on swallowing
     // every event, and nothing is left to read them.
     grab.DestroyRawInputSink();
+    if (desktopSwitch) {
+        UnhookWinEvent(desktopSwitch);
+    }
     if (grab.mouseHook_) {
         UnhookWindowsHookEx(grab.mouseHook_);
         grab.mouseHook_ = nullptr;
@@ -820,6 +827,7 @@ InputGrabDiagnostics Win32InputGrab::Diagnostics() const {
     out.correctionLagMsLast = correctionLagMsLast_.load(std::memory_order_relaxed);
     out.correctionLagMsMax = correctionLagMsMax_.load(std::memory_order_relaxed);
     out.correctionsInjected = correctionsInjected_.load(std::memory_order_relaxed);
+    out.desktopSwitches = desktopSwitches_.load(std::memory_order_relaxed);
     return out;
 }
 
@@ -1261,6 +1269,33 @@ void Win32InputGrab::PostKeyToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event, boo
 //
 // The physical up that arrives afterwards is then passed through to the OS.
 // That leaves the OS an up for a key it never saw go down, which it ignores.
+void CALLBACK Win32InputGrab::DesktopSwitchProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
+    Win32InputGrab& self = Instance();
+    self.desktopSwitches_.fetch_add(1, std::memory_order_relaxed);
+    self.KeysLeftOnAnotherDesktop();
+}
+
+// Found by hand: with the keyboard grabbed, Ctrl and Alt held until the
+// Ctrl+Alt+Del screen came up, then Cancel - a bare S hid the overlay, and
+// with the downs handed back as it hid, showed it again from the desktop.
+// Checked by hand with this: the same steps, and a bare S was a bare S.
+// A switch there and the one back may both come here; forgetting twice is
+// harmless.
+// A key still held on the way back comes up later through the hook, which
+// passes an up whose down it has no record of, and Windows ignores it.
+void Win32InputGrab::KeysLeftOnAnotherDesktop() {
+    modifiers_.Clear();
+    ReleaseSwallowedKeys();
+}
+
+LRESULT Win32InputGrab::KeyEventForTesting(UINT vk, bool isDown) {
+    KBDLLHOOKSTRUCT event{};
+    event.vkCode = vk;
+    event.scanCode = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+    event.flags = (vk == VK_RCONTROL || vk == VK_RMENU ? LLKHF_EXTENDED : 0) | (isDown ? 0 : LLKHF_UP);
+    return OnKeyboard(isDown ? WM_KEYDOWN : WM_KEYUP, event);
+}
+
 void Win32InputGrab::ReleaseSwallowedKeys() {
     for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
         if (!swallowedDown_[vk].exchange(false, std::memory_order_relaxed)) {

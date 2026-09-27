@@ -3091,6 +3091,23 @@ Consequences that shape `Win32InputGrab`:
   `HeldModifiers` reads it as up while the keyboard is grabbed: a press on
   empty canvas with it held makes a snippet, where with focus taken it
   makes none (`CreationTriggerFor`).
+- **Keys that go up on another desktop are taken as released.** The
+  Ctrl+Alt+Del screen, the lock screen and a UAC prompt are desktops of
+  their own, and a low-level hook of this one is not called there. Found
+  in review on 2026-09-27 and confirmed by hand: Ctrl and Alt held until
+  the Ctrl+Alt+Del screen came up had their downs swallowed and their ups
+  go unheard, so after Cancel the grab's record still held them. A bare S
+  matched Ctrl+Alt+S and hid the overlay, and the downs handed back as it
+  hid stayed down system-wide - from then on a bare S showed it again,
+  in the game as well, until Ctrl and Alt were pressed once more. The
+  hook thread now listens for `EVENT_SYSTEM_DESKTOPSWITCH` and forgets
+  every key it swallowed the down of: the overlay is told each came up,
+  and nothing is left to hand back (`KeysLeftOnAnotherDesktop`). A key
+  still held on the way back comes up later through the hook, as an up
+  whose down it has no record of, which it passes on and Windows
+  ignores. `GetAsyncKeyState` cannot be asked instead: Windows never saw
+  a swallowed key go down, so it reads every one as up. Checked by hand
+  with the fix: the same steps, and a bare S was a bare S.
 - **The hooks stand down when the app thread stops.** They swallow the
   machine's mouse and, with forwarding off, its keyboard, whatever the app
   thread is doing, and the way out - the hotkey - is posted to that same
