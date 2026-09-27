@@ -3164,12 +3164,17 @@ Consequences that shape `Win32InputGrab`:
   in the game as well, until Ctrl and Alt were pressed once more. The
   hook thread now listens for `EVENT_SYSTEM_DESKTOPSWITCH` and forgets
   every key it swallowed the down of: the overlay is told each came up,
-  and nothing is left to hand back (`KeysLeftOnAnotherDesktop`). A key
+  and nothing is left to hand back (`InputLeftOnAnotherDesktop`). A key
   still held on the way back comes up later through the hook, as an up
   whose down it has no record of, which it passes on and Windows
   ignores. `GetAsyncKeyState` cannot be asked instead: Windows never saw
   a swallowed key go down, so it reads every one as up. Checked by hand
-  with the fix: the same steps, and a bare S was a bare S.
+  with the fix: the same steps, and a bare S was a bare S. Mouse buttons
+  the same: the raw input the overlay hears them from is not delivered
+  there either. Found in the next review on 2026-09-27 and confirmed by
+  hand: a snippet dragged into the Ctrl+Alt+Del screen, the button let
+  go there, followed the pointer back on the desktop until the next
+  click. The switch now tells the overlay every button it holds came up.
 - **The hooks stand down when the app thread stops.** They swallow the
   machine's mouse and, with forwarding off, its keyboard, whatever the app
   thread is doing, and the way out - the hotkey - is posted to that same

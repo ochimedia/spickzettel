@@ -322,7 +322,7 @@ struct InputGrabDiagnostics {
 
     // How many switches of the active desktop the grab has heard of - each
     // one forgets the keys it held (see Win32InputGrab::
-    // KeysLeftOnAnotherDesktop).
+    // InputLeftOnAnotherDesktop).
     int desktopSwitches = 0;
 };
 

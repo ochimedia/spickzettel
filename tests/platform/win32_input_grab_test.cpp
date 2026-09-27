@@ -268,7 +268,7 @@ TEST(Win32InputGrabTest, KeysLeftOnAnotherDesktopAreTakenAsReleased) {
     grab.HeldModifiers(ctrl, shift, alt);
     EXPECT_TRUE(ctrl && alt);
 
-    grab.KeysLeftOnAnotherDesktop();
+    grab.InputLeftOnAnotherDesktop();
     grab.HeldModifiers(ctrl, shift, alt);
     EXPECT_FALSE(ctrl || alt || shift);
     grab.KeyEventForTesting('S', true);
@@ -291,6 +291,36 @@ TEST(Win32InputGrabTest, KeysLeftOnAnotherDesktopAreTakenAsReleased) {
 
     grab.RemoveHotkey(kHotkeyId);
     grab.SetOptions(EditModeInputOptions{});
+    grab.SetOverlayWindow(nullptr);
+    DestroyWindow(overlay);
+}
+
+// A button held into the Ctrl+Alt+Del screen goes up there, where the
+// raw input of this desktop does not hear it: taken as released at the
+// switch, and the overlay told. Found by hand: a snippet dragged there
+// followed the pointer back on the desktop until the next click.
+TEST(Win32InputGrabTest, ButtonsLeftOnAnotherDesktopAreTakenAsReleased) {
+    HWND overlay = CreateWindowExW(0, L"STATIC", L"overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleW(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    grab.SetOverlayWindow(overlay);
+    const auto posted = [overlay] {
+        std::vector<UINT> messages;
+        MSG msg;
+        while (PeekMessageW(&msg, overlay, WM_MOUSEFIRST, WM_MOUSELAST, PM_REMOVE)) {
+            messages.push_back(msg.message);
+        }
+        return messages;
+    };
+
+    grab.RawMouseButtonsForTesting(RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_MIDDLE_BUTTON_DOWN);
+    ASSERT_EQ(posted(), (std::vector<UINT>{WM_LBUTTONDOWN, WM_MBUTTONDOWN}));
+    grab.InputLeftOnAnotherDesktop();
+    EXPECT_EQ(posted(), (std::vector<UINT>{WM_LBUTTONUP, WM_MBUTTONUP}));
+    grab.InputLeftOnAnotherDesktop();
+    EXPECT_TRUE(posted().empty()) << "the switch back: nothing is held any more";
+
     grab.SetOverlayWindow(nullptr);
     DestroyWindow(overlay);
 }

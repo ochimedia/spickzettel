@@ -257,17 +257,24 @@ public:
 
     // Every key the hook took the down of is taken as released: the
     // overlay is told each came up, and the Ctrl/Shift/Alt record goes
-    // blank. For a switch of the active desktop - the Ctrl+Alt+Del screen,
-    // the lock screen, a UAC prompt - where the keys come up with no hook
-    // of this desktop called: the record kept Ctrl+Alt held, a bare S
-    // matched Ctrl+Alt+S, and hiding handed Windows the downs, which stayed
-    // down system-wide. Called on the hook thread for
-    // EVENT_SYSTEM_DESKTOPSWITCH; public to be tested without one.
-    void KeysLeftOnAnotherDesktop();
+    // blank. So is every mouse button the overlay was told went down. For
+    // a switch of the active desktop - the Ctrl+Alt+Del screen, the lock
+    // screen, a UAC prompt - where the keys and buttons come up with no
+    // hook or raw input of this desktop called: the record kept Ctrl+Alt
+    // held, a bare S matched Ctrl+Alt+S, and hiding handed Windows the
+    // downs, which stayed down system-wide; and a snippet dragged there
+    // went on following the pointer, the button held, until the next
+    // click. Called on the hook thread for EVENT_SYSTEM_DESKTOPSWITCH;
+    // public to be tested without one.
+    void InputLeftOnAnotherDesktop();
     // A key going down or up, as the keyboard hook would be handed it -
     // for tests, which cannot press keys. `heldByWindows` is a down of a
     // key Windows has down already: an auto-repeat.
     LRESULT KeyEventForTesting(UINT vk, bool isDown, bool heldByWindows = false);
+    // A raw mouse report with these RI_MOUSE_* button flags and no
+    // movement, as the raw input sink would be handed it - for tests,
+    // which cannot press buttons.
+    void RawMouseButtonsForTesting(USHORT buttonFlags);
 
 private:
     Win32InputGrab() = default;
@@ -285,7 +292,7 @@ private:
     static LRESULT CALLBACK KeyboardProc(int code, WPARAM wParam, LPARAM lParam);
     static LRESULT CALLBACK RawInputSinkWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     // EVENT_SYSTEM_DESKTOPSWITCH, on the hook thread - see
-    // KeysLeftOnAnotherDesktop.
+    // InputLeftOnAnotherDesktop.
     static void CALLBACK DesktopSwitchProc(HWINEVENTHOOK hook, DWORD event, HWND hwnd, LONG object, LONG child,
                                            DWORD thread, DWORD time);
 

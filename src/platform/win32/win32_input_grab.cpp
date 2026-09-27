@@ -1263,7 +1263,7 @@ void Win32InputGrab::PostKeyToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event, boo
 void CALLBACK Win32InputGrab::DesktopSwitchProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
     Win32InputGrab& self = Instance();
     self.desktopSwitches_.fetch_add(1, std::memory_order_relaxed);
-    self.KeysLeftOnAnotherDesktop();
+    self.InputLeftOnAnotherDesktop();
 }
 
 // Found by hand: with the keyboard grabbed, Ctrl and Alt held until the
@@ -1274,9 +1274,38 @@ void CALLBACK Win32InputGrab::DesktopSwitchProc(HWINEVENTHOOK, DWORD, HWND, LONG
 // harmless.
 // A key still held on the way back comes up later through the hook, which
 // passes an up whose down it has no record of, and Windows ignores it.
-void Win32InputGrab::KeysLeftOnAnotherDesktop() {
+//
+// The buttons found by hand as well: a snippet dragged into the
+// Ctrl+Alt+Del screen, the button let go there and Esc pressed, followed
+// the pointer back on the desktop. A button still held on the way back
+// comes up later through raw input, and the overlay is told a second
+// time, which is nothing to a button already up.
+void Win32InputGrab::InputLeftOnAnotherDesktop() {
     modifiers_.Clear();
     ReleaseSwallowedKeys();
+    swallowedButtons_.store(0, std::memory_order_relaxed);
+    const POINT at = VirtualCursor();
+    if (leftDown_.exchange(false)) {
+        PostToOverlay(WM_LBUTTONUP, ButtonFlags(), at);
+    }
+    if (rightDown_.exchange(false)) {
+        PostToOverlay(WM_RBUTTONUP, ButtonFlags(), at);
+    }
+    if (middleDown_.exchange(false)) {
+        PostToOverlay(WM_MBUTTONUP, ButtonFlags(), at);
+    }
+    if (x1Down_.exchange(false)) {
+        PostToOverlay(WM_XBUTTONUP, MAKEWPARAM(ButtonFlags(), XBUTTON1), at);
+    }
+    if (x2Down_.exchange(false)) {
+        PostToOverlay(WM_XBUTTONUP, MAKEWPARAM(ButtonFlags(), XBUTTON2), at);
+    }
+}
+
+void Win32InputGrab::RawMouseButtonsForTesting(USHORT buttonFlags) {
+    RAWMOUSE mouse{};
+    mouse.usButtonFlags = buttonFlags;
+    OnRawMouse(mouse);
 }
 
 LRESULT Win32InputGrab::KeyEventForTesting(UINT vk, bool isDown, bool heldByWindows) {
