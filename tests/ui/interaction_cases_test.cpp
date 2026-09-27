@@ -321,6 +321,44 @@ TEST_F(InteractionCasesTest, AMoveInterruptedIsFiledWhereItGot) {
     EXPECT_EQ(ItemOf(a).rect.x, 201.0f);
 }
 
+// A release says where the hand let go. Movement comes once a frame, and a
+// button's release carries its own position: a quick drag lets go
+// somewhere the last move never reached, and a handle can be let go of
+// with no move at all.
+TEST_F(InteractionCasesTest, AMoveAndAResizeEndWhereTheyAreLetGoOf) {
+    const ItemId a = MakeSnippet(Rect{100, 100, 200, 150});
+    Down(150.0f, 150.0f);
+    Move(200.0f, 200.0f);
+    Up(250.0f, 150.0f);
+    EXPECT_EQ(ItemOf(a).rect, (Rect{200, 100, 200, 150})) << "where it was let go of";
+    Pause();
+
+    Down(400.0f, 250.0f);  // the south-east corner, selected by the move
+    ASSERT_EQ(GestureLevel(), "Resize");
+    Up(460.0f, 310.0f);
+    // Resized by the release alone, 60 px out - its aspect kept, as a
+    // snippet's own setting has it.
+    EXPECT_EQ(ItemOf(a).rect.x, 200.0f);
+    EXPECT_EQ(ItemOf(a).rect.y, 100.0f);
+    EXPECT_GE(ItemOf(a).rect.w, 260.0f);
+    EXPECT_GT(ItemOf(a).rect.h, 150.0f);
+}
+
+TEST_F(InteractionCasesTest, AnEraseEndsWhereItIsLetGoOf) {
+    const ItemId drawing = MakeSnippet(Rect{100, 100, 600, 400});
+    editor_.EnterDrawingMode(drawing);
+    Drag(150.0f, 300.0f, 650.0f, 300.0f);
+    ASSERT_EQ(Strokes(drawing), 1u);
+    Key('E');
+    Pause();
+
+    // Pressed above the line and let go of below it, with no move between:
+    // the way from one to the other crosses it.
+    Down(300.0f, 200.0f);
+    Up(300.0f, 400.0f);
+    EXPECT_EQ(Strokes(drawing), 2u) << "cut in two";
+}
+
 TEST_F(InteractionCasesTest, AHandleResizesAtOnceAndEscapePutsItBack) {
     const ItemId a = MakeSnippet(Rect{100, 100, 200, 150});
     Click(150.0f, 150.0f);

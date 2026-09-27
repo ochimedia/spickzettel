@@ -284,7 +284,15 @@ Answer Placement::ModifiersChanged(const Event& /*event*/, Editor& editor) {
     return Answer::Pass();
 }
 
-Answer Placement::Released(const Event& /*event*/, Editor& editor) {
+Answer Placement::Released(const Event& event, Editor& editor) {
+    // Where the button came up, first: movement comes once a frame, and a
+    // release carries its own position, which the last move may not have
+    // reached - a quick drag, or a handle let go of with no move at all.
+    // An interruption has no position of its own, and ends where it got.
+    if (event.position.x != last_.x || event.position.y != last_.y) {
+        last_ = event.position;
+        Apply(event.position, editor);
+    }
     // The whole gesture, one entry - or none, if it came back to where it
     // began.
     editor.GetSession().EndPlacement();
@@ -538,6 +546,8 @@ Answer Marking::Released(const Event& event, Editor& editor) {
             session.EndShape(event.position.x, event.position.y);
             break;
         case Kind::Erase:
+            // On to where it came up, as a placement's release does.
+            session.ExtendErase(event.position.x, event.position.y, editor.EraserWidth());
             session.EndErase();
             break;
         case Kind::EraseRect:

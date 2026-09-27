@@ -2933,7 +2933,14 @@ Consequences that shape `Win32InputGrab`:
   one per frame; re-posting every swallowed report made a 1000 Hz mouse a
   message flood. The render thread emits one Move per frame while a
   button is held, if the pointer moved, which is the OS's own behavior
-  by construction.
+  by construction. A button's release is posted, with its own position,
+  and can come before the frame's move to where it happened - so a
+  gesture ends where its release says, not where the last move left it:
+  a placement is applied at the release's position first, and the eraser
+  passes on to it (`Placement::Released`, `Marking::Released`), as the
+  pen and the shapes always did. Ended at the last move, a quick drag
+  landed a frame short, and a handle let go of with no move between
+  resized nothing. Found in review on 2026-09-27.
 - **Modifiers are fed to ImGui by hand**, from `GetAsyncKeyState` OR'd
   with the grab's own record, since the backend learns them from key
   messages and key messages need focus. A keyboard chord has one frame
