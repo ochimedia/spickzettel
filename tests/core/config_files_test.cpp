@@ -8,6 +8,8 @@
 
 #include <gtest/gtest.h>
 
+#include "support/temp_dir.h"
+
 // Settings files as written, kept beside this test (config_files/) - see
 // docs/SETTINGS.md, section 8. Two kinds:
 //
@@ -42,7 +44,7 @@ void ExpectWrittenAs(const char* name, const AppConfig& config) {
     if (written == fixture) {
         return;
     }
-    const std::filesystem::path actual = std::filesystem::temp_directory_path() / name;
+    const std::filesystem::path actual = sz::test::TempDir() / name;
     std::ofstream(actual, std::ios::binary) << written;
     ADD_FAILURE() << "the settings file written differs from " << (FilesDir() / name).string()
                   << "; what was written is in " << actual.string();

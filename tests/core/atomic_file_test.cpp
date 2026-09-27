@@ -7,13 +7,15 @@
 
 #include <gtest/gtest.h>
 
+#include "support/temp_dir.h"
+
 namespace sz::core {
 namespace {
 
 class AtomicFileTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir_ = std::filesystem::temp_directory_path() /
+        dir_ = sz::test::TempDir() /
                (std::string("spickzettel_atomic_file_test_") +
                 ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(dir_);

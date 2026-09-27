@@ -3506,6 +3506,14 @@ live compositor, in four tiers:
   survives resize and disappears from GPU memory when its item is
   deleted.
 
+A test's files go under its program's own folder in the temporary one,
+`spickzettel-tests-<process id>` (`tests/support/temp_dir.h`), removed
+as the program ends; a death test's child is handed the same folder.
+Found in the next review on 2026-09-27: every test had a fixed name of
+its own under the temporary folder itself, and two runs at once - two
+worktrees - wrote each other's files. The one real hotkey a test
+registers is skipped, not failed, when another run holds it.
+
 `linux-tests` builds the portable core and its tests with GCC or Clang.
 Worth running now and then even when working on Windows: MSVC is the
 more forgiving reader, and core can drift for weeks into a shape only it

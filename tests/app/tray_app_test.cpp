@@ -19,6 +19,7 @@
 #include "support/failing_writes.h"
 #include "support/held_library.h"
 #include "support/session_test_access.h"
+#include "support/temp_dir.h"
 
 namespace sz::test {
 
@@ -173,7 +174,7 @@ TEST(TrayControllerTest, AnUnsetComboLeavesTheHotkeyAsItWas) {
 
 TEST(TrayControllerTest, ChangeHotkeyPersistsTheNewComboToDisk) {
     const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "spickzettel_tray_app_change_hotkey_test_config.json";
+        sz::test::TempDir() / "spickzettel_tray_app_change_hotkey_test_config.json";
     std::filesystem::remove(path);
 
     test::FakePlatformHost host;
@@ -207,7 +208,7 @@ int CountRegistrations(const test::FakePlatformHost& host, const platform::KeyCo
 
 TEST(TrayControllerTest, AHotkeyLeftUnboundByAnotherStaysUnboundAcrossARestart) {
     const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "spickzettel_tray_app_unbound_hotkey_test_config.json";
+        sz::test::TempDir() / "spickzettel_tray_app_unbound_hotkey_test_config.json";
     std::filesystem::remove(path);
 
     test::FakePlatformHost host;
@@ -578,7 +579,7 @@ TEST(TrayControllerTest, WhenTheWindowCannotBeMadeNothingIsShownOrCaptured) {
 class TrayControllerPersistenceTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir_ = std::filesystem::temp_directory_path() / (std::string("spickzettel_tray_app_persistence_test_") + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        dir_ = sz::test::TempDir() / (std::string("spickzettel_tray_app_persistence_test_") + ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(dir_);
         library_ = dir_ / "library.db";
     }

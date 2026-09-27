@@ -105,6 +105,7 @@ if(WIN32)
         platform/win32_screen_capture_test.cpp
     )
     target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 GTest::gtest_main)
+    target_include_directories(sz_win32_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_features(sz_win32_tests PRIVATE cxx_std_20)
     spickzettel_set_warnings(sz_win32_tests)
     spickzettel_use_utf8_code_page(sz_win32_tests)

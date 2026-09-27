@@ -10,13 +10,15 @@
 #include <thread>
 #include <vector>
 
+#include "support/temp_dir.h"
+
 namespace sz::platform::win32 {
 namespace {
 
 class Win32CrashDumpTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir_ = std::filesystem::temp_directory_path() /
+        dir_ = sz::test::TempDir() /
                (std::string("spickzettel_crash_dump_test_") +
                 ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(dir_);

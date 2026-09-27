@@ -24,6 +24,7 @@
 #include "ui/view/canvas_view.h"
 #include "ui/widgets.h"
 #include "generated/ui_strings.h"
+#include "support/temp_dir.h"
 
 #include <imgui_internal.h>
 
@@ -4345,7 +4346,7 @@ TEST_F(HeadlessAppTest, SwitchingToViewOnlyCommitsTheNoteBeingTyped) {
 // The retention period runs at startup, while nobody is looking; what it
 // deleted for good is said the next time the overlay comes up.
 TEST_F(HeadlessAppTest, WhatTheRetentionPeriodDeletedIsSaidOnTheNextShow) {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "spickzettel_headless_purge_said";
+    const std::filesystem::path dir = sz::test::TempDir() / "spickzettel_headless_purge_said";
     std::filesystem::remove_all(dir);
     CanvasManagerSnapshot snapshot;
     Folder folder;
@@ -4487,7 +4488,7 @@ class HeadlessSaveTest : public HeadlessAppTest {
 protected:
     void SetUp() override {
         StartWith(DefaultConfig());
-        root_ = std::filesystem::temp_directory_path() /
+        root_ = sz::test::TempDir() /
                 (std::string("spickzettel_headless_save_") +
                  ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(root_);

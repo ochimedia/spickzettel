@@ -29,6 +29,7 @@
 
 #include "core/persistence/library_store.h"
 #include "fakes/headless_app.h"
+#include "support/temp_dir.h"
 
 namespace sz::test {
 namespace {
@@ -174,7 +175,7 @@ TEST_F(PerfBench, WritingACommand) {
 
     // Written somewhere of its own, so the scenario library stays as it was.
     const std::filesystem::path out =
-        std::filesystem::temp_directory_path() / "sz_write_bench" / std::filesystem::path(root).filename();
+        sz::test::TempDir() / "sz_write_bench" / std::filesystem::path(root).filename();
     std::error_code ec;
     std::filesystem::remove(out, ec);
     persistence::LibraryStore store{out};

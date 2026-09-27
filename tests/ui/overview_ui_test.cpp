@@ -10,6 +10,7 @@
 #include "fakes/ui_test.h"
 #include "generated/ui_strings.h"
 #include "ui/view/overview_panel.h"
+#include "support/temp_dir.h"
 
 namespace sz::test {
 namespace {
@@ -442,7 +443,7 @@ class ColorPickerPersistenceTest : public UiTest {
 protected:
     void SetUp() override {
         UiTest::SetUp();
-        configFile_ = std::filesystem::temp_directory_path() /
+        configFile_ = sz::test::TempDir() /
                        ("sz_color_picker_" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
                         ".json");
         std::filesystem::remove(configFile_);

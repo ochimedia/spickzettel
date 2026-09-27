@@ -16,6 +16,7 @@
 #include "support/held_library.h"
 #include "support/removed_at_end.h"
 #include "support/session_test_access.h"
+#include "support/temp_dir.h"
 
 namespace sz::core {
 namespace {
@@ -742,7 +743,7 @@ TEST(SessionTest, CopiesArriveAndGoWithOneUndo) {
 // the library like any other capture's pixels.
 TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_frozen_cut";
+        sz::test::TempDir() / "spickzettel_session_test_frozen_cut";
     std::filesystem::remove_all(dir);
     const RemovedAtEnd cleanup(dir);
     persistence::LibraryStore store(dir / "library.db");
@@ -800,7 +801,7 @@ TEST(SessionTest, AShotIsCutOutOfTheFrozenScreen) {
 // show once the device is back.
 TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_capture_no_device";
+        sz::test::TempDir() / "spickzettel_session_test_capture_no_device";
     std::filesystem::remove_all(dir);
     const RemovedAtEnd cleanup(dir);
     persistence::LibraryStore store(dir / "library.db");
@@ -842,7 +843,7 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
 // and says so, rather than quietly producing a copy that looks captured.
 TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "spickzettel_session_test_copy_unreadable";
+        sz::test::TempDir() / "spickzettel_session_test_copy_unreadable";
     std::filesystem::remove_all(dir);
     const RemovedAtEnd cleanup(dir);
     persistence::LibraryStore store(dir / "library.db");
@@ -868,7 +869,7 @@ TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {
 class WrittenSessionTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir_ = std::filesystem::temp_directory_path() /
+        dir_ = sz::test::TempDir() /
                (std::string("spickzettel_session_written_") +
                 ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(dir_);

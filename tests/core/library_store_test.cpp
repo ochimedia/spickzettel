@@ -13,6 +13,7 @@
 #include <sqlite3.h>
 
 #include "support/failing_writes.h"
+#include "support/temp_dir.h"
 
 namespace sz::core::persistence {
 namespace {
@@ -20,7 +21,7 @@ namespace {
 class LibraryStoreTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir_ = std::filesystem::temp_directory_path() /
+        dir_ = sz::test::TempDir() /
                (std::string("spickzettel_library_store_test_") +
                 ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(dir_);

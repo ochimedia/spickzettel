@@ -12,6 +12,7 @@
 
 #include "core/canvas/item.h"  // kNoteTextSizeMax
 #include "core/config/config_migrations.h"
+#include "support/temp_dir.h"
 
 namespace sz::core {
 namespace {
@@ -809,7 +810,7 @@ TEST(AppConfigTest, ClampsOutOfRangeEditModeBorderOpacityAndWidth) {
 class WriteConfigFileTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        dir_ = std::filesystem::temp_directory_path() / (std::string("spickzettel_write_config_file_test_") + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        dir_ = sz::test::TempDir() / (std::string("spickzettel_write_config_file_test_") + ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(dir_);
     }
     void TearDown() override { std::filesystem::remove_all(dir_); }

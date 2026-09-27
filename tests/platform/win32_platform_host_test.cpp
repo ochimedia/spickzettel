@@ -196,7 +196,10 @@ TEST(Win32PlatformHostTest, AHotkeyCallbackCanUnregisterItsOwnHotkey) {
         host.UnregisterGlobalHotkey(id);
         ranToTheEnd = word;
     });
-    ASSERT_NE(id, 0) << "Ctrl+Alt+Shift+F24 taken by something else";
+    if (id == 0) {
+        // Taken by something else - a second run of these tests at the same time.
+        GTEST_SKIP() << "Ctrl+Alt+Shift+F24 taken by something else";
+    }
 
     SendMessageA(FindWindowA(nullptr, name.c_str()), WM_HOTKEY, static_cast<WPARAM>(id), 0);
 

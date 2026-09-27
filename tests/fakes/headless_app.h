@@ -43,6 +43,7 @@
 #include "fakes/fake_platform_host.h"
 #include "ui/widgets.h"
 #include "ui/ui_scale.h"
+#include "support/temp_dir.h"
 
 namespace sz::test {
 
@@ -118,7 +119,7 @@ protected:
     // leaves it, so that the start is not greeted as one. The file's path.
     std::filesystem::path StartWithLibrary(AppConfig config = DefaultConfig()) {
         Shutdown();  // the controller running holds a file of its own
-        libraryDir_ = std::filesystem::temp_directory_path() /
+        libraryDir_ = sz::test::TempDir() /
                       (std::string("spickzettel_headless_") +
                        ::testing::UnitTest::GetInstance()->current_test_info()->name());
         std::filesystem::remove_all(*libraryDir_);

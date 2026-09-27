@@ -15,6 +15,7 @@
 #include "support/failing_writes.h"
 #include "support/removed_at_end.h"
 #include "support/session_test_access.h"
+#include "support/temp_dir.h"
 
 namespace sz::core {
 namespace {
@@ -565,7 +566,7 @@ void ExpectTheFileHoldsTheModel(const Session& session, const std::filesystem::p
 }
 
 TEST(HistoryTest, TheFileHoldsWhatTheModelHoldsWhateverFailsToBeWritten) {
-    const std::filesystem::path dir = std::filesystem::temp_directory_path() / "spickzettel_history_test_written";
+    const std::filesystem::path dir = sz::test::TempDir() / "spickzettel_history_test_written";
     for (uint32_t seed = 1; seed <= 6; ++seed) {
         SCOPED_TRACE("seed " + std::to_string(seed));
         std::filesystem::remove_all(dir);
