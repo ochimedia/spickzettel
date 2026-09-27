@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <vector>
 
@@ -253,7 +254,8 @@ public:
     // side of Ctrl, Shift and Alt whose down `swallowed` (indexed by
     // virtual key) says the hook took, each as that very key - see
     // HandHeldModifiersToSystem. Public to be tested without injecting.
-    static std::vector<INPUT> ModifierHandBack(const bool (&swallowed)[256]);
+    // With `up`, the same keys' ups instead.
+    static std::vector<INPUT> ModifierHandBack(const bool (&swallowed)[256], bool up = false);
 
     // Every key the hook took the down of is taken as released: the
     // overlay is told each came up, and the Ctrl/Shift/Alt record goes
@@ -271,6 +273,16 @@ public:
     // for tests, which cannot press keys. `heldByWindows` is a down of a
     // key Windows has down already: an auto-repeat.
     LRESULT KeyEventForTesting(UINT vk, bool isDown, bool heldByWindows = false);
+    // A key as the installed keyboard hook is handed it, the hook's own
+    // checks first - see KeyboardProc.
+    LRESULT HookedKeyEventForTesting(UINT vk, bool isDown);
+    // The keyboard grab's two ends, as Refresh runs them, with no hook
+    // installed.
+    void GrabKeyboardForTesting(bool grabbed);
+    // What the grab's end hands Windows goes to `sink` rather than to
+    // SendInput, and `gap` runs between the grab ending and the hand-back.
+    // Empty and null for the real thing.
+    void CaptureHandBackForTesting(std::vector<INPUT>* sink, std::function<void()> gap);
     // A raw mouse report with these RI_MOUSE_* button flags and no
     // movement, as the raw input sink would be handed it - for tests,
     // which cannot press buttons.
@@ -309,7 +321,12 @@ private:
     bool TrackModifier(UINT vk, bool isDown) { return modifiers_.Track(vk, isDown); }
     // Hands still-held modifiers back to Windows when the hook goes away - see
     // its definition for the hotkey that stops working without it.
-    static void HandHeldModifiersToSystem(const bool (&swallowed)[256]);
+    void HandHeldModifiersToSystem(const bool (&swallowed)[256]);
+    // SendInput, or the sink of CaptureHandBackForTesting.
+    void SendKeys(const std::vector<INPUT>& keys);
+    // A key the hook lets by once the keyboard is no longer grabbed: see
+    // keyboardGrabbed_.
+    void KeyPassedAfterTheGrab(WPARAM message, const KBDLLHOOKSTRUCT& event);
     // Posts a key-up to the overlay for every key still marked swallowed, and
     // clears the record. Called as a grab ends - see its definition for the
     // every-other-keypress bug that needs both halves.
@@ -496,6 +513,18 @@ private:
     // cleared from the app thread as a grab ends.
     static constexpr UINT kVirtualKeyCount = 256;
     std::atomic<bool> swallowedDown_[kVirtualKeyCount] = {};
+    // Between BeginGrabbedKeyboard and EndGrabbedKeyboard. The hook comes
+    // down after the end, on its own thread, and a key in between was
+    // recorded as one the grab took: a stale record made a later up ours to
+    // swallow, and a stale Ctrl was held for a later session that never
+    // grabbed the keyboard. Out of the grab, the hook records nothing.
+    std::atomic<bool> keyboardGrabbed_{false};
+    // The modifiers whose up the hook let by since the grab ended - see
+    // HandHeldModifiersToSystem.
+    std::atomic<bool> upAfterTheGrab_[kVirtualKeyCount] = {};
+    // See CaptureHandBackForTesting.
+    std::vector<INPUT>* handBackSinkForTesting_ = nullptr;
+    std::function<void()> handBackGapForTesting_;
     // See KeyEventForTesting: the one key it says Windows has down, or 0.
     std::atomic<UINT> heldByWindowsForTesting_{0};
     // See SetGameKeepsFocus. Defaults false so nothing is grabbed until the

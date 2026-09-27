@@ -438,6 +438,96 @@ TEST(Win32InputGrabTest, AnAltOrWinChordTypesNothing) {
     DestroyWindow(overlay);
 }
 
+namespace {
+// An overlay stand-in, the keyboard grabbed with every key the overlay's,
+// and what the grab hands Windows as it ends caught in `handedBack` - no
+// hook installed, and nothing injected.
+class GrabbedKeyboard {
+public:
+    explicit GrabbedKeyboard(std::vector<INPUT>& handedBack, std::function<void()> gap = nullptr)
+        : overlay_(CreateWindowExW(0, L"STATIC", L"overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleW(nullptr), nullptr)) {
+        Win32InputGrab& grab = Win32InputGrab::Instance();
+        EditModeInputOptions options;
+        options.dontForwardKeystrokes = true;
+        grab.SetOverlayWindow(overlay_);
+        grab.SetOptions(options);
+        grab.CaptureHandBackForTesting(&handedBack, std::move(gap));
+        grab.Heartbeat();
+    }
+    ~GrabbedKeyboard() {
+        Win32InputGrab& grab = Win32InputGrab::Instance();
+        grab.CaptureHandBackForTesting(nullptr, nullptr);
+        grab.SetOptions(EditModeInputOptions{});
+        grab.SetOverlayWindow(nullptr);
+        DestroyWindow(overlay_);
+    }
+    GrabbedKeyboard(const GrabbedKeyboard&) = delete;
+    GrabbedKeyboard& operator=(const GrabbedKeyboard&) = delete;
+
+private:
+    HWND overlay_;
+};
+}  // namespace
+
+// The hook comes down after the grab ends, on its own thread, and a key in
+// between is not the grab's: let by, and recorded nowhere. Recorded, S's
+// down made its up the next grab's to swallow - S stayed down in the
+// game - and a Ctrl was held for a later session that never grabbed the
+// keyboard.
+TEST(Win32InputGrabTest, AfterTheGrabTheHookRecordsNothing) {
+    std::vector<INPUT> handedBack;
+    const GrabbedKeyboard keyboard(handedBack);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+
+    grab.GrabKeyboardForTesting(true);
+    EXPECT_EQ(grab.HookedKeyEventForTesting('S', true), 1) << "the grab's";
+    EXPECT_EQ(grab.HookedKeyEventForTesting('S', false), 1);
+    grab.GrabKeyboardForTesting(false);
+
+    EXPECT_EQ(grab.HookedKeyEventForTesting(VK_LCONTROL, true), 0) << "let by";
+    EXPECT_EQ(grab.HookedKeyEventForTesting('S', true), 0);
+    bool ctrl = false;
+    bool shift = false;
+    bool alt = false;
+    grab.HeldModifiers(ctrl, shift, alt);
+    EXPECT_FALSE(ctrl) << "held for a session that never grabs the keyboard";
+
+    grab.GrabKeyboardForTesting(true);
+    EXPECT_EQ(grab.HookedKeyEventForTesting('S', false), 0) << "its down went to Windows, and so does its up";
+    grab.GrabKeyboardForTesting(false);
+    grab.HookedKeyEventForTesting(VK_LCONTROL, false);
+}
+
+// A modifier let go of just as the grab ends has its up go by to a Windows
+// that has not been handed the down yet, and the down handed back after
+// it stayed down, system-wide. Its up is handed back too.
+TEST(Win32InputGrabTest, AModifierLetGoAsTheGrabEndsIsNotLeftDown) {
+    std::vector<INPUT> handedBack;
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    {
+        const GrabbedKeyboard keyboard(handedBack, [&grab] { grab.HookedKeyEventForTesting(VK_LCONTROL, false); });
+        grab.GrabKeyboardForTesting(true);
+        ASSERT_EQ(grab.HookedKeyEventForTesting(VK_LCONTROL, true), 1);
+        grab.GrabKeyboardForTesting(false);
+    }
+    ASSERT_EQ(handedBack.size(), 2u);
+    EXPECT_EQ(handedBack[0].ki.wVk, VK_LCONTROL);
+    EXPECT_EQ(handedBack[0].ki.dwFlags & KEYEVENTF_KEYUP, 0u) << "its down";
+    EXPECT_EQ(handedBack[1].ki.wVk, VK_LCONTROL);
+    EXPECT_NE(handedBack[1].ki.dwFlags & KEYEVENTF_KEYUP, 0u) << "and then its up";
+
+    // Held on past the end: the down alone.
+    handedBack.clear();
+    {
+        const GrabbedKeyboard keyboard(handedBack);
+        grab.GrabKeyboardForTesting(true);
+        ASSERT_EQ(grab.HookedKeyEventForTesting(VK_LCONTROL, true), 1);
+        grab.GrabKeyboardForTesting(false);
+    }
+    EXPECT_EQ(handedBack.size(), 1u);
+}
+
 // A modifier held since before the grab reached Windows itself, and has
 // nothing to be handed back.
 TEST(Win32InputGrabTest, NothingSwallowedIsNothingHandedBack) {

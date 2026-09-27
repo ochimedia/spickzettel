@@ -209,7 +209,12 @@ void Win32InputGrab::Shutdown() {
 // been swallowed yet in this grab, and OnKeyboard's key-up rule is what stops
 // it having gone stale in an earlier one.
 void Win32InputGrab::BeginGrabbedKeyboard() {
+    // Nothing is the grab's yet: see keyboardGrabbed_.
+    for (std::atomic<bool>& down : swallowedDown_) {
+        down.store(false, std::memory_order_relaxed);
+    }
     modifiers_.Seed([](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; });
+    keyboardGrabbed_.store(true, std::memory_order_release);
 }
 
 // Gives the keyboard back, to both parties that were being lied to while it
@@ -219,6 +224,16 @@ void Win32InputGrab::BeginGrabbedKeyboard() {
 // and eats the next press of it; without the second, the OS has no chord to
 // match and the hotkey stops working.
 void Win32InputGrab::EndGrabbedKeyboard() {
+    // First, so that from here on the hook takes nothing and records
+    // nothing but the ups it lets by - see keyboardGrabbed_ and
+    // HandHeldModifiersToSystem.
+    for (std::atomic<bool>& up : upAfterTheGrab_) {
+        up.store(false, std::memory_order_relaxed);
+    }
+    keyboardGrabbed_.store(false, std::memory_order_release);
+    if (handBackGapForTesting_) {
+        handBackGapForTesting_();
+    }
     bool swallowed[kVirtualKeyCount] = {};
     for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
         swallowed[vk] = swallowedDown_[vk].load(std::memory_order_relaxed);
@@ -1168,6 +1183,10 @@ LRESULT CALLBACK Win32InputGrab::KeyboardProc(int code, WPARAM wParam, LPARAM lP
     // "the overlay has the keyboard" should mean it regardless of where a
     // keystroke came from.
     const auto& event = *reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+    if (!self.keyboardGrabbed_.load(std::memory_order_acquire)) {
+        self.KeyPassedAfterTheGrab(wParam, event);
+        return CallNextHookEx(self.keyboardHook_, code, wParam, lParam);
+    }
     if (self.AppThreadStalled()) {
         self.KeyPassedThroughWhileStalled(wParam, event);
         return CallNextHookEx(self.keyboardHook_, code, wParam, lParam);  // see AppThreadStalled
@@ -1308,6 +1327,38 @@ void Win32InputGrab::RawMouseButtonsForTesting(USHORT buttonFlags) {
     OnRawMouse(mouse);
 }
 
+void Win32InputGrab::KeyPassedAfterTheGrab(WPARAM message, const KBDLLHOOKSTRUCT& event) {
+    const bool isDown = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
+    if (isDown || event.dwExtraInfo == kOwnInjectionMarker) {
+        return;
+    }
+    const UINT vk = SidedModifier(event.vkCode, event.scanCode, (event.flags & LLKHF_EXTENDED) != 0);
+    if (vk < kVirtualKeyCount) {
+        upAfterTheGrab_[vk].store(true, std::memory_order_relaxed);
+    }
+}
+
+LRESULT Win32InputGrab::HookedKeyEventForTesting(UINT vk, bool isDown) {
+    KBDLLHOOKSTRUCT event{};
+    event.vkCode = vk;
+    event.scanCode = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+    event.flags = (vk == VK_RCONTROL || vk == VK_RMENU ? LLKHF_EXTENDED : 0) | (isDown ? 0 : LLKHF_UP);
+    return KeyboardProc(HC_ACTION, isDown ? WM_KEYDOWN : WM_KEYUP, reinterpret_cast<LPARAM>(&event));
+}
+
+void Win32InputGrab::GrabKeyboardForTesting(bool grabbed) {
+    if (grabbed) {
+        BeginGrabbedKeyboard();
+    } else {
+        EndGrabbedKeyboard();
+    }
+}
+
+void Win32InputGrab::CaptureHandBackForTesting(std::vector<INPUT>* sink, std::function<void()> gap) {
+    handBackSinkForTesting_ = sink;
+    handBackGapForTesting_ = std::move(gap);
+}
+
 LRESULT Win32InputGrab::KeyEventForTesting(UINT vk, bool isDown, bool heldByWindows) {
     KBDLLHOOKSTRUCT event{};
     event.vkCode = vk;
@@ -1374,7 +1425,7 @@ void Win32InputGrab::ReleaseSwallowedKeys() {
 // follow, and left Alt stayed down on the whole desktop. And a modifier that
 // was already held when the grab began reached Windows itself; handing it
 // back again was a second down for one up.
-std::vector<INPUT> Win32InputGrab::ModifierHandBack(const bool (&swallowed)[256]) {
+std::vector<INPUT> Win32InputGrab::ModifierHandBack(const bool (&swallowed)[256], bool up) {
     static constexpr UINT kSidedModifiers[] = {VK_LCONTROL, VK_RCONTROL, VK_LSHIFT,
                                                VK_RSHIFT,   VK_LMENU,    VK_RMENU};
     std::vector<INPUT> keys;
@@ -1388,7 +1439,8 @@ std::vector<INPUT> Win32InputGrab::ModifierHandBack(const bool (&swallowed)[256]
         key.ki.wScan = static_cast<WORD>(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC));
         // The right Ctrl and Alt share their scan codes with the left ones
         // and are told apart by the extended flag. Right Shift has its own.
-        key.ki.dwFlags = (vk == VK_RCONTROL || vk == VK_RMENU) ? KEYEVENTF_EXTENDEDKEY : 0;
+        key.ki.dwFlags = ((vk == VK_RCONTROL || vk == VK_RMENU) ? KEYEVENTF_EXTENDEDKEY : 0) |
+                         (up ? KEYEVENTF_KEYUP : 0);
         // Marked as ours: this runs on the transition, which is a moment
         // before the hook is actually taken down, so without the mark our own
         // hook would swallow these straight back and the OS would learn
@@ -1399,11 +1451,32 @@ std::vector<INPUT> Win32InputGrab::ModifierHandBack(const bool (&swallowed)[256]
     return keys;
 }
 
+// A modifier let go of just as the grab ends has its up go by the hook,
+// which no longer takes it, to a Windows that has not been handed the down
+// yet: the down handed back after it then stayed down, system-wide. Found
+// in review on 2026-09-27. The hook notes every up it lets by from the
+// moment the grab ends, and a modifier handed back whose up it noted is
+// handed its up as well. One whose up came after the down gets a second
+// up, which is nothing to a key already up.
 void Win32InputGrab::HandHeldModifiersToSystem(const bool (&swallowed)[256]) {
-    std::vector<INPUT> keys = ModifierHandBack(swallowed);
-    if (!keys.empty()) {
-        SendInput(static_cast<UINT>(keys.size()), keys.data(), sizeof(INPUT));
+    SendKeys(ModifierHandBack(swallowed));
+    bool letGo[kVirtualKeyCount] = {};
+    for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
+        letGo[vk] = swallowed[vk] && upAfterTheGrab_[vk].exchange(false, std::memory_order_relaxed);
     }
+    SendKeys(ModifierHandBack(letGo, /*up=*/true));
+}
+
+void Win32InputGrab::SendKeys(const std::vector<INPUT>& keys) {
+    if (keys.empty()) {
+        return;
+    }
+    if (handBackSinkForTesting_ != nullptr) {
+        handBackSinkForTesting_->insert(handBackSinkForTesting_->end(), keys.begin(), keys.end());
+        return;
+    }
+    std::vector<INPUT> sent = keys;
+    SendInput(static_cast<UINT>(sent.size()), sent.data(), sizeof(INPUT));
 }
 
 // Records Ctrl/Shift/Alt as the grab's own view of what is held, and answers

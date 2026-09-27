@@ -3148,6 +3148,13 @@ Consequences that shape `Win32InputGrab`:
   its button comes up. Measured with injected input against the build
   before these: left Alt stayed down after AltGr+O, a repeated key stayed
   down, and the held hotkey left the overlay closed.
+  The hook comes down after the grab ends, on its own thread, and in
+  between it takes nothing and records nothing (`keyboardGrabbed_`); a
+  modifier let go of in that gap had its up reach a Windows not yet handed
+  the down, which then stayed down, so an up the hook lets by there is
+  handed back after the down. Found in review on 2026-09-27 (the gap) and
+  in the next one (what it left recorded); both are microseconds wide,
+  and tested through seams, not by hand.
 - **Held while it hides the overlay, a hotkey brings it back once** -
   known, and left so. The grab took the letter's down, and hands back
   only the modifiers when it ends, so Windows has not seen the letter go
