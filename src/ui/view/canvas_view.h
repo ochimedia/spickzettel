@@ -134,7 +134,12 @@ private:
     struct StrokeRaster {
         core::StrokeBitmap pixels;
         // Moved on whenever `pixels` change: what its texture is told to
-        // bring itself up to date by (see TextureCache::Get).
+        // bring itself up to date by (see TextureCache::Get). Taken from
+        // one count for every raster (rasterRevisions_), never counted
+        // from 0 by each: a texture outlives its raster by a frame, and a
+        // raster made again in that frame - its strokes undone to none and
+        // new ones drawn - came to the same revision, and was drawn with
+        // the old texture.
         uint64_t revision = 0;
         // What it was built from, kept so a stale raster is recognized by
         // comparing rather than by guessing. A count is not enough and
@@ -247,6 +252,8 @@ private:
     // there is one place to get it right. nullopt means "check regardless"
     // - a fresh start, or the mode having just been switched on.
     std::optional<uint64_t> strokeRasterGeneration_;
+    // The last revision given a raster - see StrokeRaster::revision.
+    uint64_t rasterRevisions_ = 0;
     // The tessellated shape of each stroke, kept between frames - see
     // StrokeMeshCache for what that saves and what invalidates an entry.
     //

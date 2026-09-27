@@ -968,7 +968,7 @@ void CanvasView::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
     // Its texture follows the next time it is drawn - uploaded whole rather
     // than by dirty rectangle: this runs once per finished stroke, not
     // several times a frame.
-    ++raster.revision;
+    raster.revision = ++rasterRevisions_;
 }
 
 void CanvasView::RefreshStrokeRasters() {

@@ -5159,5 +5159,44 @@ TEST_F(HeadlessAppTest, ViewOnlyDrawsTheStrokeFiledOnTheWayThere) {
     EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 400.0f), 0) << "the second";
 }
 
+// A bitmap made again is never taken for the one before it. A snippet's
+// strokes undone to none lose their bitmap, whose texture is kept a frame
+// longer; drawn on again before that frame is out, the new bitmap counted
+// its revision from the start, came to the old one's, and was drawn with
+// the old texture: the undone stroke on screen and the new one not.
+TEST_F(HeadlessAppTest, ABitmapMadeAgainAfterAnUndoToNothingIsNotTheOldOne) {
+    AppConfig config = DefaultConfig();
+    config.strokeRenderMode = StrokeRenderMode::Rasterized;
+    StartWith(config);
+    host_.overlayWindow.uploadsSucceed = true;
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    Drag(200.0f, 200.0f, 400.0f, 200.0f);
+    StepFrames(2);
+
+    // Undone, and a frame sees it: the bitmap goes.
+    KeyEvent(ImGuiMod_Ctrl, true);
+    KeyEvent(ImGuiKey_Z, true);
+    KeyEvent(ImGuiKey_Z, false);
+    KeyEvent(ImGuiMod_Ctrl, false);
+    StepFrame();
+    ASSERT_TRUE(Canvases().CurrentOrNull()->items[0].strokes.empty());
+    // Another stroke before the next frame, elsewhere.
+    RawMouse(200.0f, 400.0f, platform::MouseEventKind::Down);
+    RawMouse(300.0f, 400.0f, platform::MouseEventKind::Move);
+    RawMouse(400.0f, 400.0f, platform::MouseEventKind::Move);
+    RawMouse(400.0f, 400.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+
+    const Item& item = Canvases().CurrentOrNull()->items[0];
+    ASSERT_EQ(item.strokes.size(), 1u);
+    const std::optional<uint64_t> bitmap = TextureDrawnOn("##sz_items_layer");
+    ASSERT_TRUE(bitmap.has_value()) << "no bitmap drawn";
+    EXPECT_EQ(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 200.0f), 0) << "the stroke undone";
+    EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 400.0f), 0) << "the new one";
+}
+
 }  // namespace
 }  // namespace sz::test

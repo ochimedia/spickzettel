@@ -435,6 +435,14 @@ being drawn is filed, and an erase whose write failed is rolled back.
 The view then drew the bitmap from before that - the stroke missing, or
 the erase still there - until edit mode came back.
 
+A bitmap's texture is brought up to date by its revision
+(`TextureCache::Get`), and revisions come from one count for every
+bitmap. Each counted its own from zero. A snippet whose strokes are all
+undone loses its bitmap, but the texture stays a frame longer, and a
+bitmap made again inside that frame came to the old one's revision and
+was drawn with the old texture: the undone stroke on screen, the new one
+not, until the next stroke moved the revision on.
+
 ## Canvases, items and folders
 
 `Item` is a snippet: freehand strokes over a picture, at a `rect` on
