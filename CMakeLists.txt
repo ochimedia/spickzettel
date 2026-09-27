@@ -35,6 +35,22 @@ if(MSVC)
                      $<$<CONFIG:Release>:/PDBALTPATH:%_PDB%>)
 endif()
 
+# AddressSanitizer, for the windows-msvc-asan preset: a read or write of
+# freed memory stops the test that made it, with a report, where a debug
+# build can run on over it and pass. Everything is compiled with it, the
+# fetched code included, before any of that is fetched. MSVC's run-time
+# checks (/RTC1) and incremental linking do not go with it.
+option(SPICKZETTEL_ASAN "Build everything with AddressSanitizer" OFF)
+if(SPICKZETTEL_ASAN AND MSVC)
+    add_compile_options(/fsanitize=address)
+    foreach(flags CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG)
+        string(REPLACE "/RTC1" "" ${flags} "${${flags}}")
+    endforeach()
+    foreach(flags CMAKE_EXE_LINKER_FLAGS_DEBUG CMAKE_SHARED_LINKER_FLAGS_DEBUG)
+        string(REPLACE "/INCREMENTAL" "/INCREMENTAL:NO" ${flags} "${${flags}}")
+    endforeach()
+endif()
+
 option(SPICKZETTEL_BUILD_TESTS "Build the unit tests" ON)
 # Compile-time flag rather than a setting: a demo watermark that can be
 # switched off in config.json is not a watermark. See docs/ARCHITECTURE.md.

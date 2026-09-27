@@ -3091,6 +3091,15 @@ of declaration order (`-Wreorder`, which MSVC leaves off even at `/W4`).
 Configuring a scratch MSVC build with `/permissive- /W4 /w45038` catches
 most of this class without a Linux machine.
 
+`windows-msvc-asan` is the debug build under AddressSanitizer, everything
+in it compiled with `/fsanitize=address`, and is worth a run after
+anything that touches what a failed write rolls back. A test that reads
+or writes freed memory can pass in a debug build. The session's style
+preview once held pointers into canvases a rollback had just replaced,
+found by reading; its test, run against that code under this preset,
+stops with a heap-use-after-free report. The crash dump's death test is
+skipped there: the sanitizer takes the crash before the dump writer can.
+
 ## Dead ends, for the record
 
 Things that were built, used and removed. Each is described where it

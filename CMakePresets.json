@@ -15,6 +15,15 @@
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     },
     {
+      "name": "windows-msvc-asan",
+      "displayName": "Windows (MSVC + Ninja, Debug, AddressSanitizer)",
+      "inherits": "windows-msvc-debug",
+      "binaryDir": "${sourceDir}/build/windows-asan",
+      "cacheVariables": {
+        "SPICKZETTEL_ASAN": "ON"
+      }
+    },
+    {
       "name": "windows-msvc-release",
       "displayName": "Windows (MSVC + Ninja, Release)",
       "generator": "Ninja",
@@ -63,6 +72,7 @@
   ],
   "buildPresets": [
     { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug" },
+    { "name": "windows-msvc-asan", "configurePreset": "windows-msvc-asan" },
     { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release" },
     { "name": "windows-msvc-demo", "configurePreset": "windows-msvc-demo" },
     { "name": "windows-msvc-prerelease", "configurePreset": "windows-msvc-prerelease" },
@@ -70,6 +80,7 @@
   ],
   "testPresets": [
     { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug", "output": { "outputOnFailure": true } },
+    { "name": "windows-msvc-asan", "configurePreset": "windows-msvc-asan", "output": { "outputOnFailure": true } },
     { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release", "output": { "outputOnFailure": true } },
     { "name": "linux-tests", "configurePreset": "linux-tests", "output": { "outputOnFailure": true } }
   ]

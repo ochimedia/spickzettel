@@ -87,6 +87,9 @@ TEST_F(Win32CrashDumpTest, PruningKeepsTheNewest) {
 // test per test: the child runs the whole test body again, and a check
 // between two of them would fail there.
 TEST_F(Win32CrashDumpTest, ACrashLeavesADump) {
+#if defined(__SANITIZE_ADDRESS__)
+    GTEST_SKIP() << "AddressSanitizer takes the crash before the writer does, and reports it instead";
+#endif
     GTEST_FLAG_SET(death_test_style, "threadsafe");
     EXPECT_EXIT(
         {
