@@ -1166,6 +1166,24 @@ holds nothing. A hotkey collision is not a lock: with a hand-edited
 config the two copies could have different hotkeys and never notice
 each other.
 
+The mutex is in the session's namespace (`Local\`) and named for the
+user's SID as well, because the session is not the user: "Run as
+administrator" from a standard account runs the app as the
+administrator account, in the same session, with a library of its own,
+and the session's name alone would turn it away. From an administrator
+account the same command runs the same user elevated, over the same
+library, and that copy's mutex is made for the Administrators group at
+high integrity. The user unelevated may not open it, and `CreateMutex`,
+which asks every right of a mutex that is already there, fails with
+`ERROR_ACCESS_DENIED` rather than answering `ERROR_ALREADY_EXISTS`.
+So that answer is a copy running too. It was once taken for "could not
+ask" and let the second copy start, and two writers on one library
+delete each other's canvases: a layout write removes the rows its own
+picture does not have. Any other failure still starts, as one that says
+nothing about a copy of the app. The test stands in for the elevated
+copy with a mutex whose DACL grants no one anything; that is the answer
+the documentation gives, not one measured against an elevated copy.
+
 **The settings file** is written by the tray, which is the only writer
 of it; one that could not be written is said on the same line along the
 bottom, and remembered as owed: the background timer (a `WM_TIMER` on

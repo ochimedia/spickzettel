@@ -64,4 +64,8 @@ private:
     int exitCode_ = 0;
 };
 
+// The name of the mutex AcquireSingleInstance claims for appName: in this
+// session's namespace, and named for the user this process runs as.
+std::wstring InstanceMutexName(const std::string& appName);
+
 }  // namespace sz::platform::win32

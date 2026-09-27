@@ -7,6 +7,8 @@
 
 #include <windows.h>
 
+#include <sddl.h>
+
 namespace sz::platform::win32 {
 namespace {
 
@@ -144,6 +146,49 @@ TEST(Win32PlatformHostTest, PostedTasksRunFromTheLoopInOrder) {
     }
 
     EXPECT_EQ(ran, (std::vector<int>{1, 2, 3, 4}));
+}
+
+// The instance is held for as long as the copy holding it is alive, and
+// is there to be had once it is gone. The other copy is this test,
+// holding the mutex itself.
+TEST(Win32PlatformHostTest, TheInstanceIsRefusedWhileAnotherCopyHoldsIt) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    const HANDLE held = CreateMutexW(nullptr, TRUE, InstanceMutexName(name).c_str());
+    ASSERT_NE(held, nullptr);
+    ASSERT_NE(GetLastError(), static_cast<DWORD>(ERROR_ALREADY_EXISTS));
+
+    EXPECT_FALSE(host.AcquireSingleInstance());
+    CloseHandle(held);
+    EXPECT_TRUE(host.AcquireSingleInstance()) << "gone with its last handle";
+    EXPECT_TRUE(host.AcquireSingleInstance()) << "and asked again, answered from the one now held";
+}
+
+// A copy run as administrator makes the mutex for the Administrators group
+// at high integrity, and the same user unelevated may not open it:
+// CreateMutex fails with ERROR_ACCESS_DENIED instead of answering
+// ERROR_ALREADY_EXISTS. That is still a copy holding the instance - the
+// same user's, so the same library. Stood in for by a mutex whose DACL
+// grants no one anything, which is refused the same way without an
+// elevated process to make it.
+TEST(Win32PlatformHostTest, AnInstanceThisCopyMayNotOpenIsHeldAllTheSame) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    PSECURITY_DESCRIPTOR grantsNothing = nullptr;
+    ASSERT_TRUE(ConvertStringSecurityDescriptorToSecurityDescriptorW(L"D:", SDDL_REVISION_1, &grantsNothing, nullptr));
+    SECURITY_ATTRIBUTES attributes{sizeof(attributes), grantsNothing, FALSE};
+    const HANDLE held = CreateMutexW(&attributes, TRUE, InstanceMutexName(name).c_str());
+    LocalFree(grantsNothing);
+    ASSERT_NE(held, nullptr);
+    const HANDLE again = CreateMutexW(nullptr, TRUE, InstanceMutexName(name).c_str());
+    ASSERT_EQ(again, nullptr) << "the stand-in is refused as an elevated copy's mutex is";
+    ASSERT_EQ(GetLastError(), static_cast<DWORD>(ERROR_ACCESS_DENIED));
+
+    EXPECT_FALSE(host.AcquireSingleInstance());
+    CloseHandle(held);
+    EXPECT_TRUE(host.AcquireSingleInstance());
 }
 
 }  // namespace

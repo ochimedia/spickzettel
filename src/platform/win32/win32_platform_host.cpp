@@ -1,9 +1,11 @@
 #include "platform/win32/win32_platform_host.h"
 
+#include <sddl.h>
 #include <shellapi.h>
 
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 #include "platform/win32/resources/resource.h"
 #include "platform/win32/win32_displays.h"
@@ -101,19 +103,55 @@ bool Win32PlatformHost::Initialize(const std::string& appName) {
     return true;
 }
 
+// The session's namespace alone is not one per library: "Run as
+// administrator" from a standard account runs the app as the administrator
+// account, in the same session, with an %APPDATA% and a library of its
+// own. Named for the user as well, the mutex is one per %APPDATA%, and a
+// copy it refuses is one that would write this library. Without the SID,
+// should the token not answer, it is the session's name alone, as before.
+std::wstring InstanceMutexName(const std::string& appName) {
+    std::wstring name = L"Local\\" + std::wstring(appName.begin(), appName.end()) + L".Instance";
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        return name;
+    }
+    DWORD size = 0;
+    // The documented two-call shape, as in IntegrityRidOf.
+    GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+    std::vector<BYTE> buffer(size);
+    wchar_t* sid = nullptr;
+    if (size != 0 && GetTokenInformation(token, TokenUser, buffer.data(), size, &size) &&
+        ConvertSidToStringSidW(reinterpret_cast<TOKEN_USER*>(buffer.data())->User.Sid, &sid)) {
+        name += L".";
+        name += sid;
+        LocalFree(sid);
+    }
+    CloseHandle(token);
+    return name;
+}
+
 bool Win32PlatformHost::AcquireSingleInstance() {
     if (instanceMutex_) {
         return true;
     }
-    // A named mutex in the per-session namespace: one per logged-in user,
-    // which is also one per %APPDATA% and so one per library. Created
-    // owned; ERROR_ALREADY_EXISTS means another process made it first and
-    // is still alive - the kernel drops it with its last handle, so a copy
-    // that crashed holds nothing.
-    const std::wstring name = L"Local\\" + std::wstring(appName_.begin(), appName_.end()) + L".Instance";
+    // A named mutex, one per user and so one per library - see
+    // InstanceMutexName. Created owned; ERROR_ALREADY_EXISTS means another
+    // process made it first and is still alive - the kernel drops it with
+    // its last handle, so a copy that crashed holds nothing.
+    //
+    // ERROR_ACCESS_DENIED means the same. Asked for a mutex that is
+    // already there, CreateMutex opens it with every right, and fails
+    // with that when the one who made it did not grant them - which is
+    // what the same user sees of a copy run as administrator: its objects
+    // are made for the Administrators group and at high integrity, and
+    // the user unelevated is neither. The same library, so the same
+    // refusal; letting it start was two writers on it.
+    const std::wstring name = InstanceMutexName(appName_);
     HANDLE mutex = CreateMutexW(nullptr, TRUE, name.c_str());
     if (!mutex) {
-        return true;  // could not even ask: not a reason to refuse to start
+        // Anything else - the name taken by an object that is not a
+        // mutex, say - could not even ask: not a reason to refuse to start.
+        return GetLastError() != ERROR_ACCESS_DENIED;
     }
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
         CloseHandle(mutex);
