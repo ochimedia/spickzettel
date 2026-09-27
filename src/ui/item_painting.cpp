@@ -247,8 +247,9 @@ void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbM
 
         for (const Item& item : canvas.items) {
             // Deleted on its own: not part of what the canvas shows, and not
-            // what restoring a deleted canvas brings back either.
-            if (item.deletedAt != 0) {
+            // what restoring a deleted canvas brings back either. Minimized:
+            // not on the canvas either, but a chip on the dock.
+            if (item.deletedAt != 0 || item.minimized) {
                 continue;
             }
             const ImVec2 pMin(offsetX + item.rect.x * scale, offsetY + item.rect.y * scale);

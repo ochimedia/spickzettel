@@ -81,7 +81,8 @@ using PreviewTextureFn = std::function<std::optional<uint64_t>(const core::Item&
 // must not be the canvas's own: a tile draws the same items the canvas
 // behind it does, at a wholly different scale, in the same frame. A snippet
 // deleted on its own is left out: a preview is of what the canvas holds,
-// which for a deleted canvas is also what restoring it brings back.
+// which for a deleted canvas is also what restoring it brings back. So is
+// a minimized one, which the canvas shows only as a chip.
 void DrawCanvasPreview(ImDrawList* drawList, const core::Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax,
                        float displayW, float displayH, core::StrokeRenderMode rendering, bool showStrokes,
                        const PreviewTextureFn& previewTexture, core::StrokeMeshSlot meshCache,

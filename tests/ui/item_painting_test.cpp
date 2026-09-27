@@ -105,5 +105,35 @@ TEST_F(ItemPaintingTest, AStrokeOnAStretchedSnippetKeepsItsWidthOnceDrawn) {
     EXPECT_NEAR(once, whileDrawn, 0.01f);
 }
 
+// A canvas's thumbnail is what the canvas shows, and a minimized snippet
+// is not on it - only a chip on the dock. It was drawn in the thumbnail
+// all the same.
+TEST_F(ItemPaintingTest, AMinimizedSnippetIsLeftOutOfTheThumbnail) {
+    core::Canvas canvas;
+    core::Item item;
+    item.rect = core::Rect{100.0f, 100.0f, 400.0f, 300.0f};
+    item.nativeW = 400.0f;
+    item.nativeH = 300.0f;
+    core::Stroke stroke;
+    stroke.colorRGBA = 0xFF0000FFu;
+    stroke.width = 10.0f;
+    stroke.points = {core::StrokePoint{20.0f, 50.0f}, core::StrokePoint{380.0f, 250.0f}};
+    item.strokes.push_back(stroke);
+    canvas.items.push_back(item);
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    const auto verticesDrawn = [drawList](const core::Canvas& c) {
+        const int first = drawList->VtxBuffer.Size;
+        DrawCanvasPreview(drawList, c, ImVec2(0.0f, 0.0f), ImVec2(192.0f, 108.0f), 1920.0f, 1080.0f,
+                          core::StrokeRenderMode::Tessellated, /*showStrokes=*/true,
+                          [](const core::Item&) { return std::optional<uint64_t>(0); }, {}, {});
+        return drawList->VtxBuffer.Size - first;
+    };
+    const int background = verticesDrawn(core::Canvas{});
+    ASSERT_GT(verticesDrawn(canvas), background) << "drawn at all, or the test proves nothing";
+
+    canvas.items[0].minimized = true;
+    EXPECT_EQ(verticesDrawn(canvas), background);
+}
+
 }  // namespace
 }  // namespace sz::ui

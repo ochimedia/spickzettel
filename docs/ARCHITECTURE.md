@@ -2458,6 +2458,11 @@ always does, on the Canvases tab with nothing deleted shown. Found in
 the next review on 2026-09-27: it kept the tab a previous visit left, so
 a pick after a visit to Settings came up on Settings.
 
+A thumbnail is what its canvas shows: a snippet deleted on its own is
+left out, and so is a minimized one, which the canvas shows only as a
+chip on the dock - decided on 2026-09-27, after the next review asked;
+it had been drawn.
+
 Thumbnails draw strokes by default (nearly free at tile size) and
 bitmaps only when asked, because a bitmap means decoding a picture for a
 canvas whose pixels are deliberately not in memory. The 256px thumbnail
