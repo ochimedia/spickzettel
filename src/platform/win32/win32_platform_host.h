@@ -39,10 +39,18 @@ public:
     int RunEventLoop() override;
     void Quit(int exitCode) override;
 
+    // The next `count` tray icon adds fail as the shell's would with no
+    // taskbar up yet - for the tests, which have a taskbar.
+    void FailTrayIconAddsForTesting(int count) { failTrayIconAdds_ = count; }
+
 private:
     static LRESULT CALLBACK WndProcThunk(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     LRESULT HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
     void ShowTrayContextMenu();
+    // Hands the shell the icon, as ShowTrayIcon asked. A failed add is
+    // tried again: on the TaskbarCreated a starting taskbar sends, and
+    // every kTrayRetryMs until one lands.
+    bool AddTrayIcon();
     // Exits as the tray menu's Exit does, for a close asked from outside.
     void Exit();
 
@@ -52,6 +60,10 @@ private:
     // ends - Windows abandons it for us.
     HANDLE instanceMutex_ = nullptr;
     bool trayIconVisible_ = false;
+    // Asked for by ShowTrayIcon and not taken back by RemoveTrayIcon:
+    // what a failed add is tried again for - see AddTrayIcon.
+    bool trayIconWanted_ = false;
+    int failTrayIconAdds_ = 0;
     // "TaskbarCreated", as registered - see Initialize.
     UINT taskbarCreatedMessage_ = 0;
     TrayCommandCallback trayCallback_;
@@ -74,5 +86,8 @@ std::wstring InstanceMutexName(const std::string& appName);
 // The host's one tray icon, as the shell knows it: this id on the host
 // window.
 inline constexpr UINT kTrayIconId = 1;
+// The WM_TIMER that tries a failed tray icon add again, and how often.
+inline constexpr UINT_PTR kTrayRetryTimerId = 2;
+inline constexpr UINT kTrayRetryMs = 5000;
 
 }  // namespace sz::platform::win32

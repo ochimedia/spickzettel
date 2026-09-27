@@ -27,6 +27,9 @@ public:
     // See TrayController::Initialize.
     virtual bool AcquireSingleInstance() = 0;
 
+    // Puts the tray icon up, now or once the taskbar is there to take it:
+    // false while it is not up yet. RemoveTrayIcon takes it down, and
+    // stops the waiting.
     virtual bool ShowTrayIcon() = 0;
     virtual void RemoveTrayIcon() = 0;
     virtual void SetTrayCommandCallback(TrayCommandCallback callback) = 0;

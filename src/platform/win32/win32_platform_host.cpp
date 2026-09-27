@@ -168,6 +168,11 @@ bool Win32PlatformHost::AcquireSingleInstance() {
 }
 
 bool Win32PlatformHost::ShowTrayIcon() {
+    trayIconWanted_ = true;
+    return AddTrayIcon();
+}
+
+bool Win32PlatformHost::AddTrayIcon() {
     if (trayIconVisible_) {
         return true;
     }
@@ -185,14 +190,31 @@ bool Win32PlatformHost::ShowTrayIcon() {
     nid.hIcon = LoadIconA(GetModuleHandleA(nullptr), MAKEINTRESOURCEA(IDI_APP_ICON));
     strncpy_s(nid.szTip, appName_.c_str(), _TRUNCATE);
 
-    if (!Shell_NotifyIconA(NIM_ADD, &nid)) {
+    // Started at log-on, the app can be ahead of Explorer's notification
+    // area, and the add fails. That once ended the start, with a message
+    // saying another copy may be running. So the icon waits for the
+    // taskbar instead: its TaskbarCreated puts it up (see HandleMessage),
+    // and a timer tries again meanwhile, for an Explorer that was only
+    // slow to answer. An add that timed out may have landed after all,
+    // which the next add would fail on, so any icon of ours is taken out
+    // first.
+    Shell_NotifyIconA(NIM_DELETE, &nid);
+    const bool failForTesting = failTrayIconAdds_ > 0;
+    if (failForTesting) {
+        --failTrayIconAdds_;
+    }
+    if (failForTesting || !Shell_NotifyIconA(NIM_ADD, &nid)) {
+        SetTimer(hwnd_, kTrayRetryTimerId, kTrayRetryMs, nullptr);
         return false;
     }
+    KillTimer(hwnd_, kTrayRetryTimerId);
     trayIconVisible_ = true;
     return true;
 }
 
 void Win32PlatformHost::RemoveTrayIcon() {
+    trayIconWanted_ = false;
+    KillTimer(hwnd_, kTrayRetryTimerId);
     if (!trayIconVisible_) {
         return;
     }
@@ -427,7 +449,7 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
     // until the app was, and with it the menu's Exit. Taken out first,
     // should this taskbar have kept it, so that the add is of a new icon.
     if (msg == taskbarCreatedMessage_ && msg != 0) {
-        if (trayIconVisible_) {
+        if (trayIconWanted_) {
             RemoveTrayIcon();
             ShowTrayIcon();
         }
@@ -480,6 +502,9 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
         case WM_TIMER:
             if (wParam == kBackgroundTimerId && backgroundTimerCallback_) {
                 backgroundTimerCallback_();
+            }
+            if (wParam == kTrayRetryTimerId && trayIconWanted_) {
+                AddTrayIcon();
             }
             return 0;
         // Logoff or shutdown. The work is done on the query, which is where

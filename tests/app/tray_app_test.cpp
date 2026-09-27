@@ -81,15 +81,6 @@ TEST(TrayControllerTest, InitializeConfiguresEditModeInputFromConfig) {
     EXPECT_FALSE(host.overlayWindow.editModeInput.dontForwardKeystrokes);
 }
 
-TEST(TrayControllerTest, InitializeFailsIfTrayIconFails) {
-    test::FakePlatformHost host;
-    host.showTrayIconSucceeds = false;
-    TrayController controller(host, DefaultConfig());
-
-    EXPECT_FALSE(controller.Initialize());
-    EXPECT_FALSE(controller.RefusedANewerLibrary()) << "a failure of its own, told as such";
-}
-
 TEST(TrayControllerTest, InitializeFailsWhenAnotherCopyIsRunning) {
     test::FakePlatformHost host;
     host.singleInstanceAvailable = false;
@@ -504,6 +495,23 @@ TEST(TrayControllerTest, TrayToggleCommandBehavesLikeEditHotkey) {
 
     EXPECT_TRUE(host.overlayWindow.IsVisible());
     EXPECT_FALSE(controller.Overlay().IsViewOnly());
+}
+
+// A tray icon that cannot go up yet - the app started at log-on, ahead of
+// the taskbar - is not a reason to refuse the start: the host puts it up
+// once the taskbar is there, and the hotkeys work meanwhile. The start
+// was refused, with a message saying another copy may be running.
+TEST(TrayControllerTest, ATrayIconNotUpYetDoesNotStopTheStart) {
+    test::FakePlatformHost host;
+    host.showTrayIconSucceeds = false;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+
+    ASSERT_TRUE(controller.Initialize());
+    EXPECT_FALSE(host.registeredCombos.empty()) << "and the hotkeys registered";
+    controller.Start();
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    EXPECT_TRUE(host.overlayWindow.IsVisible());
 }
 
 TEST(TrayControllerTest, TrayExitCommandQuitsHost) {

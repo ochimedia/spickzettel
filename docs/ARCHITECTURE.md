@@ -2789,6 +2789,16 @@ the icon was gone until the app was restarted, and the tray menu's Exit
 with it. An elevated copy is above Explorer, where UIPI drops the
 broadcast unless the window lets it through (`ChangeWindowMessageFilterEx`).
 
+The same message puts up an icon the shell refused in the first place.
+Started at log-on, the app can be ahead of Explorer's notification area,
+and the add fails; the icon is still wanted, and goes up with the
+taskbar's `TaskbarCreated`, or at the next try of a timer every five
+seconds, for an Explorer that was only slow to answer. Each add takes
+out any icon of ours first, since one that timed out may have landed
+anyway. Found in review on 2026-09-27: the failed add ended the start,
+with the message for a second copy already running, which there was
+not; and a failed add after an Explorer restart was never tried again.
+
 A window nobody can see is not drawn either. With the screen locked or
 the secure desktop up, `Present` returns `DXGI_STATUS_OCCLUDED` at once
 instead of waiting for vsync, and a frame loop drawing every frame used

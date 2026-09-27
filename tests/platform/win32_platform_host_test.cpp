@@ -142,6 +142,45 @@ TEST(Win32PlatformHostTest, TheTrayIconIsPutBackWhenExplorerRestarts) {
     EXPECT_TRUE(shown());
 }
 
+// A tray icon the shell refuses - at log-on, ahead of the taskbar - goes
+// up once the taskbar says it is there, or at the next try of a timer,
+// for a taskbar that was only slow to answer. The failure ended the start.
+TEST(Win32PlatformHostTest, ATrayIconTheShellRefusedGoesUpLater) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    if (!host.ShowTrayIcon()) {
+        GTEST_SKIP() << "no taskbar to put an icon on";
+    }
+    host.RemoveTrayIcon();
+    const HWND hwnd = FindWindowA(nullptr, name.c_str());
+    ASSERT_NE(hwnd, nullptr);
+    NOTIFYICONDATAA icon{};
+    icon.cbSize = sizeof(icon);
+    icon.hWnd = hwnd;
+    icon.uID = kTrayIconId;
+    const auto shown = [&icon] { return Shell_NotifyIconA(NIM_MODIFY, &icon) != FALSE; };
+    const UINT taskbarCreated = RegisterWindowMessageA("TaskbarCreated");
+
+    host.FailTrayIconAddsForTesting(1);
+    EXPECT_FALSE(host.ShowTrayIcon());
+    EXPECT_FALSE(shown());
+    SendMessageA(hwnd, taskbarCreated, 0, 0);
+    EXPECT_TRUE(shown()) << "when the taskbar comes";
+
+    host.RemoveTrayIcon();
+    host.FailTrayIconAddsForTesting(1);
+    EXPECT_FALSE(host.ShowTrayIcon());
+    SendMessageA(hwnd, WM_TIMER, kTrayRetryTimerId, 0);
+    EXPECT_TRUE(shown()) << "at the next try";
+
+    // Taken down, it stays down.
+    host.RemoveTrayIcon();
+    SendMessageA(hwnd, WM_TIMER, kTrayRetryTimerId, 0);
+    SendMessageA(hwnd, taskbarCreated, 0, 0);
+    EXPECT_FALSE(shown());
+}
+
 // A hotkey's callback may unregister that same hotkey while it runs - a
 // capture that moves the combo to another hotkey does - and runs on to
 // the end with what it captured intact.

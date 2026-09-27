@@ -93,9 +93,10 @@ bool TrayController::Initialize() {
         // and a frame actually renders, which is also the first moment they'd
         // ever be visible.
     }
-    if (!host_.ShowTrayIcon()) {
-        return false;
-    }
+    // Not a reason to refuse the start when it cannot go up yet: started
+    // at log-on, the app can be ahead of the taskbar, and the icon waits
+    // for it (see IPlatformHost::ShowTrayIcon). The hotkeys work without it.
+    host_.ShowTrayIcon();
     // The file made to say what runs, once: the stand-in for a settings
     // file set aside, written where the file was - by the loader already,
     // unless that write failed - or a file reading repaired (see

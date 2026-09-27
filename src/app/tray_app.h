@@ -43,17 +43,17 @@ class TrayController {
 public:
     TrayController(platform::IPlatformHost& host, AppConfig config);
 
-    // Registers the tray icon and all four global hotkeys, then loads any
-    // previously-saved library from host_.GetLibraryPath() (a no-op
-    // if that path is empty - see FakePlatformHost's own doc comment - or
-    // if nothing's been saved there yet, in which case OverlayApp just
-    // keeps the fresh default state CanvasManager already starts with).
-    // Also attaches the library store, which every command is written to
-    // from here on (see Session). Returns false if the
-    // tray icon cannot be registered, another copy is running, or the
-    // library cannot be opened (see LibraryStore::Open). A hotkey another
-    // application owns is not one of those - see UnregisteredHotkeys.
-    // Leaves the overlay hidden: see Start.
+    // Loads any previously-saved library from host_.GetLibraryPath() (a
+    // no-op if that path is empty - see FakePlatformHost's own doc comment
+    // - or if nothing's been saved there yet, in which case OverlayApp
+    // just keeps the fresh default state CanvasManager already starts
+    // with), then puts up the tray icon and registers all four global
+    // hotkeys. Also attaches the library store, which every command is
+    // written to from here on (see Session). Returns false if another copy
+    // is running, or the library cannot be opened (see
+    // LibraryStore::Open). A hotkey another application owns is not one
+    // of those - see UnregisteredHotkeys - and neither is a tray icon the
+    // taskbar is not up to take yet. Leaves the overlay hidden: see Start.
     bool Initialize();
     // Brings the overlay to where a start puts it (OverlayRequest::Start):
     // up in edit mode with the welcome notes on a first run, otherwise
