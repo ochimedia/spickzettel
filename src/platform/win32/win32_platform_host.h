@@ -62,7 +62,8 @@ private:
     std::deque<std::function<void()>> posted_;
     int nextHotkeyId_ = 1;
     Win32OverlayWindow overlayWindow_;
-    bool running_ = false;
+    // Set by Quit, and by a WM_QUIT: the loop ends, or does not start.
+    bool quitting_ = false;
     int exitCode_ = 0;
 };
 

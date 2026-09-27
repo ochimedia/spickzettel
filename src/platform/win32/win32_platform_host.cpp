@@ -297,15 +297,16 @@ std::filesystem::path Win32PlatformHost::GetConfigFilePath() const { return AppD
 
 std::filesystem::path Win32PlatformHost::GetLibraryPath() const { return AppDataBase() / "library.db"; }
 
+// Until Quit, which may come before the loop starts - a close while a
+// startup message box is up (see main_win32.cpp) - and is kept.
 int Win32PlatformHost::RunEventLoop() {
-    running_ = true;
     MSG msg;
-    while (running_) {
+    while (!quitting_) {
         if (overlayWindow_.IsVisible()) {
             bool dispatched = false;
             while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 if (msg.message == WM_QUIT) {
-                    running_ = false;
+                    quitting_ = true;
                     break;
                 }
                 if (!SkipCharacterTranslation(msg)) {
@@ -314,7 +315,7 @@ int Win32PlatformHost::RunEventLoop() {
                 DispatchMessage(&msg);
                 dispatched = true;
             }
-            if (running_) {
+            if (!quitting_) {
                 // Every refresh while the overlay wants that, and otherwise a
                 // frame when one is due or a message may have changed what is
                 // shown - sleeping in between, until whichever comes first.
@@ -329,7 +330,7 @@ int Win32PlatformHost::RunEventLoop() {
         } else {
             const BOOL result = GetMessage(&msg, nullptr, 0, 0);
             if (result <= 0) {
-                running_ = false;
+                quitting_ = true;
                 break;
             }
             if (!SkipCharacterTranslation(msg)) {
@@ -349,9 +350,17 @@ void Win32PlatformHost::Post(std::function<void()> task) {
     PostMessageW(hwnd_, kPostedTaskMessage, 0, 0);
 }
 
+// A message besides the flag, to wake the loop: hidden, it waits in
+// GetMessage, which handles a *sent* message inside itself and returns
+// only for a posted one. A close that arrived sent - WM_CLOSE, or the
+// Restart Manager's WM_ENDSESSION - settled and set the flag, and the app
+// stayed until something unrelated was posted: past the Restart Manager's
+// wait, which then asks for a restart or kills it. Not WM_QUIT, which
+// would also end a message box that happens to be up.
 void Win32PlatformHost::Quit(int exitCode) {
     exitCode_ = exitCode;
-    running_ = false;
+    quitting_ = true;
+    PostMessageW(hwnd_, WM_NULL, 0, 0);
 }
 
 void Win32PlatformHost::Exit() {

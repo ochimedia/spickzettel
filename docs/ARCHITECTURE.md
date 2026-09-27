@@ -1346,6 +1346,17 @@ Exit, which is where `taskkill` sends it while the overlay is up - it
 closes the windows it can see, and the host window is hidden. Alt+F4
 over the overlay arrives as `SC_CLOSE` instead, and stays swallowed.
 
+The exit then has to end the loop. Found in review on 2026-09-27: `Quit`
+only set a flag, and hidden, the loop waits in `GetMessage`, which
+handles a *sent* message inside itself and returns only for a posted
+one. The Restart Manager's close and `WM_CLOSE` both come sent, so with
+the app in the tray - where it usually is - the exit settled and the
+process stayed until something unrelated was posted, past the Restart
+Manager's wait. `Quit` now posts a `WM_NULL` to wake the loop - not
+`WM_QUIT`, which would also end whatever message box is up. And the loop
+no longer sets itself running as it starts, which wiped a `Quit` that
+came first: a close while a startup message box was up was forgotten.
+
 ### Textures
 
 Every GPU texture the app draws with is held by one object,

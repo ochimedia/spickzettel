@@ -1,6 +1,11 @@
 #include "platform/win32/win32_platform_host.h"
 
+#include <atomic>
+#include <chrono>
+#include <functional>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -181,6 +186,70 @@ TEST(Win32PlatformHostTest, PostedTasksRunFromTheLoopInOrder) {
     }
 
     EXPECT_EQ(ran, (std::vector<int>{1, 2, 3, 4}));
+}
+
+// Runs the host's loop while `from` runs on a thread of its own, and
+// whether the loop ended by itself: past the `patience`, the thread posts
+// a WM_QUIT, which ends any loop, so a loop that would not end fails the
+// test rather than hanging it.
+bool LoopEndsBy(Win32PlatformHost& host, int& exitCode, const std::function<void()>& from) {
+    const DWORD loopThread = GetCurrentThreadId();
+    std::atomic<bool> ended = false;
+    std::atomic<bool> forced = false;
+    std::thread other([&] {
+        from();
+        const auto giveUp = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!ended && std::chrono::steady_clock::now() < giveUp) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        if (!ended) {
+            forced = true;
+            PostThreadMessageW(loopThread, WM_QUIT, 0, 0);
+        }
+    });
+    exitCode = host.RunEventLoop();
+    ended = true;
+    other.join();
+    return !forced;
+}
+
+// The Restart Manager's close, and taskkill's, arrive *sent*, while the
+// app sits hidden in the tray - the loop waiting in GetMessage, which
+// handles a sent message inside itself and returns only for a posted
+// one. The exit settled and set the flag, and the loop went on waiting,
+// past the Restart Manager's patience.
+TEST(Win32PlatformHostTest, ACloseSentWhileHiddenEndsTheLoop) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    for (const auto& [message, lParam] : {std::pair<UINT, LPARAM>{WM_ENDSESSION, ENDSESSION_CLOSEAPP},
+                                          std::pair<UINT, LPARAM>{WM_CLOSE, 0}}) {
+        Win32PlatformHost host;
+        ASSERT_TRUE(host.Initialize(name));
+        host.SetTrayCommandCallback([&host](TrayCommand command) {
+            if (command == TrayCommand::Exit) {
+                host.Quit(3);
+            }
+        });
+        const HWND hwnd = FindWindowA(nullptr, name.c_str());
+        ASSERT_NE(hwnd, nullptr);
+        int exitCode = -1;
+        const WPARAM wParam = message == WM_ENDSESSION ? TRUE : 0;
+        EXPECT_TRUE(LoopEndsBy(host, exitCode, [&] { SendMessageA(hwnd, message, wParam, lParam); }))
+            << "message " << message;
+        EXPECT_EQ(exitCode, 3);
+    }
+}
+
+// A Quit before the loop starts - a close while a startup message box is
+// up - is kept: the loop does not start. It was wiped by the loop setting
+// itself running, and the app carried on.
+TEST(Win32PlatformHostTest, AQuitBeforeTheLoopIsKept) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    host.Quit(7);
+    int exitCode = -1;
+    EXPECT_TRUE(LoopEndsBy(host, exitCode, [] {}));
+    EXPECT_EQ(exitCode, 7);
 }
 
 // The instance is held for as long as the copy holding it is alive, and
