@@ -1159,8 +1159,10 @@ void Win32OverlayWindow::RenderFrame() {
 // key the keyboard grab swallowed, because a swallowed event updates no key
 // state anywhere; the grab tracked those itself all along, so its record
 // fills that gap. Whichever source has focus or the hook, the other reads
-// false, and the OR is simply the truth. (The Windows key the grab never
-// takes.)
+// false, and the OR is simply the truth. The Windows key has no record in
+// the grab: taking the whole keyboard takes it too, and it then reads as
+// up for as long as the keyboard is grabbed. See ARCHITECTURE.md, "Taking
+// the keyboard takes the Windows key too".
 Modifiers Win32OverlayWindow::HeldModifiers() {
     const auto asyncDown = [](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; };
     bool grabCtrl = false;

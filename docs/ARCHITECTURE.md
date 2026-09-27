@@ -2950,6 +2950,19 @@ Consequences that shape `Win32InputGrab`:
   (and screenshot, with Freeze screen on). Keeping the hook until the key
   comes up, or ignoring a second hotkey within a second of the first,
   would stop it, at more cost than it has.
+- **Taking the keyboard takes the Windows key too** - known, and left so
+  until use gives a reason to change it. While the grab takes every key -
+  keystroke holding on, the default while the game keeps focus, or a
+  text field open under the grab - the Windows key goes to the overlay
+  with the rest, and so does Alt: Start, Win+E, Win+Shift+S and Alt+Tab
+  do nothing until edit mode ends. Ctrl+Alt+Del never reaches a hook.
+  Letting the Windows key through would hand the shell's shortcuts to it
+  mid-edit, where the window one opens takes focus from the game (see
+  "What is a Windows limitation, not a bug"). The key never reaches
+  Windows' key state either, and the grab keeps no record of it, so
+  `HeldModifiers` reads it as up while the keyboard is grabbed: a press on
+  empty canvas with it held makes a snippet, where with focus taken it
+  makes none (`CreationTriggerFor`).
 - **The hooks stand down when the app thread stops.** They swallow the
   machine's mouse and, with forwarding off, its keyboard, whatever the app
   thread is doing, and the way out - the hotkey - is posted to that same
@@ -3191,11 +3204,15 @@ several displays at once; that would be a window per display.
 ### What is a Windows limitation, not a bug
 
 Win+E, Alt-Tab and other shell shortcuts reach their targets outside
-normal focus routing, and once they open a window focus follows it. Only
-a global low-level keyboard hook swallowing the Windows key could
-prevent that, which is far more invasive than an overlay should be by
-default. Exclusive-fullscreen games sidestep all of this by not sharing
-the desktop, which an always-on-top overlay deliberately does.
+normal focus routing, and once they open a window focus follows it.
+While the input grab takes the keyboard - the default in edit mode
+while the game keeps focus - they do not get there at all: the Windows
+key and Alt go to the overlay with every other key (see "Taking the
+keyboard takes the Windows key too"). Without it - keystroke holding
+off, or edit mode taking focus - they work as they do anywhere, and only
+a hook swallowing them could stop them. Exclusive-fullscreen games
+sidestep all of this by not sharing the desktop, which an always-on-top
+overlay deliberately does.
 
 ### Cursors
 
