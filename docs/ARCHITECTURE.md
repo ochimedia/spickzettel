@@ -739,7 +739,19 @@ that is not finite reads as its default - JSON has no infinity, but
 coordinate poisons every bounding box it meets - and one with a range
 is held inside it. A value of the wrong type is its default. A stroke
 blob cut short keeps the strokes before the cut. A current canvas or
-folder naming nothing opens on one that exists.
+folder naming nothing - no row, or an id the library does not hold -
+opens on the first one that exists and is not deleted.
+
+None current is not a pointer naming nothing, and a load keeps it.
+Deleting a folder's last canvas leaves no canvas on screen and that
+folder browsed, and the model never falls back to another folder's
+canvas (see `CanvasManager::DeleteCanvas`). The load once took the 0 for
+a dangling pointer, so a restart opened on the library's first canvas -
+another folder's, or the one just deleted - and wrote that back. The
+randomized persistence test did not catch it: it made a new canvas
+whenever none was current, so the file never had to keep that state. It
+now makes one only when no live canvas is left, and deletes the canvas
+on screen as often as any other.
 
 ### Pictures: QOI, in the file
 

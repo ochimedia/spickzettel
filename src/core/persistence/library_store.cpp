@@ -654,24 +654,42 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
         return std::nullopt;
     }
 
-    // Which folder and canvas are current, as far as they still name one -
-    // a pointer naming nothing opens on something that exists rather than
-    // on nothing, and is written back so.
+    // Which folder and canvas are current. None - no canvas on screen, or
+    // no folder browsed - is a state the model has, and keeps: deleting a
+    // folder's last canvas leaves nothing on screen and that folder
+    // browsed (see CanvasManager::SettleOffDeleted). It was taken for a
+    // pointer naming nothing, and a restart opened on the library's first
+    // canvas - another folder's, or one in the trash - and wrote that
+    // back. Only a pointer naming nothing - no row, or an id the library
+    // does not hold - opens on something else: the first canvas and folder
+    // not deleted, where the model would move to, and is written back so.
+    const auto live = [](const Folder& f) { return f.deletedAt == 0; };
+    const auto liveFolder = [&](FolderId id) {
+        return std::any_of(snapshot.folders.begin(), snapshot.folders.end(),
+                           [&](const Folder& f) { return f.id == id && live(f); });
+    };
+    const auto namesNothing = [](const std::optional<uint64_t>& pointer, const auto& things) {
+        if (!pointer.has_value()) {
+            return true;
+        }
+        return *pointer != 0 &&
+               std::none_of(things.begin(), things.end(), [&](const auto& thing) { return thing.id == *pointer; });
+    };
     snapshot.currentCanvasId = currentCanvas.value_or(0);
-    const bool canvasExists = std::any_of(snapshot.canvases.begin(), snapshot.canvases.end(),
-                                          [&](const Canvas& c) { return c.id == snapshot.currentCanvasId; });
-    if (!canvasExists) {
-        snapshot.currentCanvasId = snapshot.canvases.empty() ? 0 : snapshot.canvases.front().id;
+    if (namesNothing(currentCanvas, snapshot.canvases)) {
+        const auto first = std::find_if(snapshot.canvases.begin(), snapshot.canvases.end(), [&](const Canvas& c) {
+            return c.deletedAt == 0 && liveFolder(c.folderId);
+        });
+        snapshot.currentCanvasId = first != snapshot.canvases.end() ? first->id : 0;
     }
     snapshot.currentFolderId = currentFolder.value_or(0);
-    const bool folderExists = std::any_of(snapshot.folders.begin(), snapshot.folders.end(),
-                                          [&](const Folder& f) { return f.id == snapshot.currentFolderId; });
-    if (!folderExists) {
+    if (namesNothing(currentFolder, snapshot.folders)) {
         const auto current = std::find_if(snapshot.canvases.begin(), snapshot.canvases.end(),
                                           [&](const Canvas& c) { return c.id == snapshot.currentCanvasId; });
+        const auto first = std::find_if(snapshot.folders.begin(), snapshot.folders.end(), live);
         snapshot.currentFolderId = current != snapshot.canvases.end() ? current->folderId
-                                   : snapshot.folders.empty()        ? 0
-                                                                     : snapshot.folders.front().id;
+                                   : first != snapshot.folders.end()  ? first->id
+                                                                      : 0;
     }
 
     repairs.current = currentFolder != snapshot.currentFolderId || currentCanvas != snapshot.currentCanvasId;

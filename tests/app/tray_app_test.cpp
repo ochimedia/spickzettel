@@ -1134,6 +1134,47 @@ TEST_F(TrayControllerPersistenceTest, AFirstRunThatCouldNotWriteItsLibraryIsAFir
     EXPECT_EQ(written->canvases.size(), 1u);
 }
 
+// Deleting a folder's last canvas leaves nothing on screen and that folder
+// browsed, and a restart keeps it so. It opened on the library's first
+// canvas instead - here another folder's, which nobody had been on.
+TEST_F(TrayControllerPersistenceTest, ARestartAfterAFoldersLastCanvasIsDeletedOpensOnNothingThere) {
+    CanvasManagerSnapshot snapshot;
+    Folder other;
+    other.id = 1;
+    other.name = "Other";
+    Folder here;
+    here.id = 2;
+    here.name = "Here";
+    snapshot.folders = {other, here};
+    Canvas elsewhere;
+    elsewhere.id = 3;
+    elsewhere.name = "Elsewhere";
+    elsewhere.folderId = 1;
+    Canvas last;
+    last.id = 4;
+    last.name = "Last";
+    last.folderId = 2;
+    snapshot.canvases = {elsewhere, last};
+    snapshot.currentFolderId = 2;
+    snapshot.currentCanvasId = 4;
+    ASSERT_TRUE(persistence::LibraryStore(library_).Save(snapshot));
+    {
+        test::FakePlatformHost host;
+        host.libraryPath = library_;
+        TrayController controller(host, DefaultConfig());
+        ASSERT_TRUE(controller.Initialize());
+        ASSERT_TRUE(controller.GetSession().Delete(4));
+        ASSERT_EQ(controller.GetSession().Manager().CurrentCanvasId(), 0u);
+    }
+
+    test::FakePlatformHost host;
+    host.libraryPath = library_;
+    TrayController controller(host, DefaultConfig());
+    ASSERT_TRUE(controller.Initialize());
+    EXPECT_EQ(controller.GetSession().Manager().CurrentCanvasId(), 0u) << "not the other folder's canvas";
+    EXPECT_EQ(controller.GetSession().Manager().CurrentFolderId(), 2u);
+}
+
 TEST_F(TrayControllerPersistenceTest, AFirstRunsLibraryAndACaptureAreOnDiskAsTheyAreMade) {
     test::FakePlatformHost host;
     host.libraryPath = library_;

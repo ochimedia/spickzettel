@@ -694,16 +694,47 @@ TEST_F(LibraryStoreTest, ARowThatCannotBeUsedAsItIsIsRepairedAndWrittenBack) {
     EXPECT_EQ(raw.Int("SELECT length(strokes) FROM items WHERE id = 3"), 1 + 4 + 12 + 8) << "one stroke, whole";
 }
 
-// Current pointers naming nothing open on something that exists.
+// Current pointers naming nothing open on something that exists and is not
+// deleted - the deleted canvas and folder are first here, to be passed over.
 TEST_F(LibraryStoreTest, ACurrentCanvasNamingNothingFallsBackToOneThatExists) {
     CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    std::swap(snapshot.canvases[0], snapshot.canvases[1]);
+    std::swap(snapshot.folders[0], snapshot.folders[1]);
     snapshot.currentCanvasId = 77;
     snapshot.currentFolderId = 78;
     ASSERT_TRUE(LibraryStore(file_).Save(snapshot));
+    {
+        const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(loaded->currentCanvasId, 2u);
+        EXPECT_EQ(loaded->currentFolderId, 1u);
+    }
+
+    // A folder naming nothing, with no canvas current: the first folder not
+    // deleted.
+    snapshot.currentCanvasId = 0;
+    ASSERT_TRUE(LibraryStore(file_).Save(snapshot));
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
     ASSERT_TRUE(loaded.has_value());
-    EXPECT_EQ(loaded->currentCanvasId, 2u);
+    EXPECT_EQ(loaded->currentCanvasId, 0u);
     EXPECT_EQ(loaded->currentFolderId, 1u);
+}
+
+// No canvas current is a state of its own, which deleting a folder's last
+// canvas leaves, and a load keeps it: it is not a pointer naming nothing.
+// It was taken for one, and opened on the library's first canvas - here
+// the one just deleted - which was written back.
+TEST_F(LibraryStoreTest, NoCanvasCurrentIsKept) {
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    snapshot.canvases[0].deletedAt = 1700000400;
+    snapshot.currentCanvasId = 0;
+    ASSERT_TRUE(LibraryStore(file_).Save(snapshot));
+    for (int load = 0; load < 2; ++load) {
+        const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_EQ(loaded->currentCanvasId, 0u) << "load " << load;
+        EXPECT_EQ(loaded->currentFolderId, 1u) << "load " << load;
+    }
 }
 
 // A path with characters outside every code page: %APPDATA% is under the

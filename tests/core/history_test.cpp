@@ -217,7 +217,11 @@ public:
                 ForGood();
                 break;
         }
-        if (!session_.Manager().HasCurrentCanvas()) {
+        // A canvas made only when there is none left to be on. No canvas
+        // current while others are live - what deleting a folder's last
+        // canvas leaves - is a state of its own, which the file has to
+        // keep as well; a canvas made at once hid that it did not.
+        if (!session_.Manager().HasCurrentCanvas() && !AnyLive()) {
             session_.SwitchToCanvas(session_.AddCanvas("Fresh"));
         }
     }
@@ -267,6 +271,11 @@ private:
             }
         }
         return SomeOf(ids);
+    }
+    bool AnyLive() const {
+        const CanvasManager& manager = session_.Manager();
+        return std::any_of(manager.Canvases().begin(), manager.Canvases().end(),
+                           [&manager](const Canvas& canvas) { return !manager.IsDeleted(canvas); });
     }
     CanvasId AnyLiveCanvas() {
         std::vector<CanvasId> ids;
@@ -387,7 +396,9 @@ private:
                 }
                 break;
             case 1:
-                if (const CanvasId canvas = AnyLiveCanvas()) {
+                // The canvas on screen as often as any other: what a person
+                // deletes most, and what leaves a folder with none on it.
+                if (const CanvasId canvas = Pick(2) == 0 ? manager.CurrentCanvasId() : AnyLiveCanvas()) {
                     session_.Delete(canvas);
                 }
                 break;
