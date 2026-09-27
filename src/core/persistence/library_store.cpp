@@ -126,9 +126,15 @@ public:
     // prepare answers as an error.
     int Step() { return stmt_ != nullptr ? sqlite3_step(stmt_) : SQLITE_ERROR; }
     // Steps a statement that returns no rows, and readies it to run again
-    // with fresh parameters.
+    // with fresh parameters. One that failed to prepare fails here too:
+    // sqlite3_clear_bindings, alone of what this class calls, does not
+    // take a null statement in this build (no SQLITE_ENABLE_API_ARMOR),
+    // and a table the file no longer had crashed the write naming it.
     bool Run() {
-        const int rc = Step();
+        if (stmt_ == nullptr) {
+            return false;
+        }
+        const int rc = sqlite3_step(stmt_);
         sqlite3_reset(stmt_);
         sqlite3_clear_bindings(stmt_);
         return rc == SQLITE_DONE;
@@ -742,12 +748,18 @@ bool LibraryStore::Save(const LibraryView& view) {
 bool LibraryStore::WriteRows(const LibraryView& view, const LibraryChanges& changes, const PictureWrites& pictures) {
     const bool all = changes.everything;
     // The rows the library has, by id - what a row absent from the view is
-    // found among.
-    const auto idsIn = [this](const char* sql) {
+    // found among. Nothing for a read that stopped short: the rows past
+    // where it stopped were left in, and the write committed without them
+    // taken out.
+    const auto idsIn = [this](const char* sql) -> std::optional<std::unordered_set<uint64_t>> {
         std::unordered_set<uint64_t> ids;
         Statement select(db_, sql);
-        while (select.Step() == SQLITE_ROW) {
+        int rc = SQLITE_ROW;
+        while ((rc = select.Step()) == SQLITE_ROW) {
             ids.insert(static_cast<uint64_t>(select.Int(0)));
+        }
+        if (rc != SQLITE_DONE) {
+            return std::nullopt;
         }
         return ids;
     };
@@ -771,8 +783,13 @@ bool LibraryStore::WriteRows(const LibraryView& view, const LibraryChanges& chan
     std::unordered_set<uint64_t> absentFolders;
     std::unordered_set<uint64_t> absentCanvases;
     if (layout) {
-        absentFolders = idsIn("SELECT id FROM folders");
-        absentCanvases = idsIn("SELECT id FROM canvases");
+        std::optional<std::unordered_set<uint64_t>> folders = idsIn("SELECT id FROM folders");
+        std::optional<std::unordered_set<uint64_t>> canvases = idsIn("SELECT id FROM canvases");
+        if (!folders || !canvases) {
+            return false;
+        }
+        absentFolders = std::move(*folders);
+        absentCanvases = std::move(*canvases);
         Statement folder(db_, "INSERT INTO folders (id, position, name, created_at, deleted_at) "
                               "VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT (id) DO UPDATE SET "
                               "position = excluded.position, name = excluded.name, "
@@ -881,11 +898,14 @@ bool LibraryStore::WriteRows(const LibraryView& view, const LibraryChanges& chan
         }
     }
     if (all) {
-        std::unordered_set<uint64_t> absent = idsIn("SELECT id FROM items");
-        for (const auto& [id, place] : places) {
-            absent.erase(id);
+        std::optional<std::unordered_set<uint64_t>> absent = idsIn("SELECT id FROM items");
+        if (!absent) {
+            return false;
         }
-        if (!removeAbsent("DELETE FROM items WHERE id = ?1", std::move(absent))) {
+        for (const auto& [id, place] : places) {
+            absent->erase(id);
+        }
+        if (!removeAbsent("DELETE FROM items WHERE id = ?1", std::move(*absent))) {
             return false;
         }
     }

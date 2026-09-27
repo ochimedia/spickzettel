@@ -742,6 +742,14 @@ compared at write time. `Save(view)` is the same write with everything
 named - every row, and every one the model does not hold taken out - for
 a library made rather than changed: a first run's, a test's.
 
+Every statement a write runs is checked, and one that fails fails the
+write. Two were not. A statement that failed to prepare - a table the
+file no longer has, another program's doing - was run all the same, and
+SQLite built without `SQLITE_ENABLE_API_ARMOR` answers that with a
+crash. And the read of the ids already in a table, which the rows the
+view no longer holds are found among, could stop short unseen; the write
+then committed with the rows past that point left in.
+
 ### Reading what cannot be used
 
 A value a row carries that cannot be used is repaired rather than

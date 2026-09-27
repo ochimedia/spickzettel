@@ -537,6 +537,24 @@ TEST_F(LibraryStoreTest, AWriteThatFailsPartwayLeavesNoneOfItself) {
     EXPECT_EQ(loaded->canvases[0].name, "Allowed");
 }
 
+// A table the file no longer has - another program dropped it - fails the
+// statements naming it as they are prepared, and a write that meets one
+// fails, rolled back whole. It crashed: the statement that was never made
+// was run all the same.
+TEST_F(LibraryStoreTest, AWriteToATableTheFileNoLongerHasFails) {
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    LibraryStore store(file_);
+    ASSERT_TRUE(store.Save(snapshot));
+    {
+        RawConnection raw(file_);
+        ASSERT_TRUE(raw.Exec("DROP TABLE meta"));
+    }
+    snapshot.folders[0].createdAt = 1800000000;
+    EXPECT_FALSE(store.Save(snapshot)) << "the current canvas is written into meta, last";
+    RawConnection raw(file_);
+    EXPECT_EQ(raw.Int("SELECT created_at FROM folders WHERE id = 1"), 1700000000) << "rolled back with the rest";
+}
+
 // After a first write that failed, the next write writes the whole
 // library, whatever it names: one snippet written alone would be on a
 // canvas the file does not have, which its foreign key refuses - as it
