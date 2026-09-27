@@ -359,7 +359,7 @@ drawing mode and the modifiers. Today the same decisions are spread over
 
 | # | Press | At once (prefix) | Click | Drag | Hold | Double |
 |---|---|---|---|---|---|---|
-| 1 | any, over an ImGui window | - | - | Widget (ImGui's) | - | - |
+| 1 | left or right, over an ImGui window | - | - | Widget (ImGui's) | - | - |
 | 2 | left, on a bar button | - | - | Bar button held | - | - |
 | 3 | left, on a selected snippet's handle | - | - | Resize | - | - |
 | 4 | left, on the drawing snippet, drawing mode, no Alt | - | - | Stroke / Shape / Erase / Rectangle erase / Text, by tool and modifiers | - | - |
@@ -373,10 +373,12 @@ drawing mode and the modifiers. Today the same decisions are spread over
 | 12 | right, on the drawing snippet, drawing mode, no Alt | - | leave drawing mode | Erase | - | - |
 | 13 | right, on a snippet | select (and raise, if set) | context menu | Resize from the nearest edge | - | - |
 | 14 | right, on empty canvas | - | empty canvas menu | - | - | - |
-| 15 | middle, X1, X2 | - | - | - | - | - |
+| 15 | middle, X1, X2, anywhere | - | - | - | - | - |
 
 Rows 1 and 15 hand the press to ImGui and to the bindings (section 7)
-respectively. Every row carries its cheat sheet line, so the cheat sheet's
+respectively. Row 15 holds over a panel too: no panel does anything with
+those buttons, and the one that opened the cheat sheet has to close it
+again (see ARCHITECTURE.md on mouse button shortcuts). Every row carries its cheat sheet line, so the cheat sheet's
 gesture rows are generated from the rules rather than kept in step with
 them by hand, as they are today.
 

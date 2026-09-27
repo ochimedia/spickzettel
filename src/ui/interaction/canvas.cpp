@@ -31,7 +31,8 @@ Answer CanvasLevel::Offer(const Event& event, Editor& editor) {
                 return RecognizePress(event, editor);
             }
             // A shortcut the button may be - never while a gesture is in
-            // flight, which the Gesture level above sees to.
+            // flight, which the Gesture level above sees to, but over a
+            // panel too: see INTERACTIONS.md 6.5, row 15.
             return Bound(ComboKeyForMouseButton(event.button), event, editor);
         case EventKind::PointerMove:
         case EventKind::PointerUp:
