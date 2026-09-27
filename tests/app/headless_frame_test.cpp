@@ -719,6 +719,28 @@ TEST_F(HeadlessAppTest, ACaptureMidRightClickOpensNoMenu) {
     EXPECT_FALSE(App().IsEmptyCanvasMenuOpen());
 }
 
+// A press held into View is let go of there, on whatever is under the
+// click-through overlay, and Edit comes back with nothing in the hand. It
+// came back with the rest of the press still held: the wheel and every
+// right click were swallowed until the next left press.
+TEST_F(HeadlessAppTest, APressLetGoOfInViewIsNotStillHeldInEdit) {
+    ShowEditMode();
+    StepFrame();
+    MoveTo(640.0f, 400.0f);
+    StepFrame();
+    RawMouse(640.0f, 400.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(700.0f, 450.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    ShowViewMode();
+    StepFrames(2);
+    // The release goes to what is underneath: nothing of it arrives here.
+    ShowEditMode();
+    StepFrames(2);
+    RightClick(640.0f, 400.0f);
+    EXPECT_TRUE(App().IsEmptyCanvasMenuOpen());
+}
+
 // Which press makes which kind is a setting: here a plain press makes a
 // drawing, and screenshots come from the menu or their key alone.
 TEST_F(HeadlessAppTest, EachKindIsMadeByThePressItIsSetTo) {

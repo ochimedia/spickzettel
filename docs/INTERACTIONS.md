@@ -475,6 +475,7 @@ Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.
 | Put away | the overlay settles | - | the Hand scope ends the gesture and the text; the rest stays for the next showing | - | - |
 | Shown | the overlay settles | - | the Hand scope, for whatever went some other way; the machine forgets the buttons held | - | - |
 | View-only | the overlay settles | - | All scope | - | - |
+| Edit from view-only | - | - | the machine forgets the buttons held, as at Shown | - | - |
 
 Found while building phase 3: the Text row first said a press outside a
 note is used up by closing it. Today that press also does what it does -
@@ -482,6 +483,12 @@ leaves drawing mode, selects a snippet - and only making a snippet is
 held back, and the design changes nothing it does not mark as a change;
 so the note passes the press on, still open, which is what keeps it from
 making a snippet.
+
+Found in review: the last row was missing. View and Edit are one
+session, so going back to Edit is not a showing, and nothing forgot the
+buttons. A press held into View was let go of there, on whatever is under
+the click-through overlay, and Edit came back with the rest of it Spent:
+the wheel and every right click were swallowed until the next left press.
 
 Two findings from writing the table:
 

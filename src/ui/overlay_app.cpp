@@ -74,6 +74,14 @@ void OverlayApp::SetMode(OverlayMode mode) {
         // happened to be hovered on the last edit-mode frame for the
         // whole view-only session.
         canvasView_.ForgetHoveredHandle();
+    } else {
+        // Edit again, and nothing in the hand, as when the overlay comes
+        // up: view-only is click-through, and a button let go of there was
+        // let go of on whatever is underneath. From View it is the same
+        // session and nothing else forgets: a press held into View was
+        // still held here, and its Spent swallowed the wheel and every
+        // right click until the next left press.
+        editor_.ForgetTheHand();
     }
 }
 
