@@ -845,17 +845,26 @@ blob cut short keeps the strokes before the cut. A current canvas or
 folder naming nothing - no row, or an id the library does not hold -
 opens on the first one that exists and is not deleted.
 
-A deletion stamp no delete can have made - negative, or more than a day
-past the clock at the load - reads as not deleted (`DeletionStamp`).
+A deletion stamp that is no date - negative, or past the year 3000 -
+stays deleted and reads as the time of the load (`DeletionStamp`).
 Found in review on 2026-09-27: such a stamp was read as it was, and
 hovering the folder or canvas with Show deleted on ended the app - the
 tooltip turned it into a date, which the C runtime cannot do before 1970
 or past the year 3000, and the formatting then failed on a zeroed date,
-which the invalid-parameter handler takes for a crash. It was also
-purged at the first start as long since deleted, and a snippet with one
-went with ImportLibrary. Not deleted is the side that loses nothing:
-what shows again can be deleted again. The tooltip copes with such a
-time on its own as well (see "Show deleted").
+which the invalid-parameter handler takes for a crash. The tooltip
+copes with such a time on its own as well (see "Show deleted").
+
+Any stamp but 0 means deleted, whatever its time, and one ahead of the
+clock is kept as it is. The first fix for the above read every stamp
+more than a day past the clock as not deleted, and wrote that back.
+Found in the next review on 2026-09-27: a PC that starts with its clock
+days behind - a dead CMOS battery, a restored VM snapshot, a clock wound
+back for a game - makes every recent delete such a stamp, so folders and
+canvases came back out of the trash and snippets onto their canvases,
+for good. Kept, a stamp ahead is purged by retention that much later,
+which is the side that loses nothing. A snippet whose stamp is no date
+is still deleted, so ImportLibrary erases it at start as it does every
+deleted snippet; nothing tells a damaged stamp from a real delete.
 
 None current is not a pointer naming nothing, and a load keeps it.
 Deleting a folder's last canvas leaves no canvas on screen and that

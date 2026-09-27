@@ -713,12 +713,11 @@ TEST_F(LibraryStoreTest, ARowThatCannotBeUsedAsItIsIsRepairedAndWrittenBack) {
     EXPECT_EQ(raw.Int("SELECT length(strokes) FROM items WHERE id = 3"), 1 + 4 + 12 + 8) << "one stroke, whole";
 }
 
-// A deletion stamp no delete can have made - before 1970, or years ahead
-// - reads as not deleted and is written back so, while a real one is
-// kept. Such a stamp was shown in the Show deleted tooltip, where a time
-// the C runtime cannot make a date of ended the app, and was purged at the
-// next start as long since deleted.
-TEST_F(LibraryStoreTest, ADeletionStampThatIsNoTimeReadsAsNotDeleted) {
+// A deletion stamp that is no date - before 1970, or past the year 3000 -
+// stays deleted, and reads as the time of the load, written back so. Such
+// a stamp was shown in the Show deleted tooltip, where a time the C
+// runtime cannot make a date of ended the app.
+TEST_F(LibraryStoreTest, ADeletionStampThatIsNoDateStaysDeletedAsOfNow) {
     ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
     {
         RawConnection raw(file_);
@@ -726,24 +725,50 @@ TEST_F(LibraryStoreTest, ADeletionStampThatIsNoTimeReadsAsNotDeleted) {
         ASSERT_TRUE(raw.Exec("UPDATE canvases SET deleted_at = 99999999999 WHERE id = 6"));
         ASSERT_TRUE(raw.Exec("UPDATE items SET record = json_set(record, '$.deletedAt', -1) WHERE id = 4"));
     }
+    const int64_t before = static_cast<int64_t>(std::time(nullptr));
     const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
+    const int64_t after = static_cast<int64_t>(std::time(nullptr));
     ASSERT_TRUE(loaded.has_value());
-    EXPECT_EQ(loaded->folders[1].deletedAt, 0);
-    EXPECT_EQ(loaded->canvases[1].deletedAt, 0);
-    EXPECT_EQ(loaded->canvases[0].items[1].deletedAt, 0);
+    for (const int64_t stamp :
+         {loaded->folders[1].deletedAt, loaded->canvases[1].deletedAt, loaded->canvases[0].items[1].deletedAt}) {
+        EXPECT_GE(stamp, before);
+        EXPECT_LE(stamp, after);
+    }
     EXPECT_EQ(loaded->folders[0].deletedAt, 0) << "not deleted, and not touched";
 
     RawConnection raw(file_);
-    EXPECT_EQ(raw.Int("SELECT deleted_at FROM folders WHERE id = 5"), 0) << "written back";
-    EXPECT_EQ(raw.Int("SELECT deleted_at FROM canvases WHERE id = 6"), 0);
-    EXPECT_EQ(raw.Int("SELECT json_extract(record, '$.deletedAt') FROM items WHERE id = 4"), 0);
+    EXPECT_EQ(raw.Int("SELECT deleted_at FROM folders WHERE id = 5"), loaded->folders[1].deletedAt)
+        << "written back";
+    EXPECT_EQ(raw.Int("SELECT deleted_at FROM canvases WHERE id = 6"), loaded->canvases[1].deletedAt);
+    EXPECT_EQ(raw.Int("SELECT json_extract(record, '$.deletedAt') FROM items WHERE id = 4"),
+              loaded->canvases[0].items[1].deletedAt);
+}
 
-    // A real stamp, a year back, is kept.
-    const int64_t yearAgo = static_cast<int64_t>(std::time(nullptr)) - 365 * 24 * 60 * 60;
-    ASSERT_TRUE(raw.Exec("UPDATE folders SET deleted_at = " + std::to_string(yearAgo) + " WHERE id = 5"));
-    const std::optional<CanvasManagerSnapshot> again = LibraryStore(file_).Load();
-    ASSERT_TRUE(again.has_value());
-    EXPECT_EQ(again->folders[1].deletedAt, yearAgo);
+// A deletion stamp ahead of the clock is kept as it is, and so is the
+// file. It is what a clock that runs behind at start makes of every
+// recent delete. Read as not deleted, those came back out of the trash -
+// snippets onto their canvases - and a fixed clock did not put them back.
+TEST_F(LibraryStoreTest, ADeletionStampAheadOfTheClockIsKept) {
+    ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
+    const int64_t now = static_cast<int64_t>(std::time(nullptr));
+    const int64_t weekAhead = now + 7 * 24 * 60 * 60;
+    const int64_t yearAgo = now - 365 * 24 * 60 * 60;
+    {
+        RawConnection raw(file_);
+        ASSERT_TRUE(raw.Exec("UPDATE folders SET deleted_at = " + std::to_string(weekAhead) + " WHERE id = 5"));
+        ASSERT_TRUE(raw.Exec("UPDATE canvases SET deleted_at = " + std::to_string(yearAgo) + " WHERE id = 6"));
+        ASSERT_TRUE(raw.Exec("UPDATE items SET record = json_set(record, '$.deletedAt', " +
+                             std::to_string(weekAhead) + ") WHERE id = 4"));
+    }
+    const std::optional<CanvasManagerSnapshot> loaded = LibraryStore(file_).Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->folders[1].deletedAt, weekAhead);
+    EXPECT_EQ(loaded->canvases[1].deletedAt, yearAgo);
+    EXPECT_EQ(loaded->canvases[0].items[1].deletedAt, weekAhead);
+
+    RawConnection raw(file_);
+    EXPECT_EQ(raw.Int("SELECT deleted_at FROM folders WHERE id = 5"), weekAhead);
+    EXPECT_EQ(raw.Int("SELECT json_extract(record, '$.deletedAt') FROM items WHERE id = 4"), weekAhead);
 }
 
 // Text that is not UTF-8 in a snippet's record is written with U+FFFD in

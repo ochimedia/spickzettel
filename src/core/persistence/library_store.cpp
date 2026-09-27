@@ -242,21 +242,25 @@ float ClampedOr(const json& j, const char* key, float fallback, float min, float
 constexpr float kMaxSensibleExtent = 65536.0f;
 
 // When a folder, canvas or snippet was deleted, as stored: 0 for not
-// deleted, else seconds since the epoch, from the clock at the delete. A
-// stamp no delete can have made - before 1970, or later than a day past
-// `now` - is not a time, and reads as not deleted. Kept as it was, it was
-// shown in the Show deleted tooltip, and a time the C runtime cannot turn
-// into a date ended the app there; it was taken out at the first start by
-// the retention purge, or with a snippet by ImportLibrary, as long since
-// deleted. Not deleted is the side that loses nothing: what is shown again
-// can be deleted again. A day of slack for a clock set back a little.
+// deleted, else seconds since the epoch, from the clock at the delete.
+// Anything but 0 is deleted, whatever the time: whether it was is the
+// stamp's meaning, and the time only says when. A time the C runtime
+// cannot turn into a date - before 1970, or past the year 3000 - reads
+// as `now`; the Show deleted tooltip used to end the app on one.
+//
+// One ahead of `now` is kept as it is. It is what a clock that runs
+// behind at start makes of every recent delete, and an upper bound near
+// `now` once read those as not deleted and wrote that back: fixing the
+// clock did not undo it. Kept, such a stamp is purged by retention that
+// much later, which is the side that loses nothing.
 int64_t DeletionStamp(int64_t stored, int64_t now, bool& repaired) {
-    constexpr int64_t kSlack = 24 * 60 * 60;
-    if (stored == 0 || (stored > 0 && stored <= now + kSlack)) {
+    // 3000-01-01 00:00:00 UTC.
+    constexpr int64_t kLastDatable = 32503680000;
+    if (stored == 0 || (stored > 0 && stored < kLastDatable)) {
         return stored;
     }
     repaired = true;
-    return 0;
+    return now;
 }
 
 json RectJson(const Rect& r) { return json{{"x", r.x}, {"y", r.y}, {"w", r.w}, {"h", r.h}}; }
