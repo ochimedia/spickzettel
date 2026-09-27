@@ -302,7 +302,10 @@ std::string ItemRecord(const Item& item) {
         {"noteTextColorRGBA", item.noteTextColorRGBA},
         {"noteTextSizePx", item.noteTextSizePx},
     };
-    return j.dump();
+    // A name or note that is not UTF-8 is written with U+FFFD for what
+    // cannot be read, as the settings file is: the strict dump throws, and
+    // a snippet that could not be written would take every write with it.
+    return j.dump(-1, ' ', false, json::error_handler_t::replace);
 }
 
 // A value of the wrong type is the default, not an exception: json::value

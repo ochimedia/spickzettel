@@ -814,7 +814,11 @@ The transaction is an object that rolls back unless it is committed
 rollback, which ran only on a failure returned, and left the transaction
 open: every write after it failed to begin its own. Nothing in the app
 catches an exception today - the process ends, and the journal takes the
-write back at the next open - so this is for whatever will.
+write back at the next open - so this is for whatever will. Its test
+threw with a snippet named in bytes that are not UTF-8; that record is
+written with U+FFFD since (see "Text is UTF-8, and so is the code
+page"), no other write is known to throw, and the rollback on an
+exception has no test now.
 
 ### Reading what cannot be used
 
@@ -2797,6 +2801,12 @@ are only ever made there or from a timestamp, and ImGui cuts what is
 typed or pasted into one at a character's edge. `SerializeConfig` also
 writes a broken character as U+FFFD instead of throwing, since a
 setting saved slightly wrong is not worth the app.
+
+So does a snippet's record in the library (`ItemRecord`). Found in
+review on 2026-09-27: it was dumped strictly, and nothing around a write
+catches - a name or note that was not UTF-8 would have ended the app at
+the save. Nothing known makes one today; a snippet written slightly
+wrong is still not worth the app.
 
 ### In front of the taskbar
 
