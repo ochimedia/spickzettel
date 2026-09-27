@@ -318,6 +318,9 @@ public:
     uint32_t DrawColorRGBA() const { return drawColorRGBA_; }
     // The single place the draw color actually changes.
     void SetDrawColor(uint32_t colorRGBA);
+    // Puts every setting a slider or swatch is previewing back as it was -
+    // see Settings::CancelPreviews.
+    void CancelSettingsPreviews() { settings_.CancelPreviews(); }
     float DrawWidth() const { return drawWidth_; }
     void SetDrawWidth(float width);
     float EraserWidth() const { return eraserWidth_; }

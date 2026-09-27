@@ -99,6 +99,9 @@ public:
     // what a profile resolves to is decided at the commit.
     template <typename Rule>
     bool Preview(const GlobalSetting<Rule>& row, typename Rule::Value value) {
+        if (!previewing_) {
+            beforePreviews_ = stored_;
+        }
         if (!Store(row, std::move(value))) {
             return false;
         }
@@ -109,6 +112,16 @@ public:
     void CommitPreviews() {
         if (previewing_) {
             CommitNow();
+        }
+    }
+    // Calls the previews off: every row is back to what it was before the
+    // first of them, and nothing is committed - Escape during a slider's
+    // drag, which is to put its value back (docs/INTERACTIONS.md, section
+    // 5). Nothing was said of the previews, so nothing is said of this.
+    void CancelPreviews() {
+        if (previewing_) {
+            stored_ = std::move(beforePreviews_);
+            previewing_ = false;
         }
     }
     bool Previewing() const { return previewing_; }
@@ -213,6 +226,8 @@ private:
     int resolveCount_ = 0;
     // A preview stored and not committed yet - see Preview.
     bool previewing_ = false;
+    // What was stored before the first preview - see CancelPreviews.
+    AppConfig beforePreviews_;
     std::function<void()> changedCallback_;
 };
 

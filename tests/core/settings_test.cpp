@@ -122,6 +122,31 @@ TEST(SettingsTest, APreviewIsShownAtOnceAndCommittedWhenFinished) {
     EXPECT_FALSE(settings.Previewing());
 }
 
+// Called off - Escape during the drag - every row previewed is back to what
+// it was before the first preview, and nothing is committed.
+TEST(SettingsTest, APreviewCalledOffIsPutBack) {
+    Settings settings(DefaultConfig());
+    int commits = 0;
+    settings.SetChangedCallback([&commits] { ++commits; });
+    const uint32_t accent = settings.Get(setting::kAccentColor);
+    const float opacity = settings.Get(setting::kEditModeBorderOpacity);
+
+    settings.Preview(setting::kAccentColor, 0x112233FFu);
+    settings.Preview(setting::kAccentColor, 0x445566FFu);
+    settings.Preview(setting::kEditModeBorderOpacity, 0.5f);
+    settings.CancelPreviews();
+    EXPECT_EQ(settings.Get(setting::kAccentColor), accent);
+    EXPECT_EQ(settings.Get(setting::kEditModeBorderOpacity), opacity);
+    EXPECT_FALSE(settings.Previewing());
+    settings.CommitPreviews();
+    EXPECT_EQ(commits, 0);
+
+    // And the next drag's starts from there.
+    settings.Preview(setting::kAccentColor, 0x778899FFu);
+    settings.CancelPreviews();
+    EXPECT_EQ(settings.Get(setting::kAccentColor), accent);
+}
+
 // One press cannot make both kinds: choosing the press the other has swaps
 // the two, and both may be off.
 TEST(SettingsTest, ChoosingTheOtherTriggersPressSwapsThem) {

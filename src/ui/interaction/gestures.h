@@ -248,7 +248,10 @@ class Widget final : public Gesture {
 public:
     explicit Widget(const Event& press) : Gesture(press.button), pressedAt_(press.position) {}
     const char* Name() const override { return "Widget"; }
+    void Begin(const Event& event, Editor& editor) override;
     void Interrupt(Editor& editor) override;
+    // Calls off what the drag changed: a snippet's style, a setting's
+    // preview, the pen's color in its chooser.
     void Cancel(Editor& editor) override;
     // Where the press went down - which window it is, for a view that
     // cares whether it was its own.
@@ -260,6 +263,8 @@ protected:
 
 private:
     platform::Vec2 pressedAt_;
+    // The pen's color as the press went down - see Cancel.
+    uint32_t penColorAtPress_ = 0;
 };
 
 // A selection bar button held down, fired by a release over it - the rule

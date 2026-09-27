@@ -441,6 +441,45 @@ TEST_F(ViewLayerTest, TheColorChooserKeepsThePensColorWhenItCloses) {
     EXPECT_EQ(AppSettings().Stored().strokeColorRGBA, App().DrawColorRGBA());
 }
 
+// Escape during a drag calls it off, and what the drag changed goes back:
+// the pen's color in its chooser, and a setting a slider was previewing.
+// Only a snippet's style went back, and the next frame ImGui reported the
+// drag as an edit, which kept the dragged value.
+TEST_F(ViewLayerTest, EscapeDuringADragPutsBackWhatItChanged) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    const uint32_t penBefore = App().DrawColorRGBA();
+    const uint32_t accentBefore = AppSettings().Get(setting::kAccentColor);
+    const std::optional<ImVec2> color = App().SelectionBarButtonCenter(ChromeButton::Color);
+    ASSERT_TRUE(color.has_value());
+    RawClick(color->x, color->y);
+    StepFrames(2);
+    ASSERT_TRUE(App().IsColorChooserOpen());
+
+    const ImGuiContext& g = *ImGui::GetCurrentContext();
+    ASSERT_FALSE(g.OpenPopupStack.empty());
+    const ImRect square = g.OpenPopupStack.back().Window->InnerRect;
+    MoveTo(square.Min.x + 30.0f, square.Min.y + 30.0f);
+    StepFrame();
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
+    RawMouse(square.Min.x + 30.0f, square.Min.y + 30.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    MoveTo(square.Min.x + 120.0f, square.Min.y + 60.0f);
+    StepFrames(2);
+    ASSERT_NE(App().DrawColorRGBA(), penBefore) << "the drag changed nothing, so the test proves nothing";
+    // A slider's preview, as one in Settings writes it while dragged.
+    controller_->GetSettings().Preview(setting::kAccentColor, accentBefore ^ 0x00FFFF00u);
+
+    PressKey(ImGuiKey_Escape);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
+    RawMouse(square.Min.x + 120.0f, square.Min.y + 60.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    EXPECT_EQ(App().DrawColorRGBA(), penBefore);
+    EXPECT_EQ(AppSettings().Get(setting::kAccentColor), accentBefore);
+    EXPECT_FALSE(AppSettings().Previewing());
+}
+
 // Properties' closing is done when it closes, and not on every frame it is
 // not up: done every frame, it ended the style edit a spin of Ctrl and the
 // wheel holds open, after every notch - a spin of three notches was three

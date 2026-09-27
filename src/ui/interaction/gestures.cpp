@@ -429,8 +429,15 @@ void Widget::Interrupt(Editor& editor) {
     editor.Views().LetGoOfWidget();
 }
 
+void Widget::Begin(const Event& /*event*/, Editor& editor) { penColorAtPress_ = editor.DrawColorRGBA(); }
+
+// A slider's or a swatch's value, and the pen's color in its chooser, are
+// written as they are dragged, and put back here - see docs/INTERACTIONS.md,
+// section 5.
 void Widget::Cancel(Editor& editor) {
     editor.GetSession().CancelStyleEdit();
+    editor.CancelSettingsPreviews();
+    editor.SetDrawColor(penColorAtPress_);
     editor.Views().LetGoOfWidget();
 }
 

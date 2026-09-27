@@ -265,7 +265,12 @@ Three rows answer the questions the design began with:
 
 - **Escape cancels a stroke** (and every other gesture), restoring things
   as they were when it began.
-- **Escape during a slider drag restores the value.**
+- **Escape during a slider drag restores the value.** In Settings too,
+  and the pen's color in its chooser: found in the next review on
+  2026-09-27, only a snippet's style was restored, and ImGui, let go
+  of, reported the drag as an edit the next frame, which kept the
+  dragged value. The previews are put back (`Settings::CancelPreviews`),
+  and the pen's color as the press found it (`Widget::Cancel`).
 - **A second button during a gesture is ignored, not a cancel.** This
   reversed the first suggestion, found by writing it down: Windows'
   touch press-and-hold injects a right press about 650 ms
