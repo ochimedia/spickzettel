@@ -217,6 +217,10 @@ public:
     // where two items overlap" is a question about occlusion that a
     // screenshot answers badly and a test answers exactly.
     const std::string& DebugHoveredResizeHandle() const { return canvasView_.DebugHoveredResizeHandle(); }
+    // Whether a snippet's strokes are held drawn into a bitmap, in the
+    // rasterized mode - memory a test cannot see on screen, since a bitmap
+    // nothing draws has no texture.
+    bool HasStrokeRaster(ItemId id) const { return canvasView_.HasStrokeRaster(id); }
     // The selected snippets, in the order they were selected - see
     // Editor::Selection.
     const std::vector<ItemId>& Selection() const { return editor_.Selection(); }

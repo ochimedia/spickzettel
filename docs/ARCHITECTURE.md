@@ -455,6 +455,18 @@ bitmap made again inside that frame came to the old one's revision and
 was drawn with the old texture: the undone stroke on screen, the new one
 not, until the next stroke moved the revision on.
 
+A bitmap is held only for a snippet that can be drawn: one on the
+current canvas, and not deleted. A minimized snippet keeps its bitmap,
+since its chip in the dock is drawn from it. A deleted snippet stays in
+its canvas's items until the retention purge, for undo and Show deleted,
+and each one kept its bitmap - up to 64 MB of pixels, plus the copy of
+the strokes it was built from - and was drawn into a new one every time
+its canvas came back. Its texture went, since nothing asked for it, but
+the pixels behind it did not. Now a deleted snippet loses its bitmap
+the way one on another canvas does. An undo or restore moves the
+generation like any change, so the snippet is drawn into a new bitmap
+under a new revision. Found in review on 2026-09-27.
+
 ## Canvases, items and folders
 
 `Item` is a snippet: freehand strokes over a picture, at a `rect` on

@@ -1000,14 +1000,24 @@ void CanvasView::RefreshStrokeRasters() {
             strokeRasters_.erase(item.id);
             continue;
         }
+        // A deleted snippet is as far from being drawn as one on another
+        // canvas, and loses its bitmap the same way - though it stays in
+        // `items` until the retention purge, for undo and Show deleted.
+        // Undone or restored, it moves the generation like any change, and
+        // is drawn into a bitmap from scratch. A minimized one keeps its
+        // bitmap: the dock's chip draws from it.
+        if (Manager().IsDeleted(*canvas, item)) {
+            strokeRasters_.erase(item.id);
+            continue;
+        }
         // The builder decides for itself whether there is anything to do -
         // nothing, the new strokes only, or everything from scratch - from
         // one comparison of what it built from against what is there now.
         BuildStrokeRaster(item, strokeRasters_[item.id]);
     }
 
-    // Anything not on this canvas any more - switched away from, or
-    // deleted - goes, and its texture with it, unasked for (see
+    // Anything not on this canvas any more - switched away from, or cut
+    // to another - goes, and its texture with it, unasked for (see
     // TextureCache).
     for (auto it = strokeRasters_.begin(); it != strokeRasters_.end();) {
         const bool stillHere = std::any_of(canvas->items.begin(), canvas->items.end(),

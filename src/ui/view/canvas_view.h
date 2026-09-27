@@ -81,6 +81,9 @@ public:
     // which never draw the items that set it.
     const std::string& DebugHoveredResizeHandle() const { return debugHoveredResizeHandle_; }
     void ForgetHoveredHandle() { debugHoveredResizeHandle_.clear(); }
+    // Whether `itemId`'s strokes are held drawn into a bitmap - see
+    // RefreshStrokeRasters.
+    bool HasStrokeRaster(core::ItemId itemId) const { return strokeRasters_.contains(itemId); }
 
 private:
     const core::CanvasManager& Manager() const { return session_.Manager(); }

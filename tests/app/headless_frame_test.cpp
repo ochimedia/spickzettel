@@ -5084,5 +5084,54 @@ TEST_F(HeadlessAppTest, ABitmapMadeAgainAfterAnUndoToNothingIsNotTheOldOne) {
     EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 400.0f), 0) << "the new one";
 }
 
+// A deleted snippet holds no bitmap of its strokes. It stays in the
+// canvas's items until the retention purge, for undo and Show deleted,
+// and kept its bitmap there - up to 64 MB each, never drawn - and was
+// drawn into a new one on every return to its canvas. Undone, it is drawn
+// into one again; a minimized snippet keeps its own, which its chip in the
+// dock is drawn from.
+TEST_F(HeadlessAppTest, ADeletedSnippetHoldsNoBitmapOfItsStrokes) {
+    AppConfig config = DefaultConfig();
+    config.strokeRenderMode = StrokeRenderMode::Rasterized;
+    StartWith(config);
+    host_.overlayWindow.uploadsSucceed = true;
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    Drag(200.0f, 200.0f, 400.0f, 200.0f);
+    StepFrames(2);
+    Session& session = controller_->GetSession();
+    const ItemId drawing = Canvases().CurrentOrNull()->items[0].id;
+    const CanvasId home = Canvases().CurrentCanvasId();
+    const CanvasId elsewhere = session.AddCanvas("Elsewhere");
+    StepFrame();
+    ASSERT_TRUE(App().HasStrokeRaster(drawing));
+
+    session.DeleteItem(drawing);
+    StepFrame();
+    EXPECT_FALSE(App().HasStrokeRaster(drawing)) << "let go of when deleted";
+
+    session.SwitchToCanvas(elsewhere);
+    StepFrame();
+    session.SwitchToCanvas(home);
+    StepFrame();
+    EXPECT_FALSE(App().HasStrokeRaster(drawing)) << "and not made again on coming back";
+
+    PressCtrlKey(ImGuiKey_Z);
+    StepFrame();
+    const Item& item = Canvases().CurrentOrNull()->items[0];
+    ASSERT_EQ(item.deletedAt, 0) << "the delete undone";
+    EXPECT_TRUE(App().HasStrokeRaster(drawing)) << "made again";
+    const std::optional<uint64_t> bitmap = TextureDrawnOn("##sz_items_layer");
+    ASSERT_TRUE(bitmap.has_value()) << "no bitmap drawn";
+    EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 200.0f), 0) << "with the stroke on it";
+    EXPECT_EQ(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 400.0f), 0) << "and nothing else";
+
+    session.SetMinimized({drawing}, true);
+    StepFrames(2);
+    EXPECT_TRUE(App().HasStrokeRaster(drawing)) << "kept while minimized, for its chip";
+}
+
 }  // namespace
 }  // namespace sz::test
