@@ -2792,6 +2792,14 @@ Consequences that shape `Win32InputGrab`:
   from the raw stream (one stream, so a click can never land at the
   position of the previous report) and re-posted as ordinary messages.
   Button state is tracked in the grab because Windows no longer knows it.
+  Raw input reports the button pressed, before Windows swaps left and
+  right for a mouse whose primary button is set to the right
+  (`SM_SWAPBUTTON`), so the grab swaps them itself (`ButtonSwap`), asking
+  the setting at every press. Taken as they came - confirmed by hand -
+  the overlay under the grab read that primary button as its secondary: a
+  click opened the menu, while the same overlay without the grab, fed by
+  Windows' own messages, had it right. A button comes up as the one it
+  went down as, should the setting change while it is held.
 - **The pointer is driven by raw device counts, not screen positions.**
   Differencing integer cursor positions discards any movement too small
   to cross a pixel with no remainder kept: measured, 22% of events came

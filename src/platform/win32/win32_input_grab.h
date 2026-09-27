@@ -198,6 +198,27 @@ public:
         std::atomic<bool> held_[kSides] = {};
     };
 
+    // The overlay's left and right button, from the ones raw input reports.
+    // Raw input reports the button pressed, before Windows swaps the two
+    // for everything else - "Primary mouse button: Right", SM_SWAPBUTTON -
+    // so the grab swaps them itself. A button comes up as the one it went
+    // down as, should the setting change while it is held. Hook thread
+    // only. Public to be tested without a device.
+    class ButtonSwap {
+    public:
+        // Whether the physical left or right button (`physicalRight`),
+        // going down or up, is the overlay's right one, with the buttons
+        // `swapped` in Windows as they are now.
+        bool Right(bool physicalRight, bool down, bool swapped);
+
+    private:
+        struct Pressed {
+            bool down = false;
+            bool asRight = false;
+        };
+        Pressed pressed_[2];  // the physical left, the physical right
+    };
+
     // Injects the correction banked so far right now, rather than when
     // countering next ends - for the window to call before it stops hiding
     // the game, so that what the game shows next is already the camera put
@@ -574,6 +595,10 @@ private:
     std::atomic<bool> middleDown_{false};
     std::atomic<bool> x1Down_{false};
     std::atomic<bool> x2Down_{false};
+    // Which of those two a physical left or right button is - see
+    // ButtonSwap. Not cleared with them as a grab ends: that is the app
+    // thread, and a stale entry is replaced by the button's next press.
+    ButtonSwap buttonSwap_;
 
     // Modifier state, tracked for the same reason as the buttons: the
     // modifier key-downs are swallowed too, so GetKeyState can't be asked.

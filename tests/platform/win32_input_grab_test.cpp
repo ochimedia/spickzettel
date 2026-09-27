@@ -214,6 +214,25 @@ TEST(Win32InputGrabTest, ASidelessModifierIsTakenAsTheSideItIs) {
     EXPECT_FALSE(record.Shift()) << "undone by its own side's up";
 }
 
+// Raw input reports the button pressed, not the one Windows makes of it:
+// with the primary button set to the right, the right one is the overlay's
+// left, as it is everywhere else. A button comes up as the one it went
+// down as, whatever the setting says by then.
+TEST(Win32InputGrabTest, AButtonIsTheOneWindowsSwapsItTo) {
+    Win32InputGrab::ButtonSwap swap;
+    EXPECT_FALSE(swap.Right(/*physicalRight=*/false, /*down=*/true, /*swapped=*/false));
+    EXPECT_FALSE(swap.Right(false, false, false));
+    EXPECT_TRUE(swap.Right(true, true, false));
+    EXPECT_TRUE(swap.Right(true, false, false));
+
+    EXPECT_FALSE(swap.Right(true, true, true)) << "swapped, the right is the left";
+    EXPECT_TRUE(swap.Right(false, true, true)) << "and the left the right";
+    EXPECT_FALSE(swap.Right(true, false, false)) << "up as it went down, though swapped back since";
+    EXPECT_TRUE(swap.Right(false, false, false));
+
+    EXPECT_FALSE(swap.Right(true, false, true)) << "an up whose down came before the grab: as the setting is";
+}
+
 // The machine's input is only held while the app thread is there to give it
 // back: a couple of seconds without a frame and the hooks let everything by.
 TEST(Win32InputGrabTest, TheHooksStandDownWhenTheAppThreadStopsBeating) {

@@ -1079,21 +1079,32 @@ void Win32InputGrab::OnRawMouse(const RAWMOUSE& mouse) {
     }
 
     const USHORT flags = mouse.usButtonFlags;
+    // The physical buttons, as Windows' swap makes them - see ButtonSwap.
+    // Taken as they came, the overlay under the grab read the primary
+    // button of a mouse set up the other way round as its secondary: a
+    // click opened the menu and a menu click drew. Asked only of a report
+    // with one of the two in it, and every time, since the setting can
+    // change while the app runs.
+    constexpr USHORT kLeftOrRight =
+        RI_MOUSE_LEFT_BUTTON_DOWN | RI_MOUSE_LEFT_BUTTON_UP | RI_MOUSE_RIGHT_BUTTON_DOWN | RI_MOUSE_RIGHT_BUTTON_UP;
+    const bool swapped = (flags & kLeftOrRight) != 0 && GetSystemMetrics(SM_SWAPBUTTON) != 0;
+    const auto button = [&](bool physicalRight, bool down) {
+        const bool right = buttonSwap_.Right(physicalRight, down, swapped);
+        (right ? rightDown_ : leftDown_) = down;
+        const UINT message = right ? (down ? WM_RBUTTONDOWN : WM_RBUTTONUP) : (down ? WM_LBUTTONDOWN : WM_LBUTTONUP);
+        PostToOverlay(message, ButtonFlags(), VirtualCursor());
+    };
     if (flags & RI_MOUSE_LEFT_BUTTON_DOWN) {
-        leftDown_ = true;
-        PostToOverlay(WM_LBUTTONDOWN, ButtonFlags(), VirtualCursor());
+        button(/*physicalRight=*/false, /*down=*/true);
     }
     if (flags & RI_MOUSE_LEFT_BUTTON_UP) {
-        leftDown_ = false;
-        PostToOverlay(WM_LBUTTONUP, ButtonFlags(), VirtualCursor());
+        button(false, false);
     }
     if (flags & RI_MOUSE_RIGHT_BUTTON_DOWN) {
-        rightDown_ = true;
-        PostToOverlay(WM_RBUTTONDOWN, ButtonFlags(), VirtualCursor());
+        button(true, true);
     }
     if (flags & RI_MOUSE_RIGHT_BUTTON_UP) {
-        rightDown_ = false;
-        PostToOverlay(WM_RBUTTONUP, ButtonFlags(), VirtualCursor());
+        button(true, false);
     }
     if (flags & RI_MOUSE_MIDDLE_BUTTON_DOWN) {
         middleDown_ = true;
@@ -1325,6 +1336,19 @@ void Win32InputGrab::HandHeldModifiersToSystem(const bool (&swallowed)[256]) {
 // ImGui - a swallowed key updates nothing the OS can be asked about, so this
 // is the only place that knows. The hook reports the side (VK_LSHIFT, not
 // VK_SHIFT); a sideless key, which it does not send, would count for both.
+bool Win32InputGrab::ButtonSwap::Right(bool physicalRight, bool down, bool swapped) {
+    Pressed& pressed = pressed_[physicalRight ? 1 : 0];
+    if (down) {
+        pressed = Pressed{true, physicalRight != swapped};
+        return pressed.asRight;
+    }
+    // One pressed before the grab began, whose down went by unseen, is
+    // taken as the setting has it now.
+    const bool asRight = pressed.down ? pressed.asRight : physicalRight != swapped;
+    pressed.down = false;
+    return asRight;
+}
+
 UINT Win32InputGrab::SidedModifier(UINT vk, DWORD scanCode, bool extended) {
     constexpr DWORD kRightShiftScanCode = 0x36;
     switch (vk) {
