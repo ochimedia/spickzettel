@@ -2881,6 +2881,17 @@ that. Checking at that rate from the start left the taskbar in front for
 up to 250 ms, long enough to see the canvas bar's first peek pop out
 from under it; checking every frame leaves it there for one frame.
 
+The Start menu, Search and the notification center stay in front, and
+that is known and left so. They are drawn in z-order bands of their
+own, above the one every application's windows share, topmost ones
+included: measured on Windows 11 (build 26200) with the undocumented
+`GetWindowBand`, the overlay and the taskbar are in band 1, Start and
+Search in band 6, notifications in band 4. No window of an ordinary
+exe gets above them; that takes UIAccess, a signed exe installed under
+Program Files. What would make them go is taking focus, since Start
+closes when it loses it - and the overlay does not close the user's
+shell UI for them.
+
 ### Translucency
 
 The overlay window is *not* `WS_EX_LAYERED`. It is an ordinary topmost
