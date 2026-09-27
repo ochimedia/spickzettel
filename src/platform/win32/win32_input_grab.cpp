@@ -1253,22 +1253,6 @@ void Win32InputGrab::PostKeyToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event, boo
     PostMessageA(overlay_, isDown ? WM_KEYDOWN : WM_KEYUP, static_cast<WPARAM>(vk), lParam);
 }
 
-// Ends every key the hook is still holding down on the overlay's behalf, and
-// forgets them, so a grab never begins or ends with a key latched.
-//
-// Both halves matter. Forgetting alone was the first attempt and it produced
-// a HUD whose number keys worked every *other* press: toggling an option
-// restarts edit mode, the restart deactivates and reactivates the grab
-// between the key's down and its up, and the up then arrived with nothing
-// recorded - so it was passed to the OS and never handed to the overlay.
-// ImGui went on believing the digit was held, and the next press was not a
-// press at all. Posting the key-up first is what keeps the app's own idea of
-// the keyboard honest across a restart; clearing the record is what keeps a
-// stale entry from authorizing the swallow of an up whose down the OS *did*
-// see, which is the whole point of the rule in OnKeyboard.
-//
-// The physical up that arrives afterwards is then passed through to the OS.
-// That leaves the OS an up for a key it never saw go down, which it ignores.
 void CALLBACK Win32InputGrab::DesktopSwitchProc(HWINEVENTHOOK, DWORD, HWND, LONG, LONG, DWORD, DWORD) {
     Win32InputGrab& self = Instance();
     self.desktopSwitches_.fetch_add(1, std::memory_order_relaxed);
@@ -1296,6 +1280,22 @@ LRESULT Win32InputGrab::KeyEventForTesting(UINT vk, bool isDown) {
     return OnKeyboard(isDown ? WM_KEYDOWN : WM_KEYUP, event);
 }
 
+// Ends every key the hook is still holding down on the overlay's behalf, and
+// forgets them, so a grab never begins or ends with a key latched.
+//
+// Both halves matter. Forgetting alone was the first attempt and it produced
+// a HUD whose number keys worked every *other* press: toggling an option
+// restarts edit mode, the restart deactivates and reactivates the grab
+// between the key's down and its up, and the up then arrived with nothing
+// recorded - so it was passed to the OS and never handed to the overlay.
+// ImGui went on believing the digit was held, and the next press was not a
+// press at all. Posting the key-up first is what keeps the app's own idea of
+// the keyboard honest across a restart; clearing the record is what keeps a
+// stale entry from authorizing the swallow of an up whose down the OS *did*
+// see, which is the whole point of the rule in OnKeyboard.
+//
+// The physical up that arrives afterwards is then passed through to the OS.
+// That leaves the OS an up for a key it never saw go down, which it ignores.
 void Win32InputGrab::ReleaseSwallowedKeys() {
     for (UINT vk = 0; vk < kVirtualKeyCount; ++vk) {
         if (!swallowedDown_[vk].exchange(false, std::memory_order_relaxed)) {
