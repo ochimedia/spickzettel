@@ -322,7 +322,7 @@ std::filesystem::path Win32PlatformHost::GetLibraryPath() const { return AppData
 // The wide calls, for the wide overlay window: through the ANSI ones a
 // WM_CHAR went to a code-page byte and back, one UTF-16 unit at a time,
 // and half of a surrogate pair is no character of any code page - an
-// emoji typed into a name arrived as replacement characters.
+// emoji typed arrived as two question marks.
 int Win32PlatformHost::RunEventLoop() {
     MSG msg;
     while (!quitting_) {

@@ -3213,10 +3213,14 @@ Consequences that shape `Win32InputGrab`:
   `WM_SYSCHAR` of Alt+E, which no text field takes. IME composition genuinely needs a focused window
   and still borrows one. The event loop takes and dispatches its
   messages with the wide calls too. Found in the next review on
-  2026-09-27, and seen by hand: through the ANSI ones every `WM_CHAR`
-  went to a code-page byte and back, one UTF-16 unit at a time, and an
-  emoji's two halves, no character of any code page each, were saved
-  in a name as replacement characters.
+  2026-09-27: through the ANSI ones every `WM_CHAR` went to a code-page
+  byte and back, one UTF-16 unit at a time, and an emoji's two halves,
+  no character of any code page each, arrived as two question marks.
+  An emoji still does not reach a name, though, typed or pasted: ImGui
+  is built with 16-bit characters (no `IMGUI_USE_WCHAR32`), and takes
+  anything past U+FFFF as U+FFFD. Nor could it draw one - Manrope has
+  no emoji, nor Japanese or Chinese, and ImGui draws `?` for a glyph
+  the font lacks. Both are left for now.
 - **Counter raw mouse input** banks the exact negation of every
   physical movement, against the raw device deltas read through an
   `RIDEV_INPUTSINK` registration: negating hook-derived screen

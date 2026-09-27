@@ -226,7 +226,7 @@ TEST(Win32PlatformHostTest, ABackgroundTimerCallbackCanSetTheTimerAgain) {
 // The loop hands a wide window its characters as they were posted: an
 // emoji is two UTF-16 units, and a WM_CHAR through the ANSI calls went to
 // a code-page byte and back one unit at a time - a lone half of the pair
-// is in no code page, and arrived as a replacement character.
+// is in no code page, and arrived as a question mark.
 std::vector<WPARAM> g_charsReceived;
 LRESULT CALLBACK RecordCharsProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_CHAR) {
