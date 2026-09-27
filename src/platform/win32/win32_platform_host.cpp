@@ -318,12 +318,17 @@ std::filesystem::path Win32PlatformHost::GetLibraryPath() const { return AppData
 
 // Until Quit, which may come before the loop starts - a close while a
 // startup message box is up (see main_win32.cpp) - and is kept.
+//
+// The wide calls, for the wide overlay window: through the ANSI ones a
+// WM_CHAR went to a code-page byte and back, one UTF-16 unit at a time,
+// and half of a surrogate pair is no character of any code page - an
+// emoji typed into a name arrived as replacement characters.
 int Win32PlatformHost::RunEventLoop() {
     MSG msg;
     while (!quitting_) {
         if (overlayWindow_.IsVisible()) {
             bool dispatched = false;
-            while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
                 if (msg.message == WM_QUIT) {
                     quitting_ = true;
                     break;
@@ -331,7 +336,7 @@ int Win32PlatformHost::RunEventLoop() {
                 if (!SkipCharacterTranslation(msg)) {
                     TranslateMessage(&msg);
                 }
-                DispatchMessage(&msg);
+                DispatchMessageW(&msg);
                 dispatched = true;
             }
             if (!quitting_) {
@@ -347,7 +352,7 @@ int Win32PlatformHost::RunEventLoop() {
                 }
             }
         } else {
-            const BOOL result = GetMessage(&msg, nullptr, 0, 0);
+            const BOOL result = GetMessageW(&msg, nullptr, 0, 0);
             if (result <= 0) {
                 quitting_ = true;
                 break;
@@ -355,7 +360,7 @@ int Win32PlatformHost::RunEventLoop() {
             if (!SkipCharacterTranslation(msg)) {
                 TranslateMessage(&msg);
             }
-            DispatchMessage(&msg);
+            DispatchMessageW(&msg);
         }
     }
     return exitCode_;

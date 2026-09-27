@@ -223,6 +223,48 @@ TEST(Win32PlatformHostTest, ABackgroundTimerCallbackCanSetTheTimerAgain) {
     host.SetBackgroundTimer(0, nullptr);
 }
 
+// The loop hands a wide window its characters as they were posted: an
+// emoji is two UTF-16 units, and a WM_CHAR through the ANSI calls went to
+// a code-page byte and back one unit at a time - a lone half of the pair
+// is in no code page, and arrived as a replacement character.
+std::vector<WPARAM> g_charsReceived;
+LRESULT CALLBACK RecordCharsProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_CHAR) {
+        g_charsReceived.push_back(wParam);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+TEST(Win32PlatformHostTest, TheLoopHandsAWideWindowTheCharactersAsPosted) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    WNDCLASSEXW windowClass{};
+    windowClass.cbSize = sizeof(windowClass);
+    windowClass.lpfnWndProc = RecordCharsProc;
+    windowClass.hInstance = GetModuleHandleW(nullptr);
+    windowClass.lpszClassName = L"SpickzettelHostTestChars";
+    RegisterClassExW(&windowClass);
+    const HWND window = CreateWindowExW(0, windowClass.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                        windowClass.hInstance, nullptr);
+    ASSERT_NE(window, nullptr);
+    ASSERT_TRUE(IsWindowUnicode(window));
+    g_charsReceived.clear();
+
+    // U+1F600, and a u with umlaut after it.
+    const std::vector<WPARAM> posted = {0xD83D, 0xDE00, 0x00FC};
+    for (const WPARAM unit : posted) {
+        PostMessageW(window, WM_CHAR, unit, 1);
+    }
+    host.Post([&host] { host.Quit(0); });
+    host.RunEventLoop();
+
+    EXPECT_EQ(g_charsReceived, posted);
+    DestroyWindow(window);
+    UnregisterClassW(windowClass.lpszClassName, windowClass.hInstance);
+}
+
 // A posted task waits for the message loop - it runs after whatever frame
 // or message posted it, not inside it - and tasks run in the order they
 // were posted, one posted by a task after those already waiting.

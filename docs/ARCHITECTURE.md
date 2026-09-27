@@ -3197,7 +3197,12 @@ Consequences that shape `Win32InputGrab`:
   wide so a posted `WM_CHAR` carries a UTF-16 unit, and
   `TranslateMessage` is skipped for the key-downs the grab posts or every
   letter arrives twice. IME composition genuinely needs a focused window
-  and still borrows one.
+  and still borrows one. The event loop takes and dispatches its
+  messages with the wide calls too. Found in the next review on
+  2026-09-27, and seen by hand: through the ANSI ones every `WM_CHAR`
+  went to a code-page byte and back, one UTF-16 unit at a time, and an
+  emoji's two halves, no character of any code page each, were saved
+  in a name as replacement characters.
 - **Counter raw mouse input** banks the exact negation of every
   physical movement, against the raw device deltas read through an
   `RIDEV_INPUTSINK` registration: negating hook-derived screen
