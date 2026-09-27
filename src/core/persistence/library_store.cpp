@@ -4,6 +4,7 @@
 #include <bit>
 #include <cmath>
 #include <cstring>
+#include <ctime>
 #include <string_view>
 #include <system_error>
 #include <unordered_set>
@@ -240,6 +241,24 @@ float ClampedOr(const json& j, const char* key, float fallback, float min, float
 // a wish.
 constexpr float kMaxSensibleExtent = 65536.0f;
 
+// When a folder, canvas or snippet was deleted, as stored: 0 for not
+// deleted, else seconds since the epoch, from the clock at the delete. A
+// stamp no delete can have made - before 1970, or later than a day past
+// `now` - is not a time, and reads as not deleted. Kept as it was, it was
+// shown in the Show deleted tooltip, and a time the C runtime cannot turn
+// into a date ended the app there; it was taken out at the first start by
+// the retention purge, or with a snippet by ImportLibrary, as long since
+// deleted. Not deleted is the side that loses nothing: what is shown again
+// can be deleted again. A day of slack for a clock set back a little.
+int64_t DeletionStamp(int64_t stored, int64_t now, bool& repaired) {
+    constexpr int64_t kSlack = 24 * 60 * 60;
+    if (stored == 0 || (stored > 0 && stored <= now + kSlack)) {
+        return stored;
+    }
+    repaired = true;
+    return 0;
+}
+
 json RectJson(const Rect& r) { return json{{"x", r.x}, {"y", r.y}, {"w", r.w}, {"h", r.h}}; }
 
 void ReadRect(const json& j, const char* key, Rect& out, bool& repaired) {
@@ -302,7 +321,7 @@ T Value(const json& j, const char* key, T fallback, bool& repaired) {
     }
 }
 
-void ReadItemRecord(std::string_view text, Item& out, bool& repaired) {
+void ReadItemRecord(std::string_view text, int64_t now, Item& out, bool& repaired) {
     const json j = json::parse(text, nullptr, /*allow_exceptions=*/false);
     if (!j.is_object()) {
         repaired = true;
@@ -310,7 +329,7 @@ void ReadItemRecord(std::string_view text, Item& out, bool& repaired) {
     }
     out.name = Value(j, "name", std::string(), repaired);
     out.createdAt = Value(j, "createdAt", int64_t{0}, repaired);
-    out.deletedAt = Value(j, "deletedAt", int64_t{0}, repaired);
+    out.deletedAt = DeletionStamp(Value(j, "deletedAt", int64_t{0}, repaired), now, repaired);
     out.hasBackground = Value(j, "hasBackground", false, repaired);
     ReadRect(j, "rect", out.rect, repaired);
     out.nativeW = ClampedOr(j, "nativeW", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
@@ -575,6 +594,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
     LibraryChanges repairs;
     std::optional<uint64_t> currentFolder;
     std::optional<uint64_t> currentCanvas;
+    const int64_t now = static_cast<int64_t>(std::time(nullptr));
 
     // One read transaction, so the library is read as of one moment.
     const auto read = [&]() -> int {
@@ -587,7 +607,9 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
                 folder.id = static_cast<uint64_t>(statement.Int(0));
                 folder.name = statement.Text(2);
                 folder.createdAt = statement.Int(3);
-                folder.deletedAt = statement.Int(4);
+                bool repaired = false;
+                folder.deletedAt = DeletionStamp(statement.Int(4), now, repaired);
+                repairs.foldersAndCanvases = repairs.foldersAndCanvases || repaired;
                 snapshot.folders.push_back(std::move(folder));
             }
             if (rc != SQLITE_DONE) {
@@ -605,7 +627,9 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
                 canvas.folderId = static_cast<uint64_t>(statement.Int(1));
                 canvas.name = statement.Text(3);
                 canvas.createdAt = statement.Int(4);
-                canvas.deletedAt = statement.Int(5);
+                bool repaired = false;
+                canvas.deletedAt = DeletionStamp(statement.Int(5), now, repaired);
+                repairs.foldersAndCanvases = repairs.foldersAndCanvases || repaired;
                 canvasIndex[canvas.id] = snapshot.canvases.size();
                 snapshot.canvases.push_back(std::move(canvas));
             }
@@ -630,7 +654,7 @@ std::optional<CanvasManagerSnapshot> LibraryStore::Load() {
                 bool repaired = false;
                 const std::string record = statement.Text(3);
                 const std::vector<uint8_t> strokes = statement.Blob(4);
-                ReadItemRecord(record, item, repaired);
+                ReadItemRecord(record, now, item, repaired);
                 item.strokes = ReadStrokes(strokes, repaired);
                 item.picture.stored = statement.Int(5) != 0;
                 if (repaired) {
