@@ -10,6 +10,12 @@
 
 namespace sz::ui {
 
+namespace {
+// As long as a message kept for the next showing is up (see
+// OnOverlayShown): a line to read, and this one names a path.
+constexpr double kFailedWriteSeconds = 8.0;
+}  // namespace
+
 void Messages::Say(std::string text) {
     // ImGui::GetTime() dereferences the current context unconditionally, so
     // asking it with none set is a crash, not a graceful no-op.
@@ -22,6 +28,10 @@ void Messages::Say(std::string text) {
 
 bool Messages::Showing() const {
     return !text_.empty() && ImGui::GetCurrentContext() != nullptr && ImGui::GetTime() < expiresAtSeconds_;
+}
+
+bool Messages::Timed() const {
+    return Showing() || (ImGui::GetCurrentContext() != nullptr && ImGui::GetTime() < failedWriteSaidUntilSeconds_);
 }
 
 void Messages::SayDeletedForGoodAtStart(size_t count, int days) {
@@ -55,6 +65,12 @@ bool Messages::NoticeJustFinished() {
 
 void Messages::Draw() {
     DrawToast();
+    // A write that failed since the last frame is said from now - see
+    // PersistenceWarning.
+    if (session_.FailedWrites() != failedWritesSaid_) {
+        failedWritesSaid_ = session_.FailedWrites();
+        failedWriteSaidUntilSeconds_ = ImGui::GetTime() + kFailedWriteSeconds;
+    }
     DrawPersistenceWarning();
 }
 
@@ -77,7 +93,9 @@ void Messages::DrawToast() {
 std::string Messages::PersistenceWarning() const {
     std::string warning;
     char line[1024];
-    if (session_.LastWriteFailed() && session_.Store() != nullptr) {
+    const bool failed = session_.LastWriteFailed() || session_.FailedWrites() != failedWritesSaid_ ||
+                        (ImGui::GetCurrentContext() != nullptr && ImGui::GetTime() < failedWriteSaidUntilSeconds_);
+    if (failed && session_.Store() != nullptr) {
         std::snprintf(line, sizeof(line), strings::kStatusWriteFailed, session_.Store()->File().string().c_str());
         warning = line;
     }

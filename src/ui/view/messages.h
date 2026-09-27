@@ -3,11 +3,12 @@
 // The messages - docs/VIEW_LAYER.md, section 7: the toast, a line for a
 // moment at the top of the screen that says what a key or a button just
 // did; and the persistence warning, a line along the bottom for as long as
-// a save stays failed. Both are drawn on ImGui's foreground list, above
-// every window, in edit mode and in the read-only modes alike. What it
-// keeps of its own is the message and when it expires, the message for the
-// next showing, the settings file that failed, and whether a notice's end
-// was reported.
+// a save stays failed, and long enough to be read. Both are drawn on
+// ImGui's foreground list, above every window, in edit mode and in the
+// read-only modes alike. What it keeps of its own is the message and when
+// it expires, the message for the next showing, the settings file that
+// failed, the failed writes said and until when, and whether a notice's
+// end was reported.
 
 #include <cstddef>
 #include <optional>
@@ -39,6 +40,10 @@ public:
     // Whether a message is on screen - which keeps frames coming while it
     // fades.
     bool Showing() const;
+    // Whether anything on screen goes by itself, on a clock: the message,
+    // or the warning of a failed write kept up past a write that landed
+    // (see PersistenceWarning). What keeps frames coming.
+    bool Timed() const;
 
     // At startup, when the retention period deleted `count` folders and
     // canvases for good: said the next time the overlay comes up, rather
@@ -52,7 +57,10 @@ public:
     // carried on the same line as a library save that failed.
     void SetConfigWriteFailed(std::optional<std::string> path) { configWriteFailedPath_ = std::move(path); }
     // The warning as it would be drawn this frame, or empty when there is
-    // nothing wrong.
+    // nothing wrong. A write that failed is said from the frame it is first
+    // drawn in for kFailedWriteSeconds at least, whatever lands after it,
+    // and after that for as long as no write lands: a failure followed by
+    // a write that landed, a frame later, was said for that frame alone.
     std::string PersistenceWarning() const;
 
     // A notice just entered: its end is reported when its own message fades.
@@ -78,6 +86,11 @@ private:
     std::string messageForNextShow_;
     // See SetConfigWriteFailed.
     std::optional<std::string> configWriteFailedPath_;
+    // The failed writes said so far (see Session::FailedWrites), and until
+    // when the last of them is said whatever has landed since - on ImGui's
+    // clock, which stands still while nothing is drawn.
+    uint64_t failedWritesSaid_ = 0;
+    double failedWriteSaidUntilSeconds_ = 0.0;
     // See NoticeJustFinished.
     bool noticeFinishedReported_ = false;
 };

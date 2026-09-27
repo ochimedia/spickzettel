@@ -1116,13 +1116,16 @@ moved snippet back where it was, a snippet deleted for good back with
 its history - and a line along the bottom of the screen says the
 library could not be written and the last change was not made, drawn
 from `Session::LastWriteFailed` until a write lands - which a command
-with nothing to write, a click that selected, does not. Nothing is filed on
-the history for it, and an undo or redo whose write fails puts its step
-back on its stack as it was. A disk that is full or a file another
-program holds loses the change being made, visibly, and nothing else: a
-screenshot that cannot be written is not taken, rather than kept in
-memory looking captured. Under the autosave, the same failure kept every
-change since in memory, for an exit to lose.
+with nothing to write, a click that selected, does not - and for eight
+seconds at least from the frame it is first drawn in, whatever lands
+(`Messages::PersistenceWarning`): a write landing a moment after the
+failure took the line down with it, before anyone could read it.
+Nothing is filed on the history for it, and an undo or redo whose write
+fails puts its step back on its stack as it was. A disk that is full or
+a file another program holds loses the change being made, visibly, and
+nothing else: a screenshot that cannot be written is not taken, rather
+than kept in memory looking captured. Under the autosave, the same
+failure kept every change since in memory, for an exit to lose.
 
 **Nor is what comes after it in the same command.** Every command first
 ends what is open - `Editor::Settle` for the hand, and

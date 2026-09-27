@@ -4563,8 +4563,11 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
 
 // A change whose write fails is not made, and that is said on screen until
 // a write lands - what is drawn is what the library holds, and the line
-// says why the change is not there.
-TEST_F(HeadlessSaveTest, AWriteThatFailsIsSaidOnScreenUntilOneLands) {
+// says why the change is not there - and for long enough to be read,
+// whatever lands first: a write that landed a moment later took it down
+// before anyone could.
+TEST_F(HeadlessSaveTest, AWriteThatFailsIsSaidOnScreenUntilOneLandsAndLongEnoughToRead) {
+    constexpr int kEightSeconds = 8 * 60;  // frames, at the harness's 60 a second
     PlaceADrawing();
     AttachStore();
     EXPECT_TRUE(App().PersistenceWarning().empty()) << "nothing has failed yet";
@@ -4576,10 +4579,22 @@ TEST_F(HeadlessSaveTest, AWriteThatFailsIsSaidOnScreenUntilOneLands) {
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), strokes) << "not made";
     const std::string warning = App().PersistenceWarning();
     EXPECT_NE(warning.find(Library().string()), std::string::npos) << warning;
+    StepFrames(kEightSeconds + 60);
+    EXPECT_FALSE(App().PersistenceWarning().empty()) << "no write has landed";
 
     Drag(300.0f, 300.0f, 500.0f, 400.0f);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), strokes + 1);
     EXPECT_TRUE(App().PersistenceWarning().empty()) << "gone with the write that landed";
+
+    {
+        test::HeldLibrary held(Library(), /*readers=*/true);
+        Drag(300.0f, 300.0f, 500.0f, 400.0f);
+    }
+    Drag(300.0f, 300.0f, 500.0f, 400.0f);
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), strokes + 2);
+    EXPECT_FALSE(App().PersistenceWarning().empty()) << "a write landed, and the line has not been read";
+    StepFrames(kEightSeconds);
+    EXPECT_TRUE(App().PersistenceWarning().empty()) << "read, and gone";
 }
 
 // ===== Deleted things, on the screen =====

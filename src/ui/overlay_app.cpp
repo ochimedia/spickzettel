@@ -490,13 +490,14 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     //
     // View-only - the pinned view included - shows a picture that doesn't
     // change by itself, so it is idle unless something on it moves: a
-    // message fading, which is all a notice is. What it shows otherwise
+    // message fading, which is all a notice is, or a failed write's warning
+    // kept up on a clock (see Messages::Timed). What it shows otherwise
     // changes only through something that arrives as a message, like a
     // capture hotkey, and a message always gets a frame. The debug overlay
     // is the exception, since it follows the pointer.
     {
-        const bool toastShowing = messages_.Showing();
-        const platform::FramePacing pacing = IsViewOnly() && !IsNoticeOnly() && !toastShowing && !Cfg().showDebugOverlay
+        const bool timed = messages_.Timed();
+        const platform::FramePacing pacing = IsViewOnly() && !IsNoticeOnly() && !timed && !Cfg().showDebugOverlay
                                                  ? platform::FramePacing::Idle
                                                  : platform::FramePacing::EveryFrame;
         if (window_ != nullptr && appliedFramePacing_ != pacing) {
