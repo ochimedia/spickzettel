@@ -521,6 +521,10 @@ The rules that keep a chain sound:
   step. A version is for what an old file would otherwise be read
   wrong in: a key renamed or moved, or a value whose meaning changed.
 - **No steps downward.** A newer file is C11's case.
+- **Every version has its step.** The steps are an array sized by
+  `kConfigVersion`, so a version raised without its step still compiled,
+  with a null step in the gap, called at the first older file read. A
+  `static_assert` refuses that build.
 
 Tests: each step on its own, from a small document of its source
 version. And the files each release wrote, read through the whole chain

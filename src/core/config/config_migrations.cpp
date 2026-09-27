@@ -22,6 +22,11 @@ namespace {
 // first, and every build so far has written it.
 constexpr std::array<ConfigMigration, kConfigVersion - 1> kSteps{};
 
+// Sized by kConfigVersion, so a version raised without its step still
+// compiles - with a null step, called at the first older file read.
+static_assert(std::ranges::none_of(kSteps, [](ConfigMigration step) { return step == nullptr; }),
+              "every version below kConfigVersion needs its step in kSteps");
+
 }  // namespace
 
 std::span<const ConfigMigration> ConfigMigrations() { return kSteps; }
