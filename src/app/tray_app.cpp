@@ -588,9 +588,9 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     // the user to go and free the combo by hand - and since Windows hands a
     // registered combination to its hotkey and to nothing else, pressing it
     // while the editor waited would do the other hotkey's job rather than
-    // be captured at all. Nothing stops the OS
-    // from registering the same physical combo twice under two ids, so it
-    // is unregistered here first rather than left to collide. An unset
+    // be captured at all. Windows refuses a combo already registered, even
+    // by this same window under another id, so the other hotkey is
+    // unregistered here first, or this one could not take it. An unset
     // combination is exempt - it registers nothing, so it can collide with
     // nothing.
     std::optional<HotkeySlot> taken;

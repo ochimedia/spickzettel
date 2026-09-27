@@ -258,14 +258,14 @@ from the input options HUD, where the six booleans are a key each.
 
 | Key | Field | Default | Rule | Effect |
 |---|---|---|---|---|
-| `dontStealFocus` | `editModeNoActivate` | true | bool | Window; two answers (section 7) |
-| `takeFocusOverElevated` | `takeFocusOverElevated` | true | bool | Window |
-| `softwarePointer` | `editModeInput.useSoftwarePointer` | true | bool | Window, and Frame |
-| `rawMouseInput` | `editModeInput.useRawMouseInput` | true | bool | Window |
-| `dontForwardKeystrokes` | `editModeInput.dontForwardKeystrokes` | true | bool | Window |
-| `counterRawMouseInput` | `editModeInput.counterRawMouseInput` | false | bool | Window |
-| `counterThreshold` | `editModeInput.counterThreshold` | 100 | 10..5000 held | Window |
-| `freezeScreen` | `freezeScreenInEditMode` | false | bool | Freeze; two answers (section 7) |
+| `dontStealFocus` | `profileable.dontStealFocus` | true | bool | Window; two answers (section 7) |
+| `takeFocusOverElevated` | `profileable.takeFocusOverElevated` | true | bool | Window |
+| `softwarePointer` | `profileable.softwarePointer` | true | bool | Window, and Frame |
+| `rawMouseInput` | `profileable.rawMouseInput` | true | bool | Window |
+| `dontForwardKeystrokes` | `profileable.dontForwardKeystrokes` | true | bool | Window |
+| `counterRawMouseInput` | `profileable.counterRawMouseInput` | false | bool | Window |
+| `counterThreshold` | `profileable.counterThreshold` | 100 | 10..5000 held | Window |
+| `freezeScreen` | `profileable.freezeScreen` | false | bool | Freeze; two answers (section 7) |
 
 **`shortcuts`**: Profile, one setting per `ShortcutAction` (13). Rule: a
 key, or Mouse3-5, with modifiers, or `null` for unbound. Invariant: one

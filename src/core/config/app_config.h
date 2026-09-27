@@ -99,7 +99,7 @@ struct AppConfig {
     // are settings, they are edited in the same panel, and one file means
     // one thing to back up and one thing to hand-edit.
     std::vector<Profile> profiles;
-    uint32_t strokeColorRGBA = 0xFF0000FF;  // opaque red (0xAABBGGRR)
+    uint32_t strokeColorRGBA = 0xFF0000FF;  // opaque red (0xRRGGBBAA)
     float strokeWidth = 3.0f;
     // Draws a border around the screen plus a status line (stroke count,
     // active-stroke state, tracked mouse position) whenever the overlay is
