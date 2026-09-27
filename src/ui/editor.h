@@ -507,9 +507,10 @@ public:
     // table it is bound to, which puts the fixed keys ahead of the chosen
     // ones and, among those, the table's order ahead of a profile that
     // bound one key twice. A key matches exactly the modifiers its binding
-    // names, but for Escape, Delete and the arrows, which never cared (a
-    // nudge reads Shift itself). A key held down and repeating runs only a
-    // command that repeats; a global hotkey is the tray's, never a key's.
+    // names, but for Escape and the arrows, which take any, and Delete and
+    // Backspace, which take Shift and nothing else (see HeldWith). A key
+    // held down and repeating runs only a command that repeats; a global
+    // hotkey is the tray's, never a key's.
     std::optional<CommandId> CommandForKey(int key, const platform::Modifiers& held, bool repeat) const;
     // Where the global hotkeys' commands run: the tray, which alone knows
     // the window and the modes. Left null they do nothing.

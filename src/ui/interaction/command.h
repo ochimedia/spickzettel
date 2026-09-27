@@ -119,6 +119,20 @@ constexpr bool IsNudge(CommandId id) {
            id == CommandId::NudgeDown;
 }
 
+// Which modifiers a command's own keys match with (CommandInfo::keys).
+enum class HeldWith {
+    // Exactly those the binding names: Ctrl+Z is not Ctrl+Shift+Z.
+    Exactly,
+    // Any at all: Escape puts down whatever is held, and a nudge reads
+    // Shift itself, for ten pixels.
+    Any,
+    // None, or Shift: Delete and Backspace. Shift, because Shift+click is
+    // how a selection grows, and Delete comes with Shift still held. Not
+    // Ctrl or Alt, whose chords with Delete are other programs' - Ctrl+Alt+
+    // Del deleted the selection on its way to the Windows screen.
+    NothingButShift,
+};
+
 struct CommandInfo {
     CommandId id;
     // A stable name, for tests and logs.
@@ -133,9 +147,8 @@ struct CommandInfo {
     // Keys of its own that nobody rebinds: undo's Ctrl+Z, Escape, the
     // arrows. A key of 0 is none.
     std::array<platform::KeyCombo, 2> keys{};
-    // Whether those match with any modifiers held, as Escape, Delete and
-    // the arrows always have - a nudge reads Shift itself, for ten pixels.
-    bool anyModifiers = false;
+    // Which modifiers those match with - see HeldWith.
+    HeldWith heldWith = HeldWith::Exactly;
     // Whether a key held down runs it again at the key's repeat rate.
     bool repeats = false;
 };
@@ -145,9 +158,9 @@ using platform::KeyCombo;
 constexpr KeyCombo Key(int key, bool ctrl = false, bool shift = false) { return KeyCombo{ctrl, false, shift, key}; }
 // The four kinds of row: a command on keys of its own, on a key a person
 // chooses, on a global hotkey, and on nothing but a menu or the bar.
-constexpr CommandInfo Fixed(CommandId id, std::string_view name, std::array<KeyCombo, 2> keys, bool anyModifiers,
+constexpr CommandInfo Fixed(CommandId id, std::string_view name, std::array<KeyCombo, 2> keys, HeldWith heldWith,
                             bool repeats) {
-    return CommandInfo{id, name, Scope::Hand, std::nullopt, std::nullopt, keys, anyModifiers, repeats};
+    return CommandInfo{id, name, Scope::Hand, std::nullopt, std::nullopt, keys, heldWith, repeats};
 }
 constexpr CommandInfo Chosen(CommandId id, std::string_view name, core::ShortcutAction shortcut,
                              Scope scope = Scope::Hand) {
@@ -165,14 +178,15 @@ inline constexpr std::array kCommands = [] {
     using namespace command_detail;
     using core::HotkeySlot;
     using core::ShortcutAction;
-    constexpr bool kAny = true;      // anyModifiers
+    constexpr HeldWith kExactly = HeldWith::Exactly;
+    constexpr HeldWith kAny = HeldWith::Any;
     constexpr bool kRepeats = true;  // repeats
     return std::array{
-        Fixed(CommandId::Undo, "undo", {Key('Z', /*ctrl=*/true)}, !kAny, kRepeats),
-        Fixed(CommandId::Redo, "redo", {Key('Y', true), Key('Z', true, /*shift=*/true)}, !kAny, kRepeats),
+        Fixed(CommandId::Undo, "undo", {Key('Z', /*ctrl=*/true)}, kExactly, kRepeats),
+        Fixed(CommandId::Redo, "redo", {Key('Y', true), Key('Z', true, /*shift=*/true)}, kExactly, kRepeats),
         Fixed(CommandId::PutDown, "putDown", {Key(KeyCombo::kEscape)}, kAny, kRepeats),
         Fixed(CommandId::DeleteSelection, "deleteSelection", {Key(KeyCombo::kDelete), Key(KeyCombo::kBackspace)},
-              kAny, !kRepeats),
+              HeldWith::NothingButShift, !kRepeats),
         Fixed(CommandId::NudgeLeft, "nudgeLeft", {Key(KeyCombo::kLeftArrow)}, kAny, kRepeats),
         Fixed(CommandId::NudgeRight, "nudgeRight", {Key(KeyCombo::kRightArrow)}, kAny, kRepeats),
         Fixed(CommandId::NudgeUp, "nudgeUp", {Key(KeyCombo::kUpArrow)}, kAny, kRepeats),

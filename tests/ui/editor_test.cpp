@@ -44,6 +44,32 @@ TEST_F(EditorTest, SelectsWhatIsHitAndDeletesItUndoably) {
     EXPECT_EQ(editor_.ResolvePointerTarget(150.0f, 150.0f).item, a);
 }
 
+// Delete and Backspace delete bare or with Shift - held on from growing
+// the selection with Shift+click - and not with Ctrl or Alt, whose chords
+// are other programs'. With any modifiers, Ctrl+Alt+Del deleted the
+// selection on its way to the Windows screen. Escape and the arrows still
+// take any.
+TEST_F(EditorTest, DeleteTakesShiftButNotCtrlOrAlt) {
+    const auto command = [this](int key, bool ctrl, bool shift, bool alt) {
+        platform::Modifiers held;
+        held.ctrl = ctrl;
+        held.shift = shift;
+        held.alt = alt;
+        return editor_.CommandForKey(key, held, /*repeat=*/false);
+    };
+    for (const int key : {platform::KeyCombo::kDelete, platform::KeyCombo::kBackspace}) {
+        EXPECT_EQ(command(key, false, false, false), CommandId::DeleteSelection);
+        EXPECT_EQ(command(key, false, true, false), CommandId::DeleteSelection) << "Shift";
+        EXPECT_EQ(command(key, true, false, true), std::nullopt) << "Ctrl+Alt+Del is Windows'";
+        EXPECT_EQ(command(key, true, false, false), std::nullopt) << "Ctrl";
+        EXPECT_EQ(command(key, false, false, true), std::nullopt) << "Alt";
+        EXPECT_EQ(command(key, true, true, false), std::nullopt) << "Ctrl+Shift+Del is a browser's";
+    }
+    EXPECT_EQ(command(platform::KeyCombo::kEscape, true, true, true), CommandId::PutDown);
+    EXPECT_EQ(command(platform::KeyCombo::kLeftArrow, true, false, true), CommandId::NudgeLeft);
+    EXPECT_EQ(command('Z', true, true, false), CommandId::Redo) << "and Ctrl+Z exactly";
+}
+
 TEST_F(EditorTest, AMarkingToolKeyEntersDrawingModeOnTheSelection) {
     const ItemId a = test::Model(session_).CreateItem(false, Rect{100, 100, 200, 150}, "A");
     EXPECT_TRUE(editor_.Dispatch(Command{CommandId::DrawTool}));

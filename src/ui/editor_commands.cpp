@@ -55,9 +55,13 @@ std::optional<CommandId> Editor::CommandForKey(int key, const platform::Modifier
         for (const platform::KeyCombo& binding : KeysFor(info.id, Cfg(), shortcuts)) {
             // Exactly the modifiers the binding names, so a bare "P" does
             // not also fire on Ctrl+P - which is somebody else's chord, even
-            // if nothing here claims it yet.
-            if (binding.key != key || (!info.anyModifiers && (held.ctrl != binding.ctrl || held.alt != binding.alt ||
-                                                              held.shift != binding.shift))) {
+            // if nothing here claims it yet. See HeldWith for the others.
+            const bool exact =
+                held.ctrl == binding.ctrl && held.alt == binding.alt && held.shift == binding.shift;
+            const bool modifiersMatch = info.heldWith == HeldWith::Any ||
+                                        (info.heldWith == HeldWith::NothingButShift && !held.ctrl && !held.alt) ||
+                                        (info.heldWith == HeldWith::Exactly && exact);
+            if (binding.key != key || !modifiersMatch) {
                 continue;
             }
             // The key belongs to this command, repeating or not.

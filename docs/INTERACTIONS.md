@@ -403,6 +403,17 @@ it closes the sheet). Rebinding works as it does for keys today
 button and X1/X2, with modifiers, can be bound to any command, and the
 Settings row asks for "the key or button you want".
 
+A key matches exactly the modifiers its binding names, so a bare P is
+not Ctrl+P. The fixed keys are the exceptions (`HeldWith`). Escape and
+the arrows match with any modifiers: Escape puts down whatever is held,
+and a nudge reads Shift itself, for ten pixels. Delete and Backspace
+match bare or with Shift - Shift+click grows the selection, and Delete
+follows with Shift still held - and not with Ctrl or Alt, whose chords
+with Delete are other programs': Ctrl+Alt+Del is Windows', Ctrl+Shift+Del
+a browser's. (Found by hand in the review of 2026-09-27: they matched
+with any modifiers, and Ctrl+Alt+Del deleted the selection on its way to
+the Windows screen.)
+
 **Available** and **reachable** are different things, and both are
 needed. Reachable is the stack's answer: a key reaches the Canvas's
 bindings only if every level above passed it (a note being typed claims
