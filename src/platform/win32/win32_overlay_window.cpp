@@ -161,6 +161,10 @@ Vec2 ClientPosition(LPARAM lParam) {
     return Vec2{static_cast<float>(GET_X_LPARAM(lParam)), static_cast<float>(GET_Y_LPARAM(lParam))};
 }
 
+// The window's own, after a WM_CAPTURECHANGED: whether the capture is
+// still lost, and a button still held - see HandleMessage.
+constexpr UINT kCaptureLostMessage = WM_APP + 1;
+
 }  // namespace
 
 int KeyForVirtualKey(UINT virtualKey) {
@@ -1222,7 +1226,20 @@ void Win32OverlayWindow::EmitPointer(InputEventKind kind, const Vec2& position, 
     event.position = position;
     event.button = button;
     event.buttons = buttons;
+    lastPointerPosition_ = position;
     Emit(event);
+}
+
+void Win32OverlayWindow::EmitButtonUp(MouseButton button, const Vec2& position) {
+    const uint8_t bit = ButtonBit(button);
+    if ((buttonsHeld_ & bit) == 0) {
+        return;
+    }
+    buttonsHeld_ = static_cast<uint8_t>(buttonsHeld_ & ~bit);
+    if (buttonsHeld_ == 0) {
+        ReleaseCapture();
+    }
+    EmitPointer(InputEventKind::PointerUp, position, button);
 }
 
 // A key's down or up, by the key's own name - the modifiers alone are not
@@ -1328,6 +1345,7 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
             return static_cast<LRESULT>(kTabletGestureFlags);  // see its comment
         case WM_LBUTTONDOWN:
             SetCapture(hwnd);
+            buttonsHeld_ |= ButtonBit(MouseButton::Left);
             EmitPointer(InputEventKind::PointerDown, ClientPosition(lParam), MouseButton::Left);
             return 0;
         case WM_MOUSEMOVE: {
@@ -1346,24 +1364,39 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
             return 0;
         }
         case WM_LBUTTONUP:
-            ReleaseCapture();
-            EmitPointer(InputEventKind::PointerUp, ClientPosition(lParam), MouseButton::Left);
+            EmitButtonUp(MouseButton::Left, ClientPosition(lParam));
             return 0;
         // Right button: the app's own right-button gestures (a resize from
         // a snippet's nearest edge, the eraser in drawing mode, framing a
         // drawing on empty canvas - see ui/interaction/recognizer.cpp). Shares
         // SetCapture/ReleaseCapture with the left button above (Win32
-        // mouse capture is per-window, not per-button); harmless to call
-        // again if already captured, and ReleaseCapture here is safe even
-        // if a left drag is still in progress since a genuine simultaneous
-        // L+R drag is not a gesture this app gives any meaning to.
+        // mouse capture is per-window, not per-button): harmless to call
+        // again if already captured, and let go of once neither is held.
         case WM_RBUTTONDOWN:
             SetCapture(hwnd);
+            buttonsHeld_ |= ButtonBit(MouseButton::Right);
             EmitPointer(InputEventKind::PointerDown, ClientPosition(lParam), MouseButton::Right);
             return 0;
         case WM_RBUTTONUP:
-            ReleaseCapture();
-            EmitPointer(InputEventKind::PointerUp, ClientPosition(lParam), MouseButton::Right);
+            EmitButtonUp(MouseButton::Right, ClientPosition(lParam));
+            return 0;
+        // The capture taken from under a held button - Alt+Tab mid-drag,
+        // the other window taking the pointer - and the button's up goes
+        // to that window. Unheard, the drag went on: the snippet followed
+        // the pointer until the next click. So the button goes up here,
+        // where the pointer was last. Asked again once this message is
+        // done: ImGui's backend lets go of the capture itself on an up,
+        // ahead of the up above, and that is no capture lost.
+        case WM_CAPTURECHANGED:
+            if (reinterpret_cast<HWND>(lParam) != hwnd && buttonsHeld_ != 0) {
+                PostMessageW(hwnd, kCaptureLostMessage, 0, 0);
+            }
+            return 0;
+        case kCaptureLostMessage:
+            if (GetCapture() != hwnd) {
+                EmitButtonUp(MouseButton::Left, lastPointerPosition_);
+                EmitButtonUp(MouseButton::Right, lastPointerPosition_);
+            }
             return 0;
         // The middle and side buttons, the wheel and the keys: into the
         // stream as well, and then on to the default handling they had

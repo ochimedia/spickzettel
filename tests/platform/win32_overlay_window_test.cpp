@@ -101,5 +101,63 @@ TEST(Win32OverlayWindowTest, EveryInputMessageArrivesAsOneEventInOrder) {
     window.Destroy();
 }
 
+// A button held while the capture is taken away - Alt+Tab mid-drag, the
+// other window taking the pointer - goes up where the pointer was last:
+// its real up goes to that other window. Unheard, the drag went on, the
+// snippet following the pointer until the next click. An up of the
+// window's own, from letting go of the capture, is not one.
+TEST(Win32OverlayWindowTest, AButtonHeldWhenTheCaptureIsLostGoesUp) {
+    Win32OverlayWindow window;
+    window.Initialize(GetModuleHandleW(nullptr));
+    DisplayInfo display;
+    display.width = 320;
+    display.height = 240;
+    ASSERT_TRUE(window.EnsureCreated(display));
+    window.Present(Presentation::ClickThrough);
+    std::vector<InputEvent> events;
+    window.SetInputCallback([&events](const InputEvent& event) {
+        if (event.kind == InputEventKind::PointerDown || event.kind == InputEventKind::PointerUp) {
+            events.push_back(event);
+        }
+    });
+    const HWND hwnd = FindWindowW(L"SpickzettelOverlayWindowClass", nullptr);
+    ASSERT_NE(hwnd, nullptr);
+    const HWND other = CreateWindowExW(0, L"STATIC", L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                       GetModuleHandleW(nullptr), nullptr);
+    ASSERT_NE(other, nullptr);
+    const auto pump = [] {
+        MSG msg;
+        while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            DispatchMessageW(&msg);
+        }
+    };
+
+    // An ordinary click: one down, one up.
+    SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(10, 20));
+    SendMessageW(hwnd, WM_LBUTTONUP, 0, MAKELPARAM(10, 20));
+    pump();
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_EQ(events[1].kind, InputEventKind::PointerUp);
+
+    // Held, and the capture taken.
+    events.clear();
+    SendMessageW(hwnd, WM_LBUTTONDOWN, MK_LBUTTON, MAKELPARAM(30, 40));
+    ASSERT_EQ(GetCapture(), hwnd);
+    SetCapture(other);
+    pump();
+    ASSERT_EQ(events.size(), 2u);
+    EXPECT_EQ(events[1].kind, InputEventKind::PointerUp);
+    EXPECT_EQ(events[1].button, MouseButton::Left);
+    EXPECT_EQ(events[1].position.x, 30.0f);
+    EXPECT_EQ(events[1].position.y, 40.0f);
+    // Should its up come after all, it is told once.
+    SendMessageW(hwnd, WM_LBUTTONUP, 0, MAKELPARAM(50, 60));
+    EXPECT_EQ(events.size(), 2u);
+
+    ReleaseCapture();
+    DestroyWindow(other);
+    window.Destroy();
+}
+
 }  // namespace
 }  // namespace sz::platform::win32

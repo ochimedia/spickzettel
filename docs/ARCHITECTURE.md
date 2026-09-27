@@ -3175,6 +3175,11 @@ Consequences that shape `Win32InputGrab`:
   hand: a snippet dragged into the Ctrl+Alt+Del screen, the button let
   go there, followed the pointer back on the desktop until the next
   click. The switch now tells the overlay every button it holds came up.
+  Without the grab the same comes of the mouse capture taken away while
+  a button is held - Alt+Tab mid-drag - whose up then goes to the other
+  window: the overlay window takes the loss as the button going up,
+  where the pointer was last (`WM_CAPTURECHANGED`), and tells each up
+  once, however many say so.
 - **The hooks stand down when the app thread stops.** They swallow the
   machine's mouse and, with forwarding off, its keyboard, whatever the app
   thread is doing, and the way out - the hotkey - is posted to that same

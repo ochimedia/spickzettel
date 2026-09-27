@@ -84,6 +84,9 @@ private:
     // changed since the last one. See SetInputCallback.
     void Emit(InputEvent event);
     void EmitPointer(InputEventKind kind, const Vec2& position, MouseButton button, uint8_t buttons = 0);
+    // The left or right button's up at `position`, unless it was told
+    // already - see WM_CAPTURECHANGED in HandleMessage.
+    void EmitButtonUp(MouseButton button, const Vec2& position);
     void EmitKey(WPARAM virtualKey, LPARAM lParam, bool down);
     // A Modifiers event, if `held` is not what the last event carried.
     void EmitModifiersIfChanged(const Modifiers& held, double seconds);
@@ -171,6 +174,12 @@ private:
     // The keys whose down was delivered and whose up was not yet, so a
     // down for one of them is its repeat - see EmitKey.
     std::bitset<256> keysDown_;
+    // The left and right buttons whose down was delivered and whose up
+    // not yet, as ButtonBit's bits - the ones a lost capture ends.
+    uint8_t buttonsHeld_ = 0;
+    // Where the last pointer event was: where a button the window lets go
+    // of itself goes up.
+    Vec2 lastPointerPosition_{};
     std::unique_ptr<Win32Dx11Renderer> renderer_;
     // The texture generations of renderers since destroyed, which took
     // every texture they made with them. See TextureGeneration.
