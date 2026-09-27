@@ -83,11 +83,9 @@ struct AppConfig {
     // showToastsWhileHidden, and TrayController::SilentCapture for
     // how a message reaches the screen with no overlay behind it.
     //
-    // The one hotkey whose registration is allowed to fail: the other
-    // three are how the overlay is reached at all, so the app refuses to
-    // start without them, while this one is an extra, and a machine where
-    // another application already owns Ctrl+Alt+X should still get an app
-    // that runs. Rebind it in Settings if that happens.
+    // Like every hotkey, one another application already owns is left
+    // unregistered and noted at start, and the app runs without it (see
+    // TrayController::UnregisteredHotkeys); rebind it in Settings.
     platform::KeyCombo hotkeySilentCapture{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'X'};
     // The settings a per-application profile may override - the file's
     // `behavior` and `shortcuts` groups - as the defaults have them. See
