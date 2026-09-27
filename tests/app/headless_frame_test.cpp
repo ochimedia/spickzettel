@@ -385,6 +385,62 @@ TEST_F(HeadlessAppTest, DraggingOverAnItemDrawsAStroke) {
     EXPECT_GT(StrokeCountOnCurrentCanvas(), before);
 }
 
+// The most opaque of the last frame's vertices on the items layer inside
+// `min..max` that are `colorRGBA`'s color, whatever its alpha: 0 for none.
+// Inside, because the drawing bar's swatch is the pen's color too.
+int StrongestAlphaOnItemsLayer(uint32_t colorRGBA, ImVec2 min, ImVec2 max) {
+    const ImGuiWindow* layer = ImGui::FindWindowByName("##sz_items_layer");
+    if (layer == nullptr) {
+        ADD_FAILURE() << "no items layer";
+        return 0;
+    }
+    const ImU32 color = ui::ToImColor(colorRGBA) & ~IM_COL32_A_MASK;
+    int strongest = 0;
+    for (const ImDrawVert& vertex : layer->DrawList->VtxBuffer) {
+        const bool inside = vertex.pos.x >= min.x && vertex.pos.x <= max.x && vertex.pos.y >= min.y &&
+                            vertex.pos.y <= max.y;
+        if (inside && (vertex.col & ~IM_COL32_A_MASK) == color) {
+            strongest = std::max(strongest, static_cast<int>((vertex.col & IM_COL32_A_MASK) >> IM_COL32_A_SHIFT));
+        }
+    }
+    return strongest;
+}
+
+// The stroke being drawn is at its snippet's foreground opacity, as it is
+// once let go: it was drawn opaque, and faded on the release.
+TEST_F(HeadlessAppTest, AStrokeBeingDrawnIsAtItsSnippetsOpacity) {
+    AppConfig config = DefaultConfig();
+    config.drawingDefaults = SnippetDefaults{false, 0.25f, 0.0f};
+    config.strokeColorRGBA = 0x3C9A57FFu;  // a green nothing else on the layer is
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const int quarter = static_cast<int>(255.0f * 0.25f);
+
+    MoveTo(200.0f, 200.0f);
+    StepFrame();
+    RawMouse(200.0f, 200.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    for (int i = 1; i <= 4; ++i) {
+        RawMouse(200.0f + 50.0f * static_cast<float>(i), 200.0f + 30.0f * static_cast<float>(i),
+                 platform::MouseEventKind::Move);
+        StepFrame();
+    }
+    // Around the stroke, and nothing else there but the drawing's empty
+    // background.
+    const ImVec2 min(180.0f, 180.0f);
+    const ImVec2 max(420.0f, 340.0f);
+    ASSERT_TRUE(AppSession().LiveLayer().ActiveStroke().has_value()) << "still being drawn";
+    EXPECT_EQ(StrongestAlphaOnItemsLayer(config.strokeColorRGBA, min, max), quarter);
+
+    RawMouse(400.0f, 320.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    ASSERT_EQ(StrokeCountOnCurrentCanvas(), 1u);
+    EXPECT_EQ(StrongestAlphaOnItemsLayer(config.strokeColorRGBA, min, max), quarter) << "the same once let go";
+}
+
 // ===== Making a snippet: a press on empty canvas =====
 //
 // Whatever is in hand: the left button makes a screenshot, the right a

@@ -329,13 +329,15 @@ void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
         // the stroke finished, since that layer sits behind items in
         // z-order - a Drawing item's fill-less background just
         // happened to let it show through regardless, which is what
-        // made this easy to miss.
+        // made this easy to miss. At the item's foreground opacity, as
+        // it is drawn once it is let go: opaque, it faded on the release.
         const CanvasState& live = session_.LiveLayer();
         for (const Stroke& stroke : live.Strokes()) {
-            DrawStroke(drawList, stroke, LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f);
+            DrawStroke(drawList, stroke, LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f, item.foregroundOpacity);
         }
         if (live.ActiveStroke().has_value()) {
-            DrawStroke(drawList, *live.ActiveStroke(), LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f);
+            DrawStroke(drawList, *live.ActiveStroke(), LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f,
+                       item.foregroundOpacity);
         }
     }
     // Cut, and waiting for the paste that will move it: faded where it

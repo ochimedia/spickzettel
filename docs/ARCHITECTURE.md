@@ -285,6 +285,10 @@ its snippet - holds a list of finished strokes plus at most one in
 progress. Both are dumb on purpose: they record what they are given, so
 a shape tool can hand them exact corners and a test exact points.
 
+The live layer is drawn as its snippet's strokes are, at the snippet's
+foreground opacity. It was drawn opaque, and a stroke in a snippet set
+to a quarter faded to a quarter the moment it was let go.
+
 ### From a hand to a mark: input, fitting, tessellation
 
 Three stages, and it is worth knowing which owns what, because the same
