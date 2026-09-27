@@ -527,6 +527,19 @@ The rules that keep a chain sound:
   with a null step in the gap, called at the first older file read. A
   `static_assert` refuses that build.
 
+**Known, and left: an older build drops the keys a newer one added.** A
+key added without a version, as above, leaves a file an older build
+reads as its own. It ignores the key, and its next save - any settings
+change, or a repair written back at start - writes the file in its own
+shape, without it. Back on the newer build, that setting reads as its
+default, and nothing says so. Only a downgrade meets it, or two builds
+of different ages on one settings folder. Found in review on
+2026-09-27, and left: there is one release, and no key yet whose loss
+would matter. When one comes, the fix is to carry over into what is
+written the keys this build does not know - safe at the same version,
+where no key has moved, and needed inside each profile as well as at
+the top.
+
 Tests: each step on its own, from a small document of its source
 version. And the files each release wrote, read through the whole chain
 to the config they were written from (below).

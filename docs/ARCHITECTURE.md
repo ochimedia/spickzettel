@@ -950,7 +950,8 @@ works on the JSON with its keys spelled out and calls nothing of the
 current build's, which changes under it; and once a build writing its
 target version is out, it is never edited. Adding or dropping a key is
 not a version, since an absent key reads as its default and an unknown
-one is ignored. A file a newer build wrote is read as well as this build
+one is ignored - which costs a downgrade the keys added since (see
+`docs/SETTINGS.md`, section 8). A file a newer build wrote is read as well as this build
 can, and not written over for the run, which would lose whatever the
 newer build had stored. It is the
 arrangement a file that cannot be read already had, message and skipped
