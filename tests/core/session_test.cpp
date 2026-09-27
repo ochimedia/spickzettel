@@ -1197,6 +1197,41 @@ TEST(SessionTest, ASnippetSentAwayTakesItsPartOfAGroupMove) {
     EXPECT_FLOAT_EQ(ItemById(session.Manager(), a)->rect.y, 0.0f);
 }
 
+// A group move whose middle snippet went on elsewhere and came back puts
+// every snippet back where it stood, undone. Rejoined at the end, its part
+// was undone out of turn, and two snippets swapped places in the stack.
+TEST(SessionTest, AGroupMoveWhoseSnippetCameBackIsUndoneIntoTheOrderItLeft) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    std::vector<ItemId> ids;
+    for (const char* name : {"X", "A", "Y", "B", "Z", "C"}) {
+        ids.push_back(Model(session).CreateItem(false, Rect{0, 0, 100, 100}, name));
+    }
+    const ItemId a = ids[1];
+    const ItemId b = ids[3];
+    const ItemId c = ids[5];
+    const CanvasId second = session.AddCanvas("Second");
+    const CanvasId third = session.AddCanvas("Third");
+    // A canvas's stack, bottom first, by name.
+    const auto stack = [&session](CanvasId canvas) {
+        std::string names;
+        for (const Item& item : session.Manager().FindCanvas(canvas)->items) {
+            names += item.name;
+        }
+        return names;
+    };
+
+    ASSERT_EQ(session.SendItemsTo({a, b, c}, second, /*copy=*/false).items.size(), 3u);
+    session.SwitchToCanvas(second);
+    ASSERT_EQ(session.SendItemsTo({b}, third, /*copy=*/false).items.size(), 1u);
+    session.SwitchToCanvas(third);
+    ASSERT_TRUE(session.Undo().has_value()) << "B's send taken back";
+    session.SwitchToCanvas(second);
+    ASSERT_TRUE(session.Undo().has_value()) << "the group move";
+    EXPECT_EQ(stack(first), "XAYBZC");
+    EXPECT_EQ(stack(second), "");
+}
+
 // A paste undone sends what it moved back with its history, and redone
 // brings both again.
 TEST(SessionTest, AnUndonePasteTakesTheHistoryBackAndARedoBringsItAgain) {

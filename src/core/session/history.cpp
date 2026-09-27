@@ -217,6 +217,9 @@ void History::Record(CanvasId canvas, Step step) {
     }
     Stacks& stacks = stacks_[canvas];
     stacks.redo.clear();
+    for (size_t place = 0; place < step.changes.size(); ++place) {
+        step.changes[place].place = place;
+    }
     step.seq = nextSeq_++;
     PushCapped(stacks.undo, std::move(step));
     ++revision_;
@@ -286,13 +289,21 @@ void History::Migrate(ItemId item, CanvasId canvas) {
         return;
     }
     // In by when each was done - the stack is in that order - and a part
-    // whose step already has a part here rejoins it.
+    // whose step already has a part here rejoins it, in its own place
+    // among the rest. Both are in that order already, a part taken out
+    // keeping it. Appended, a group move's snippet came back at the end:
+    // its moves are undone in the reverse of the order the snippets left
+    // in, each to the index it left at, and undone out of order they put
+    // two snippets back in each other's places in the stack.
     std::deque<Step>& target = stacks_[canvas].undo;
     for (Step& part : parts) {
         const auto same =
             std::find_if(target.begin(), target.end(), [&part](const Step& step) { return step.seq == part.seq; });
         if (same != target.end()) {
+            const auto kept = static_cast<std::ptrdiff_t>(same->changes.size());
             std::move(part.changes.begin(), part.changes.end(), std::back_inserter(same->changes));
+            std::inplace_merge(same->changes.begin(), same->changes.begin() + kept, same->changes.end(),
+                               [](const Change& a, const Change& b) { return a.place < b.place; });
             continue;
         }
         const auto at = std::upper_bound(target.begin(), target.end(), part.seq,

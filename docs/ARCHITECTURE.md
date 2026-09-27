@@ -1423,7 +1423,12 @@ rules that keep it so are applied eagerly, the moment they become true:
   that meets its step again rejoins it. This is what makes a move
   undoable at all: the paste is the newest change about the snippet, on
   the canvas it is now on, and its older changes are beneath it there.
-  Before, a move forgot the snippet's history outright.
+  Before, a move forgot the snippet's history outright. A part rejoins in
+  its own place among the rest, which each change keeps from when its
+  step was filed. It was appended, and order is what a group move's
+  changes are made of: each snippet goes back to the index it left at, in
+  the reverse of the order they left in, and undone out of turn two of
+  them came back in each other's places in the stack.
 - *A new change to a snippet drops its changes from every redo stack*,
   besides the usual rule that a new step clears its own canvas's redo
   stack: the future they were for is gone. A paste undone and the snippet
@@ -1448,6 +1453,16 @@ undo change is on its snippet's canvas, and every few that undoing
 everything on the current canvas and redoing it gives back exactly the
 library it started from. It ran clean over three thousand seeds before
 being cut to the hundred and twenty that run every time.
+
+That round trip cannot see an undo that goes wrong in a way its redo
+carries back out, and the group move undone out of turn was one: redone
+from the wrong order, it ended where it started all the same.
+`HistoryTest.EveryUndoGivesBackTheSnippetsAsTheyWereBeforeItsStep` checks
+each undo against the snippets as they were before its step, which takes
+an undo with one right answer: only commands the history takes back,
+every gesture ended as it is made, and every undo the newest step on any
+canvas. It found the swap in 3 of 200 seeds, and nothing else; 40 run
+every time, the swap among them.
 
 A paste undone while the canvas it came from is deleted - not for good -
 sends the snippet back into it all the same, where restoring the canvas

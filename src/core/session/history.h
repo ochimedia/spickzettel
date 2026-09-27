@@ -113,6 +113,10 @@ using ChangeKind = std::variant<StrokeAdded, StrokesErased, TextChanged, Placeme
 struct Change {
     ItemId item = 0;
     ChangeKind kind;
+    // Its place in its step as the step was filed: what puts a part split
+    // off to another canvas back among the rest when it rejoins the step
+    // (see History::Migrate).
+    size_t place = 0;
 };
 
 struct Step {

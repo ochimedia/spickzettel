@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <random>
 #include <string>
@@ -592,6 +593,222 @@ TEST(HistoryTest, TheFileHoldsWhatTheModelHoldsWhateverFailsToBeWritten) {
         EXPECT_GT(failed, 0u) << "no write failed: the test tested nothing of that";
         random.Detach();
         store.reset();
+    }
+}
+
+// ===== Every undo gives back what was there before its step =====
+//
+// The round trip above cannot see an undo that goes wrong in a way the
+// redo carries back out: a group move undone into the wrong stacking order
+// is redone from there, and the library ends where it started all the
+// same. Checking an undo against the library as it was before its step
+// takes an undo with one right answer, and this session is kept to where
+// there is one: only commands the history takes back, every gesture ended
+// as it is made, and every undo the newest step anywhere, on whichever
+// canvas holds it. Undoing a step then leaves the snippets exactly as they
+// were before it - the live ones, since an undone creation leaves its
+// snippet in place, deleted.
+class NewestFirstSession {
+public:
+    explicit NewestFirstSession(uint32_t seed) : random_(seed) {
+        session_.SyncItemsToDisplaySize(1000.0f, 800.0f);
+        session_.AddCanvas("B");
+        session_.AddCanvas("C");
+    }
+
+    void Step(int op) {
+        const Snippets before = Live();
+        const std::vector<uint64_t> filedBefore = Filed();
+        switch (Pick(18)) {
+            case 0:
+            case 1:
+                session_.CreateItem(false, Rect{Coord(), Coord(), 60.0f + Coord() * 0.5f, 60.0f + Coord() * 0.5f},
+                                    "Snippet");
+                break;
+            case 2:
+                if (const ItemId item = AnyHere()) {
+                    const Rect rect = session_.Manager().FindItemAnywhere(item)->rect;
+                    session_.LiveLayer().BeginStroke(StrokePoint{rect.x + 5.0f, rect.y + 5.0f}, 0xFF0000FFu, 4.0f);
+                    session_.LiveLayer().ExtendStroke(StrokePoint{rect.x + rect.w - 5.0f, rect.y + rect.h - 5.0f});
+                    session_.LiveLayer().EndStroke();
+                    session_.CommitLiveStroke(item);
+                }
+                break;
+            case 3:
+                if (const ItemId item = AnyHere()) {
+                    session_.EraseRect(item, 0.0f, 0.0f, Coord(), Coord());
+                }
+                break;
+            case 4:
+                if (const ItemId item = AnyHere()) {
+                    session_.BeginTextEdit(item);
+                    session_.PreviewText(Pick(2) == 0 ? "a" : "two words");
+                    session_.EndTextEdit(std::nullopt);
+                }
+                break;
+            case 5: {
+                std::vector<std::pair<ItemId, Rect>> rects;
+                for (const ItemId id : SomeHere()) {
+                    rects.emplace_back(id, Rect{Coord(), Coord(), 50.0f + Coord() * 0.3f, 50.0f + Coord() * 0.3f});
+                }
+                session_.SetRects(rects);
+                break;
+            }
+            case 6:
+                if (const ItemId item = AnyHere()) {
+                    session_.ToggleFullscreen(item, Pick(2) == 0);
+                }
+                break;
+            case 7:
+                session_.DeleteItems(SomeHere());
+                break;
+            case 8:
+            case 9:
+                session_.Paste(SomeAnywhere(), /*cut=*/Pick(3) != 0);
+                break;
+            case 10:
+                session_.Duplicate(SomeHere());
+                break;
+            case 11:
+            case 12:
+                session_.SendItemsTo(SomeHere(), AnyCanvas(), /*copy=*/Pick(4) == 0);
+                break;
+            case 13:
+            case 14:
+            case 15:
+                UndoNewest(op);
+                return;
+            case 16:
+                session_.Redo();
+                break;
+            case 17:
+                session_.SwitchToCanvas(AnyCanvas());
+                break;
+        }
+        // A step filed or redone by this command: undone, it gives back
+        // what there was before the command.
+        for (const uint64_t seq : Filed()) {
+            if (std::find(filedBefore.begin(), filedBefore.end(), seq) == filedBefore.end()) {
+                before_[seq] = before;
+            }
+        }
+    }
+
+    int undone = 0;
+
+private:
+    // Every canvas's live snippets, bottom first.
+    using Snippets = std::vector<std::pair<CanvasId, std::vector<Item>>>;
+
+    Snippets Live() const {
+        Snippets live;
+        for (const Canvas& canvas : session_.Manager().Canvases()) {
+            std::vector<Item> items;
+            for (const Item& item : canvas.items) {
+                if (item.deletedAt == 0) {
+                    items.push_back(item);
+                }
+            }
+            live.emplace_back(canvas.id, std::move(items));
+        }
+        return live;
+    }
+    // Which snippets they are, for a failure to be read by.
+    static std::string Ids(const Snippets& snippets) {
+        std::string text;
+        for (const auto& [canvas, items] : snippets) {
+            text += "[";
+            for (const Item& item : items) {
+                text += " " + std::to_string(item.id % 10000);
+            }
+            text += " ]";
+        }
+        return text;
+    }
+
+    // The seq of every step on an undo stack.
+    std::vector<uint64_t> Filed() const {
+        std::vector<uint64_t> seqs;
+        for (const CanvasId canvas : session_.History().Canvases()) {
+            for (const history::Step& step : *session_.History().UndoStack(canvas)) {
+                seqs.push_back(step.seq);
+            }
+        }
+        return seqs;
+    }
+
+    // The newest step anywhere, undone on every canvas holding a part of it.
+    void UndoNewest(int op) {
+        const std::vector<uint64_t> filed = Filed();
+        if (filed.empty()) {
+            return;
+        }
+        const uint64_t newest = *std::max_element(filed.begin(), filed.end());
+        for (const CanvasId canvas : session_.History().Canvases()) {
+            const std::deque<history::Step>* undo = session_.History().UndoStack(canvas);
+            if (undo != nullptr && !undo->empty() && undo->back().seq == newest) {
+                session_.SwitchToCanvas(canvas);
+                ASSERT_TRUE(session_.Undo().has_value()) << "op " << op;
+            }
+        }
+        const auto before = before_.find(newest);
+        ASSERT_NE(before, before_.end()) << "op " << op << ": a step filed by no command";
+        const Snippets now = Live();
+        ASSERT_TRUE(now == before->second) << "op " << op << ": " << Ids(now) << " against " << Ids(before->second);
+        ++undone;
+    }
+
+    size_t Pick(size_t n) { return std::uniform_int_distribution<size_t>(0, n - 1)(random_); }
+    float Coord() { return std::uniform_real_distribution<float>(0.0f, 400.0f)(random_); }
+    std::vector<ItemId> Here() const {
+        std::vector<ItemId> ids;
+        if (const Canvas* canvas = session_.Manager().CurrentOrNull()) {
+            for (const Item& item : canvas->items) {
+                if (item.deletedAt == 0) {
+                    ids.push_back(item.id);
+                }
+            }
+        }
+        return ids;
+    }
+    ItemId AnyHere() {
+        const std::vector<ItemId> ids = Here();
+        return ids.empty() ? 0 : ids[Pick(ids.size())];
+    }
+    std::vector<ItemId> SomeOf(std::vector<ItemId> ids) {
+        std::shuffle(ids.begin(), ids.end(), random_);
+        ids.resize(std::min(ids.size(), 1 + Pick(3)));
+        return ids;
+    }
+    std::vector<ItemId> SomeHere() { return SomeOf(Here()); }
+    std::vector<ItemId> SomeAnywhere() {
+        std::vector<ItemId> ids;
+        for (const Canvas& canvas : session_.Manager().Canvases()) {
+            for (const Item& item : canvas.items) {
+                ids.push_back(item.id);
+            }
+        }
+        return SomeOf(ids);
+    }
+    CanvasId AnyCanvas() {
+        const std::vector<Canvas>& canvases = session_.Manager().Canvases();
+        return canvases[Pick(canvases.size())].id;
+    }
+
+    Session session_;
+    std::mt19937 random_;
+    // The live snippets before each step on the stacks was filed or redone.
+    std::map<uint64_t, Snippets> before_;
+};
+
+TEST(HistoryTest, EveryUndoGivesBackTheSnippetsAsTheyWereBeforeItsStep) {
+    for (uint32_t seed = 1; seed <= 40; ++seed) {
+        SCOPED_TRACE("seed " + std::to_string(seed));
+        NewestFirstSession random(seed);
+        for (int op = 0; op < 300; ++op) {
+            ASSERT_NO_FATAL_FAILURE(random.Step(op));
+        }
+        EXPECT_GT(random.undone, 0) << "nothing undone: the test tested nothing";
     }
 }
 
