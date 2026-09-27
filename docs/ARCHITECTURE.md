@@ -426,6 +426,15 @@ of a 5120-wide capture land where they were drawn. Clamping the
 bitmap's width and height while still mapping coordinates 1:1 cropped
 everything past the cap and stretched the rest.
 
+A drawn bitmap is what shows, not the strokes, so it has to be brought
+up to date before every frame that draws it (`CanvasView::
+RefreshStrokeRasters`), which costs nothing while the library has not
+changed. View-only frames skipped it. Going view-only settles whatever
+edit mode left in progress, after edit mode's last frame: a stroke still
+being drawn is filed, and an erase whose write failed is rolled back.
+The view then drew the bitmap from before that - the stroke missing, or
+the erase still there - until edit mode came back.
+
 ## Canvases, items and folders
 
 `Item` is a snippet: freehand strokes over a picture, at a `rect` on

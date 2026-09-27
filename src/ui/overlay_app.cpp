@@ -535,6 +535,13 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     }
 
     if (IsViewOnly()) {
+        // The strokes' bitmaps, as below, since view-only draws them too.
+        // Going view-only settles what edit mode left in progress - a
+        // stroke in flight is filed, an erase the write refused is rolled
+        // back - after edit mode's last frame, and with this skipped the
+        // view drew the bitmap from before that: the last stroke missing,
+        // until edit mode came back.
+        canvasView_.RefreshStrokeRasters();
         return;
     }
 

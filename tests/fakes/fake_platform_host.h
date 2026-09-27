@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -151,15 +152,22 @@ public:
         ++uploadCount;
         const uint64_t handle = nextTextureHandle++;
         liveTextures.emplace(handle, textureGeneration);
+        texturePixels[handle] = TexturePixels{
+            width, height, std::vector<uint8_t>(pixelsRGBA, pixelsRGBA + static_cast<size_t>(width) * height * 4)};
         return handle;
     }
 
-    bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* /*pixelsRGBA*/, int /*sourceWidth*/, int /*x*/,
-                              int /*y*/, int /*w*/, int /*h*/) override {
+    bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* pixelsRGBA, int sourceWidth, int x, int y, int w,
+                              int h) override {
         const auto it = liveTextures.find(textureHandle);
         if (it == liveTextures.end() || it->second != textureGeneration) {
             ++badTextureUses;  // freed, or made on a device that is gone
             return false;
+        }
+        TexturePixels& texture = texturePixels[textureHandle];
+        for (int row = 0; row < h; ++row) {
+            std::copy_n(pixelsRGBA + static_cast<size_t>(row) * sourceWidth * 4, static_cast<size_t>(w) * 4,
+                        texture.rgba.begin() + (static_cast<size_t>(y + row) * texture.width + x) * 4);
         }
         return true;
     }
@@ -241,6 +249,14 @@ public:
     // Every texture made and not yet released, with the device (the
     // generation) it was made on.
     std::unordered_map<uint64_t, uint64_t> liveTextures;
+    // What each texture made holds: its pixels as uploaded, and updated
+    // since.
+    struct TexturePixels {
+        int width = 0;
+        int height = 0;
+        std::vector<uint8_t> rgba;
+    };
+    std::unordered_map<uint64_t, TexturePixels> texturePixels;
     // A texture released twice, or updated after it was released or its
     // device replaced. Never anything but 0.
     int badTextureUses = 0;

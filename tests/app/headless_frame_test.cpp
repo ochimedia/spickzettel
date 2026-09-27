@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <map>
+#include <iostream>
 #include <fstream>
 #include <iterator>
 #include <memory>
@@ -5085,6 +5087,76 @@ TEST_F(HeadlessSaveTest, EveryTextureDrawnIsLiveWhateverHappens) {
         const bool frozen = session.FrozenScreenTexture() != 0;
         EXPECT_EQ(window.liveTextures.size(), frozen ? 1u : 0u);
     }
+}
+
+// ===== Rasterized strokes =====
+//
+// In the rasterized mode a snippet's strokes are drawn from one bitmap of
+// them (see CanvasView::BuildStrokeRaster), and a bitmap that is not what
+// the strokes are shows something else. What a frame drew is read from
+// the fake window's copy of each texture's pixels.
+
+// The texture of the app's own that `layer` drew in the last frame - the
+// strokes' bitmap, where a drawing is all a canvas holds.
+std::optional<uint64_t> TextureDrawnOn(const char* layer) {
+    const ImGuiWindow* window = ImGui::FindWindowByName(layer);
+    if (window == nullptr || !window->Active) {
+        return std::nullopt;
+    }
+    for (const ImDrawCmd& cmd : window->DrawList->CmdBuffer) {
+        // TexRef's own id rather than GetTexID, which asserts on the font
+        // atlas's commands - never uploaded, with no renderer.
+        if (cmd.UserCallback == nullptr && cmd.TexRef._TexData == nullptr && cmd.TexRef._TexID != 0) {
+            return static_cast<uint64_t>(cmd.TexRef._TexID);
+        }
+    }
+    return std::nullopt;
+}
+
+// How opaque `texture`, stretched over `item`, is at the screen point x, y.
+int AlphaAt(const FakeOverlayWindow& window, uint64_t texture, const Item& item, float x, float y) {
+    const auto found = window.texturePixels.find(texture);
+    if (found == window.texturePixels.end()) {
+        ADD_FAILURE() << "texture " << texture << " was never made";
+        return -1;
+    }
+    const FakeOverlayWindow::TexturePixels& pixels = found->second;
+    const auto px = static_cast<size_t>((x - item.rect.x) / item.rect.w * static_cast<float>(pixels.width));
+    const auto py = static_cast<size_t>((y - item.rect.y) / item.rect.h * static_cast<float>(pixels.height));
+    return pixels.rgba[(py * static_cast<size_t>(pixels.width) + px) * 4 + 3];
+}
+
+// View-only draws the strokes' bitmap too, brought up to date first.
+// Leaving edit mode files a stroke still being drawn - after edit mode's
+// last frame - and the view drew the bitmap from before it: the stroke
+// missing until edit mode came back.
+TEST_F(HeadlessAppTest, ViewOnlyDrawsTheStrokeFiledOnTheWayThere) {
+    AppConfig config = DefaultConfig();
+    config.strokeRenderMode = StrokeRenderMode::Rasterized;
+    StartWith(config);
+    host_.overlayWindow.uploadsSucceed = true;
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    Drag(200.0f, 200.0f, 400.0f, 200.0f);
+    StepFrame();
+    // The second stroke, with the button still down as the view comes up.
+    RawMouse(200.0f, 400.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    for (int i = 1; i <= 4; ++i) {
+        RawMouse(200.0f + 50.0f * static_cast<float>(i), 400.0f, platform::MouseEventKind::Move);
+        StepFrame();
+    }
+    ShowViewMode();
+    StepFrames(2);
+
+    const Item& item = Canvases().CurrentOrNull()->items[0];
+    ASSERT_EQ(item.strokes.size(), 2u) << "filed on the way";
+    const std::optional<uint64_t> bitmap = TextureDrawnOn("##spickzettel_view_only");
+    ASSERT_TRUE(bitmap.has_value()) << "no bitmap drawn";
+    EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 200.0f), 0) << "the first stroke";
+    EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 400.0f), 0) << "the second";
 }
 
 }  // namespace
