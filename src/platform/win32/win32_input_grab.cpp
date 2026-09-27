@@ -1206,7 +1206,9 @@ void Win32InputGrab::PostCharactersToOverlay(UINT vk, const KBDLLHOOKSTRUCT& eve
     keyboardState_[VK_CONTROL] = ctrl ? 0x80 : 0;
     keyboardState_[VK_MENU] = alt ? 0x80 : 0;
     // Toggles, not held states: Caps Lock survives the hook untouched, so the
-    // OS still has the truth about it.
+    // OS still has the truth about it - and GetKeyState reads it here, on a
+    // thread that reads no keyboard messages (see the HUD digits in
+    // OnKeyboard).
     keyboardState_[VK_CAPITAL] = static_cast<BYTE>(GetKeyState(VK_CAPITAL) & 0x0001);
 
     const HKL layout = GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), nullptr));
@@ -1476,6 +1478,11 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // options_.dontForwardKeystrokes) when the HUD goes.
     if (!WantsAllKeystrokes()) {
         const bool isHudDigit = vk >= '1' && vk < '1' + static_cast<UINT>(HudDigits());
+        // GetKeyState, on the hook thread, which reads no keyboard messages
+        // of its own: it follows the keys all the same. Measured on Windows
+        // 11 (build 26200), with the keys sent from another process - a
+        // Shift held and Caps Lock toggled show here as GetAsyncKeyState
+        // has them. A review had taken it for a state that never changes.
         const bool bare = (GetKeyState(VK_CONTROL) & 0x8000) == 0 &&
                           (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
         if (!isHudDigit || !bare) {
