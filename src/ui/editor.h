@@ -375,9 +375,9 @@ public:
     // selected, a drawing entered with the pen.
     void HandOverNewItem(ItemCreationKind kind, ItemId id);
     // The current canvas, creating one first if the library is empty (a
-    // state CanvasManager allows - see its class comment). The create
-    // path always produces one.
-    const Canvas& EnsureCanvasForNewItem();
+    // state CanvasManager allows - see its class comment). Null when there
+    // was none and the one made could not be written.
+    const Canvas* EnsureCanvasForNewItem();
 
     // ----- The drawing a stray click made -----
     //
@@ -417,9 +417,11 @@ public:
     CanvasId CreateCanvasInCurrentFolder();
     // The same, in the folder the current canvas lives in - where the work
     // is - rather than the one the Overview happens to be browsing. What
-    // every way of making a canvas from the canvas itself uses.
+    // every way of making a canvas from the canvas itself uses. 0 as well
+    // when that folder could not be made the browsed one.
     CanvasId CreateCanvasBesideCurrent();
-    // A new canvas beside the current one, switched to.
+    // A new canvas beside the current one, switched to - when it could be
+    // made.
     void CreateAndSwitchToNewCanvas();
     // That, taking the selected snippets along.
     void MoveSelectionToNewCanvas();

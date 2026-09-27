@@ -142,6 +142,36 @@ TEST_F(HeadlessAppTest, ADoubleClickOnAnEmptyLibraryMakesACanvasForTheScreenshot
     EXPECT_TRUE(Canvases().CurrentOrNull()->items[0].hasBackground);
 }
 
+// ...unless the canvas made for it cannot be written: then nothing is
+// made, and there is still no canvas to make it on. It used to go on to
+// name the snippet after the canvas that was not there, and crash.
+TEST_F(HeadlessAppTest, NothingIsMadeOnAnEmptyLibraryWhoseNewCanvasCannotBeWritten) {
+    const std::filesystem::path library = StartWithLibrary();
+    controller_->GetSession().ImportLibrary(CanvasManagerSnapshot{});
+    test::FailingWrites failing(library);
+    failing.FailAll();
+
+    // The capture hotkey, with the overlay hidden, and a snippet asked for
+    // from edit mode.
+    TriggerHotkey(config_.hotkeySilentCapture);
+    StepFrame();
+    EXPECT_FALSE(Canvases().HasCurrentCanvas());
+    ShowEditMode();
+    StepFrame();
+    ASSERT_FALSE(App().IsViewOnly());
+    controller_->Overlay().Dispatch(Command{CommandId::FullscreenDrawing});
+    StepFrame();
+    EXPECT_FALSE(Canvases().HasCurrentCanvas());
+    EXPECT_TRUE(Canvases().Canvases().empty());
+    EXPECT_TRUE(AppSession().LastWriteFailed());
+
+    failing.Stop();
+    controller_->Overlay().Dispatch(Command{CommandId::FullscreenDrawing});
+    StepFrame();
+    ASSERT_TRUE(Canvases().HasCurrentCanvas());
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+}
+
 // ===== What the app did, rather than what it looked like =====
 
 // A marking tool's key picks it for the selected snippet - drawing mode on

@@ -534,22 +534,25 @@ std::optional<ItemCreationKind> Editor::EmptyCanvasCreationKind() const {
 // self-healing: the first thing created gets out of it on its own, and
 // only an explicit "New canvas" is needed if what you want *is* an empty
 // canvas.
-const Canvas& Editor::EnsureCanvasForNewItem() {
+const Canvas* Editor::EnsureCanvasForNewItem() {
     if (const Canvas* existing = Manager().CurrentOrNull()) {
-        return *existing;
+        return existing;
     }
     CreateAndSwitchToNewCanvas();
-    // AddCanvas (via CreateAndSwitchToNewCanvas) always produces one, and
-    // makes it current - there is no failure path.
-    return *Manager().CurrentOrNull();
+    // Still none when the new canvas could not be written (see
+    // Session::Land): nothing is made then either.
+    return Manager().CurrentOrNull();
 }
 
 ItemId Editor::CreateFullscreenItem(ItemCreationKind kind) { return CreateFullscreenItem(kind, displayW_, displayH_); }
 
 ItemId Editor::CreateFullscreenItem(ItemCreationKind kind, float width, float height) {
-    const Canvas& canvas = EnsureCanvasForNewItem();
+    const Canvas* canvas = EnsureCanvasForNewItem();
+    if (canvas == nullptr) {
+        return 0;
+    }
     Item prototype =
-        PrototypeForKind(kind, Rect{0.0f, 0.0f, width, height}, ItemNameForKind(kind, canvas, /*fullscreen=*/true));
+        PrototypeForKind(kind, Rect{0.0f, 0.0f, width, height}, ItemNameForKind(kind, *canvas, /*fullscreen=*/true));
     prototype.isFullscreen = true;
     // Through the session, so that making it is on the history - see
     // Session::CreateItem.
@@ -565,9 +568,12 @@ ItemId Editor::CreateRegionItem(ItemCreationKind kind, Rect rect) {
     if (rect.w < kRegionMinSize || rect.h < kRegionMinSize) {
         return 0;
     }
-    const Canvas& canvas = EnsureCanvasForNewItem();
+    const Canvas* canvas = EnsureCanvasForNewItem();
+    if (canvas == nullptr) {
+        return 0;
+    }
     const ItemId id =
-        session_.CreateItem(PrototypeForKind(kind, rect, ItemNameForKind(kind, canvas, /*fullscreen=*/false)));
+        session_.CreateItem(PrototypeForKind(kind, rect, ItemNameForKind(kind, *canvas, /*fullscreen=*/false)));
     if (id == 0) {
         return 0;
     }
@@ -668,7 +674,7 @@ CanvasId Editor::CreateCanvasInCurrentFolder() {
     const CanvasId id = session_.AddCanvas(TimestampName());
     // It lands at the end of the folder, which in a long folder is off the
     // bottom of the Overview's grid.
-    if (views_ != nullptr) {
+    if (views_ != nullptr && id != 0) {
         views_->CanvasMade(id);
     }
     return id;
@@ -678,9 +684,14 @@ CanvasId Editor::CreateCanvasBesideCurrent() {
     // The browsed folder and the current canvas's are deliberately
     // decoupled (see CanvasManager's class comment); browsing elsewhere
     // without opening anything is what tells them apart. A switch to the
-    // new canvas re-syncs the browsed folder anyway.
+    // new canvas re-syncs the browsed folder anyway. Not made when that
+    // could not be written: it would land in the folder being browsed.
     if (const Canvas* current = Manager().CurrentOrNull()) {
+        const uint64_t failures = session_.FailedWrites();
         session_.SwitchToFolder(current->folderId);
+        if (session_.FailedWrites() != failures) {
+            return 0;
+        }
     }
     return CreateCanvasInCurrentFolder();
 }
@@ -690,7 +701,9 @@ void Editor::CreateAndSwitchToNewCanvas() {
     // Nothing to settle when the new canvas is already current - the
     // library had none, and the press that asked for a snippet is what is
     // in flight (see EnsureCanvasForNewItem).
-    SwitchCanvas(CreateCanvasBesideCurrent());
+    if (const CanvasId id = CreateCanvasBesideCurrent(); id != 0) {
+        SwitchCanvas(id);
+    }
 }
 
 // A new canvas that the selected snippets come along to - "these belong
@@ -713,6 +726,9 @@ void Editor::CreateAndSwitchToNewCanvas() {
 // started on, before the snippet leaves it.
 void Editor::MoveSelectionToNewCanvas() {
     const CanvasId target = CreateCanvasBesideCurrent();
+    if (target == 0) {
+        return;  // not written: nowhere to move them to
+    }
     const std::vector<ItemId> moved = session_.SendItemsTo(selection_, target, /*copy=*/false).items;
     session_.SwitchToCanvas(target);
     // What arrived is what is selected, so it can be arranged straight
@@ -805,7 +821,18 @@ void Editor::QuickCapture(float displayW, float displayH) {
     // it: a screen full of captures piled on the canvas you were drawing
     // on is hard to tell apart later, where one capture per canvas is a
     // strip of tiles you can read at a glance in the Overview.
-    session_.SwitchToCanvas(CreateCanvasBesideCurrent());
+    //
+    // Nothing is captured when the canvas for it could not be made, or not
+    // switched to: it would land on the canvas being worked on.
+    const uint64_t failures = session_.FailedWrites();
+    const CanvasId target = CreateCanvasBesideCurrent();
+    if (target != 0) {
+        session_.SwitchToCanvas(target);
+    }
+    if (target == 0 || session_.FailedWrites() != failures) {
+        Say(strings::kToastNotWritten);
+        return;
+    }
     const ItemId made = CreateFullscreenItem(ItemCreationKind::Screenshot, displayW, displayH);
     // Not made when it could not be written - see Session::Land.
     Say(made != 0 ? strings::kToastCapturedScreenshot : strings::kToastNotWritten);

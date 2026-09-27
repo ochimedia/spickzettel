@@ -167,7 +167,9 @@ void OverlayApp::PlaceWelcomeNotes(float displayW, float displayH) {
                              : ImVec2(welcomeSize.x, welcomeSize.y + 2.0f * (warningSize.y + gap));
     ImVec2 at((displayW - group.x) * 0.5f, (displayH - group.y) * 0.5f);
 
-    editor_.EnsureCanvasForNewItem();
+    if (editor_.EnsureCanvasForNewItem() == nullptr) {
+        return;
+    }
     // Made as they are, text and all, and not on the history: nobody made
     // them, so there is nothing for an undo to take back.
     const auto place = [&](ImVec2 size, const char* name, std::string text, float textSizePx,
@@ -652,8 +654,14 @@ void OverlayApp::Do(const ViewAction& action) {
                        // Named for when it was made (see TimestampName), and at
                        // the end of the sidebar - which is where the eye goes
                        // after pressing a button at the bottom of it, and matches
-                       // where a new canvas lands in its own list.
-                       overview_.ScrollToFolder(session_.AddFolder(TimestampName()));
+                       // where a new canvas lands in its own list. Nothing more
+                       // when it could not be written: the canvas below would
+                       // land in the folder browsed before.
+                       const FolderId folder = session_.AddFolder(TimestampName());
+                       if (folder == 0) {
+                           return;
+                       }
+                       overview_.ScrollToFolder(folder);
                        overview_.ForgetDeletedFolderShown();
                        // With a canvas already in it. A folder is where canvases
                        // live, so an empty one is a step rather than a result, and
@@ -661,7 +669,9 @@ void OverlayApp::Do(const ViewAction& action) {
                        // nothing to drop an item onto. AddFolder has already made
                        // the new folder current, so this lands inside it - and,
                        // like New canvas, the canvas it makes is switched to.
-                       editor_.SwitchCanvas(editor_.CreateCanvasInCurrentFolder());
+                       if (const CanvasId canvas = editor_.CreateCanvasInCurrentFolder(); canvas != 0) {
+                           editor_.SwitchCanvas(canvas);
+                       }
                    },
                    [&](const action::NewCanvas&) {
                        // At the end of the folder, so the grid may have to scroll
@@ -669,6 +679,9 @@ void OverlayApp::Do(const ViewAction& action) {
                        // CreateCanvasInCurrentFolder calls either way: the tile
                        // is what the click was about.
                        const CanvasId id = editor_.CreateCanvasInCurrentFolder();
+                       if (id == 0) {
+                           return;  // not written
+                       }
                        if (overview_.Picking()) {
                            // A destination for the snippet being sent away, and not
                            // switched to: following it would take the user off the
