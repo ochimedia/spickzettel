@@ -467,10 +467,35 @@ void Session::OffsetCopy(ItemId copyId) {
         return;
     }
     constexpr float kCopyOffsetPx = 24.0f;
+    const float displayW = Model().DisplayWidth();
+    const float displayH = Model().DisplayHeight();
+    if (item->isFullscreen) {
+        // Fullscreen, as its source is, over it - the screen is what both
+        // take up. What is offset is the place it goes back to, the anchor
+        // underneath: offset as a snippet on the canvas is, the fullscreen
+        // rect was committed as that place, and taken out of fullscreen the
+        // copy stayed the size of the screen.
+        Rect normal = item->anchorRect;
+        if (item->anchorDisplayWidth > 0.0f && item->anchorDisplayHeight > 0.0f && displayW > 0.0f &&
+            displayH > 0.0f) {
+            normal = RescaleRectForDisplaySize(normal, item->anchorDisplayWidth, item->anchorDisplayHeight, displayW,
+                                               displayH);
+        }
+        normal.x += kCopyOffsetPx;
+        normal.y += kCopyOffsetPx;
+        if (displayW > 0.0f && displayH > 0.0f) {
+            item->anchorRect = ClampRectToViewport(normal, displayW, displayH);
+            item->anchorDisplayWidth = displayW;
+            item->anchorDisplayHeight = displayH;
+        } else {
+            item->anchorRect = normal;
+        }
+        return;
+    }
     item->rect.x += kCopyOffsetPx;
     item->rect.y += kCopyOffsetPx;
-    if (Model().DisplayWidth() > 0.0f && Model().DisplayHeight() > 0.0f) {
-        item->rect = ClampRectToViewport(item->rect, Model().DisplayWidth(), Model().DisplayHeight());
+    if (displayW > 0.0f && displayH > 0.0f) {
+        item->rect = ClampRectToViewport(item->rect, displayW, displayH);
     }
     Model().CommitItemLayout(copyId);
 }

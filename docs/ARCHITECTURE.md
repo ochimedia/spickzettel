@@ -536,6 +536,13 @@ alone cannot tell). Exiting fullscreen recomputes the restore rect from
 the untouched anchor against the *current* viewport, so a display change
 while fullscreen lands it in the right place.
 
+A copy of a fullscreen snippet, duplicated or pasted beside its source,
+is fullscreen too, and what is offset is its anchor - the place it goes
+back to - not its rect (`Session::OffsetCopy`). Offset like any other
+copy, the fullscreen rect was committed as its anchor, so taken out of
+fullscreen it stayed the size of the screen, and was saved so. Found in
+review on 2026-09-27.
+
 ### The floor is a shape
 
 Items cannot shrink below 90x70. Applied as two independent per-axis
