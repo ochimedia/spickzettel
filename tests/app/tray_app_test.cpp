@@ -362,6 +362,31 @@ TEST(TrayControllerTest, EditHotkeyTogglesBetweenHiddenAndEdit) {
     EXPECT_EQ(host.overlayWindow.hideCallCount, 1);
 }
 
+// Held until Start - while WinMain's message boxes say what the start
+// found - a hotkey or a click on the tray icon brings nothing up. Run from
+// the box's modal loop, they brought up an overlay that no frame drew
+// until the box was closed. The menu's Exit is not held.
+TEST(TrayControllerTest, HeldUntilStartNothingBringsTheOverlayUp) {
+    test::FakePlatformHost host;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    controller.HoldUntilStart();
+
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyViewMode));
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyQuickCapture));
+    host.TriggerTrayCommand(platform::TrayCommand::ToggleOverlay);
+    EXPECT_EQ(host.overlayWindow.showCallCount, 0);
+    EXPECT_EQ(host.overlayWindow.ensureCreatedCallCount, 0) << "and nothing captured";
+    host.TriggerTrayCommand(platform::TrayCommand::Exit);
+    EXPECT_TRUE(host.quitCalled);
+
+    controller.Start();
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyViewMode));
+    EXPECT_TRUE(host.overlayWindow.IsVisible()) << "from Start on, as ever";
+}
+
 TEST(TrayControllerTest, ViewHotkeyTogglesBetweenHiddenAndView) {
     test::FakePlatformHost host;
     const AppConfig config = DefaultConfig();

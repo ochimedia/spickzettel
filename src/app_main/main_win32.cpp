@@ -122,7 +122,9 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         return 1;
     }
     // What the start found is said before the overlay comes up - see
-    // TrayController::Start, and ShowPrereleaseNotice for the same reason.
+    // TrayController::Start, and ShowPrereleaseNotice for the same reason -
+    // and nothing brings it up while a box says so.
+    trayController.HoldUntilStart();
     //
     // Started on an empty library because the file there could not be read:
     // said once, with where it was kept.

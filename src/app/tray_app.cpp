@@ -155,7 +155,9 @@ void TrayController::Start() {
     // to be possible. Any other start is Away: pinned snippets are on
     // screen whenever the overlay is away, and having just started is one
     // of those times. From anything but Hidden - brought up from the tray
-    // or a hotkey while the caller's message was up - Start stays.
+    // or a hotkey before Start, by a caller that did not hold them (see
+    // HoldUntilStart) - Start stays.
+    held_ = false;
     if (firstRun_) {
         overlayApp_.RequestWelcomeNote();
     }
@@ -165,6 +167,9 @@ void TrayController::Start() {
 }
 
 void TrayController::OnHotkey(HotkeySlot slot) {
+    if (held_) {
+        return;
+    }
     // A command like any other, and dispatched like one: the overlay's
     // input machine offers it to what is open, which passes it on, ends
     // what the command's scope covers, and hands it back here to run (see
@@ -622,7 +627,9 @@ void TrayController::OnTrayCommand(platform::TrayCommand command) {
             // The edit hotkey's command, but not through OnHotkey: a click in
             // the tray menu is no key press, so it completes no hotkey
             // capture.
-            overlayApp_.Dispatch(Command{CommandId::ToggleEditMode});
+            if (!held_) {
+                overlayApp_.Dispatch(Command{CommandId::ToggleEditMode});
+            }
             break;
         case platform::TrayCommand::Exit:
             SettleForExit();

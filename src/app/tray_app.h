@@ -65,6 +65,13 @@ public:
     // answered, over a screen that does not move. A start on a library
     // set aside is always a first run.
     void Start();
+    // Holds back the hotkeys and the tray icon's show and hide until
+    // Start, for a caller that shows something in between - WinMain's
+    // message boxes. Their modal loops hand on hotkeys and tray clicks,
+    // and one run there brought up an edit overlay that no frame drew
+    // until the box was closed: the grab holding the mouse and keyboard
+    // over a screen that did not move. Exit is not held.
+    void HoldUntilStart() { held_ = true; }
     // After a failed Initialize: whether it was the library that refused,
     // and why - a newer build wrote it, or it could not be read - which the
     // person has to be told apart from a hotkey held elsewhere, and from
@@ -284,6 +291,8 @@ private:
     bool writeConfigAtStart_ = false;
     // Whether Initialize found no library to load, which Start greets.
     bool firstRun_ = false;
+    // See HoldUntilStart.
+    bool held_ = false;
     // Constructed up front (from host.GetLibraryPath(), possibly empty) but
     // only ever used - Load()'d from, attached to overlayApp_ - when that
     // path is non-empty; see Initialize().

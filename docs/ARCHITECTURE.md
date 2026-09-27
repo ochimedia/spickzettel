@@ -175,6 +175,13 @@ that overlay drew no frame until the box was answered, since frames
 come from the event loop. A box nobody could see or reach, over a
 screen that did not move.
 
+Until `Start`, the hotkeys and the tray icon's show and hide are held
+(`TrayController::HoldUntilStart`); the menu's Exit is not. Found in
+review on 2026-09-27: a box's modal loop hands on `WM_HOTKEY` and tray
+clicks, and the edit hotkey pressed under one brought up the same
+undrawn edit overlay, the grab holding the mouse and keyboard until the
+box was closed by Enter or the overlay put away again.
+
 The version lives in `VERSION` at the repo root, read by CMake and fed to
 both `project()` and the header, so a release script can bump it without
 parsing CMake. (A file named `VERSION` can shadow `#include <version>` on
