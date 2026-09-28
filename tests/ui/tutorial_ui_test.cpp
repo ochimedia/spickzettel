@@ -155,6 +155,28 @@ TEST_F(TutorialUiTest, TheSkipCardsDoneTrashesTheFolderAndDoneKeepKeepsIt) {
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(kept)));
 }
 
+// A press on the card as the window hands it on: into ImGui, and into the
+// input stream the machine reads - both, as a real one is.
+TEST_F(TutorialUiTest, APressOnTheCardReachesItsButtonThroughTheInputMachine) {
+    StartTheTutorial();
+    ImRect next;
+    RunUi("where Next is", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##tutorial_card");
+        next = ctx->ItemInfo("**/###tutorial_next").RectFull;
+    });
+    const ImVec2 at = next.GetCenter();
+    MoveTo(at.x, at.y);
+    RawMouse(at.x, at.y, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(at.x, at.y, platform::MouseEventKind::Down);
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
+    StepFrame();
+    RawMouse(at.x, at.y, platform::MouseEventKind::Up);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrames(3);
+    EXPECT_EQ(StepUp(), "screenshot");
+}
+
 // Settings > Interaction: the Overview closes, and the tutorial starts at
 // its first step in a new folder (section 7.6).
 TEST_F(TutorialUiTest, TakeTheTutorialAgainStartsItFromSettings) {
