@@ -43,8 +43,7 @@ public:
     // left.
     void OpenList() {
         listing_ = true;
-        place_.reset();
-        drawnAt_.reset();
+        PlaceAnew();
     }
     bool Listing() const { return listing_; }
 
@@ -118,8 +117,16 @@ private:
     enum class Place { Top, Bottom, TopLeft, TopRight, LowerRight };
     // Where the card is drawn this frame: its place, or on the way there.
     ImVec2 Placed(float displayW, float displayH);
+    // Placed as at the start - where the user dragged it forgotten - as a
+    // topic starts, and as the list opens or closes (docs/TUTORIAL.md,
+    // section 19.5).
+    void PlaceAnew() {
+        moved_ = false;
+        place_.reset();
+        drawnAt_.reset();
+    }
 
-    // Dragged by the user: left where it was put for the rest of the run.
+    // Dragged by the user: left where it was put until the list opens.
     bool moved_ = false;
     // Its place, none until the first frame of a run or of the list, and
     // whether it was chosen over the Overview.

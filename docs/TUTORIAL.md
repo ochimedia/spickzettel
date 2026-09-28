@@ -154,7 +154,9 @@ the ring's anchor or a bar; then it slides to the nearest place that
 covers least. The Overview opened or closed places it anew (section 19).
 Wherever it goes, all of it stays on screen: the list is tall (18.8).
 The user can drag the card by its title, and it stays where it is left
-for the rest of the run.
+until the list opens. The list is always at the top center, and the
+card placed as at the start once it closes or a topic starts from it
+(19.5).
 
 **Keys.** The card takes none:
 
@@ -2775,6 +2777,12 @@ test:
   and the nearer, its own, would win.
 - **A card that grows at the bottom grows upward,** since its place is
   "bottom center" and not a y: `resize`'s text is taller than `move`'s.
+- **The list forgets where the card was dragged** (asked for after
+  trying it). It shows at the top center, where it first did, always:
+  it points at nothing, and a list that turns up wherever the last
+  card was is hard to find. A card dragged during a topic is placed as
+  at the start again when the list opens, and stays so for the card
+  the list closes to and for the topic started from it.
 - **Tests:** the card stays over the subject alone; stays at the bottom
   when the step moves on and the top is clear again; and slides, part
   of the way on the frame after and all of it once the slide is over.

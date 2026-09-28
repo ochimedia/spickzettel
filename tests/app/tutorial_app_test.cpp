@@ -104,6 +104,22 @@ protected:
         ClickAnchor(Anchor{AnchorId::SettingsShowingEntry, name ? ProfileIndex(*name) + 1 : 0});
         StepFrames(2);
     }
+    // The card dragged by its top edge, as a hand moves a window.
+    void DragCard(float dx, float dy) {
+        const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+        ASSERT_NE(card, nullptr);
+        const ImVec2 from(card->Pos.x + card->Size.x - 12.0f, card->Pos.y + 4.0f);
+        MoveTo(from.x, from.y);
+        StepFrame();
+        MouseButtonEvent(ImGuiMouseButton_Left, true);
+        StepFrame();
+        for (int i = 1; i <= 4; ++i) {
+            MoveTo(from.x + dx * static_cast<float>(i) / 4.0f, from.y + dy * static_cast<float>(i) / 4.0f);
+            StepFrame();
+        }
+        MouseButtonEvent(ImGuiMouseButton_Left, false);
+        StepFrames(2);
+    }
     // Long enough for a step whose goal is met to move on by itself.
     void Settle() { StepFrames(75); }
     void Press(TutorialButton button) {
@@ -1815,6 +1831,49 @@ TEST_F(TutorialAppTest, TheEndCardLeadsOnToTheListAndATopicDoneSaysSo) {
     const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
     ASSERT_NE(card, nullptr);
     EXPECT_TRUE(card->Active) << "the list, with no topic running";
+}
+
+// The list always at the top center, where it first was: a card dragged
+// during a topic is placed as at the start again once the list opens, and
+// stays so for the topic started from it (docs/TUTORIAL.md, section 19.5).
+TEST_F(TutorialAppTest, TheListForgetsWhereTheCardWasDragged) {
+    Overlay().OpenTutorialList();
+    StepFrames(2);
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    const ImVec2 listAt = card->Pos;
+    EXPECT_FLOAT_EQ(listAt.x, (kDisplayWidth - card->Size.x) * 0.5f) << "centered";
+
+    StartTheTutorial();
+    const ImVec2 cardAt = card->Pos;
+    DragCard(-200.0f, 150.0f);
+    ASSERT_FLOAT_EQ(card->Pos.x, cardAt.x - 200.0f) << "dragged";
+    Press(TutorialButton::Next);
+    StepFrames(20);
+    EXPECT_FLOAT_EQ(card->Pos.x, cardAt.x - 200.0f) << "left where it was put";
+
+    Press(TutorialButton::Skip);
+    Press(TutorialButton::MoreTopics);
+    StepFrames(2);
+    ASSERT_TRUE(App().TutorialListed());
+    EXPECT_FLOAT_EQ(card->Pos.x, listAt.x);
+    EXPECT_FLOAT_EQ(card->Pos.y, listAt.y);
+
+    Press(TutorialButton::CloseList);
+    StepFrames(20);
+    EXPECT_FLOAT_EQ(card->Pos.x, cardAt.x) << "back on its card, placed anew";
+    EXPECT_FLOAT_EQ(card->Pos.y, cardAt.y);
+
+    // Over the Overview, the list still at the top center.
+    DragCard(-200.0f, 150.0f);
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+    StepFrames(2);
+    Press(TutorialButton::MoreTopics);
+    StepFrames(2);
+    EXPECT_FLOAT_EQ(card->Pos.x, listAt.x);
+    Overlay().StartTutorial("pinning");
+    StepFrames(20);
+    EXPECT_NE(card->Pos.x, cardAt.x - 200.0f) << "a new topic placed as at the start";
 }
 
 // ===== The folder (sections 6.4, 7.6 and 9) =====

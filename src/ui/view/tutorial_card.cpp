@@ -127,9 +127,7 @@ void TutorialCard::Resume(const tutorial::Topic& topic, std::string_view id, cor
     topic_ = &topic;
     runner_ = tutorial::Tutorial(topic.chain());
     runner_.Resume(id, folder);
-    moved_ = false;
-    place_.reset();
-    drawnAt_.reset();
+    PlaceAnew();
     hasRun_ = true;
     listing_ = false;
 }
@@ -150,10 +148,11 @@ void TutorialCard::Press(TutorialButton button) {
             runner_.Done();
             return;
         case TutorialButton::MoreTopics:
-            listing_ = true;
+            OpenList();
             return;
         case TutorialButton::CloseList:
             listing_ = false;
+            PlaceAnew();
             return;
     }
 }
@@ -336,10 +335,12 @@ std::optional<AnchorRect> TutorialCard::RestoreRect() const {
 // ================= The card =================
 
 ImVec2 TutorialCard::Placed(float displayW, float displayH) {
-    // Top center to begin with, unless what the step is about lies under
-    // it; then bottom center, then the top corners, where a large snippet
-    // on a small display leaves room at neither. Over the Overview, the
-    // lower right first. What the step is about is what the ring is on
+    // The list at the top center, always: it points at nothing.
+    //
+    // A step's card at the top center to begin with, unless what the step
+    // is about lies under it; then bottom center, then the top corners,
+    // where a large snippet on a small display leaves room at neither.
+    // Over the Overview, the lower right first. What the step is about is what the ring is on
     // and the subject, and after them the bars over the selection, whose
     // buttons a line may name when nothing rings them: where every place
     // covers something, the one that covers least.
@@ -380,6 +381,10 @@ ImVec2 TutorialCard::Placed(float displayW, float displayH) {
         pos.y = std::max(0.0f, std::min(pos.y, displayH - height - side));
         return pos;
     };
+    if (listing_) {
+        drawnAt_ = at(Place::Top);
+        return *drawnAt_;
+    }
 
     const std::optional<AnchorRect> spot = SpotRect();
     const std::optional<AnchorRect> subject = SubjectRect();
