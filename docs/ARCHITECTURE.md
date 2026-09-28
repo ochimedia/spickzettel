@@ -2525,6 +2525,53 @@ override it. The panel sizes itself to its text and fits up to three
 columns within the Overview's margins. Its six groups are split across
 the columns so that the tallest column is as short as it can be.
 
+### The tutorial
+
+A card that leads through the app one step at a time, in topics picked
+from a list: Basics (a screenshot, moving, resizing, deleting and
+undoing, two warnings, getting back to your program) and Drawing. A
+first run starts Basics; so does the first start of an install from
+before it. `docs/TUTORIAL.md` is the design, and says why.
+
+**It reads the app, and is not part of it.** The runner
+(`ui/tutorial/`, no ImGui) sees the app only through `tutorial::World`,
+an interface of `const` queries that `OverlayApp` answers from the
+editor, the session and the settings (`AppWorld`), and that the tests
+fake. It changes nothing but its own state. What the card's buttons
+want - a topic started, the folder made again, a practice snippet - is a
+view action, done in Apply like every other. The rest of the app knows
+the tutorial in three places: a widget marks where it was drawn on an
+anchor board (`ViewHost::Mark`, one line per anchored widget), one owner
+draws the card and the spotlight (`TutorialCard`), and three settings
+rows keep its progress.
+
+**It guides, and does not guard.** Nothing is held back while it runs:
+no command, gesture or key is blocked, and the card takes no keys, so
+the input machine is unchanged. Instead a step is done when its result
+is there, however that came about - a goal compares the app's state with
+a record the step took as it began - and names what it needs first, with
+a line and often a button to get it back: close the Overview, go back to
+the tutorial's folder, put a practice snippet here. Rails were weighed
+and rejected: they would need holds at the commands, the gestures and
+every widget, and could trap someone over their game.
+
+**Each run has a folder of its own**, named for its topic, as a
+lightweight sandbox: the user's own canvases are never what a step asks
+to move or delete, and a capture hotkey pressed meanwhile lands there by
+the ordinary current-folder rule. At the end Done puts the folder in the
+trash, asked first like any folder's delete, and "Done, keep the
+folder" keeps it. A throwaway library was considered instead, and set
+aside: every owner holds the session, and much of the view's state would
+need an answer to "the library was replaced".
+
+**A step is a row of a table** (`chains.cpp`): its text, what it points
+at, its needs, its goal as a plain function, and the mistakes it has a
+line for. A topic is a chain and a row in `topics.cpp`. The derail
+matrix crosses every do step of every topic with every way off the path
+- the Overview opened, the canvas switched, the snippet deleted,
+minimized or made fullscreen, the overlay hidden - and checks that the
+card says a line, and that following it gets the step done.
+
 ### Show deleted
 
 A checkbox on the Canvases row adds what is deleted to the same sidebar

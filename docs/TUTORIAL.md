@@ -1,11 +1,12 @@
 # The tutorial
 
-Status: **agreed** (2026-09-28), for 0.2.0, and to be built in the
-phases of section 10. It was proposed on 2026-09-27. Its questions and
-their answers are in section 12, and the design below was changed to
-match them. Phases 1 to 3 are built. **Topics** (section 13), several
-chains chosen from a list, were agreed after them, and come next as
-phase 4.
+Status: **built** (2026-09-28), for 0.2.0, in the five phases of
+section 10. It was proposed on 2026-09-27 and agreed on 2026-09-28. Its
+questions and their answers are in section 12, and the design below was
+changed to match them. **Topics** (section 13), several chains chosen
+from a list, were agreed after phase 3 and built as phase 4. The
+sections below describe what is built; section 13 keeps the reasoning
+for the topics.
 
 It fits into the designs that are built: `docs/INTERACTIONS.md` for
 input, `docs/OVERLAY_STATES.md` for the overlay's states,
@@ -24,8 +25,8 @@ the app shows, points at it, and says what to do next:
   folder it runs in, a practice snippet it places when asked, and
   switching back to its folder.
 - The app knows about the tutorial in three places only: an anchor
-  marked where a widget is drawn, one owner in the view, and one
-  setting.
+  marked where a widget is drawn, one owner in the view, and its rows
+  in the settings.
 
 **It guides; it does not guard.** Nothing the user does is held back
 while the tutorial runs. Instead, every step is written so that nothing
@@ -51,8 +52,8 @@ design documents argue theirs. The structure is:
 
 The first external testers found the app hard to discover.
 
-**What a first run offers today.** It opens edit mode with three notes
-(`OverlayApp::PlaceWelcomeNotes`):
+**What a first run offered before the tutorial.** It opened edit mode
+with three notes, which are gone now (question 4):
 
 - **The welcome.** How to make a screenshot and open a menu, the
   edit-mode hotkey, the cheat sheet's key, and how to delete.
@@ -62,7 +63,7 @@ The first external testers found the app hard to discover.
 The cheat sheet, on its key or from the empty canvas's menu, lists every
 key and gesture.
 
-**Why that is not enough.** Both are references. They say what exists,
+**Why that was not enough.** Both are references. They say what exists,
 to someone who already knows what they want. Neither leads. A first-time
 user does not know:
 
@@ -91,11 +92,11 @@ These are sequences, and a sequence is learned by doing it once.
 
 ## 2. Vocabulary
 
-- **Chain**: an ordered list of steps. The first is the *welcome chain*.
-  More may follow (section 8).
-- **Topic**: a chain the user picks from the tutorial's list, such as
-  Basics or Drawing (section 13). The welcome chain is split
-  into the first two.
+- **Topic**: a subject the tutorial covers, such as Basics or Drawing,
+  picked from the tutorial's list (section 13).
+- **Chain**: a topic's ordered list of steps. Until phase 4 there was one,
+  the *welcome chain*; it was split into Basics and Drawing.
+- **The list**: the card's list of topics, to start one from (13.3).
 - **Step**: what one card shows. There are two kinds:
   - a *read step* is done when Next is pressed;
   - a *do step* is done when its goal is met.
@@ -125,7 +126,7 @@ These are sequences, and a sequence is learned by doing it once.
 **The card.** A small window in the app's own theme, about 360 px wide
 at 100%. It holds:
 
-- "Step 3 of 11", with a thin progress bar;
+- "Step 3 of 10", with a thin progress bar;
 - the title and the text.
   - Keys are named as they are bound now: "Press Ctrl+Z".
   - A step whose key is unbound says what to do instead, the way the
@@ -205,26 +206,33 @@ user.
 
 **Skip.** It goes to a last card, "Tutorial skipped":
 
-- The card shows the two warnings (section 4, steps 9 and 10) in short
-  form, unless the user has already passed them. Someone who skips at
-  once still sees them.
-- It says where to take the tutorial again (Settings > Interaction).
+- The card shows the two warnings (Basics' steps 6 and 7, section 4) in
+  short form. In Basics it leaves out those the user has already passed
+  in this run; from any other topic it shows both, until Basics has been
+  finished once (13.6). Someone who skips at once still sees them.
 - It offers Back, to the step skipped from, so a misclick costs nothing.
   That is why no confirmation box is needed.
-- Its Done ends the tutorial and puts the tutorial folder in the trash.
-  Its "Done, keep the folder" keeps the folder (question 9). The end
-  card has the same two buttons.
+- Its Done ends the topic and puts its folder in the trash. Its "Done,
+  keep the folder" keeps the folder (question 9). The end card has the
+  same two buttons.
+- Its "More topics" opens the list, and it says the tutorial is also in
+  Settings > Interaction. The end card has "More topics" too.
 
-## 4. The welcome chain
+**The list.** A state of the card, with a row per topic: its title, one
+line on what it covers, its number of steps, and where the user is with
+it (New, At step 4 of 10, Started, Done). A row starts its topic; the
+list's Back goes back to the topic running, and its Close, with none
+running, takes the card away (13.3).
 
-*Section 13 splits this chain: steps 4 to 6 become the
-Drawing topic, and the rest is Basics.*
+## 4. The chains
 
-It runs in the tutorial folder (section 6.5), and "the tutorial's
-snippets" means the snippets in it. The keys in braces are named as they
-are bound, and written for the triggers as set: on a first run the
-screenshot trigger is plain, a drag with no key held. In the Next
+Each topic's chain runs in its tutorial folder (section 6.5), and "the
+tutorial's snippets" means the snippets in it. The keys in braces are
+named as they are bound, and written for the triggers as set: on a first
+run the screenshot trigger is plain, a drag with no key held. In the Next
 column, "waits" marks a gated step (section 3).
+
+**Basics:**
 
 | # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
 |---|---|---|---|---|---|---|---|---|
@@ -232,15 +240,25 @@ column, "waits" marks a gated step (section 3).
 | 1 | `screenshot` | do | **waits** | Drag a box over anything on screen to take a screenshot of it. With a trigger key set: "Hold {trigger} and drag". With the trigger off: "Press {newScreenshot}, then drag", or with that key unbound too, the empty canvas's menu. | - | in the tutorial folder; canvas uncovered; no drawing mode; no tool in hand but the screenshot tool | a screenshot snippet made since the step began, on the current canvas, not fullscreen | a fullscreen one: "That took the whole screen; a double-click does that. Drag a box instead." A drawing: "That made a drawing; {drawingTrigger}+drag does that." |
 | 2 | `move` | do | moves on | Drag it to move it. A press selects it, and a drag takes it along. | the subject | a subject that can move; no drawing mode | the subject moved 16 px or more from where the step found it, its size changed by less than 10%, and not fullscreen | resized instead: "That changed its size. Drag from the middle to move it." |
 | 3 | `resize` | do | moves on | Drag a corner to resize it; Shift switches keeping its shape. A right-drag near an edge does it too. | the subject's lower right handle | a subject that can move; no drawing mode; the subject selected | its width or height changed by 10% or more, and not fullscreen | - |
-| 4 | `drawingMode` | do | **waits** | Double-click it, or hold the button down on it, to draw on it. | the subject | a subject | drawing mode on the subject | - |
-| 5 | `draw` | do | moves on | Drag across it to draw. The bar above it has the pen, the eraser, text and the color. | the drawing bar's pen | drawing mode on the subject | the subject has more strokes than when the step began | - |
-| 6 | `stopDrawing` | do | moves on | Click outside it, or press Esc, to stop drawing. | - | - | no drawing mode | - |
-| 7 | `delete` | do | **waits** | Select it and press Delete, or the close button on its bar. | the subject's close button | a subject; no drawing mode | the subject deleted | - |
-| 8 | `undo` | do | moves on | Deleted by mistake? {undo} brings it back. It takes back anything you did, a step at a time. | - | in the tutorial folder; canvas uncovered; the subject's canvas; a deleted subject | the subject back on the canvas, after being deleted in this step (or when it began) | - |
-| 9 | `programs` | read | moves on | Set it up for your programs. Some games break when the overlay takes focus; others need it to. Look through Settings > Behavior, and make a profile for each program that needs its own. | - | - | Next | - |
-| 10 | `antiCheat` | read | moves on | Careful with anti-cheat. Some games watch for tools that draw over them or read their input. If a game might object, quit Spickzettel before you start it. | - | - | Next | - |
-| 11 | `away` | do | moves on | Press {editMode} to put the overlay away and go back to your program. Press it again to come back here. | - | - | the overlay has come back since the step began | with the hotkey unbound, the text names the tray icon instead |
-| 12 | `end` | read | Done | That's the basics. {cheatSheet} shows every key and gesture, and a right-click on anything shows what it can do. You can take this tutorial again from Settings > Interaction. | - | - | Done | - |
+| 4 | `delete` | do | **waits** | Select it and press Delete, or the close button on its bar. | the subject's close button | a subject; no drawing mode | the subject deleted | - |
+| 5 | `undo` | do | moves on | Deleted by mistake? {undo} brings it back. It takes back anything you did, a step at a time. | - | in the tutorial folder; canvas uncovered; the subject's canvas; a deleted subject | the subject back on the canvas, after being deleted in this step (or when it began) | - |
+| 6 | `programs` | read | moves on | Set it up for your programs. Some games break when the overlay takes focus; others need it to. Look through Settings > Behavior, and make a profile for each program that needs its own. | - | - | Next | - |
+| 7 | `antiCheat` | read | moves on | Careful with anti-cheat. Some games watch for tools that draw over them or read their input. If a game might object, quit Spickzettel before you start it. | - | - | Next | - |
+| 8 | `away` | do | moves on | Press {editMode} to put the overlay away and go back to your program. Press it again to come back here. | - | - | the overlay has come back since the step began | with the hotkey unbound, the text names the tray icon instead |
+| 9 | `end` | read | Done | That's the basics. {cheatSheet} shows every key and gesture, and a right-click on anything shows what it can do. More topics has the others. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
+
+**Drawing:**
+
+| # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when |
+|---|---|---|---|---|---|---|---|
+| 0 | `drawingMode` | do | **waits** | Any snippet can be drawn on, a screenshot as well as a drawing. Double-click it, or hold the button down on it, to draw on it. | the subject | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen | drawing mode on the subject |
+| 1 | `draw` | do | moves on | Drag across it to draw. The bar above it has the pen, the eraser, text and the color. | the drawing bar's pen | the same, and drawing mode on the subject | the subject has more strokes than when the step began |
+| 2 | `stopDrawing` | do | moves on | Click outside it, or press Esc, to stop drawing. | - | - | no drawing mode |
+| 3 | `end` | read | Done | That's drawing. Double-click any snippet to draw on it. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done |
+
+A new folder has no snippet, so Drawing starts with its need for a
+subject unmet: its line says to take a screenshot, and its button, Put
+one here, places the practice snippet (6.4).
 
 *Found while building phase 1:* the welcome text first said that the
 screen behind is frozen while you edit. That holds only with "Freeze
@@ -264,15 +282,16 @@ since a drag on a snippet in drawing mode draws.
 **Which steps wait.** A step waits when a later step needs what its goal
 makes, and nothing else can make it:
 
-- the screenshot is the subject of every step after it;
-- drawing mode is what step 5 draws in;
-- the deleted subject is what step 8 brings back.
+- the screenshot is the subject of every Basics step after it;
+- the deleted subject is what Basics' `undo` brings back;
+- drawing mode is what Drawing's `draw` draws in.
 
 The other do steps move on, because no later step depends on them. A
-need they leave unmet has its own way back: step 6's "no drawing mode"
-is a need of step 7, with its own line. A test checks this for the
-whole chain. Every need of every step is either the goal of an earlier
-gated step, or has a line that says how to meet it (section 9).
+need they leave unmet has its own way back, with its own line: Basics'
+`delete` needs drawing mode off, and says how. A test checks this for
+every topic: every need of every step is either the goal of an earlier
+gated step of its chain, or has a line, or a button, that says how to
+meet it (section 9).
 
 **Steps beyond the first list.** The first list asked for screenshot,
 move and resize, draw, and delete. Four more steps came out of the
@@ -336,14 +355,14 @@ first, and the needs only guide while it is not met.
   step's need says so ("Delete it again to try this"), and on a step
   that does not wait, Next moves on.
 
-**What is kept on disk.** Each step change is kept, by the step's id, in
-the setting `tutorial.welcome` (section 7.6).
+**What is kept on disk.** Each step change is kept, by the step's id,
+under the topic's id in the setting `tutorial.progress` (section 7.6).
 
 ## 6. Staying on track
 
 ### 6.1 What derails a tutorial
 
-These are the app's actual ways off the path, with the welcome chain's
+These are the app's actual ways off the path, with the topics'
 examples:
 
 | Way | Examples |
@@ -441,8 +460,8 @@ to do.
 ### 6.5 The subject
 
 **The tutorial folder: a lightweight sandbox** (question 6). Every run
-of the tutorial makes a folder of its own, named "Tutorial", with one
-canvas, and switches to it:
+of a topic makes a folder of its own, named for the topic ("Tutorial:
+Basics"), with one canvas, and switches to it:
 
 - The user's other folders are left as they were, and the tutorial
   starts from a clean canvas every time.
@@ -530,13 +549,13 @@ reading about it, is what the step is for.
 | The folder changes | Go back to the tutorial, which makes the folder again if it is gone (6.4, 6.5) |
 | The canvas is covered | the need's line (6.4) |
 | A mode is in the way | the need's line (6.4) |
-| The overlay leaves edit mode | the card goes and comes back with it (3); step 11 is built on it |
+| The overlay leaves edit mode | the card goes and comes back with it (3); Basics' `away` step is built on it |
 | A near miss | the hint (6.6) |
 | The settings change | the text is resolved in every frame from the bindings and triggers as they are (7.1) |
 | Out of order | the start record (6.7) |
 | Wanting out | Skip; nothing is held (6.8) |
 
-**If a step ever needs a hold.** Nothing in the welcome chain does. The
+**If a step ever needs a hold.** Nothing in the topics built does. The
 one place a hold would go is `Editor::Available`, with a reason: it is
 what grays a menu row out and what a key checks. That covers commands
 only, not gestures or widgets, and it is a change to
@@ -569,6 +588,8 @@ the settings and the anchors, and a test fakes it. It answers:
 - **Words:** the label of the keys that run a command, or of a hotkey,
   as bound now (`KeysFor`, `FormatKeyComboLabel`, as the cheat sheet
   uses them); the triggers as set.
+- **The tutorial's own progress:** what is kept for a topic (7.6), for
+  the list and the skip card's warnings.
 
 Answers are values: ids, rectangles, counts. The tutorial never holds a
 reference into the model, which is the same rule `docs/VIEW_LAYER.md`
@@ -583,7 +604,7 @@ point at, and a board of where each is this frame. There are two kinds:
   as it draws it: `host_.Mark(AnchorId::SelectionBarClose, rect)`,
   through `ViewHost`. That is one line per anchored widget. The board is
   cleared in Prepare, so an anchor not drawn this frame is not on screen.
-  The welcome chain marks:
+  The topics mark:
   - the selection bar's close button;
   - the drawing bar's pen;
   - a dock chip, by its snippet.
@@ -601,15 +622,18 @@ like every other:
 
 | Action | Does | Through |
 |---|---|---|
-| Tutorial next, back, skip, end | the runner's own state | the runner |
+| Tutorial next, back, skip, end; More topics, and leaving the list | the runner's own state, and the card's | the runner, the card |
 | Switch to a canvas | Go back there; Go back to the tutorial (6.4) | the existing `action::SwitchCanvas` |
 | Make the tutorial folder | a start (7.6); Go back to the tutorial when the folder is gone | `Session::AddFolder` and `AddCanvas`, as the Overview's New folder does, then a switch |
 | Practice snippet | Put one here (6.4): a snippet of the drawing kind, with a backing, at the middle of the canvas and clear of the card | `Session::CreateItem(prototype, /*undoable=*/false)` |
-| Start the tutorial | the Settings button, the offer card (7.6) | the tutorial folder, then the runner |
+| Start a topic | a first run, an install from before, a row of the list (7.6) | the running topic let go of, the tutorial folder, then a runner for the topic's chain |
+| Resume a topic | a start after quitting partway (7.6) | its folder, or a new one; then a runner at its step |
+| Open the list | the Settings button (7.6) | the Overview closed; the card's own state |
 | End with the folder | Done on the end card or the skip card (question 9) | kept, or the existing `action::Delete`, which puts it in the trash |
 
 The practice snippet is made off the history, the way the first-run
-notes have been made until now: undo cannot take it away from under a step. In every other
+notes were made before the tutorial: undo cannot take it away from under
+a step. In every other
 way it is an ordinary snippet, and it can be moved, drawn on and deleted
 like one.
 
@@ -624,14 +648,15 @@ settings, set through `Settings::Set` (7.6).
 - **the card**, a window named `##tutorial_card`;
 - **the spotlight**, an overlay.
 
-It holds where the card was left, and records actions.
+It holds the runner, which topic it runs, whether the list is up and
+where the card was left, and records actions.
 
 **New rows in the surface table** (`docs/VIEW_LAYER.md`, section 3), for
 edit mode:
 
 | # | Surface | Kind | Up while | Owner |
 |---|---|---|---|---|
-| between 10 and 11 | The tutorial card | window `##tutorial_card` | the tutorial is on | Tutorial card |
+| between 10 and 11 | The tutorial card | window `##tutorial_card` | a topic runs, or the list is up | Tutorial card |
 | between 13 and 14 | The spotlight | overlay | the step points at an anchor on screen | Tutorial card |
 
 The positions have reasons:
@@ -659,21 +684,26 @@ The positions have reasons:
 - `world.h`: the world (7.1).
 - `step.h`: a step, its needs, and the functions for its goal, its
   subject rule and its near misses.
-- `welcome_chain.{h,cpp}`: the table of section 4.
-- `tutorial.{h,cpp}`: the runner (section 5).
+- `chains.{h,cpp}`: the tables of section 4, one function per topic's
+  chain, sharing their goals, needs and near misses.
+- `topics.{h,cpp}`: the table of topics, in the list's order (13.2).
+- `tutorial.{h,cpp}`: the runner (section 5). A runner runs one chain;
+  the card makes another for another topic, and lets go of the one
+  running with `Leave` (13.3).
 
 ```cpp
-// The sketch, not the final shape.
 struct Step {
-    std::string_view id;               // stable: kept on disk (7.6)
-    StepKind kind;                     // Read, Do
-    bool gated;                        // Next waits for the goal (section 3)
-    std::string_view title, text;      // ui_strings keys, with {placeholders}
-    std::optional<Pointing> pointsAt;  // an AnchorId, the subject, or a handle of it
-    std::vector<Need> needs;           // checked in order (6.4)
-    SubjectRule subject;               // none, any, can move (6.5)
-    Goal goal;                         // bool(const World&, const StartRecord&)
-    std::vector<NearMiss> nearMisses;  // {check, ui_strings key}
+    std::string_view id;                       // stable: kept on disk (7.6)
+    StepKind kind;                             // Read, Do
+    bool gated;                                // Next waits for the goal (section 3)
+    bool warning;                              // repeated on the skip card (13.6)
+    const char* title;                         // from ui_strings
+    const char* (*text)(const World&);         // chosen for the keys and triggers
+    Spot spot;                                 // an anchor, the subject, or a handle of it
+    std::vector<Need> needs;                   // checked in order (6.4)
+    SubjectRule subject;                       // none, any, can move, last deleted (6.5)
+    Check goal;                                // bool(const Look&)
+    std::vector<NearMiss> nearMisses;          // {check, ui_strings text}
 };
 ```
 
@@ -685,59 +715,50 @@ across steps and each carries a text and a button.
 
 ### 7.6 Start, resume and start again
 
-*Section 13 changes this section:*
-
-- *the progress is kept per topic (13.7);*
-- *an install from before 0.2.0 starts Basics, with no offer (13.4);*
-- *the Settings button opens the list of topics.*
-
-**The settings.** Two catalog rows (`docs/SETTINGS.md`, section 3):
+**The settings.** Three catalog rows (`docs/SETTINGS.md`, section 3):
 
 | Key | Field | Default | Rule | Edited from | Effect |
 |---|---|---|---|---|---|
-| `tutorial.welcome` | `tutorialWelcome` | `""` | `""` (never shown), `"offered"`, a step id, `"finished"` or `"skipped"` | the tutorial; Settings > Interaction | Use |
-| `tutorial.folder` | `tutorialFolder` | 0 | the tutorial folder's id; 0 for none | the tutorial | Use |
+| `tutorial.progress` | `tutorialProgress` | `{}` | each topic's id, mapped to a step id, `"finished"` or `"skipped"`; no entry for a topic never started | the tutorial | Use |
+| `tutorial.current` | `tutorialCurrent` | `""` | the topic running, or empty | the tutorial | Use |
+| `tutorial.folder` | `tutorialFolder` | `"0"` | the running topic's folder id, as digits; 0 for none | the tutorial | Use |
 
-Both are Global, and in no profile. Adding keys needs no version bump
-(section 8 there).
+All three are Global, and in no profile. Adding keys needs no version
+bump (section 8 there). Phase 3 built a single `tutorial.welcome` row,
+which phase 4 replaced before any release had it.
 
 The folder's id is a library id kept in the settings file. The two
 files can disagree: the library may be set aside, or the folder deleted.
-Either way the id finds no live folder, and a start or a resume makes a
-new one. A row in the library's `meta` table would keep the two
-together, at the cost of a change to the store. It is not needed for
-this.
+Either way the id finds no live folder, and a resume makes a new one. A
+row in the library's `meta` table would keep the two together, at the
+cost of a change to the store. It is not needed for this.
 
-**When the tutorial starts:**
+**When a topic starts** (`OverlayApp::WelcomeAtStart`, told by
+`TrayController` what its start found of the library; done the first
+time edit mode comes up):
 
-- **A first run** (`TrayController`'s `firstRun_`, which
-  `RequestWelcomeNote` answers today) starts it at its first step. It
-  makes the tutorial folder beside the folder and canvas a first run
-  makes. That one stays empty, for the user's own work.
-- **A start after quitting partway** comes back to the step it was on,
-  by its id, the next time edit mode comes up. It switches to the
-  tutorial folder, or makes a new one if that folder is gone. An id no
-  longer in the chain starts the chain again.
-- **An install from before 0.2.0** (a library, and `tutorial.welcome`
-  empty) is offered the tutorial once, the first time edit mode comes up
-  (question 5). A card of its own reads "New: a short tutorial, in a
-  folder of its own. [Start] [No thanks]". Either answer is kept
-  (`"offered"`), so the offer is made once. Start begins the chain as
-  below.
+- **A first run** starts Basics at its first step. It makes the
+  tutorial folder beside the folder and canvas a first run makes. That
+  one stays empty, for the user's own work.
+- **A start after quitting partway** goes on with the topic
+  `tutorial.current` names, at the step kept for it. It switches to that
+  topic's folder, or makes a new one if the folder is gone. A step id no
+  longer in the chain starts the topic again.
+- **An install from before 0.2.0** (a library, and nothing in
+  `tutorial.progress`) starts Basics, as a first run does (question 11).
+  Phase 3 built an offer card for it (question 5), which phase 4 took
+  out.
+- **A row of the list** starts its topic at its first step, in a new
+  folder, whatever its status (question 12). A topic running is let go
+  of first, as "Done, keep the folder" would (question 13).
 
-**Take the tutorial again** is a button in Settings > Interaction
-(question 7). It:
+**Open the tutorial** is a button in Settings > Interaction (question
+7). It closes the Overview and opens the list.
 
-1. closes the Overview;
-2. makes a new tutorial folder, and switches to it (question 6). A
-   folder from an earlier run is left as it is;
-3. starts at the first step.
-
-**The first-run notes go** (question 4). A first run places no notes.
-The welcome note's content is on the first and last cards, and the two
-warnings are steps 9 and 10, and the skip card (section 3).
-`OverlayApp::PlaceWelcomeNotes`, `RequestWelcomeNote` and the
-`welcome.*` strings go with them.
+**The first-run notes are gone** (question 4). A first run places no
+notes. The welcome note's content is on Basics' first and last cards,
+and the two warnings are Basics' steps 6 and 7, and on the skip card
+(section 3).
 
 ### 7.7 What does not change
 
@@ -745,8 +766,9 @@ warnings are steps 9 and 10, and the skip card (section 3).
   rules, the command table and `Available`.
 - **The session and the store.** The folder and the practice snippet
   are made with calls that exist.
-- **The overlay's states and their table.** The tray only asks for the
-  tutorial where it asks for the welcome notes today.
+- **The overlay's states and their table.** The tray tells the overlay
+  what its start found of the library, where it asked for the welcome
+  notes before.
 - **The surface table's existing rows**, and every ImGui id a test finds
   a widget by.
 
@@ -759,13 +781,20 @@ warnings are steps 9 and 10, and the skip card (section 3).
 - sometimes an anchor marked in the owner that draws it;
 - rarely a new need.
 
-**A chain** is:
+**A topic** is:
 
-- a table;
-- a catalog row for its progress;
-- a place it is offered from.
+- a chain in `ui/tutorial/chains.cpp`, or a file of its own;
+- a row in the topic table, with its title and one line on what it
+  covers;
+- its strings.
 
-**What later steps or chains could cover:**
+Its progress is kept under its id with no new setting, and the list
+offers it with no new code.
+
+**What the next topics are to cover** (section 13.2): Drawing in more
+depth (the pen, the eraser, the color, the width, text), Folders and
+canvases, and Profiles. Each is designed in this document first. Other
+candidates:
 
 - the context menu and Properties;
 - the wheel, to scale and change opacity;
@@ -794,16 +823,17 @@ gesture.
   - progress kept by id; an unknown id starts the chain again;
   - Next grayed out on a gated step until its goal is met, and not after
     Back.
-- **The chain's shape.** Every need of every step is either the goal of
-  an earlier gated step, or has a line that says how to meet it. Step ids
-  are unique.
+- **The chains' shape,** for every topic in the table. Every need a
+  step cannot meet by itself is the goal of an earlier gated step of its
+  chain. Step ids are unique within a chain, and topic ids within the
+  table. Each chain ends on a read step.
 - **Each step:** its goal, each of its needs and each near miss, with
   the fake world set up for each.
-- **A walk-through.** In the headless harness (`HeadlessAppTest`), the
-  whole chain is done with real gestures: a drag, a double-click, Delete,
-  Ctrl+Z, the edit hotkey twice. The test checks that each card moves
-  on.
-- **The derail matrix.** For each do step, crossed with each way of 6.1
+- **A walk-through,** for every topic. In the headless harness
+  (`HeadlessAppTest`), the whole chain is done with real gestures: a
+  drag, a double-click, Delete, Ctrl+Z, the edit hotkey twice, Put one
+  here. The test checks that each card moves on.
+- **The derail matrix.** For each do step of each topic, crossed with each way of 6.1
   that applies (subject deleted, undo run several times, canvas
   switched, Overview opened, cheat sheet opened, overlay hidden and
   shown, view mode, minimized, fullscreen, the capture hotkey), the test
@@ -820,20 +850,27 @@ gesture.
   - starting again makes a new folder and leaves the old one;
   - Done puts it in the trash, and Done, keep the folder keeps it.
 - **The start:**
-  - a first run places no notes and starts the chain;
-  - an install from before gets the offer once, whatever it answers.
+  - a first run places no notes and starts Basics;
+  - an install from before starts Basics too;
+  - the topic running when the app quit is resumed at its step, and no
+    other;
+  - a library whose tutorial is over starts nothing.
+- **Progress:** kept per topic as it goes; another topic started keeps
+  the running one's folder, and what it ended as.
+- **The list:** More topics on the end card and the skip card, and the
+  Settings button, open it; Back returns to the card it came from; a
+  row starts its topic at its first step; each topic's status; Drawing's
+  skip card shows the two warnings until Basics is finished.
 - **The stack.** The table in `tests/support/view_stack.h` gains the
   card's row.
 - **By hand.** A scratch instance with its own APPDATA, and a screenshot
-  of each card.
+  of each card, both topics walked through by real input (section 10,
+  phase 5).
 
 ## 10. Getting there
 
-*With section 13, a phase for topics comes before phase 4,
-which becomes phase 5 (13.10).*
-
-Each phase is a set of reviewable commits, and the app is whole after
-each.
+Each phase was a set of reviewable commits, and the app was whole after
+each. All five are built.
 
 1. **The runner and the welcome chain**, against the fake world. No UI
    yet.
@@ -843,19 +880,34 @@ each.
    - the card and spotlight owner;
    - the actions and the stack rows;
    - the walk-through test and the derail matrix.
-   The tutorial can be started only by a test at this point.
+   The tutorial could be started only by a test at this point.
 3. **Start, resume and start again:**
-   - the two settings;
+   - the settings;
    - the tutorial folder, and Go back to the tutorial;
    - the first run, with the first-run notes gone;
    - the Settings button;
-   - the offer to installs from before;
+   - the offer to installs from before (taken out in phase 4);
    - the end with the folder: trash, or keep (question 9).
-4. **By hand, and the docs:**
-   - the hand check;
-   - `docs/ARCHITECTURE.md` gains a "The tutorial" paragraph;
+4. **Topics** (section 13):
+   - Basics and Drawing split out of the welcome chain, and the topic
+     table;
+   - the progress kept per topic;
+   - the list, and More topics;
+   - Basics started on a first run and for installs from before;
+   - Open the tutorial in Settings;
+   - the skip card's warnings from any topic.
+5. **By hand, and the docs:**
+   - the hand check: both topics walked through in a scratch instance
+     by real input, with a screenshot of each card, the list, the
+     delete confirmation, and the card over the Overview;
+   - `docs/ARCHITECTURE.md` gains "The tutorial";
    - the rows in `docs/VIEW_LAYER.md` and `docs/SETTINGS.md`;
    - this document marked built.
+
+*Found by hand:* nothing broke. The spotlight was hard to see in the
+accent around a selected snippet, and has a color of its own (section
+3). Runs of one topic leave folders of one name, "Tutorial: Basics" and
+"Tutorial: Basics" (13.5).
 
 ## 11. Considered and not proposed
 
@@ -875,7 +927,7 @@ each.
     picker and renames, the canvas bar's last canvas, the stroke
     rasters. Every owner would need an answer to "the library was
     replaced", a new rule in `docs/VIEW_LAYER.md` that is easy to forget.
-  - A capture hotkey pressed in step 11, back in the user's program,
+  - A capture hotkey pressed in Basics' `away` step, back in the user's program,
     would land in the throwaway library and be lost, unless it were held
     back or both libraries ran at once.
   - Keeping what was made there would need snippets and pictures copied
@@ -992,12 +1044,10 @@ Asked with the topics (section 13), after phase 3 was built:
 
 ## 13. Topics
 
-Status: **agreed** (2026-09-28), after phases 1 to 3 were built, and
-to be built as phase 4 (13.10). Its questions are 10 to 15 of section
-12, and this section matches their answers.
-
-It changes sections 3, 4, 7.6, 9 and 10 where they meet it. Each of
-them says so. They are brought in line with it when it is built.
+Status: **built** (2026-09-28) as phase 4, after phases 1 to 3. Its
+questions are 10 to 15 of section 12, and this section matches their
+answers. Sections 3 to 10 describe what is built; this section keeps
+why, and what is still to come.
 
 ### 13.1 What changes, and why
 
@@ -1109,7 +1159,7 @@ Opening the list keeps nothing.
   means.
 - **An install from before 0.2.0 starts Basics the same way** (question
   11). Such an install is a library with nothing in
-  `tutorial.progress`. The offer card of section 7.6 goes: a user from
+  `tutorial.progress`. The offer card built in phase 3 goes: a user from
   before is treated as a new one.
 - **Every topic's end card, and the skip card,** gain a "More topics"
   button that opens the list. The topic stays where it is until another
@@ -1125,6 +1175,10 @@ Opening the list keeps nothing.
   folder, a clean place to practice.
 - **At the end,** Done puts the folder in the trash, and "Done, keep
   the folder" keeps it, as now (question 9).
+- **Runs of one topic** leave folders of one name, found by hand. Done
+  puts each in the trash, so they pile up only for someone who keeps
+  every run. A number after the name is the fix, if that turns out to
+  matter.
 - **A topic that makes folders** (Folders and canvases):
   - The folders made during the run count as part of the run's space.
     A step in one of them counts as in the tutorial folder.

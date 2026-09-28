@@ -216,10 +216,19 @@ order, including where that is surprising (section 9, finding 3).
 | 8 | The edit-mode border, the demo mark | layer `##sz_chrome_layer` | always, each as its setting says | Screen chrome |
 | 9 | The Overview: its backdrop, its panel, and ImGui's popups inside it | panel | the Panel level holds the Overview | Overview; Settings page |
 | 10 | The cheat sheet: its backdrop and its panel | panel | the Panel level holds the cheat sheet | Cheat sheet |
+| 10a | The tutorial card | window `##tutorial_card` | a tutorial topic runs, or its list is up | Tutorial card |
 | 11 | The delete confirmation | popup | the Popup level holds it | Popups |
 | 12 | The drag previews (a region, the rectangle eraser), the size preview, the modifier badge | overlays | their gesture or preview is on; not under a panel | Pointer |
 | 13 | The toast, the persistence warning | overlays | a message is up; a write has failed | Messages |
+| 13a | The tutorial's spotlight | overlay | the step points at something on screen, and its goal is not met | Tutorial card |
 | 14 | The software pointer | overlay | its setting draws one | Pointer |
+
+Rows 10a and 13a came with the tutorial (`docs/TUTORIAL.md`, section
+7.4), numbered so that no other row's number changed. The card sits
+above the panels, so that a step can talk about them, and below the
+delete confirmation, which must stay reachable. The spotlight sits above
+everything but the pointer, so that it can ring something inside a
+panel.
 
 **View, Pinned and Notice:**
 
@@ -321,16 +330,16 @@ Every frame of edit mode runs these stages, in order:
 
 | Stage | What it does | What it may change | Today |
 |---|---|---|---|
-| 1. Prepare | tells the editor the display size; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the selection pruned; a note edit ended elsewhere put away (C5); the stroke rasters; where the canvas bar is | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
+| 1. Prepare | tells the editor the display size; the anchor board cleared; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the selection pruned; a note edit ended elsewhere put away (C5); the stroke rasters; where the canvas bar is; what the start decided for the tutorial, asked for once as an action; the tutorial's runner brought up to date, its own state only | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
 | 2. Canvas | surfaces 1 to 5 | a widget's own value (section 6); records actions | `RenderCanvasLayer`, `RenderItems`, `RenderCanvasBar` |
 | 3. Open | the effect queue: popups opened and closed, ImGui's active widget let go | ImGui's popups and focus | `ApplyEffects` |
 | 4. Popups | surface 6 | as stage 2 | the five popups' `Render...` functions |
 | 5. Over the canvas | surfaces 7, 8 and 12 | nothing | the drag previews, `RenderBrushSizePreview`, `RenderToolModifierBadge`, `RenderScreenChrome` |
 | 6. Panels | surfaces 9 to 11 | as stage 2 | `RenderOverview`, `RenderCheatSheet`, `RenderConfirmDeletePopover` |
-| 7. Messages | surface 13 | nothing | `RenderActionToast`, `RenderPersistenceWarning` |
+| 7. Messages | surfaces 13 and 13a | nothing | `RenderActionToast`, `RenderPersistenceWarning` |
 | 8. Stack | the pass of C1 | the windows' order | the 19 calls, spread over stages 2 to 6 |
 | 9. Pointer | the pointer's shape; surface 14 | the window's cursor | `ApplyPointerShape`, `DrawSoftwareCursor` |
-| 10. Apply | the actions recorded in stages 2 to 6, in order; the pen's width, once its preview has faded; the HUD's restart, once its key is up; a notice's end | the library, the editor, settings, what is up | new (C5, C6); today spread over the draws |
+| 10. Apply | the actions recorded in stages 2 to 6, in order; the tutorial's progress set, where it changed; the pen's width, once its preview has faded; the HUD's restart, once its key is up; a notice's end | the library, the editor, settings, what is up | new (C5, C6); today spread over the draws |
 
 The view-only modes run part of Prepare, the view-only layer, Messages
 and Apply.
@@ -394,6 +403,9 @@ in-place changes of section 1 go through it too.
 | Restore a minimized snippet | a dock chip | the session |
 | Close the Overview or the cheat sheet | the backdrop; the picker's Cancel, a tile clicked | the machine |
 | Finish a note edit | the note editor let go of | the editor |
+| The tutorial card's buttons: Next, Back, Skip, Done, Done keep, More topics, leaving the list | the tutorial card | the card's runner; Done also asks to delete the topic's folder |
+| Start a tutorial topic; resume one; open the list | a row of the list; the start (Prepare); the Settings button | `OverlayApp`: the Overview closed, the running topic let go of, the topic's folder made, then the card |
+| Go back to the tutorial; put a practice snippet here | a hint's button on the card | the editor's switch, or the topic's folder made again; the session, off the history |
 
 An action is a value: an id, an index, a name. It never holds a
 reference into the model, which is the failure that every deferral today
@@ -450,7 +462,8 @@ what it is handed, and records actions:
 | Screen chrome | 7, 8 | the HUD's applied digits, restart request and last-key record; the demo mark's place | `overlay_app.cpp` |
 | Messages | 13 | the message and when it expires; the message for the next showing; the settings file that failed; whether a notice's end was reported | `overlay_app.cpp`, `overlay_app_overview.cpp` |
 | Pointer | 12, 14; the pointer's shape | the applied shape and the cursor history; when the size preview expires; the pen's width owed | `overlay_app.cpp`, `overlay_app_popovers.cpp` |
-| `OverlayApp` | none of its own | the mode; the stages; the actions; the scale, accent and pacing applied; the style; the welcome request; the tray's callbacks | `overlay_app.cpp`, `overlay_app_input.cpp`, `overlay_app_commands.cpp` |
+| Tutorial card | 10a, 13a | the runner and the topic it runs; whether the list is up; whether a topic has run; whether the card was dragged | new with the tutorial (`docs/TUTORIAL.md`) |
+| `OverlayApp` | none of its own | the mode; the stages; the actions; the scale, accent and pacing applied; the style; what the start decided for the tutorial; the tutorial's world and the anchor board; the tray's callbacks | `overlay_app.cpp`, `overlay_app_input.cpp`, `overlay_app_commands.cpp` |
 
 The rules:
 
@@ -611,7 +624,9 @@ green throughout.
    What an owner asks of `OverlayApp` is an interface, `ViewHost`: to act,
    to say something, the window, the displays, a hotkey offered to the
    OS, a delete asked, the overlay restarted, a tile menu opened, and what
-   a preview is drawn with. The Overview draws the Settings page's body
+   a preview is drawn with. The tutorial added one more: an anchor marked
+   where a widget is drawn, on a board cleared each frame, which the
+   tutorial's spotlight reads (`docs/TUTORIAL.md`, section 7.2). The Overview draws the Settings page's body
    through a call `OverlayApp` hands it, and the view-only layer the demo
    mark the same way. `overlay_app_internal.h` went last, its tool tables
    to the Settings page.
