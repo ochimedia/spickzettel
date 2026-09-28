@@ -496,5 +496,254 @@ TEST_F(TutorialAppTest, SkipShowsTheWarningsNotReachedAndDoneLetsGo) {
     EXPECT_FALSE(card->Active);
 }
 
+// ===== The derail matrix (sections 6.1 and 9) =====
+//
+// Each do step, crossed with each way off the path that applies to it: the
+// card says a line that applies, and doing what the lines say - one after
+// the other, as a user would - and then the step completes it.
+
+// A way off the path, as a user takes it.
+enum class Way {
+    Overview,
+    CheatSheet,
+    OtherFolder,
+    OtherCanvasHere,
+    HiddenAndShown,
+    ViewOnly,
+    Deleted,
+    UndoneSeveralTimes,
+    Minimized,
+    Fullscreen,
+    CaptureHotkey,
+    LeftDrawingMode,
+    EnteredDrawingMode,
+};
+
+const char* WayName(Way way) {
+    switch (way) {
+        case Way::Overview: return "Overview";
+        case Way::CheatSheet: return "CheatSheet";
+        case Way::OtherFolder: return "OtherFolder";
+        case Way::OtherCanvasHere: return "OtherCanvasHere";
+        case Way::HiddenAndShown: return "HiddenAndShown";
+        case Way::ViewOnly: return "ViewOnly";
+        case Way::Deleted: return "Deleted";
+        case Way::UndoneSeveralTimes: return "UndoneSeveralTimes";
+        case Way::Minimized: return "Minimized";
+        case Way::Fullscreen: return "Fullscreen";
+        case Way::CaptureHotkey: return "CaptureHotkey";
+        case Way::LeftDrawingMode: return "LeftDrawingMode";
+        case Way::EnteredDrawingMode: return "EnteredDrawingMode";
+    }
+    return "?";
+}
+
+struct Derail {
+    const char* step;
+    Way way;
+    // The need the card says a line for - none where the way breaks
+    // nothing the step needs.
+    std::optional<tutorial::Need> says;
+};
+
+std::vector<Derail> Matrix() {
+    using enum Way;
+    using tutorial::Need;
+    const std::optional<Need> nothing;
+    std::vector<Derail> cases = {
+        {"screenshot", Overview, Need::CanvasUncovered},
+        {"screenshot", CheatSheet, Need::CanvasUncovered},
+        {"screenshot", OtherFolder, Need::InTutorialFolder},
+        {"screenshot", HiddenAndShown, nothing},
+        {"screenshot", ViewOnly, nothing},
+        {"screenshot", CaptureHotkey, nothing},
+    };
+    for (const char* step : {"move", "resize"}) {
+        cases.push_back({step, Overview, Need::CanvasUncovered});
+        cases.push_back({step, CheatSheet, Need::CanvasUncovered});
+        cases.push_back({step, OtherFolder, Need::InTutorialFolder});
+        cases.push_back({step, OtherCanvasHere, Need::SubjectHere});
+        cases.push_back({step, HiddenAndShown, nothing});
+        cases.push_back({step, ViewOnly, nothing});
+        cases.push_back({step, Deleted, Need::ASubject});
+        cases.push_back({step, UndoneSeveralTimes, Need::ASubject});
+        cases.push_back({step, Minimized, Need::SubjectOnScreen});
+        cases.push_back({step, Fullscreen, Need::SubjectCanMove});
+        cases.push_back({step, CaptureHotkey, Need::SubjectHere});
+        cases.push_back({step, EnteredDrawingMode, Need::NoDrawingMode});
+    }
+    const std::vector<Derail> more = {
+        {"drawingMode", Overview, Need::CanvasUncovered},
+        {"drawingMode", CheatSheet, Need::CanvasUncovered},
+        {"drawingMode", OtherFolder, Need::InTutorialFolder},
+        {"drawingMode", OtherCanvasHere, Need::SubjectHere},
+        {"drawingMode", HiddenAndShown, nothing},
+        {"drawingMode", ViewOnly, nothing},
+        {"drawingMode", Deleted, Need::ASubject},
+        {"drawingMode", Minimized, Need::SubjectOnScreen},
+        {"drawingMode", Fullscreen, nothing},
+        {"draw", Overview, Need::CanvasUncovered},
+        {"draw", CheatSheet, Need::CanvasUncovered},
+        {"draw", HiddenAndShown, nothing},
+        {"draw", ViewOnly, Need::DrawingOnSubject},
+        {"draw", LeftDrawingMode, Need::DrawingOnSubject},
+        {"delete", Overview, Need::CanvasUncovered},
+        {"delete", CheatSheet, Need::CanvasUncovered},
+        {"delete", OtherFolder, Need::InTutorialFolder},
+        {"delete", OtherCanvasHere, Need::SubjectHere},
+        {"delete", HiddenAndShown, nothing},
+        {"delete", ViewOnly, nothing},
+        {"delete", Minimized, Need::SubjectOnScreen},
+        {"delete", EnteredDrawingMode, Need::NoDrawingMode},
+        {"undo", Overview, Need::CanvasUncovered},
+        {"undo", CheatSheet, Need::CanvasUncovered},
+        {"undo", OtherFolder, Need::InTutorialFolder},
+        {"undo", OtherCanvasHere, Need::SubjectHere},
+        {"undo", HiddenAndShown, nothing},
+        {"undo", ViewOnly, nothing},
+        {"away", Overview, nothing},
+        {"away", CheatSheet, nothing},
+    };
+    cases.insert(cases.end(), more.begin(), more.end());
+    return cases;
+}
+
+class TutorialDerailTest : public TutorialAppTest, public ::testing::WithParamInterface<Derail> {
+protected:
+    void TakeTheWay(Way way) {
+        const std::optional<ItemId> subject = Runner().Subject();
+        switch (way) {
+            case Way::Overview:
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+                break;
+            case Way::CheatSheet:
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::CheatSheet}));
+                break;
+            case Way::OtherFolder:
+                // The canvas the app started on, outside the tutorial's folder.
+                for (const Canvas& canvas : Canvases().Canvases()) {
+                    if (canvas.folderId != Runner().Folder()) {
+                        controller_->GetSession().SwitchToCanvas(canvas.id);
+                        break;
+                    }
+                }
+                ASSERT_NE(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+                break;
+            case Way::OtherCanvasHere:
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::NewCanvas}));
+                break;
+            case Way::HiddenAndShown:
+                ShowEditMode();
+                StepFrame();
+                ShowEditMode();
+                break;
+            case Way::ViewOnly:
+                ShowViewMode();
+                StepFrame();
+                ShowEditMode();
+                break;
+            case Way::Deleted:
+                ASSERT_TRUE(subject.has_value());
+                ASSERT_TRUE(controller_->GetSession().DeleteItem(*subject));
+                break;
+            case Way::UndoneSeveralTimes:
+                for (int i = 0; i < 4; ++i) {
+                    PressCtrlKey(ImGuiKey_Z);
+                }
+                break;
+            case Way::Minimized:
+                ASSERT_TRUE(subject.has_value());
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Minimize, *subject}));
+                break;
+            case Way::Fullscreen:
+                ASSERT_TRUE(subject.has_value());
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::ToggleFullscreen, *subject}));
+                break;
+            case Way::CaptureHotkey:
+                TriggerHotkey(config_.hotkeyQuickCapture);
+                break;
+            case Way::LeftDrawingMode:
+                RawClick(1200.0f, 120.0f);
+                break;
+            case Way::EnteredDrawingMode:
+                DoubleClick(SubjectMiddle().x, SubjectMiddle().y);
+                break;
+        }
+        StepFrames(3);
+    }
+
+    // What the lines say, done one after the other until there is none:
+    // the card's button where the line has one, and otherwise what its
+    // words say to do.
+    void FollowTheLines() {
+        for (int guard = 0; guard < 6; ++guard) {
+            const std::optional<tutorial::Hint>& hint = Runner().CurrentHint();
+            if (!hint.has_value() || !hint->need.has_value()) {
+                return;
+            }
+            if (hint->button != tutorial::HintButton::None) {
+                Overlay().PressTutorialHint();
+                StepFrames(3);
+                continue;
+            }
+            switch (*hint->need) {
+                case tutorial::Need::CanvasUncovered:
+                case tutorial::Need::NoOtherTool:
+                    PressKey(ImGuiKey_Escape);
+                    break;
+                case tutorial::Need::NoDrawingMode:
+                    // "Click outside the snippet, or press Esc."
+                    PressKey(ImGuiKey_Escape);
+                    break;
+                case tutorial::Need::SubjectOnScreen: {
+                    const std::optional<AnchorRect> chip = App().TutorialSpot();
+                    ASSERT_TRUE(chip.has_value()) << "the ring on the chip";
+                    Click(Center(*chip).x, Center(*chip).y);
+                    break;
+                }
+                case tutorial::Need::SubjectCanMove:
+                    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::ToggleFullscreen, *Runner().Subject()}));
+                    break;
+                case tutorial::Need::SubjectSelected:
+                    RawClick(SubjectMiddle().x, SubjectMiddle().y);
+                    break;
+                case tutorial::Need::DrawingOnSubject:
+                    DoubleClick(SubjectMiddle().x, SubjectMiddle().y);
+                    break;
+                default:
+                    FAIL() << "a line with nothing to do: " << hint->text;
+            }
+            StepFrames(3);
+        }
+        FAIL() << "the lines never ran out: " << HintUp();
+    }
+
+};
+
+TEST_P(TutorialDerailTest, TheCardSaysALineAndFollowingItGetsTheStepDone) {
+    const Derail& derail = GetParam();
+    WalkTo(derail.step);
+    const bool gated = Runner().CurrentStep().gated;
+
+    TakeTheWay(derail.way);
+    ASSERT_EQ(StepUp(), derail.step) << "the way off the path did not do the step";
+    EXPECT_EQ(NeedUp(), derail.says) << "the line: " << HintUp();
+    // Never trapped: Skip is on every step, and Next where it always is.
+    EXPECT_EQ(Runner().GetState(), tutorial::Tutorial::State::OnStep);
+    if (!gated) {
+        EXPECT_TRUE(Runner().NextEnabled());
+    }
+
+    FollowTheLines();
+    EXPECT_FALSE(NeedUp().has_value()) << HintUp();
+    DoStep(derail.step);
+    EXPECT_NE(StepUp(), derail.step) << "not done after following the lines: " << HintUp();
+}
+
+INSTANTIATE_TEST_SUITE_P(Matrix, TutorialDerailTest, ::testing::ValuesIn(Matrix()),
+                         [](const ::testing::TestParamInfo<Derail>& info) {
+                             return std::string(info.param.step) + "_" + WayName(info.param.way);
+                         });
+
 }  // namespace
 }  // namespace sz::test

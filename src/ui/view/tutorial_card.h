@@ -47,6 +47,8 @@ public:
     // What the spotlight rings this frame, if anything - read from the
     // anchor board, so only once the canvas has been drawn.
     std::optional<AnchorRect> SpotRect() const;
+    // What the hint's button asks for, while the hint up has one.
+    std::optional<ViewAction> HintAction() const;
 
 private:
     // The subject's rectangle, while it is on the canvas being looked at.

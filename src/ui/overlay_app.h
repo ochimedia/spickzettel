@@ -251,6 +251,12 @@ public:
     // One of the card's buttons, pressed as the card presses it - for a
     // test, as Dispatch is for a key.
     void PressTutorial(TutorialButton button) { Act(action::TutorialPress{button}); }
+    // The button under the hint, if the hint up has one.
+    void PressTutorialHint() {
+        if (std::optional<ViewAction> action = tutorialCard_.HintAction()) {
+            Act(std::move(*action));
+        }
+    }
     const tutorial::Tutorial& TutorialRunner() const { return tutorialCard_.Runner(); }
     std::optional<AnchorRect> TutorialSpot() const { return tutorialCard_.SpotRect(); }
 

@@ -277,26 +277,44 @@ void TutorialCard::DrawStep() {
     }
 }
 
+std::optional<ViewAction> TutorialCard::HintAction() const {
+    const std::optional<tutorial::Hint>& hint = runner_.CurrentHint();
+    if (runner_.GetState() != tutorial::Tutorial::State::OnStep || !hint.has_value()) {
+        return std::nullopt;
+    }
+    switch (hint->button) {
+        case tutorial::HintButton::None:
+            return std::nullopt;
+        case tutorial::HintButton::BackToTutorial:
+            return action::BackToTutorial{};
+        case tutorial::HintButton::BackThere:
+            return action::SwitchCanvas{hint->canvas};
+        case tutorial::HintButton::PutOneHere:
+            return action::PracticeSnippet{};
+    }
+    return std::nullopt;
+}
+
 void TutorialCard::DrawHint(const tutorial::Hint& hint) {
     Wrapped(theme::Accent(), tutorial::Expand(hint.text, world_, hint.canvas));
+    const char* label = nullptr;
     switch (hint.button) {
         case tutorial::HintButton::None:
             return;
         case tutorial::HintButton::BackToTutorial:
-            if (ImGui::SmallButton(Labeled(strings::kTutorialCardBackToTutorial, "tutorial_hint"))) {
-                host_.Act(action::BackToTutorial{});
-            }
-            return;
+            label = strings::kTutorialCardBackToTutorial;
+            break;
         case tutorial::HintButton::BackThere:
-            if (ImGui::SmallButton(Labeled(strings::kTutorialCardBackThere, "tutorial_hint"))) {
-                host_.Act(action::SwitchCanvas{hint.canvas});
-            }
-            return;
+            label = strings::kTutorialCardBackThere;
+            break;
         case tutorial::HintButton::PutOneHere:
-            if (ImGui::SmallButton(Labeled(strings::kTutorialCardPutOneHere, "tutorial_hint"))) {
-                host_.Act(action::PracticeSnippet{});
-            }
-            return;
+            label = strings::kTutorialCardPutOneHere;
+            break;
+    }
+    if (ImGui::SmallButton(Labeled(label, "tutorial_hint"))) {
+        if (std::optional<ViewAction> action = HintAction()) {
+            host_.Act(std::move(*action));
+        }
     }
 }
 
