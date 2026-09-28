@@ -32,6 +32,12 @@ bool SubjectBoth(const Look& look, const SnippetFacts*& now, const SnippetFacts*
     return now != nullptr && then != nullptr;
 }
 
+// The subject as it can be moved and resized: both there, and not
+// fullscreen now - which changes its rectangle, and is neither.
+bool SubjectOutOfFullscreen(const Look& look, const SnippetFacts*& now, const SnippetFacts*& then) {
+    return SubjectBoth(look, now, then) && !now->fullscreen;
+}
+
 const char* Fixed(const char* text) { return text; }
 
 std::vector<Step> Make() {
@@ -116,14 +122,14 @@ std::vector<Step> Make() {
             [](const Look& look) {
                 const SnippetFacts* now = nullptr;
                 const SnippetFacts* then = nullptr;
-                return SubjectBoth(look, now, then) && Moved(*now, *then) && !Resized(*now, *then);
+                return SubjectOutOfFullscreen(look, now, then) && Moved(*now, *then) && !Resized(*now, *then);
             },
         .nearMisses =
             {
                 {[](const Look& look) {
                      const SnippetFacts* now = nullptr;
                      const SnippetFacts* then = nullptr;
-                     return SubjectBoth(look, now, then) && Resized(*now, *then);
+                     return SubjectOutOfFullscreen(look, now, then) && Resized(*now, *then);
                  },
                  strings::kTutorialMoveMissResized},
             },
@@ -140,7 +146,7 @@ std::vector<Step> Make() {
             [](const Look& look) {
                 const SnippetFacts* now = nullptr;
                 const SnippetFacts* then = nullptr;
-                return SubjectBoth(look, now, then) && Resized(*now, *then);
+                return SubjectOutOfFullscreen(look, now, then) && Resized(*now, *then);
             },
     });
     chain.push_back(Step{
@@ -205,7 +211,9 @@ std::vector<Step> Make() {
         .kind = StepKind::Do,
         .title = strings::kTutorialUndoTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialUndoText); },
-        .needs = {DeletedSubject},
+        // Undo takes back the canvas's own steps, and none while a panel
+        // has the keys.
+        .needs = {InTutorialFolder, CanvasUncovered, SubjectHere, DeletedSubject},
         .subject = SubjectRule::LastDeleted,
         // Back after being deleted in this step - deleted when it began
         // counts, being what the step before left.

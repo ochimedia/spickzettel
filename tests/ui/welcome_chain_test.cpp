@@ -160,6 +160,25 @@ TEST_F(WelcomeChainTest, TheMoveStepSaysAResizeIsNotAMove) {
     EXPECT_STREQ(HintText(), strings::kTutorialMoveMissResized);
 }
 
+TEST_F(WelcomeChainTest, FullscreenIsNeitherAMoveNorAResize) {
+    world_.Make(1);
+    At("move");
+    world_.At(1).fullscreen = true;
+    world_.At(1).rect = core::Rect{0.0f, 0.0f, 1280.0f, 768.0f};
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_EQ(NeedShown(), Need::SubjectCanMove);
+
+    world_.At(1).fullscreen = false;
+    world_.At(1).rect = core::Rect{100.0f, 100.0f, 200.0f, 150.0f};
+    At("resize");
+    world_.At(1).fullscreen = true;
+    world_.At(1).rect = core::Rect{0.0f, 0.0f, 1280.0f, 768.0f};
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_EQ(NeedShown(), Need::SubjectCanMove);
+}
+
 TEST_F(WelcomeChainTest, TheMoveStepNeedsASnippetThatCanMoveOutOfDrawingMode) {
     world_.Make(1).fullscreen = true;
     At("move");
@@ -234,6 +253,27 @@ TEST_F(WelcomeChainTest, UndoneBeforeItsStepTheUndoStepAsksForADeleteAgain) {
     world_.At(1).deleted = false;
     Frame();
     EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(WelcomeChainTest, TheUndoStepNeedsTheCanvasItWasDeletedOnAndTheKeys) {
+    world_.Make(1);
+    At("delete");
+    world_.At(1).deleted = true;
+    Settle();
+    ASSERT_EQ(Id(), "undo");
+
+    // Undo takes back the canvas's own steps: elsewhere, it cannot.
+    world_.current = FakeWorld::kSecondCanvas;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::SubjectHere);
+    EXPECT_EQ(tutorial_.CurrentHint()->button, HintButton::BackThere);
+    world_.current = FakeWorld::kCanvas;
+    world_.cover = Cover::Overview;  // which has the keys
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::CanvasUncovered);
+    world_.cover = Cover::None;
+    Frame();
+    EXPECT_FALSE(tutorial_.CurrentHint().has_value());
 }
 
 TEST_F(WelcomeChainTest, TheTextsFollowTheTriggersAndTheKeys) {
