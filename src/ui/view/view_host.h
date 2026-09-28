@@ -17,6 +17,7 @@
 #include "core/session/actions.h"
 #include "platform/i_overlay_window.h"
 #include "ui/item_painting.h"
+#include "ui/view/anchors.h"
 #include "ui/view_action.h"
 
 namespace sz::ui {
@@ -45,6 +46,10 @@ public:
     virtual void RestartOverlay() = 0;
     // A canvas bar tile's menu, for `canvas`, at `at`.
     virtual void OpenCanvasMenu(core::CanvasId canvas, ImVec2 at) = 0;
+    // An anchored widget, drawn this frame at `min`-`max` - see
+    // AnchorBoard. What the owner drawing it says, and all it knows of
+    // what points at it.
+    virtual void Mark(Anchor anchor, ImVec2 min, ImVec2 max) = 0;
 
     // What a canvas's preview is drawn with - see DrawCanvasPreview: each
     // picture's thumbnail-sized pixels, the previews' own mesh cache, and

@@ -237,6 +237,9 @@ public:
     // while the bar is not showing - for a test to press it where it is
     // rather than where it computes it to be.
     std::optional<ImVec2> SelectionBarButtonCenter(ChromeButton button) const;
+    // Where an anchored widget was drawn in the last frame, if it was -
+    // see AnchorBoard.
+    std::optional<AnchorRect> AnchorAt(Anchor anchor) const { return anchors_.Find(anchor); }
 
     // Captures a fullscreen screenshot onto a canvas made for it (see the
     // definition, and the other declaration of this below).
@@ -431,6 +434,10 @@ private:
     std::vector<platform::DisplayInfo> ListDisplays() override;
     bool ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) override;
     void OpenCanvasMenu(CanvasId canvas, ImVec2 at) override { popups_.OpenCanvasMenu(canvas, at); }
+    void Mark(Anchor anchor, ImVec2 min, ImVec2 max) override { anchors_.Mark(anchor, AnchorRect{min, max}); }
+    // Where the anchored widgets were drawn this frame - cleared in
+    // Prepare, marked as they are drawn. See AnchorBoard.
+    AnchorBoard anchors_;
     void RestartOverlay() override {
         if (restartOverlayCallback_) {
             restartOverlayCallback_();

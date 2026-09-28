@@ -435,6 +435,8 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     // The display the canvas is on, for the editor - which draws nothing
     // and so has no other way to know it.
     editor_.SetDisplaySize(displayW, displayH);
+    // Nothing is marked on screen until it is drawn in this frame.
+    anchors_.Clear();
 
     // The interface scale, before anything is drawn, so a whole frame is
     // drawn at one scale. The setting, or Windows' own for the display the

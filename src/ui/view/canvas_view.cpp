@@ -484,6 +484,11 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
             fill = danger ? theme::kDanger : active ? theme::AccentHover() : theme::kHoverWash;
         }
         ImGui::RenderFrame(Im(rect.min), Im(rect.max), ImGui::GetColorU32(fill), true, theme::kRadiusPill);
+        if (button == ChromeButton::Close) {
+            host_.Mark(Anchor{AnchorId::SelectionBarClose}, Im(rect.min), Im(rect.max));
+        } else if (button == ChromeButton::Pen) {
+            host_.Mark(Anchor{AnchorId::DrawingBarPen}, Im(rect.min), Im(rect.max));
+        }
 
         if (button == ChromeButton::Color) {
             // The color itself, as a swatch, ringed in white so a dark
@@ -733,6 +738,7 @@ void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTo
         dl->PopClipRect();
 
         dl->AddRect(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), Px(theme::kRadiusSm));
+        host_.Mark(Anchor{AnchorId::DockChip, item->id}, chipMin, chipMax);
 
         char btnId[32];
         std::snprintf(btnId, sizeof(btnId), "##dockchip%llu", static_cast<unsigned long long>(item->id));

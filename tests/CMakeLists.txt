@@ -5,6 +5,7 @@ add_executable(sz_core_tests
     app/overlay_states_test.cpp
     app/perf_bench_test.cpp
     app/tray_app_test.cpp
+    app/tutorial_app_test.cpp
     app/view_layer_test.cpp
     core/build_info_test.cpp
     core/app_config_test.cpp
