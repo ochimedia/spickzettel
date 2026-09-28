@@ -61,6 +61,15 @@ enum class Need {
     PenInHand,
     // Something drawn on the subject, for a step that erases.
     SubjectDrawnOn,
+    // The Overview up - the opposite of CanvasUncovered - and showing the
+    // canvases, not Settings or About.
+    OverviewUp,
+    CanvasesTab,
+    // Show deleted on, in the Overview.
+    DeletedShown,
+    // A canvas or folder of the tutorial's in the trash, for the step that
+    // restores it.
+    SomethingInTrash,
 };
 
 // Which snippet a step is about - section 6.5.
@@ -95,6 +104,21 @@ enum class Spot {
     DrawingBarColor,
     // The subject's chip in the dock, while it is minimized.
     DockChip,
+    // The canvas bar's + and Overview buttons.
+    CanvasBarNew,
+    CanvasBarOverview,
+    // The Overview's New folder and Show deleted.
+    NewFolder,
+    ShowDeleted,
+    // A folder's row in the Overview: the one made in the run, and the
+    // tutorial's own.
+    MadeFolder,
+    TutorialFolder,
+    // The trash button under the tile of a canvas of the tutorial's, one
+    // with a snippet on it first.
+    DeleteCanvas,
+    // The Restore of what of the tutorial's is in the trash.
+    Restore,
 };
 
 // A button a hint line carries - section 6.4.
@@ -103,6 +127,11 @@ enum class HintButton { None, BackToTutorial, BackThere, PutOneHere };
 // What a step notes as it begins, for its goal to compare with - section
 // 5. Snippets that turn up during the step are noted as first seen.
 struct StartRecord {
+    // The canvas being looked at, every folder, and the canvases of the
+    // tutorial's folders (section 17.3).
+    core::CanvasId canvas = 0;
+    std::vector<FolderFacts> folders;
+    std::vector<CanvasFacts> canvases;
     uint64_t showings = 0;
     uint64_t pinnedViews = 0;
     uint64_t viewModes = 0;
@@ -129,12 +158,19 @@ struct InkGone {
 };
 
 // What a goal or a near miss is asked with: the world, the step's start
-// record, the tutorial's snippets as they are now, and what the runner
-// has seen during the step.
+// record, the tutorial's snippets, folders and canvases as they are now,
+// and what the runner has seen during the step.
 struct Look {
     const World& world;
     const StartRecord& start;
     const std::vector<SnippetFacts>& snippets;
+    // The tutorial's own folder, and its folders: that one and those made
+    // in the run (section 17.3). Every folder, and the canvases of the
+    // tutorial's.
+    core::FolderId folder;
+    const std::vector<core::FolderId>& folders;
+    const std::vector<FolderFacts>& allFolders;
+    const std::vector<CanvasFacts>& canvases;
     std::optional<core::ItemId> subject;
     // The tutorial's snippets seen deleted during this step - those
     // deleted when it began among them.
@@ -144,6 +180,9 @@ struct Look {
     const std::unordered_set<core::ItemId>& pinnedThisStep;
     // The ink gone from each of the tutorial's snippets during this step.
     const std::unordered_map<core::ItemId, InkGone>& inkGoneThisStep;
+    // The tutorial's canvases and folders seen in the trash during this
+    // step - those in it when it began among them.
+    const std::unordered_set<uint64_t>& trashedThisStep;
 
     // A snippet of the tutorial's as it is now, or null.
     const SnippetFacts* Now(core::ItemId id) const;
@@ -155,6 +194,11 @@ struct Look {
     InkGone SubjectInkGone() const;
     // The live ones made since the step began, on the current canvas.
     std::vector<const SnippetFacts*> MadeHere() const;
+    // Whether `folder` is one of the tutorial's.
+    bool Tutorials(core::FolderId folder) const;
+    // A folder or a canvas of the tutorial's as it is now, or null.
+    const FolderFacts* FolderNow(core::FolderId id) const;
+    const CanvasFacts* CanvasNow(core::CanvasId id) const;
 };
 
 using Check = bool (*)(const Look& look);
@@ -173,6 +217,9 @@ struct Step {
     bool gated = false;
     // One of the warnings the skip card repeats, when it was not reached.
     bool warning = false;
+    // The folders made while it is up are the tutorial's (section 17.3):
+    // for the step that asks for one.
+    bool keepsFolders = false;
     const char* title = "";
     // The text, chosen for the world as it is - a trigger set, a key
     // unbound - with the {placeholders} of Expand in it.

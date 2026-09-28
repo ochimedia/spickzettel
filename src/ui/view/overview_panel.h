@@ -89,14 +89,19 @@ private:
     // compiled in so it travels with the binary rather than living next to
     // it as a file that can go missing - see build::AboutText.
     void RenderOverviewAboutPanel();
-    // Whether the Canvases tab shows what is deleted - showDeleted_, never
-    // while picking where a snippet goes, which is a place among the live
-    // ones.
-    bool ShowingDeleted() const { return showDeleted_ && !pickerItemId_.has_value(); }
 
 public:
     // Whether it is up on its Settings tab.
     bool OnSettingsTab() const { return IsOpen() && overviewTab_ == OverviewTab::Settings; }
+    // Whether it is up showing the canvases: on its Canvases tab, or as the
+    // picker, which shows them whatever the tab.
+    bool ShowsCanvases() const {
+        return IsOpen() && (pickerItemId_.has_value() || overviewTab_ == OverviewTab::Canvases);
+    }
+    // Whether the Canvases tab shows what is deleted - showDeleted_, never
+    // while picking where a snippet goes, which is a place among the live
+    // ones.
+    bool ShowingDeleted() const { return showDeleted_ && !pickerItemId_.has_value(); }
 
 private:
     // The folder the sidebar marks as open and the grid shows: the one

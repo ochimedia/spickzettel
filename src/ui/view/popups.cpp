@@ -703,24 +703,45 @@ void Popups::RenderConfirmDeletePopover() {
     // A delete marks the thing, which can be restored, and says so; a delete
     // of something deleted already is for good, and says that.
     const bool forGood = target.forGood || deletedIn;
+    // Several folders at once - the tutorial's, at its Done - are named
+    // each, and spoken of as several.
+    const bool several = isFolder && !target.alsoFolders.empty();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Px(220.0f));
     if (deletedIn) {
         ImGui::Text(strings::kDeleteConfirmPromptDeletedIn, target.name.c_str());
+    } else if (several) {
+        std::vector<std::string> names{target.name};
+        for (const uint64_t also : target.alsoFolders) {
+            const Folder* found = Manager().FindFolder(also);
+            names.push_back(found != nullptr ? found->name : std::string());
+        }
+        std::string list;
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i > 0) {
+                list += i + 1 == names.size() ? strings::kDeleteConfirmAnd : ", ";
+            }
+            list += "\"" + names[i] + "\"";
+        }
+        ImGui::Text(strings::kDeleteConfirmPromptFolders, list.c_str());
     } else {
         ImGui::Text(forGood ? strings::kDeleteConfirmPromptForGood : strings::kDeleteConfirmPrompt, word,
                     target.name.c_str());
     }
     if (isFolder) {
-        ImGui::TextColored(theme::kDanger, "%s", strings::kDeleteConfirmAlsoCanvases);
+        ImGui::TextColored(theme::kDanger, "%s",
+                           several ? strings::kDeleteConfirmAlsoCanvasesMany : strings::kDeleteConfirmAlsoCanvases);
     }
     // With the retention period on, "can be restored" has an end, and says
     // when: the dialog is where a person decides how much that matters.
     if (forGood) {
         ImGui::TextColored(theme::kGraphite200, "%s", strings::kDeleteConfirmCannotUndo);
     } else if (Cfg().purgeDeleted) {
-        ImGui::TextColored(theme::kGraphite200, strings::kDeleteConfirmRestorableFor, Cfg().purgeDeletedAfterDays);
+        ImGui::TextColored(theme::kGraphite200,
+                           several ? strings::kDeleteConfirmRestorableForMany : strings::kDeleteConfirmRestorableFor,
+                           Cfg().purgeDeletedAfterDays);
     } else {
-        ImGui::TextColored(theme::kGraphite200, "%s", strings::kDeleteConfirmRestorable);
+        ImGui::TextColored(theme::kGraphite200, "%s",
+                           several ? strings::kDeleteConfirmRestorableMany : strings::kDeleteConfirmRestorable);
     }
     ImGui::PopTextWrapPos();
     ImGui::Spacing();

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 // For MovingWindow: whether the user is dragging the card this frame - see
@@ -12,6 +13,7 @@
 #include <imgui_internal.h>
 
 #include "generated/ui_strings.h"
+#include "ui/interaction/levels.h"
 #include "ui/selection_layout.h"
 #include "ui/theme.h"
 #include "ui/ui_scale.h"
@@ -34,6 +36,21 @@ constexpr float kCardSideMargin = 24.0f;
 
 bool Overlap(const AnchorRect& a, const AnchorRect& b) {
     return a.min.x < b.max.x && b.min.x < a.max.x && a.min.y < b.max.y && b.min.y < a.max.y;
+}
+
+// Whether a spot is one of the Overview's own, which only it draws.
+bool InOverview(tutorial::Spot spot) {
+    switch (spot) {
+        case tutorial::Spot::NewFolder:
+        case tutorial::Spot::ShowDeleted:
+        case tutorial::Spot::MadeFolder:
+        case tutorial::Spot::TutorialFolder:
+        case tutorial::Spot::DeleteCanvas:
+        case tutorial::Spot::Restore:
+            return true;
+        default:
+            return false;
+    }
 }
 
 // A button in the accent, for the step's way on.
@@ -207,6 +224,78 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
             const std::optional<core::ItemId> subject = runner_.Subject();
             return subject.has_value() ? anchors_.Find(Anchor{AnchorId::DockChip, *subject}) : std::nullopt;
         }
+        case tutorial::Spot::CanvasBarNew:
+            return anchors_.Find(Anchor{AnchorId::CanvasBarNew});
+        case tutorial::Spot::CanvasBarOverview:
+            return anchors_.Find(Anchor{AnchorId::CanvasBarOverview});
+        case tutorial::Spot::NewFolder:
+            return anchors_.Find(Anchor{AnchorId::OverviewNewFolder});
+        case tutorial::Spot::ShowDeleted:
+            return anchors_.Find(Anchor{AnchorId::OverviewShowDeleted});
+        case tutorial::Spot::MadeFolder:
+            for (const core::FolderId folder : runner_.MadeFolders()) {
+                if (const std::optional<AnchorRect> row = anchors_.Find(Anchor{AnchorId::OverviewFolderRow, folder})) {
+                    return row;
+                }
+            }
+            return std::nullopt;
+        case tutorial::Spot::TutorialFolder:
+            return anchors_.Find(Anchor{AnchorId::OverviewFolderRow, runner_.Folder()});
+        case tutorial::Spot::DeleteCanvas:
+            return DeleteCanvasRect();
+        case tutorial::Spot::Restore:
+            return RestoreRect();
+    }
+    return std::nullopt;
+}
+
+std::optional<AnchorRect> TutorialCard::DeleteCanvasRect() const {
+    std::vector<tutorial::CanvasFacts> canvases;
+    std::vector<core::CanvasId> withSnippets;
+    for (const core::FolderId folder : runner_.Folders()) {
+        for (const tutorial::CanvasFacts& canvas : world_.CanvasesIn(folder)) {
+            if (!canvas.deleted) {
+                canvases.push_back(canvas);
+            }
+        }
+        for (const tutorial::SnippetFacts& snippet : world_.SnippetsIn(folder)) {
+            if (!snippet.deleted) {
+                withSnippets.push_back(snippet.canvas);
+            }
+        }
+    }
+    // A pass for those with a snippet on them, then one for any.
+    for (const bool needsSnippet : {true, false}) {
+        for (const tutorial::CanvasFacts& canvas : canvases) {
+            if (needsSnippet && std::find(withSnippets.begin(), withSnippets.end(), canvas.id) == withSnippets.end()) {
+                continue;
+            }
+            if (const std::optional<AnchorRect> button =
+                    anchors_.Find(Anchor{AnchorId::OverviewCanvasDelete, canvas.id})) {
+                return button;
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<AnchorRect> TutorialCard::RestoreRect() const {
+    const std::vector<core::FolderId> folders = runner_.Folders();
+    for (const core::FolderId folder : folders) {
+        for (const tutorial::CanvasFacts& canvas : world_.CanvasesIn(folder)) {
+            if (!canvas.deleted) {
+                continue;
+            }
+            if (const std::optional<AnchorRect> button = anchors_.Find(Anchor{AnchorId::OverviewRestore, canvas.id})) {
+                return button;
+            }
+        }
+    }
+    // The grid shows another folder: the row of the folder that holds it.
+    for (const core::FolderId folder : folders) {
+        if (const std::optional<AnchorRect> button = anchors_.Find(Anchor{AnchorId::OverviewRestore, folder})) {
+            return button;
+        }
     }
     return std::nullopt;
 }
@@ -221,7 +310,8 @@ void TutorialCard::Draw(float displayW, float displayH) {
     // Where the user put it - ImGui moves a window dragged by its body -
     // or top center, unless what the step is about lies under that; then
     // bottom center, then the top corners, where a large snippet on a small
-    // display leaves room at neither. What the step is about is what the
+    // display leaves room at neither. Over the Overview, the lower right
+    // first. What the step is about is what the
     // ring is on and the subject, and after them the bars over the
     // selection, whose buttons a line may name when nothing rings them:
     // where every place covers something, the one that covers least.
@@ -251,9 +341,16 @@ void TutorialCard::Draw(float displayW, float displayH) {
             return weight;
         };
         const float side = Px(kCardSideMargin);
-        ImVec2 best = top;
-        int least = covered(top);
-        for (const ImVec2 at : {bottom, ImVec2(side, top.y), ImVec2(displayW - width - side, top.y)}) {
+        // Over the Overview, whose grid fills from the top left and runs
+        // under top center, the lower right comes first: the grid is
+        // usually empty there (docs/TUTORIAL.md, question 38).
+        std::vector<ImVec2> places = {top, bottom, ImVec2(side, top.y), ImVec2(displayW - width - side, top.y)};
+        if (world_.CanvasCover() == tutorial::Cover::Overview) {
+            places.insert(places.begin(), ImVec2(displayW - width - side, bottom.y));
+        }
+        ImVec2 best = places.front();
+        int least = covered(best);
+        for (const ImVec2 at : places) {
             if (least == 0) {
                 break;
             }
@@ -540,16 +637,26 @@ void TutorialCard::DoneKeepButton() {
 
 // ================= The spotlight =================
 
-void TutorialCard::DrawSpotlight() {
+std::optional<AnchorRect> TutorialCard::SpotlightRect() const {
     if (listing_ || runner_.GetState() != tutorial::Tutorial::State::OnStep || runner_.GoalMet()) {
-        return;
+        return std::nullopt;
     }
-    // Not through a panel: the step's line says to close it first.
+    // Not through a panel: the step's line says to close it first. The
+    // Overview's own spots are the exception, drawn only while it is up -
+    // and not through what is over it, the delete confirmation.
     const tutorial::Cover cover = world_.CanvasCover();
-    if (cover == tutorial::Cover::Overview || cover == tutorial::Cover::CheatSheet) {
-        return;
+    if (InOverview(runner_.CurrentSpot())) {
+        if (cover != tutorial::Cover::Overview || editor_.Input().At(Level::Popup) != nullptr) {
+            return std::nullopt;
+        }
+    } else if (cover == tutorial::Cover::Overview || cover == tutorial::Cover::CheatSheet) {
+        return std::nullopt;
     }
-    const std::optional<AnchorRect> spot = SpotRect();
+    return SpotRect();
+}
+
+void TutorialCard::DrawSpotlight() {
+    const std::optional<AnchorRect> spot = SpotlightRect();
     if (!spot.has_value()) {
         return;
     }

@@ -783,6 +783,254 @@ std::vector<Step> MakeCapturing() {
     return chain;
 }
 
+// Whether a canvas of the tutorial's that was there when the step began,
+// live then, is `now` - in the trash, or in another folder.
+bool ACanvasThatWas(const Look& look, bool (*now)(const Look& look, const CanvasFacts& then)) {
+    return std::any_of(look.start.canvases.begin(), look.start.canvases.end(),
+                       [&](const CanvasFacts& then) { return !then.deleted && now(look, then); });
+}
+
+// The folders and canvases of the tutorial's that were there when the
+// step began, by id, as they were.
+const FolderFacts* FolderAtStart(const Look& look, core::FolderId id) {
+    for (const FolderFacts& facts : look.start.folders) {
+        if (facts.id == id) {
+            return &facts;
+        }
+    }
+    return nullptr;
+}
+const CanvasFacts* CanvasAtStart(const Look& look, core::CanvasId id) {
+    for (const CanvasFacts& facts : look.start.canvases) {
+        if (facts.id == id) {
+            return &facts;
+        }
+    }
+    return nullptr;
+}
+
+std::vector<Step> MakeFolders() {
+    using enum Need;
+    std::vector<Step> chain;
+    // Waits: the next step moves a snippet to another canvas.
+    chain.push_back(Step{
+        .id = "newCanvas",
+        .kind = StepKind::Do,
+        .gated = true,
+        .title = strings::kTutorialNewCanvasTitle,
+        .text =
+            [](const World& world) {
+                if (world.CanvasBarOn()) {
+                    return Fixed(strings::kTutorialNewCanvasText);
+                }
+                return Fixed(world.KeyLabel(CommandId::NewCanvas) ? strings::kTutorialNewCanvasTextKey
+                                                                  : strings::kTutorialNewCanvasTextOverview);
+            },
+        .spot = Spot::CanvasBarNew,
+        // Not the canvas uncovered: the Overview's New canvas does it too.
+        .needs = {InTutorialFolder},
+        .goal =
+            [](const Look& look) {
+                const core::CanvasId here = look.world.CurrentCanvas();
+                return look.Tutorials(look.world.FolderOf(here)) && CanvasAtStart(look, here) == nullptr;
+            },
+    });
+    // A move keeps the snippet's id (Session::Paste, SendItemsTo): one the
+    // step has seen, now on another canvas. Moved while the step's
+    // subject is cut and waiting, it is not on the canvas being looked at,
+    // so there is no need for it there.
+    chain.push_back(Step{
+        .id = "moveSnippet",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialMoveSnippetTitle,
+        .text =
+            [](const World& world) {
+                const bool keys = world.KeyLabel(CommandId::Cut) && world.KeyLabel(CommandId::Paste);
+                if (keys) {
+                    return Fixed(world.CanvasBarOn() ? strings::kTutorialMoveSnippetText
+                                                     : strings::kTutorialMoveSnippetTextNoBar);
+                }
+                return Fixed(world.CanvasBarOn() ? strings::kTutorialMoveSnippetTextMenu
+                                                 : strings::kTutorialMoveSnippetTextMenuNoBar);
+            },
+        .spot = Spot::Subject,
+        .needs = {InTutorialFolder, CanvasUncovered, ASubject},
+        .subject = SubjectRule::Any,
+        .goal =
+            [](const Look& look) {
+                return std::any_of(look.snippets.begin(), look.snippets.end(), [&](const SnippetFacts& now) {
+                    const SnippetFacts* then = look.AtStart(now.id);
+                    return !now.deleted && then != nullptr && then->canvas != now.canvas;
+                });
+            },
+        // A copy pasted onto another canvas keeps its place exactly: made
+        // during the step, a twin of one of the tutorial's elsewhere.
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     return std::any_of(look.snippets.begin(), look.snippets.end(), [&](const SnippetFacts& copy) {
+                         return !copy.deleted && !look.start.present.contains(copy.id) &&
+                                std::any_of(look.snippets.begin(), look.snippets.end(), [&](const SnippetFacts& first) {
+                                    return !first.deleted && first.id != copy.id && first.canvas != copy.canvas &&
+                                           first.picture == copy.picture && first.rect.x == copy.rect.x &&
+                                           first.rect.y == copy.rect.y && first.rect.w == copy.rect.w &&
+                                           first.rect.h == copy.rect.h;
+                                });
+                     });
+                 },
+                 strings::kTutorialMoveSnippetMissCopy},
+            },
+    });
+    chain.push_back(Step{
+        .id = "overview",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialOverviewTitle,
+        .text =
+            [](const World& world) {
+                return Fixed(world.CanvasBarOn() ? strings::kTutorialOverviewText : strings::kTutorialOverviewTextMenu);
+            },
+        .spot = Spot::CanvasBarOverview,
+        .needs = {InTutorialFolder},
+        .goal = [](const Look& look) { return look.world.CanvasCover() == Cover::Overview; },
+    });
+    // Waits: the next two are about the folder it makes, which is the
+    // tutorial's from then on (section 17.3).
+    chain.push_back(Step{
+        .id = "newFolder",
+        .kind = StepKind::Do,
+        .gated = true,
+        .keepsFolders = true,
+        .title = strings::kTutorialNewFolderTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialNewFolderText); },
+        .spot = Spot::NewFolder,
+        .needs = {InTutorialFolder, OverviewUp, CanvasesTab},
+        .goal =
+            [](const Look& look) {
+                return std::any_of(look.allFolders.begin(), look.allFolders.end(), [&](const FolderFacts& folder) {
+                    return !folder.deleted && FolderAtStart(look, folder.id) == nullptr;
+                });
+            },
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     return std::any_of(look.canvases.begin(), look.canvases.end(), [&](const CanvasFacts& canvas) {
+                         return !canvas.deleted && CanvasAtStart(look, canvas.id) == nullptr;
+                     });
+                 },
+                 strings::kTutorialNewFolderMissCanvas},
+            },
+    });
+    // Its folders are where it goes on, so no need for the tutorial's.
+    chain.push_back(Step{
+        .id = "rename",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialRenameTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialRenameText); },
+        .spot = Spot::MadeFolder,
+        .needs = {OverviewUp, CanvasesTab},
+        .goal =
+            [](const Look& look) {
+                const bool folder = std::any_of(look.folders.begin(), look.folders.end(), [&](core::FolderId id) {
+                    const FolderFacts* now = look.FolderNow(id);
+                    const FolderFacts* then = FolderAtStart(look, id);
+                    return now != nullptr && then != nullptr && !now->deleted && now->name != then->name;
+                });
+                return folder ||
+                       std::any_of(look.canvases.begin(), look.canvases.end(), [&](const CanvasFacts& now) {
+                           const CanvasFacts* then = CanvasAtStart(look, now.id);
+                           return then != nullptr && !now.deleted && now.name != then->name;
+                       });
+            },
+    });
+    // The one step that asks for the tutorial's own folder, not any of
+    // its folders: the way back from the new one.
+    chain.push_back(Step{
+        .id = "switchFolder",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialSwitchFolderTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialSwitchFolderText); },
+        .spot = Spot::TutorialFolder,
+        .needs = {OverviewUp, CanvasesTab},
+        .goal =
+            [](const Look& look) {
+                const core::CanvasId here = look.world.CurrentCanvas();
+                return here != look.start.canvas && look.world.FolderOf(here) == look.folder;
+            },
+    });
+    chain.push_back(Step{
+        .id = "moveCanvas",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialMoveCanvasTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialMoveCanvasText); },
+        .spot = Spot::MadeFolder,
+        .needs = {InTutorialFolder, OverviewUp, CanvasesTab},
+        .goal =
+            [](const Look& look) {
+                return ACanvasThatWas(look, [](const Look& seen, const CanvasFacts& then) {
+                    // Into one of the tutorial's folders, or out of them.
+                    const CanvasFacts* now = seen.CanvasNow(then.id);
+                    const core::FolderId folder =
+                        now != nullptr ? (now->deleted ? 0 : now->folder) : seen.world.FolderOf(then.id);
+                    return folder != 0 && folder != then.folder;
+                });
+            },
+    });
+    // The tutorial's own folder deleted takes the current canvas out of
+    // its folders, so the trash's steps do not need them: restore brings
+    // it back.
+    chain.push_back(Step{
+        .id = "deleteCanvas",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialDeleteCanvasTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialDeleteCanvasText); },
+        .spot = Spot::DeleteCanvas,
+        .needs = {OverviewUp, CanvasesTab},
+        .goal =
+            [](const Look& look) {
+                const bool canvas = ACanvasThatWas(look, [](const Look& seen, const CanvasFacts& then) {
+                    const CanvasFacts* now = seen.CanvasNow(then.id);
+                    return now != nullptr && now->deleted;
+                });
+                return canvas || std::any_of(look.folders.begin(), look.folders.end(), [&](core::FolderId id) {
+                           const FolderFacts* now = look.FolderNow(id);
+                           const FolderFacts* then = FolderAtStart(look, id);
+                           return now != nullptr && then != nullptr && now->deleted && !then->deleted;
+                       });
+            },
+    });
+    chain.push_back(Step{
+        .id = "showDeleted",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialShowDeletedTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialShowDeletedText); },
+        .spot = Spot::ShowDeleted,
+        .needs = {OverviewUp, CanvasesTab},
+        .goal = [](const Look& look) { return look.world.OverviewShowsDeleted(); },
+    });
+    chain.push_back(Step{
+        .id = "restore",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialRestoreTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialRestoreText); },
+        .spot = Spot::Restore,
+        .needs = {OverviewUp, CanvasesTab, DeletedShown, SomethingInTrash},
+        .goal =
+            [](const Look& look) {
+                return std::any_of(look.trashedThisStep.begin(), look.trashedThisStep.end(), [&](uint64_t id) {
+                    const CanvasFacts* canvas = look.CanvasNow(id);
+                    const FolderFacts* folder = look.FolderNow(id);
+                    return (canvas != nullptr && !canvas->deleted) || (folder != nullptr && !folder->deleted);
+                });
+            },
+    });
+    chain.push_back(Step{
+        .id = "end",
+        .title = strings::kTutorialFoldersEndTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialFoldersEndText); },
+    });
+    return chain;
+}
+
 }  // namespace
 
 const std::vector<Step>& BasicsChain() {
@@ -802,6 +1050,11 @@ const std::vector<Step>& PinningChain() {
 
 const std::vector<Step>& CapturingChain() {
     static const std::vector<Step> chain = MakeCapturing();
+    return chain;
+}
+
+const std::vector<Step>& FoldersChain() {
+    static const std::vector<Step> chain = MakeFolders();
     return chain;
 }
 

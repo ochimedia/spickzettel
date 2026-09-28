@@ -157,6 +157,56 @@ TEST_F(TutorialUiTest, TheSkipCardsDoneTrashesTheFolderAndDoneKeepKeepsIt) {
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(kept)));
 }
 
+// The folder made at Folders and canvases' `newFolder` goes with the
+// tutorial's at Done: one confirmation, and its Delete puts both in the
+// trash (docs/TUTORIAL.md, section 17.3).
+TEST_F(TutorialUiTest, DoneAsksOnceForTheFolderMadeInTheRunAndTrashesBoth) {
+    ShowEditMode();
+    StepFrame();
+    Overlay().StartTutorial("folders");
+    StepFrames(2);
+    ASSERT_EQ(StepUp(), "newCanvas");
+    RunUi("a new canvas", [](ImGuiTestContext* ctx) {
+        ctx->MouseMoveToPos(ImVec2(kDisplayWidth * 0.5f, kDisplayHeight - 1.0f));
+        ctx->Yield(30);
+        ctx->SetRef("//##canvas_bar");
+        ctx->ItemClick("##canvasbar_new");
+    });
+    StepFrames(75);
+    ASSERT_EQ(StepUp(), "moveSnippet");
+    ClickOnCard("**/###tutorial_next");
+    ClickOnCard("**/###tutorial_next");
+    ASSERT_EQ(StepUp(), "newFolder");
+    OpenOverviewUi();
+    RunUi("a new folder", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/##newfolder");
+    });
+    StepFrames(75);
+    ASSERT_EQ(StepUp(), "rename");
+    ASSERT_EQ(Runner().MadeFolders().size(), 1u);
+    const FolderId own = Runner().Folder();
+    const FolderId made = Runner().MadeFolders().front();
+    while (StepUp() != "end") {
+        const std::string before = StepUp();
+        ClickOnCard("**/###tutorial_next");
+        ASSERT_NE(StepUp(), before);
+    }
+
+    RunUi("done, and confirm", [this, own, made](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##tutorial_card");
+        ctx->ItemClick("**/###tutorial_done");
+        ctx->Yield(3);
+        IM_CHECK(!Canvases().IsDeleted(*Canvases().FindFolder(own)));  // asked first
+        IM_CHECK(!Canvases().IsDeleted(*Canvases().FindFolder(made)));
+        ctx->SetRef("//$FOCUSED");
+        ctx->ItemClick("##confirmdelete");
+        ctx->Yield(3);
+    });
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindFolder(own)));
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindFolder(made)));
+}
+
 // A press on the card as the window hands it on: into ImGui, and into the
 // input stream the machine reads - both, as a real one is.
 TEST_F(TutorialUiTest, APressOnTheCardReachesItsButtonThroughTheInputMachine) {

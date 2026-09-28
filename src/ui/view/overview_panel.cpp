@@ -60,9 +60,10 @@ constexpr float kDimmedAlpha = 0.4f;
 
 // A deleted folder's or canvas's two buttons, side by side at the cursor:
 // Restore, and Delete permanently. Ids "##restore" and "##deleteforgood",
-// under whatever the caller has pushed.
+// under whatever the caller has pushed. Where Restore was drawn goes to
+// `restore`, for the caller to mark.
 enum class DeletedButton { None, Restore, DeleteForGood };
-DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip);
+DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip, ImRect& restore);
 
 // A local calendar time, copied out of the buffer std::localtime shares -
 // see TimestampName for why that spelling, and the pragma. None for a time
@@ -144,12 +145,13 @@ std::string GoesOn(int64_t deletedAt, int days) {
 
 namespace {
 
-DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip) {
+DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip, ImRect& restore) {
     DeletedButton pressed = DeletedButton::None;
     // Accent-filled rather than neutral: of the two, it is the one meant.
     if (PillIconButton("##restore", icons::kUndo, /*active=*/true)) {
         pressed = DeletedButton::Restore;
     }
+    restore = ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", restoreTip);
     }
@@ -361,6 +363,7 @@ void OverviewPanel::RenderOverviewHeader() {
     if (ImGui::Checkbox(Labeled(deletedLabel, "showdeleted"), &showDeleted_)) {
         SettleDeletedFolderShown();
     }
+    host_.Mark(Anchor{AnchorId::OverviewShowDeleted}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kOverviewShowDeletedHelp);
     }
@@ -434,6 +437,7 @@ void OverviewPanel::RenderFolderSidebar() {
         const float buttonsWidth = marked ? Px(kPillButtonSize) * 2.0f + Px(kDeletedButtonGap) : Px(kPillButtonSize);
         const float selectWidth = rowWidth - buttonsWidth - Px(6.0f);
         const ImVec2 rowMax(rowMin.x + rowWidth, rowMin.y + Px(kFolderRowHeight));
+        host_.Mark(Anchor{AnchorId::OverviewFolderRow, f.id}, rowMin, rowMax);
         ImDrawList* sidebarDrawList = ImGui::GetWindowDrawList();
         // Through GetColorU32, which a dimmed row's alpha applies to.
         if (isCurrentFolder) {
@@ -540,9 +544,12 @@ void OverviewPanel::RenderFolderSidebar() {
                 // Both act on what is deleted in the folder: all of it back,
                 // or all of it gone for good - the folder with it only if
                 // the folder is what was deleted.
-                switch (DeletedButtons(strings::kDeletedRestoreFolderTip,
-                                       deleted ? strings::kDeletedDeleteForGoodTip
-                                               : strings::kDeletedDeleteDeletedInFolderTip)) {
+                ImRect restore;
+                const DeletedButton pressed = DeletedButtons(
+                    strings::kDeletedRestoreFolderTip,
+                    deleted ? strings::kDeletedDeleteForGoodTip : strings::kDeletedDeleteDeletedInFolderTip, restore);
+                host_.Mark(Anchor{AnchorId::OverviewRestore, f.id}, restore.Min, restore.Max);
+                switch (pressed) {
                     case DeletedButton::Restore:
                         host_.Act(action::Restore{f.id});
                         break;
@@ -656,6 +663,7 @@ void OverviewPanel::RenderCanvasGrid(float displayW, float displayH, const ViewH
 
         const ImVec2 thumbMin = ImGui::GetCursorScreenPos();
         const ImVec2 thumbMax(thumbMin.x + tileSize.x, thumbMin.y + tileSize.y);
+        host_.Mark(Anchor{AnchorId::OverviewCanvasTile, c.id}, thumbMin, thumbMax);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         DrawCanvasPreview(drawList, c, thumbMin, thumbMax, displayW, displayH, Cfg().strokeRenderMode,
                            Cfg().overviewShowsStrokes, previewTexture, previews.meshes, previews.sampling);
@@ -744,9 +752,13 @@ void OverviewPanel::RenderCanvasGrid(float displayW, float displayH, const ViewH
             // CanvasManager::Restore.
             const Folder* folder = Manager().FindFolder(c.folderId);
             const bool folderDeleted = folder != nullptr && Manager().IsDeleted(*folder);
-            switch (DeletedButtons(folderDeleted ? strings::kDeletedRestoreCanvasAndFolderTip
-                                                 : strings::kDeletedRestoreCanvasTip,
-                                   strings::kDeletedDeleteForGoodTip)) {
+            ImRect restore;
+            const DeletedButton pressed =
+                DeletedButtons(folderDeleted ? strings::kDeletedRestoreCanvasAndFolderTip
+                                             : strings::kDeletedRestoreCanvasTip,
+                               strings::kDeletedDeleteForGoodTip, restore);
+            host_.Mark(Anchor{AnchorId::OverviewRestore, c.id}, restore.Min, restore.Max);
+            switch (pressed) {
                 case DeletedButton::Restore:
                     host_.Act(action::Restore{c.id});
                     break;
@@ -762,6 +774,7 @@ void OverviewPanel::RenderCanvasGrid(float displayW, float displayH, const ViewH
             ImGui::BeginDisabled(pickerItemId_.has_value());
             const bool deletePressed = DangerIconButton("##delcanvas", icons::kTrash);
             ImGui::EndDisabled();
+            host_.Mark(Anchor{AnchorId::OverviewCanvasDelete, c.id}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
             if (deletePressed) {
                 host_.AskToDelete(DeleteTarget{DeleteTarget::Kind::Canvas, c.id, c.name});
             }
@@ -819,6 +832,7 @@ void OverviewPanel::RenderOverviewFooter(bool showCanvasesBody) {
     ImGui::BeginDisabled(pickerItemId_.has_value());
     const bool newFolderPressed = PrimaryButton("##newfolder", icons::kPlus, strings::kOverviewNewFolder);
     ImGui::EndDisabled();
+    host_.Mark(Anchor{AnchorId::OverviewNewFolder}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (newFolderPressed) {
         host_.Act(action::NewFolder{});
     }

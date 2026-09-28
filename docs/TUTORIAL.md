@@ -148,8 +148,9 @@ over the selection, whose buttons a hint may name with no ring on them.
 If any of these lies under it, the card tries the bottom center, then
 the top corners, and takes the first place that covers none of them, or
 else the one that covers least, the anchor and the subject counting
-double. The user can drag the card by its title, and it stays where it
-is left for the rest of the run.
+double. Over the Overview, the lower right corner comes before all of
+them (17.8). The user can drag the card by its title, and it stays where
+it is left for the rest of the run.
 
 **Keys.** The card takes none:
 
@@ -461,6 +462,10 @@ and where it can, a way back in one click:
 | The subject pinned | the subject is not pinned | "It isn't pinned. Select it, and press Pin on its bar." | - |
 | The pen in hand | another tool is in hand | "Press the pen on the bar." | - |
 | Something drawn on the subject | the subject has no strokes | "Nothing is drawn on it to erase. Draw something with the pen first." | - |
+| The Overview up | it is not up (17.3) | "Open the Overview: right-click an empty spot and choose Overview." | - |
+| Its Canvases tab | it is on Settings or About | "Go back to the Canvases tab, at the top left." | - |
+| Show deleted on | it is off | "Tick Show deleted, at the top right, to see it." | - |
+| Something in the trash | nothing of the tutorial's is deleted | "Nothing of the tutorial's is in the trash. Delete a canvas first, or go on with Next." | - |
 
 The needs are checked in the step's order, every frame the goal is not
 met (section 5). So a card never shows a text that is wrong for what is
@@ -593,6 +598,10 @@ the settings and the anchors, and a test fakes it. It answers:
 - **The canvas:** the current canvas's id, name and folder; the
   snippets on it; whether a folder exists and is not deleted, and its
   canvases.
+- **Folders and canvases:** every folder, and every canvas of a folder,
+  each with its name and whether it is in the trash (17.3).
+- **The Overview and the canvas bar:** whether the Overview shows the
+  canvases and what is deleted; whether the canvas bar is on (17.3).
 - **A snippet, by id:**
   - its kind (a picture or not);
   - its rectangle;
@@ -626,7 +635,11 @@ point at, and a board of where each is this frame. There are two kinds:
   The topics mark:
   - the selection bar's close button and its Pin;
   - the drawing bar's pen, eraser, Text and color;
-  - a dock chip, by its snippet.
+  - a dock chip, by its snippet;
+  - the canvas bar's + and Overview buttons;
+  - the Overview's New folder and Show deleted; a folder's row; a
+    canvas's tile and the trash button under it; a Restore - by the
+    folder's or canvas's id (17.3).
 - **Worked out from the model:** the subject, and its handles, from the
   snippet's rectangle and the selection's layout
   (`ui/selection_layout.h`), in the world's implementation.
@@ -1098,7 +1111,7 @@ The new parts are:
 | `pinning` | Pinning and view mode | pinning a snippet, and the pinned view; making it see-through with the wheel or Properties; view mode; unpinning | built: section 14 |
 | `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; a line and a rectangle; the eraser, its rectangle and the right button; a note | built: section 15 |
 | `capturing` | Capturing | a blank drawing; a full-screen screenshot; the quick and silent capture hotkeys, which work while the overlay is away | built: section 16 |
-| `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | designed: section 17 |
+| `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | built: section 17 |
 | `profiles` | Profiles | what a profile is for; making one for a program; what it can change | to design |
 
 The first build had Basics, Drawing, Folders and canvases, and Profiles
@@ -1994,14 +2007,17 @@ of 16.5 and the hand check.
   it is a near miss of its own, "Press Esc to stop drawing on it", and
   the line to delete it follows once drawing mode is off. A drawing made
   in a box needs neither: an empty spot is still there to double-click.
-- **The hotkey steps need no uncovered canvas.** Their cards ask for the
-  overlay away first, and leaving edit mode closes any panel or popup
-  (the All scope).
+- **The hotkey steps need no uncovered canvas.** A capture hotkey works
+  whatever is up, and the goal reads the capture. (First written as
+  "leaving edit mode closes any panel": only view mode and the pinned
+  view do, by the All scope. Put away with nothing pinned, the overlay
+  is hidden, which keeps the Overview up - 17.8.)
 
 ## 17. Folders and canvases
 
-Status: **agreed** (2026-09-28). Its questions and their answers are in
-17.7, and the design below matches them.
+Status: **built** (2026-09-28). Its questions and their answers are in
+17.7, and the design below matches them. What building it found is in
+17.8.
 
 ### 17.1 What it teaches, and why
 
@@ -2183,12 +2199,9 @@ is in the trash. Delete a canvas first, or go on with Next."
   panel (7.4). It keeps that rule for the canvas's own spots, and draws
   the Overview's while the Overview is up. Their anchors are only marked
   then anyway.
-- **The card over the Overview** keeps its places, top center first,
-  and keeps clear of the ring as it does on the canvas (question 38). At
-  1920 by 1080, top center covers the middle of the Overview's header
-  and its grid's first row from the third tile on. The tutorial's
-  folders have two or three canvases. The hand check says whether that
-  holds.
+- **The card over the Overview** takes the lower right corner first,
+  and keeps clear of the ring as it does on the canvas (question 38,
+  17.8).
 - **The strings:** each step's title, texts and near misses, the four
   needs, the end card (`tutorial.foldersEnd.*`), the confirmation for
   several folders, and `tutorial.topics.folders.*` ("Folders and
@@ -2237,8 +2250,9 @@ is in the trash. Delete a canvas first, or go on with Next."
     put away and back; a copy pasted (the near miss);
   - `overview`: another folder; put away and back;
   - each step from `newFolder` to `restore`: the Overview closed with
-    Esc, and put away and back (the need for it up); the Settings tab
-    (its need); another folder picked in the list (nothing);
+    Esc (the need for it up); put away and back (nothing: hidden keeps
+    it up); the Settings tab (its need); another folder picked in the
+    list (nothing);
   - `newFolder`: New canvas pressed (the near miss);
   - `restore`: Show deleted off (its need).
 - **By hand:** every card with real input, and where the card lands
@@ -2288,3 +2302,35 @@ Two pieces of work:
     covering what a step needs, the fix is a place of its own over the
     Overview, the lower right corner, where the grid is usually empty.
     *Answer:* as recommended.
+
+### 17.8 Found while building
+
+- **The card covered the grid.** At the test display's 1280 by 768, top
+  center lies over the Overview's first row of tiles, which
+  `switchFolder` and `moveCanvas` press and drag: the walk-through's
+  drag landed on the card. So the fallback of question 38 is built.
+  While the Overview is up, the card tries its lower right corner
+  first. At 1920 by 1080 it sits there clear of the grid, the sidebar,
+  the footer and Show deleted.
+- **Put away and back keeps the Overview up.** With nothing pinned the
+  overlay is hidden, and hidden keeps what edit mode left up
+  (`docs/OVERLAY_STATES.md`); only view mode and the pinned view end
+  the panels. The matrix rows for it say nothing, and 16.8's bullet,
+  which said otherwise, is corrected.
+- **`moveCanvas` begins with the Overview closed:** the tile that
+  `switchFolder` presses closes it. The step's need says how to open it
+  again, as 17.2 meant, and the matrix follows that line before it
+  takes its way.
+- **`Anchor::item` became `Anchor::of`,** the id of the snippet, folder
+  or canvas the anchor is for.
+- **The spotlight's rule is one function,** `TutorialCard::SpotlightRect`,
+  which the draw and the tests share: the step waiting, and the spot not
+  covered, or the Overview's own while it is up and nothing is over it.
+- **By hand,** at 1920 by 1080 with real input: the bar's + and grid
+  button with the rings on them; the line for a subject; Ctrl+X, Alt and
+  the wheel, Ctrl+V; New canvas pressed for New folder (the near miss);
+  a folder renamed by a double-click; the tutorial's folder and a tile;
+  the Overview opened from the right-click menu, as the line says; a
+  tile dragged onto the new folder; the trash and its confirmation, with
+  no ring through it; Show deleted and Restore; Done, whose confirmation
+  names both folders and puts both in the trash.

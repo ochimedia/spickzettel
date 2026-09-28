@@ -72,12 +72,20 @@ public:
     // What the spotlight rings this frame, if anything - read from the
     // anchor board, so only once the canvas has been drawn.
     std::optional<AnchorRect> SpotRect() const;
+    // Where the spotlight is drawn this frame: the spot, while the step
+    // up waits for its goal and nothing covers it.
+    std::optional<AnchorRect> SpotlightRect() const;
     // What the hint's button asks for, while the hint up has one.
     std::optional<ViewAction> HintAction() const;
 
 private:
     // The subject's rectangle, while it is on the canvas being looked at.
     std::optional<AnchorRect> SubjectRect() const;
+    // The Overview's trash button under a tile of the tutorial's, one with
+    // a snippet on it first; and the Restore of what of the tutorial's is
+    // in the trash - under its tile, or on its folder's row.
+    std::optional<AnchorRect> DeleteCanvasRect() const;
+    std::optional<AnchorRect> RestoreRect() const;
     void DrawStep();
     void DrawSkipped();
     void DrawList();

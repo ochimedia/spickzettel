@@ -8,12 +8,11 @@
 // what reads it - the tutorial's spotlight - is none of theirs.
 
 #include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <vector>
 
 #include <imgui.h>
-
-#include "core/canvas/item.h"
 
 namespace sz::ui {
 
@@ -28,13 +27,26 @@ enum class AnchorId {
     DrawingBarColor,
     // A minimized snippet's chip in the dock, by its snippet.
     DockChip,
+    // The canvas bar's two buttons: a new canvas, and the Overview.
+    CanvasBarNew,
+    CanvasBarOverview,
+    // The Overview's New folder and Show deleted; a folder's row, by its
+    // folder; a canvas's tile and the trash button under it, by its
+    // canvas; and the Restore of something deleted, by its folder or
+    // canvas.
+    OverviewNewFolder,
+    OverviewShowDeleted,
+    OverviewFolderRow,
+    OverviewCanvasTile,
+    OverviewCanvasDelete,
+    OverviewRestore,
 };
 
-// An anchor, and the snippet it is for when there is one on screen per
-// snippet.
+// An anchor, and what it is for when there is one on screen per snippet,
+// folder or canvas: its id.
 struct Anchor {
     AnchorId id = AnchorId::SelectionBarClose;
-    core::ItemId item = 0;
+    uint64_t of = 0;
 
     bool operator==(const Anchor&) const = default;
 };

@@ -12,6 +12,7 @@ const std::vector<Topic>& Topics() {
         {"drawing", strings::kTutorialTopicsDrawingTitle, strings::kTutorialTopicsDrawingGist, &DrawingChain},
         {"capturing", strings::kTutorialTopicsCapturingTitle, strings::kTutorialTopicsCapturingGist,
          &CapturingChain},
+        {"folders", strings::kTutorialTopicsFoldersTitle, strings::kTutorialTopicsFoldersGist, &FoldersChain},
     };
     return topics;
 }

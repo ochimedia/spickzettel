@@ -273,6 +273,7 @@ public:
     TutorialCard::Status TutorialStatus(const tutorial::Topic& topic) const { return tutorialCard_.StatusOf(topic); }
     std::vector<const tutorial::Step*> TutorialSkipWarnings() const { return tutorialCard_.SkipWarnings(); }
     std::optional<AnchorRect> TutorialSpot() const { return tutorialCard_.SpotRect(); }
+    std::optional<AnchorRect> TutorialSpotlight() const { return tutorialCard_.SpotlightRect(); }
 
     // Captures a fullscreen screenshot onto a canvas made for it (see the
     // definition, and the other declaration of this below).
@@ -600,7 +601,7 @@ private:
     Welcome welcomePending_ = Welcome::Nothing;
 
     // What the tutorial reads of the app, and the showings it counts.
-    AppWorld tutorialWorld_{session_, settings_, editor_};
+    AppWorld tutorialWorld_{session_, settings_, editor_, overview_};
 
     // ===== The owners of the surfaces (docs/VIEW_LAYER.md, section 7) =====
     //

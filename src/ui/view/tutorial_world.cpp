@@ -100,6 +100,26 @@ std::vector<tutorial::SnippetFacts> AppWorld::SnippetsIn(core::FolderId folder) 
     return snippets;
 }
 
+std::vector<tutorial::FolderFacts> AppWorld::Folders() const {
+    const core::CanvasManager& manager = session_.Manager();
+    std::vector<tutorial::FolderFacts> folders;
+    for (const core::Folder& folder : manager.Folders()) {
+        folders.push_back(tutorial::FolderFacts{folder.id, folder.name, manager.IsDeleted(folder)});
+    }
+    return folders;
+}
+
+std::vector<tutorial::CanvasFacts> AppWorld::CanvasesIn(core::FolderId folder) const {
+    const core::CanvasManager& manager = session_.Manager();
+    std::vector<tutorial::CanvasFacts> canvases;
+    for (const core::Canvas& canvas : manager.Canvases()) {
+        if (canvas.folderId == folder) {
+            canvases.push_back(tutorial::CanvasFacts{canvas.id, folder, canvas.name, manager.IsDeleted(canvas)});
+        }
+    }
+    return canvases;
+}
+
 std::optional<std::string> AppWorld::KeyLabel(CommandId command) const {
     // A global hotkey another program holds does nothing when pressed, so
     // a card has no key to name (docs/TUTORIAL.md, section 16.3).

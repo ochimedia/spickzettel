@@ -24,5 +24,9 @@ const std::vector<Step>& PinningChain();
 // Capturing: a drawing, a screenshot of the whole screen, and the quick
 // and silent capture hotkeys.
 const std::vector<Step>& CapturingChain();
+// Folders and canvases: a new canvas, a snippet moved to it, the
+// Overview, a folder made, renamed and gone back from, a canvas sorted
+// into it, and a canvas deleted and restored from the trash.
+const std::vector<Step>& FoldersChain();
 
 }  // namespace sz::ui::tutorial

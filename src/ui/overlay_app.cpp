@@ -222,8 +222,14 @@ void OverlayApp::PerformDelete(const DeleteTarget& target) {
         if (deletedIn ? session_.DeleteMarkedCanvasesPermanently(target.id) : session_.DeletePermanently(target.id)) {
             messages_.Say(strings::kToastDeletedForGood);
         }
-    } else if (session_.Delete(target.id)) {
-        messages_.Say(strings::kToastDeleted);
+    } else {
+        bool deleted = session_.Delete(target.id);
+        for (const uint64_t also : target.alsoFolders) {
+            deleted = session_.Delete(also) || deleted;
+        }
+        if (deleted) {
+            messages_.Say(strings::kToastDeleted);
+        }
     }
 }
 
@@ -682,16 +688,30 @@ void OverlayApp::Do(const ViewAction& action) {
                    },
                    [&](const action::FinishNoteEdit& a) { editor_.EndEditingNote(a.text); },
                    [&](const action::TutorialPress& a) {
-                       const FolderId folder = tutorialCard_.Runner().Folder();
+                       const std::vector<FolderId> folders = tutorialCard_.Runner().Folders();
                        const bool on = tutorialCard_.Runner().On();
                        tutorialCard_.Press(a.button);
-                       // Done ends the tutorial with its folder in the trash,
+                       // Done ends the tutorial with its folders in the trash,
                        // asked first where Settings says to, as any folder's
-                       // Delete is (question 9). Done, keep the folder keeps it.
+                       // Delete is (question 9): its own, and those made in the
+                       // run (section 17.3), under one confirmation. Done, keep
+                       // the folder keeps them.
                        if (a.button == TutorialButton::Done && on && !tutorialCard_.Runner().On()) {
-                           if (const Folder* found = Manager().FindFolder(folder);
-                               found != nullptr && !Manager().IsDeleted(*found)) {
-                               AskToDelete(DeleteTarget{DeleteTarget::Kind::Folder, folder, found->name});
+                           DeleteTarget target{DeleteTarget::Kind::Folder};
+                           for (const FolderId each : folders) {
+                               const Folder* found = Manager().FindFolder(each);
+                               if (found == nullptr || Manager().IsDeleted(*found)) {
+                                   continue;
+                               }
+                               if (target.id == 0) {
+                                   target.id = each;
+                                   target.name = found->name;
+                               } else {
+                                   target.alsoFolders.push_back(each);
+                               }
+                           }
+                           if (target.id != 0) {
+                               AskToDelete(std::move(target));
                            }
                        }
                    },

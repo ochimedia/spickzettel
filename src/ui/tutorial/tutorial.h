@@ -90,6 +90,10 @@ public:
     Outcome GetOutcome() const { return outcome_; }
     bool On() const { return state_ != State::Off; }
     core::FolderId Folder() const { return folder_; }
+    // The tutorial's folders (section 17.3): its own, then those made
+    // while a step that keeps them was up - kept for this run only.
+    std::vector<core::FolderId> Folders() const;
+    const std::vector<core::FolderId>& MadeFolders() const { return madeFolders_; }
     size_t StepIndex() const { return index_; }
     size_t StepCount() const { return chain_->size(); }
     const std::vector<Step>& Chain() const { return *chain_; }
@@ -123,7 +127,7 @@ private:
     void TallyInk(const World& world, const std::vector<SnippetFacts>& snippets);
     void ChooseSubject(const World& world, const std::vector<SnippetFacts>& snippets);
     // The first need not met, as the hint, or nothing.
-    std::optional<Hint> UnmetNeed(const World& world, const std::vector<SnippetFacts>& snippets) const;
+    std::optional<Hint> UnmetNeed(const World& world, const Look& look) const;
 
     const std::vector<Step>* chain_;
     State state_ = State::Off;
@@ -143,6 +147,7 @@ private:
     std::unordered_set<core::ItemId> deletedThisStep_;
     std::unordered_set<core::ItemId> pinnedThisStep_;
     std::unordered_map<core::ItemId, InkGone> inkGoneThisStep_;
+    std::unordered_set<uint64_t> trashedThisStep_;
     // Each live snippet's ink in the last frame, for TallyInk.
     std::unordered_map<core::ItemId, float> inkLastFrame_;
     std::optional<Hint> hint_;
@@ -156,6 +161,9 @@ private:
     std::optional<core::ItemId> subject_;
     // The subject as the step up sees it - none for a step about none.
     std::optional<core::ItemId> lookSubject_;
+    // The folders made while a step that keeps them was up, in the order
+    // they were made.
+    std::vector<core::FolderId> madeFolders_;
 };
 
 // `text` with its placeholders filled in from `world`:

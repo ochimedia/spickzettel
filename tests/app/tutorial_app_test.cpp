@@ -2,10 +2,12 @@
 // anchors the owners mark as they draw, what the app answers the tutorial,
 // the card and the spotlight, and the welcome chain walked through with
 // real gestures.
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <vector>
 
+#include "core/config/settings_catalog.h"
 #include "fakes/headless_app.h"
 #include "support/failing_writes.h"
 #include "generated/ui_strings.h"
@@ -120,6 +122,78 @@ protected:
         ASSERT_FALSE(g.OpenPopupStack.empty());
         const ImRect square = g.OpenPopupStack.back().Window->InnerRect;
         Click(square.Min.x + 30.0f, square.Min.y + 30.0f);
+    }
+
+    // A widget the tutorial may point at, clicked where its owner marked
+    // it this frame.
+    void ClickAnchor(Anchor anchor) {
+        const std::optional<AnchorRect> rect = App().AnchorAt(anchor);
+        ASSERT_TRUE(rect.has_value()) << "not on screen: " << static_cast<int>(anchor.id);
+        Click(Center(*rect).x, Center(*rect).y);
+    }
+    // The canvas bar, out once the pointer is at the bottom edge, and one
+    // of its buttons pressed.
+    void PressOnCanvasBar(AnchorId button) {
+        MoveTo(kDisplayWidth * 0.5f, kDisplayHeight - 1.0f);
+        for (int i = 0; i < 60 && App().CanvasBarReveal() < 1.0f; ++i) {
+            StepFrame();
+        }
+        StepFrame();
+        ClickAnchor(Anchor{button});
+    }
+    // Held Alt and the wheel, to the canvas next to this one in its
+    // folder: back, or on where there is none before it.
+    void ToTheOtherCanvas() {
+        const CanvasId before = Canvases().CurrentCanvasId();
+        MoveTo(kEmptySpot.x, kEmptySpot.y);
+        With(ImGuiMod_Alt, [&] { Wheel(1.0f); });
+        StepFrames(2);
+        if (Canvases().CurrentCanvasId() == before) {
+            With(ImGuiMod_Alt, [&] { Wheel(-1.0f); });
+            StepFrames(2);
+        }
+    }
+    // A widget dragged onto another, as ImGui's drag and drop takes it:
+    // pressed, moved over in steps, and let go of there.
+    void DragWidget(ImVec2 from, ImVec2 to) {
+        MoveTo(from.x, from.y);
+        StepFrame();
+        MouseButtonEvent(ImGuiMouseButton_Left, true);
+        StepFrame();
+        for (int i = 1; i <= 8; ++i) {
+            const float t = static_cast<float>(i) / 8.0f;
+            MoveTo(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+            StepFrame();
+        }
+        StepFrame();
+        MouseButtonEvent(ImGuiMouseButton_Left, false);
+        StepFrames(3);
+    }
+    // A name typed into the field that has the keyboard, and Enter.
+    void TypeAName(const std::string& name) {
+        for (const char letter : name) {
+            ImGui::GetIO().AddInputCharacter(letter);
+            StepFrame();
+        }
+        PressKey(ImGuiKey_Enter);
+        StepFrames(2);
+    }
+    // The canvases of a folder not in the trash, and whether a snippet not
+    // deleted is on a canvas.
+    std::vector<CanvasId> LiveCanvasesIn(FolderId folder) const {
+        std::vector<CanvasId> ids;
+        for (const Canvas& canvas : Canvases().Canvases()) {
+            if (canvas.folderId == folder && !Canvases().IsDeleted(canvas)) {
+                ids.push_back(canvas.id);
+            }
+        }
+        return ids;
+    }
+    bool HoldsASnippet(CanvasId id) const {
+        const Canvas* canvas = Canvases().FindCanvas(id);
+        return canvas != nullptr && std::any_of(canvas->items.begin(), canvas->items.end(), [&](const Item& item) {
+                   return !Canvases().IsDeleted(*canvas, item);
+               });
     }
 
     // What a hand does for each step of every topic, as the step's text
@@ -247,6 +321,79 @@ protected:
             StepFrame();
             ShowEditMode();  // and back to see it
             StepFrame();
+        } else if (id == "newCanvas") {
+            PressOnCanvasBar(AnchorId::CanvasBarNew);
+        } else if (id == "moveSnippet") {
+            if (!Runner().Subject().has_value()) {
+                Drag(300.0f, 360.0f, 600.0f, 560.0f);  // a screenshot to take along
+            }
+            const std::vector<Item>& here = Canvases().CurrentOrNull()->items;
+            if (std::none_of(here.begin(), here.end(), [&](const Item& item) { return item.id == Subject().id; })) {
+                ToTheOtherCanvas();  // to where it is
+            }
+            if (!App().IsSelected(Subject().id)) {
+                RawClick(SubjectMiddle().x, SubjectMiddle().y);
+            }
+            PressCtrlKey(ImGuiKey_X);
+            ToTheOtherCanvas();
+            PressCtrlKey(ImGuiKey_V);
+        } else if (id == "overview") {
+            PressOnCanvasBar(AnchorId::CanvasBarOverview);
+        } else if (id == "newFolder") {
+            ClickAnchor(Anchor{AnchorId::OverviewNewFolder});
+        } else if (id == "rename") {
+            ASSERT_FALSE(Runner().MadeFolders().empty());
+            const Anchor row{AnchorId::OverviewFolderRow, Runner().MadeFolders().front()};
+            ClickAnchor(row);  // a double-click
+            ClickAnchor(row);
+            TypeAName("Games");
+        } else if (id == "switchFolder") {
+            ClickAnchor(Anchor{AnchorId::OverviewFolderRow, Runner().Folder()});
+            for (const CanvasId canvas : LiveCanvasesIn(Runner().Folder())) {
+                if (canvas != Canvases().CurrentCanvasId()) {
+                    ClickAnchor(Anchor{AnchorId::OverviewCanvasTile, canvas});
+                    break;
+                }
+            }
+        } else if (id == "moveCanvas") {
+            if (!App().IsOverviewOpen()) {
+                PressOnCanvasBar(AnchorId::CanvasBarOverview);
+            }
+            ClickAnchor(Anchor{AnchorId::OverviewFolderRow, Runner().Folder()});
+            // One without the snippet, which the steps after it delete and
+            // restore.
+            const std::vector<CanvasId> canvases = LiveCanvasesIn(Runner().Folder());
+            ASSERT_FALSE(canvases.empty());
+            CanvasId dragged = canvases.front();
+            for (const CanvasId canvas : canvases) {
+                if (!HoldsASnippet(canvas)) {
+                    dragged = canvas;
+                }
+            }
+            const std::optional<AnchorRect> tile = App().AnchorAt(Anchor{AnchorId::OverviewCanvasTile, dragged});
+            const std::optional<AnchorRect> row =
+                App().AnchorAt(Anchor{AnchorId::OverviewFolderRow, Runner().MadeFolders().front()});
+            ASSERT_TRUE(tile.has_value());
+            ASSERT_TRUE(row.has_value());
+            DragWidget(Center(*tile), Center(*row));
+        } else if (id == "deleteCanvas") {
+            if (!App().TutorialSpot().has_value()) {
+                ClickAnchor(Anchor{AnchorId::OverviewFolderRow, Runner().Folder()});  // its tiles shown
+            }
+            const std::optional<AnchorRect> trash = App().TutorialSpot();
+            ASSERT_TRUE(trash.has_value());
+            // The confirmation is the Overview's own (overview_ui_test), and
+            // left out here: the hand has no name to click it by.
+            const bool asks = AppSettings().Stored().confirmDelete;
+            controller_->GetSettings().Set(setting::kConfirmDelete, false);
+            Click(Center(*trash).x, Center(*trash).y);
+            controller_->GetSettings().Set(setting::kConfirmDelete, asks);
+        } else if (id == "showDeleted") {
+            ClickAnchor(Anchor{AnchorId::OverviewShowDeleted});
+        } else if (id == "restore") {
+            const std::optional<AnchorRect> restore = App().TutorialSpot();
+            ASSERT_TRUE(restore.has_value());
+            Click(Center(*restore).x, Center(*restore).y);
         } else if (id == "end") {
             Press(TutorialButton::Done);
         } else {
@@ -297,6 +444,58 @@ TEST_F(TutorialAppTest, TheSelectionBarsPinIsMarkedWhereItIsDrawn) {
     ASSERT_TRUE(center.has_value());
     EXPECT_FLOAT_EQ(Center(*pin).x, center->x);
     EXPECT_FLOAT_EQ(Center(*pin).y, center->y);
+}
+
+// The canvas bar's two buttons, marked where they are drawn: pressed
+// there, each does what it is for.
+TEST_F(TutorialAppTest, TheCanvasBarsButtonsAreMarkedWhereTheyAreDrawn) {
+    ShowEditMode();
+    StepFrame();
+    const CanvasId before = Canvases().CurrentCanvasId();
+    const size_t canvases = Canvases().Canvases().size();
+    PressOnCanvasBar(AnchorId::CanvasBarNew);
+    EXPECT_EQ(Canvases().Canvases().size(), canvases + 1);
+    EXPECT_NE(Canvases().CurrentCanvasId(), before);
+    PressOnCanvasBar(AnchorId::CanvasBarOverview);
+    EXPECT_TRUE(App().IsOverviewOpen());
+}
+
+// The Overview's widgets a step points at, marked where they are drawn:
+// pressed there, each does what it is for.
+TEST_F(TutorialAppTest, TheOverviewsWidgetsAreMarkedWhereTheyAreDrawn) {
+    AppConfig config = DefaultConfig();
+    config.confirmDelete = false;
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    const FolderId first = Canvases().CurrentFolderId();
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+    StepFrames(2);
+
+    ClickAnchor(Anchor{AnchorId::OverviewNewFolder});
+    const FolderId made = Canvases().CurrentFolderId();
+    ASSERT_NE(made, first);
+    const CanvasId canvas = Canvases().CurrentCanvasId();
+    ASSERT_TRUE(App().AnchorAt(Anchor{AnchorId::OverviewFolderRow, made}).has_value());
+    ASSERT_TRUE(App().AnchorAt(Anchor{AnchorId::OverviewCanvasTile, canvas}).has_value());
+
+    ClickAnchor(Anchor{AnchorId::OverviewCanvasDelete, canvas});
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindCanvas(canvas)));
+    EXPECT_FALSE(App().AnchorAt(Anchor{AnchorId::OverviewRestore, canvas}).has_value()) << "not shown yet";
+    ClickAnchor(Anchor{AnchorId::OverviewShowDeleted});
+    EXPECT_TRUE(App().TutorialWorld().OverviewShowsDeleted());
+    ClickAnchor(Anchor{AnchorId::OverviewRestore, canvas});
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindCanvas(canvas)));
+
+    ClickAnchor(Anchor{AnchorId::OverviewShowDeleted});  // off again
+    const CanvasId current = Canvases().CurrentCanvasId();
+    ClickAnchor(Anchor{AnchorId::OverviewFolderRow, first});
+    EXPECT_EQ(Canvases().CurrentFolderId(), first) << "browsed";
+    EXPECT_EQ(Canvases().CurrentCanvasId(), current) << "and not gone to";
+    const CanvasId there = LiveCanvasesIn(first).front();
+    ClickAnchor(Anchor{AnchorId::OverviewCanvasTile, there});
+    EXPECT_EQ(Canvases().CurrentCanvasId(), there);
+    EXPECT_FALSE(App().IsOverviewOpen());
 }
 
 TEST_F(TutorialAppTest, AnAnchorNotDrawnThisFrameIsNotOnTheBoard) {
@@ -641,6 +840,46 @@ TEST_F(TutorialAppTest, ACaptureNotWrittenIsNotCounted) {
     TriggerHotkey(config_.hotkeyQuickCapture);
     StepFrame();
     EXPECT_EQ(App().TutorialWorld().Captures(HotkeySlot::QuickCapture), 0u);
+}
+
+// The folders and canvases, those in the trash among them, the Overview's
+// tab and Show deleted, and the canvas bar's setting.
+TEST_F(TutorialAppTest, TheWorldTellsTheFoldersCanvasesAndTheOverview) {
+    ShowEditMode();
+    StepFrame();
+    const tutorial::World& world = App().TutorialWorld();
+    const FolderId folder = Canvases().CurrentFolderId();
+    const CanvasId canvas = Canvases().CurrentCanvasId();
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::NewCanvas}));
+    const CanvasId second = Canvases().CurrentCanvasId();
+    controller_->GetSession().RenameCanvas(second, "Maps");
+    ASSERT_TRUE(controller_->GetSession().Delete(canvas));
+
+    const std::vector<tutorial::CanvasFacts> canvases = world.CanvasesIn(folder);
+    ASSERT_EQ(canvases.size(), 2u);
+    EXPECT_EQ(canvases[0].id, canvas);
+    EXPECT_TRUE(canvases[0].deleted) << "in the trash, and still told";
+    EXPECT_EQ(canvases[1].name, "Maps");
+    EXPECT_FALSE(canvases[1].deleted);
+    const std::vector<tutorial::FolderFacts> folders = world.Folders();
+    ASSERT_FALSE(folders.empty());
+    EXPECT_EQ(folders.front().id, folder);
+    EXPECT_FALSE(folders.front().deleted);
+
+    EXPECT_FALSE(world.OverviewShowsCanvases()) << "not up";
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+    StepFrames(2);
+    EXPECT_TRUE(world.OverviewShowsCanvases());
+    EXPECT_FALSE(world.OverviewShowsDeleted());
+    ClickAnchor(Anchor{AnchorId::OverviewShowDeleted});
+    EXPECT_TRUE(world.OverviewShowsDeleted());
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+    StepFrames(2);
+    EXPECT_FALSE(world.OverviewShowsCanvases()) << "on Settings";
+
+    EXPECT_TRUE(world.CanvasBarOn());
+    controller_->GetSettings().Set(setting::kShowCanvasBar, false);
+    EXPECT_FALSE(world.CanvasBarOn());
 }
 
 TEST_F(TutorialAppTest, TheWorldCountsTheOverlayComingUp) {
@@ -1055,6 +1294,91 @@ TEST_F(TutorialAppTest, ACaptureHotkeyPressedWithTheOverlayUpDoesItsStep) {
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 
+// Inside the Overview the spotlight rings the Overview's own widgets, and
+// not through the delete confirmation over it; the canvas's spots still
+// go under it.
+TEST_F(TutorialAppTest, TheSpotlightRingsInsideTheOverviewButNotThroughIt) {
+    WalkTo("newFolder", "folders");
+    const std::optional<AnchorRect> ring = App().TutorialSpotlight();
+    const std::optional<AnchorRect> button = App().AnchorAt(Anchor{AnchorId::OverviewNewFolder});
+    ASSERT_TRUE(ring.has_value());
+    ASSERT_TRUE(button.has_value());
+    EXPECT_FLOAT_EQ(ring->min.x, button->min.x);
+    EXPECT_FLOAT_EQ(ring->min.y, button->min.y);
+    // The card keeps clear of it.
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    EXPECT_FALSE(card->Pos.x < button->max.x && button->min.x < card->Pos.x + card->Size.x &&
+                 card->Pos.y < button->max.y && button->min.y < card->Pos.y + card->Size.y);
+
+    const CanvasId canvas = Canvases().CurrentCanvasId();
+    ClickAnchor(Anchor{AnchorId::OverviewCanvasDelete, canvas});  // the confirmation up
+    ASSERT_NE(App().InputStack().find("ConfirmDelete"), std::string::npos);
+    EXPECT_FALSE(App().TutorialSpotlight().has_value());
+    PressKey(ImGuiKey_Escape);
+    StepFrames(2);
+
+    ShowEditMode();  // put away, for the next start
+    StepFrame();
+    WalkTo("moveSnippet", "folders");
+    Drag(300.0f, 360.0f, 600.0f, 560.0f);  // a subject
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+    StepFrames(2);
+    EXPECT_TRUE(App().TutorialSpot().has_value()) << "the subject is there";
+    EXPECT_FALSE(App().TutorialSpotlight().has_value()) << "under the Overview";
+}
+
+// A copy pasted rather than the snippet cut: the line says so, and a cut
+// then moves it.
+TEST_F(TutorialAppTest, ACopyPastedOnTheOtherCanvasIsNotTheMove) {
+    WalkTo("moveSnippet", "folders");
+    Drag(300.0f, 360.0f, 600.0f, 560.0f);
+    PressCtrlKey(ImGuiKey_C);
+    ToTheOtherCanvas();
+    PressCtrlKey(ImGuiKey_V);
+    StepFrames(3);
+    EXPECT_EQ(StepUp(), "moveSnippet");
+    EXPECT_EQ(HintUp(), std::string(strings::kTutorialMoveSnippetMissCopy));
+    DoStep("moveSnippet");
+    EXPECT_EQ(StepUp(), "overview") << HintUp();
+}
+
+// The folder made at `newFolder` is the tutorial's: Done asks once, for
+// both, and puts both in the trash; Done, keep the folder keeps both.
+TEST_F(TutorialAppTest, DoneTakesTheFolderMadeInTheRunWithTheTutorials) {
+    WalkTo("end", "folders");
+    ASSERT_EQ(Runner().MadeFolders().size(), 1u);
+    const FolderId own = Runner().Folder();
+    const FolderId made = Runner().MadeFolders().front();
+    EXPECT_EQ(Canvases().FindFolder(made)->name, "Games");
+    Press(TutorialButton::Done);
+    EXPECT_NE(App().InputStack().find("ConfirmDelete"), std::string::npos) << "asked first, once";
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(made)));
+    PressKey(ImGuiKey_Escape);
+    StepFrames(2);
+
+    controller_->GetSettings().Set(setting::kConfirmDelete, false);
+    ShowEditMode();  // put away, for the next start
+    StepFrame();
+    WalkTo("end", "folders");
+    const FolderId own2 = Runner().Folder();
+    const FolderId made2 = Runner().MadeFolders().front();
+    Press(TutorialButton::Done);
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindFolder(own2)));
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindFolder(made2)));
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(made))) << "only this run's";
+
+    ShowEditMode();
+    StepFrame();
+    WalkTo("end", "folders");
+    const FolderId own3 = Runner().Folder();
+    const FolderId made3 = Runner().MadeFolders().front();
+    Press(TutorialButton::DoneKeep);
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(own3)));
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(made3)));
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(own)));
+}
+
 // ===== Progress, kept (section 13.7) =====
 
 TEST_F(TutorialAppTest, TheProgressIsKeptInTheSettingsAsItGoes) {
@@ -1403,6 +1727,12 @@ enum class Way {
     DrawingToolPicked,
     SilentCaptured,
     QuickCaptured,
+    CopyPasted,
+    OverviewClosed,
+    SettingsTab,
+    OtherFolderBrowsed,
+    NewCanvasMade,
+    ShowDeletedOff,
 };
 
 const char* WayName(Way way) {
@@ -1434,6 +1764,12 @@ const char* WayName(Way way) {
         case Way::DrawingToolPicked: return "DrawingToolPicked";
         case Way::SilentCaptured: return "SilentCaptured";
         case Way::QuickCaptured: return "QuickCaptured";
+        case Way::CopyPasted: return "CopyPasted";
+        case Way::OverviewClosed: return "OverviewClosed";
+        case Way::SettingsTab: return "SettingsTab";
+        case Way::OtherFolderBrowsed: return "OtherFolderBrowsed";
+        case Way::NewCanvasMade: return "NewCanvasMade";
+        case Way::ShowDeletedOff: return "ShowDeletedOff";
     }
     return "?";
 }
@@ -1559,6 +1895,17 @@ std::vector<Derail> Matrix() {
         {"capturing", "silentCapture", OtherFolder, Need::InTutorialFolder},
         {"capturing", "silentCapture", Overview, nothing},
         {"capturing", "silentCapture", QuickCaptured, nothing},
+        {"folders", "newCanvas", OtherFolder, Need::InTutorialFolder},
+        {"folders", "newCanvas", HiddenAndShown, nothing},
+        {"folders", "moveSnippet", Overview, Need::CanvasUncovered},
+        {"folders", "moveSnippet", CheatSheet, Need::CanvasUncovered},
+        {"folders", "moveSnippet", OtherFolder, Need::InTutorialFolder},
+        {"folders", "moveSnippet", HiddenAndShown, nothing},
+        {"folders", "moveSnippet", CopyPasted, nothing},
+        {"folders", "overview", OtherFolder, Need::InTutorialFolder},
+        {"folders", "overview", HiddenAndShown, nothing},
+        {"folders", "newFolder", NewCanvasMade, nothing},
+        {"folders", "restore", ShowDeletedOff, Need::DeletedShown},
     };
     cases.insert(cases.end(), more.begin(), more.end());
     // Drawing's steps after the stroke: each needs drawing mode on its
@@ -1570,6 +1917,15 @@ std::vector<Derail> Matrix() {
     }
     for (const char* step : {"color", "width", "line", "rectangle"}) {
         cases.push_back({"drawing", step, EraserPicked, Need::PenInHand});
+    }
+    // Folders and canvases' steps in the Overview: each needs it up, and
+    // on its canvases.
+    for (const char* step :
+         {"newFolder", "rename", "switchFolder", "moveCanvas", "deleteCanvas", "showDeleted", "restore"}) {
+        cases.push_back({"folders", step, OverviewClosed, Need::OverviewUp});
+        cases.push_back({"folders", step, HiddenAndShown, nothing});  // hidden keeps the Overview up
+        cases.push_back({"folders", step, SettingsTab, Need::CanvasesTab});
+        cases.push_back({"folders", step, OtherFolderBrowsed, nothing});
     }
     return cases;
 }
@@ -1697,6 +2053,35 @@ protected:
             case Way::QuickCaptured:
                 TriggerHotkey(config_.hotkeyQuickCapture);
                 break;
+            case Way::CopyPasted:
+                SelectTheSubject();
+                PressCtrlKey(ImGuiKey_C);
+                ToTheOtherCanvas();
+                PressCtrlKey(ImGuiKey_V);
+                ASSERT_EQ(HintUp(), std::string(strings::kTutorialMoveSnippetMissCopy));
+                break;
+            case Way::OverviewClosed:
+                ASSERT_TRUE(App().IsOverviewOpen());
+                PressKey(ImGuiKey_Escape);
+                break;
+            case Way::SettingsTab:
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+                break;
+            case Way::OtherFolderBrowsed: {
+                // The folder the app started with, not the tutorial's.
+                const Folder& mine = Canvases().Folders().front();
+                ASSERT_NE(mine.id, Runner().Folder());
+                ClickAnchor(Anchor{AnchorId::OverviewFolderRow, mine.id});
+                break;
+            }
+            case Way::NewCanvasMade:
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::NewCanvas}));
+                StepFrames(2);
+                ASSERT_EQ(HintUp(), std::string(strings::kTutorialNewFolderMissCanvas));
+                break;
+            case Way::ShowDeletedOff:
+                ClickAnchor(Anchor{AnchorId::OverviewShowDeleted});
+                break;
             case Way::TypingLeftOpen:
                 PressBar(ChromeButton::Text);
                 RawClick(SubjectMiddle().x, SubjectMiddle().y);
@@ -1754,6 +2139,18 @@ protected:
                 case tutorial::Need::PenInHand:
                     PressBar(ChromeButton::Pen);
                     break;
+                case tutorial::Need::OverviewUp:
+                    // "Right-click an empty spot and choose Overview."
+                    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+                    break;
+                case tutorial::Need::CanvasesTab:
+                    // Its tab pressed - which opening the Overview again
+                    // comes back to, as a press has no anchor to find it by.
+                    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+                    break;
+                case tutorial::Need::DeletedShown:
+                    ClickAnchor(Anchor{AnchorId::OverviewShowDeleted});
+                    break;
                 default:
                     FAIL() << "a line with nothing to do: " << hint->text;
             }
@@ -1773,6 +2170,12 @@ TEST_P(TutorialDerailTest, TheCardSaysALineAndFollowingItGetsTheStepDone) {
         Overlay().PressTutorialHint();
         StepFrames(3);
         ASSERT_TRUE(Runner().Subject().has_value());
+    }
+    // A step that begins with the Overview closed - the tile the step
+    // before pressed closes it: first open, as its line says.
+    if (NeedUp() == tutorial::Need::OverviewUp) {
+        ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+        StepFrames(3);
     }
     const bool gated = Runner().CurrentStep().gated;
 

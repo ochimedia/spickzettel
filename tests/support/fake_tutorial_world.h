@@ -16,7 +16,9 @@ namespace sz::ui::tutorial {
 
 struct FakeWorld : World {
     // Folder 1 is the tutorial's, with canvases 11 and 12; folder 2 is
-    // the user's own, with canvas 21.
+    // the user's own, with canvas 21. A canvas in the trash is in no
+    // folder, as FolderOf has it; a folder in the trash is marked as a
+    // test marks it, and its canvases with it.
     static constexpr core::FolderId kTutorialFolder = 1;
     static constexpr core::FolderId kOtherFolder = 2;
     static constexpr core::CanvasId kCanvas = 11;
@@ -38,8 +40,13 @@ struct FakeWorld : World {
     float penWidth = 3.0f;
     std::optional<core::ItemId> typing;
     core::CanvasId current = kCanvas;
-    std::unordered_map<core::CanvasId, core::FolderId> folderOf{
-        {kCanvas, kTutorialFolder}, {kSecondCanvas, kTutorialFolder}, {kOtherCanvas, kOtherFolder}};
+    std::vector<FolderFacts> folders{{kTutorialFolder, "Tutorial: Folders and canvases"}, {kOtherFolder, "Mine"}};
+    std::vector<CanvasFacts> canvases{{kCanvas, kTutorialFolder, "One"},
+                                      {kSecondCanvas, kTutorialFolder, "Two"},
+                                      {kOtherCanvas, kOtherFolder, "Mine"}};
+    bool overviewShowsCanvases = true;
+    bool overviewShowsDeleted = false;
+    bool canvasBarOn = true;
     std::vector<SnippetFacts> snippets;
     std::unordered_map<CommandId, std::string> keys{{CommandId::Undo, "Ctrl+Z"},
                                                     {CommandId::CheatSheet, "Ctrl+H"},
@@ -49,7 +56,9 @@ struct FakeWorld : World {
                                                     {CommandId::NewDrawingTool, "D"},
                                                     {CommandId::DeleteSelection, "Delete"},
                                                     {CommandId::QuickCapture, "Ctrl+Alt+C"},
-                                                    {CommandId::SilentCapture, "Ctrl+Alt+X"}};
+                                                    {CommandId::SilentCapture, "Ctrl+Alt+X"},
+                                                    {CommandId::Cut, "Ctrl+X"},
+                                                    {CommandId::Paste, "Ctrl+V"}};
     core::CreationTrigger screenshotTrigger = core::CreationTrigger::Plain;
     core::CreationTrigger drawingTrigger = core::CreationTrigger::Ctrl;
     std::unordered_map<std::string, std::string> progress;
@@ -74,6 +83,29 @@ struct FakeWorld : World {
         stroke.shape = shape;
         At(id).strokes.push_back(stroke);
         return At(id).strokes.back();
+    }
+    FolderFacts& Folder(core::FolderId id) {
+        for (FolderFacts& folder : folders) {
+            if (folder.id == id) {
+                return folder;
+            }
+        }
+        throw std::out_of_range("no such folder");
+    }
+    CanvasFacts& Canvas(core::CanvasId id) {
+        for (CanvasFacts& canvas : canvases) {
+            if (canvas.id == id) {
+                return canvas;
+            }
+        }
+        throw std::out_of_range("no such canvas");
+    }
+    // A folder made, with a canvas in it, and that canvas current - as the
+    // Overview's New folder does it.
+    void MakeFolder(core::FolderId folder, core::CanvasId canvas) {
+        folders.push_back(FolderFacts{folder, "2026-09-28 12:00:00"});
+        canvases.push_back(CanvasFacts{canvas, folder, "2026-09-28 12:00:00"});
+        current = canvas;
     }
     SnippetFacts& At(core::ItemId id) {
         for (SnippetFacts& snippet : snippets) {
@@ -103,8 +135,12 @@ struct FakeWorld : World {
     std::optional<core::ItemId> NoteBeingTyped() const override { return typing; }
     core::CanvasId CurrentCanvas() const override { return current; }
     core::FolderId FolderOf(core::CanvasId canvas) const override {
-        const auto it = folderOf.find(canvas);
-        return it == folderOf.end() ? 0 : it->second;
+        for (const CanvasFacts& facts : canvases) {
+            if (facts.id == canvas) {
+                return facts.deleted ? 0 : facts.folder;
+            }
+        }
+        return 0;
     }
     std::string CanvasName(core::CanvasId canvas) const override { return "Canvas " + std::to_string(canvas); }
     std::vector<SnippetFacts> SnippetsIn(core::FolderId folder) const override {
@@ -116,6 +152,19 @@ struct FakeWorld : World {
         }
         return in;
     }
+    std::vector<FolderFacts> Folders() const override { return folders; }
+    std::vector<CanvasFacts> CanvasesIn(core::FolderId folder) const override {
+        std::vector<CanvasFacts> in;
+        for (const CanvasFacts& canvas : canvases) {
+            if (canvas.folder == folder) {
+                in.push_back(canvas);
+            }
+        }
+        return in;
+    }
+    bool OverviewShowsCanvases() const override { return cover == Cover::Overview && overviewShowsCanvases; }
+    bool OverviewShowsDeleted() const override { return cover == Cover::Overview && overviewShowsDeleted; }
+    bool CanvasBarOn() const override { return canvasBarOn; }
     std::optional<std::string> KeyLabel(CommandId command) const override {
         const auto it = keys.find(command);
         return it == keys.end() ? std::nullopt : std::optional<std::string>(it->second);

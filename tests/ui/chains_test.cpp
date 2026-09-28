@@ -109,6 +109,42 @@ protected:
     }
 };
 
+class FoldersChainTest : public ChainTest {
+protected:
+    // A folder made in the run, and its canvas.
+    static constexpr core::FolderId kMadeFolder = 3;
+    static constexpr core::CanvasId kMadeCanvas = 31;
+
+    FoldersChainTest() : ChainTest(FoldersChain()) {}
+
+    const char* TextOf(std::string_view id) {
+        for (const Step& step : FoldersChain()) {
+            if (step.id == id) {
+                return step.text(world_);
+            }
+        }
+        return "";
+    }
+    // The Overview up, on its Canvases tab.
+    void OverviewUp() {
+        world_.cover = Cover::Overview;
+        world_.overviewShowsCanvases = true;
+    }
+    // A folder made at `newFolder`, and the steps after it walked to `id`
+    // with Next: the folder stays the tutorial's, which a Resume would
+    // forget.
+    void MadeAFolderThenAt(std::string_view id) {
+        At("newFolder");
+        OverviewUp();
+        world_.MakeFolder(kMadeFolder, kMadeCanvas);
+        Settle();
+        while (Id() != id) {
+            tutorial_.Next();
+            Frame();
+        }
+    }
+};
+
 TEST_F(BasicsChainTest, CanBeWalkedTheWayAUserWould) {
     Frame();
     EXPECT_EQ(Id(), "welcome");
@@ -444,6 +480,243 @@ TEST_F(CapturingChainTest, TheTextsFollowTheTriggersAndTheKeys) {
     world_.keys.erase(CommandId::SilentCapture);
     EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureTextNoKey);
     EXPECT_STREQ(TextOf("silentCapture"), strings::kTutorialSilentCaptureTextNoKey);
+}
+
+TEST_F(FoldersChainTest, CanBeWalkedTheWayAUserWould) {
+    Frame();
+    ASSERT_EQ(Id(), "newCanvas");
+    EXPECT_FALSE(tutorial_.NextEnabled()) << "the next step needs another canvas";
+    world_.canvases.push_back(CanvasFacts{13, FakeWorld::kTutorialFolder, "Three"});
+    world_.current = 13;
+    Settle();
+
+    ASSERT_EQ(Id(), "moveSnippet");
+    EXPECT_EQ(NeedShown(), Need::ASubject) << "a new folder has no snippet";
+    world_.Make(1);  // on canvas 13
+    world_.selection = {1};
+    Frame();
+    EXPECT_FALSE(NeedShown().has_value());
+    // Cut, and pasted on the first canvas.
+    world_.current = FakeWorld::kCanvas;
+    world_.At(1).canvas = FakeWorld::kCanvas;
+    Settle();
+
+    ASSERT_EQ(Id(), "overview");
+    OverviewUp();
+    Settle();
+
+    ASSERT_EQ(Id(), "newFolder");
+    EXPECT_FALSE(tutorial_.NextEnabled()) << "the next steps are about the folder it makes";
+    world_.MakeFolder(kMadeFolder, kMadeCanvas);
+    Settle();
+    EXPECT_EQ(tutorial_.Folders(), (std::vector<core::FolderId>{FakeWorld::kTutorialFolder, kMadeFolder}));
+
+    ASSERT_EQ(Id(), "rename");
+    EXPECT_FALSE(NeedShown().has_value()) << "its folder is the tutorial's";
+    world_.Folder(kMadeFolder).name = "Games";
+    Settle();
+
+    ASSERT_EQ(Id(), "switchFolder");
+    world_.current = FakeWorld::kSecondCanvas;  // a tile, which closes the Overview
+    world_.cover = Cover::None;
+    Settle();
+
+    ASSERT_EQ(Id(), "moveCanvas");
+    EXPECT_EQ(NeedShown(), Need::OverviewUp);
+    OverviewUp();
+    world_.Canvas(13).folder = kMadeFolder;
+    Settle();
+
+    ASSERT_EQ(Id(), "deleteCanvas");
+    world_.Canvas(FakeWorld::kCanvas).deleted = true;  // the snippet's
+    Settle();
+
+    ASSERT_EQ(Id(), "showDeleted");
+    world_.overviewShowsDeleted = true;
+    Settle();
+
+    ASSERT_EQ(Id(), "restore");
+    EXPECT_FALSE(NeedShown().has_value());
+    world_.Canvas(FakeWorld::kCanvas).deleted = false;
+    Settle();
+
+    ASSERT_EQ(Id(), "end");
+    tutorial_.Next();
+    EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
+}
+
+// Any canvas of the tutorial's new since the step began - the Overview's
+// New canvas, or a capture's - and none that was there already.
+TEST_F(FoldersChainTest, ANewCanvasIsOneThatWasNotThere) {
+    At("newCanvas");
+    world_.current = FakeWorld::kSecondCanvas;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "there already";
+    world_.current = FakeWorld::kOtherCanvas;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::InTutorialFolder);
+    world_.canvases.push_back(CanvasFacts{13, FakeWorld::kTutorialFolder, "Three"});
+    world_.current = 13;
+    world_.cover = Cover::Overview;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet()) << "made in the Overview as well";
+}
+
+// A copy pasted onto another canvas keeps its place exactly: the first
+// one is still where it was, and the line says to cut it instead.
+TEST_F(FoldersChainTest, ACopyPastedIsNotAMove) {
+    world_.Make(1);
+    At("moveSnippet");
+    world_.current = FakeWorld::kSecondCanvas;
+    world_.Make(2);  // the copy, in the same place
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), strings::kTutorialMoveSnippetMissCopy);
+    world_.At(2).deleted = true;
+    world_.At(1).canvas = FakeWorld::kSecondCanvas;  // cut and pasted
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(FoldersChainTest, TheOverviewsStepsNeedItUpOnItsCanvases) {
+    At("newFolder");
+    EXPECT_EQ(NeedShown(), Need::OverviewUp);
+    world_.cover = Cover::Overview;
+    world_.overviewShowsCanvases = false;  // on Settings
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::CanvasesTab);
+    world_.overviewShowsCanvases = true;
+    Frame();
+    EXPECT_FALSE(NeedShown().has_value());
+}
+
+TEST_F(FoldersChainTest, NewCanvasPressedForNewFolderSaysWhichButtonItIs) {
+    OverviewUp();
+    At("newFolder");
+    world_.canvases.push_back(CanvasFacts{13, FakeWorld::kTutorialFolder, "Three"});
+    world_.current = 13;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), strings::kTutorialNewFolderMissCanvas);
+}
+
+// The folders made while `newFolder` is up are the tutorial's for the
+// rest of the run: a step there is in the tutorial folder. A folder made
+// at another step stays the user's (section 17.3).
+TEST_F(FoldersChainTest, OnlyTheFoldersMadeAtNewFolderAreTheTutorials) {
+    MadeAFolderThenAt("moveCanvas");
+    ASSERT_EQ(world_.current, kMadeCanvas);
+    EXPECT_FALSE(NeedShown().has_value()) << "in a folder of the tutorial's";
+    world_.folders.push_back(FolderFacts{4, "Mine too"});
+    world_.canvases.push_back(CanvasFacts{41, 4, "Mine too"});
+    world_.current = 41;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::InTutorialFolder) << "made at another step";
+    EXPECT_EQ(tutorial_.Folders(), (std::vector<core::FolderId>{FakeWorld::kTutorialFolder, kMadeFolder}));
+
+    tutorial_.Resume("moveCanvas", FakeWorld::kTutorialFolder);
+    EXPECT_EQ(tutorial_.Folders(), std::vector<core::FolderId>{FakeWorld::kTutorialFolder})
+        << "not kept across a start";
+}
+
+TEST_F(FoldersChainTest, ARenameCountsForAFolderOrACanvasOfTheTutorials) {
+    OverviewUp();
+    At("rename");
+    world_.Canvas(FakeWorld::kSecondCanvas).name = "Two";  // the same
+    world_.Folder(FakeWorld::kOtherFolder).name = "Not the tutorial's";
+    world_.Canvas(FakeWorld::kOtherCanvas).name = "Nor this";
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    world_.Canvas(FakeWorld::kSecondCanvas).name = "Maps";
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+
+    OverviewUp();
+    At("rename");
+    world_.Folder(FakeWorld::kTutorialFolder).name = "Practice";
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// Back from the new folder: a switch to another canvas, in the tutorial's
+// own folder.
+TEST_F(FoldersChainTest, TheWayBackIsToTheTutorialsOwnFolder) {
+    MadeAFolderThenAt("switchFolder");
+    world_.canvases.push_back(CanvasFacts{32, kMadeFolder, "Another"});
+    world_.current = 32;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "still in the new folder";
+    world_.current = FakeWorld::kCanvas;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// A canvas moves into a folder of the tutorial's, or out to one of the
+// user's.
+TEST_F(FoldersChainTest, ACanvasMovedToAnotherFolderCounts) {
+    OverviewUp();
+    At("moveCanvas");
+    world_.Canvas(FakeWorld::kSecondCanvas).folder = FakeWorld::kOtherFolder;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// The tutorial's own folder deleted counts, and takes the current canvas
+// out of its folders: the trash's steps do not need them.
+TEST_F(FoldersChainTest, TheTutorialsFolderDeletedIsDeletedAndRestored) {
+    OverviewUp();
+    At("deleteCanvas");
+    world_.Folder(FakeWorld::kTutorialFolder).deleted = true;
+    world_.Canvas(FakeWorld::kCanvas).deleted = true;
+    world_.Canvas(FakeWorld::kSecondCanvas).deleted = true;
+    world_.current = FakeWorld::kOtherCanvas;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+
+    world_.overviewShowsDeleted = true;
+    At("restore");
+    EXPECT_FALSE(NeedShown().has_value()) << "in the trash, and no need for the tutorial's folder";
+    world_.Folder(FakeWorld::kTutorialFolder).deleted = false;
+    world_.Canvas(FakeWorld::kCanvas).deleted = false;
+    world_.Canvas(FakeWorld::kSecondCanvas).deleted = false;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(FoldersChainTest, RestoreNeedsShowDeletedAndSomethingInTheTrash) {
+    OverviewUp();
+    At("restore");
+    EXPECT_EQ(NeedShown(), Need::DeletedShown);
+    world_.overviewShowsDeleted = true;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::SomethingInTrash);
+    world_.Canvas(FakeWorld::kOtherCanvas).deleted = true;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::SomethingInTrash) << "not the tutorial's";
+    world_.Canvas(FakeWorld::kSecondCanvas).deleted = true;
+    Frame();
+    EXPECT_FALSE(NeedShown().has_value());
+    // Deleted for good: gone, and nothing left in the trash.
+    world_.canvases.erase(world_.canvases.begin() + 1);
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_EQ(NeedShown(), Need::SomethingInTrash);
+}
+
+TEST_F(FoldersChainTest, TheTextsFollowTheCanvasBarAndTheKeys) {
+    EXPECT_STREQ(TextOf("newCanvas"), strings::kTutorialNewCanvasText);
+    EXPECT_STREQ(TextOf("moveSnippet"), strings::kTutorialMoveSnippetText);
+    EXPECT_STREQ(TextOf("overview"), strings::kTutorialOverviewText);
+    world_.canvasBarOn = false;
+    EXPECT_STREQ(TextOf("newCanvas"), strings::kTutorialNewCanvasTextOverview);
+    world_.keys[CommandId::NewCanvas] = "Ctrl+N";
+    EXPECT_STREQ(TextOf("newCanvas"), strings::kTutorialNewCanvasTextKey);
+    EXPECT_STREQ(TextOf("moveSnippet"), strings::kTutorialMoveSnippetTextNoBar);
+    EXPECT_STREQ(TextOf("overview"), strings::kTutorialOverviewTextMenu);
+    world_.keys.erase(CommandId::Paste);
+    EXPECT_STREQ(TextOf("moveSnippet"), strings::kTutorialMoveSnippetTextMenuNoBar);
+    world_.canvasBarOn = true;
+    EXPECT_STREQ(TextOf("moveSnippet"), strings::kTutorialMoveSnippetTextMenu);
 }
 
 // The bar pins the whole selection: any of the tutorial's pinned will do.
@@ -975,7 +1248,13 @@ TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
         strings::kTutorialFullscreenTextTool,   strings::kTutorialFullscreenTextMenu,
         strings::kTutorialQuickCaptureTextTray, strings::kTutorialQuickCaptureTextNoKey,
         strings::kTutorialSilentCaptureTextTray, strings::kTutorialSilentCaptureTextNoKey,
+        strings::kTutorialNeedOverviewUp,       strings::kTutorialNeedCanvasesTab,
+        strings::kTutorialNeedDeletedShown,     strings::kTutorialNeedSomethingInTrash,
+        strings::kTutorialNewCanvasTextKey,     strings::kTutorialNewCanvasTextOverview,
+        strings::kTutorialMoveSnippetTextNoBar, strings::kTutorialMoveSnippetTextMenu,
+        strings::kTutorialMoveSnippetTextMenuNoBar, strings::kTutorialOverviewTextMenu,
     };
+    world_.keys[CommandId::NewCanvas] = "Ctrl+N";
     for (const Topic& topic : Topics()) {
         texts.push_back(topic.title);
         texts.push_back(topic.gist);

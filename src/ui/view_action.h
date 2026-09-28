@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <string>
 #include <variant>
+#include <vector>
 
 #include "core/canvas/canvas.h"
 #include "core/canvas/item.h"
@@ -39,6 +40,10 @@ struct DeleteTarget {
     std::string name;
     // Deleted already, so this is Delete permanently rather than a mark.
     bool forGood = false;
+    // More folders that go with a folder's delete, under the one
+    // confirmation - the tutorial's, at its Done (docs/TUTORIAL.md,
+    // section 17.3). Never with forGood.
+    std::vector<uint64_t> alsoFolders;
 };
 
 // One of the tutorial card's own buttons. Done ends the tutorial and puts

@@ -65,6 +65,22 @@ struct SnippetFacts {
     }
 };
 
+// A folder, as the tutorial sees it: deleted when it is in the trash.
+struct FolderFacts {
+    core::FolderId id = 0;
+    std::string name;
+    bool deleted = false;
+};
+
+// A canvas, as the tutorial sees it: deleted when it is in the trash, on
+// its own or with its folder.
+struct CanvasFacts {
+    core::CanvasId id = 0;
+    core::FolderId folder = 0;
+    std::string name;
+    bool deleted = false;
+};
+
 // What covers the canvas, if anything - the machine's Panel and Popup
 // levels, as far as a card needs to tell them apart. A snippet's own
 // popups, the color chooser and Properties, cover nothing: a step may
@@ -113,6 +129,18 @@ public:
     // included, bottom to top per canvas. Nothing for a folder that is
     // gone.
     virtual std::vector<SnippetFacts> SnippetsIn(core::FolderId folder) const = 0;
+    // Every folder, in the Overview's order, and every canvas of `folder`
+    // - those in the trash among them.
+    virtual std::vector<FolderFacts> Folders() const = 0;
+    virtual std::vector<CanvasFacts> CanvasesIn(core::FolderId folder) const = 0;
+
+    // The Overview, while it is up (CanvasCover): whether it shows the
+    // canvases rather than Settings or About, and whether it shows what
+    // is deleted. And whether the canvas bar is on at all (Settings >
+    // Appearance).
+    virtual bool OverviewShowsCanvases() const = 0;
+    virtual bool OverviewShowsDeleted() const = 0;
+    virtual bool CanvasBarOn() const = 0;
 
     // Words for the card: the key that runs `command`, as bound now -
     // nothing when it is unbound, or is a global hotkey another program

@@ -317,6 +317,7 @@ void CanvasBar::Draw(float displayW, float displayH) {
     if (PillIconButton("##canvasbar_new", icons::kPlus, false)) {
         host_.Act(action::RunCommand{Command{CommandId::NewCanvas}});
     }
+    host_.Mark(Anchor{AnchorId::CanvasBarNew}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarNewCanvasTip);
     }
@@ -328,6 +329,7 @@ void CanvasBar::Draw(float displayW, float displayH) {
     if (PillIconButton("##canvasbar_overview", icons::kLayoutGrid, false)) {
         host_.Act(action::RunCommand{Command{CommandId::Overview}});
     }
+    host_.Mark(Anchor{AnchorId::CanvasBarOverview}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kCanvasBarOverviewTip);
     }

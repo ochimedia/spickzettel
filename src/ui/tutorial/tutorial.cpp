@@ -41,6 +41,31 @@ std::vector<const SnippetFacts*> Look::MadeHere() const {
     return made;
 }
 
+bool Look::Tutorials(core::FolderId id) const {
+    return id != 0 && std::find(folders.begin(), folders.end(), id) != folders.end();
+}
+
+const FolderFacts* Look::FolderNow(core::FolderId id) const {
+    if (!Tutorials(id)) {
+        return nullptr;
+    }
+    for (const FolderFacts& facts : allFolders) {
+        if (facts.id == id) {
+            return &facts;
+        }
+    }
+    return nullptr;
+}
+
+const CanvasFacts* Look::CanvasNow(core::CanvasId id) const {
+    for (const CanvasFacts& facts : canvases) {
+        if (facts.id == id) {
+            return &facts;
+        }
+    }
+    return nullptr;
+}
+
 void Tutorial::Start(core::FolderId folder) { Resume({}, folder); }
 
 void Tutorial::Resume(std::string_view id, core::FolderId folder) {
@@ -63,7 +88,14 @@ void Tutorial::Resume(std::string_view id, core::FolderId folder) {
     wasDeleted_.clear();
     lastDeleted_.reset();
     subject_.reset();
+    madeFolders_.clear();
     Begin();
+}
+
+std::vector<core::FolderId> Tutorial::Folders() const {
+    std::vector<core::FolderId> folders{folder_};
+    folders.insert(folders.end(), madeFolders_.begin(), madeFolders_.end());
+    return folders;
 }
 
 void Tutorial::Begin() {
@@ -314,15 +346,8 @@ void Tutorial::ChooseSubject(const World& world, const std::vector<SnippetFacts>
     lookSubject_ = pick;
 }
 
-std::optional<Hint> Tutorial::UnmetNeed(const World& world, const std::vector<SnippetFacts>& snippets) const {
-    const SnippetFacts* subject = nullptr;
-    if (lookSubject_) {
-        for (const SnippetFacts& snippet : snippets) {
-            if (snippet.id == *lookSubject_) {
-                subject = &snippet;
-            }
-        }
-    }
+std::optional<Hint> Tutorial::UnmetNeed(const World& world, const Look& look) const {
+    const SnippetFacts* subject = look.Subject();
     auto unmet = [](Need need, const char* text, HintButton button = HintButton::None, core::CanvasId canvas = 0) {
         return Hint{text, button, canvas, need};
     };
@@ -331,7 +356,7 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const std::vector<Sn
     for (const Need need : CurrentStep().needs) {
         switch (need) {
             case Need::InTutorialFolder:
-                if (world.FolderOf(world.CurrentCanvas()) != folder_) {
+                if (!look.Tutorials(world.FolderOf(world.CurrentCanvas()))) {
                     return unmet(need, strings::kTutorialNeedInTutorialFolder, HintButton::BackToTutorial);
                 }
                 break;
@@ -434,6 +459,33 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const std::vector<Sn
                     return unmet(need, strings::kTutorialNeedSubjectDrawnOn);
                 }
                 break;
+            case Need::OverviewUp:
+                if (world.CanvasCover() != Cover::Overview) {
+                    return unmet(need, strings::kTutorialNeedOverviewUp);
+                }
+                break;
+            case Need::CanvasesTab:
+                if (!world.OverviewShowsCanvases()) {
+                    return unmet(need, strings::kTutorialNeedCanvasesTab);
+                }
+                break;
+            case Need::DeletedShown:
+                if (!world.OverviewShowsDeleted()) {
+                    return unmet(need, strings::kTutorialNeedDeletedShown);
+                }
+                break;
+            case Need::SomethingInTrash: {
+                const bool canvas = std::any_of(look.canvases.begin(), look.canvases.end(),
+                                                [](const CanvasFacts& facts) { return facts.deleted; });
+                const bool folder = std::any_of(look.folders.begin(), look.folders.end(), [&](core::FolderId id) {
+                    const FolderFacts* facts = look.FolderNow(id);
+                    return facts != nullptr && facts->deleted;
+                });
+                if (!canvas && !folder) {
+                    return unmet(need, strings::kTutorialNeedSomethingInTrash);
+                }
+                break;
+            }
         }
     }
     return std::nullopt;
@@ -443,9 +495,33 @@ void Tutorial::Update(const World& world, double now) {
     if (state_ != State::OnStep) {
         return;
     }
-    const std::vector<SnippetFacts> snippets = world.SnippetsIn(folder_);
+    const std::vector<FolderFacts> allFolders = world.Folders();
+    // A folder made while a step that keeps them is up is the tutorial's
+    // from then on, this frame included.
+    if (begun_ && CurrentStep().keepsFolders) {
+        for (const FolderFacts& facts : allFolders) {
+            const bool wasThere = std::any_of(start_.folders.begin(), start_.folders.end(),
+                                              [&](const FolderFacts& was) { return was.id == facts.id; });
+            if (!facts.deleted && !wasThere && facts.id != folder_ &&
+                std::find(madeFolders_.begin(), madeFolders_.end(), facts.id) == madeFolders_.end()) {
+                madeFolders_.push_back(facts.id);
+            }
+        }
+    }
+    const std::vector<core::FolderId> folders = Folders();
+    std::vector<SnippetFacts> snippets;
+    std::vector<CanvasFacts> canvases;
+    for (const core::FolderId folder : folders) {
+        const std::vector<SnippetFacts> in = world.SnippetsIn(folder);
+        snippets.insert(snippets.end(), in.begin(), in.end());
+        const std::vector<CanvasFacts> of = world.CanvasesIn(folder);
+        canvases.insert(canvases.end(), of.begin(), of.end());
+    }
     if (!begun_) {
         start_ = StartRecord{};
+        start_.canvas = world.CurrentCanvas();
+        start_.folders = allFolders;
+        start_.canvases = canvases;
         start_.showings = world.Showings();
         start_.pinnedViews = world.PinnedViews();
         start_.viewModes = world.ViewModes();
@@ -460,7 +536,18 @@ void Tutorial::Update(const World& world, double now) {
         pinnedThisStep_.clear();
         inkGoneThisStep_.clear();
         inkLastFrame_.clear();
+        trashedThisStep_.clear();
         begun_ = true;
+    }
+    for (const CanvasFacts& facts : canvases) {
+        if (facts.deleted) {
+            trashedThisStep_.insert(facts.id);
+        }
+    }
+    for (const FolderFacts& facts : allFolders) {
+        if (facts.deleted && std::find(folders.begin(), folders.end(), facts.id) != folders.end()) {
+            trashedThisStep_.insert(facts.id);
+        }
     }
     Observe(snippets);
     TallyInk(world, snippets);
@@ -481,7 +568,9 @@ void Tutorial::Update(const World& world, double now) {
     // The goal first: a result is a result, however it came about, and
     // what makes it may itself leave a need unmet - deleting the only
     // snippet leaves no subject. The needs guide only while it is not met.
-    const Look look{world, start_, snippets, lookSubject_, deletedThisStep_, pinnedThisStep_, inkGoneThisStep_};
+    const Look look{world,    start_,           snippets,         folder_,          folders,
+                    allFolders, canvases,       lookSubject_,     deletedThisStep_, pinnedThisStep_,
+                    inkGoneThisStep_, trashedThisStep_};
     if (step.goal != nullptr && step.goal(look)) {
         metThisVisit_ = true;
         done_[index_] = true;
@@ -489,7 +578,7 @@ void Tutorial::Update(const World& world, double now) {
         hint_.reset();
         return;
     }
-    hint_ = UnmetNeed(world, snippets);
+    hint_ = UnmetNeed(world, look);
     if (hint_) {
         return;
     }
