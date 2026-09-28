@@ -266,6 +266,7 @@ public:
     void OpenTutorialList() { Act(action::OpenTutorialList{}); }
     bool TutorialListed() const { return tutorialCard_.Listing(); }
     TutorialCard::Status TutorialStatus(const tutorial::Topic& topic) const { return tutorialCard_.StatusOf(topic); }
+    std::vector<const tutorial::Step*> TutorialSkipWarnings() const { return tutorialCard_.SkipWarnings(); }
     std::optional<AnchorRect> TutorialSpot() const { return tutorialCard_.SpotRect(); }
 
     // Captures a fullscreen screenshot onto a canvas made for it (see the

@@ -506,6 +506,7 @@ TEST_F(TutorialAppTest, SkipShowsTheWarningsNotReachedAndDoneLetsGo) {
     Press(TutorialButton::Skip);
     EXPECT_EQ(Runner().GetState(), tutorial::Tutorial::State::Skipped);
     EXPECT_EQ(Runner().WarningsNotReached().size(), 2u);
+    EXPECT_EQ(App().TutorialSkipWarnings().size(), 2u);
     const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
     ASSERT_NE(card, nullptr);
     EXPECT_TRUE(card->Active) << "the skip card";
@@ -517,6 +518,25 @@ TEST_F(TutorialAppTest, SkipShowsTheWarningsNotReachedAndDoneLetsGo) {
     EXPECT_FALSE(Runner().On());
     EXPECT_EQ(Runner().GetOutcome(), tutorial::Tutorial::Outcome::Skipped);
     EXPECT_FALSE(card->Active);
+}
+
+// Basics' two warnings, on the skip card of any topic, until Basics has
+// been finished once (section 13.6).
+TEST_F(TutorialAppTest, AnyTopicsSkipCardShowsTheWarningsUntilBasicsIsFinished) {
+    StartTheTutorial("drawing");
+    Press(TutorialButton::Skip);
+    const std::vector<const tutorial::Step*> warnings = App().TutorialSkipWarnings();
+    ASSERT_EQ(warnings.size(), 2u);
+    EXPECT_EQ(warnings[0]->id, "programs");
+    EXPECT_EQ(warnings[1]->id, "antiCheat");
+    Press(TutorialButton::DoneKeep);
+
+    AppConfig config = DefaultConfig();
+    config.tutorialProgress = {{"basics", "finished"}};
+    StartWithLibrary(config);
+    StartTheTutorial("drawing");
+    Press(TutorialButton::Skip);
+    EXPECT_TRUE(App().TutorialSkipWarnings().empty()) << "read to the end of Basics already";
 }
 
 // ===== Progress, kept (section 13.7) =====

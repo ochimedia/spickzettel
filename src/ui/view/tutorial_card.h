@@ -11,6 +11,7 @@
 
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "core/session/session.h"
 #include "ui/editor.h"
@@ -46,6 +47,10 @@ public:
     // Where the user is with a topic, as the list says it.
     enum class Status { New, Running, Started, Done };
     Status StatusOf(const tutorial::Topic& topic) const;
+    // The warnings the skip card repeats (section 13.6): Basics' own not
+    // reached in this run, while Basics runs; from any other topic, all of
+    // Basics' until Basics has been finished once.
+    std::vector<const tutorial::Step*> SkipWarnings() const;
     // The tutorial's folder, made again.
     void MoveTo(core::FolderId folder) { runner_.MoveTo(folder); }
     // One of the card's buttons, as an action asked for it.

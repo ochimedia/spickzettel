@@ -343,7 +343,7 @@ void TutorialCard::DrawHint(const tutorial::Hint& hint) {
 void TutorialCard::DrawSkipped() {
     ImGui::TextColored(theme::kWhite, "%s", strings::kTutorialSkippedTitle);
     // The warnings not reached before the skip, which nobody should miss.
-    const std::vector<const tutorial::Step*> warnings = runner_.WarningsNotReached();
+    const std::vector<const tutorial::Step*> warnings = SkipWarnings();
     if (!warnings.empty()) {
         Wrapped(theme::kGraphite100, strings::kTutorialSkippedText);
         for (const tutorial::Step* warning : warnings) {
@@ -386,6 +386,22 @@ TutorialCard::Status TutorialCard::StatusOf(const tutorial::Topic& topic) const 
         return Status::New;
     }
     return progress == "finished" ? Status::Done : Status::Started;
+}
+
+std::vector<const tutorial::Step*> TutorialCard::SkipWarnings() const {
+    if (topic_->id == tutorial::kBasicsTopic) {
+        return runner_.WarningsNotReached();
+    }
+    std::vector<const tutorial::Step*> warnings;
+    if (world_.TopicProgress(tutorial::kBasicsTopic) == "finished") {
+        return warnings;
+    }
+    for (const tutorial::Step& step : tutorial::FindTopic(tutorial::kBasicsTopic)->chain()) {
+        if (step.warning) {
+            warnings.push_back(&step);
+        }
+    }
+    return warnings;
 }
 
 void TutorialCard::DrawList() {
