@@ -1088,7 +1088,7 @@ The new parts are:
 |---|---|---|---|
 | `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the two warnings; putting the overlay away and back | built: section 4's steps, but three |
 | `pinning` | Pinning and view mode | pinning a snippet, and the pinned view; making it see-through with the wheel or Properties; view mode; unpinning | built: section 14 |
-| `drawing` | Drawing and notes | drawing mode, a stroke, stopping; later the pen and its shapes, the eraser and its shapes, the color, the width, and the text tool | its first three steps built; the rest to design |
+| `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; the pen's shapes; the eraser; a note | its first three steps built; the rest proposed in section 15 |
 | `capturing` | Capturing | the quick and silent capture hotkeys, which work while the overlay is away; a full-screen screenshot; pasting an image; a blank drawing | to design |
 | `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | to design (13.8) |
 | `profiles` | Profiles | what a profile is for; making one for a program; what it can change | to design |
@@ -1538,3 +1538,195 @@ the hand check.
 - **Only the strokes fade with the drawing's opacity.** A note's text
   has no opacity of its own, so "while something is drawn" is the
   strokes alone, and the world needs no fact about text.
+
+## 15. Drawing and notes
+
+Status: **proposed** (2026-09-28). Its questions are in 15.7.
+
+### 15.1 What it teaches, and why
+
+Drawing is built with three steps: drawing mode, a stroke, and stopping
+(13.2). The topic grows into the rest of the drawing bar, which a user
+otherwise finds only by hovering its buttons:
+
+- **The color,** the swatch on the bar, which opens a chooser.
+- **The width,** which is the wheel while drawing. Nothing on screen
+  says so: there is no width slider anywhere.
+- **The pen's shapes:** the pen pressed again draws straight lines, and
+  again, rectangles. Its icon shows which. Shift and Ctrl held do the
+  same for one stroke.
+- **The eraser,** which cuts what it passes over rather than taking
+  whole strokes. It too has a second shape, a rectangle, and the right
+  button erases with any tool.
+- **A note:** Text, then a click on the snippet, and typing. A note is
+  one caption per snippet, drawn over its strokes, and editable at any
+  time (`Item::noteText`).
+
+Each of these is its own step, and each counts only once it shows on the
+snippet, as question 18 settled for opacity: a color or a width counts
+once something is drawn with it, a shape once one is drawn, the eraser
+once something is gone, and a note once it is written.
+
+**Left out:** Clear drawing (the right-click menu), the note's color and
+size (Properties, the bar's More), and the modifier keys beyond one
+line. The end card names the first two.
+
+The title becomes "Drawing and notes". The id stays `drawing`, so
+progress is kept, and a run's folder is "Tutorial: Drawing and notes".
+
+### 15.2 The chain
+
+| # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
+|---|---|---|---|---|---|---|---|---|
+| 0 | `drawingMode` | do | **waits** | as built | the subject | as built | as built | - |
+| 1 | `draw` | do | moves on | Drag across it to draw. | the drawing bar's pen | as built | as built | - |
+| 2 | `color` | do | moves on | Press the color on the bar, and pick another. Click anywhere to close the chooser, then draw with it. | the drawing bar's color | drawing mode on the subject; the pen in hand | a stroke on the subject in a color that differs from the pen's color when the step began, more of them than at the start | the color changed, nothing drawn with it yet: "Now draw with it." |
+| 3 | `width` | do | moves on | While you draw on a snippet, the wheel sets the pen's width. Turn it a few notches, then draw. | the subject | as `color` | a stroke on the subject 2 px or more wider or thinner than the pen when the step began, more of them than at the start | the width changed, nothing drawn yet: "Now draw with it to see the difference." Ctrl or Shift held: "That changed its opacity. Turn the wheel without a key held." |
+| 4 | `shape` | do | moves on | Press the pen on the bar again for straight lines, and once more for rectangles; its icon shows which. Then drag. Shift held draws a line, and Ctrl a rectangle, for one stroke. | the drawing bar's pen | as `color` | a straight line or a rectangle on the subject, more than at the start | a freehand stroke instead: "That was the pen. Press it again on the bar for a line." |
+| 5 | `erase` | do | moves on | Press the eraser on the bar, and drag over what you drew. It cuts through strokes. Pressed again, it erases a rectangle; the right button erases with any tool. | the drawing bar's eraser | drawing mode on the subject; something drawn on the subject | the strokes on the subject 16 px shorter, or more, than at the start | - |
+| 6 | `text` | do | moves on | Press Text on the bar, click the snippet, and type a note. Press Esc or click outside it when you're done. | the drawing bar's Text | drawing mode on the subject | the subject's note is not empty, and differs from the start | the note being typed: "Press Esc or click outside it when you're done." |
+| 7 | `stopDrawing` | do | moves on | as built | - | - | as built | - |
+| 8 | `end` | read | Done | That's drawing and notes. Double-click any snippet to draw on it. Clear drawing, in its right-click menu, takes every stroke away; More, on its bar, has the note's color and size. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
+
+**Which step waits.** Only `drawingMode`, as built: every later step
+needs drawing mode on the subject, and its line says how to get it back.
+`erase` needs something drawn, which `draw` makes; its need has a line
+too, for strokes cleared or undone since.
+
+**"More of them than at the start."** A goal about a stroke counts the
+subject's strokes that meet the condition, now and at the step's start,
+and is done when there are more. So a stroke drawn in a new color in an
+earlier step does not finish `color` at once, and undoing the new
+stroke takes the step back to waiting, as 6.3 has it for any goal
+before it is met.
+
+**Only what shows.** Each goal is a change on the snippet:
+
+- **Color:** a channel 64 or more (of 255) away from the old color. The
+  chooser changes the color as it is dragged, so a click next to the old
+  color is no new color.
+- **Width:** 2 px, two notches of the wheel, like opacity's two notches.
+  The width is compared on screen, the stroke's stored width scaled by
+  the snippet's size, since a stroke is stored at the snippet's own
+  scale.
+- **Shape:** a stroke of two points (a line), or of five that close an
+  upright rectangle, which is how a shape is stored
+  (`session_shapes.cpp`). A freehand stroke flicked in two frames has
+  two points too; that counts, and is rare.
+- **Erase:** the strokes' total length on screen, 16 px shorter. The
+  eraser cuts strokes into pieces, so their count can grow as ink goes.
+  Undo of a stroke, and Clear drawing, count too: the ink is gone,
+  whatever took it (6.3).
+- **Note:** the text, which the snippet holds once typing ends. What is
+  typed sits in the editor's buffer until then, so the step waits for
+  the typing to end, and says so while it goes on.
+
+**The pen's shapes are the pen's while it is in hand.** Picking the
+eraser puts the shape back to freehand (`DrawingMode::SetTool`), so
+`shape` comes before `erase`. The steps before it keep the pen in hand,
+and `color`, `width` and `shape` need it (15.3).
+
+**The color is the user's from then on.** The chooser's color is kept
+for the next time the app starts. The step does not put it back: the
+user picked it.
+
+### 15.3 What it needs that is new
+
+- **The world** (7.1):
+  - per snippet: its strokes, each with its color, its width on screen
+    and whether it is a line or a rectangle, in place of their count;
+    their total length on screen; and its note's text;
+  - the pen's color and width, and the tool in hand
+    (`Editor::DrawColorRGBA`, `DrawWidth`, `ActiveTool`);
+  - the snippet whose note is being typed, if one is
+    (`Editor::EditingNote`).
+- **The start record** keeps the pen's color and width, as it keeps the
+  counts.
+- **Two needs:**
+  - "the pen in hand": "Press the pen on the bar." With the eraser or
+    Text in hand, a drag erases or opens the note instead. No button.
+  - "something drawn on the subject": "Nothing is drawn on it to erase.
+    Draw something first." No button.
+- **Three spots, with their anchors:** the drawing bar's color, eraser
+  and Text, marked in `canvas_view.cpp` beside the pen (7.2). While the
+  bar is not drawn, each falls back to the subject, as Pin does.
+- **The color chooser and Properties do not cover the canvas** (question
+  24). Both are a snippet's own popups, opened from its bar, and today
+  the need "canvas uncovered" tells the user to close them: in `color`
+  while they pick, and in Pinning's `opacity` while they use the
+  sliders the card itself names. The world tells the popups apart, and
+  only the menus and the confirmation cover. A press outside either
+  still closes it and does nothing else, as ImGui has it, and the
+  `color` text says so.
+- **The strings:** each step's title and text, the near misses, the two
+  needs, the end card; `tutorial.topics.drawing.*` gets the new title
+  and gist ("Draw on a snippet: the color, the width, shapes, the
+  eraser, and a note.").
+- **The settings help** names "drawing and notes".
+
+### 15.4 What does not change
+
+- The runner, the card, the list and the settings rows.
+- The input machine and the drawing tools: the steps use them as they
+  are.
+- Steps 0, 1 and 7, but `draw`'s text, which no longer lists the bar
+  since the steps after it go through it.
+
+### 15.5 Tests
+
+- **`chains_test`,** against the fake world: each goal with the strokes
+  it counts and those it does not (an old color, 1 px of width, a
+  freehand stroke, 8 px erased, an empty note); each near miss; the two
+  needs. `TopicsTest` covers the shape.
+- **`AppWorld`,** by real gestures: a stroke's color, screen width and
+  shape as the world reads them, the ink shorter after an erase, the
+  note after typing, and the popups told apart.
+- **The walk-through,** with hands for the new steps: the bar's color,
+  a click in the chooser and a drag; the wheel and a drag; the pen
+  pressed again and a drag; the eraser and a drag across the stroke;
+  Text, a click, typed keys and Esc.
+- **The derail matrix,** a row per way:
+  - drawing mode left, in every new step;
+  - the eraser in hand for `color`, `width` and `shape`;
+  - the chooser up in `color` (no line), and Properties up in `opacity`
+    (no line);
+  - Ctrl and the wheel in `width` (the near miss);
+  - a freehand stroke in `shape` (the near miss);
+  - the strokes cleared before `erase` (the need);
+  - the note left typing in `text` (the near miss).
+- **By hand:** every card with real input, and typing a note.
+
+### 15.6 Getting there
+
+One piece of work, as section 14 was: the world's facts, the two needs,
+the popups told apart, the three anchors, the chain, its strings and the
+new title, with the tests of 15.5 and the hand check.
+
+### 15.7 Questions for review
+
+21. **Five new steps** (`color`, `width`, `shape`, `erase`, `text`),
+    for nine cards in all. The alternative is fewer, longer cards:
+    color and width as one "your pen" step, and shapes as a line on the
+    end card. *Recommended:* five, each small, as unpin was (question
+    17): each is one button or the wheel, and one drag.
+22. **A color or a width counts once something is drawn with it,** not
+    when the swatch or the size preview changes. The swatch shows the
+    change too, so the step could count it alone and save a drag.
+    *Recommended:* drawn with, since what the step shows is what the
+    stroke looks like; the near miss says "Now draw with it" in between.
+23. **One step for the pen's shapes,** done by a line or a rectangle.
+    The eraser's rectangle and the right button get a sentence in
+    `erase`, with no goal of their own. *Recommended:* as proposed.
+24. **The color chooser and Properties stop counting as a cover** for
+    every step, not only for the steps that use them. The alternative
+    is a list, per step, of the popups it allows. *Recommended:* every
+    step: a press outside either closes it without doing anything else,
+    so it is never in the way for more than a click, and one rule is
+    simpler than a list. It also fixes Pinning's `opacity`, whose card
+    names Properties and then asks to close it.
+25. **The note step waits for the typing to end,** with a line while it
+    goes on, rather than counting the first letter typed. The note
+    reaches the snippet only then. *Recommended:* as proposed.
+26. **Undo and Clear drawing count for `erase`,** since the goal reads
+    the ink, not the eraser (6.3). *Recommended:* accept; telling them
+    apart would mean watching the commands.
