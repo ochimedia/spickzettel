@@ -18,8 +18,10 @@
 namespace sz::ui {
 
 enum class AnchorId {
-    // The selection bar's close button, and the drawing bar's pen.
+    // The selection bar's close button and its pin, and the drawing bar's
+    // pen.
     SelectionBarClose,
+    SelectionBarPin,
     DrawingBarPen,
     // A minimized snippet's chip in the dock, by its snippet.
     DockChip,

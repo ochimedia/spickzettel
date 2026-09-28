@@ -486,6 +486,8 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         ImGui::RenderFrame(Im(rect.min), Im(rect.max), ImGui::GetColorU32(fill), true, theme::kRadiusPill);
         if (button == ChromeButton::Close) {
             host_.Mark(Anchor{AnchorId::SelectionBarClose}, Im(rect.min), Im(rect.max));
+        } else if (button == ChromeButton::Pin) {
+            host_.Mark(Anchor{AnchorId::SelectionBarPin}, Im(rect.min), Im(rect.max));
         } else if (button == ChromeButton::Pen) {
             host_.Mark(Anchor{AnchorId::DrawingBarPen}, Im(rect.min), Im(rect.max));
         }

@@ -75,8 +75,24 @@ protected:
         return ImVec2(r.x + r.w * 0.5f, r.y + r.h * 0.5f);
     }
 
-    // What a hand does for each step of the welcome chain, as the step's
-    // text says it: real gestures, keys and hotkeys.
+    // A subject, selected: the practice snippet put here if there is none.
+    void SelectTheSubject() {
+        if (!Runner().Subject().has_value()) {
+            Overlay().PressTutorialHint();  // Put one here
+            StepFrames(3);
+        }
+        if (!App().IsSelected(Subject().id)) {
+            RawClick(SubjectMiddle().x, SubjectMiddle().y);
+        }
+    }
+    void PressBarPin() {
+        const std::optional<ImVec2> pin = App().SelectionBarButtonCenter(ChromeButton::Pin);
+        ASSERT_TRUE(pin.has_value());
+        RawClick(pin->x, pin->y);
+    }
+
+    // What a hand does for each step of every topic, as the step's text
+    // says it: real gestures, keys and hotkeys.
     void DoStep(const std::string& id) {
         if (id == "welcome" || id == "programs" || id == "antiCheat") {
             Press(TutorialButton::Next);
@@ -115,6 +131,28 @@ protected:
             StepFrame();
             ShowEditMode();  // and back
             StepFrame();
+        } else if (id == "pin" || id == "unpin") {
+            SelectTheSubject();
+            PressBarPin();
+        } else if (id == "pinnedAway") {
+            ShowEditMode();  // away, to the pinned view
+            StepFrame();
+            ShowEditMode();  // and back
+            StepFrame();
+        } else if (id == "opacity") {
+            SelectTheSubject();
+            MoveTo(SubjectMiddle().x, SubjectMiddle().y);
+            KeyEvent(ImGuiMod_Ctrl, true);
+            Wheel(-1.0f);
+            Wheel(-1.0f);
+            Wheel(-1.0f);
+            KeyEvent(ImGuiMod_Ctrl, false);
+            StepFrame();
+        } else if (id == "viewMode") {
+            ShowViewMode();
+            StepFrame();
+            ShowEditMode();  // back
+            StepFrame();
         } else if (id == "end") {
             Press(TutorialButton::Done);
         } else {
@@ -151,6 +189,20 @@ TEST_F(TutorialAppTest, TheSelectionBarsCloseButtonIsMarkedWhereItIsDrawn) {
     EXPECT_FLOAT_EQ(Center(*close).x, center->x);
     EXPECT_FLOAT_EQ(Center(*close).y, center->y);
     EXPECT_FALSE(App().AnchorAt(Anchor{AnchorId::DrawingBarPen}).has_value()) << "not the drawing bar";
+}
+
+TEST_F(TutorialAppTest, TheSelectionBarsPinIsMarkedWhereItIsDrawn) {
+    ShowEditMode();
+    StepFrame();
+    MakeASnippet(300.0f, 300.0f, 600.0f, 500.0f);
+    StepFrame();
+
+    const std::optional<AnchorRect> pin = App().AnchorAt(Anchor{AnchorId::SelectionBarPin});
+    const std::optional<ImVec2> center = App().SelectionBarButtonCenter(ChromeButton::Pin);
+    ASSERT_TRUE(pin.has_value());
+    ASSERT_TRUE(center.has_value());
+    EXPECT_FLOAT_EQ(Center(*pin).x, center->x);
+    EXPECT_FLOAT_EQ(Center(*pin).y, center->y);
 }
 
 TEST_F(TutorialAppTest, AnAnchorNotDrawnThisFrameIsNotOnTheBoard) {
@@ -353,6 +405,77 @@ TEST_F(TutorialAppTest, TheWorldCountsTheOverlayComingUp) {
     EXPECT_EQ(world.Showings(), before + 1);
 }
 
+// Each transition into the pinned view, or view mode, once - not every
+// time the mode is set: Hidden keeps the mode it came down from.
+TEST_F(TutorialAppTest, TheWorldCountsThePinnedViewAndViewModeAsTheyAreEntered) {
+    ShowEditMode();
+    StepFrame();
+    const tutorial::World& world = App().TutorialWorld();
+    const uint64_t pinnedBefore = world.PinnedViews();
+    const uint64_t viewBefore = world.ViewModes();
+
+    ShowViewMode();
+    StepFrame();
+    EXPECT_EQ(world.ViewModes(), viewBefore + 1);
+    ShowViewMode();  // away: hidden, nothing pinned
+    StepFrame();
+    ShowViewMode();  // and view mode again
+    StepFrame();
+    EXPECT_EQ(world.ViewModes(), viewBefore + 2);
+    EXPECT_EQ(world.PinnedViews(), pinnedBefore);
+
+    ShowEditMode();  // edit mode, in place
+    StepFrame();
+    const ItemId shot = MakeASnippet(300.0f, 300.0f, 600.0f, 500.0f);
+    controller_->GetSession().SetPinned({shot}, true);
+    ShowEditMode();  // away: the pinned view
+    StepFrame();
+    EXPECT_EQ(world.PinnedViews(), pinnedBefore + 1);
+    ShowViewMode();  // view mode, in place
+    StepFrame();
+    EXPECT_EQ(world.ViewModes(), viewBefore + 3);
+    ShowViewMode();  // away again: the pinned view
+    StepFrame();
+    EXPECT_EQ(world.PinnedViews(), pinnedBefore + 2);
+}
+
+TEST_F(TutorialAppTest, TheWorldReadsAPinAndBothOpacities) {
+    ShowEditMode();
+    StepFrame();
+    const tutorial::World& world = App().TutorialWorld();
+    const ItemId shot = MakeASnippet(300.0f, 300.0f, 600.0f, 500.0f);
+    const FolderId folder = world.FolderOf(world.CurrentCanvas());
+    const auto facts = [&] {
+        for (const tutorial::SnippetFacts& f : world.SnippetsIn(folder)) {
+            if (f.id == shot) {
+                return f;
+            }
+        }
+        return tutorial::SnippetFacts{};
+    };
+    EXPECT_FALSE(facts().pinned);
+    const float picture = facts().pictureOpacity;
+    const float drawing = facts().drawingOpacity;
+    EXPECT_FLOAT_EQ(picture, Canvases().FindItemAnywhere(shot)->picture.opacity);
+
+    PressBarPin();
+    EXPECT_TRUE(facts().pinned);
+
+    MoveTo(450.0f, 400.0f);
+    KeyEvent(ImGuiMod_Ctrl, true);
+    Wheel(-1.0f);
+    KeyEvent(ImGuiMod_Ctrl, false);
+    StepFrame();
+    EXPECT_NEAR(facts().pictureOpacity, picture - 0.05f, 0.001f) << "Ctrl: the picture's";
+    EXPECT_FLOAT_EQ(facts().drawingOpacity, drawing);
+
+    KeyEvent(ImGuiMod_Shift, true);
+    Wheel(-1.0f);
+    KeyEvent(ImGuiMod_Shift, false);
+    StepFrame();
+    EXPECT_NEAR(facts().drawingOpacity, drawing - 0.05f, 0.001f) << "Shift: the strokes'";
+}
+
 // ===== The card, the spotlight and the walk-through (section 9) =====
 
 TEST_F(TutorialAppTest, AStartMakesAFolderOfItsOwnAndSwitchesToIt) {
@@ -454,6 +577,65 @@ TEST_F(TutorialAppTest, TheCardSitsAboveThePanelsAndBelowTheDeleteConfirmation) 
     ASSERT_GE(stack.size(), 2u);
     EXPECT_EQ(stack[stack.size() - 2], "tutorial card") << Describe(stack);
     EXPECT_EQ(stack.back(), "delete confirmation") << Describe(stack);
+}
+
+// The bar's Pin once the subject is selected, and the snippet until then.
+TEST_F(TutorialAppTest, ThePinStepRingsTheSnippetUntilItsBarShowsThenThePin) {
+    StartTheTutorial("pinning");
+    ASSERT_EQ(StepUp(), "pin");
+    Overlay().PressTutorialHint();  // Put one here
+    StepFrames(3);
+    EXPECT_EQ(NeedUp(), tutorial::Need::SubjectSelected);
+    std::optional<AnchorRect> spot = App().TutorialSpot();
+    ASSERT_TRUE(spot.has_value());
+    EXPECT_FLOAT_EQ(spot->min.x, Subject().rect.x);
+
+    RawClick(SubjectMiddle().x, SubjectMiddle().y);
+    spot = App().TutorialSpot();
+    const std::optional<AnchorRect> pin = App().AnchorAt(Anchor{AnchorId::SelectionBarPin});
+    ASSERT_TRUE(spot.has_value());
+    ASSERT_TRUE(pin.has_value());
+    EXPECT_FLOAT_EQ(spot->min.x, pin->min.x);
+    EXPECT_FLOAT_EQ(spot->min.y, pin->min.y);
+}
+
+// The line may name the bar's Pin with no ring on it, so the card keeps
+// off the bar as well as the snippet - here, with neither the top nor the
+// bottom clear of both, in a top corner.
+TEST_F(TutorialAppTest, TheCardKeepsClearOfTheSubjectAndItsBar) {
+    WalkTo("pinnedAway", "pinning");
+    StepFrames(2);
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    const std::optional<AnchorRect> pin = App().AnchorAt(Anchor{AnchorId::SelectionBarPin});
+    ASSERT_TRUE(pin.has_value()) << "selected, with its bar";
+    const Rect& r = Subject().rect;
+    const auto clear = [&](ImVec2 min, ImVec2 max) {
+        return card->Pos.x + card->Size.x <= min.x || max.x <= card->Pos.x || card->Pos.y + card->Size.y <= min.y ||
+               max.y <= card->Pos.y;
+    };
+    EXPECT_TRUE(clear(pin->min, pin->max));
+    EXPECT_TRUE(clear(ImVec2(r.x, r.y), ImVec2(r.x + r.w, r.y + r.h)));
+}
+
+// Shift and the wheel on a snippet with nothing drawn on it change a
+// value and nothing on screen: no check, and a line that says so.
+TEST_F(TutorialAppTest, TheOpacityStepCountsOnlyAChangeThatShows) {
+    WalkTo("opacity", "pinning");
+    ASSERT_EQ(Subject().strokes.size(), 0u);
+    SelectTheSubject();
+    MoveTo(SubjectMiddle().x, SubjectMiddle().y);
+    KeyEvent(ImGuiMod_Shift, true);
+    Wheel(-1.0f);
+    Wheel(-1.0f);
+    Wheel(-1.0f);
+    KeyEvent(ImGuiMod_Shift, false);
+    StepFrames(3);
+    EXPECT_FALSE(Runner().GoalMet());
+    EXPECT_EQ(HintUp(), ::sz::strings::kTutorialOpacityMissNothingDrawn);
+
+    DoStep("opacity");  // Ctrl, as the line says
+    EXPECT_EQ(StepUp(), "viewMode");
 }
 
 TEST_F(TutorialAppTest, TheSpotlightRingsTheSubjectAndTheCardStaysClearOfIt) {
@@ -873,6 +1055,7 @@ enum class Way {
     CaptureHotkey,
     LeftDrawingMode,
     EnteredDrawingMode,
+    Unpinned,
 };
 
 const char* WayName(Way way) {
@@ -890,6 +1073,7 @@ const char* WayName(Way way) {
         case Way::CaptureHotkey: return "CaptureHotkey";
         case Way::LeftDrawingMode: return "LeftDrawingMode";
         case Way::EnteredDrawingMode: return "EnteredDrawingMode";
+        case Way::Unpinned: return "Unpinned";
     }
     return "?";
 }
@@ -960,6 +1144,35 @@ std::vector<Derail> Matrix() {
         {"basics", "undo", ViewOnly, nothing},
         {"basics", "away", Overview, nothing},
         {"basics", "away", CheatSheet, nothing},
+        {"pinning", "pin", Overview, Need::CanvasUncovered},
+        {"pinning", "pin", CheatSheet, Need::CanvasUncovered},
+        {"pinning", "pin", OtherFolder, Need::InTutorialFolder},
+        {"pinning", "pin", OtherCanvasHere, Need::SubjectHere},
+        {"pinning", "pin", Deleted, Need::ASubject},
+        {"pinning", "pin", Minimized, Need::SubjectOnScreen},
+        {"pinning", "pin", EnteredDrawingMode, Need::NoDrawingMode},
+        {"pinning", "pinnedAway", Overview, nothing},
+        {"pinning", "pinnedAway", OtherFolder, Need::InTutorialFolder},
+        {"pinning", "pinnedAway", OtherCanvasHere, Need::SubjectHere},
+        {"pinning", "pinnedAway", Deleted, Need::ASubject},
+        {"pinning", "pinnedAway", Minimized, Need::SubjectOnScreen},
+        {"pinning", "pinnedAway", Unpinned, Need::SubjectPinned},
+        {"pinning", "pinnedAway", ViewOnly, nothing},
+        {"pinning", "opacity", Overview, Need::CanvasUncovered},
+        {"pinning", "opacity", CheatSheet, Need::CanvasUncovered},
+        {"pinning", "opacity", OtherFolder, Need::InTutorialFolder},
+        {"pinning", "opacity", OtherCanvasHere, Need::SubjectHere},
+        {"pinning", "opacity", Deleted, Need::ASubject},
+        {"pinning", "opacity", Minimized, Need::SubjectOnScreen},
+        {"pinning", "opacity", EnteredDrawingMode, nothing},
+        {"pinning", "viewMode", Overview, nothing},
+        {"pinning", "viewMode", HiddenAndShown, nothing},
+        {"pinning", "unpin", Overview, Need::CanvasUncovered},
+        {"pinning", "unpin", OtherFolder, Need::InTutorialFolder},
+        {"pinning", "unpin", OtherCanvasHere, Need::SubjectHere},
+        {"pinning", "unpin", Deleted, Need::ASubject},
+        {"pinning", "unpin", Minimized, Need::SubjectOnScreen},
+        {"pinning", "unpin", EnteredDrawingMode, Need::NoDrawingMode},
     };
     cases.insert(cases.end(), more.begin(), more.end());
     return cases;
@@ -1030,6 +1243,10 @@ protected:
             case Way::EnteredDrawingMode:
                 DoubleClick(SubjectMiddle().x, SubjectMiddle().y);
                 break;
+            case Way::Unpinned:
+                ASSERT_TRUE(subject.has_value());
+                controller_->GetSession().SetPinned({*subject}, false);
+                break;
         }
         StepFrames(3);
     }
@@ -1071,6 +1288,11 @@ protected:
                     break;
                 case tutorial::Need::DrawingOnSubject:
                     DoubleClick(SubjectMiddle().x, SubjectMiddle().y);
+                    break;
+                case tutorial::Need::SubjectPinned:
+                    // "Select it, and press Pin on its bar."
+                    SelectTheSubject();
+                    PressBarPin();
                     break;
                 default:
                     FAIL() << "a line with nothing to do: " << hint->text;

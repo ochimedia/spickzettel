@@ -178,6 +178,9 @@ void Tutorial::Observe(const std::vector<SnippetFacts>& snippets) {
         if (snippet.deleted) {
             deletedThisStep_.insert(snippet.id);
         }
+        if (snippet.pinned && !snippet.deleted) {
+            pinnedThisStep_.insert(snippet.id);
+        }
     }
 }
 
@@ -202,14 +205,29 @@ void Tutorial::ChooseSubject(const World& world, const std::vector<SnippetFacts>
             return;
         case SubjectRule::Any:
         case SubjectRule::CanMove:
+        case SubjectRule::Pinned:
             break;
     }
     const core::CanvasId here = world.CurrentCanvas();
+    // What the rule asks of a snippet besides: one that can move, or one
+    // pinned.
+    auto wanted = [&](const SnippetFacts& snippet) {
+        switch (rule) {
+            case SubjectRule::CanMove:
+                return !snippet.fullscreen;
+            case SubjectRule::Pinned:
+                return snippet.pinned;
+            case SubjectRule::None:
+            case SubjectRule::Any:
+            case SubjectRule::LastDeleted:
+                break;
+        }
+        return true;
+    };
     // How well a snippet does as the subject: on this canvas, on screen,
-    // and one that can move where the step needs that. 7 is all three.
+    // and what the rule asks besides. 7 is all three.
     auto quality = [&](const SnippetFacts& snippet) {
-        return (snippet.canvas == here ? 4 : 0) + (!snippet.minimized ? 2 : 0) +
-               (rule != SubjectRule::CanMove || !snippet.fullscreen ? 1 : 0);
+        return (snippet.canvas == here ? 4 : 0) + (!snippet.minimized ? 2 : 0) + (wanted(snippet) ? 1 : 0);
     };
     auto fits = [&](std::optional<core::ItemId> id) {
         const SnippetFacts* snippet = id ? find(*id) : nullptr;
@@ -361,6 +379,14 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const std::vector<Sn
                     return unmet(need, strings::kTutorialNeedDeletedSubject);
                 }
                 break;
+            case Need::SubjectPinned:
+                if (subject == nullptr) {
+                    return noSubject;
+                }
+                if (!subject->pinned) {
+                    return unmet(need, strings::kTutorialNeedSubjectPinned);
+                }
+                break;
         }
     }
     return std::nullopt;
@@ -374,10 +400,13 @@ void Tutorial::Update(const World& world, double now) {
     if (!begun_) {
         start_ = StartRecord{};
         start_.showings = world.Showings();
+        start_.pinnedViews = world.PinnedViews();
+        start_.viewModes = world.ViewModes();
         for (const SnippetFacts& snippet : snippets) {
             start_.present.insert(snippet.id);
         }
         deletedThisStep_.clear();
+        pinnedThisStep_.clear();
         begun_ = true;
     }
     Observe(snippets);
@@ -398,7 +427,7 @@ void Tutorial::Update(const World& world, double now) {
     // The goal first: a result is a result, however it came about, and
     // what makes it may itself leave a need unmet - deleting the only
     // snippet leaves no subject. The needs guide only while it is not met.
-    const Look look{world, start_, snippets, lookSubject_, deletedThisStep_};
+    const Look look{world, start_, snippets, lookSubject_, deletedThisStep_, pinnedThisStep_};
     if (step.goal != nullptr && step.goal(look)) {
         metThisVisit_ = true;
         done_[index_] = true;

@@ -54,6 +54,8 @@ enum class Need {
     // The subject is deleted, or was during this step - for the step that
     // brings it back.
     DeletedSubject,
+    // The subject is pinned.
+    SubjectPinned,
 };
 
 // Which snippet a step is about - section 6.5.
@@ -66,6 +68,8 @@ enum class SubjectRule {
     CanMove,
     // The one deleted last, for the step that brings it back.
     LastDeleted,
+    // A pinned one, before one that is not - as Any when none is.
+    Pinned,
 };
 
 // What the spotlight rings - section 3. The view turns it into a place
@@ -76,6 +80,8 @@ enum class Spot {
     // The handle at the subject's lower right corner.
     SubjectHandle,
     SelectionBarClose,
+    // The selection bar's Pin, or the subject while no bar is drawn.
+    SelectionBarPin,
     DrawingBarPen,
     // The subject's chip in the dock, while it is minimized.
     DockChip,
@@ -88,6 +94,8 @@ enum class HintButton { None, BackToTutorial, BackThere, PutOneHere };
 // 5. Snippets that turn up during the step are noted as first seen.
 struct StartRecord {
     uint64_t showings = 0;
+    uint64_t pinnedViews = 0;
+    uint64_t viewModes = 0;
     // The tutorial's snippets there were when the step began.
     std::unordered_set<core::ItemId> present;
     // Each snippet of the tutorial's as the step first saw it.
@@ -105,6 +113,9 @@ struct Look {
     // The tutorial's snippets seen deleted during this step - those
     // deleted when it began among them.
     const std::unordered_set<core::ItemId>& deletedThisStep;
+    // Those seen pinned during this step - pinned when it began among
+    // them.
+    const std::unordered_set<core::ItemId>& pinnedThisStep;
 
     // A snippet of the tutorial's as it is now, or null.
     const SnippetFacts* Now(core::ItemId id) const;

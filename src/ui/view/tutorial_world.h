@@ -3,8 +3,8 @@
 // The tutorial's world as the running app answers it - docs/TUTORIAL.md,
 // section 7.1: from the editor, the session and the settings, read as they
 // are whenever it is asked, and every answer a value. The one thing it
-// keeps is how many times the overlay has come up, which nothing else
-// counts.
+// keeps is how many times the overlay has come up, and has entered the
+// pinned view and view mode, which nothing else counts.
 
 #include <cstdint>
 #include <optional>
@@ -23,10 +23,16 @@ public:
     AppWorld(const core::Session& session, const core::Settings& settings, const Editor& editor)
         : session_(session), settings_(settings), editor_(editor) {}
 
-    // The overlay has come up - see OverlayApp::OnOverlayShown.
+    // The overlay has come up - see OverlayApp::OnOverlayShown - and a
+    // transition has entered the pinned view, or view mode (see
+    // OverlayApp::OnModeEntered).
     void CountShowing() { ++showings_; }
+    void CountPinnedView() { ++pinnedViews_; }
+    void CountViewMode() { ++viewModes_; }
 
     uint64_t Showings() const override { return showings_; }
+    uint64_t PinnedViews() const override { return pinnedViews_; }
+    uint64_t ViewModes() const override { return viewModes_; }
     tutorial::Cover CanvasCover() const override;
     std::optional<core::ItemId> DrawingItem() const override { return editor_.DrawingItem(); }
     std::vector<core::ItemId> Selection() const override { return editor_.Selection(); }
@@ -49,6 +55,8 @@ private:
     const core::Settings& settings_;
     const Editor& editor_;
     uint64_t showings_ = 0;
+    uint64_t pinnedViews_ = 0;
+    uint64_t viewModes_ = 0;
 };
 
 }  // namespace sz::ui

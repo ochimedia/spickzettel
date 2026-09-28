@@ -121,6 +121,11 @@ public:
     // without settling.
     void SetMode(OverlayMode mode);
     OverlayMode Mode() const { return mode_; }
+    // A transition has entered `mode` from another state - which SetMode
+    // cannot tell: Hidden keeps the last mode, and a notice going down
+    // leaves View set with nothing on screen. Only counted, for the
+    // tutorial (docs/TUTORIAL.md, section 14.3).
+    void OnModeEntered(OverlayMode mode);
 
     // The overlay has just been put back on screen. Anything this class
     // remembers about state the OS owns is stale at that moment - the

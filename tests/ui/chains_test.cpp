@@ -62,6 +62,20 @@ protected:
     DrawingChainTest() : ChainTest(DrawingChain()) {}
 };
 
+class PinningChainTest : public ChainTest {
+protected:
+    PinningChainTest() : ChainTest(PinningChain()) {}
+
+    const char* TextOf(std::string_view id) {
+        for (const Step& step : PinningChain()) {
+            if (step.id == id) {
+                return step.text(world_);
+            }
+        }
+        return "";
+    }
+};
+
 TEST_F(BasicsChainTest, CanBeWalkedTheWayAUserWould) {
     Frame();
     EXPECT_EQ(Id(), "welcome");
@@ -134,6 +148,166 @@ TEST_F(DrawingChainTest, CanBeWalkedTheWayAUserWould) {
     ASSERT_EQ(Id(), "end");
     tutorial_.Next();
     EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
+}
+
+// In a new folder, as Drawing: the practice snippet first.
+TEST_F(PinningChainTest, CanBeWalkedTheWayAUserWould) {
+    Frame();
+    ASSERT_EQ(Id(), "pin");
+    EXPECT_EQ(NeedShown(), Need::ASubject);
+    EXPECT_FALSE(tutorial_.NextEnabled()) << "the steps after it need a pin";
+    world_.Make(5, /*picture=*/false);
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::SubjectSelected);
+    world_.selection = {5};
+    world_.At(5).pinned = true;
+    Settle();
+
+    ASSERT_EQ(Id(), "pinnedAway");
+    world_.pinnedViews += 1;
+    world_.showings += 1;
+    Settle();
+
+    ASSERT_EQ(Id(), "opacity");
+    world_.At(5).pictureOpacity -= 0.10f;
+    Settle();
+
+    ASSERT_EQ(Id(), "viewMode");
+    world_.viewModes += 1;
+    Settle();
+
+    ASSERT_EQ(Id(), "unpin");
+    world_.At(5).pinned = false;
+    Settle();
+
+    ASSERT_EQ(Id(), "end");
+    tutorial_.Next();
+    EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
+}
+
+// The bar pins the whole selection: any of the tutorial's pinned will do.
+TEST_F(PinningChainTest, APinOnAnotherOfTheTutorialsSnippetsCounts) {
+    world_.Make(1);
+    world_.Make(2);
+    world_.selection = {2};
+    At("pin");
+    world_.At(1).pinned = true;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// Put away and back, a pinned one is the subject - and one unpinned since
+// gets its line.
+TEST_F(PinningChainTest, PuttingItAwayNeedsItPinnedAndPrefersAPinnedOne) {
+    world_.Make(1).pinned = true;
+    world_.Make(2);
+    world_.selection = {2};  // the hand on the one not pinned
+    At("pinnedAway");
+    EXPECT_EQ(tutorial_.Subject(), 1u);
+    EXPECT_FALSE(tutorial_.CurrentHint().has_value());
+
+    world_.At(1).pinned = false;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::SubjectPinned);
+    EXPECT_STREQ(HintText(), strings::kTutorialNeedSubjectPinned);
+    world_.At(2).pinned = true;
+    Frame();
+    EXPECT_EQ(tutorial_.Subject(), 2u) << "the hand's, now that it is pinned";
+    EXPECT_FALSE(tutorial_.CurrentHint().has_value());
+}
+
+TEST_F(PinningChainTest, PuttingItAwaySaysWhenViewModeCameUpInstead) {
+    world_.Make(1).pinned = true;
+    At("pinnedAway");
+    world_.viewModes += 1;
+    world_.showings += 1;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), strings::kTutorialPinnedAwayMissViewMode);
+}
+
+TEST_F(PinningChainTest, SeeThroughCountsOnlyWhatShows) {
+    world_.Make(1);
+    world_.selection = {1};
+    At("opacity");
+    world_.At(1).drawingOpacity = 0.7f;  // nothing drawn to fade
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), strings::kTutorialOpacityMissNothingDrawn);
+
+    world_.At(1).strokes = 1;  // something drawn: now it shows
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(PinningChainTest, SeeThroughTakesThePictureEitherWayAndNotOneNotch) {
+    world_.Make(1).pictureOpacity = 0.5f;
+    world_.selection = {1};
+    At("opacity");
+    world_.At(1).pictureOpacity = 0.55f;  // one notch
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    world_.At(1).pictureOpacity = 0.6f;  // two, up
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(PinningChainTest, SeeThroughSaysAResizeIsNotItAndNeedsTheSelection) {
+    world_.Make(1);
+    At("opacity");
+    EXPECT_EQ(NeedShown(), Need::SubjectSelected);
+    world_.selection = {1};
+    world_.At(1).rect.w *= 1.3f;
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialOpacityMissResized);
+}
+
+TEST_F(PinningChainTest, ViewModeSaysWhenTheOverlayWasPutAwayInstead) {
+    At("viewMode");
+    world_.showings += 1;
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialViewModeMissAway);
+
+    // With no key to name, no line to say it with: Next goes on.
+    world_.keys.erase(CommandId::ToggleViewMode);
+    Frame();
+    EXPECT_FALSE(tutorial_.CurrentHint().has_value());
+    EXPECT_TRUE(tutorial_.NextEnabled());
+}
+
+TEST_F(PinningChainTest, TheTextsFollowTheKeys) {
+    EXPECT_STREQ(TextOf("pinnedAway"), strings::kTutorialPinnedAwayText);
+    EXPECT_STREQ(TextOf("viewMode"), strings::kTutorialViewModeText);
+    world_.keys.erase(CommandId::ToggleEditMode);
+    EXPECT_STREQ(TextOf("pinnedAway"), strings::kTutorialPinnedAwayTextTray);
+    EXPECT_STREQ(TextOf("viewMode"), strings::kTutorialViewModeTextTray);
+    world_.keys.erase(CommandId::ToggleViewMode);
+    EXPECT_STREQ(TextOf("viewMode"), strings::kTutorialViewModeTextNoKey);
+}
+
+// Begun with nothing pinned: a pin first, and the unpin after it counts.
+TEST_F(PinningChainTest, UnpinAsksForAPinFirstWhenNothingIsPinned) {
+    world_.Make(1);
+    world_.selection = {1};
+    At("unpin");
+    EXPECT_EQ(NeedShown(), Need::SubjectPinned);
+    world_.At(1).pinned = true;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    world_.At(1).pinned = false;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(PinningChainTest, UnpinIsNotDoneByDeletingThePinnedOne) {
+    world_.Make(1).pinned = true;
+    world_.Make(2);
+    world_.selection = {1};
+    At("unpin");
+    world_.At(1).deleted = true;
+    world_.selection.clear();
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
 }
 
 // Let go of for another topic: finished from its end, skipped from the
@@ -360,6 +534,8 @@ TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
         strings::kTutorialNeedDeletedSubject,   strings::kTutorialScreenshotTextTrigger,
         strings::kTutorialScreenshotTextTool,   strings::kTutorialScreenshotTextMenu,
         strings::kTutorialAwayTextTray,         strings::kTutorialEndTextNoCheatSheetKey,
+        strings::kTutorialNeedSubjectPinned,    strings::kTutorialPinnedAwayTextTray,
+        strings::kTutorialViewModeTextTray,     strings::kTutorialViewModeTextNoKey,
     };
     for (const Topic& topic : Topics()) {
         texts.push_back(topic.title);
@@ -411,6 +587,9 @@ TEST(TopicsTest, HaveTheShapeTheRunnerReliesOn) {
                 }
                 if (need == Need::DeletedSubject) {
                     EXPECT_TRUE(gatedSoFar.contains("delete")) << topic.id << "/" << step.id;
+                }
+                if (need == Need::SubjectPinned) {
+                    EXPECT_TRUE(gatedSoFar.contains("pin")) << topic.id << "/" << step.id;
                 }
             }
             if (step.gated) {

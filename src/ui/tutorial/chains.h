@@ -18,5 +18,8 @@ namespace sz::ui::tutorial {
 const std::vector<Step>& BasicsChain();
 // Drawing: drawing mode, a stroke, and out of it again.
 const std::vector<Step>& DrawingChain();
+// Pinning and view mode: a pin, the pinned view, see-through, view mode
+// and the pin taken off.
+const std::vector<Step>& PinningChain();
 
 }  // namespace sz::ui::tutorial

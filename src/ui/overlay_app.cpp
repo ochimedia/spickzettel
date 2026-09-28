@@ -819,6 +819,14 @@ void OverlayApp::PlacePracticeSnippet() {
     session_.CreateItem(std::move(practice), /*undoable=*/false);
 }
 
+void OverlayApp::OnModeEntered(OverlayMode mode) {
+    if (mode == OverlayMode::Pinned) {
+        tutorialWorld_.CountPinnedView();
+    } else if (mode == OverlayMode::View) {
+        tutorialWorld_.CountViewMode();
+    }
+}
+
 void OverlayApp::OnOverlayShown() {
     tutorialWorld_.CountShowing();
     settingsPage_.OnOverlayShown();

@@ -29,6 +29,8 @@ constexpr float kCardTop = 72.0f;
 // Where it goes when what it is about lies under it: this far above the
 // bottom, clear of the canvas bar's edge and the dock.
 constexpr float kCardBottomMargin = 96.0f;
+// In a top corner, this far from the side.
+constexpr float kCardSideMargin = 24.0f;
 
 bool Overlap(const AnchorRect& a, const AnchorRect& b) {
     return a.min.x < b.max.x && b.min.x < a.max.x && a.min.y < b.max.y && b.min.y < a.max.y;
@@ -184,6 +186,11 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
         }
         case tutorial::Spot::SelectionBarClose:
             return anchors_.Find(Anchor{AnchorId::SelectionBarClose});
+        case tutorial::Spot::SelectionBarPin: {
+            // The snippet itself until it is selected and its bar is drawn.
+            const std::optional<AnchorRect> pin = anchors_.Find(Anchor{AnchorId::SelectionBarPin});
+            return pin.has_value() ? pin : SubjectRect();
+        }
         case tutorial::Spot::DrawingBarPen:
             return anchors_.Find(Anchor{AnchorId::DrawingBarPen});
         case tutorial::Spot::DockChip: {
@@ -203,7 +210,11 @@ void TutorialCard::Draw(float displayW, float displayH) {
     const float width = Px(kCardWidth);
     // Where the user put it - ImGui moves a window dragged by its body -
     // or top center, unless what the step is about lies under that; then
-    // bottom center.
+    // bottom center, then the top corners, where a large snippet on a small
+    // display leaves room at neither. What the step is about is what the
+    // ring is on and the subject, and after them the bars over the
+    // selection, whose buttons a line may name when nothing rings them:
+    // where every place covers something, the one that covers least.
     const ImGuiWindow* last = ImGui::FindWindowByName(kCardWindow);
     if (last != nullptr && ImGui::GetCurrentContext()->MovingWindow == last) {
         moved_ = true;
@@ -211,11 +222,36 @@ void TutorialCard::Draw(float displayW, float displayH) {
     if (!moved_) {
         const float height = last != nullptr ? last->Size.y : Px(160.0f);
         const ImVec2 top((displayW - width) * 0.5f, Px(kCardTop));
-        const AnchorRect atTop{top, ImVec2(top.x + width, top.y + height)};
+        const ImVec2 bottom(top.x, displayH - height - Px(kCardBottomMargin));
         const std::optional<AnchorRect> spot = SpotRect();
         const std::optional<AnchorRect> subject = SubjectRect();
-        const bool covers = (spot.has_value() && Overlap(atTop, *spot)) || (subject.has_value() && Overlap(atTop, *subject));
-        ImGui::SetNextWindowPos(covers ? ImVec2(top.x, displayH - height - Px(kCardBottomMargin)) : top);
+        const std::optional<AnchorRect> bars[] = {anchors_.Find(Anchor{AnchorId::SelectionBarPin}),
+                                                  anchors_.Find(Anchor{AnchorId::SelectionBarClose}),
+                                                  anchors_.Find(Anchor{AnchorId::DrawingBarPen})};
+        const auto covered = [&](ImVec2 at) {
+            const AnchorRect card{at, ImVec2(at.x + width, at.y + height)};
+            const auto under = [&](const std::optional<AnchorRect>& rect) {
+                return rect.has_value() && Overlap(card, *rect) ? 1 : 0;
+            };
+            int weight = 2 * (under(spot) + under(subject));
+            for (const std::optional<AnchorRect>& bar : bars) {
+                weight += under(bar);
+            }
+            return weight;
+        };
+        const float side = Px(kCardSideMargin);
+        ImVec2 best = top;
+        int least = covered(top);
+        for (const ImVec2 at : {bottom, ImVec2(side, top.y), ImVec2(displayW - width - side, top.y)}) {
+            if (least == 0) {
+                break;
+            }
+            if (const int weight = covered(at); weight < least) {
+                best = at;
+                least = weight;
+            }
+        }
+        ImGui::SetNextWindowPos(best);
     }
     ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0.0f), ImVec2(width, FLT_MAX));
     ImGui::Begin(kCardWindow, nullptr,

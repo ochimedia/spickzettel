@@ -342,6 +342,9 @@ void TrayController::Apply(const OverlayTransition& transition) {
     // down is over, and leaves the plain view-only mode it was a kind of.
     if (to != OverlayState::Hidden) {
         overlayApp_.SetMode(ModeFor(to));
+        if (to != from) {
+            overlayApp_.OnModeEntered(ModeFor(to));
+        }
     } else if (from == OverlayState::Notice) {
         overlayApp_.SetMode(OverlayMode::View);
     }

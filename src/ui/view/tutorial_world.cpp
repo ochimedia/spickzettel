@@ -50,6 +50,9 @@ std::vector<tutorial::SnippetFacts> AppWorld::SnippetsIn(core::FolderId folder) 
             facts.minimized = item.minimized;
             facts.deleted = manager.IsDeleted(canvas, item);
             facts.strokes = item.strokes.size();
+            facts.pinned = item.pinned;
+            facts.pictureOpacity = item.picture.opacity;
+            facts.drawingOpacity = item.foregroundOpacity;
             snippets.push_back(facts);
         }
     }

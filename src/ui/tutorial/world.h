@@ -34,6 +34,12 @@ struct SnippetFacts {
     // Marked deleted: still in the library, for undo to bring back.
     bool deleted = false;
     size_t strokes = 0;
+    // Stays on screen when the overlay is put away (Item::pinned).
+    bool pinned = false;
+    // The picture's opacity - a screenshot's image, a drawing's backing -
+    // and the strokes' (Item::foregroundOpacity).
+    float pictureOpacity = 1.0f;
+    float drawingOpacity = 1.0f;
 };
 
 // What covers the canvas, if anything - the machine's Panel and Popup
@@ -47,6 +53,11 @@ public:
     // How many times the overlay has come up since the app started (see
     // OverlayApp::OnOverlayShown).
     virtual uint64_t Showings() const = 0;
+    // How many times the pinned view, and view mode, have come up since
+    // the app started - each counted as a transition enters it (see
+    // OverlayApp::OnModeEntered).
+    virtual uint64_t PinnedViews() const = 0;
+    virtual uint64_t ViewModes() const = 0;
     virtual Cover CanvasCover() const = 0;
 
     // The hand: the snippet in drawing mode, the selection, and the

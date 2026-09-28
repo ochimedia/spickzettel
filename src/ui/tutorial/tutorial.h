@@ -138,6 +138,7 @@ private:
     std::optional<double> doneAt_;
     StartRecord start_;
     std::unordered_set<core::ItemId> deletedThisStep_;
+    std::unordered_set<core::ItemId> pinnedThisStep_;
     std::optional<Hint> hint_;
 
     // Across steps: the tutorial's snippets in the order they turned up,

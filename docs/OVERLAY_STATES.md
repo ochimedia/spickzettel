@@ -226,7 +226,9 @@ the same order unless said otherwise.
    and, on leaving Edit for any other mode, the All scope settled. Down,
    the mode stays as it was, except that a
    notice going down leaves plain View, as today: a notice's mode is what
-   reports its fade.
+   reports its fade. A state entered from another is also said
+   (`OverlayApp::OnModeEntered`), which the tutorial counts
+   (`docs/TUTORIAL.md`, section 14.3).
 6. **Start the session**, when entering View or Edit from a state without
    one:
    - ask what is underneath, and match a profile;

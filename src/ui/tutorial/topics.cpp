@@ -8,6 +8,7 @@ namespace sz::ui::tutorial {
 const std::vector<Topic>& Topics() {
     static const std::vector<Topic> topics = {
         {kBasicsTopic, strings::kTutorialTopicsBasicsTitle, strings::kTutorialTopicsBasicsGist, &BasicsChain},
+        {"pinning", strings::kTutorialTopicsPinningTitle, strings::kTutorialTopicsPinningGist, &PinningChain},
         {"drawing", strings::kTutorialTopicsDrawingTitle, strings::kTutorialTopicsDrawingGist, &DrawingChain},
     };
     return topics;

@@ -24,6 +24,8 @@ struct FakeWorld : World {
     static constexpr core::CanvasId kOtherCanvas = 21;
 
     uint64_t showings = 1;
+    uint64_t pinnedViews = 0;
+    uint64_t viewModes = 0;
     Cover cover = Cover::None;
     std::optional<core::ItemId> drawing;
     std::vector<core::ItemId> selection;
@@ -35,6 +37,7 @@ struct FakeWorld : World {
     std::unordered_map<CommandId, std::string> keys{{CommandId::Undo, "Ctrl+Z"},
                                                     {CommandId::CheatSheet, "Ctrl+H"},
                                                     {CommandId::ToggleEditMode, "Ctrl+Alt+S"},
+                                                    {CommandId::ToggleViewMode, "Ctrl+Alt+V"},
                                                     {CommandId::NewScreenshotTool, "S"}};
     core::CreationTrigger screenshotTrigger = core::CreationTrigger::Plain;
     core::CreationTrigger drawingTrigger = core::CreationTrigger::Ctrl;
@@ -60,6 +63,8 @@ struct FakeWorld : World {
     }
 
     uint64_t Showings() const override { return showings; }
+    uint64_t PinnedViews() const override { return pinnedViews; }
+    uint64_t ViewModes() const override { return viewModes; }
     Cover CanvasCover() const override { return cover; }
     std::optional<core::ItemId> DrawingItem() const override { return drawing; }
     std::vector<core::ItemId> Selection() const override { return selection; }
