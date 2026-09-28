@@ -165,7 +165,7 @@
   "hud.useSoftwarePointer": "Use a software pointer",
   "hud.freezeScreenWhileEditing": "Freeze screen while editing",
 
-  "_tutorial": "The tutorial's cards - see docs/TUTORIAL.md, section 4: each step's title and text, the lines under a text when a step needs something first (need.*) or sees a mistake coming (a step's miss*); the card's own words (card.*), and the card a skip ends on (skipped.*), and the offer an install from before the tutorial is made once (offer.*). Step %d of %d takes the step and the count. Wrapped by the card, so written as running text. In braces, filled in as bound and set: {key:<command>} is the key that runs the command of that name (undo, cheatSheet, toggleEditMode, newScreenshotTool), {trigger:screenshot} and {trigger:drawing} the key held for a drag that makes one, {canvas} a canvas's name.",
+  "_tutorial": "The tutorial's cards - see docs/TUTORIAL.md, section 4: each step's title and text, the lines under a text when a step needs something first (need.*) or sees a mistake coming (a step's miss*); the card's own words (card.*), and the card a skip ends on (skipped.*), the offer an install from before the tutorial is made once (offer.*), and its row in Settings > Interaction (settings.*). Step %d of %d takes the step and the count. Wrapped by the card, so written as running text. In braces, filled in as bound and set: {key:<command>} is the key that runs the command of that name (undo, cheatSheet, toggleEditMode, newScreenshotTool), {trigger:screenshot} and {trigger:drawing} the key held for a drag that makes one, {canvas} a canvas's name.",
   "tutorial.welcome.title": "Welcome to Spickzettel",
   "tutorial.welcome.text": "Spickzettel keeps snippets - screenshots, drawings and notes - over whatever program is underneath, and everything saves itself.\n\nA few steps show you the basics. They run in a folder of their own, so nothing you already have is touched.",
   "tutorial.screenshot.title": "Take a screenshot",
@@ -228,6 +228,9 @@
   "tutorial.offer.text": "New: a short tutorial, in a folder of its own.",
   "tutorial.offer.start": "Start",
   "tutorial.offer.noThanks": "No thanks",
+  "tutorial.settings.heading": "Tutorial",
+  "tutorial.settings.help": "The tutorial walks you through the basics: a screenshot, moving and resizing it, drawing, deleting and undoing.\n\nIt runs in a new folder of its own, away from your canvases. A folder from an earlier run is left as it is.",
+  "tutorial.settings.again": "Take the tutorial again",
   "tutorial.folderName": "Tutorial",
   "tutorial.practiceName": "Practice",
 

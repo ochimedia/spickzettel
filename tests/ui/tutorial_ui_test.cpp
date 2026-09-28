@@ -1,6 +1,6 @@
 // The tutorial card's buttons, clicked by name - docs/TUTORIAL.md, section
 // 3: Back, Next, Skip tutorial and Done, Next grayed out on a gated step,
-// and the buttons under a hint.
+// the buttons under a hint, and Take the tutorial again in Settings.
 #include <string>
 
 #include "fakes/ui_test.h"
@@ -125,6 +125,27 @@ TEST_F(TutorialUiTest, PutOneHereMakesASnippetToPracticeOn) {
     // Off the history: an undo brings the screenshot back, and leaves it.
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_FALSE(Canvases().IsItemDeleted(*Runner().Subject()));
+}
+
+// Settings > Interaction: the Overview closes, and the tutorial starts at
+// its first step in a new folder (section 7.6).
+TEST_F(TutorialUiTest, TakeTheTutorialAgainStartsItFromSettings) {
+    ShowEditMode();
+    StepFrame();
+    const size_t folders = Canvases().Folders().size();
+    OpenOverviewUi();
+    RunUi("take the tutorial again", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectioninteraction");
+        ctx->ItemClick("**/###tutorial_again");
+    });
+    StepFrames(2);
+    EXPECT_FALSE(App().IsOverviewOpen());
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(StepUp(), "welcome");
+    ASSERT_EQ(Canvases().Folders().size(), folders + 1);
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 
 }  // namespace

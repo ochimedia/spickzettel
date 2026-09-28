@@ -746,6 +746,15 @@ void SettingsPage::RenderSettingsInteraction() {
     SettingsHeading("barsheading", strings::kBarsHeading, strings::kBarsHelp);
     RenderBarButtonRow("snippetbar", strings::kBarsSnippetRow, setting::kSnippetBar);
     RenderBarButtonRow("drawingbar", strings::kBarsDrawingRow, setting::kDrawingBar);
+
+    SettingsGroupBreak();
+
+    // In a new folder, from the first step; the Overview, which this page
+    // is in, closes for it (docs/TUTORIAL.md, section 7.6).
+    SettingsHeading("tutorialheading", strings::kTutorialSettingsHeading, strings::kTutorialSettingsHelp);
+    if (ImGui::Button(Labeled(strings::kTutorialSettingsAgain, "tutorial_again"))) {
+        host_.Act(action::StartTutorial{});
+    }
 }
 
 void SettingsPage::RenderSettingsDefaults() {
