@@ -133,6 +133,10 @@
     "duplicate": "Ctrl+D",
     "cheatSheet": "Ctrl+H"
   },
+  "tutorial": {
+    "welcome": "",
+    "folder": "0"
+  },
   "diagnostics": {
     "showDebugOverlay": false,
     "showInputOptionsHud": false

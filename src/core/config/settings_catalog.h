@@ -191,6 +191,12 @@ inline constexpr ProfileSetting<BoolRule> kFreezeScreen{
 // ----- shortcuts: overridable too, one per action -----
 inline constexpr ShortcutSettings kShortcuts{"shortcuts", {}, E::Use};
 
+// ----- tutorial: kept by the tutorial as it goes (docs/TUTORIAL.md, 7.6) -----
+inline constexpr GlobalSetting<TextRule> kTutorialWelcome{
+    {"tutorial", "", "welcome"}, {}, E::Use, [](AppConfig& c) { return &c.tutorialWelcome; }};
+inline constexpr GlobalSetting<IdRule> kTutorialFolder{
+    {"tutorial", "", "folder"}, {}, E::Use, [](AppConfig& c) { return &c.tutorialFolder; }};
+
 // ----- diagnostics -----
 inline constexpr GlobalSetting<BoolRule> kShowDebugOverlay{
     {"diagnostics", "", "showDebugOverlay"}, {}, E::Frame, [](AppConfig& c) { return &c.showDebugOverlay; }};
@@ -215,6 +221,7 @@ inline constexpr auto kAll = std::tuple{
     &kDontStealFocus, &kTakeFocusOverElevated, &kSoftwarePointer, &kRawMouseInput, &kDontForwardKeystrokes,
     &kCounterRawMouseInput, &kCounterThreshold, &kFreezeScreen,
     &kShortcuts,
+    &kTutorialWelcome, &kTutorialFolder,
     &kShowDebugOverlay, &kShowInputOptionsHud,
 };
 

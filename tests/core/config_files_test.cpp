@@ -133,6 +133,8 @@ AppConfig Everything() {
     c.noteTextColorRGBA = 0x000000C0u;
     c.overlayDisplayId = "\\\\?\\DISPLAY#TEST#1";
     c.overlayDisplayName = "Test Display";
+    c.tutorialWelcome = "move";
+    c.tutorialFolder = 18446744073709551557ull;  // past a double's 53 bits
     return c;
 }
 
@@ -169,6 +171,8 @@ TEST(ConfigFilesTest, TheFirstReleasesSettingsAreReadAsItWroteThem) {
     expected.drawingBackgroundColorRGBA = defaults.drawingBackgroundColorRGBA;
     expected.noteTextSizePx = defaults.noteTextSizePx;
     expected.noteTextColorRGBA = defaults.noteTextColorRGBA;
+    expected.tutorialWelcome = defaults.tutorialWelcome;
+    expected.tutorialFolder = defaults.tutorialFolder;
     EXPECT_EQ(ParseConfig(ReadFixture("v0.1.0-everything.json")), expected);
 }
 

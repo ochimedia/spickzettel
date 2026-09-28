@@ -134,6 +134,10 @@
     "duplicate": "Ctrl+D",
     "cheatSheet": "F1"
   },
+  "tutorial": {
+    "welcome": "move",
+    "folder": "18446744073709551557"
+  },
   "diagnostics": {
     "showDebugOverlay": true,
     "showInputOptionsHud": true

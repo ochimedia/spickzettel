@@ -633,6 +633,7 @@ void OverlayApp::Apply() {
     for (const ViewAction& action : actions) {
         Do(action);
     }
+    KeepTutorialProgress();
 
     if (IsViewOnly()) {
         // A notice exists only to carry its message, so it is over when the
@@ -772,6 +773,21 @@ FolderId OverlayApp::MakeTutorialFolder() {
         editor_.SwitchCanvas(canvas);
     }
     return folder;
+}
+
+void OverlayApp::KeepTutorialProgress() {
+    // Where the runner is once it has moved on for the frame - by itself in
+    // Prepare, or at a button just done. Only a change is set: a Set is a
+    // commit, which the tray writes to the file. A runner that has never
+    // run says nothing, and leaves "offered" as it is.
+    const tutorial::Tutorial& runner = tutorialCard_.Runner();
+    if (std::string progress = runner.Progress();
+        !progress.empty() && progress != settings_.Get(setting::kTutorialWelcome)) {
+        settings_.Set(setting::kTutorialWelcome, std::move(progress));
+    }
+    if (runner.On() && runner.Folder() != settings_.Get(setting::kTutorialFolder)) {
+        settings_.Set(setting::kTutorialFolder, runner.Folder());
+    }
 }
 
 void OverlayApp::PlacePracticeSnippet() {

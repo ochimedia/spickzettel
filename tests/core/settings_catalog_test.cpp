@@ -44,6 +44,7 @@ platform::KeyCombo Other(const ShortcutRule&, const platform::KeyCombo& value) {
     return value != other ? other : platform::KeyCombo{};
 }
 std::string Other(const TextRule&, const std::string& value) { return value + "x"; }
+uint64_t Other(const IdRule&, uint64_t value) { return value + 0x1234567890ABCDEFull; }
 BarButtonList Other(const BarRule&, BarButtonList value) {
     value.front().shown = !value.front().shown;
     return value;
@@ -131,7 +132,8 @@ auto Fields(const AppConfig& c) {
                  overviewShowsBitmaps, showCanvasBar, showEditModeBorder, editModeBorderColorRGBA,
                  editModeBorderOpacity, editModeBorderWidthPx, editModeBorderOnlyWhenEmpty, purgeDeleted,
                  purgeDeletedAfterDays, confirmDelete, confirmDeleteForGood, screenshotDefaults, drawingDefaults,
-                 drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId, overlayDisplayName] = c;
+                 drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId, overlayDisplayName,
+                 tutorialWelcome, tutorialFolder] = c;
     return std::tie(hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
                     strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showItemBorders,
                     showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
@@ -141,7 +143,7 @@ auto Fields(const AppConfig& c) {
                     editModeBorderColorRGBA, editModeBorderOpacity, editModeBorderWidthPx, editModeBorderOnlyWhenEmpty,
                     purgeDeleted, purgeDeletedAfterDays, confirmDelete, confirmDeleteForGood, screenshotDefaults,
                     drawingDefaults, drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId,
-                    overlayDisplayName);
+                    overlayDisplayName, tutorialWelcome, tutorialFolder);
 }
 
 auto Fields(const ProfileableSettings& s) {

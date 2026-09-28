@@ -495,6 +495,10 @@ private:
     // take it from under a step (docs/TUTORIAL.md, section 7.3).
     FolderId MakeTutorialFolder();
     void PlacePracticeSnippet();
+    // The step the tutorial is on, or how it ended, and its folder, set in
+    // the settings as they change (docs/TUTORIAL.md, section 7.6) - so a
+    // start after quitting partway comes back to it.
+    void KeepTutorialProgress();
 
     // What the popover's Delete does, and what a delete Settings > Behavior
     // says not to ask about does (see AppConfig::confirmDelete) - the Delete

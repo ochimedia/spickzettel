@@ -272,6 +272,14 @@ key, or Mouse3-5, with modifiers, or `null` for unbound. Invariant: one
 combination, one action within a target. Default: `DefaultShortcuts()`.
 Edited from Settings > Hotkeys, lower box. Effect: Use.
 
+**`tutorial`**: Global. Edited from the tutorial as it goes
+(`docs/TUTORIAL.md`, section 7.6). Effect: Use.
+
+| Key | Field | Default | Rule |
+|---|---|---|---|
+| `welcome` | `tutorialWelcome` | empty (never shown) | text: `"offered"`, a step id, `"finished"` or `"skipped"` |
+| `folder` | `tutorialFolder` | `"0"` (none) | a library id, as a string of digits: a double holds no 64-bit id; anything else reads as nothing said |
+
 **`diagnostics`**: Global. Rule: bool. Edited from Settings > Debug.
 Effect: Frame.
 

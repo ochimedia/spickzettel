@@ -496,6 +496,37 @@ TEST_F(TutorialAppTest, SkipShowsTheWarningsNotReachedAndDoneLetsGo) {
     EXPECT_FALSE(card->Active);
 }
 
+// ===== Progress, kept (section 7.6) =====
+
+TEST_F(TutorialAppTest, TheProgressIsKeptInTheSettingsAsItGoes) {
+    const auto welcome = [this] { return AppSettings().Stored().tutorialWelcome; };
+    EXPECT_EQ(welcome(), "") << "never shown";
+    StartTheTutorial();
+    EXPECT_EQ(welcome(), "welcome");
+    EXPECT_EQ(AppSettings().Stored().tutorialFolder, Runner().Folder());
+    EXPECT_NE(Runner().Folder(), 0u);
+
+    Press(TutorialButton::Next);
+    EXPECT_EQ(welcome(), "screenshot");
+    DoStep("screenshot");
+    Settle();
+    EXPECT_EQ(welcome(), "move") << "a step moved on by itself is kept too";
+
+    Press(TutorialButton::Skip);
+    EXPECT_EQ(welcome(), "skipped");
+    Press(TutorialButton::Back);
+    EXPECT_EQ(welcome(), "move");
+    Press(TutorialButton::Skip);
+    Press(TutorialButton::Done);
+    EXPECT_EQ(welcome(), "skipped");
+}
+
+TEST_F(TutorialAppTest, AFinishedTutorialIsKeptAsFinished) {
+    WalkTo("end");
+    Press(TutorialButton::Done);
+    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "finished");
+}
+
 // ===== The derail matrix (sections 6.1 and 9) =====
 //
 // Each do step, crossed with each way off the path that applies to it: the

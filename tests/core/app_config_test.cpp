@@ -483,6 +483,24 @@ TEST(AppConfigTest, TheChosenDisplayRoundTripsAndIsThePrimaryUntilChosen) {
     EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
 }
 
+// A library id takes all 64 bits, which a double does not hold: written as
+// digits, and read back only as digits.
+TEST(AppConfigTest, TheTutorialsFolderIsKeptAsDigitsToTheLastBit) {
+    AppConfig config = DefaultConfig();
+    ASSERT_EQ(config.tutorialFolder, 0u);
+    ASSERT_TRUE(config.tutorialWelcome.empty());
+    config.tutorialFolder = 18446744073709551557ull;
+    config.tutorialWelcome = "finished";
+    const std::string text = SerializeConfig(config);
+    EXPECT_NE(text.find("\"18446744073709551557\""), std::string::npos);
+    EXPECT_EQ(ParseConfig(text), config);
+
+    for (const char* said : {"42", R"("")", R"("12x")", R"("-3")", R"("99999999999999999999")"}) {
+        EXPECT_EQ(ParseConfig(One("tutorial", "folder", said)).tutorialFolder, 0u) << said;
+    }
+    EXPECT_EQ(ParseConfig(One("tutorial", "folder", R"("42")")).tutorialFolder, 42u);
+}
+
 // The colors that say which snippet is in front. Their alpha is part of
 // the color, so they are the first settings written as eight hex digits -
 // and the six-digit spelling every other color uses still has to parse,

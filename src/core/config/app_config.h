@@ -299,6 +299,16 @@ struct AppConfig {
     std::string overlayDisplayId;
     std::string overlayDisplayName;
 
+    // How far the welcome tutorial got (docs/TUTORIAL.md, section 7.6):
+    // empty for never shown, "offered" for an install from before it that
+    // has been asked, the id of the step up while it runs, and "finished"
+    // or "skipped" once it is over. Written by the tutorial as it goes.
+    std::string tutorialWelcome;
+    // The library id of the tutorial's folder, 0 for none. The library may
+    // no longer hold it - set aside, or the folder deleted - and a start
+    // then makes a new one.
+    uint64_t tutorialFolder = 0;
+
     bool operator==(const AppConfig&) const = default;
 };
 
