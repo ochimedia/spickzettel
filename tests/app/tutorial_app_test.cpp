@@ -61,6 +61,13 @@ protected:
         StepFrames(2);
     }
 
+    // What is kept of `topic`, or empty for a topic never started.
+    std::string Kept(std::string_view topic = tutorial::kBasicsTopic) const {
+        const auto& progress = AppSettings().Stored().tutorialProgress;
+        const auto it = progress.find(std::string(topic));
+        return it == progress.end() ? std::string() : it->second;
+    }
+
     // The subject as the model has it now.
     const Item& Subject() const { return *Canvases().FindItemAnywhere(*Runner().Subject()); }
     ImVec2 SubjectMiddle() const {
@@ -512,35 +519,70 @@ TEST_F(TutorialAppTest, SkipShowsTheWarningsNotReachedAndDoneLetsGo) {
     EXPECT_FALSE(card->Active);
 }
 
-// ===== Progress, kept (section 7.6) =====
+// ===== Progress, kept (section 13.7) =====
 
 TEST_F(TutorialAppTest, TheProgressIsKeptInTheSettingsAsItGoes) {
-    const auto welcome = [this] { return AppSettings().Stored().tutorialWelcome; };
-    EXPECT_EQ(welcome(), "") << "never shown";
+    const auto current = [this] { return AppSettings().Stored().tutorialCurrent; };
+    EXPECT_EQ(Kept(), "") << "never shown";
+    EXPECT_EQ(current(), "");
     StartTheTutorial();
-    EXPECT_EQ(welcome(), "welcome");
+    EXPECT_EQ(Kept(), "welcome");
+    EXPECT_EQ(current(), "basics");
     EXPECT_EQ(AppSettings().Stored().tutorialFolder, Runner().Folder());
     EXPECT_NE(Runner().Folder(), 0u);
 
     Press(TutorialButton::Next);
-    EXPECT_EQ(welcome(), "screenshot");
+    EXPECT_EQ(Kept(), "screenshot");
     DoStep("screenshot");
     Settle();
-    EXPECT_EQ(welcome(), "move") << "a step moved on by itself is kept too";
+    EXPECT_EQ(Kept(), "move") << "a step moved on by itself is kept too";
 
     Press(TutorialButton::Skip);
-    EXPECT_EQ(welcome(), "skipped");
+    EXPECT_EQ(Kept(), "skipped");
     Press(TutorialButton::Back);
-    EXPECT_EQ(welcome(), "move");
+    EXPECT_EQ(Kept(), "move");
     Press(TutorialButton::Skip);
     Press(TutorialButton::Done);
-    EXPECT_EQ(welcome(), "skipped");
+    EXPECT_EQ(Kept(), "skipped");
+    EXPECT_EQ(current(), "") << "none running";
+    EXPECT_EQ(Kept("drawing"), "") << "only the topic that ran";
 }
 
 TEST_F(TutorialAppTest, AFinishedTutorialIsKeptAsFinished) {
     WalkTo("end");
     Press(TutorialButton::Done);
-    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "finished");
+    EXPECT_EQ(Kept(), "finished");
+}
+
+// Another topic started while one runs: the running one ends as Done,
+// keep the folder would (section 13.3).
+TEST_F(TutorialAppTest, AnotherTopicStartedLeavesTheRunningOnesStepAndFolder) {
+    WalkTo("move");
+    const FolderId basics = Runner().Folder();
+    Overlay().StartTutorial("drawing");
+    StepFrames(2);
+    EXPECT_EQ(Overlay().TutorialTopic().id, "drawing");
+    EXPECT_EQ(StepUp(), "drawingMode");
+    EXPECT_NE(Runner().Folder(), basics);
+    EXPECT_EQ(Canvases().FindFolder(Runner().Folder())->name, "Tutorial: Drawing");
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(basics))) << "kept";
+    EXPECT_EQ(Kept(), "move") << "left partway";
+    EXPECT_EQ(Kept("drawing"), "drawingMode");
+    EXPECT_EQ(AppSettings().Stored().tutorialCurrent, "drawing");
+    EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos) << "nothing asked";
+}
+
+TEST_F(TutorialAppTest, AnotherTopicStartedFromAnEndCardOrASkipCardCountsItsEnd) {
+    WalkTo("end");
+    Overlay().StartTutorial("drawing");
+    StepFrames(2);
+    EXPECT_EQ(Kept(), "finished");
+
+    Press(TutorialButton::Skip);
+    Overlay().StartTutorial(tutorial::kBasicsTopic);
+    StepFrames(2);
+    EXPECT_EQ(Kept("drawing"), "skipped");
+    EXPECT_EQ(Kept(), "welcome") << "started again, from its first step";
 }
 
 // ===== The folder (sections 6.4, 7.6 and 9) =====
@@ -599,7 +641,7 @@ TEST_F(TutorialAppTest, DoneOnTheEndCardPutsTheFolderInTheTrash) {
     EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindFolder(folder))) << "in the trash, to restore";
     ASSERT_NE(Canvases().CurrentOrNull(), nullptr);
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().CurrentOrNull())) << "left for a canvas not deleted";
-    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "finished");
+    EXPECT_EQ(Kept(), "finished");
 }
 
 TEST_F(TutorialAppTest, DoneAsksFirstWhereSettingsSaysTo) {
@@ -620,7 +662,7 @@ TEST_F(TutorialAppTest, DoneKeepTheFolderKeepsIt) {
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(folder)));
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, folder) << "and stays in it";
     EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos);
-    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "finished");
+    EXPECT_EQ(Kept(), "finished");
 }
 
 TEST_F(TutorialAppTest, TheSkipCardEndsWithTheFolderTrashedOrKept) {
@@ -633,7 +675,7 @@ TEST_F(TutorialAppTest, TheSkipCardEndsWithTheFolderTrashedOrKept) {
     Press(TutorialButton::DoneKeep);
     EXPECT_FALSE(Runner().On());
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(first)));
-    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "skipped");
+    EXPECT_EQ(Kept(), "skipped");
 
     Overlay().StartTutorial();
     StepFrames(2);
@@ -646,16 +688,14 @@ TEST_F(TutorialAppTest, TheSkipCardEndsWithTheFolderTrashedOrKept) {
 }
 
 TEST_F(TutorialAppTest, ADoneWithNoTutorialOnTrashesNothing) {
-    StartWithLibraryFromBefore();
     ShowEditMode();
-    StepFrames(2);
-    ASSERT_TRUE(App().TutorialOffered());
-    Press(TutorialButton::Done);  // not on the offer: nothing to end
+    StepFrame();
+    Press(TutorialButton::Done);
     EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos);
-    EXPECT_TRUE(App().TutorialOffered());
+    EXPECT_FALSE(Runner().On());
 }
 
-// ===== The start (sections 7.6 and 9) =====
+// ===== The start (sections 13.4, 13.7 and 9) =====
 
 TEST_F(TutorialAppTest, AFirstRunPlacesNoNotesAndStartsTheChain) {
     StartAsFirstRun();
@@ -671,7 +711,6 @@ TEST_F(TutorialAppTest, AFirstRunPlacesNoNotesAndStartsTheChain) {
     for (const Canvas& canvas : Canvases().Canvases()) {
         EXPECT_TRUE(canvas.items.empty()) << "no notes";
     }
-    EXPECT_FALSE(App().TutorialOffered());
 }
 
 TEST_F(TutorialAppTest, AStartAfterQuittingPartwayComesBackToTheStepItWasOn) {
@@ -690,7 +729,6 @@ TEST_F(TutorialAppTest, AStartAfterQuittingPartwayComesBackToTheStepItWasOn) {
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, folder);
     EXPECT_EQ(Runner().Subject(), subject) << "its snippet, from the last run";
     EXPECT_EQ(Canvases().Folders().size(), 2u) << "no folder made";
-    EXPECT_FALSE(App().TutorialOffered());
 }
 
 TEST_F(TutorialAppTest, AResumeWithItsFolderGoneMakesANewOne) {
@@ -712,7 +750,8 @@ TEST_F(TutorialAppTest, AResumeWithItsFolderGoneMakesANewOne) {
 
 TEST_F(TutorialAppTest, AStepIdNoLongerInTheChainStartsItAgain) {
     AppConfig config = DefaultConfig();
-    config.tutorialWelcome = "aStepSinceRemoved";
+    config.tutorialProgress = {{"basics", "aStepSinceRemoved"}};
+    config.tutorialCurrent = "basics";
     StartWithLibrary(config);
     ShowEditMode();
     StepFrames(2);
@@ -720,48 +759,54 @@ TEST_F(TutorialAppTest, AStepIdNoLongerInTheChainStartsItAgain) {
     EXPECT_EQ(StepUp(), "welcome");
 }
 
-TEST_F(TutorialAppTest, AnInstallFromBeforeIsOfferedItOnceAndNoThanksIsKept) {
-    StartWithLibraryFromBefore();
-    EXPECT_EQ(controller_->State(), app::OverlayState::Hidden) << "not a first run";
-    ShowEditMode();
-    StepFrames(2);
-    EXPECT_TRUE(App().TutorialOffered());
-    EXPECT_FALSE(Runner().On());
-    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
-    ASSERT_NE(card, nullptr);
-    EXPECT_TRUE(card->Active);
-    const size_t folders = Canvases().Folders().size();
-
-    Press(TutorialButton::NoThanks);
-    EXPECT_FALSE(App().TutorialOffered());
-    EXPECT_FALSE(card->Active);
-    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "offered");
-    EXPECT_EQ(Canvases().Folders().size(), folders) << "no folder made";
+TEST_F(TutorialAppTest, TheTopicRunningWhenTheAppQuitIsTheOneResumed) {
+    StartWithLibrary();
+    WalkTo("draw", "drawing");
+    const FolderId folder = Runner().Folder();
 
     StartWith(AppSettings().Stored());
     ShowEditMode();
     StepFrames(2);
-    EXPECT_FALSE(App().TutorialOffered()) << "offered once";
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(Overlay().TutorialTopic().id, "drawing");
+    EXPECT_EQ(StepUp(), "draw");
+    EXPECT_EQ(Runner().Folder(), folder);
+}
+
+// A topic whose step is kept, but not as running, is not resumed: only
+// the list starts it again, from its first step (question 12).
+TEST_F(TutorialAppTest, ATopicLeftPartwayForAnotherIsNotResumed) {
+    AppConfig config = DefaultConfig();
+    config.tutorialProgress = {{"basics", "move"}};
+    config.tutorialCurrent = "";
+    StartWithLibrary(config);
+    ShowEditMode();
+    StepFrames(2);
     EXPECT_FALSE(Runner().On());
 }
 
-TEST_F(TutorialAppTest, AnInstallFromBeforeThatTakesTheOfferStartsTheChain) {
+// Treated as a new user (question 11): Basics starts, the first time edit
+// mode comes up.
+TEST_F(TutorialAppTest, AnInstallFromBeforeStartsBasicsLikeAFirstRun) {
     StartWithLibraryFromBefore();
+    EXPECT_EQ(controller_->State(), app::OverlayState::Hidden) << "not a first run";
+    EXPECT_FALSE(Runner().On());
     ShowEditMode();
     StepFrames(2);
-    ASSERT_TRUE(App().TutorialOffered());
-    Overlay().StartTutorial();  // the offer's Start
-    StepFrames(2);
-    EXPECT_FALSE(App().TutorialOffered());
     ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(Overlay().TutorialTopic().id, "basics");
     EXPECT_EQ(StepUp(), "welcome");
-    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "welcome");
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+}
 
-    StartWith(AppSettings().Stored());
+TEST_F(TutorialAppTest, ALibraryWhoseTutorialIsOverStartsNothing) {
+    StartWithLibrary();  // Basics finished
     ShowEditMode();
     StepFrames(2);
-    EXPECT_FALSE(App().TutorialOffered()) << "answered";
-    EXPECT_EQ(StepUp(), "welcome") << "and resumed";
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(ImGui::FindWindowByName("##tutorial_card") != nullptr &&
+                  ImGui::FindWindowByName("##tutorial_card")->Active,
+              false);
 }
 
 // ===== The derail matrix (sections 6.1 and 9) =====

@@ -42,9 +42,8 @@ struct DeleteTarget {
 };
 
 // One of the tutorial card's own buttons. Done ends the tutorial and puts
-// its folder in the trash, DoneKeep ends it and keeps the folder; NoThanks
-// is the offer's (see OverlayApp::WelcomeAtStart).
-enum class TutorialButton { Next, Back, Skip, Done, DoneKeep, NoThanks };
+// its folder in the trash, DoneKeep ends it and keeps the folder.
+enum class TutorialButton { Next, Back, Skip, Done, DoneKeep };
 
 namespace action {
 
@@ -119,7 +118,7 @@ struct FinishNoteEdit {
 };
 
 // The tutorial (docs/TUTORIAL.md, section 7.3). The card's own buttons:
-// the runner's state, the offer's answer, kept, and the folder at the end.
+// the runner's state, and the folder at the end.
 struct TutorialPress {
     TutorialButton button = TutorialButton::Next;
 };
@@ -128,8 +127,8 @@ struct TutorialPress {
 struct StartTutorial {
     std::string topic{tutorial::kBasicsTopic};
 };
-// A start after quitting partway: at the step kept, in the folder kept, or
-// a new one when that is gone (section 7.6).
+// A start after quitting partway: the topic kept as running, at the step
+// kept, in the folder kept - or a new one when that is gone (section 13.7).
 struct ResumeTutorial {};
 // Go back to the tutorial: to its folder, made again when it is gone.
 struct BackToTutorial {};

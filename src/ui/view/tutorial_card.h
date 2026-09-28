@@ -32,10 +32,12 @@ public:
     void Start(const tutorial::Topic& topic, core::FolderId folder);
     // `topic` at the step `id` names, in `folder` - after quitting partway.
     void Resume(const tutorial::Topic& topic, std::string_view id, core::FolderId folder);
-    // The offer to an install from before the tutorial, up until it is
-    // answered: Start, or No thanks.
-    void Offer() { offering_ = true; }
-    bool Offering() const { return offering_; }
+    // The running topic let go of for another (section 13.3) - see
+    // Tutorial::Leave.
+    void Leave() { runner_.Leave(); }
+    // Whether a topic has run since the app started: until one has, the
+    // topic kept as running is a resume's to go on with.
+    bool HasRun() const { return hasRun_; }
     // The tutorial's folder, made again.
     void MoveTo(core::FolderId folder) { runner_.MoveTo(folder); }
     // One of the card's buttons, as an action asked for it.
@@ -65,7 +67,6 @@ private:
     std::optional<AnchorRect> SubjectRect() const;
     void DrawStep();
     void DrawSkipped();
-    void DrawOffer();
     // Done, keep the folder - on the end card and the skip card.
     void DoneKeepButton();
     // The hint under a step's text, and its button.
@@ -81,7 +82,7 @@ private:
     tutorial::Tutorial runner_;
     // Dragged by the user: left where it was put for the rest of the run.
     bool moved_ = false;
-    bool offering_ = false;
+    bool hasRun_ = false;
 };
 
 }  // namespace sz::ui

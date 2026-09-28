@@ -72,7 +72,7 @@ static_assert(FieldCount<ProfileOverrides>() == kProfileRows,
 // them, the snippet defaults hold three each, `profiles` is no row - so
 // this is a tripwire rather than a proof: a field added here fails the
 // build until it has its row, and then this count is raised.
-static_assert(FieldCount<AppConfig>() == 45, "an AppConfig field added: give it a row in settings_catalog.h, "
+static_assert(FieldCount<AppConfig>() == 46, "an AppConfig field added: give it a row in settings_catalog.h, "
                                               "then count it here");
 
 // The version a file says it is. 1 when it says nothing a version can be -
@@ -309,6 +309,19 @@ std::optional<std::string> Parse(const TextRule&, const json& j) {
     return j.is_string() ? std::optional(j.get<std::string>()) : std::nullopt;
 }
 
+std::optional<std::map<std::string, std::string>> Parse(const TextMapRule&, const json& j) {
+    if (!j.is_object()) {
+        return std::nullopt;
+    }
+    std::map<std::string, std::string> map;
+    for (const auto& [key, value] : j.items()) {
+        if (value.is_string()) {
+            map.emplace(key, value.get<std::string>());
+        }
+    }
+    return map;
+}
+
 // Digits only, and all of them: anything else is no id this wrote.
 std::optional<uint64_t> Parse(const IdRule&, const json& j) {
     if (!j.is_string()) {
@@ -379,6 +392,13 @@ json Write(const ShortcutRule&, const platform::KeyCombo& value) {
 }
 json Write(const TextRule&, const std::string& value) { return value; }
 json Write(const IdRule&, uint64_t value) { return std::to_string(value); }
+json Write(const TextMapRule&, const std::map<std::string, std::string>& map) {
+    json out = json::object();
+    for (const auto& [key, value] : map) {
+        out[key] = value;
+    }
+    return out;
+}
 json Write(const BarRule&, const BarButtonList& buttons) {
     json out = json::array();
     for (const BarButtonSetting& entry : buttons) {

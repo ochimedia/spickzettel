@@ -260,8 +260,7 @@ public:
         }
     }
     const tutorial::Tutorial& TutorialRunner() const { return tutorialCard_.Runner(); }
-    // Whether the offer to an install from before the tutorial is up.
-    bool TutorialOffered() const { return tutorialCard_.Offering(); }
+    const tutorial::Topic& TutorialTopic() const { return tutorialCard_.CurrentTopic(); }
     std::optional<AnchorRect> TutorialSpot() const { return tutorialCard_.SpotRect(); }
 
     // Captures a fullscreen screenshot onto a canvas made for it (see the
@@ -339,10 +338,11 @@ public:
     // kept at all (a host with nowhere to keep one).
     enum class LibraryAtStart { None, FirstRun, Loaded };
     // What the tutorial does the first time edit mode comes up, decided
-    // from that and the progress kept (docs/TUTORIAL.md, section 7.6): a
-    // first run starts it; a library loaded goes back to the step it was
-    // on, or is offered it once when it has never been shown - an install
-    // from before it.
+    // from that and the progress kept (docs/TUTORIAL.md, section 13.7): a
+    // first run starts Basics; a library loaded goes back to the topic
+    // that was running, at its step, or starts Basics when no topic has
+    // ever run - an install from before the tutorial, treated as a new
+    // one.
     void WelcomeAtStart(LibraryAtStart library);
 
     // Asks the host to hide the overlay and show it again. Installed by
@@ -491,13 +491,14 @@ private:
     // middle of the canvas being looked at, off the history: undo cannot
     // take it from under a step (docs/TUTORIAL.md, section 7.3).
     FolderId MakeTutorialFolder(const tutorial::Topic& topic);
-    // `folder`'s first canvas not deleted, switched to - or, with none, the
-    // tutorial's folder made again. The folder the tutorial goes on in.
-    FolderId GoToTutorialFolder(FolderId folder);
+    // `folder`'s first canvas not deleted, switched to - or, with none,
+    // `topic`'s folder made again. The folder the tutorial goes on in.
+    FolderId GoToTutorialFolder(const tutorial::Topic& topic, FolderId folder);
     void PlacePracticeSnippet();
-    // The step the tutorial is on, or how it ended, and its folder, set in
-    // the settings as they change (docs/TUTORIAL.md, section 7.6) - so a
-    // start after quitting partway comes back to it.
+    // The step the running topic is on, or how it ended, which topic is
+    // running and its folder, set in the settings as they change
+    // (docs/TUTORIAL.md, section 13.7) - so a start after quitting partway
+    // comes back to it.
     void KeepTutorialProgress();
 
     // What the popover's Delete does, and what a delete Settings > Behavior
@@ -570,7 +571,7 @@ private:
 
     // What WelcomeAtStart decided, done on the first frame of edit mode and
     // then let go of, so it is done once.
-    enum class Welcome { Nothing, Start, Resume, Offer };
+    enum class Welcome { Nothing, Start, Resume };
     Welcome welcomePending_ = Welcome::Nothing;
 
     // What the tutorial reads of the app, and the showings it counts.

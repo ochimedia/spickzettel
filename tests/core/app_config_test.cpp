@@ -488,9 +488,7 @@ TEST(AppConfigTest, TheChosenDisplayRoundTripsAndIsThePrimaryUntilChosen) {
 TEST(AppConfigTest, TheTutorialsFolderIsKeptAsDigitsToTheLastBit) {
     AppConfig config = DefaultConfig();
     ASSERT_EQ(config.tutorialFolder, 0u);
-    ASSERT_TRUE(config.tutorialWelcome.empty());
     config.tutorialFolder = 18446744073709551557ull;
-    config.tutorialWelcome = "finished";
     const std::string text = SerializeConfig(config);
     EXPECT_NE(text.find("\"18446744073709551557\""), std::string::npos);
     EXPECT_EQ(ParseConfig(text), config);
@@ -499,6 +497,21 @@ TEST(AppConfigTest, TheTutorialsFolderIsKeptAsDigitsToTheLastBit) {
         EXPECT_EQ(ParseConfig(One("tutorial", "folder", said)).tutorialFolder, 0u) << said;
     }
     EXPECT_EQ(ParseConfig(One("tutorial", "folder", R"("42")")).tutorialFolder, 42u);
+}
+
+// Each topic's progress, by its id: an object of strings, where anything
+// not a string is not there.
+TEST(AppConfigTest, TheTutorialsProgressRoundTripsPerTopic) {
+    AppConfig config = DefaultConfig();
+    ASSERT_TRUE(config.tutorialProgress.empty());
+    ASSERT_TRUE(config.tutorialCurrent.empty());
+    config.tutorialProgress = {{"basics", "finished"}, {"drawing", "draw"}};
+    config.tutorialCurrent = "drawing";
+    EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
+
+    const AppConfig read = ParseConfig(One("tutorial", "progress", R"({"basics": "move", "drawing": 3})"));
+    EXPECT_EQ(read.tutorialProgress, (std::map<std::string, std::string>{{"basics", "move"}}));
+    EXPECT_TRUE(ParseConfig(One("tutorial", "progress", R"("basics")")).tutorialProgress.empty());
 }
 
 // The colors that say which snippet is in front. Their alpha is part of

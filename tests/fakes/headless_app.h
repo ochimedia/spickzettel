@@ -116,13 +116,13 @@ protected:
     // A start on a library file of its own, in a directory made for the
     // test and removed with it: for a test that looks at what is written,
     // or makes the writes fail (see FailingWrites). Written as a first run
-    // leaves it, so that the start is not greeted as one - and with the
-    // tutorial over, unless `config` says where it is: a library whose
-    // settings say nothing of the tutorial is an install from before it,
-    // which is offered it (see OverlayApp::WelcomeAtStart). The file's path.
+    // leaves it, so that the start is not greeted as one - and with Basics
+    // finished, unless `config` says where the tutorial is: a library whose
+    // settings say nothing of it is an install from before it, which
+    // starts Basics (see OverlayApp::WelcomeAtStart). The file's path.
     std::filesystem::path StartWithLibrary(AppConfig config = DefaultConfig()) {
-        if (config.tutorialWelcome.empty()) {
-            config.tutorialWelcome = "finished";
+        if (config.tutorialProgress.empty()) {
+            config.tutorialProgress = {{"basics", "finished"}};
         }
         return StartOnLibraryFile(std::move(config), /*written=*/true);
     }

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -121,6 +122,13 @@ struct IdRule {
     using Value = uint64_t;
 };
 
+// Texts by key, such as a topic's progress by its id: an object of
+// strings in the file. An entry whose value is not a string reads as not
+// there.
+struct TextMapRule {
+    using Value = std::map<std::string, std::string>;
+};
+
 // A bar's buttons, made to hold each of that bar's buttons exactly once
 // by `normalize` (see NormalizeSnippetBar).
 struct BarRule {
@@ -175,6 +183,10 @@ inline std::optional<platform::KeyCombo> Hold(const ShortcutRule&, platform::Key
 }
 inline std::optional<std::string> Hold(const TextRule&, std::string value) { return value; }
 inline std::optional<uint64_t> Hold(const IdRule&, uint64_t value) { return value; }
+inline std::optional<std::map<std::string, std::string>> Hold(const TextMapRule&,
+                                                              std::map<std::string, std::string> value) {
+    return value;
+}
 inline std::optional<BarButtonList> Hold(const BarRule& rule, BarButtonList value) {
     rule.normalize(value);
     return value;

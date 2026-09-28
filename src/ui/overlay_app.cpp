@@ -14,6 +14,7 @@
 #include <ctime>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -142,7 +143,6 @@ constexpr float kNoteBackgroundOpacity = 0.5f;
 }  // namespace
 
 void OverlayApp::WelcomeAtStart(LibraryAtStart library) {
-    const std::string& progress = settings_.Get(setting::kTutorialWelcome);
     switch (library) {
         case LibraryAtStart::None:
             welcomePending_ = Welcome::Nothing;
@@ -153,12 +153,16 @@ void OverlayApp::WelcomeAtStart(LibraryAtStart library) {
         case LibraryAtStart::Loaded:
             break;
     }
-    if (progress.empty()) {
-        welcomePending_ = Welcome::Offer;
-    } else if (progress == "offered" || progress == "finished" || progress == "skipped") {
-        welcomePending_ = Welcome::Nothing;
+    const std::map<std::string, std::string>& progress = settings_.Get(setting::kTutorialProgress);
+    const std::string& current = settings_.Get(setting::kTutorialCurrent);
+    if (const auto running = progress.find(current);
+        running != progress.end() && tutorial::FindTopic(current) != nullptr && running->second != "finished" &&
+        running->second != "skipped") {
+        welcomePending_ = Welcome::Resume;  // at a step's id
+    } else if (progress.empty()) {
+        welcomePending_ = Welcome::Start;  // never shown: an install from before it
     } else {
-        welcomePending_ = Welcome::Resume;  // a step's id
+        welcomePending_ = Welcome::Nothing;
     }
 }
 
@@ -517,9 +521,6 @@ void OverlayApp::Prepare(float displayW, float displayH) {
         case Welcome::Resume:
             Act(action::ResumeTutorial{});
             break;
-        case Welcome::Offer:
-            tutorialCard_.Offer();
-            break;
     }
 
     // The tutorial's step brought up to date with what the input above
@@ -681,10 +682,6 @@ void OverlayApp::Do(const ViewAction& action) {
                    },
                    [&](const action::FinishNoteEdit& a) { editor_.EndEditingNote(a.text); },
                    [&](const action::TutorialPress& a) {
-                       // Either answer to the offer is kept, so it is made once.
-                       if (a.button == TutorialButton::NoThanks) {
-                           settings_.Set(setting::kTutorialWelcome, std::string("offered"));
-                       }
                        const FolderId folder = tutorialCard_.Runner().Folder();
                        const bool on = tutorialCard_.Runner().On();
                        tutorialCard_.Press(a.button);
@@ -706,20 +703,35 @@ void OverlayApp::Do(const ViewAction& action) {
                        if (topic == nullptr) {
                            topic = tutorial::FindTopic(tutorial::kBasicsTopic);
                        }
+                       // The topic running let go of first, as Done, keep the
+                       // folder would, and what it ended as kept for it
+                       // (section 13.3).
+                       if (tutorialCard_.Runner().On()) {
+                           tutorialCard_.Leave();
+                           KeepTutorialProgress();
+                       }
                        if (const FolderId folder = MakeTutorialFolder(*topic); folder != 0) {
                            tutorialCard_.Start(*topic, folder);
                        }
                    },
                    [&](const action::ResumeTutorial&) {
-                       if (const FolderId folder = GoToTutorialFolder(settings_.Get(setting::kTutorialFolder));
+                       const std::string& current = settings_.Get(setting::kTutorialCurrent);
+                       const tutorial::Topic* topic = tutorial::FindTopic(current);
+                       const auto& progress = settings_.Get(setting::kTutorialProgress);
+                       const auto at = progress.find(current);
+                       if (topic == nullptr || at == progress.end()) {
+                           return;
+                       }
+                       if (const FolderId folder =
+                               GoToTutorialFolder(*topic, settings_.Get(setting::kTutorialFolder));
                            folder != 0) {
-                           tutorialCard_.Resume(tutorialCard_.CurrentTopic(), settings_.Get(setting::kTutorialWelcome),
-                                                folder);
+                           tutorialCard_.Resume(*topic, at->second, folder);
                        }
                    },
                    [&](const action::BackToTutorial&) {
                        const FolderId folder = tutorialCard_.Runner().Folder();
-                       if (const FolderId now = GoToTutorialFolder(folder); now != 0 && now != folder) {
+                       if (const FolderId now = GoToTutorialFolder(tutorialCard_.CurrentTopic(), folder);
+                           now != 0 && now != folder) {
                            tutorialCard_.MoveTo(now);
                        }
                    },
@@ -747,7 +759,7 @@ FolderId OverlayApp::MakeTutorialFolder(const tutorial::Topic& topic) {
     return folder;
 }
 
-FolderId OverlayApp::GoToTutorialFolder(FolderId folder) {
+FolderId OverlayApp::GoToTutorialFolder(const tutorial::Topic& topic, FolderId folder) {
     for (const Canvas& canvas : Manager().Canvases()) {
         if (folder != 0 && canvas.folderId == folder && !Manager().IsDeleted(canvas)) {
             editor_.SwitchCanvas(canvas.id);
@@ -755,18 +767,30 @@ FolderId OverlayApp::GoToTutorialFolder(FolderId folder) {
         }
     }
     // Gone - deleted, or never in this library - and a new one to go on in.
-    return MakeTutorialFolder(tutorialCard_.CurrentTopic());
+    return MakeTutorialFolder(topic);
 }
 
 void OverlayApp::KeepTutorialProgress() {
     // Where the runner is once it has moved on for the frame - by itself in
     // Prepare, or at a button just done. Only a change is set: a Set is a
-    // commit, which the tray writes to the file. A runner that has never
-    // run says nothing, and leaves "offered" as it is.
+    // commit, which the tray writes to the file. Until a topic has run,
+    // nothing is: the topic kept as running is a resume's, still to come.
+    if (!tutorialCard_.HasRun()) {
+        return;
+    }
     const tutorial::Tutorial& runner = tutorialCard_.Runner();
-    if (std::string progress = runner.Progress();
-        !progress.empty() && progress != settings_.Get(setting::kTutorialWelcome)) {
-        settings_.Set(setting::kTutorialWelcome, std::move(progress));
+    const std::string topic(tutorialCard_.CurrentTopic().id);
+    // Nothing to say for a topic let go of partway: its step stays kept.
+    if (std::string progress = runner.Progress(); !progress.empty()) {
+        std::map<std::string, std::string> kept = settings_.Get(setting::kTutorialProgress);
+        if (std::string& entry = kept[topic]; entry != progress) {
+            entry = std::move(progress);
+            settings_.Set(setting::kTutorialProgress, std::move(kept));
+        }
+    }
+    if (std::string current = runner.On() ? topic : std::string();
+        current != settings_.Get(setting::kTutorialCurrent)) {
+        settings_.Set(setting::kTutorialCurrent, std::move(current));
     }
     if (runner.On() && runner.Folder() != settings_.Get(setting::kTutorialFolder)) {
         settings_.Set(setting::kTutorialFolder, runner.Folder());

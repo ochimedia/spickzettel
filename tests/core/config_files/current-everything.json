@@ -135,7 +135,11 @@
     "cheatSheet": "F1"
   },
   "tutorial": {
-    "welcome": "move",
+    "progress": {
+      "basics": "finished",
+      "drawing": "draw"
+    },
+    "current": "drawing",
     "folder": "18446744073709551557"
   },
   "diagnostics": {

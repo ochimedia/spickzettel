@@ -273,11 +273,12 @@ combination, one action within a target. Default: `DefaultShortcuts()`.
 Edited from Settings > Hotkeys, lower box. Effect: Use.
 
 **`tutorial`**: Global. Edited from the tutorial as it goes
-(`docs/TUTORIAL.md`, section 7.6). Effect: Use.
+(`docs/TUTORIAL.md`, section 13.7). Effect: Use.
 
 | Key | Field | Default | Rule |
 |---|---|---|---|
-| `welcome` | `tutorialWelcome` | empty (never shown) | text: `"offered"`, a step id, `"finished"` or `"skipped"` |
+| `progress` | `tutorialProgress` | `{}` | an object of texts by topic id: a step id, `"finished"` or `"skipped"`; an entry not a string reads as not there |
+| `current` | `tutorialCurrent` | empty (none) | text: the topic running |
 | `folder` | `tutorialFolder` | `"0"` (none) | a library id, as a string of digits: a double holds no 64-bit id; anything else reads as nothing said |
 
 **`diagnostics`**: Global. Rule: bool. Edited from Settings > Debug.

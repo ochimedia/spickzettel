@@ -97,7 +97,7 @@ void TutorialCard::Resume(const tutorial::Topic& topic, std::string_view id, cor
     runner_ = tutorial::Tutorial(topic.chain());
     runner_.Resume(id, folder);
     moved_ = false;
-    offering_ = false;
+    hasRun_ = true;
 }
 
 void TutorialCard::Press(TutorialButton button) {
@@ -114,9 +114,6 @@ void TutorialCard::Press(TutorialButton button) {
         case TutorialButton::Done:
         case TutorialButton::DoneKeep:
             runner_.Done();
-            return;
-        case TutorialButton::NoThanks:
-            offering_ = false;
             return;
     }
 }
@@ -192,7 +189,7 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
 // ================= The card =================
 
 void TutorialCard::Draw(float displayW, float displayH) {
-    if (!runner_.On() && !offering_) {
+    if (!runner_.On()) {
         return;
     }
     const float width = Px(kCardWidth);
@@ -217,9 +214,7 @@ void TutorialCard::Draw(float displayW, float displayH) {
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing |
                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
-    if (!runner_.On()) {
-        DrawOffer();
-    } else if (runner_.GetState() == tutorial::Tutorial::State::Skipped) {
+    if (runner_.GetState() == tutorial::Tutorial::State::Skipped) {
         DrawSkipped();
     } else {
         DrawStep();
@@ -366,19 +361,6 @@ void TutorialCard::DoneKeepButton() {
     // (question 9), so it is the quieter of the two.
     if (QuietButton(Labeled(strings::kTutorialCardDoneKeep, "tutorial_donekeep"))) {
         host_.Act(action::TutorialPress{TutorialButton::DoneKeep});
-    }
-}
-
-void TutorialCard::DrawOffer() {
-    Wrapped(theme::kWhite, strings::kTutorialOfferText);
-    ImGui::Spacing();
-    ImGui::Separator();
-    if (AccentButton(Labeled(strings::kTutorialOfferStart, "tutorial_start"))) {
-        host_.Act(action::StartTutorial{});
-    }
-    ImGui::SameLine();
-    if (QuietButton(Labeled(strings::kTutorialOfferNoThanks, "tutorial_nothanks"))) {
-        host_.Act(action::TutorialPress{TutorialButton::NoThanks});
     }
 }
 
