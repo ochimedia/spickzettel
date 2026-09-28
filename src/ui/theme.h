@@ -49,6 +49,13 @@ void SetAccent(uint32_t rgba);
 
 inline constexpr ImVec4 kDanger(0.898f, 0.282f, 0.302f, 1.00f);  // #e5484d
 
+// The tutorial's own highlight: the spotlight ring, and what the card marks
+// out - a hint, a warning's title, the check, the progress. Not the accent:
+// the ring has to stand out from the selection frame, which is the accent,
+// and the accent is a setting that can be dark. Bright, so it reads on the
+// card and on whatever the desktop shows.
+inline constexpr ImVec4 kTutorialHighlight(0.290f, 0.835f, 1.000f, 1.00f);  // #4ad5ff
+
 // var(--panel-bg): graphite-900 at 86% - the frosted-material panels
 // (item chrome, popovers, the Overview panel). ImGui has no
 // backdrop-filter/blur equivalent, so translucency plus a subtle border

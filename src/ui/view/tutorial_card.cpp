@@ -74,7 +74,7 @@ void CheckMark() {
     const ImVec2 points[] = {ImVec2(at.x + size * 0.15f, at.y + size * 0.55f),
                              ImVec2(at.x + size * 0.40f, at.y + size * 0.80f),
                              ImVec2(at.x + size * 0.85f, at.y + size * 0.20f)};
-    drawList->AddPolyline(points, 3, ImGui::GetColorU32(theme::Accent()), ImDrawFlags_None, Px(2.0f));
+    drawList->AddPolyline(points, 3, ImGui::GetColorU32(theme::kTutorialHighlight), ImDrawFlags_None, Px(2.0f));
 }
 
 }  // namespace
@@ -244,7 +244,7 @@ void TutorialCard::DrawStep() {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         drawList->AddRectFilled(at, ImVec2(at.x + w, at.y + h), ImGui::GetColorU32(theme::kFieldBg), h);
         const float done = w * static_cast<float>(index + 1) / static_cast<float>(count);
-        drawList->AddRectFilled(at, ImVec2(at.x + done, at.y + h), ImGui::GetColorU32(theme::Accent()), h);
+        drawList->AddRectFilled(at, ImVec2(at.x + done, at.y + h), ImGui::GetColorU32(theme::kTutorialHighlight), h);
     }
     ImGui::Spacing();
 
@@ -312,7 +312,7 @@ std::optional<ViewAction> TutorialCard::HintAction() const {
 }
 
 void TutorialCard::DrawHint(const tutorial::Hint& hint) {
-    Wrapped(theme::Accent(), tutorial::Expand(hint.text, world_, hint.canvas));
+    Wrapped(theme::kTutorialHighlight, tutorial::Expand(hint.text, world_, hint.canvas));
     const char* label = nullptr;
     switch (hint.button) {
         case tutorial::HintButton::None:
@@ -342,7 +342,7 @@ void TutorialCard::DrawSkipped() {
         Wrapped(theme::kGraphite100, strings::kTutorialSkippedText);
         for (const tutorial::Step* warning : warnings) {
             ImGui::Spacing();
-            Wrapped(theme::Accent(), warning->title);
+            Wrapped(theme::kTutorialHighlight, warning->title);
             Wrapped(theme::kGraphite100, tutorial::Expand(warning->text(world_), world_));
         }
     }
@@ -397,14 +397,19 @@ void TutorialCard::DrawSpotlight() {
     if (!spot.has_value()) {
         return;
     }
-    // A slow pulse, about two seconds a beat, that never fades out.
+    // A slow pulse, about two seconds a beat, that never fades out: a solid
+    // ring, clear of the selection frame, in a soft glow of the same color.
     const float pulse = 0.5f + 0.5f * static_cast<float>(std::sin(ImGui::GetTime() * 3.0));
-    ImVec4 color = theme::Accent();
-    color.w = 0.55f + 0.45f * pulse;
-    const float pad = Px(6.0f);
-    ImGui::GetForegroundDrawList()->AddRect(ImVec2(spot->min.x - pad, spot->min.y - pad),
-                                            ImVec2(spot->max.x + pad, spot->max.y + pad),
-                                            ImGui::GetColorU32(color), Px(8.0f), ImDrawFlags_None, Px(3.0f));
+    ImVec4 ring = theme::kTutorialHighlight;
+    ring.w = 0.65f + 0.35f * pulse;
+    ImVec4 glow = theme::kTutorialHighlight;
+    glow.w = 0.10f + 0.12f * pulse;
+    const float pad = Px(8.0f);
+    const ImVec2 min(spot->min.x - pad, spot->min.y - pad);
+    const ImVec2 max(spot->max.x + pad, spot->max.y + pad);
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+    drawList->AddRect(min, max, ImGui::GetColorU32(glow), Px(10.0f), ImDrawFlags_None, Px(12.0f));
+    drawList->AddRect(min, max, ImGui::GetColorU32(ring), Px(10.0f), ImDrawFlags_None, Px(5.0f));
 }
 
 }  // namespace sz::ui
