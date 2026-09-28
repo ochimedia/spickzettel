@@ -4,7 +4,7 @@ Status: **agreed** (2026-09-28), for 0.2.0, and to be built in the
 phases of section 10. It was proposed on 2026-09-27. Its questions and
 their answers are in section 12, and the design below was changed to
 match them. Phases 1 to 3 are built. **Topics** (section 13), several
-chains chosen from a list, are proposed as an addition to build before
+chains chosen from a list, were agreed after them, and come next as
 phase 4.
 
 It fits into the designs that are built: `docs/INTERACTIONS.md` for
@@ -94,7 +94,7 @@ These are sequences, and a sequence is learned by doing it once.
 - **Chain**: an ordered list of steps. The first is the *welcome chain*.
   More may follow (section 8).
 - **Topic**: a chain the user picks from the tutorial's list, such as
-  Basics or Drawing (section 13, proposed). The welcome chain is split
+  Basics or Drawing (section 13). The welcome chain is split
   into the first two.
 - **Step**: what one card shows. There are two kinds:
   - a *read step* is done when Next is pressed;
@@ -217,7 +217,7 @@ user.
 
 ## 4. The welcome chain
 
-*Section 13 (proposed) splits this chain: steps 4 to 6 become the
+*Section 13 splits this chain: steps 4 to 6 become the
 Drawing topic, and the rest is Basics.*
 
 It runs in the tutorial folder (section 6.5), and "the tutorial's
@@ -685,7 +685,7 @@ across steps and each carries a text and a button.
 
 ### 7.6 Start, resume and start again
 
-*Section 13 (proposed) changes this section:*
+*Section 13 changes this section:*
 
 - *the progress is kept per topic (13.7);*
 - *an install from before 0.2.0 starts Basics, with no offer (13.4);*
@@ -829,7 +829,7 @@ gesture.
 
 ## 10. Getting there
 
-*With section 13 (proposed), a phase for topics comes before phase 4,
+*With section 13, a phase for topics comes before phase 4,
 which becomes phase 5 (13.10).*
 
 Each phase is a set of reviewable commits, and the app is whole after
@@ -969,24 +969,32 @@ Asked with the topics (section 13), after phase 3 was built:
     is missing. The alternatives are:
     - starting it over;
     - going back to its old folder, which needs a folder kept per topic.
+
+    *Answer (2026-09-28):* it starts over, at its first step. A step in
+    the middle may rest on what earlier steps made, and in a new folder
+    none of it is there. Only the topic running when the app quit goes
+    on at its step, at the next start (decision 1 of question 10).
 13. **Another topic chosen while one runs.** Recommended: the running
     one ends as "Done, keep the folder" would, with its progress kept at
     its step. The alternative is asking first, which adds a box for
     something the user can undo by choosing the first topic again.
+    *Answer:* as recommended.
 14. **The folder's name.** Recommended: "Tutorial: {topic}", such as
     "Tutorial: Drawing". The alternative is "Tutorial" for every topic,
-    which leaves several folders of one name in the Overview.
+    which leaves several folders of one name in the Overview. *Answer:*
+    as recommended.
 15. **How much of Drawing in the first build.** Recommended: the three
     steps that exist, so topics can ship without new steps to design.
     The pen, eraser, color, width and text steps are the next piece of
     work. The alternative is designing and building them now, in phase
-    4.
+    4. *Answer:* as recommended. A drawing topic in more depth is
+    designed later.
 
 ## 13. Topics
 
-Status: **proposed** (2026-09-28), after phases 1 to 3 were built.
-Question 10 answered its four decisions, and question 11 answered how
-installs from before 0.2.0 start. Questions 12 to 15 are still open.
+Status: **agreed** (2026-09-28), after phases 1 to 3 were built, and
+to be built as phase 4 (13.10). Its questions are 10 to 15 of section
+12, and this section matches their answers.
 
 It changes sections 3, 4, 7.6, 9 and 10 where they meet it. Each of
 them says so. They are brought in line with it when it is built.
@@ -1061,27 +1069,38 @@ per topic, with:
 
 - the title, and one line on what the topic covers;
 - how many steps it has;
-- where the user is with it: *New*, *At step 4 of 10*, or *Done*.
+- where the user is with it:
+  - *New*: never started;
+  - *At step 4 of 10*: the topic running now;
+  - *Started*: left partway, or skipped;
+  - *Done*: finished at least once.
 
-**Pressing a row** starts that topic:
-
-- **New, done or skipped:** at its first step. A done topic taken again
-  is the refresher.
-- **Partway:** at the step it was on, in a new folder. The steps' needs
-  say what the new folder lacks, and Put one here supplies it (question
-  12).
+**Pressing a row** starts that topic at its first step, in a new folder,
+whatever its status (question 12). A done topic taken again is the
+refresher.
 
 **While a topic runs,** the list marks it as the current one:
 
 - Pressing it goes back to its step.
 - Pressing another topic ends the running one the way "Done, keep the
-  folder" does. Its progress stays at its step, and its folder stays
-  (question 13).
+  folder" does, and starts the other (question 13):
+  - on its end card, the running topic counts as finished;
+  - on its skip card, it counts as skipped;
+  - on any other step, its progress stays at that step, which the list
+    shows as *Started*.
+
+  Its folder stays either way.
 
 Only one topic runs at a time.
 
-The list has a Close button, which takes the card away. Opening the
-list keeps nothing.
+**Leaving the list.** Its bottom button depends on whether a topic
+runs:
+
+- **Back**, while one does. It goes back to that topic's step, so
+  opening the list from an end card costs nothing.
+- **Close**, while none does. It takes the card away.
+
+Opening the list keeps nothing.
 
 ### 13.4 Where the list shows, and where a topic starts
 
@@ -1093,7 +1112,9 @@ list keeps nothing.
   `tutorial.progress`. The offer card of section 7.6 goes: a user from
   before is treated as a new one.
 - **Every topic's end card, and the skip card,** gain a "More topics"
-  button that opens the list. That is how Basics leads on.
+  button that opens the list. The topic stays where it is until another
+  is chosen, so Back on the list returns to the card it came from. That
+  is how Basics leads on.
 - **Settings > Interaction:** "Take the tutorial again" becomes "Open
   the tutorial". It closes the Overview and opens the list.
 
@@ -1148,8 +1169,10 @@ it goes, as it wrote `tutorial.welcome`.
 
 - **`ui/tutorial/topics.{h,cpp}`** holds the table, `struct Topic {
   id, title, gist, chain }`, and `Topics()`. `welcome_chain.{h,cpp}`
-  becomes the Basics chain, and the Drawing chain is a file beside it.
-  Each later topic is a chain file and a row in the table.
+  becomes `chains.{h,cpp}`, holding the Basics and Drawing chains. The
+  two share their goals, needs and near misses, which are functions in
+  that file. A later topic whose steps share nothing with these can
+  have a file of its own.
 - **The runner** is unchanged. The card makes one for the chosen
   topic's chain, and holds which topic it is.
 - **The card** gains the list state and loses the offer. The Offer
