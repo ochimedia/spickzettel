@@ -137,6 +137,7 @@ bool TrayController::Initialize() {
     overlayApp_.SetHotkeyChangeCallback([this](HotkeySlot slot, platform::KeyCombo combo) {
         return ChangeHotkey(slot, combo);
     });
+    overlayApp_.SetHotkeyRegisteredQuery([this](HotkeySlot slot) { return HotkeyId(slot) != 0; });
     // The two requests that arrive in a frame, carried out after it: a
     // transition changes what the frame is part of (docs/OVERLAY_STATES.md,
     // section 8).
@@ -209,7 +210,8 @@ void TrayController::QuickCaptureAndShow() {
     if (!PrepareWindow()) {
         return;
     }
-    overlayApp_.QuickCapture(static_cast<float>(overlayDisplay_.width), static_cast<float>(overlayDisplay_.height));
+    overlayApp_.QuickCapture(static_cast<float>(overlayDisplay_.width), static_cast<float>(overlayDisplay_.height),
+                             HotkeySlot::QuickCapture);
     // So the user actually notices the capture happened - always lands in
     // edit mode (never puts it away, unlike the edit hotkey itself).
     Request(OverlayRequest::QuickCapture);
@@ -230,7 +232,8 @@ void TrayController::SilentCapture() {
     const std::optional<CanvasId> stayOn = state_ == OverlayState::Pinned
                                                ? std::optional<CanvasId>(session_.Manager().CurrentCanvasId())
                                                : std::nullopt;
-    overlayApp_.QuickCapture(static_cast<float>(overlayDisplay_.width), static_cast<float>(overlayDisplay_.height));
+    overlayApp_.QuickCapture(static_cast<float>(overlayDisplay_.width), static_cast<float>(overlayDisplay_.height),
+                             HotkeySlot::SilentCapture);
     if (stayOn.has_value()) {
         session_.SwitchToCanvas(*stayOn);
     }

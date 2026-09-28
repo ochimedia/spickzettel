@@ -411,8 +411,8 @@ public:
     void SwitchCanvasByOffset(int delta);
     // A fullscreen screenshot onto a canvas made for it, at the end of the
     // folder the current canvas lives in, switched to - see
-    // OverlayApp::QuickCapture.
-    void QuickCapture(float displayW, float displayH);
+    // OverlayApp::QuickCapture. Whether the shot was made.
+    bool QuickCapture(float displayW, float displayH);
 
     // ===== Placing and changing the selection =====
 

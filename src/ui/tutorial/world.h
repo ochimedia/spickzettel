@@ -84,6 +84,9 @@ public:
     // OverlayApp::OnModeEntered).
     virtual uint64_t PinnedViews() const = 0;
     virtual uint64_t ViewModes() const = 0;
+    // How many screenshots a capture hotkey, the quick or the silent one,
+    // has taken since the app started (see OverlayApp::QuickCapture).
+    virtual uint64_t Captures(core::HotkeySlot by) const = 0;
     virtual Cover CanvasCover() const = 0;
 
     // The hand: the snippet in drawing mode, the selection, and the
@@ -112,7 +115,8 @@ public:
     virtual std::vector<SnippetFacts> SnippetsIn(core::FolderId folder) const = 0;
 
     // Words for the card: the key that runs `command`, as bound now -
-    // nothing when it is unbound - and the triggers that make snippets
+    // nothing when it is unbound, or is a global hotkey another program
+    // holds - and the triggers that make snippets
     // with a drag on empty canvas.
     virtual std::optional<std::string> KeyLabel(CommandId command) const = 0;
     virtual core::CreationTrigger ScreenshotTrigger() const = 0;

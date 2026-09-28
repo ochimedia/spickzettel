@@ -89,6 +89,26 @@ protected:
     }
 };
 
+class CapturingChainTest : public ChainTest {
+protected:
+    CapturingChainTest() : ChainTest(CapturingChain()) {}
+
+    const char* TextOf(std::string_view id) {
+        for (const Step& step : CapturingChain()) {
+            if (step.id == id) {
+                return step.text(world_);
+            }
+        }
+        return "";
+    }
+    // A snippet made on the current canvas, full screen.
+    void MakeFullscreen(core::ItemId id, bool picture) {
+        SnippetFacts& made = world_.Make(id, picture);
+        made.rect = core::Rect{0.0f, 0.0f, 1920.0f, 1080.0f};
+        made.fullscreen = true;
+    }
+};
+
 TEST_F(BasicsChainTest, CanBeWalkedTheWayAUserWould) {
     Frame();
     EXPECT_EQ(Id(), "welcome");
@@ -238,6 +258,192 @@ TEST_F(PinningChainTest, CanBeWalkedTheWayAUserWould) {
     ASSERT_EQ(Id(), "end");
     tutorial_.Next();
     EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
+}
+
+TEST_F(CapturingChainTest, CanBeWalkedTheWayAUserWould) {
+    Frame();
+    ASSERT_EQ(Id(), "newDrawing");
+    EXPECT_FALSE(NeedShown().has_value()) << "an empty canvas is all it needs";
+    EXPECT_TRUE(tutorial_.NextEnabled()) << "no step waits";
+    world_.Make(1, /*picture=*/false);
+    world_.drawing = 1;  // a drawing comes ready to draw on
+    world_.hand = core::Tool::Draw;
+    Settle();
+
+    ASSERT_EQ(Id(), "fullscreen");
+    EXPECT_FALSE(NeedShown().has_value()) << "a double-click leaves drawing mode";
+    world_.drawing.reset();
+    MakeFullscreen(2, /*picture=*/true);
+    Settle();
+
+    // Each capture on a canvas of its own, in the tutorial's folder.
+    ASSERT_EQ(Id(), "quickCapture");
+    world_.current = FakeWorld::kSecondCanvas;
+    world_.Make(3);
+    world_.quickCaptures += 1;
+    world_.showings += 1;
+    Settle();
+
+    ASSERT_EQ(Id(), "silentCapture");
+    world_.silentCaptures += 1;
+    world_.showings += 1;
+    Settle();
+
+    ASSERT_EQ(Id(), "end");
+    tutorial_.Next();
+    EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
+}
+
+TEST_F(CapturingChainTest, TheDrawingStepSaysWhenAScreenshotWasMade) {
+    At("newDrawing");
+    world_.Make(1);
+    Frame();
+    EXPECT_EQ(Id(), "newDrawing");
+    EXPECT_STREQ(HintText(), strings::kTutorialNewDrawingMissScreenshot);
+    world_.Make(2, /*picture=*/false);
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// Full screen, of either kind, it covers the canvas: the line says to
+// delete it first, and a drawing of the whole screen is not the step's.
+TEST_F(CapturingChainTest, TheDrawingStepSaysToDeleteOneMadeFullScreen) {
+    At("newDrawing");
+    MakeFullscreen(1, /*picture=*/false);
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), strings::kTutorialNewDrawingMissFullscreen);
+    world_.At(1).deleted = true;
+    Frame();
+    EXPECT_STREQ(HintText(), "");
+    MakeFullscreen(2, /*picture=*/true);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialNewDrawingMissFullscreen);
+}
+
+TEST_F(CapturingChainTest, TheDrawingStepNeedsDrawingModeOffAndTheTutorialsFolder) {
+    world_.Make(1, /*picture=*/false);
+    world_.drawing = 1;
+    At("newDrawing");
+    EXPECT_EQ(NeedShown(), Need::NoDrawingMode);
+    world_.drawing.reset();
+    world_.current = FakeWorld::kOtherCanvas;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::InTutorialFolder);
+}
+
+TEST_F(CapturingChainTest, TheFullScreenStepSaysWhenABoxOrADrawingWasMade) {
+    At("fullscreen");
+    world_.Make(1);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialFullscreenMissBox);
+    world_.At(1).deleted = true;
+    world_.Make(2, /*picture=*/false);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialFullscreenMissDrawing);
+    world_.At(2).deleted = true;
+    MakeFullscreen(3, /*picture=*/true);
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// A drawing of the whole screen covers the canvas, in drawing mode, where
+// Delete does nothing: out of that first, then deleted.
+TEST_F(CapturingChainTest, TheFullScreenStepTakesAFullScreenDrawingAwayInTwoLines) {
+    At("fullscreen");
+    MakeFullscreen(1, /*picture=*/false);
+    world_.drawing = 1;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), strings::kTutorialFullscreenMissDrawingMode);
+    world_.drawing.reset();
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialFullscreenMissDelete);
+    world_.At(1).deleted = true;
+    Frame();
+    EXPECT_STREQ(HintText(), "");
+}
+
+TEST_F(CapturingChainTest, TheFullScreenStepTakesTheScreenshotToolButNoOther) {
+    world_.tool = core::ItemCreationKind::Drawing;
+    At("fullscreen");
+    EXPECT_EQ(NeedShown(), Need::NoOtherTool);
+    world_.tool = core::ItemCreationKind::Screenshot;
+    Frame();
+    EXPECT_FALSE(NeedShown().has_value());
+}
+
+// A snippet made before the step began is not the step's.
+TEST_F(CapturingChainTest, OnlyWhatIsMadeDuringTheStepCounts) {
+    MakeFullscreen(1, /*picture=*/true);
+    At("fullscreen");
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), "");
+}
+
+// Each hotkey step counts its own hotkey's captures, and says when the
+// other one was pressed - while its own has a key to name.
+TEST_F(CapturingChainTest, TheCaptureStepsCountTheirOwnHotkey) {
+    world_.quickCaptures = 3;
+    world_.silentCaptures = 2;
+    At("quickCapture");
+    world_.silentCaptures += 1;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), strings::kTutorialQuickCaptureMissSilent);
+    world_.quickCaptures += 1;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+    Settle();
+
+    ASSERT_EQ(Id(), "silentCapture");
+    world_.quickCaptures += 1;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), strings::kTutorialSilentCaptureMissQuick);
+    world_.keys.erase(CommandId::SilentCapture);
+    Frame();
+    EXPECT_STREQ(HintText(), "") << "no key to name";
+    world_.silentCaptures += 1;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(CapturingChainTest, TheCaptureStepsNeedTheTutorialsFolder) {
+    world_.current = FakeWorld::kOtherCanvas;
+    At("quickCapture");
+    EXPECT_EQ(NeedShown(), Need::InTutorialFolder);
+    world_.current = FakeWorld::kSecondCanvas;
+    Frame();
+    EXPECT_FALSE(NeedShown().has_value()) << "any canvas of the folder";
+}
+
+TEST_F(CapturingChainTest, TheTextsFollowTheTriggersAndTheKeys) {
+    EXPECT_STREQ(TextOf("newDrawing"), strings::kTutorialNewDrawingTextTrigger);
+    world_.drawingTrigger = core::CreationTrigger::Plain;
+    EXPECT_STREQ(TextOf("newDrawing"), strings::kTutorialNewDrawingText);
+    world_.drawingTrigger = core::CreationTrigger::Off;
+    EXPECT_STREQ(TextOf("newDrawing"), strings::kTutorialNewDrawingTextTool);
+    world_.keys.erase(CommandId::NewDrawingTool);
+    EXPECT_STREQ(TextOf("newDrawing"), strings::kTutorialNewDrawingTextMenu);
+
+    EXPECT_STREQ(TextOf("fullscreen"), strings::kTutorialFullscreenText);
+    world_.screenshotTrigger = core::CreationTrigger::Alt;
+    EXPECT_STREQ(TextOf("fullscreen"), strings::kTutorialFullscreenTextTrigger);
+    world_.screenshotTrigger = core::CreationTrigger::Off;
+    EXPECT_STREQ(TextOf("fullscreen"), strings::kTutorialFullscreenTextTool);
+    world_.keys.erase(CommandId::NewScreenshotTool);
+    EXPECT_STREQ(TextOf("fullscreen"), strings::kTutorialFullscreenTextMenu);
+
+    EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureText);
+    EXPECT_STREQ(TextOf("silentCapture"), strings::kTutorialSilentCaptureText);
+    world_.keys.erase(CommandId::ToggleEditMode);
+    EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureTextTray);
+    EXPECT_STREQ(TextOf("silentCapture"), strings::kTutorialSilentCaptureTextTray);
+    world_.keys.erase(CommandId::QuickCapture);
+    world_.keys.erase(CommandId::SilentCapture);
+    EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureTextNoKey);
+    EXPECT_STREQ(TextOf("silentCapture"), strings::kTutorialSilentCaptureTextNoKey);
 }
 
 // The bar pins the whole selection: any of the tutorial's pinned will do.
@@ -764,6 +970,11 @@ TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
         strings::kTutorialAwayTextTray,         strings::kTutorialEndTextNoCheatSheetKey,
         strings::kTutorialNeedSubjectPinned,    strings::kTutorialPinnedAwayTextTray,
         strings::kTutorialViewModeTextTray,     strings::kTutorialViewModeTextNoKey,
+        strings::kTutorialNewDrawingText,       strings::kTutorialNewDrawingTextTool,
+        strings::kTutorialNewDrawingTextMenu,   strings::kTutorialFullscreenText,
+        strings::kTutorialFullscreenTextTool,   strings::kTutorialFullscreenTextMenu,
+        strings::kTutorialQuickCaptureTextTray, strings::kTutorialQuickCaptureTextNoKey,
+        strings::kTutorialSilentCaptureTextTray, strings::kTutorialSilentCaptureTextNoKey,
     };
     for (const Topic& topic : Topics()) {
         texts.push_back(topic.title);

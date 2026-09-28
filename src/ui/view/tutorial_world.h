@@ -3,10 +3,13 @@
 // The tutorial's world as the running app answers it - docs/TUTORIAL.md,
 // section 7.1: from the editor, the session and the settings, read as they
 // are whenever it is asked, and every answer a value. The one thing it
-// keeps is how many times the overlay has come up, and has entered the
-// pinned view and view mode, which nothing else counts.
+// keeps is how many times the overlay has come up, has entered the pinned
+// view and view mode, and each capture hotkey has taken a screenshot,
+// which nothing else counts.
 
+#include <array>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -29,10 +32,15 @@ public:
     void CountShowing() { ++showings_; }
     void CountPinnedView() { ++pinnedViews_; }
     void CountViewMode() { ++viewModes_; }
+    // A capture hotkey has taken a screenshot (see OverlayApp::QuickCapture).
+    void CountCapture(core::HotkeySlot by) { ++captures_[static_cast<size_t>(by)]; }
+    // See OverlayApp::SetHotkeyRegisteredQuery.
+    void SetHotkeyRegisteredQuery(std::function<bool(core::HotkeySlot)> query) { registered_ = std::move(query); }
 
     uint64_t Showings() const override { return showings_; }
     uint64_t PinnedViews() const override { return pinnedViews_; }
     uint64_t ViewModes() const override { return viewModes_; }
+    uint64_t Captures(core::HotkeySlot by) const override { return captures_[static_cast<size_t>(by)]; }
     tutorial::Cover CanvasCover() const override;
     std::optional<core::ItemId> DrawingItem() const override { return editor_.DrawingItem(); }
     std::vector<core::ItemId> Selection() const override { return editor_.Selection(); }
@@ -62,6 +70,8 @@ private:
     uint64_t showings_ = 0;
     uint64_t pinnedViews_ = 0;
     uint64_t viewModes_ = 0;
+    std::array<uint64_t, std::size(core::kAllHotkeySlots)> captures_{};
+    std::function<bool(core::HotkeySlot)> registered_;
 };
 
 }  // namespace sz::ui

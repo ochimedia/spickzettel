@@ -106,6 +106,9 @@ struct StartRecord {
     uint64_t showings = 0;
     uint64_t pinnedViews = 0;
     uint64_t viewModes = 0;
+    // The capture hotkeys' screenshots, the quick one's and the silent's.
+    uint64_t quickCaptures = 0;
+    uint64_t silentCaptures = 0;
     // What the pen drew with.
     uint32_t penColor = 0;
     float penWidth = 0.0f;

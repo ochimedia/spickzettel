@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "fakes/headless_app.h"
+#include "support/failing_writes.h"
 #include "generated/ui_strings.h"
 #include "support/view_stack.h"
 #include "ui/tutorial/topics.h"
@@ -23,6 +24,10 @@ protected:
         Drag(fromX, fromY, toX, toY);
         return Canvases().CurrentOrNull()->items.back().id;
     }
+
+    // A spot left empty by the steps that make snippets there, and clear
+    // of the card.
+    static constexpr ImVec2 kEmptySpot{900.0f, 450.0f};
 
     static ImVec2 Center(const AnchorRect& rect) {
         return ImVec2((rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f);
@@ -225,6 +230,22 @@ protected:
             ShowViewMode();
             StepFrame();
             ShowEditMode();  // back
+            StepFrame();
+        } else if (id == "newDrawing") {
+            MakeADrawing(300.0f, 360.0f, 600.0f, 560.0f);
+        } else if (id == "fullscreen") {
+            DoubleClick(kEmptySpot.x, kEmptySpot.y);
+        } else if (id == "quickCapture") {
+            ShowEditMode();  // away
+            StepFrame();
+            TriggerHotkey(config_.hotkeyQuickCapture);  // and back with it
+            StepFrame();
+        } else if (id == "silentCapture") {
+            ShowEditMode();  // away
+            StepFrame();
+            TriggerHotkey(config_.hotkeySilentCapture);
+            StepFrame();
+            ShowEditMode();  // and back to see it
             StepFrame();
         } else if (id == "end") {
             Press(TutorialButton::Done);
@@ -576,6 +597,52 @@ TEST_F(TutorialAppTest, TheWorldNamesKeysAsTheyAreBound) {
     EXPECT_EQ(world.DrawingTrigger(), config_.drawingTrigger);
 }
 
+// A hotkey another program holds does nothing when pressed, so no card
+// names it (docs/TUTORIAL.md, section 16.3) - until it is picked again and
+// registers.
+TEST_F(TutorialAppTest, TheWorldNamesNoHotkeyThatDidNotRegister) {
+    host_.registerHotkeySucceeds = false;
+    StartWith(DefaultConfig());
+    host_.registerHotkeySucceeds = true;
+    const tutorial::World& world = App().TutorialWorld();
+    EXPECT_FALSE(world.KeyLabel(CommandId::QuickCapture).has_value());
+    EXPECT_FALSE(world.KeyLabel(CommandId::ToggleEditMode).has_value());
+    EXPECT_EQ(world.KeyLabel(CommandId::Undo), std::optional<std::string>("Ctrl+Z")) << "not a hotkey";
+
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::QuickCapture);
+    controller_->Overlay().CompleteHotkeyCapture(config_.hotkeyQuickCapture);
+    EXPECT_EQ(world.KeyLabel(CommandId::QuickCapture),
+              std::optional<std::string>(FormatKeyComboLabel(config_.hotkeyQuickCapture)));
+}
+
+// Each capture hotkey's screenshots, pressed with the overlay away or up.
+TEST_F(TutorialAppTest, TheWorldCountsEachCaptureHotkeysScreenshots) {
+    const tutorial::World& world = App().TutorialWorld();
+    TriggerHotkey(config_.hotkeyQuickCapture);  // away: up with it
+    StepFrame();
+    EXPECT_EQ(world.Captures(HotkeySlot::QuickCapture), 1u);
+    EXPECT_EQ(world.Captures(HotkeySlot::SilentCapture), 0u);
+    TriggerHotkey(config_.hotkeySilentCapture);  // up
+    StepFrame();
+    EXPECT_EQ(world.Captures(HotkeySlot::SilentCapture), 1u);
+    ShowEditMode();  // away
+    StepFrame();
+    TriggerHotkey(config_.hotkeySilentCapture);
+    StepFrame();
+    EXPECT_EQ(world.Captures(HotkeySlot::SilentCapture), 2u);
+    EXPECT_EQ(world.Captures(HotkeySlot::QuickCapture), 1u);
+}
+
+// A capture whose canvas could not be written is not made, and not counted.
+TEST_F(TutorialAppTest, ACaptureNotWrittenIsNotCounted) {
+    const std::filesystem::path library = StartWithLibrary();
+    test::FailingWrites failing(library);
+    failing.FailAll();
+    TriggerHotkey(config_.hotkeyQuickCapture);
+    StepFrame();
+    EXPECT_EQ(App().TutorialWorld().Captures(HotkeySlot::QuickCapture), 0u);
+}
+
 TEST_F(TutorialAppTest, TheWorldCountsTheOverlayComingUp) {
     ShowEditMode();
     StepFrame();
@@ -903,6 +970,89 @@ TEST_F(TutorialAppTest, AnyTopicsSkipCardShowsTheWarningsUntilBasicsIsFinished) 
     StartTheTutorial("drawing");
     Press(TutorialButton::Skip);
     EXPECT_TRUE(App().TutorialSkipWarnings().empty()) << "read to the end of Basics already";
+}
+
+// A snippet made full screen by mistake covers the canvas, and a drag on
+// it does not frame: the near miss says to delete it first, and then the
+// drag the step asks for does it (question 31).
+TEST_F(TutorialAppTest, AFullScreenSnippetMadeByMistakeIsDeletedAsTheLinesSay) {
+    for (const auto& [topic, step] : {std::pair{"basics", "screenshot"}, std::pair{"capturing", "newDrawing"}}) {
+        SCOPED_TRACE(topic);
+        WalkTo(step, topic);
+        if (std::string_view(topic) == "basics") {
+            DoubleClick(kEmptySpot.x, kEmptySpot.y);
+        } else {
+            With(ImGuiMod_Ctrl, [&] { DoubleClick(kEmptySpot.x, kEmptySpot.y); });
+        }
+        StepFrames(3);
+        ASSERT_TRUE(Canvases().CurrentOrNull()->items.back().isFullscreen);
+        if (App().DrawingItem().has_value()) {
+            // A drawing comes in drawing mode, where Delete does nothing.
+            EXPECT_EQ(NeedUp(), tutorial::Need::NoDrawingMode);
+            PressKey(ImGuiKey_Escape);
+            StepFrames(3);
+        }
+        EXPECT_NE(tutorial::Expand(HintUp(), App().TutorialWorld()).find("Press Delete to delete it"), std::string::npos)
+            << HintUp();
+
+        PressKey(ImGuiKey_Delete);
+        StepFrames(3);
+        EXPECT_EQ(HintUp(), "");
+        DoStep(step);
+        EXPECT_NE(StepUp(), step) << HintUp();
+        ShowEditMode();  // put away, for the next topic's start
+        StepFrame();
+    }
+}
+
+// In the step for a screenshot of the whole screen, a drawing of it: Esc,
+// then Delete, as the lines say, and the double-click then does it.
+TEST_F(TutorialAppTest, AFullScreenDrawingInTheFullScreenStepGoesAsTheLinesSay) {
+    WalkTo("fullscreen", "capturing");
+    With(ImGuiMod_Ctrl, [&] { DoubleClick(kEmptySpot.x, kEmptySpot.y); });
+    StepFrames(3);
+    ASSERT_TRUE(App().DrawingItem().has_value());
+    EXPECT_EQ(HintUp(), std::string(strings::kTutorialFullscreenMissDrawingMode));
+    PressKey(ImGuiKey_Escape);
+    StepFrames(3);
+    EXPECT_EQ(HintUp(), std::string(strings::kTutorialFullscreenMissDelete));
+    PressKey(ImGuiKey_Delete);
+    StepFrames(3);
+    EXPECT_EQ(HintUp(), "");
+    DoStep("fullscreen");
+    EXPECT_EQ(StepUp(), "quickCapture") << HintUp();
+}
+
+// The quick capture pressed in the silent capture's step, and the other
+// way round: each says which it was, and the right one then does it.
+TEST_F(TutorialAppTest, TheCaptureStepsTellTheTwoHotkeysApart) {
+    WalkTo("quickCapture", "capturing");
+    TriggerHotkey(config_.hotkeySilentCapture);
+    StepFrames(3);
+    EXPECT_EQ(StepUp(), "quickCapture");
+    EXPECT_EQ(HintUp(), std::string(strings::kTutorialQuickCaptureMissSilent));
+    DoStep("quickCapture");
+    ASSERT_EQ(StepUp(), "silentCapture");
+
+    TriggerHotkey(config_.hotkeyQuickCapture);
+    StepFrames(3);
+    EXPECT_EQ(StepUp(), "silentCapture");
+    EXPECT_EQ(HintUp(), std::string(strings::kTutorialSilentCaptureMissQuick));
+    DoStep("silentCapture");
+    EXPECT_EQ(StepUp(), "end");
+}
+
+// Pressed with the overlay up, a capture hotkey does its step too: the
+// goal reads the capture, not where it was pressed (question 28).
+TEST_F(TutorialAppTest, ACaptureHotkeyPressedWithTheOverlayUpDoesItsStep) {
+    WalkTo("quickCapture", "capturing");
+    TriggerHotkey(config_.hotkeyQuickCapture);
+    Settle();
+    ASSERT_EQ(StepUp(), "silentCapture");
+    TriggerHotkey(config_.hotkeySilentCapture);
+    Settle();
+    EXPECT_EQ(StepUp(), "end");
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 
 // ===== Progress, kept (section 13.7) =====
@@ -1249,6 +1399,10 @@ enum class Way {
     ErasedRound,
     ErasedWithTheEraser,
     TypingLeftOpen,
+    FramedAScreenshot,
+    DrawingToolPicked,
+    SilentCaptured,
+    QuickCaptured,
 };
 
 const char* WayName(Way way) {
@@ -1276,6 +1430,10 @@ const char* WayName(Way way) {
         case Way::ErasedRound: return "ErasedRound";
         case Way::ErasedWithTheEraser: return "ErasedWithTheEraser";
         case Way::TypingLeftOpen: return "TypingLeftOpen";
+        case Way::FramedAScreenshot: return "FramedAScreenshot";
+        case Way::DrawingToolPicked: return "DrawingToolPicked";
+        case Way::SilentCaptured: return "SilentCaptured";
+        case Way::QuickCaptured: return "QuickCaptured";
     }
     return "?";
 }
@@ -1383,6 +1541,24 @@ std::vector<Derail> Matrix() {
         {"drawing", "eraseRect", ErasedRound, nothing},
         {"drawing", "eraseRight", ErasedWithTheEraser, nothing},
         {"drawing", "note", TypingLeftOpen, nothing},
+        {"capturing", "newDrawing", Overview, Need::CanvasUncovered},
+        {"capturing", "newDrawing", CheatSheet, Need::CanvasUncovered},
+        {"capturing", "newDrawing", OtherFolder, Need::InTutorialFolder},
+        {"capturing", "newDrawing", HiddenAndShown, nothing},
+        {"capturing", "newDrawing", FramedAScreenshot, nothing},
+        {"capturing", "fullscreen", Overview, Need::CanvasUncovered},
+        {"capturing", "fullscreen", CheatSheet, Need::CanvasUncovered},
+        {"capturing", "fullscreen", OtherFolder, Need::InTutorialFolder},
+        {"capturing", "fullscreen", HiddenAndShown, nothing},
+        {"capturing", "fullscreen", FramedAScreenshot, nothing},
+        {"capturing", "fullscreen", DrawingToolPicked, Need::NoOtherTool},
+        {"capturing", "quickCapture", OtherFolder, Need::InTutorialFolder},
+        {"capturing", "quickCapture", Overview, nothing},
+        {"capturing", "quickCapture", HiddenAndShown, nothing},
+        {"capturing", "quickCapture", SilentCaptured, nothing},
+        {"capturing", "silentCapture", OtherFolder, Need::InTutorialFolder},
+        {"capturing", "silentCapture", Overview, nothing},
+        {"capturing", "silentCapture", QuickCaptured, nothing},
     };
     cases.insert(cases.end(), more.begin(), more.end());
     // Drawing's steps after the stroke: each needs drawing mode on its
@@ -1508,6 +1684,19 @@ protected:
                 Drag(middle.x - 50.0f, middle.y - 80.0f, middle.x - 30.0f, middle.y + 80.0f);
                 break;
             }
+            case Way::FramedAScreenshot:
+                // Away from where the steps make theirs.
+                Drag(850.0f, 520.0f, 1050.0f, 650.0f);
+                break;
+            case Way::DrawingToolPicked:
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::NewDrawingTool}));
+                break;
+            case Way::SilentCaptured:
+                TriggerHotkey(config_.hotkeySilentCapture);
+                break;
+            case Way::QuickCaptured:
+                TriggerHotkey(config_.hotkeyQuickCapture);
+                break;
             case Way::TypingLeftOpen:
                 PressBar(ChromeButton::Text);
                 RawClick(SubjectMiddle().x, SubjectMiddle().y);

@@ -101,6 +101,12 @@ std::vector<tutorial::SnippetFacts> AppWorld::SnippetsIn(core::FolderId folder) 
 }
 
 std::optional<std::string> AppWorld::KeyLabel(CommandId command) const {
+    // A global hotkey another program holds does nothing when pressed, so
+    // a card has no key to name (docs/TUTORIAL.md, section 16.3).
+    if (const std::optional<core::HotkeySlot> slot = InfoFor(command).hotkey;
+        slot.has_value() && registered_ && !registered_(*slot)) {
+        return std::nullopt;
+    }
     // The first of its keys, as the cheat sheet names it.
     const std::vector<platform::KeyCombo> keys = KeysFor(command, settings_.Stored(), settings_.Live().shortcuts);
     return keys.empty() ? std::nullopt : std::optional<std::string>(FormatKeyComboLabel(keys.front()));

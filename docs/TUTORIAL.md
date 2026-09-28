@@ -243,7 +243,7 @@ column, "waits" marks a gated step (section 3).
 | # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
 |---|---|---|---|---|---|---|---|---|
 | 0 | `welcome` | read | moves on | Spickzettel keeps snippets (screenshots, drawings and notes) over whatever program is underneath, and everything saves itself. This tutorial runs in a folder of its own. | - | - | Next | - |
-| 1 | `screenshot` | do | **waits** | Drag a box over anything on screen to take a screenshot of it. With a trigger key set: "Hold {trigger} and drag". With the trigger off: "Press {newScreenshot}, then drag", or with that key unbound too, the empty canvas's menu. | - | in the tutorial folder; canvas uncovered; no drawing mode; no tool in hand but the screenshot tool | a screenshot snippet made since the step began, on the current canvas, not fullscreen | a fullscreen one: "That took the whole screen; a double-click does that. Drag a box instead." A drawing: "That made a drawing; {drawingTrigger}+drag does that." |
+| 1 | `screenshot` | do | **waits** | Drag a box over anything on screen to take a screenshot of it. With a trigger key set: "Hold {trigger} and drag". With the trigger off: "Press {newScreenshot}, then drag", or with that key unbound too, the empty canvas's menu. | - | in the tutorial folder; canvas uncovered; no drawing mode; no tool in hand but the screenshot tool | a screenshot snippet made since the step began, on the current canvas, not fullscreen | a fullscreen one: "That took the whole screen - a double-click does that. Press {key:deleteSelection} to delete it, and drag a box instead." (question 31) A drawing: "That made a drawing; {drawingTrigger}+drag does that." |
 | 2 | `move` | do | moves on | Drag it to move it. A press selects it, and a drag takes it along. | the subject | a subject that can move; no drawing mode | the subject moved 16 px or more from where the step found it, its size changed by less than 10%, and not fullscreen | resized instead: "That changed its size. Drag from the middle to move it." |
 | 3 | `resize` | do | moves on | Drag a corner to resize it; Shift switches keeping its shape. A right-drag near an edge does it too. | the subject's lower right handle | a subject that can move; no drawing mode; the subject selected | its width or height changed by 10% or more, and not fullscreen | - |
 | 4 | `delete` | do | **waits** | Select it and press Delete, or the close button on its bar. | the subject's close button | a subject; no drawing mode | the subject deleted | - |
@@ -583,7 +583,8 @@ the settings and the anchors, and a test fakes it. It answers:
 
 - **The overlay:** its mode; how many times it has come up (counted in
   `OverlayApp::OnOverlayShown`), and how many times the pinned view and
-  view mode have (14.3).
+  view mode have (14.3); how many screenshots each capture hotkey has
+  taken (16.3).
 - **What covers the canvas:** the panel or popup that is up, if any,
   but a snippet's own popups, the color chooser and Properties (15.3).
 - **The hand:** the selection; the snippet in drawing mode; the tool in
@@ -604,7 +605,8 @@ the settings and the anchors, and a test fakes it. It answers:
 - **Anchors:** where an anchor is this frame, if it is on screen (7.2).
 - **Words:** the label of the keys that run a command, or of a hotkey,
   as bound now (`KeysFor`, `FormatKeyComboLabel`, as the cheat sheet
-  uses them); the triggers as set.
+  uses them), and none for a hotkey another program holds (16.3); the
+  triggers as set.
 - **The tutorial's own progress:** what is kept for a topic (7.6), for
   the list and the skip card's warnings.
 
@@ -1095,7 +1097,7 @@ The new parts are:
 | `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the two warnings; putting the overlay away and back | built: section 4's steps, but three |
 | `pinning` | Pinning and view mode | pinning a snippet, and the pinned view; making it see-through with the wheel or Properties; view mode; unpinning | built: section 14 |
 | `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; a line and a rectangle; the eraser, its rectangle and the right button; a note | built: section 15 |
-| `capturing` | Capturing | a blank drawing; a full-screen screenshot; the quick and silent capture hotkeys, which work while the overlay is away | designed: section 16 |
+| `capturing` | Capturing | a blank drawing; a full-screen screenshot; the quick and silent capture hotkeys, which work while the overlay is away | built: section 16 |
 | `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | to design (13.8) |
 | `profiles` | Profiles | what a profile is for; making one for a program; what it can change | to design |
 
@@ -1801,8 +1803,9 @@ hand check.
 
 ## 16. Capturing
 
-Status: **agreed** (2026-09-28). Its questions and their answers are in
-16.7, and the design below matches them.
+Status: **built** (2026-09-28). Its questions and their answers are in
+16.7, and the design below matches them. What building it found is in
+16.8.
 
 ### 16.1 What it teaches, and why
 
@@ -1849,8 +1852,8 @@ canvas.
 
 | # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
 |---|---|---|---|---|---|---|---|---|
-| 0 | `drawing` | do | moves on | A drawing is a blank snippet to draw or write on. Hold {trigger:drawing} and drag a box on an empty spot to make one. | - | in the tutorial folder; canvas uncovered; no drawing mode | a drawing made here since the step began, not full screen | a screenshot instead: "That made a screenshot rather than a drawing. Make one as above." A full-screen drawing: "That took the whole screen - a double-click does that. Press {key:deleteSelection} to delete it, and drag a box instead." |
-| 1 | `fullscreen` | do | moves on | Double-click an empty spot, or hold the button down on it, to take a screenshot of the whole screen. | - | in the tutorial folder; canvas uncovered; no creation tool but the screenshot tool | a screenshot made here since the step began, full screen | a box instead: "That took a part of the screen. Double-click instead of dragging." A drawing: "That made a drawing rather than a screenshot. Take one as above." |
+| 0 | `newDrawing` | do | moves on | A drawing is a blank snippet to draw or write on. Hold {trigger:drawing} and drag a box on an empty spot to make one. | - | in the tutorial folder; canvas uncovered; no drawing mode | a drawing made here since the step began, not full screen | a screenshot instead: "That made a screenshot rather than a drawing. Make one as above." A full-screen drawing: "That took the whole screen - a double-click does that. Press {key:deleteSelection} to delete it, and drag a box instead." |
+| 1 | `fullscreen` | do | moves on | Double-click an empty spot, or hold the button down on it, to take a screenshot of the whole screen. | - | in the tutorial folder; canvas uncovered; no creation tool but the screenshot tool | a screenshot made here since the step began, full screen | a drawing of the whole screen, in drawing mode: "That made a drawing of the whole screen. Press Esc to stop drawing on it." Then, out of it: "... Press {key:deleteSelection} to delete it, and take a screenshot as above." A box instead: "That took a part of the screen. Double-click instead of dragging." A drawing: "That made a drawing rather than a screenshot. Take one as above." |
 | 2 | `quickCapture` | do | moves on | The capture hotkeys work while the overlay is away, so you can grab your game without opening the overlay first. Press {key:toggleEditMode} to put the overlay away, then press {key:quickCapture}. It takes a screenshot of the whole screen and brings the overlay back with it, on a new canvas of its own. | - | in the tutorial folder | the quick capture has taken a screenshot since the step began | the silent capture instead: "That was the silent capture, which comes next. Press {key:quickCapture} for this one." |
 | 3 | `silentCapture` | do | moves on | {key:silentCapture} captures the same way, but the overlay stays away, so your game keeps the focus. Put the overlay away, press {key:silentCapture}, then press {key:toggleEditMode} to come back and see the capture. | - | in the tutorial folder | the silent capture has taken a screenshot since the step began | the quick capture instead: "That was the quick capture, which brings the overlay up. Put it away, and press {key:silentCapture} instead." |
 | 4 | `end` | read | Done | That's capturing. Each capture is on a canvas of its own, so they're easy to tell apart: the Overview, in the right-click menu, shows them side by side. A right-click on an empty spot also has every way to make a snippet. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
@@ -1860,7 +1863,7 @@ make their own canvas, and a step can always be left with Next.
 
 **The text follows the settings,** as Basics' `screenshot` does:
 
-- `drawing`, by the drawing trigger: with it plain, "Drag a box on an
+- `newDrawing`, by the drawing trigger: with it plain, "Drag a box on an
   empty spot"; with it off, "Press {key:newDrawingTool}, then drag a
   box", or, with that unbound too, "Right-click an empty spot and choose
   New drawing, then drag a box".
@@ -1931,16 +1934,20 @@ world counts each hotkey's captures (16.3).
   capture; the edit hotkey, the silent capture, and the edit hotkey
   again.
 - **The derail matrix,** a row per way:
-  - `drawing`: a plain drag (the screenshot near miss); a double-click
-    with the trigger (the full-screen near miss, then deleted and
-    done); another folder; the Overview up;
-  - `fullscreen`: a drag (the box near miss); the drawing tool in hand
-    (the need); from drawing mode, which the double-click leaves;
-  - `quickCapture`: the silent capture (the near miss); pressed with
-    the overlay up (done); another folder (the need and its button);
-  - `silentCapture`: the quick capture (the near miss); pressed with
-    the overlay up (done);
-  - both hotkeys unbound (the text, and Next).
+  - `newDrawing`: a screenshot framed instead (the near miss); another
+    folder; the Overview or the cheat sheet up; put away and back;
+  - `fullscreen`: the same, and the drawing tool in hand (the need);
+  - `quickCapture`: the silent capture (the near miss); another folder
+    (the need and its button); the Overview up; put away and back;
+  - `silentCapture`: the quick capture (the near miss); another folder;
+    the Overview up.
+
+  Beside the matrix, in `tutorial_app_test`: a snippet made full screen
+  by mistake in Basics' `screenshot` and in `newDrawing`, and a drawing
+  of the whole screen in `fullscreen`, each taken away as the lines say
+  and the step then done; each hotkey pressed in the other's step; both
+  pressed with the overlay up. The texts for unbound keys are in
+  `chains_test`.
 - **By hand:** every card with real input, and both hotkeys over
   another program.
 
@@ -1971,3 +1978,20 @@ of 16.5 and the hand check.
     screenshot it made covers the canvas, and a drag on it does not
     frame. Its line, like `drawing`'s here, should say to delete it
     first. *Answer:* as recommended.
+
+### 16.8 Found while building
+
+- **The first step is `newDrawing`,** not `drawing`: its strings would
+  have been `tutorial.drawing.*`, beside the Drawing and notes topic's
+  `tutorial.topics.drawing.*` and its steps.
+- **A drawing comes in drawing mode, where Delete does nothing** (Basics'
+  `delete` has its line for it). So a drawing of the whole screen made by
+  mistake takes two lines to clear. In `newDrawing` the first is the need
+  for no drawing mode, whose line every step has; in `fullscreen`, which
+  has no such need since a double-click leaves drawing mode by itself,
+  it is a near miss of its own, "Press Esc to stop drawing on it", and
+  the line to delete it follows once drawing mode is off. A drawing made
+  in a box needs neither: an empty spot is still there to double-click.
+- **The hotkey steps need no uncovered canvas.** Their cards ask for the
+  overlay away first, and leaving edit mode closes any panel or popup
+  (the All scope).

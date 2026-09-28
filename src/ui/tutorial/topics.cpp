@@ -10,6 +10,8 @@ const std::vector<Topic>& Topics() {
         {kBasicsTopic, strings::kTutorialTopicsBasicsTitle, strings::kTutorialTopicsBasicsGist, &BasicsChain},
         {"pinning", strings::kTutorialTopicsPinningTitle, strings::kTutorialTopicsPinningGist, &PinningChain},
         {"drawing", strings::kTutorialTopicsDrawingTitle, strings::kTutorialTopicsDrawingGist, &DrawingChain},
+        {"capturing", strings::kTutorialTopicsCapturingTitle, strings::kTutorialTopicsCapturingGist,
+         &CapturingChain},
     };
     return topics;
 }

@@ -26,6 +26,8 @@ struct FakeWorld : World {
     uint64_t showings = 1;
     uint64_t pinnedViews = 0;
     uint64_t viewModes = 0;
+    uint64_t quickCaptures = 0;
+    uint64_t silentCaptures = 0;
     Cover cover = Cover::None;
     std::optional<core::ItemId> drawing;
     std::vector<core::ItemId> selection;
@@ -43,7 +45,11 @@ struct FakeWorld : World {
                                                     {CommandId::CheatSheet, "Ctrl+H"},
                                                     {CommandId::ToggleEditMode, "Ctrl+Alt+S"},
                                                     {CommandId::ToggleViewMode, "Ctrl+Alt+V"},
-                                                    {CommandId::NewScreenshotTool, "S"}};
+                                                    {CommandId::NewScreenshotTool, "S"},
+                                                    {CommandId::NewDrawingTool, "D"},
+                                                    {CommandId::DeleteSelection, "Delete"},
+                                                    {CommandId::QuickCapture, "Ctrl+Alt+C"},
+                                                    {CommandId::SilentCapture, "Ctrl+Alt+X"}};
     core::CreationTrigger screenshotTrigger = core::CreationTrigger::Plain;
     core::CreationTrigger drawingTrigger = core::CreationTrigger::Ctrl;
     std::unordered_map<std::string, std::string> progress;
@@ -81,6 +87,11 @@ struct FakeWorld : World {
     uint64_t Showings() const override { return showings; }
     uint64_t PinnedViews() const override { return pinnedViews; }
     uint64_t ViewModes() const override { return viewModes; }
+    uint64_t Captures(core::HotkeySlot by) const override {
+        return by == core::HotkeySlot::QuickCapture ? quickCaptures
+               : by == core::HotkeySlot::SilentCapture ? silentCaptures
+                                                        : 0;
+    }
     Cover CanvasCover() const override { return cover; }
     std::optional<core::ItemId> DrawingItem() const override { return drawing; }
     std::vector<core::ItemId> Selection() const override { return selection; }

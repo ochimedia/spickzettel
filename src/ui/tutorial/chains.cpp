@@ -619,6 +619,170 @@ std::vector<Step> MakePinning() {
     return chain;
 }
 
+// Any snippet made here since the step began that `is`.
+template <typename Is>
+bool MadeHereThat(const Look& look, Is is) {
+    const std::vector<const SnippetFacts*> made = look.MadeHere();
+    return std::any_of(made.begin(), made.end(), [&](const SnippetFacts* snippet) { return is(*snippet); });
+}
+
+std::vector<Step> MakeCapturing() {
+    using enum Need;
+    std::vector<Step> chain;
+    // The canvas steps first: a screenshot of the whole screen covers the
+    // canvas, and each hotkey goes to a canvas of its own (docs/TUTORIAL.md,
+    // section 16.1).
+    chain.push_back(Step{
+        .id = "newDrawing",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialNewDrawingTitle,
+        .text =
+            [](const World& world) {
+                switch (world.DrawingTrigger()) {
+                    case core::CreationTrigger::Plain:
+                        break;
+                    case core::CreationTrigger::Ctrl:
+                    case core::CreationTrigger::Alt:
+                        return Fixed(strings::kTutorialNewDrawingTextTrigger);
+                    case core::CreationTrigger::Off:
+                        return Fixed(world.KeyLabel(CommandId::NewDrawingTool) ? strings::kTutorialNewDrawingTextTool
+                                                                               : strings::kTutorialNewDrawingTextMenu);
+                }
+                return Fixed(strings::kTutorialNewDrawingText);
+            },
+        // In drawing mode a press on empty canvas only leaves it.
+        .needs = {InTutorialFolder, CanvasUncovered, NoDrawingMode},
+        .goal =
+            [](const Look& look) {
+                return MadeHereThat(look, [](const SnippetFacts& made) { return !made.picture && !made.fullscreen; });
+            },
+        .nearMisses =
+            {
+                // Either kind: it covers the canvas, and has to go first.
+                {[](const Look& look) {
+                     return MadeHereThat(look, [](const SnippetFacts& made) { return made.fullscreen; });
+                 },
+                 strings::kTutorialNewDrawingMissFullscreen},
+                {[](const Look& look) {
+                     return MadeHereThat(look, [](const SnippetFacts& made) { return made.picture; });
+                 },
+                 strings::kTutorialNewDrawingMissScreenshot},
+            },
+    });
+    chain.push_back(Step{
+        .id = "fullscreen",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialFullscreenTitle,
+        .text =
+            [](const World& world) {
+                switch (world.ScreenshotTrigger()) {
+                    case core::CreationTrigger::Plain:
+                        break;
+                    case core::CreationTrigger::Ctrl:
+                    case core::CreationTrigger::Alt:
+                        return Fixed(strings::kTutorialFullscreenTextTrigger);
+                    case core::CreationTrigger::Off:
+                        return Fixed(world.KeyLabel(CommandId::NewScreenshotTool) ? strings::kTutorialFullscreenTextTool
+                                                                                  : strings::kTutorialFullscreenTextMenu);
+                }
+                return Fixed(strings::kTutorialFullscreenText);
+            },
+        // No drawing mode needed: a double-click, or a hold, leaves it and
+        // makes the snippet.
+        .needs = {InTutorialFolder, CanvasUncovered, NoOtherTool},
+        .goal =
+            [](const Look& look) {
+                return MadeHereThat(look, [](const SnippetFacts& made) { return made.picture && made.fullscreen; });
+            },
+        // A drawing of the whole screen covers the canvas, and Delete does
+        // nothing in drawing mode, which it comes in: out of that first,
+        // then deleted.
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     return MadeHereThat(look, [&](const SnippetFacts& made) {
+                         return !made.picture && made.fullscreen && look.world.DrawingItem() == made.id;
+                     });
+                 },
+                 strings::kTutorialFullscreenMissDrawingMode},
+                {[](const Look& look) {
+                     return MadeHereThat(look, [](const SnippetFacts& made) { return !made.picture && made.fullscreen; });
+                 },
+                 strings::kTutorialFullscreenMissDelete},
+                {[](const Look& look) {
+                     return MadeHereThat(look, [](const SnippetFacts& made) { return made.picture; });
+                 },
+                 strings::kTutorialFullscreenMissBox},
+                {[](const Look& look) {
+                     return MadeHereThat(look, [](const SnippetFacts& made) { return !made.picture; });
+                 },
+                 strings::kTutorialFullscreenMissDrawing},
+            },
+    });
+    // The two hotkeys. Each capture is on a canvas of its own, and the
+    // result alone cannot tell them apart, so the goals count each
+    // hotkey's captures (section 16.2), wherever it was pressed.
+    chain.push_back(Step{
+        .id = "quickCapture",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialQuickCaptureTitle,
+        .text =
+            [](const World& world) {
+                if (!world.KeyLabel(CommandId::QuickCapture)) {
+                    return Fixed(strings::kTutorialQuickCaptureTextNoKey);
+                }
+                return Fixed(world.KeyLabel(CommandId::ToggleEditMode) ? strings::kTutorialQuickCaptureText
+                                                                        : strings::kTutorialQuickCaptureTextTray);
+            },
+        // The capture lands in the current folder.
+        .needs = {InTutorialFolder},
+        .goal =
+            [](const Look& look) {
+                return look.world.Captures(core::HotkeySlot::QuickCapture) > look.start.quickCaptures;
+            },
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     return look.world.Captures(core::HotkeySlot::SilentCapture) > look.start.silentCaptures &&
+                            look.world.KeyLabel(CommandId::QuickCapture).has_value();
+                 },
+                 strings::kTutorialQuickCaptureMissSilent},
+            },
+    });
+    chain.push_back(Step{
+        .id = "silentCapture",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialSilentCaptureTitle,
+        .text =
+            [](const World& world) {
+                if (!world.KeyLabel(CommandId::SilentCapture)) {
+                    return Fixed(strings::kTutorialSilentCaptureTextNoKey);
+                }
+                return Fixed(world.KeyLabel(CommandId::ToggleEditMode) ? strings::kTutorialSilentCaptureText
+                                                                        : strings::kTutorialSilentCaptureTextTray);
+            },
+        .needs = {InTutorialFolder},
+        .goal =
+            [](const Look& look) {
+                return look.world.Captures(core::HotkeySlot::SilentCapture) > look.start.silentCaptures;
+            },
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     return look.world.Captures(core::HotkeySlot::QuickCapture) > look.start.quickCaptures &&
+                            look.world.KeyLabel(CommandId::SilentCapture).has_value();
+                 },
+                 strings::kTutorialSilentCaptureMissQuick},
+            },
+    });
+    chain.push_back(Step{
+        .id = "end",
+        .title = strings::kTutorialCapturingEndTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialCapturingEndText); },
+    });
+    return chain;
+}
+
 }  // namespace
 
 const std::vector<Step>& BasicsChain() {
@@ -633,6 +797,11 @@ const std::vector<Step>& DrawingChain() {
 
 const std::vector<Step>& PinningChain() {
     static const std::vector<Step> chain = MakePinning();
+    return chain;
+}
+
+const std::vector<Step>& CapturingChain() {
+    static const std::vector<Step> chain = MakeCapturing();
     return chain;
 }
 

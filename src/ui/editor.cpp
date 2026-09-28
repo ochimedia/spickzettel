@@ -763,7 +763,7 @@ void Editor::SwitchCanvasByOffset(int delta) {
     Say(text);
 }
 
-void Editor::QuickCapture(float displayW, float displayH) {
+bool Editor::QuickCapture(float displayW, float displayH) {
     // Whatever the hand was in the middle of has ended on the canvas it
     // started on, as before any other canvas switch: a capture hotkey can
     // arrive mid-stroke, and its command's scope, Canvas, ends it (the tray
@@ -784,11 +784,12 @@ void Editor::QuickCapture(float displayW, float displayH) {
     }
     if (target == 0 || session_.FailedWrites() != failures) {
         Say(strings::kToastNotWritten);
-        return;
+        return false;
     }
     const ItemId made = CreateFullscreenItem(ItemCreationKind::Screenshot, displayW, displayH);
     // Not made when it could not be written - see Session::Land.
     Say(made != 0 ? strings::kToastCapturedScreenshot : strings::kToastNotWritten);
+    return made != 0;
 }
 
 // ================= Placing and changing the selection =================

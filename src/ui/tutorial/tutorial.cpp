@@ -449,6 +449,8 @@ void Tutorial::Update(const World& world, double now) {
         start_.showings = world.Showings();
         start_.pinnedViews = world.PinnedViews();
         start_.viewModes = world.ViewModes();
+        start_.quickCaptures = world.Captures(core::HotkeySlot::QuickCapture);
+        start_.silentCaptures = world.Captures(core::HotkeySlot::SilentCapture);
         start_.penColor = world.PenColor();
         start_.penWidth = world.PenWidth();
         for (const SnippetFacts& snippet : snippets) {

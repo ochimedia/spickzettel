@@ -21,5 +21,8 @@ const std::vector<Step>& DrawingChain();
 // Pinning and view mode: a pin, the pinned view, see-through, view mode
 // and the pin taken off.
 const std::vector<Step>& PinningChain();
+// Capturing: a drawing, a screenshot of the whole screen, and the quick
+// and silent capture hotkeys.
+const std::vector<Step>& CapturingChain();
 
 }  // namespace sz::ui::tutorial

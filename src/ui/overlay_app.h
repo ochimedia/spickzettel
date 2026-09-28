@@ -293,7 +293,21 @@ public:
     // was current: every capture is the same size and shape, so stacked
     // they hide each other, while one per canvas is a row of tiles in the
     // Overview that can be told apart at a glance. The user's own call.
-    void QuickCapture(float displayW, float displayH) { editor_.QuickCapture(displayW, displayH); }
+    //
+    // `by` is the hotkey that asked, whose captures the tutorial counts
+    // (docs/TUTORIAL.md, section 16.3).
+    void QuickCapture(float displayW, float displayH, core::HotkeySlot by) {
+        if (editor_.QuickCapture(displayW, displayH)) {
+            tutorialWorld_.CountCapture(by);
+        }
+    }
+    // Asks whether a global hotkey is registered - one another program
+    // holds is not, and does nothing when pressed - for the tutorial's
+    // cards (see AppWorld::KeyLabel). Unset, every one counts as
+    // registered.
+    void SetHotkeyRegisteredQuery(std::function<bool(core::HotkeySlot)> query) {
+        tutorialWorld_.SetHotkeyRegisteredQuery(std::move(query));
+    }
 
     // Whatever is in flight, finished as the overlay goes away, comes up or
     // turns view-only - one sequence for all of them, in one order: what
