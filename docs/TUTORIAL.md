@@ -1801,8 +1801,8 @@ hand check.
 
 ## 16. Capturing
 
-Status: **proposed** (2026-09-28), for review. The questions are in
-16.7.
+Status: **agreed** (2026-09-28). Its questions and their answers are in
+16.7, and the design below matches them.
 
 ### 16.1 What it teaches, and why
 
@@ -1950,23 +1950,24 @@ One piece of work: the counts, the hotkeys' registration told to the
 overlay, the chain, its strings and its row in the table, with the tests
 of 16.5 and the hand check.
 
-### 16.7 Questions for review
+### 16.7 Questions for review, and the answers
 
 27. **Pasting an image is left out,** since the app has none: Paste is
     of snippets copied inside it. Copy, cut and paste go to Folders and
     canvases, as a way to move a snippet. Pasting an image from another
     program would be a feature of its own, not part of this topic.
-    *Recommended:* leave it out here.
+    *Answer:* out of scope here. Copy and paste through the Windows
+    clipboard goes on the to-do list.
 28. **The capture hotkeys count wherever they are pressed,** the overlay
     up or away, though the text asks for it away (16.2).
-    *Recommended:* count both; the result is the same.
+    *Answer:* as recommended.
 29. **A hotkey another program holds reads as unbound** on every card,
     so the card says to set one rather than to press one that does
-    nothing (16.3). *Recommended:* yes.
+    nothing (16.3). *Answer:* as recommended.
 30. **The creation tools and the right-click menu's rows** get a line
     on the end card, not steps: they reach the same results as the
-    steps. *Recommended:* a line.
+    steps. *Answer:* as recommended.
 31. **Basics' full-screen near miss** says "Drag a box instead", but the
     screenshot it made covers the canvas, and a drag on it does not
     frame. Its line, like `drawing`'s here, should say to delete it
-    first. *Recommended:* change it with this topic.
+    first. *Answer:* as recommended.
