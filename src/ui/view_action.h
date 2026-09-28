@@ -22,6 +22,7 @@
 #include "core/canvas/item.h"
 #include "ui/interaction/command.h"
 #include "ui/interaction/levels.h"
+#include "ui/tutorial/topics.h"
 
 namespace sz::ui {
 
@@ -122,8 +123,11 @@ struct FinishNoteEdit {
 struct TutorialPress {
     TutorialButton button = TutorialButton::Next;
 };
-// A start, in a folder made for it.
-struct StartTutorial {};
+// A topic's start, at its first step, in a folder made for it - the
+// topic's id (see tutorial::Topics), Basics for one there is no longer.
+struct StartTutorial {
+    std::string topic{tutorial::kBasicsTopic};
+};
 // A start after quitting partway: at the step kept, in the folder kept, or
 // a new one when that is gone (section 7.6).
 struct ResumeTutorial {};

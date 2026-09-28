@@ -13,7 +13,6 @@
 #include "generated/ui_strings.h"
 #include "ui/selection_layout.h"
 #include "ui/theme.h"
-#include "ui/tutorial/welcome_chain.h"
 #include "ui/ui_scale.h"
 #include "ui/widgets.h"
 
@@ -86,15 +85,16 @@ TutorialCard::TutorialCard(const core::Session& session, const Editor& editor, c
       world_(world),
       anchors_(anchors),
       host_(host),
-      runner_(tutorial::WelcomeChain()) {}
+      topic_(tutorial::FindTopic(tutorial::kBasicsTopic)),
+      runner_(topic_->chain()) {}
 
-void TutorialCard::Start(core::FolderId folder) {
-    runner_.Start(folder);
-    moved_ = false;
-    offering_ = false;
+void TutorialCard::Start(const tutorial::Topic& topic, core::FolderId folder) {
+    Resume(topic, {}, folder);
 }
 
-void TutorialCard::Resume(std::string_view id, core::FolderId folder) {
+void TutorialCard::Resume(const tutorial::Topic& topic, std::string_view id, core::FolderId folder) {
+    topic_ = &topic;
+    runner_ = tutorial::Tutorial(topic.chain());
     runner_.Resume(id, folder);
     moved_ = false;
     offering_ = false;

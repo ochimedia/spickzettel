@@ -1,4 +1,4 @@
-#include "ui/tutorial/welcome_chain.h"
+#include "ui/tutorial/chains.h"
 
 #include <gtest/gtest.h>
 
@@ -8,18 +8,21 @@
 
 #include "generated/ui_strings.h"
 #include "support/fake_tutorial_world.h"
+#include "ui/tutorial/topics.h"
 #include "ui/tutorial/tutorial.h"
 
-// The welcome chain of docs/TUTORIAL.md, section 4, run against a fake
+// The chains of docs/TUTORIAL.md, sections 4 and 13, run against a fake
 // world: done the way a user would, off the path the ways section 6.1
 // lists, and checked for the shape the runner relies on.
 
 namespace sz::ui::tutorial {
 namespace {
 
-class WelcomeChainTest : public ::testing::Test {
+class ChainTest : public ::testing::Test {
 protected:
-    WelcomeChainTest() { tutorial_.Start(FakeWorld::kTutorialFolder); }
+    explicit ChainTest(const std::vector<Step>& chain) : tutorial_(chain) {
+        tutorial_.Start(FakeWorld::kTutorialFolder);
+    }
 
     void Frame() {
         seconds_ += 0.1;
@@ -45,11 +48,21 @@ protected:
     const char* HintText() const { return tutorial_.CurrentHint() ? tutorial_.CurrentHint()->text : ""; }
 
     FakeWorld world_;
-    Tutorial tutorial_{WelcomeChain()};
+    Tutorial tutorial_;
     double seconds_ = 0.0;
 };
 
-TEST_F(WelcomeChainTest, CanBeWalkedTheWayAUserWould) {
+class BasicsChainTest : public ChainTest {
+protected:
+    BasicsChainTest() : ChainTest(BasicsChain()) {}
+};
+
+class DrawingChainTest : public ChainTest {
+protected:
+    DrawingChainTest() : ChainTest(DrawingChain()) {}
+};
+
+TEST_F(BasicsChainTest, CanBeWalkedTheWayAUserWould) {
     Frame();
     EXPECT_EQ(Id(), "welcome");
     tutorial_.Next();
@@ -68,18 +81,6 @@ TEST_F(WelcomeChainTest, CanBeWalkedTheWayAUserWould) {
     EXPECT_EQ(NeedShown(), Need::SubjectSelected);
     world_.selection = {1};
     world_.At(1).rect.w *= 1.5f;
-    Settle();
-
-    ASSERT_EQ(Id(), "drawingMode");
-    world_.drawing = 1;
-    Settle();
-
-    ASSERT_EQ(Id(), "draw");
-    world_.At(1).strokes = 1;
-    Settle();
-
-    ASSERT_EQ(Id(), "stopDrawing");
-    world_.drawing.reset();
     Settle();
 
     ASSERT_EQ(Id(), "delete");
@@ -108,7 +109,52 @@ TEST_F(WelcomeChainTest, CanBeWalkedTheWayAUserWould) {
     EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
 }
 
-TEST_F(WelcomeChainTest, TheScreenshotStepSaysWhenAFullscreenOneWasMade) {
+// In a new folder: nothing to draw on, until the practice snippet is put
+// there.
+TEST_F(DrawingChainTest, CanBeWalkedTheWayAUserWould) {
+    Frame();
+    ASSERT_EQ(Id(), "drawingMode");
+    EXPECT_EQ(NeedShown(), Need::ASubject);
+    EXPECT_EQ(tutorial_.CurrentHint()->button, HintButton::PutOneHere);
+    EXPECT_FALSE(tutorial_.NextEnabled());
+    world_.Make(5, /*picture=*/false);  // what Put one here makes
+    Frame();
+    EXPECT_EQ(tutorial_.Subject(), 5u);
+    world_.drawing = 5;
+    Settle();
+
+    ASSERT_EQ(Id(), "draw");
+    world_.At(5).strokes = 1;
+    Settle();
+
+    ASSERT_EQ(Id(), "stopDrawing");
+    world_.drawing.reset();
+    Settle();
+
+    ASSERT_EQ(Id(), "end");
+    tutorial_.Next();
+    EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
+}
+
+// Let go of for another topic: finished from its end, skipped from the
+// skip card, and otherwise nothing said, so its step is what stays kept.
+TEST_F(DrawingChainTest, LeftForAnotherTopicItSaysOnlyHowItEnded) {
+    Frame();
+    tutorial_.Leave();
+    EXPECT_FALSE(tutorial_.On());
+    EXPECT_EQ(tutorial_.Progress(), "");
+
+    tutorial_.Resume("end", FakeWorld::kTutorialFolder);
+    tutorial_.Leave();
+    EXPECT_EQ(tutorial_.Progress(), "finished");
+
+    tutorial_.Resume("draw", FakeWorld::kTutorialFolder);
+    tutorial_.Skip();
+    tutorial_.Leave();
+    EXPECT_EQ(tutorial_.Progress(), "skipped");
+}
+
+TEST_F(BasicsChainTest, TheScreenshotStepSaysWhenAFullscreenOneWasMade) {
     At("screenshot");
     world_.Make(1).fullscreen = true;
     Frame();
@@ -116,7 +162,7 @@ TEST_F(WelcomeChainTest, TheScreenshotStepSaysWhenAFullscreenOneWasMade) {
     EXPECT_STREQ(HintText(), strings::kTutorialScreenshotMissFullscreen);
 }
 
-TEST_F(WelcomeChainTest, TheScreenshotStepSaysWhenADrawingWasMade) {
+TEST_F(BasicsChainTest, TheScreenshotStepSaysWhenADrawingWasMade) {
     At("screenshot");
     world_.Make(1, /*picture=*/false);
     Frame();
@@ -124,7 +170,7 @@ TEST_F(WelcomeChainTest, TheScreenshotStepSaysWhenADrawingWasMade) {
     EXPECT_STREQ(HintText(), strings::kTutorialScreenshotMissDrawing);
 }
 
-TEST_F(WelcomeChainTest, TheScreenshotStepTakesTheScreenshotToolButNoOther) {
+TEST_F(BasicsChainTest, TheScreenshotStepTakesTheScreenshotToolButNoOther) {
     At("screenshot");
     world_.tool = core::ItemCreationKind::Drawing;
     Frame();
@@ -134,7 +180,7 @@ TEST_F(WelcomeChainTest, TheScreenshotStepTakesTheScreenshotToolButNoOther) {
     EXPECT_FALSE(tutorial_.CurrentHint().has_value());
 }
 
-TEST_F(WelcomeChainTest, TheScreenshotStepWaitsForAScreenshot) {
+TEST_F(BasicsChainTest, TheScreenshotStepWaitsForAScreenshot) {
     At("screenshot");
     EXPECT_FALSE(tutorial_.NextEnabled());
     world_.Make(1);
@@ -142,7 +188,7 @@ TEST_F(WelcomeChainTest, TheScreenshotStepWaitsForAScreenshot) {
     EXPECT_TRUE(tutorial_.NextEnabled());
 }
 
-TEST_F(WelcomeChainTest, LeavingTheTutorialFolderOffersTheWayBack) {
+TEST_F(BasicsChainTest, LeavingTheTutorialFolderOffersTheWayBack) {
     world_.Make(1);
     At("move");
     world_.current = FakeWorld::kOtherCanvas;
@@ -151,7 +197,7 @@ TEST_F(WelcomeChainTest, LeavingTheTutorialFolderOffersTheWayBack) {
     EXPECT_EQ(tutorial_.CurrentHint()->button, HintButton::BackToTutorial);
 }
 
-TEST_F(WelcomeChainTest, TheMoveStepSaysAResizeIsNotAMove) {
+TEST_F(BasicsChainTest, TheMoveStepSaysAResizeIsNotAMove) {
     world_.Make(1);
     At("move");
     world_.At(1).rect.w *= 2.0f;
@@ -160,7 +206,7 @@ TEST_F(WelcomeChainTest, TheMoveStepSaysAResizeIsNotAMove) {
     EXPECT_STREQ(HintText(), strings::kTutorialMoveMissResized);
 }
 
-TEST_F(WelcomeChainTest, FullscreenIsNeitherAMoveNorAResize) {
+TEST_F(BasicsChainTest, FullscreenIsNeitherAMoveNorAResize) {
     world_.Make(1);
     At("move");
     world_.At(1).fullscreen = true;
@@ -179,7 +225,7 @@ TEST_F(WelcomeChainTest, FullscreenIsNeitherAMoveNorAResize) {
     EXPECT_EQ(NeedShown(), Need::SubjectCanMove);
 }
 
-TEST_F(WelcomeChainTest, TheMoveStepNeedsASnippetThatCanMoveOutOfDrawingMode) {
+TEST_F(BasicsChainTest, TheMoveStepNeedsASnippetThatCanMoveOutOfDrawingMode) {
     world_.Make(1).fullscreen = true;
     At("move");
     EXPECT_EQ(NeedShown(), Need::SubjectCanMove);
@@ -189,7 +235,7 @@ TEST_F(WelcomeChainTest, TheMoveStepNeedsASnippetThatCanMoveOutOfDrawingMode) {
     EXPECT_EQ(NeedShown(), Need::NoDrawingMode);
 }
 
-TEST_F(WelcomeChainTest, WithNothingToPracticeOnAPracticeSnippetBecomesTheSubject) {
+TEST_F(BasicsChainTest, WithNothingToPracticeOnAPracticeSnippetBecomesTheSubject) {
     At("move");
     EXPECT_EQ(NeedShown(), Need::ASubject);
     EXPECT_EQ(tutorial_.CurrentHint()->button, HintButton::PutOneHere);
@@ -199,7 +245,7 @@ TEST_F(WelcomeChainTest, WithNothingToPracticeOnAPracticeSnippetBecomesTheSubjec
     EXPECT_FALSE(tutorial_.CurrentHint().has_value());
 }
 
-TEST_F(WelcomeChainTest, DrawingOnAnotherOfTheTutorialsSnippetsCounts) {
+TEST_F(DrawingChainTest, DrawingOnAnotherOfTheTutorialsSnippetsCounts) {
     world_.Make(1);
     world_.Make(2);
     world_.selection = {2};
@@ -211,7 +257,7 @@ TEST_F(WelcomeChainTest, DrawingOnAnotherOfTheTutorialsSnippetsCounts) {
     EXPECT_TRUE(tutorial_.GoalMet());
 }
 
-TEST_F(WelcomeChainTest, TheDrawStepAsksToDrawOnItAgainOutOfDrawingMode) {
+TEST_F(DrawingChainTest, TheDrawStepAsksToDrawOnItAgainOutOfDrawingMode) {
     world_.Make(1);
     At("draw");
     EXPECT_EQ(NeedShown(), Need::DrawingOnSubject);
@@ -220,7 +266,7 @@ TEST_F(WelcomeChainTest, TheDrawStepAsksToDrawOnItAgainOutOfDrawingMode) {
     EXPECT_FALSE(tutorial_.CurrentHint().has_value());
 }
 
-TEST_F(WelcomeChainTest, DeleteDoesNothingInDrawingModeAndTheStepSaysSo) {
+TEST_F(BasicsChainTest, DeleteDoesNothingInDrawingModeAndTheStepSaysSo) {
     world_.Make(1);
     world_.drawing = 1;
     At("delete");
@@ -228,7 +274,7 @@ TEST_F(WelcomeChainTest, DeleteDoesNothingInDrawingModeAndTheStepSaysSo) {
     EXPECT_FALSE(tutorial_.NextEnabled());
 }
 
-TEST_F(WelcomeChainTest, DeletingTheOnlySnippetStillMovesOn) {
+TEST_F(BasicsChainTest, DeletingTheOnlySnippetStillMovesOn) {
     world_.Make(1);
     At("delete");
     world_.At(1).deleted = true;
@@ -237,7 +283,7 @@ TEST_F(WelcomeChainTest, DeletingTheOnlySnippetStillMovesOn) {
     EXPECT_FALSE(tutorial_.CurrentHint().has_value());
 }
 
-TEST_F(WelcomeChainTest, UndoneBeforeItsStepTheUndoStepAsksForADeleteAgain) {
+TEST_F(BasicsChainTest, UndoneBeforeItsStepTheUndoStepAsksForADeleteAgain) {
     world_.Make(1);
     At("delete");
     world_.At(1).deleted = true;
@@ -255,7 +301,7 @@ TEST_F(WelcomeChainTest, UndoneBeforeItsStepTheUndoStepAsksForADeleteAgain) {
     EXPECT_TRUE(tutorial_.GoalMet());
 }
 
-TEST_F(WelcomeChainTest, TheUndoStepNeedsTheCanvasItWasDeletedOnAndTheKeys) {
+TEST_F(BasicsChainTest, TheUndoStepNeedsTheCanvasItWasDeletedOnAndTheKeys) {
     world_.Make(1);
     At("delete");
     world_.At(1).deleted = true;
@@ -276,8 +322,8 @@ TEST_F(WelcomeChainTest, TheUndoStepNeedsTheCanvasItWasDeletedOnAndTheKeys) {
     EXPECT_FALSE(tutorial_.CurrentHint().has_value());
 }
 
-TEST_F(WelcomeChainTest, TheTextsFollowTheTriggersAndTheKeys) {
-    const auto& chain = WelcomeChain();
+TEST_F(BasicsChainTest, TheTextsFollowTheTriggersAndTheKeys) {
+    const auto& chain = BasicsChain();
     auto textOf = [&](std::string_view id) {
         for (const Step& step : chain) {
             if (step.id == id) {
@@ -303,7 +349,7 @@ TEST_F(WelcomeChainTest, TheTextsFollowTheTriggersAndTheKeys) {
     EXPECT_STREQ(textOf("end"), strings::kTutorialEndTextNoCheatSheetKey);
 }
 
-TEST_F(WelcomeChainTest, EveryTextHasItsPlaceholdersFilledIn) {
+TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
     std::vector<const char*> texts = {
         strings::kTutorialNeedInTutorialFolder, strings::kTutorialNeedCloseOverview,
         strings::kTutorialNeedCloseCheatSheet,  strings::kTutorialNeedClosePopup,
@@ -315,11 +361,15 @@ TEST_F(WelcomeChainTest, EveryTextHasItsPlaceholdersFilledIn) {
         strings::kTutorialScreenshotTextTool,   strings::kTutorialScreenshotTextMenu,
         strings::kTutorialAwayTextTray,         strings::kTutorialEndTextNoCheatSheetKey,
     };
-    for (const Step& step : WelcomeChain()) {
-        texts.push_back(step.title);
-        texts.push_back(step.text(world_));
-        for (const NearMiss& miss : step.nearMisses) {
-            texts.push_back(miss.text);
+    for (const Topic& topic : Topics()) {
+        texts.push_back(topic.title);
+        texts.push_back(topic.gist);
+        for (const Step& step : topic.chain()) {
+            texts.push_back(step.title);
+            texts.push_back(step.text(world_));
+            for (const NearMiss& miss : step.nearMisses) {
+                texts.push_back(miss.text);
+            }
         }
     }
     world_.screenshotTrigger = core::CreationTrigger::Ctrl;
@@ -330,41 +380,47 @@ TEST_F(WelcomeChainTest, EveryTextHasItsPlaceholdersFilledIn) {
     }
 }
 
-// What the runner relies on, and docs/TUTORIAL.md, section 4 says: every
-// need a step cannot meet by itself is met by an earlier step that waits
-// for it.
-TEST_F(WelcomeChainTest, HasTheShapeTheRunnerReliesOn) {
-    const auto& chain = WelcomeChain();
-    std::set<std::string_view> ids;
-    std::set<std::string_view> gatedSoFar;
-    for (const Step& step : chain) {
-        EXPECT_TRUE(ids.insert(step.id).second) << step.id;
-        EXPECT_NE(step.text, nullptr) << step.id;
-        if (step.kind == StepKind::Read) {
-            EXPECT_EQ(step.goal, nullptr) << step.id;
-            EXPECT_FALSE(step.gated) << step.id;
-            EXPECT_TRUE(step.needs.empty()) << step.id;
-        } else {
-            EXPECT_NE(step.goal, nullptr) << step.id;
-            EXPECT_FALSE(step.warning) << step.id;
-        }
-        for (const Need need : step.needs) {
-            if (need == Need::ASubject) {
-                EXPECT_TRUE(gatedSoFar.contains("screenshot")) << step.id;
+// What the runner relies on, and docs/TUTORIAL.md, sections 4 and 13
+// say, for every topic: ids unique, and every need a step cannot meet by
+// itself - one with no button to meet it - met by an earlier step of the
+// chain that waits for it. A topic may start with a do step, which a
+// need's button makes possible; it ends on a read step, the end card.
+TEST(TopicsTest, HaveTheShapeTheRunnerReliesOn) {
+    std::set<std::string_view> topicIds;
+    for (const Topic& topic : Topics()) {
+        EXPECT_TRUE(topicIds.insert(topic.id).second) << topic.id;
+        EXPECT_EQ(FindTopic(topic.id), &topic);
+        const std::vector<Step>& chain = topic.chain();
+        ASSERT_FALSE(chain.empty()) << topic.id;
+        std::set<std::string_view> ids;
+        std::set<std::string_view> gatedSoFar;
+        for (const Step& step : chain) {
+            EXPECT_TRUE(ids.insert(step.id).second) << topic.id << "/" << step.id;
+            EXPECT_NE(step.text, nullptr) << step.id;
+            if (step.kind == StepKind::Read) {
+                EXPECT_EQ(step.goal, nullptr) << step.id;
+                EXPECT_FALSE(step.gated) << step.id;
+                EXPECT_TRUE(step.needs.empty()) << step.id;
+            } else {
+                EXPECT_NE(step.goal, nullptr) << step.id;
+                EXPECT_FALSE(step.warning) << step.id;
             }
-            if (need == Need::DrawingOnSubject) {
-                EXPECT_TRUE(gatedSoFar.contains("drawingMode")) << step.id;
+            for (const Need need : step.needs) {
+                if (need == Need::DrawingOnSubject) {
+                    EXPECT_TRUE(gatedSoFar.contains("drawingMode")) << topic.id << "/" << step.id;
+                }
+                if (need == Need::DeletedSubject) {
+                    EXPECT_TRUE(gatedSoFar.contains("delete")) << topic.id << "/" << step.id;
+                }
             }
-            if (need == Need::DeletedSubject) {
-                EXPECT_TRUE(gatedSoFar.contains("delete")) << step.id;
+            if (step.gated) {
+                gatedSoFar.insert(step.id);
             }
         }
-        if (step.gated) {
-            gatedSoFar.insert(step.id);
-        }
+        EXPECT_EQ(chain.back().kind, StepKind::Read) << topic.id;
     }
-    EXPECT_EQ(chain.front().kind, StepKind::Read);
-    EXPECT_EQ(chain.back().kind, StepKind::Read);
+    EXPECT_EQ(Topics().front().id, kBasicsTopic) << "the first in the list";
+    EXPECT_EQ(FindTopic("gone"), nullptr);
 }
 
 }  // namespace

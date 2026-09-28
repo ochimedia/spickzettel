@@ -7,7 +7,7 @@
 #include "support/fake_tutorial_world.h"
 
 // The runner of docs/TUTORIAL.md, section 5, on a chain of its own - what
-// the welcome chain's steps do is welcome_chain_test.cpp's.
+// the topics' steps do is chains_test.cpp's.
 
 namespace sz::ui::tutorial {
 namespace {

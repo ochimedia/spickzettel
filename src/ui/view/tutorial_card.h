@@ -14,6 +14,7 @@
 
 #include "core/session/session.h"
 #include "ui/editor.h"
+#include "ui/tutorial/topics.h"
 #include "ui/tutorial/tutorial.h"
 #include "ui/tutorial/world.h"
 #include "ui/view/anchors.h"
@@ -27,10 +28,10 @@ public:
     TutorialCard(const core::Session& session, const Editor& editor, const tutorial::World& world,
                  const AnchorBoard& anchors, ViewHost& host);
 
-    // At the first step, in `folder`, just made for it.
-    void Start(core::FolderId folder);
-    // At the step `id` names, in `folder` - after quitting partway.
-    void Resume(std::string_view id, core::FolderId folder);
+    // `topic` at its first step, in `folder`, just made for it.
+    void Start(const tutorial::Topic& topic, core::FolderId folder);
+    // `topic` at the step `id` names, in `folder` - after quitting partway.
+    void Resume(const tutorial::Topic& topic, std::string_view id, core::FolderId folder);
     // The offer to an install from before the tutorial, up until it is
     // answered: Start, or No thanks.
     void Offer() { offering_ = true; }
@@ -41,6 +42,8 @@ public:
     void Press(TutorialButton button);
 
     const tutorial::Tutorial& Runner() const { return runner_; }
+    // The topic running, or run last.
+    const tutorial::Topic& CurrentTopic() const { return *topic_; }
 
     // Stage 1, in edit mode: the runner brought up to date with the app.
     // `now` in seconds.
@@ -74,6 +77,7 @@ private:
     const AnchorBoard& anchors_;
     ViewHost& host_;
 
+    const tutorial::Topic* topic_;
     tutorial::Tutorial runner_;
     // Dragged by the user: left where it was put for the rest of the run.
     bool moved_ = false;

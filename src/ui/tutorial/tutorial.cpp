@@ -37,8 +37,8 @@ void Tutorial::Start(core::FolderId folder) { Resume({}, folder); }
 
 void Tutorial::Resume(std::string_view id, core::FolderId folder) {
     size_t at = 0;
-    for (size_t i = 0; i < chain_.size(); ++i) {
-        if (chain_[i].id == id) {
+    for (size_t i = 0; i < chain_->size(); ++i) {
+        if ((*chain_)[i].id == id) {
             at = i;
         }
     }
@@ -49,7 +49,7 @@ void Tutorial::Resume(std::string_view id, core::FolderId folder) {
     reached_ = at;
     // The steps before one resumed at were passed, and a gated one only
     // when it was done: going back to it must not lock Next.
-    done_.assign(chain_.size(), false);
+    done_.assign(chain_->size(), false);
     std::fill(done_.begin(), done_.begin() + static_cast<std::ptrdiff_t>(at), true);
     order_.clear();
     wasDeleted_.clear();
@@ -75,7 +75,7 @@ void Tutorial::Next() {
     if (!NextEnabled()) {
         return;
     }
-    if (index_ + 1 == chain_.size()) {
+    if (index_ + 1 == chain_->size()) {
         state_ = State::Off;
         outcome_ = Outcome::Finished;
         return;
@@ -106,9 +106,23 @@ void Tutorial::Done() {
     if (state_ == State::Skipped) {
         state_ = State::Off;
         outcome_ = Outcome::Skipped;
-    } else if (state_ == State::OnStep && index_ + 1 == chain_.size()) {
+    } else if (state_ == State::OnStep && index_ + 1 == chain_->size()) {
         Next();
     }
+}
+
+void Tutorial::Leave() {
+    if (state_ == State::Skipped) {
+        Done();
+        return;
+    }
+    if (state_ == State::OnStep && index_ + 1 == chain_->size()) {
+        state_ = State::Off;
+        outcome_ = Outcome::Finished;
+        return;
+    }
+    state_ = State::Off;
+    outcome_ = Outcome::None;
 }
 
 Spot Tutorial::CurrentSpot() const {
@@ -123,9 +137,9 @@ Spot Tutorial::CurrentSpot() const {
 
 std::vector<const Step*> Tutorial::WarningsNotReached() const {
     std::vector<const Step*> warnings;
-    for (size_t i = reached_ + 1; i < chain_.size(); ++i) {
-        if (chain_[i].warning) {
-            warnings.push_back(&chain_[i]);
+    for (size_t i = reached_ + 1; i < chain_->size(); ++i) {
+        if ((*chain_)[i].warning) {
+            warnings.push_back(&(*chain_)[i]);
         }
     }
     return warnings;
@@ -375,7 +389,7 @@ void Tutorial::Update(const World& world, double now) {
     // gone - and that is no reason to say so now.
     if (metThisVisit_) {
         hint_.reset();
-        if (now - *doneAt_ >= kMoveOnSeconds && index_ + 1 < chain_.size()) {
+        if (now - *doneAt_ >= kMoveOnSeconds && index_ + 1 < chain_->size()) {
             ++index_;
             Begin();
         }

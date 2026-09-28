@@ -247,7 +247,9 @@ public:
     // The tutorial: started at its first step, in a folder made for it, as
     // the next frame is done (see action::StartTutorial); where it is; and
     // what its spotlight rings in the last frame.
-    void StartTutorial() { Act(action::StartTutorial{}); }
+    void StartTutorial(std::string_view topic = tutorial::kBasicsTopic) {
+        Act(action::StartTutorial{std::string(topic)});
+    }
     // One of the card's buttons, pressed as the card presses it - for a
     // test, as Dispatch is for a key.
     void PressTutorial(TutorialButton button) { Act(action::TutorialPress{button}); }
@@ -488,7 +490,7 @@ private:
     // when it could not be written. And a snippet to practice on, in the
     // middle of the canvas being looked at, off the history: undo cannot
     // take it from under a step (docs/TUTORIAL.md, section 7.3).
-    FolderId MakeTutorialFolder();
+    FolderId MakeTutorialFolder(const tutorial::Topic& topic);
     // `folder`'s first canvas not deleted, switched to - or, with none, the
     // tutorial's folder made again. The folder the tutorial goes on in.
     FolderId GoToTutorialFolder(FolderId folder);

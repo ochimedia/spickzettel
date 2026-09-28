@@ -44,7 +44,7 @@ add_executable(sz_core_tests
     ui/machine_test.cpp
     ui/tutorial_test.cpp
     ui/ui_strings_file_test.cpp
-    ui/welcome_chain_test.cpp
+    ui/chains_test.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # sz_app, not only sz_core: the headless frame tests and the tray controller

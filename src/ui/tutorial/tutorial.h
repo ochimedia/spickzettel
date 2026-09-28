@@ -52,8 +52,9 @@ public:
     // Off (see Progress).
     enum class Outcome { None, Finished, Skipped };
 
-    // `chain` outlives the tutorial - see WelcomeChain.
-    explicit Tutorial(const std::vector<Step>& chain) : chain_(chain) {}
+    // `chain` outlives the tutorial - see chains.h. A tutorial is replaced
+    // by another for another chain.
+    explicit Tutorial(const std::vector<Step>& chain) : chain_(&chain) {}
 
     // At the first step, in `folder` - a folder the view has just made
     // for it (section 6.5).
@@ -79,15 +80,21 @@ public:
     void Back();
     void Skip();
     void Done();
+    // Let go of for another topic (section 13.3): finished from the last
+    // step, skipped from the skip card, and otherwise left where it was,
+    // Off with nothing to say, so that the progress kept stays at its
+    // step.
+    void Leave();
 
     State GetState() const { return state_; }
     Outcome GetOutcome() const { return outcome_; }
     bool On() const { return state_ != State::Off; }
     core::FolderId Folder() const { return folder_; }
     size_t StepIndex() const { return index_; }
-    size_t StepCount() const { return chain_.size(); }
+    size_t StepCount() const { return chain_->size(); }
+    const std::vector<Step>& Chain() const { return *chain_; }
     // The step up - or skipped from, on the skip card. Only while On.
-    const Step& CurrentStep() const { return chain_[index_]; }
+    const Step& CurrentStep() const { return (*chain_)[index_]; }
     // Whether the step up has had its goal met, on this visit or an
     // earlier one (goals are latched).
     bool GoalMet() const { return done_.size() > index_ && done_[index_]; }
@@ -115,7 +122,7 @@ private:
     // The first need not met, as the hint, or nothing.
     std::optional<Hint> UnmetNeed(const World& world, const std::vector<SnippetFacts>& snippets) const;
 
-    const std::vector<Step>& chain_;
+    const std::vector<Step>* chain_;
     State state_ = State::Off;
     Outcome outcome_ = Outcome::None;
     core::FolderId folder_ = 0;

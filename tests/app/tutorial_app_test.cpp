@@ -9,7 +9,7 @@
 #include "fakes/headless_app.h"
 #include "generated/ui_strings.h"
 #include "support/view_stack.h"
-#include "ui/tutorial/welcome_chain.h"
+#include "ui/tutorial/topics.h"
 
 namespace sz::test {
 namespace {
@@ -45,11 +45,11 @@ protected:
         return hint.has_value() ? hint->need : std::nullopt;
     }
 
-    // Edit mode, and the tutorial at its first step in a folder of its own.
-    void StartTheTutorial() {
+    // Edit mode, and a topic at its first step in a folder of its own.
+    void StartTheTutorial(std::string_view topic = tutorial::kBasicsTopic) {
         ShowEditMode();
         StepFrame();
-        Overlay().StartTutorial();
+        Overlay().StartTutorial(topic);
         StepFrames(2);
         ASSERT_TRUE(Runner().On());
         ASSERT_EQ(App().TutorialWorld().FolderOf(Canvases().CurrentCanvasId()), Runner().Folder());
@@ -88,6 +88,10 @@ protected:
             const float y = std::round(r.y + r.h);
             Drag(x, y, x + 80.0f, y + 60.0f);
         } else if (id == "drawingMode") {
+            if (!Runner().Subject().has_value()) {
+                Overlay().PressTutorialHint();  // Put one here
+                StepFrames(3);
+            }
             DoubleClick(SubjectMiddle().x, SubjectMiddle().y);
         } else if (id == "draw") {
             const ImVec2 middle = SubjectMiddle();
@@ -111,9 +115,11 @@ protected:
         }
         Settle();
     }
-    // The steps done, one after the other, until `id` is up.
-    void WalkTo(const std::string& id) {
-        StartTheTutorial();
+    // Every step of `topic`, from the one up, done and moved on from.
+    void WalkThrough(const tutorial::Topic& topic);
+    // The steps of `topic` done, one after the other, until `id` is up.
+    void WalkTo(const std::string& id, std::string_view topic = tutorial::kBasicsTopic) {
+        StartTheTutorial(topic);
         for (int guard = 0; guard < 20 && StepUp() != id; ++guard) {
             const std::string before = StepUp();
             DoStep(before);
@@ -355,14 +361,24 @@ TEST_F(TutorialAppTest, AStartMakesAFolderOfItsOwnAndSwitchesToIt) {
     ASSERT_EQ(Canvases().Folders().size(), folders + 1);
     const Folder& made = Canvases().Folders().back();
     EXPECT_EQ(made.id, Runner().Folder());
-    EXPECT_EQ(made.name, strings::kTutorialFolderName);
+    EXPECT_EQ(made.name, "Tutorial: Basics") << "named for its topic";
     EXPECT_NE(Canvases().CurrentCanvasId(), before);
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, made.id);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "an empty canvas to start on";
 }
 
-TEST_F(TutorialAppTest, TheWelcomeChainIsWalkedThroughWithRealGestures) {
-    StartTheTutorial();
+// Every topic, done the way its cards say, with real gestures.
+TEST_F(TutorialAppTest, EveryTopicIsWalkedThroughWithRealGestures) {
+    for (const tutorial::Topic& topic : tutorial::Topics()) {
+        SCOPED_TRACE(std::string(topic.id));
+        StartTheTutorial(topic.id);
+        WalkThrough(topic);
+        ShowEditMode();  // put away, for the next topic's start
+        StepFrame();
+    }
+}
+
+void TutorialAppTest::WalkThrough(const tutorial::Topic& topic) {
     std::vector<std::string> seen;
     for (int guard = 0; guard < 20 && Runner().On(); ++guard) {
         const std::string step = StepUp();
@@ -375,7 +391,7 @@ TEST_F(TutorialAppTest, TheWelcomeChainIsWalkedThroughWithRealGestures) {
     EXPECT_FALSE(Runner().On());
     EXPECT_EQ(Runner().GetOutcome(), tutorial::Tutorial::Outcome::Finished);
     std::vector<std::string> chain;
-    for (const tutorial::Step& step : tutorial::WelcomeChain()) {
+    for (const tutorial::Step& step : topic.chain()) {
         chain.emplace_back(step.id);
     }
     EXPECT_EQ(seen, chain) << "every step, in order, none skipped";
@@ -470,7 +486,7 @@ TEST_F(TutorialAppTest, TheSpotlightRingsTheBarsCloseOnTheDeleteStep) {
 }
 
 TEST_F(TutorialAppTest, TheSpotlightRingsTheDrawingBarsPen) {
-    WalkTo("draw");
+    WalkTo("draw", "drawing");
     const std::optional<AnchorRect> spot = App().TutorialSpot();
     const std::optional<AnchorRect> pen = App().AnchorAt(Anchor{AnchorId::DrawingBarPen});
     ASSERT_TRUE(spot.has_value());
@@ -550,7 +566,7 @@ TEST_F(TutorialAppTest, WithItsFolderDeletedGoBackToTheTutorialMakesANewOne) {
     const FolderId made = Runner().Folder();
     EXPECT_NE(made, old);
     ASSERT_NE(Canvases().FindFolder(made), nullptr);
-    EXPECT_EQ(Canvases().FindFolder(made)->name, strings::kTutorialFolderName);
+    EXPECT_EQ(Canvases().FindFolder(made)->name, "Tutorial: Basics");
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, made);
     EXPECT_EQ(AppSettings().Stored().tutorialFolder, made) << "kept for a resume";
     EXPECT_EQ(StepUp(), "move");
@@ -791,6 +807,7 @@ const char* WayName(Way way) {
 }
 
 struct Derail {
+    const char* topic;
     const char* step;
     Way way;
     // The need the card says a line for - none where the way breaks
@@ -803,58 +820,58 @@ std::vector<Derail> Matrix() {
     using tutorial::Need;
     const std::optional<Need> nothing;
     std::vector<Derail> cases = {
-        {"screenshot", Overview, Need::CanvasUncovered},
-        {"screenshot", CheatSheet, Need::CanvasUncovered},
-        {"screenshot", OtherFolder, Need::InTutorialFolder},
-        {"screenshot", HiddenAndShown, nothing},
-        {"screenshot", ViewOnly, nothing},
-        {"screenshot", CaptureHotkey, nothing},
+        {"basics", "screenshot", Overview, Need::CanvasUncovered},
+        {"basics", "screenshot", CheatSheet, Need::CanvasUncovered},
+        {"basics", "screenshot", OtherFolder, Need::InTutorialFolder},
+        {"basics", "screenshot", HiddenAndShown, nothing},
+        {"basics", "screenshot", ViewOnly, nothing},
+        {"basics", "screenshot", CaptureHotkey, nothing},
     };
     for (const char* step : {"move", "resize"}) {
-        cases.push_back({step, Overview, Need::CanvasUncovered});
-        cases.push_back({step, CheatSheet, Need::CanvasUncovered});
-        cases.push_back({step, OtherFolder, Need::InTutorialFolder});
-        cases.push_back({step, OtherCanvasHere, Need::SubjectHere});
-        cases.push_back({step, HiddenAndShown, nothing});
-        cases.push_back({step, ViewOnly, nothing});
-        cases.push_back({step, Deleted, Need::ASubject});
-        cases.push_back({step, UndoneSeveralTimes, Need::ASubject});
-        cases.push_back({step, Minimized, Need::SubjectOnScreen});
-        cases.push_back({step, Fullscreen, Need::SubjectCanMove});
-        cases.push_back({step, CaptureHotkey, Need::SubjectHere});
-        cases.push_back({step, EnteredDrawingMode, Need::NoDrawingMode});
+        cases.push_back({"basics", step, Overview, Need::CanvasUncovered});
+        cases.push_back({"basics", step, CheatSheet, Need::CanvasUncovered});
+        cases.push_back({"basics", step, OtherFolder, Need::InTutorialFolder});
+        cases.push_back({"basics", step, OtherCanvasHere, Need::SubjectHere});
+        cases.push_back({"basics", step, HiddenAndShown, nothing});
+        cases.push_back({"basics", step, ViewOnly, nothing});
+        cases.push_back({"basics", step, Deleted, Need::ASubject});
+        cases.push_back({"basics", step, UndoneSeveralTimes, Need::ASubject});
+        cases.push_back({"basics", step, Minimized, Need::SubjectOnScreen});
+        cases.push_back({"basics", step, Fullscreen, Need::SubjectCanMove});
+        cases.push_back({"basics", step, CaptureHotkey, Need::SubjectHere});
+        cases.push_back({"basics", step, EnteredDrawingMode, Need::NoDrawingMode});
     }
     const std::vector<Derail> more = {
-        {"drawingMode", Overview, Need::CanvasUncovered},
-        {"drawingMode", CheatSheet, Need::CanvasUncovered},
-        {"drawingMode", OtherFolder, Need::InTutorialFolder},
-        {"drawingMode", OtherCanvasHere, Need::SubjectHere},
-        {"drawingMode", HiddenAndShown, nothing},
-        {"drawingMode", ViewOnly, nothing},
-        {"drawingMode", Deleted, Need::ASubject},
-        {"drawingMode", Minimized, Need::SubjectOnScreen},
-        {"drawingMode", Fullscreen, nothing},
-        {"draw", Overview, Need::CanvasUncovered},
-        {"draw", CheatSheet, Need::CanvasUncovered},
-        {"draw", HiddenAndShown, nothing},
-        {"draw", ViewOnly, Need::DrawingOnSubject},
-        {"draw", LeftDrawingMode, Need::DrawingOnSubject},
-        {"delete", Overview, Need::CanvasUncovered},
-        {"delete", CheatSheet, Need::CanvasUncovered},
-        {"delete", OtherFolder, Need::InTutorialFolder},
-        {"delete", OtherCanvasHere, Need::SubjectHere},
-        {"delete", HiddenAndShown, nothing},
-        {"delete", ViewOnly, nothing},
-        {"delete", Minimized, Need::SubjectOnScreen},
-        {"delete", EnteredDrawingMode, Need::NoDrawingMode},
-        {"undo", Overview, Need::CanvasUncovered},
-        {"undo", CheatSheet, Need::CanvasUncovered},
-        {"undo", OtherFolder, Need::InTutorialFolder},
-        {"undo", OtherCanvasHere, Need::SubjectHere},
-        {"undo", HiddenAndShown, nothing},
-        {"undo", ViewOnly, nothing},
-        {"away", Overview, nothing},
-        {"away", CheatSheet, nothing},
+        {"drawing", "drawingMode", Overview, Need::CanvasUncovered},
+        {"drawing", "drawingMode", CheatSheet, Need::CanvasUncovered},
+        {"drawing", "drawingMode", OtherFolder, Need::InTutorialFolder},
+        {"drawing", "drawingMode", OtherCanvasHere, Need::SubjectHere},
+        {"drawing", "drawingMode", HiddenAndShown, nothing},
+        {"drawing", "drawingMode", ViewOnly, nothing},
+        {"drawing", "drawingMode", Deleted, Need::ASubject},
+        {"drawing", "drawingMode", Minimized, Need::SubjectOnScreen},
+        {"drawing", "drawingMode", Fullscreen, nothing},
+        {"drawing", "draw", Overview, Need::CanvasUncovered},
+        {"drawing", "draw", CheatSheet, Need::CanvasUncovered},
+        {"drawing", "draw", HiddenAndShown, nothing},
+        {"drawing", "draw", ViewOnly, Need::DrawingOnSubject},
+        {"drawing", "draw", LeftDrawingMode, Need::DrawingOnSubject},
+        {"basics", "delete", Overview, Need::CanvasUncovered},
+        {"basics", "delete", CheatSheet, Need::CanvasUncovered},
+        {"basics", "delete", OtherFolder, Need::InTutorialFolder},
+        {"basics", "delete", OtherCanvasHere, Need::SubjectHere},
+        {"basics", "delete", HiddenAndShown, nothing},
+        {"basics", "delete", ViewOnly, nothing},
+        {"basics", "delete", Minimized, Need::SubjectOnScreen},
+        {"basics", "delete", EnteredDrawingMode, Need::NoDrawingMode},
+        {"basics", "undo", Overview, Need::CanvasUncovered},
+        {"basics", "undo", CheatSheet, Need::CanvasUncovered},
+        {"basics", "undo", OtherFolder, Need::InTutorialFolder},
+        {"basics", "undo", OtherCanvasHere, Need::SubjectHere},
+        {"basics", "undo", HiddenAndShown, nothing},
+        {"basics", "undo", ViewOnly, nothing},
+        {"basics", "away", Overview, nothing},
+        {"basics", "away", CheatSheet, nothing},
     };
     cases.insert(cases.end(), more.begin(), more.end());
     return cases;
@@ -905,6 +922,11 @@ protected:
                 break;
             case Way::Minimized:
                 ASSERT_TRUE(subject.has_value());
+                // Minimize acts on the selection: a practice snippet put
+                // there is not selected yet, as a screenshot just made is.
+                if (!App().IsSelected(*subject)) {
+                    RawClick(SubjectMiddle().x, SubjectMiddle().y);
+                }
                 ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Minimize, *subject}));
                 break;
             case Way::Fullscreen:
@@ -974,7 +996,14 @@ protected:
 
 TEST_P(TutorialDerailTest, TheCardSaysALineAndFollowingItGetsTheStepDone) {
     const Derail& derail = GetParam();
-    WalkTo(derail.step);
+    WalkTo(derail.step, derail.topic);
+    // A topic that starts with nothing to practice on: first the snippet
+    // its line puts there, as a user would take it.
+    if (NeedUp() == tutorial::Need::ASubject) {
+        Overlay().PressTutorialHint();
+        StepFrames(3);
+        ASSERT_TRUE(Runner().Subject().has_value());
+    }
     const bool gated = Runner().CurrentStep().gated;
 
     TakeTheWay(derail.way);
@@ -994,7 +1023,8 @@ TEST_P(TutorialDerailTest, TheCardSaysALineAndFollowingItGetsTheStepDone) {
 
 INSTANTIATE_TEST_SUITE_P(Matrix, TutorialDerailTest, ::testing::ValuesIn(Matrix()),
                          [](const ::testing::TestParamInfo<Derail>& info) {
-                             return std::string(info.param.step) + "_" + WayName(info.param.way);
+                             return std::string(info.param.topic) + "_" + info.param.step + "_" +
+                                    WayName(info.param.way);
                          });
 
 }  // namespace

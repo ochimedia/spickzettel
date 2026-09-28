@@ -698,18 +698,23 @@ void OverlayApp::Do(const ViewAction& action) {
                            }
                        }
                    },
-                   [&](const action::StartTutorial&) {
+                   [&](const action::StartTutorial& a) {
                        // From Settings, which is in the Overview: the tutorial
                        // is about the canvas.
                        overview_.Close();
-                       if (const FolderId folder = MakeTutorialFolder(); folder != 0) {
-                           tutorialCard_.Start(folder);
+                       const tutorial::Topic* topic = tutorial::FindTopic(a.topic);
+                       if (topic == nullptr) {
+                           topic = tutorial::FindTopic(tutorial::kBasicsTopic);
+                       }
+                       if (const FolderId folder = MakeTutorialFolder(*topic); folder != 0) {
+                           tutorialCard_.Start(*topic, folder);
                        }
                    },
                    [&](const action::ResumeTutorial&) {
                        if (const FolderId folder = GoToTutorialFolder(settings_.Get(setting::kTutorialFolder));
                            folder != 0) {
-                           tutorialCard_.Resume(settings_.Get(setting::kTutorialWelcome), folder);
+                           tutorialCard_.Resume(tutorialCard_.CurrentTopic(), settings_.Get(setting::kTutorialWelcome),
+                                                folder);
                        }
                    },
                    [&](const action::BackToTutorial&) {
@@ -723,10 +728,14 @@ void OverlayApp::Do(const ViewAction& action) {
                action);
 }
 
-FolderId OverlayApp::MakeTutorialFolder() {
+FolderId OverlayApp::MakeTutorialFolder(const tutorial::Topic& topic) {
     // As the Overview's New folder makes one: current once it is made, and
     // with a canvas in it, switched to.
-    const FolderId folder = session_.AddFolder(strings::kTutorialFolderName);
+    // Named for its topic, so that runs of several leave folders that can
+    // be told apart (section 13.5).
+    char name[128];
+    std::snprintf(name, sizeof(name), strings::kTutorialFolderName, topic.title);
+    const FolderId folder = session_.AddFolder(name);
     if (folder == 0) {
         return 0;
     }
@@ -746,7 +755,7 @@ FolderId OverlayApp::GoToTutorialFolder(FolderId folder) {
         }
     }
     // Gone - deleted, or never in this library - and a new one to go on in.
-    return MakeTutorialFolder();
+    return MakeTutorialFolder(tutorialCard_.CurrentTopic());
 }
 
 void OverlayApp::KeepTutorialProgress() {

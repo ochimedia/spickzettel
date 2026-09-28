@@ -1,4 +1,4 @@
-#include "ui/tutorial/welcome_chain.h"
+#include "ui/tutorial/chains.h"
 
 #include <cmath>
 
@@ -40,17 +40,19 @@ bool SubjectOutOfFullscreen(const Look& look, const SnippetFacts*& now, const Sn
 
 const char* Fixed(const char* text) { return text; }
 
-std::vector<Step> Make() {
+// What every step about a snippet on the canvas needs first.
+std::vector<Need> OnTheCanvas() {
     using enum Need;
-    // What every step about a snippet on the canvas needs first.
-    const std::vector<Need> onTheCanvas = {InTutorialFolder, CanvasUncovered, ASubject, SubjectHere,
-                                           SubjectOnScreen};
-    auto with = [&](std::initializer_list<Need> more) {
-        std::vector<Need> needs = onTheCanvas;
-        needs.insert(needs.end(), more);
-        return needs;
-    };
+    return {InTutorialFolder, CanvasUncovered, ASubject, SubjectHere, SubjectOnScreen};
+}
+std::vector<Need> With(std::initializer_list<Need> more) {
+    std::vector<Need> needs = OnTheCanvas();
+    needs.insert(needs.end(), more);
+    return needs;
+}
 
+std::vector<Step> MakeBasics() {
+    using enum Need;
     std::vector<Step> chain;
     chain.push_back(Step{
         .id = "welcome",
@@ -116,7 +118,7 @@ std::vector<Step> Make() {
         .text = [](const World&) { return Fixed(strings::kTutorialMoveText); },
         .spot = Spot::Subject,
         // In drawing mode a drag on the snippet draws.
-        .needs = with({SubjectCanMove, NoDrawingMode}),
+        .needs = With({SubjectCanMove, NoDrawingMode}),
         .subject = SubjectRule::CanMove,
         .goal =
             [](const Look& look) {
@@ -140,7 +142,7 @@ std::vector<Step> Make() {
         .title = strings::kTutorialResizeTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialResizeText); },
         .spot = Spot::SubjectHandle,
-        .needs = with({SubjectCanMove, NoDrawingMode, SubjectSelected}),
+        .needs = With({SubjectCanMove, NoDrawingMode, SubjectSelected}),
         .subject = SubjectRule::CanMove,
         .goal =
             [](const Look& look) {
@@ -150,39 +152,6 @@ std::vector<Step> Make() {
             },
     });
     chain.push_back(Step{
-        .id = "drawingMode",
-        .kind = StepKind::Do,
-        .gated = true,
-        .title = strings::kTutorialDrawingModeTitle,
-        .text = [](const World&) { return Fixed(strings::kTutorialDrawingModeText); },
-        .spot = Spot::Subject,
-        .needs = onTheCanvas,
-        .subject = SubjectRule::Any,
-        .goal = [](const Look& look) { return look.subject && look.world.DrawingItem() == look.subject; },
-    });
-    chain.push_back(Step{
-        .id = "draw",
-        .kind = StepKind::Do,
-        .title = strings::kTutorialDrawTitle,
-        .text = [](const World&) { return Fixed(strings::kTutorialDrawText); },
-        .spot = Spot::DrawingBarPen,
-        .needs = with({DrawingOnSubject}),
-        .subject = SubjectRule::Any,
-        .goal =
-            [](const Look& look) {
-                const SnippetFacts* now = nullptr;
-                const SnippetFacts* then = nullptr;
-                return SubjectBoth(look, now, then) && now->strokes > then->strokes;
-            },
-    });
-    chain.push_back(Step{
-        .id = "stopDrawing",
-        .kind = StepKind::Do,
-        .title = strings::kTutorialStopDrawingTitle,
-        .text = [](const World&) { return Fixed(strings::kTutorialStopDrawingText); },
-        .goal = [](const Look& look) { return !look.world.DrawingItem().has_value(); },
-    });
-    chain.push_back(Step{
         .id = "delete",
         .kind = StepKind::Do,
         .gated = true,
@@ -190,7 +159,7 @@ std::vector<Step> Make() {
         .text = [](const World&) { return Fixed(strings::kTutorialDeleteText); },
         .spot = Spot::SelectionBarClose,
         // Delete does nothing in drawing mode.
-        .needs = with({NoDrawingMode}),
+        .needs = With({NoDrawingMode}),
         .subject = SubjectRule::Any,
         // Any of the tutorial's snippets, live when the step saw it first:
         // the subject follows the hand, and which one went is the next
@@ -258,10 +227,61 @@ std::vector<Step> Make() {
     return chain;
 }
 
+std::vector<Step> MakeDrawing() {
+    using enum Need;
+    std::vector<Step> chain;
+    // First: in a new folder there is no snippet yet, and the need for one
+    // offers the practice snippet (Put one here).
+    chain.push_back(Step{
+        .id = "drawingMode",
+        .kind = StepKind::Do,
+        .gated = true,
+        .title = strings::kTutorialDrawingModeTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialDrawingModeText); },
+        .spot = Spot::Subject,
+        .needs = OnTheCanvas(),
+        .subject = SubjectRule::Any,
+        .goal = [](const Look& look) { return look.subject && look.world.DrawingItem() == look.subject; },
+    });
+    chain.push_back(Step{
+        .id = "draw",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialDrawTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialDrawText); },
+        .spot = Spot::DrawingBarPen,
+        .needs = With({DrawingOnSubject}),
+        .subject = SubjectRule::Any,
+        .goal =
+            [](const Look& look) {
+                const SnippetFacts* now = nullptr;
+                const SnippetFacts* then = nullptr;
+                return SubjectBoth(look, now, then) && now->strokes > then->strokes;
+            },
+    });
+    chain.push_back(Step{
+        .id = "stopDrawing",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialStopDrawingTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialStopDrawingText); },
+        .goal = [](const Look& look) { return !look.world.DrawingItem().has_value(); },
+    });
+    chain.push_back(Step{
+        .id = "end",
+        .title = strings::kTutorialDrawingEndTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialDrawingEndText); },
+    });
+    return chain;
+}
+
 }  // namespace
 
-const std::vector<Step>& WelcomeChain() {
-    static const std::vector<Step> chain = Make();
+const std::vector<Step>& BasicsChain() {
+    static const std::vector<Step> chain = MakeBasics();
+    return chain;
+}
+
+const std::vector<Step>& DrawingChain() {
+    static const std::vector<Step> chain = MakeDrawing();
     return chain;
 }
 
