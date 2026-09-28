@@ -215,19 +215,25 @@ column, "waits" marks a gated step (section 3).
 
 | # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
 |---|---|---|---|---|---|---|---|---|
-| 0 | `welcome` | read | moves on | Spickzettel keeps snippets (screenshots, drawings and notes) over whatever program is underneath. While you edit, the screen behind is frozen. Everything saves itself. This tutorial runs in a folder of its own. | - | - | Next | - |
-| 1 | `screenshot` | do | **waits** | Drag a box over anything on screen to take a screenshot of it. With a trigger key set: "Hold {trigger} and drag". With the trigger off: "Press {newScreenshot}, then drag". | - | in the tutorial folder; canvas uncovered; no drawing mode; no tool in hand but the screenshot tool | a screenshot snippet made since the step began, on the current canvas, not fullscreen | a fullscreen one: "That took the whole screen; a double-click does that. Drag a box instead." A drawing: "That made a drawing; {drawingTrigger}+drag does that." |
-| 2 | `move` | do | moves on | Drag it to move it. A press selects it, and a drag takes it along. | the subject | a subject that can move | the subject moved 16 px or more from where the step found it | resized instead: "That changed its size. Drag from the middle to move it." |
-| 3 | `resize` | do | moves on | Drag a corner to resize it; Shift switches keeping its shape. A right-drag near an edge does it too. | the subject's lower right handle | a subject that can move; the subject selected | its width or height changed by 10% or more | - |
+| 0 | `welcome` | read | moves on | Spickzettel keeps snippets (screenshots, drawings and notes) over whatever program is underneath, and everything saves itself. This tutorial runs in a folder of its own. | - | - | Next | - |
+| 1 | `screenshot` | do | **waits** | Drag a box over anything on screen to take a screenshot of it. With a trigger key set: "Hold {trigger} and drag". With the trigger off: "Press {newScreenshot}, then drag", or with that key unbound too, the empty canvas's menu. | - | in the tutorial folder; canvas uncovered; no drawing mode; no tool in hand but the screenshot tool | a screenshot snippet made since the step began, on the current canvas, not fullscreen | a fullscreen one: "That took the whole screen; a double-click does that. Drag a box instead." A drawing: "That made a drawing; {drawingTrigger}+drag does that." |
+| 2 | `move` | do | moves on | Drag it to move it. A press selects it, and a drag takes it along. | the subject | a subject that can move; no drawing mode | the subject moved 16 px or more from where the step found it, its size changed by less than 10% | resized instead: "That changed its size. Drag from the middle to move it." |
+| 3 | `resize` | do | moves on | Drag a corner to resize it; Shift switches keeping its shape. A right-drag near an edge does it too. | the subject's lower right handle | a subject that can move; no drawing mode; the subject selected | its width or height changed by 10% or more | - |
 | 4 | `drawingMode` | do | **waits** | Double-click it, or hold the button down on it, to draw on it. | the subject | a subject | drawing mode on the subject | - |
 | 5 | `draw` | do | moves on | Drag across it to draw. The bar above it has the pen, the eraser, text and the color. | the drawing bar's pen | drawing mode on the subject | the subject has more strokes than when the step began | - |
 | 6 | `stopDrawing` | do | moves on | Click outside it, or press Esc, to stop drawing. | - | - | no drawing mode | - |
 | 7 | `delete` | do | **waits** | Select it and press Delete, or the close button on its bar. | the subject's close button | a subject; no drawing mode | the subject deleted | - |
-| 8 | `undo` | do | moves on | Deleted by mistake? {undo} brings it back. It takes back anything you did, a step at a time. | - | a deleted subject | the subject back on the canvas | - |
+| 8 | `undo` | do | moves on | Deleted by mistake? {undo} brings it back. It takes back anything you did, a step at a time. | - | a deleted subject | the subject back on the canvas, after being deleted in this step (or when it began) | - |
 | 9 | `programs` | read | moves on | Set it up for your programs. Some games break when the overlay takes focus; others need it to. Look through Settings > Behavior, and make a profile for each program that needs its own. | - | - | Next | - |
 | 10 | `antiCheat` | read | moves on | Careful with anti-cheat. Some games watch for tools that draw over them or read their input. If a game might object, quit Spickzettel before you start it. | - | - | Next | - |
 | 11 | `away` | do | moves on | Press {editMode} to put the overlay away and go back to your program. Press it again to come back here. | - | - | the overlay has come back since the step began | with the hotkey unbound, the text names the tray icon instead |
 | 12 | `end` | read | Done | That's the basics. {cheatSheet} shows every key and gesture, and a right-click on anything shows what it can do. You can take this tutorial again from Settings > Interaction. | - | - | Done | - |
+
+*Found while building phase 1:* the welcome text first said that the
+screen behind is frozen while you edit. That holds only with "Freeze
+screen while editing" on, which is off by default, so the card no
+longer says it. The move and resize steps also need drawing mode off,
+since a drag on a snippet in drawing mode draws.
 
 **Which steps wait.** A step waits when a later step needs what its goal
 makes, and nothing else can make it:
@@ -434,16 +440,24 @@ and the delete it may then meet is undoable.
 **Only the tutorial's snippets.** A subject is always one of the
 snippets in the tutorial folder.
 
-**Choosing it.** In order:
+**Choosing it.** A snippet *will do* when it still exists, is on the
+current canvas, is not minimized, and is not fullscreen where the step
+needs to move it. In order:
 
-1. **It stays.** The subject is kept for as long as it will do: it
-   still exists, is on the current canvas, is not minimized, and is not
-   fullscreen where the step needs to move it.
-2. **It follows the hand.** When the user selects another of the
-   tutorial's snippets, or starts drawing on one, that one becomes the
-   subject. So working on "the wrong one" is working on the right one.
+1. **It follows the hand.** The snippet being drawn on, or else the one
+   selected last, when it will do. So working on "the wrong one" is
+   working on the right one.
+2. **It stays.** The subject there was, for as long as it will do.
 3. **Otherwise the newest** of the tutorial's snippets that will do.
-4. **Otherwise none,** and the step's need for a subject says so.
+4. **Otherwise the subject there was**, while it still exists, or else
+   the one that comes closest, so that the step's needs can say what is
+   wrong with it.
+5. **Otherwise none,** and the step's need for a subject says so.
+
+*Found while building phase 1:* the hand came second, after the subject
+staying, as first written. Then the hand never took over while the old
+subject would still do, and the rule meant to let the user work on any
+of the tutorial's snippets did nothing.
 
 **Following the canvas.** The subject is looked for on the current
 canvas. Switching canvases is therefore no derailment:
