@@ -6,7 +6,9 @@ questions and their answers are in section 12, and the design below was
 changed to match them. **Topics** (section 13), several chains chosen
 from a list, were agreed after phase 3 and built as phase 4. The
 sections below describe what is built; section 13 keeps the reasoning
-for the topics.
+for the topics. **The next topics** (13.2) and the design of the first
+of them, Keeping it on screen (section 14), are proposed (2026-09-28)
+and not built yet.
 
 It fits into the designs that are built: `docs/INTERACTIONS.md` for
 input, `docs/OVERLAY_STATES.md` for the overlay's states,
@@ -791,18 +793,10 @@ and the two warnings are Basics' steps 6 and 7, and on the skip card
 Its progress is kept under its id with no new setting, and the list
 offers it with no new code.
 
-**What the next topics are to cover** (section 13.2): Drawing in more
-depth (the pen, the eraser, the color, the width, text), Folders and
-canvases, and Profiles. Each is designed in this document first. Other
-candidates:
-
-- the context menu and Properties;
-- the wheel, to scale and change opacity;
-- canvases and the canvas bar;
-- the Overview, the trash and restoring;
-- pinning, and view mode;
-- the capture hotkeys;
-- profiles.
+**What the next topics are to cover** is the table in section 13.2, in
+the order they are to be built: Keeping it on screen (section 14),
+Drawing and notes, Capturing, Folders and canvases, and Profiles. Each
+is designed in this document first.
 
 The design already carries what these need:
 
@@ -1081,12 +1075,47 @@ The new parts are:
 
 ### 13.2 The topics
 
-| Id | Title | What it covers | In the first build |
+| Id | Title | What it covers | Status |
 |---|---|---|---|
-| `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the two warnings; putting the overlay away and back | yes: section 4's steps, but three |
-| `drawing` | Drawing | drawing on a snippet: drawing mode, a stroke, stopping; later the pen, the eraser, the color, the width and text | yes: section 4's three drawing steps |
-| `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas | no: its own piece of work (13.8) |
-| `profiles` | Profiles | what a profile is for; making one for a program; what it can change | no: its own piece of work |
+| `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the two warnings; putting the overlay away and back | built: section 4's steps, but three |
+| `onscreen` | Keeping it on screen | pinning a snippet, and the pinned view; making it see-through with the wheel or Properties; view mode; unpinning | proposed: section 14 |
+| `drawing` | Drawing and notes | drawing mode, a stroke, stopping; later the pen and its shapes, the eraser and its shapes, the color, the width, and the text tool | its first three steps built; the rest to design |
+| `capturing` | Capturing | the quick and silent capture hotkeys, which work while the overlay is away; a full-screen screenshot; pasting an image; a blank drawing | to design |
+| `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | to design (13.8) |
+| `profiles` | Profiles | what a profile is for; making one for a program; what it can change | to design |
+
+The first build had Basics, Drawing, Folders and canvases, and Profiles
+in the table. After it, the list was reordered and grew by two topics
+(2026-09-28):
+
+- **Keeping it on screen is new, and comes second.** The app is mostly
+  used to keep a reference in sight over another program, often a game.
+  Basics ends with putting the overlay away, and does not say that a
+  pinned snippet stays, or that view mode lets clicks through. It is
+  also the cheapest topic to build: every step is on the canvas, and
+  Basics' `away` step already runs across the overlay going and coming
+  back.
+- **The context menu, Properties and the selection bar** are taught
+  inside it, since Pin is on both the menu and the bar, and Properties
+  sets the opacity. They are not a topic of their own.
+- **Drawing becomes Drawing and notes** once its later steps are built,
+  since the text tool is used in drawing mode, like the pen. Its id
+  stays `drawing`, so its progress is kept.
+- **Capturing is new.** Its hotkeys are the fastest way to get a
+  reference in, and they work while the overlay is away, which the
+  other topics never show.
+- **The trash moves into Folders and canvases**, which is where the
+  Overview shows it.
+- **Profiles comes last.** A user needs to know the app before they can
+  judge what a profile is for, and its steps happen inside the Settings
+  panel. That makes it the most work to guide, with the Overview's
+  topic next.
+- **The cheat sheet stays a line**, on Basics' end card, where it
+  already is.
+
+The list shows the topics in this order. The first three reuse what is
+built. Folders and canvases and Profiles need steps inside a panel: the
+spotlight shown in it, and anchors marked by its owner (13.8).
 
 **Basics** is section 4's chain without steps 4 to 6 (`drawingMode`,
 `draw`, `stopDrawing`), in the same order: `welcome`, `screenshot`,
@@ -1281,6 +1310,173 @@ it:
    - "Open the tutorial" in Settings;
    - the tests of 13.9.
 
-Folders and canvases, Profiles and the later drawing steps are each a
-piece of work of their own after phase 5, each with its table in this
-document first.
+The later topics are each a piece of work of their own after phase 5,
+in the order of 13.2, each with its table in this document first.
+Section 14 is the first.
+
+## 14. Keeping it on screen
+
+Status: **proposed** (2026-09-28). Its questions are in 14.7.
+
+### 14.1 What it teaches, and why
+
+A snippet is mostly there to be looked at while the user is in another
+program. The topic teaches the two ways to keep it in sight, and how to
+keep it from hiding what is underneath:
+
+- **Pinning.** A pinned snippet stays on screen when the overlay is put
+  away. The overlay is then in its pinned view: click-through, showing
+  the current canvas's pinned snippets and nothing else
+  (`docs/OVERLAY_STATES.md`, section 3).
+- **See-through.** Ctrl and the wheel change the selection's picture
+  opacity; Shift and the wheel change the opacity of what is drawn on
+  it. Properties has the same, as sliders.
+- **View mode.** Everything on the canvas stays on screen, and clicks go
+  through to the program underneath.
+- **Unpinning.** A pinned snippet stays until it is unpinned, even after
+  the tutorial, so the topic shows how.
+
+Along the way it shows the right-click menu, which has everything a
+snippet can do, and the selection bar's Pin.
+
+### 14.2 The chain
+
+| # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
+|---|---|---|---|---|---|---|---|---|
+| 0 | `pin` | do | **waits** | A pinned snippet stays on screen when you put the overlay away, so it can sit over your game. Press the pin on its bar, or right-click it and choose Pin. The right-click menu has everything a snippet can do. | the selection bar's Pin, or the subject while its bar is not shown | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen | the subject pinned | - |
+| 1 | `pinnedAway` | do | moves on | Press {editMode} to put the overlay away. The pinned snippet stays over your program, and your clicks go through to it. Press {editMode} again to come back here. With the hotkey unbound, the tray icon, as in Basics' `away`. | - | in the tutorial folder; a subject; the subject here and on screen; the subject pinned | the pinned view has come up since the step began | view mode instead: "That was view mode, which keeps everything on screen; it comes next. Press {editMode} to put the overlay away." |
+| 2 | `opacity` | do | moves on | Make it see-through, so it hides less of what's underneath: hold Ctrl and turn the wheel. Shift and the wheel fade what's drawn on it instead, and the wheel alone resizes it. Right-click it and choose Properties to set these with sliders. | the subject | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen; the subject selected | the subject's picture or drawing opacity changed by 0.10 or more (two notches) from the step's start | resized instead: "That changed its size. Hold Ctrl as you turn the wheel." |
+| 3 | `viewMode` | do | moves on | View mode keeps everything on this canvas on screen, pinned or not, and your clicks go through to your program. Press {viewMode} to switch to it, and {editMode} to come back here. With {viewMode} unbound: "View mode has no key yet. Set one in Settings > Hotkeys to use it." With {editMode} unbound, the tray icon comes back. | - | - | view mode has come up since the step began | the pinned view instead: "That put the overlay away, and only pinned snippets stayed. Press {viewMode} for view mode." |
+| 4 | `unpin` | do | moves on | A pinned snippet stays on screen until you unpin it, even after the tutorial. Press the pin on its bar again, or choose Pin in its menu again. | the selection bar's Pin, or the subject | as `pinnedAway`, and canvas uncovered | a snippet of the tutorial's seen pinned during the step is not pinned now | - |
+| 5 | `end` | read | Done | That's keeping it on screen. Pin what you need while you play, and make it see-through so it doesn't hide the game. The bar's full-screen button fills the screen with a snippet, and the right-click menu has the rest. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
+
+**The subject.** Steps 0 and 2 take any of the tutorial's snippets
+(`SubjectRule::Any`). Steps 1 and 4 prefer a pinned one (14.3), so that
+selecting another snippet does not make the step's subject one that
+cannot be put away pinned, or unpinned. A new folder has no snippet, so
+step 0 starts with its need for a subject unmet, and Put one here
+places the practice snippet, as in Drawing.
+
+**Which step waits.** Only `pin`: `pinnedAway` and `unpin` are about a
+pinned snippet, and nothing else in the chain makes one. The need "the
+subject pinned" has its own line too, for a snippet unpinned since.
+
+**The overlay leaving edit mode is the lesson** in steps 1 and 3, as in
+Basics' `away`. The card goes with edit mode (section 3), so the step's
+text says, before the user leaves, how to come back. Its goal is
+checked when edit mode is back, and the step then shows its check and
+moves on.
+
+**Opacity, either way.** The practice snippet's backing starts at 50%,
+and a screenshot at the default in Settings > Defaults, so the text
+asks for "see-through", and the goal accepts a change either way.
+Properties' sliders count too, since the goal reads the snippet, not
+the wheel (6.3).
+
+**Left out:** full screen and the order of snippets (Bring forward,
+Send backward). Full screen gets a line on the end card. The order
+matters once snippets overlap, which a topic with one snippet cannot
+show.
+
+### 14.3 What it needs that is new
+
+Each of these is one of section 8's changes that fit: rows, a need, a
+subject rule, an anchor.
+
+- **The world** (7.1):
+  - three facts per snippet: pinned, the picture's opacity and the
+    drawing's opacity (`Item::pinned`, `Picture::opacity`,
+    `Item::foregroundOpacity`);
+  - two counts beside the showings: how many times the pinned view has
+    come up, and how many times view mode has. They are counted where
+    `OverlayApp` takes its mode (`SetMode`), and read only. The
+    overlay's states and their table do not change.
+- **The start record** keeps both counts, as it keeps the showings.
+- **The look** gains the snippets seen pinned during the step, kept by
+  the runner as it keeps the snippets deleted during the step
+  (`deletedThisStep`). `unpin` is done when one of those is not pinned
+  now. A step that began with nothing pinned asks for a pin first, with
+  the need below, and is then done by the unpin that follows.
+- **A need, "the subject pinned":** "It isn't pinned. Press the pin on
+  its bar, or right-click it and choose Pin." It has no button: pinning
+  the user's snippet for them is not among what the tutorial may change
+  (7.3).
+- **A subject rule, `Pinned`:** section 6.5's order, with a pinned
+  snippet chosen before one that is not at each rung. The hand's
+  snippet, if pinned; else the subject there was, if pinned; else the
+  newest pinned. With none pinned, the rule falls back to `Any`, so the
+  need above can say what is wrong with the one there is.
+- **A spot and its anchor, the selection bar's Pin:** marked in
+  `canvas_view.cpp` beside the Close button (7.2). While no bar is
+  drawn, the spotlight rings the subject instead, as the handle's spot
+  does before the handles show.
+- **The strings:** `tutorial.topics.onscreen.*`, each step's title and
+  text, their unbound-key texts, the near misses, the new need's line
+  and the end card (`tutorial.onscreenEnd.*`, as Drawing's
+  `drawingEnd`).
+- **A row in the topic table**, second, after Basics.
+
+### 14.4 What does not change
+
+- The runner's states, Next, Back and Skip; the card, the list and the
+  settings.
+- The input machine: pinning, the wheel and the hotkeys work as they
+  do.
+- The overlay's states and their table. The tutorial only counts two of
+  the transitions, as it counts the showings.
+- The skip card's warnings (13.6).
+
+### 14.5 Tests
+
+Section 9's, for the new topic:
+
+- **`chains_test`,** against the fake world: each step's goal, needs
+  and near misses; the `Pinned` rule's choices; the chain's shape, which
+  `TopicsTest` already checks for every topic. The rule "a need is met
+  by an earlier gated step, or has a line" covers the new need, with
+  `pin` gated.
+- **The walk-through** picks the topic up from the table. Its hands:
+  - `pin`, a click on the bar's Pin;
+  - `pinnedAway`, the edit hotkey twice, and the pinned view seen in
+    between;
+  - `opacity`, Ctrl and the wheel;
+  - `viewMode`, the view hotkey, then the edit hotkey;
+  - `unpin`, Pin in the right-click menu.
+- **The derail matrix,** a row per way:
+  - `pin`: minimized, deleted, another canvas, another folder, the
+    Overview up;
+  - `pinnedAway`: unpinned first; minimized first; view mode instead
+    (the near miss);
+  - `opacity`: not selected; the wheel alone (the near miss);
+  - `viewMode`: the pinned view instead (the near miss); the view
+    hotkey unbound (the text, and Next);
+  - `unpin`: nothing pinned at the step's start; another snippet
+    selected (the rule).
+- **By hand:** the topic's cards, the pinned view over a program, and
+  view mode, with real input.
+
+### 14.6 Getting there
+
+One piece of work, in two commits:
+
+1. The world's facts and counts, the look's pinned snippets, the need,
+   the subject rule, and the spot with its anchor, with their tests
+   against the fake world.
+2. The chain, its strings and its row in the table, with the
+   walk-through, the derail rows and the hand check.
+
+### 14.7 Questions for review
+
+16. **The title and id:** "Keeping it on screen", `onscreen`.
+17. **Unpin as a step,** rather than only a line on the end card. The
+    reason for a step: after "Done, keep the folder", a snippet still
+    pinned would come up over every program whenever that canvas is
+    current.
+18. **Both opacities count** for `opacity`, and the text leads with
+    Ctrl (the picture), since the practice snippet has nothing drawn on
+    it for Shift to fade.
+19. **Full screen and the order of snippets are left out** (14.2), full
+    screen with a line on the end card.
+20. **View mode with no key:** the step says where to set one and moves
+    on with Next. It does not wait, since nothing later needs it.
+
