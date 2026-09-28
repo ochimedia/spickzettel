@@ -81,8 +81,8 @@ plausible-looking numbers:
 - **The frame budget is not 16.7 ms.** Read the refresh rate; this machine
   runs at 120 Hz, so a held frame is 8.33 ms and "60 fps" means it is
   dropping half of them.
-- **The app shows itself on some starts and not others** (a first run puts
-  the welcome note up), so "sleep, then press the hotkey" is a coin flip
+- **The app shows itself on some starts and not others** (a first run starts
+  the tutorial), so "sleep, then press the hotkey" is a coin flip
   between showing the overlay and hiding it again. That produced samples of
   0.0% - the app sitting in the tray with the loop parked in `GetMessage`,
   drawing nothing. The script now polls for visibility and checks it either

@@ -154,7 +154,7 @@ this. They are of five kinds, and only two kinds are a problem:
 | Kind | Members | |
 |---|---|---|
 | What was last applied, compared with what is wanted | `appliedUiScalePercent_`, `appliedAccentRGBA_`, `appliedFramePacing_`, `appliedInputOptionsHudDigits_`, `appliedPointerShape_` and the cursor history | sound: the same reconcile the tray does for the window |
-| Something only a later frame can do | `effects_`, `welcomeNotePending_`, `edgePanelsFlashPending_`, `styleApplied_`, `pendingOverlayRestart_`, `noticeFinishedReported_` | sound; each belongs to a stage (section 5) |
+| Something only a later frame can do | `effects_`, `welcomePending_`, `edgePanelsFlashPending_`, `styleApplied_`, `pendingOverlayRestart_`, `noticeFinishedReported_` | sound; each belongs to a stage (section 5) |
 | A request to one widget, used where it is drawn | `overviewBodyScrollToTop_`, `renameJustFocused_`, `overviewScrollToCanvasId_`, `overviewScrollToFolderId_`, `canvasBarScrollToCurrent_` | sound; each belongs to the owner of that widget (section 7) |
 | A copy of whether a popup was drawn | `confirmDeleteShown_`, `colorChooserOpen_`, `ContextMenu::open_` | goes (C2) |
 | A save waiting for a draw | `drawWidthDirty_`, and `colorChooserOpen_` again | goes (C3, C4) |
@@ -321,7 +321,7 @@ Every frame of edit mode runs these stages, in order:
 
 | Stage | What it does | What it may change | Today |
 |---|---|---|---|
-| 1. Prepare | tells the editor the display size; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the welcome notes placed; the selection pruned; a note edit ended elsewhere put away (C5); the stroke rasters; where the canvas bar is | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
+| 1. Prepare | tells the editor the display size; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the selection pruned; a note edit ended elsewhere put away (C5); the stroke rasters; where the canvas bar is | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
 | 2. Canvas | surfaces 1 to 5 | a widget's own value (section 6); records actions | `RenderCanvasLayer`, `RenderItems`, `RenderCanvasBar` |
 | 3. Open | the effect queue: popups opened and closed, ImGui's active widget let go | ImGui's popups and focus | `ApplyEffects` |
 | 4. Popups | surface 6 | as stage 2 | the five popups' `Render...` functions |

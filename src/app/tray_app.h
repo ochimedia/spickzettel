@@ -289,8 +289,11 @@ private:
     bool configFileKept_ = false;
     // See WriteConfigAtStart.
     bool writeConfigAtStart_ = false;
-    // Whether Initialize found no library to load, which Start greets.
+    // Whether Initialize found no library to load, which Start greets; and
+    // whether it loaded one, which the tutorial may be offered to or
+    // resumed in (see OverlayApp::WelcomeAtStart).
     bool firstRun_ = false;
+    bool libraryLoaded_ = false;
     // See HoldUntilStart.
     bool held_ = false;
     // Constructed up front (from host.GetLibraryPath(), possibly empty) but

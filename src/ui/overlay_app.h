@@ -258,6 +258,8 @@ public:
         }
     }
     const tutorial::Tutorial& TutorialRunner() const { return tutorialCard_.Runner(); }
+    // Whether the offer to an install from before the tutorial is up.
+    bool TutorialOffered() const { return tutorialCard_.Offering(); }
     std::optional<AnchorRect> TutorialSpot() const { return tutorialCard_.SpotRect(); }
 
     // Captures a fullscreen screenshot onto a canvas made for it (see the
@@ -329,15 +331,17 @@ public:
     // Machine::Describe. What a test asks of the state it is in.
     std::string InputStack() const { return editor_.Input().Describe(); }
 
-    // Asks for the first-run notes to be placed on the current
-    // canvas. Called by TrayController when there was no library on disk to
-    // load - i.e. a genuinely fresh install, not merely an empty library
-    // someone deliberately cleared out (that one loads fine and says so).
-    //
-    // Deferred rather than done immediately: the note is centered on the
-    // display, and the display size isn't known until ImGui has run a
-    // frame. OnFrame places it on the first frame that has one.
-    void RequestWelcomeNote() { welcomeNotePending_ = true; }
+    // What the start found of the library, as TrayController tells it
+    // before the first frame: nothing to load - a fresh install, not an
+    // emptied library, which loads fine - a library loaded, or no library
+    // kept at all (a host with nowhere to keep one).
+    enum class LibraryAtStart { None, FirstRun, Loaded };
+    // What the tutorial does the first time edit mode comes up, decided
+    // from that and the progress kept (docs/TUTORIAL.md, section 7.6): a
+    // first run starts it; a library loaded goes back to the step it was
+    // on, or is offered it once when it has never been shown - an install
+    // from before it.
+    void WelcomeAtStart(LibraryAtStart library);
 
     // Asks the host to hide the overlay and show it again. Installed by
     // TrayController alongside the callbacks above, and used by the input
@@ -480,20 +484,14 @@ public:
     bool IsCapturingShortcut() const { return settingsPage_.IsCapturingShortcut(); }
 
 private:
-    // Places the first-run notes, centered as a group: the welcome, and the
-    // two warnings beside it - see RequestWelcomeNote.
-    // Ordinary items, deliberately: each can be moved, edited, or closed
-    // like anything else, and they are in the library, so they stay until
-    // the user is done with them and then they stop existing for good. A modal dialog would
-    // have to be dismissed before the app could be touched at all, and
-    // would teach nothing about how the app actually works.
-    void PlaceWelcomeNotes(float displayW, float displayH);
-
     // The tutorial's folder, made and switched to, with a canvas in it - 0
     // when it could not be written. And a snippet to practice on, in the
     // middle of the canvas being looked at, off the history: undo cannot
     // take it from under a step (docs/TUTORIAL.md, section 7.3).
     FolderId MakeTutorialFolder();
+    // `folder`'s first canvas not deleted, switched to - or, with none, the
+    // tutorial's folder made again. The folder the tutorial goes on in.
+    FolderId GoToTutorialFolder(FolderId folder);
     void PlacePracticeSnippet();
     // The step the tutorial is on, or how it ended, and its folder, set in
     // the settings as they change (docs/TUTORIAL.md, section 7.6) - so a
@@ -568,9 +566,10 @@ private:
     // OnFrame.
     int appliedUiScalePercent_ = 0;
 
-    // See RequestWelcomeNote/PlaceWelcomeNotes. Cleared the moment the notes
-    // are placed, so they can never be placed twice.
-    bool welcomeNotePending_ = false;
+    // What WelcomeAtStart decided, done on the first frame of edit mode and
+    // then let go of, so it is done once.
+    enum class Welcome { Nothing, Start, Resume, Offer };
+    Welcome welcomePending_ = Welcome::Nothing;
 
     // What the tutorial reads of the app, and the showings it counts.
     AppWorld tutorialWorld_{session_, settings_, editor_};

@@ -66,6 +66,7 @@ bool TrayController::Initialize() {
         session_.SetLibraryStore(&libraryStore_);
         if (snapshot.has_value()) {
             session_.ImportLibrary(std::move(*snapshot));
+            libraryLoaded_ = true;
             // The retention period: only here, at startup, rather than on a
             // clock as well - an instance left running for days keeps what
             // it has until it is next started, which is soon enough.
@@ -80,7 +81,7 @@ bool TrayController::Initialize() {
             // library someone deliberately emptied, which loads fine as an
             // empty one - that person has already met the app and shouldn't
             // be greeted again. Load() also returns nothing for a file it
-            // set aside, where showing the welcome note is the right call
+            // set aside, where starting the tutorial is the right call
             // anyway. What the app starts with - a folder and a canvas - is
             // written now, for every command after to write into.
             firstRun_ = true;
@@ -152,16 +153,16 @@ void TrayController::Start() {
     // nobody knows the hotkey yet - an app that installs a tray icon and
     // then sits there invisibly, waiting for a chord it never mentioned, is
     // indistinguishable from one that didn't start. Edit mode specifically,
-    // not view-only: the note explains how to interact, so interaction has
-    // to be possible. Any other start is Away: pinned snippets are on
+    // not view-only: the tutorial is done by interacting, so interaction
+    // has to be possible. Any other start is Away: pinned snippets are on
     // screen whenever the overlay is away, and having just started is one
     // of those times. From anything but Hidden - brought up from the tray
     // or a hotkey before Start, by a caller that did not hold them (see
     // HoldUntilStart) - Start stays.
     held_ = false;
-    if (firstRun_) {
-        overlayApp_.RequestWelcomeNote();
-    }
+    overlayApp_.WelcomeAtStart(firstRun_         ? OverlayApp::LibraryAtStart::FirstRun
+                               : libraryLoaded_ ? OverlayApp::LibraryAtStart::Loaded
+                                                : OverlayApp::LibraryAtStart::None);
     OverlayFacts facts = Facts();
     facts.firstRun = firstRun_;
     Apply(Next(state_, OverlayRequest::Start, facts));

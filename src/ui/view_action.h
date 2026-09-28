@@ -40,8 +40,9 @@ struct DeleteTarget {
     bool forGood = false;
 };
 
-// One of the tutorial card's own buttons.
-enum class TutorialButton { Next, Back, Skip, Done };
+// One of the tutorial card's own buttons - NoThanks is the offer's (see
+// OverlayApp::WelcomeAtStart).
+enum class TutorialButton { Next, Back, Skip, Done, NoThanks };
 
 namespace action {
 
@@ -115,13 +116,16 @@ struct FinishNoteEdit {
     std::string text;
 };
 
-// The tutorial (docs/TUTORIAL.md, section 7.3). The card's own buttons -
-// the runner's state and nothing else.
+// The tutorial (docs/TUTORIAL.md, section 7.3). The card's own buttons:
+// the runner's state, and the offer's answer, kept.
 struct TutorialPress {
     TutorialButton button = TutorialButton::Next;
 };
 // A start, in a folder made for it.
 struct StartTutorial {};
+// A start after quitting partway: at the step kept, in the folder kept, or
+// a new one when that is gone (section 7.6).
+struct ResumeTutorial {};
 // Go back to the tutorial: to its folder, made again when it is gone.
 struct BackToTutorial {};
 // Put one here: a snippet to practice on, on the canvas being looked at.
@@ -134,6 +138,7 @@ using ViewAction =
                  action::ReorderFolder, action::ReorderCanvas, action::MoveCanvasToFolder, action::RenameFolder,
                  action::RenameCanvas, action::NewFolder, action::NewCanvas, action::SendPicked, action::Restore,
                  action::Delete, action::RestoreMinimized, action::ClosePanel, action::FinishNoteEdit,
-                 action::TutorialPress, action::StartTutorial, action::BackToTutorial, action::PracticeSnippet>;
+                 action::TutorialPress, action::StartTutorial, action::ResumeTutorial, action::BackToTutorial,
+                 action::PracticeSnippet>;
 
 }  // namespace sz::ui

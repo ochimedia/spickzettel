@@ -91,6 +91,13 @@ TutorialCard::TutorialCard(const core::Session& session, const Editor& editor, c
 void TutorialCard::Start(core::FolderId folder) {
     runner_.Start(folder);
     moved_ = false;
+    offering_ = false;
+}
+
+void TutorialCard::Resume(std::string_view id, core::FolderId folder) {
+    runner_.Resume(id, folder);
+    moved_ = false;
+    offering_ = false;
 }
 
 void TutorialCard::Press(TutorialButton button) {
@@ -106,6 +113,9 @@ void TutorialCard::Press(TutorialButton button) {
             return;
         case TutorialButton::Done:
             runner_.Done();
+            return;
+        case TutorialButton::NoThanks:
+            offering_ = false;
             return;
     }
 }
@@ -181,7 +191,7 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
 // ================= The card =================
 
 void TutorialCard::Draw(float displayW, float displayH) {
-    if (!runner_.On()) {
+    if (!runner_.On() && !offering_) {
         return;
     }
     const float width = Px(kCardWidth);
@@ -206,7 +216,9 @@ void TutorialCard::Draw(float displayW, float displayH) {
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing |
                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
-    if (runner_.GetState() == tutorial::Tutorial::State::Skipped) {
+    if (!runner_.On()) {
+        DrawOffer();
+    } else if (runner_.GetState() == tutorial::Tutorial::State::Skipped) {
         DrawSkipped();
     } else {
         DrawStep();
@@ -340,6 +352,19 @@ void TutorialCard::DrawSkipped() {
     ImGui::SameLine();
     if (AccentButton(Labeled(strings::kTutorialCardDone, "tutorial_done"))) {
         host_.Act(action::TutorialPress{TutorialButton::Done});
+    }
+}
+
+void TutorialCard::DrawOffer() {
+    Wrapped(theme::kWhite, strings::kTutorialOfferText);
+    ImGui::Spacing();
+    ImGui::Separator();
+    if (AccentButton(Labeled(strings::kTutorialOfferStart, "tutorial_start"))) {
+        host_.Act(action::StartTutorial{});
+    }
+    ImGui::SameLine();
+    if (QuietButton(Labeled(strings::kTutorialOfferNoThanks, "tutorial_nothanks"))) {
+        host_.Act(action::TutorialPress{TutorialButton::NoThanks});
     }
 }
 

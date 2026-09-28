@@ -10,6 +10,7 @@
 // everything else as an action.
 
 #include <optional>
+#include <string_view>
 
 #include "core/session/session.h"
 #include "ui/editor.h"
@@ -28,6 +29,12 @@ public:
 
     // At the first step, in `folder`, just made for it.
     void Start(core::FolderId folder);
+    // At the step `id` names, in `folder` - after quitting partway.
+    void Resume(std::string_view id, core::FolderId folder);
+    // The offer to an install from before the tutorial, up until it is
+    // answered: Start, or No thanks.
+    void Offer() { offering_ = true; }
+    bool Offering() const { return offering_; }
     // The tutorial's folder, made again.
     void MoveTo(core::FolderId folder) { runner_.MoveTo(folder); }
     // One of the card's buttons, as an action asked for it.
@@ -55,6 +62,7 @@ private:
     std::optional<AnchorRect> SubjectRect() const;
     void DrawStep();
     void DrawSkipped();
+    void DrawOffer();
     // The hint under a step's text, and its button.
     void DrawHint(const tutorial::Hint& hint);
 
@@ -67,6 +75,7 @@ private:
     tutorial::Tutorial runner_;
     // Dragged by the user: left where it was put for the rest of the run.
     bool moved_ = false;
+    bool offering_ = false;
 };
 
 }  // namespace sz::ui

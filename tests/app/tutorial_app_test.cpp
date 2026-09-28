@@ -527,6 +527,157 @@ TEST_F(TutorialAppTest, AFinishedTutorialIsKeptAsFinished) {
     EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "finished");
 }
 
+// ===== The folder (sections 6.4, 7.6 and 9) =====
+
+TEST_F(TutorialAppTest, ACaptureHotkeyDuringTheTutorialLandsInItsFolder) {
+    StartTheTutorial();
+    const CanvasId before = Canvases().CurrentCanvasId();
+    TriggerHotkey(config_.hotkeyQuickCapture);
+    StepFrames(2);
+    EXPECT_NE(Canvases().CurrentCanvasId(), before) << "a canvas of its own";
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+}
+
+TEST_F(TutorialAppTest, WithItsFolderDeletedGoBackToTheTutorialMakesANewOne) {
+    WalkTo("move");
+    const FolderId old = Runner().Folder();
+    ASSERT_TRUE(controller_->GetSession().Delete(old));
+    StepFrames(2);
+    ASSERT_EQ(NeedUp(), tutorial::Need::InTutorialFolder) << HintUp();
+
+    Overlay().PressTutorialHint();
+    StepFrames(2);
+    const FolderId made = Runner().Folder();
+    EXPECT_NE(made, old);
+    ASSERT_NE(Canvases().FindFolder(made), nullptr);
+    EXPECT_EQ(Canvases().FindFolder(made)->name, strings::kTutorialFolderName);
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, made);
+    EXPECT_EQ(AppSettings().Stored().tutorialFolder, made) << "kept for a resume";
+    EXPECT_EQ(StepUp(), "move");
+    EXPECT_EQ(NeedUp(), tutorial::Need::ASubject) << "nothing in it yet: " << HintUp();
+}
+
+TEST_F(TutorialAppTest, StartingAgainMakesANewFolderAndLeavesTheOldOne) {
+    WalkTo("move");
+    const FolderId old = Runner().Folder();
+    Overlay().StartTutorial();
+    StepFrames(2);
+    EXPECT_EQ(StepUp(), "welcome");
+    EXPECT_NE(Runner().Folder(), old);
+    ASSERT_NE(Canvases().FindFolder(old), nullptr);
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(old)));
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+}
+
+// ===== The start (sections 7.6 and 9) =====
+
+TEST_F(TutorialAppTest, AFirstRunPlacesNoNotesAndStartsTheChain) {
+    StartAsFirstRun();
+    EXPECT_EQ(controller_->State(), app::OverlayState::Edit) << "a first run comes up in edit mode";
+    StepFrames(2);
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(StepUp(), "welcome");
+    // The folder a first run makes, left empty for the user's own work,
+    // and the tutorial's beside it.
+    ASSERT_EQ(Canvases().Folders().size(), 2u);
+    EXPECT_EQ(Canvases().Folders().back().id, Runner().Folder());
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+    for (const Canvas& canvas : Canvases().Canvases()) {
+        EXPECT_TRUE(canvas.items.empty()) << "no notes";
+    }
+    EXPECT_FALSE(App().TutorialOffered());
+}
+
+TEST_F(TutorialAppTest, AStartAfterQuittingPartwayComesBackToTheStepItWasOn) {
+    StartWithLibrary();
+    WalkTo("move");
+    const FolderId folder = Runner().Folder();
+    const ItemId subject = *Runner().Subject();
+
+    StartWith(AppSettings().Stored());  // the library file is kept
+    EXPECT_FALSE(Runner().On()) << "not before edit mode comes up";
+    ShowEditMode();
+    StepFrames(2);
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(StepUp(), "move");
+    EXPECT_EQ(Runner().Folder(), folder);
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, folder);
+    EXPECT_EQ(Runner().Subject(), subject) << "its snippet, from the last run";
+    EXPECT_EQ(Canvases().Folders().size(), 2u) << "no folder made";
+    EXPECT_FALSE(App().TutorialOffered());
+}
+
+TEST_F(TutorialAppTest, AResumeWithItsFolderGoneMakesANewOne) {
+    StartWithLibrary();
+    WalkTo("move");
+    const FolderId old = Runner().Folder();
+    ASSERT_TRUE(controller_->GetSession().Delete(old));
+    StepFrame();
+
+    StartWith(AppSettings().Stored());
+    ShowEditMode();
+    StepFrames(2);
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(StepUp(), "move");
+    EXPECT_NE(Runner().Folder(), old);
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+    EXPECT_EQ(AppSettings().Stored().tutorialFolder, Runner().Folder());
+}
+
+TEST_F(TutorialAppTest, AStepIdNoLongerInTheChainStartsItAgain) {
+    AppConfig config = DefaultConfig();
+    config.tutorialWelcome = "aStepSinceRemoved";
+    StartWithLibrary(config);
+    ShowEditMode();
+    StepFrames(2);
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(StepUp(), "welcome");
+}
+
+TEST_F(TutorialAppTest, AnInstallFromBeforeIsOfferedItOnceAndNoThanksIsKept) {
+    StartWithLibraryFromBefore();
+    EXPECT_EQ(controller_->State(), app::OverlayState::Hidden) << "not a first run";
+    ShowEditMode();
+    StepFrames(2);
+    EXPECT_TRUE(App().TutorialOffered());
+    EXPECT_FALSE(Runner().On());
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    EXPECT_TRUE(card->Active);
+    const size_t folders = Canvases().Folders().size();
+
+    Press(TutorialButton::NoThanks);
+    EXPECT_FALSE(App().TutorialOffered());
+    EXPECT_FALSE(card->Active);
+    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "offered");
+    EXPECT_EQ(Canvases().Folders().size(), folders) << "no folder made";
+
+    StartWith(AppSettings().Stored());
+    ShowEditMode();
+    StepFrames(2);
+    EXPECT_FALSE(App().TutorialOffered()) << "offered once";
+    EXPECT_FALSE(Runner().On());
+}
+
+TEST_F(TutorialAppTest, AnInstallFromBeforeThatTakesTheOfferStartsTheChain) {
+    StartWithLibraryFromBefore();
+    ShowEditMode();
+    StepFrames(2);
+    ASSERT_TRUE(App().TutorialOffered());
+    Overlay().StartTutorial();  // the offer's Start
+    StepFrames(2);
+    EXPECT_FALSE(App().TutorialOffered());
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(StepUp(), "welcome");
+    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "welcome");
+
+    StartWith(AppSettings().Stored());
+    ShowEditMode();
+    StepFrames(2);
+    EXPECT_FALSE(App().TutorialOffered()) << "answered";
+    EXPECT_EQ(StepUp(), "welcome") << "and resumed";
+}
+
 // ===== The derail matrix (sections 6.1 and 9) =====
 //
 // Each do step, crossed with each way off the path that applies to it: the

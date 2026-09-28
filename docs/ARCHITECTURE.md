@@ -1709,10 +1709,7 @@ It is one number for the whole frame, `UiScale()`, set at the start of
 What is not interface is not scaled: snippets, strokes, the eraser and
 brush sizes, and a note's text size, which is content with a size of its
 own (the note editor divides the scale back out of the font size it
-pushes, since ImGui would otherwise apply it). The welcome notes are the
-exception, made at the interface scale when they are made - they are the
-app speaking, and someone who reads at 150% should not need the
-text-size slider to read the note that says where it is. Drag thresholds
+pushes, since ImGui would otherwise apply it). Drag thresholds
 stay in pixels too: they are about how far a hand moves, not about how
 large anything looks.
 
@@ -2506,9 +2503,8 @@ Every key and gesture on one panel, `Ctrl+H` by default and in the
 empty canvas's menu. It exists mostly for what nothing else shows: a
 tool key is on its button's tooltip, but Alt-drag in drawing mode, a
 right-drag that resizes or the modifier that makes a press a drawing are
-nowhere on screen. So the welcome note carries only one gesture, the
-right-click menus, the key that brings the overlay back and the sheet's
-own key, and the sheet the rest, where they can be kept current.
+nowhere on screen. So the tutorial teaches a few gestures and names the
+sheet's key, and the sheet has the rest, where they can be kept current.
 
 Rows are built from the bindings as they are (`BuildCheatSheet`): the
 summon hotkeys, the shortcuts the active profile resolves to and the
@@ -2516,9 +2512,8 @@ creation triggers. A rebound key reads as rebound, and an unbound one or
 a trigger set to Off drops its row rather than showing "(none)". The
 text of each row is fixed, while the keys come from the settings. A
 hand-written page could not do this: it would be out of date the first
-time someone rebound a key. The welcome note fills in its two keys the
-same way. When the sheet's key is unbound, the note sends you to the
-menu instead.
+time someone rebound a key. The tutorial's cards fill in their keys the
+same way. When a key is unbound, a card says what to do instead.
 
 The sheet is a panel over a dimmed canvas, like the Overview, and shares
 its backdrop, and it is on the machine's Panel level as the Overview is:
@@ -2769,19 +2764,13 @@ application owns it - is left unregistered and named at the start, for
 any of the four: the tray menu reaches the overlay without one (see "A
 hotkey another application owns does not stop the start", under
 Configuration). A first run - nothing on disk at all - shows the overlay in edit
-mode with a welcome note, since an app that installs a tray icon and then
-waits for a chord it never mentioned is indistinguishable from one that
-did not start.
-
-Two notes sit beside the welcome, in larger, light-red text. One says to
-set up Behavior and profiles per program, because no one set of input
-defaults suits every game. The other warns that anti-cheat systems may
-object to an input hook drawing over a game. They are notes rather than
-a dialog for the reason the welcome is: they can be moved or deleted
-like anything else, and they show how the app works. Being deletable is
-also why the About text repeats both warnings. They sit in a row with
-the welcome, or in a column on a screen too narrow for that, so that
-none of them covers another.
+mode and starts the tutorial (`docs/TUTORIAL.md`), since an app that
+installs a tray icon and then waits for a chord it never mentioned is
+indistinguishable from one that did not start. Two of its steps are
+warnings: set up Behavior and profiles per program, because no one set
+of input defaults suits every game, and beware of anti-cheat systems,
+which may object to an input hook drawing over a game. Skipping the
+tutorial still shows both.
 
 ## The Windows backend
 
