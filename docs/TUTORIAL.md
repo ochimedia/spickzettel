@@ -1098,7 +1098,7 @@ The new parts are:
 | `pinning` | Pinning and view mode | pinning a snippet, and the pinned view; making it see-through with the wheel or Properties; view mode; unpinning | built: section 14 |
 | `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; a line and a rectangle; the eraser, its rectangle and the right button; a note | built: section 15 |
 | `capturing` | Capturing | a blank drawing; a full-screen screenshot; the quick and silent capture hotkeys, which work while the overlay is away | built: section 16 |
-| `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | to design (13.8) |
+| `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | designed: section 17 |
 | `profiles` | Profiles | what a profile is for; making one for a program; what it can change | to design |
 
 The first build had Basics, Drawing, Folders and canvases, and Profiles
@@ -1229,8 +1229,10 @@ Opening the list keeps nothing.
   - The folders made during the run count as part of the run's space.
     A step in one of them counts as in the tutorial folder.
   - Done puts them in the trash with the run's folder. Deleting several
-    folders under one confirmation is new, and is settled when that
-    topic is built.
+    folders under one confirmation is new.
+
+  Section 17.3 settles which folders these are: those made while the
+  step that asks for one is up.
 
 ### 13.6 The warnings on the skip card
 
@@ -1289,7 +1291,7 @@ it goes, as it wrote `tutorial.welcome`.
   - a need of the opposite kind, "the Overview open";
   - the spotlight shown inside the Overview for such a step.
 
-  Those are argued with that topic.
+  Section 17 argues them.
 
 ### 13.9 Tests
 
@@ -1995,3 +1997,289 @@ of 16.5 and the hand check.
 - **The hotkey steps need no uncovered canvas.** Their cards ask for the
   overlay away first, and leaving edit mode closes any panel or popup
   (the All scope).
+
+## 17. Folders and canvases
+
+Status: **designed** (2026-09-28), for review. Its questions are in
+17.7.
+
+### 17.1 What it teaches, and why
+
+The other topics stay on one canvas. This one is about where snippets
+live, and how to find them again:
+
+- **Canvases.** A canvas is a page of snippets, and a folder holds
+  canvases. The canvas bar shows the current folder's canvases, with +
+  for a new one and a button for the Overview. It stays out of sight
+  until the pointer reaches the bottom edge of the screen, which is why
+  it gets a step.
+- **Switching.** A tile on the bar, or Alt and the wheel anywhere on the
+  canvas, which steps through the folder's canvases. Alt and the wheel
+  is on no button and in no menu; only the cheat sheet has it.
+- **Moving a snippet.** Cut it, then paste it on the other canvas: the
+  snippet itself moves, not a copy (`Editor::PasteFromClipboard`,
+  question 27).
+- **The Overview.** Every folder and canvas: the folders listed on the
+  left, and the canvases of the folder picked there as tiles. A folder's
+  row only shows its canvases. A tile goes to its canvas and closes the
+  Overview.
+- **Folders.** New folder makes one, with a canvas in it, and goes
+  there.
+- **Two gestures the Overview shows no sign of:** a double-click on a
+  name renames the folder or canvas, and a tile dragged onto a folder's
+  row moves the canvas into that folder.
+- **The trash.** A deleted canvas or folder is only marked. Show deleted
+  shows what is marked, in red, where it was, and Restore brings it back
+  with everything on it. A deleted snippet is not in the trash: it comes
+  back by undo, as Basics shows.
+
+**The order** goes from the canvas outward. The bar and the canvases
+come first, since they need nothing open. The Overview and its folders
+follow. The trash comes last, since its steps leave Show deleted on and
+the rest of the grid dimmed.
+
+**Left out:**
+
+- **Move to canvas and Move to new canvas,** in a snippet's right-click
+  menu: other ways to the move the step teaches. The end card names
+  them (question 33).
+- **Copy and Duplicate:** understood without a step.
+- **Reordering,** by dragging a tile between tiles or a row between
+  rows: plain once a tile has been dragged onto a folder.
+- **Delete permanently and the retention period.** The tooltip on
+  anything deleted says when it goes for good, and Settings > Behavior
+  sets how long that is.
+- **Deleting a canvas from the canvas bar,** by a right-click on its
+  tile: the end card names it.
+- **The rest of the Overview:** the Vector and Bitmap previews, and the
+  Settings and About tabs.
+
+### 17.2 The chain
+
+| # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
+|---|---|---|---|---|---|---|---|---|
+| 0 | `newCanvas` | do | **waits** | A folder holds canvases, and each canvas its own snippets. Move the pointer to the bottom edge of the screen: the canvas bar comes out with this folder's canvases. Press + on it for a new canvas. | the bar's + | in the tutorial folder | the current canvas is one of the tutorial's that was not there when the step began | - |
+| 1 | `moveSnippet` | do | moves on | To take a snippet to another canvas, select it and press {key:cut}. Go to the other canvas - hold Alt and turn the wheel, or click its tile on the bar - and press {key:paste} there. | the subject | in the tutorial folder; canvas uncovered; a subject | a snippet of the tutorial's is on another canvas than when the step first saw it | a copy pasted: "That pasted a copy - the first one is still on the other canvas. Cut it to move it instead." |
+| 2 | `overview` | do | moves on | The Overview has all your folders and canvases. Open it with the grid button at the right end of the canvas bar. | the bar's Overview button | in the tutorial folder | the Overview up | - |
+| 3 | `newFolder` | do | **waits** | Folders keep canvases apart - one for each game, say. Press New folder, at the bottom left. It comes with a canvas, and takes you there. | New folder | in the tutorial folder; the Overview up; its Canvases tab | a folder that was not there when the step began | New canvas pressed instead: "That made a canvas. New folder is the button to its left." |
+| 4 | `rename` | do | moves on | It's named for the time it was made. Double-click the name, type a better one, and press Enter. A canvas is renamed the same way, by the name under its tile. | the new folder's row | the Overview up; its Canvases tab | a folder or canvas of the tutorial's has another name than when the step began | - |
+| 5 | `switchFolder` | do | moves on | A folder's row shows its canvases, and a tile takes you there. Click the tutorial's folder in the list, then one of its canvases. | the tutorial folder's row | the Overview up; its Canvases tab | the current canvas is another than when the step began, in the tutorial's own folder | - |
+| 6 | `moveCanvas` | do | moves on | To move a canvas to another folder, drag its tile onto the folder in the list. Drag one of these onto your folder. | the new folder's row | in the tutorial folder; the Overview up; its Canvases tab | a canvas of the tutorial's is in another folder than when the step began | - |
+| 7 | `deleteCanvas` | do | moves on | The trash button under a tile deletes that canvas, with its snippets. Delete the one your snippet is on. | that tile's trash button | the Overview up; its Canvases tab | a canvas or folder of the tutorial's deleted since the step began | - |
+| 8 | `showDeleted` | do | moves on | Nothing deleted is gone yet. Tick Show deleted, at the top right: what's in the trash shows in red, where it was. | Show deleted | the Overview up; its Canvases tab | Show deleted on | - |
+| 9 | `restore` | do | moves on | Press Restore, the arrow under its tile: the canvas comes back, with its snippet. | that Restore | the Overview up; its Canvases tab; Show deleted on; something in the trash | a canvas or folder of the tutorial's that was in the trash during the step is back | - |
+| 10 | `end` | read | Done | That's folders and canvases. A snippet's right-click menu has two more ways to move it: Move to canvas, which picks one in the Overview, and Move to new canvas. A right-click on a tile of the canvas bar deletes that canvas. Done puts the tutorial's folders in the trash; Done, keep the folder keeps them. | - | - | Done | - |
+
+**"The tutorial's"** means the run's folders (17.3): the tutorial's own
+folder and the one made in `newFolder`. "In the tutorial folder" is met
+in either, so the steps after `newFolder` go on in the new folder as
+well. `switchFolder` is the one step that asks for the tutorial's own
+folder.
+
+**Which steps wait** (question 37). `newCanvas` does, since `moveSnippet`
+needs another canvas to move to, and `newFolder` does, since `rename`
+and `moveCanvas` are about the folder it makes. `deleteCanvas` does not:
+`restore` has its need for something in the trash, with a line, as
+Basics' `undo` has for a deleted subject.
+
+**What each goal reads.** Each is a change between the step's start and
+now, as in 6.3, and none looks at what was pressed:
+
+- **A canvas made:** the quick capture, the Overview's New canvas and a
+  key bound to New canvas count for `newCanvas` too.
+- **A snippet moved:** a move keeps the snippet's id (`Session::Paste`,
+  `Session::SendItemsTo`), so the goal asks whether a snippet the step
+  has seen is now on another canvas. Move to canvas and Move to new
+  canvas count.
+- **A copy:** a copy pasted onto another canvas keeps its place exactly
+  (`Editor::PasteFromClipboard`). So a snippet made during the step, of
+  the kind and in the place of one of the tutorial's on another canvas,
+  is a copy, and gets the near miss.
+- **A name:** any folder or canvas of the tutorial's, renamed to
+  something else. The same name typed again is no change.
+- **A switch:** a canvas of the tutorial's own folder other than the one
+  the step began on. From the new folder, any of its tiles does it.
+- **Deleted and restored:** any canvas or folder of the tutorial's,
+  including the tutorial's own folder. Deleted, that one takes the
+  current canvas with it, to another folder
+  (`CanvasManager::SettleOffDeleted`). So `deleteCanvas`, `showDeleted`
+  and `restore` do not need the tutorial folder, and `restore` then
+  brings it back.
+
+**Deleted for good by mistake.** Restore's neighbor is Delete
+permanently, and it asks first. If the canvas goes for good anyway, the
+need for something in the trash has its line: "Nothing of the tutorial's
+is in the trash. Delete a canvas first, or go on with Next."
+
+**The text follows the settings:**
+
+- **With the canvas bar off** (Settings > Appearance): `newCanvas` says
+  "Press {key:newCanvas} for a new canvas", or, with that unbound,
+  "Right-click an empty spot, choose Overview, and press New canvas at
+  the bottom". `moveSnippet` names only Alt and the wheel, and
+  `overview` the right-click menu. The goal of `newCanvas` is met in the
+  Overview too, which is why it does not need the canvas uncovered.
+- **With Cut or Paste unbound:** "Right-click it and choose Cut. Go to
+  the other canvas - ... - then right-click an empty spot and choose
+  Paste."
+
+### 17.3 What it needs that is new
+
+- **The run's folders** (13.5, settled here; question 36). They are the
+  tutorial's own folder and those made while `newFolder` is up:
+  - They are the tutorial's space. "In the tutorial folder" is met in
+    any of them, and the subject and the snippets are looked for in all
+    of them.
+  - A flag on the step, `keepsFolders`, marks the step whose folders are
+    the run's. The runner notes each folder that appears while that step
+    is up.
+  - Only there. A folder made at another time, perhaps for the user's
+    own work while a topic is left partway, stays the user's.
+  - They are not kept across a restart. After one, a folder made before
+    it is the user's own.
+- **Done with several folders.** The confirmation names each ("Delete
+  the folders "Tutorial: Folders and canvases" and "Games"? Their
+  canvases go too."), and its Delete puts them all in the trash.
+  `DeleteTarget` carries the other folders. Done, keep the folder keeps
+  them all. With the confirmation turned off in Settings, they go
+  without asking, as one folder does now.
+- **The world** (7.1):
+  - every folder, with its name and whether it is deleted; every canvas
+    of a folder, with its name and whether it is deleted, deleted ones
+    included (`FolderFacts`, `CanvasFacts`);
+  - the Overview: whether it is up, which tab it is on, whether Show
+    deleted is on;
+  - whether the canvas bar is on.
+- **The start record** keeps the current canvas, and the folders and the
+  run's canvases as they were. The runner keeps what of the run's was
+  seen in the trash during the step, beside `deletedThisStep`.
+- **Four needs:**
+
+  | Need | Not met when | The card says | Button |
+  |---|---|---|---|
+  | The Overview up | it is not up | "Open the Overview: right-click an empty spot and choose Overview." | - |
+  | Its Canvases tab | it is on Settings or About | "Go back to the Canvases tab, at the top left." | - |
+  | Show deleted on | it is off | "Tick Show deleted, at the top right, to see it." | - |
+  | Something in the trash | nothing of the run's is deleted, and nothing was during the step | "Nothing of the tutorial's is in the trash. Delete a canvas first, or go on with Next." | - |
+
+  The first is the opposite of "canvas uncovered", as 13.8 foresaw. It
+  has no button: opening the Overview is what the topic teaches.
+- **Anchors, marked by their owners** (7.2):
+  - the canvas bar's + and its Overview button (`canvas_bar.cpp`);
+  - the Overview's New folder, Show deleted, a folder's row, the trash
+    button under a tile, and a Restore (`overview_panel.cpp`). The last
+    three are marked by their folder's or canvas's id, so `Anchor::item`
+    becomes `Anchor::id`.
+- **Spots:**
+  - `CanvasBarNew`, `CanvasBarOverview`, `NewFolder`, `ShowDeleted`;
+  - `MadeFolder`: the row of the folder made in `newFolder`;
+  - `TutorialFolder`: the row of the tutorial's own folder;
+  - `DeleteCanvas`: the trash button under a tile of the tutorial's,
+    one with a snippet on it first;
+  - `Restore`: the Restore of what of the tutorial's is in the trash:
+    under its tile, or on its folder's row while the grid shows another
+    folder.
+- **The spotlight inside the Overview.** Today it is drawn through no
+  panel (7.4). It keeps that rule for the canvas's own spots, and draws
+  the Overview's while the Overview is up. Their anchors are only marked
+  then anyway.
+- **The card over the Overview** keeps its places, top center first,
+  and keeps clear of the ring as it does on the canvas (question 38). At
+  1920 by 1080, top center covers the middle of the Overview's header
+  and its grid's first row from the third tile on. The tutorial's
+  folders have two or three canvases. The hand check says whether that
+  holds.
+- **The strings:** each step's title, texts and near misses, the four
+  needs, the end card (`tutorial.foldersEnd.*`), the confirmation for
+  several folders, and `tutorial.topics.folders.*` ("Folders and
+  canvases": "Make and switch canvases, move a snippet, sort canvases
+  into folders, and restore from the trash.").
+- **A row in the topic table,** fifth, after Capturing.
+
+### 17.4 What does not change
+
+- The runner's loop, the card, the list and the settings rows.
+- The input machine, the Overview and the canvas bar: the steps use them
+  as they are, and their owners only mark anchors.
+- The session and the store. Done's folders are deleted with the call
+  one folder uses.
+
+### 17.5 Tests
+
+- **`chains_test`,** against the fake world:
+  - each goal and near miss, and the four needs;
+  - the run's folders: a folder made while `newFolder` is up is the
+    tutorial's, and one made during another step is not;
+  - the texts for the canvas bar off and for Cut or Paste unbound.
+
+  `TopicsTest` covers the shape.
+- **`AppWorld`:** the folders and canvases, with their names and deleted
+  marks; the Overview's tab and Show deleted; each new anchor marked
+  where its widget is drawn.
+- **Done with a folder made:** one confirmation naming both; its Delete
+  puts both in the trash; Done, keep the folder keeps both; with the
+  confirmation off, both go.
+- **The walk-through,** with hands:
+  - the pointer at the bottom edge, and a press on +;
+  - a screenshot, then Ctrl+X, Alt and the wheel, and Ctrl+V;
+  - the bar's grid button;
+  - New folder;
+  - a double-click on its row, a name typed, and Enter;
+  - the tutorial folder's row, then a tile;
+  - the Overview from the right-click menu, and a tile dragged onto the
+    new folder's row;
+  - the trash button under a tile, and the confirmation's Delete;
+  - Show deleted, and Restore;
+  - Done, and the confirmation.
+- **The derail matrix,** a row per way:
+  - `newCanvas`: another folder; put away and back;
+  - `moveSnippet`: the Overview or the cheat sheet up; another folder;
+    put away and back; a copy pasted (the near miss);
+  - `overview`: another folder; put away and back;
+  - each step from `newFolder` to `restore`: the Overview closed with
+    Esc, and put away and back (the need for it up); the Settings tab
+    (its need); another folder picked in the list (nothing);
+  - `newFolder`: New canvas pressed (the near miss);
+  - `restore`: Show deleted off (its need).
+- **By hand:** every card with real input, and where the card lands
+  over the Overview.
+
+### 17.6 Getting there
+
+Two pieces of work:
+
+1. **What the chain stands on:** the run's folders, and Done with
+   several; the world's folders, canvases and Overview; the four needs;
+   the anchors and spots; the spotlight inside the Overview. Each with
+   its tests, before any step uses it.
+2. **The chain:** its strings and its row, with the walk-through, the
+   matrix and the hand check.
+
+### 17.7 Questions for review
+
+32. **Ten steps and the end card, the trash last** (17.2). The
+    alternative is the trash before the folders, which leaves Show
+    deleted on under `newFolder`, with the new folder dimmed.
+33. **Cut and paste is the move,** with Alt and the wheel as the way to
+    the other canvas, since both are hidden from sight (question 27).
+    Move to canvas and Move to new canvas get a line on the end card.
+34. **Renaming, and dragging a tile onto a folder, are steps,** since
+    the Overview shows no sign of either. The alternative is a line each
+    on the end card, for nine cards in all.
+35. **The trash steps use a canvas,** the one the snippet is on, so the
+    restore brings a snippet back into sight. A folder is deleted and
+    restored the same way, and would do as well.
+36. **The run's folders are those made while `newFolder` is up,** with
+    the tutorial's own. They count as the tutorial folder for every
+    step, and Done puts them all in the trash under one confirmation
+    that names each. They are not kept across a restart. The
+    alternative, every folder made while the topic runs, would put a
+    folder made for real work during a topic left partway in the trash
+    with the tutorial's.
+37. **`newCanvas` and `newFolder` wait for their goal,** since later
+    steps use what they make. `deleteCanvas` does not: `restore` has a
+    need, with its line, for something in the trash.
+38. **Inside the Overview,** the spotlight rings the Overview's own
+    widgets, and the card keeps its places. If the hand check finds it
+    covering what a step needs, the fix is a place of its own over the
+    Overview, the lower right corner, where the grid is usually empty.
