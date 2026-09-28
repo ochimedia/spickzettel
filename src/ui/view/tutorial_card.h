@@ -38,6 +38,14 @@ public:
     // Whether a topic has run since the app started: until one has, the
     // topic kept as running is a resume's to go on with.
     bool HasRun() const { return hasRun_; }
+    // The list of topics (section 13.3), up until one is chosen or it is
+    // left.
+    void OpenList() { listing_ = true; }
+    bool Listing() const { return listing_; }
+
+    // Where the user is with a topic, as the list says it.
+    enum class Status { New, Running, Started, Done };
+    Status StatusOf(const tutorial::Topic& topic) const;
     // The tutorial's folder, made again.
     void MoveTo(core::FolderId folder) { runner_.MoveTo(folder); }
     // One of the card's buttons, as an action asked for it.
@@ -67,6 +75,9 @@ private:
     std::optional<AnchorRect> SubjectRect() const;
     void DrawStep();
     void DrawSkipped();
+    void DrawList();
+    // More topics - on the end card and the skip card.
+    void MoreTopicsButton();
     // Done, keep the folder - on the end card and the skip card.
     void DoneKeepButton();
     // The hint under a step's text, and its button.
@@ -83,6 +94,7 @@ private:
     // Dragged by the user: left where it was put for the rest of the run.
     bool moved_ = false;
     bool hasRun_ = false;
+    bool listing_ = false;
 };
 
 }  // namespace sz::ui

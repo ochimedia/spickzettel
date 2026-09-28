@@ -1,9 +1,11 @@
 // The tutorial card's buttons, clicked by name - docs/TUTORIAL.md, section
 // 3: Back, Next, Skip tutorial and Done, Next grayed out on a gated step,
-// the buttons under a hint, and Take the tutorial again in Settings.
+// the buttons under a hint, and the list of topics, from Settings and More
+// topics.
 #include <string>
 
 #include "fakes/ui_test.h"
+#include "ui/tutorial/topics.h"
 #include "ui/tutorial/tutorial.h"
 
 namespace sz::test {
@@ -177,25 +179,70 @@ TEST_F(TutorialUiTest, APressOnTheCardReachesItsButtonThroughTheInputMachine) {
     EXPECT_EQ(StepUp(), "screenshot");
 }
 
-// Settings > Interaction: the Overview closes, and the tutorial starts at
-// its first step in a new folder (section 7.6).
-TEST_F(TutorialUiTest, TakeTheTutorialAgainStartsItFromSettings) {
+// Settings > Interaction: the Overview closes, and the list of topics
+// comes up; a topic pressed starts at its first step, in a new folder
+// named for it (section 13.4).
+TEST_F(TutorialUiTest, OpenTheTutorialInSettingsShowsTheTopicsToPickFrom) {
     ShowEditMode();
     StepFrame();
     const size_t folders = Canvases().Folders().size();
     OpenOverviewUi();
-    RunUi("take the tutorial again", [](ImGuiTestContext* ctx) {
+    RunUi("open the tutorial", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
         ctx->ItemClick("**/###sectioninteraction");
-        ctx->ItemClick("**/###tutorial_again");
+        ctx->ItemClick("**/###tutorial_open");
     });
     StepFrames(2);
     EXPECT_FALSE(App().IsOverviewOpen());
+    EXPECT_TRUE(App().TutorialListed());
+    EXPECT_FALSE(Runner().On()) << "nothing started by opening the list";
+
+    ClickOnCard("**/tutorial_topic_drawing");
+    EXPECT_FALSE(App().TutorialListed());
     ASSERT_TRUE(Runner().On());
-    EXPECT_EQ(StepUp(), "welcome");
+    EXPECT_EQ(App().TutorialTopic().id, "drawing");
+    EXPECT_EQ(StepUp(), "drawingMode");
     ASSERT_EQ(Canvases().Folders().size(), folders + 1);
+    EXPECT_EQ(Canvases().Folders().back().name, "Tutorial: Drawing");
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+}
+
+TEST_F(TutorialUiTest, TheListClosesWithNothingStarted) {
+    ShowEditMode();
+    StepFrame();
+    Overlay().OpenTutorialList();
+    StepFrames(2);
+    ASSERT_TRUE(App().TutorialListed());
+    ClickOnCard("**/###tutorial_closelist");
+    EXPECT_FALSE(App().TutorialListed());
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(ImGui::FindWindowByName("##tutorial_card")->Active, false);
+}
+
+// More topics, from the skip card: the list, where Back returns to the
+// skip card, the running topic's row to it too, and another row starts
+// that topic.
+TEST_F(TutorialUiTest, MoreTopicsOpensTheListAndBackReturnsToTheCardItCameFrom) {
+    StartTheTutorial();
+    ClickOnCard("**/###tutorial_skip");
+    ClickOnCard("**/###tutorial_moretopics");
+    ASSERT_TRUE(App().TutorialListed());
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Running);
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("drawing")), TutorialCard::Status::New);
+
+    ClickOnCard("**/###tutorial_closelist");
+    EXPECT_EQ(Runner().GetState(), tutorial::Tutorial::State::Skipped) << "back on the skip card";
+    ClickOnCard("**/###tutorial_moretopics");
+    ClickOnCard("**/tutorial_topic_basics");
+    EXPECT_EQ(Runner().GetState(), tutorial::Tutorial::State::Skipped) << "the running one goes on where it is";
+
+    ClickOnCard("**/###tutorial_moretopics");
+    ClickOnCard("**/tutorial_topic_drawing");
+    EXPECT_EQ(App().TutorialTopic().id, "drawing");
+    EXPECT_EQ(StepUp(), "drawingMode");
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Started)
+        << "skipped, so started";
 }
 
 }  // namespace

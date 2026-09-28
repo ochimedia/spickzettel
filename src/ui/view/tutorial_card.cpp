@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstdio>
 #include <string>
 
 #include <imgui.h>
@@ -98,6 +99,7 @@ void TutorialCard::Resume(const tutorial::Topic& topic, std::string_view id, cor
     runner_.Resume(id, folder);
     moved_ = false;
     hasRun_ = true;
+    listing_ = false;
 }
 
 void TutorialCard::Press(TutorialButton button) {
@@ -114,6 +116,12 @@ void TutorialCard::Press(TutorialButton button) {
         case TutorialButton::Done:
         case TutorialButton::DoneKeep:
             runner_.Done();
+            return;
+        case TutorialButton::MoreTopics:
+            listing_ = true;
+            return;
+        case TutorialButton::CloseList:
+            listing_ = false;
             return;
     }
 }
@@ -189,7 +197,7 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
 // ================= The card =================
 
 void TutorialCard::Draw(float displayW, float displayH) {
-    if (!runner_.On()) {
+    if (!runner_.On() && !listing_) {
         return;
     }
     const float width = Px(kCardWidth);
@@ -214,7 +222,9 @@ void TutorialCard::Draw(float displayW, float displayH) {
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse |
                      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoFocusOnAppearing |
                      ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoScrollbar);
-    if (runner_.GetState() == tutorial::Tutorial::State::Skipped) {
+    if (listing_) {
+        DrawList();
+    } else if (runner_.GetState() == tutorial::Tutorial::State::Skipped) {
         DrawSkipped();
     } else {
         DrawStep();
@@ -276,6 +286,7 @@ void TutorialCard::DrawStep() {
     if (last) {
         ImGui::SameLine();
         DoneKeepButton();
+        MoreTopicsButton();
     } else {
         // The way out, right-aligned and quieter.
         const char* skip = Labeled(strings::kTutorialCardSkip, "tutorial_skip");
@@ -354,6 +365,106 @@ void TutorialCard::DrawSkipped() {
     }
     ImGui::SameLine();
     DoneKeepButton();
+    MoreTopicsButton();
+}
+
+void TutorialCard::MoreTopicsButton() {
+    // On a row of its own, right-aligned: the end card's row is full.
+    const float w = ImGui::CalcTextSize(strings::kTutorialCardMoreTopics).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - w));
+    if (QuietButton(Labeled(strings::kTutorialCardMoreTopics, "tutorial_moretopics"))) {
+        host_.Act(action::TutorialPress{TutorialButton::MoreTopics});
+    }
+}
+
+TutorialCard::Status TutorialCard::StatusOf(const tutorial::Topic& topic) const {
+    if (runner_.On() && topic_ == &topic) {
+        return Status::Running;
+    }
+    const std::string progress = world_.TopicProgress(topic.id);
+    if (progress.empty()) {
+        return Status::New;
+    }
+    return progress == "finished" ? Status::Done : Status::Started;
+}
+
+void TutorialCard::DrawList() {
+    ImGui::TextColored(theme::kWhite, "%s", strings::kTutorialListTitle);
+    Wrapped(theme::kGraphite100, strings::kTutorialListText);
+    ImGui::Spacing();
+    // A row per topic, pressed as a whole: its text drawn first, on the
+    // upper channel, and the row's button and hover behind it.
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    for (const tutorial::Topic& topic : tutorial::Topics()) {
+        const Status status = StatusOf(topic);
+        char statusText[64];
+        switch (status) {
+            case Status::New:
+                std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListNew);
+                break;
+            case Status::Running:
+                std::snprintf(statusText, sizeof(statusText), strings::kTutorialListAtStep,
+                              static_cast<int>(runner_.StepIndex() + 1), static_cast<int>(runner_.StepCount()));
+                break;
+            case Status::Started:
+                std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListStarted);
+                break;
+            case Status::Done:
+                std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListDone);
+                break;
+        }
+        char steps[32];
+        std::snprintf(steps, sizeof(steps), strings::kTutorialListSteps, static_cast<int>(topic.chain().size()));
+
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const ImVec2 pad(style.FramePadding.x, style.FramePadding.y);
+        drawList->ChannelsSplit(2);
+        drawList->ChannelsSetCurrent(1);
+        const ImVec2 start = ImGui::GetCursorScreenPos();
+        ImGui::SetCursorScreenPos(ImVec2(start.x + pad.x, start.y + pad.y));
+        ImGui::BeginGroup();
+        ImGui::PushTextWrapPos(ImGui::GetWindowContentRegionMax().x - pad.x);
+        ImGui::TextColored(theme::kWhite, "%s", topic.title);
+        ImGui::SameLine();
+        ImGui::TextColored(status == Status::Running ? theme::kTutorialHighlight : theme::kGraphite300, "%s",
+                           statusText);
+        ImGui::PushStyleColor(ImGuiCol_Text, theme::kGraphite100);
+        ImGui::TextUnformatted(topic.gist);
+        ImGui::PopStyleColor();
+        ImGui::TextColored(theme::kGraphite300, "%s", steps);
+        ImGui::PopTextWrapPos();
+        ImGui::EndGroup();
+        const ImVec2 end(start.x + ImGui::GetContentRegionAvail().x, ImGui::GetItemRectMax().y + pad.y);
+
+        drawList->ChannelsSetCurrent(0);
+        ImGui::SetCursorScreenPos(start);
+        const std::string id = "tutorial_topic_" + std::string(topic.id);
+        const bool pressed = ImGui::InvisibleButton(id.c_str(), ImVec2(end.x - start.x, end.y - start.y));
+        if (status == Status::Running) {
+            drawList->AddRect(start, end, ImGui::GetColorU32(theme::kTutorialHighlight), Px(6.0f), ImDrawFlags_None,
+                              Px(1.5f));
+        }
+        if (ImGui::IsItemHovered()) {
+            drawList->AddRectFilled(start, end, ImGui::GetColorU32(theme::kHoverWash), Px(6.0f));
+        }
+        drawList->ChannelsMerge();
+        if (pressed) {
+            // The topic running goes on where it is; any other starts at
+            // its first step (question 12).
+            if (status == Status::Running) {
+                host_.Act(action::TutorialPress{TutorialButton::CloseList});
+            } else {
+                host_.Act(action::StartTutorial{std::string(topic.id)});
+            }
+        }
+        ImGui::Spacing();
+    }
+    ImGui::Separator();
+    // Back to the topic running, or Close with none.
+    const char* leave = runner_.On() ? strings::kTutorialCardBack : strings::kTutorialListClose;
+    if (ImGui::Button(Labeled(leave, "tutorial_closelist"))) {
+        host_.Act(action::TutorialPress{TutorialButton::CloseList});
+    }
 }
 
 void TutorialCard::DoneKeepButton() {
@@ -367,7 +478,7 @@ void TutorialCard::DoneKeepButton() {
 // ================= The spotlight =================
 
 void TutorialCard::DrawSpotlight() {
-    if (runner_.GetState() != tutorial::Tutorial::State::OnStep || runner_.GoalMet()) {
+    if (listing_ || runner_.GetState() != tutorial::Tutorial::State::OnStep || runner_.GoalMet()) {
         return;
     }
     // Not through a panel: the step's line says to close it first.

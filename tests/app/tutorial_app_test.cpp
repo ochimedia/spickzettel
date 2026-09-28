@@ -585,6 +585,29 @@ TEST_F(TutorialAppTest, AnotherTopicStartedFromAnEndCardOrASkipCardCountsItsEnd)
     EXPECT_EQ(Kept(), "welcome") << "started again, from its first step";
 }
 
+// ===== The list (section 13.3) =====
+
+TEST_F(TutorialAppTest, TheEndCardLeadsOnToTheListAndATopicDoneSaysSo) {
+    WalkTo("end");
+    Press(TutorialButton::MoreTopics);
+    ASSERT_TRUE(App().TutorialListed());
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Running);
+    EXPECT_FALSE(App().TutorialSpot().has_value());
+    Press(TutorialButton::CloseList);
+    EXPECT_FALSE(App().TutorialListed());
+    EXPECT_EQ(StepUp(), "end") << "back on the card it came from";
+
+    Press(TutorialButton::DoneKeep);
+    Overlay().OpenTutorialList();
+    StepFrames(2);
+    ASSERT_TRUE(App().TutorialListed());
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Done);
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("drawing")), TutorialCard::Status::New);
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    EXPECT_TRUE(card->Active) << "the list, with no topic running";
+}
+
 // ===== The folder (sections 6.4, 7.6 and 9) =====
 
 TEST_F(TutorialAppTest, ACaptureHotkeyDuringTheTutorialLandsInItsFolder) {

@@ -749,11 +749,11 @@ void SettingsPage::RenderSettingsInteraction() {
 
     SettingsGroupBreak();
 
-    // In a new folder, from the first step; the Overview, which this page
-    // is in, closes for it (docs/TUTORIAL.md, section 7.6).
+    // Its list of topics; the Overview, which this page is in, closes for
+    // it (docs/TUTORIAL.md, section 13.4).
     SettingsHeading("tutorialheading", strings::kTutorialSettingsHeading, strings::kTutorialSettingsHelp);
-    if (ImGui::Button(Labeled(strings::kTutorialSettingsAgain, "tutorial_again"))) {
-        host_.Act(action::StartTutorial{});
+    if (ImGui::Button(Labeled(strings::kTutorialSettingsOpen, "tutorial_open"))) {
+        host_.Act(action::OpenTutorialList{});
     }
 }
 

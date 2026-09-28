@@ -38,6 +38,11 @@ public:
     std::optional<std::string> KeyLabel(CommandId command) const override;
     core::CreationTrigger ScreenshotTrigger() const override { return settings_.Stored().screenshotTrigger; }
     core::CreationTrigger DrawingTrigger() const override { return settings_.Stored().drawingTrigger; }
+    std::string TopicProgress(std::string_view topic) const override {
+        const auto& progress = settings_.Stored().tutorialProgress;
+        const auto it = progress.find(std::string(topic));
+        return it == progress.end() ? std::string() : it->second;
+    }
 
 private:
     const core::Session& session_;

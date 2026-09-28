@@ -728,6 +728,10 @@ void OverlayApp::Do(const ViewAction& action) {
                            tutorialCard_.Resume(*topic, at->second, folder);
                        }
                    },
+                   [&](const action::OpenTutorialList&) {
+                       overview_.Close();
+                       tutorialCard_.OpenList();
+                   },
                    [&](const action::BackToTutorial&) {
                        const FolderId folder = tutorialCard_.Runner().Folder();
                        if (const FolderId now = GoToTutorialFolder(tutorialCard_.CurrentTopic(), folder);

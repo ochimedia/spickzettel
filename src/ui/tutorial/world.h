@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/canvas/canvas.h"
@@ -70,6 +71,11 @@ public:
     virtual std::optional<std::string> KeyLabel(CommandId command) const = 0;
     virtual core::CreationTrigger ScreenshotTrigger() const = 0;
     virtual core::CreationTrigger DrawingTrigger() const = 0;
+
+    // What is kept of a topic's progress (docs/TUTORIAL.md, section
+    // 13.7): a step's id, "finished" or "skipped" - empty for a topic
+    // never started. For the list, and the skip card's warnings.
+    virtual std::string TopicProgress(std::string_view topic) const = 0;
 };
 
 }  // namespace sz::ui::tutorial

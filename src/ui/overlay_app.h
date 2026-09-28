@@ -261,6 +261,11 @@ public:
     }
     const tutorial::Tutorial& TutorialRunner() const { return tutorialCard_.Runner(); }
     const tutorial::Topic& TutorialTopic() const { return tutorialCard_.CurrentTopic(); }
+    // The list of topics, as Settings opens it; whether it is up; and what
+    // it says of a topic.
+    void OpenTutorialList() { Act(action::OpenTutorialList{}); }
+    bool TutorialListed() const { return tutorialCard_.Listing(); }
+    TutorialCard::Status TutorialStatus(const tutorial::Topic& topic) const { return tutorialCard_.StatusOf(topic); }
     std::optional<AnchorRect> TutorialSpot() const { return tutorialCard_.SpotRect(); }
 
     // Captures a fullscreen screenshot onto a canvas made for it (see the

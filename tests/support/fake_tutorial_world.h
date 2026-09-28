@@ -38,6 +38,7 @@ struct FakeWorld : World {
                                                     {CommandId::NewScreenshotTool, "S"}};
     core::CreationTrigger screenshotTrigger = core::CreationTrigger::Plain;
     core::CreationTrigger drawingTrigger = core::CreationTrigger::Ctrl;
+    std::unordered_map<std::string, std::string> progress;
 
     // A snippet made on the current canvas: a screenshot, unless said.
     SnippetFacts& Make(core::ItemId id, bool picture = true) {
@@ -84,6 +85,10 @@ struct FakeWorld : World {
     }
     core::CreationTrigger ScreenshotTrigger() const override { return screenshotTrigger; }
     core::CreationTrigger DrawingTrigger() const override { return drawingTrigger; }
+    std::string TopicProgress(std::string_view topic) const override {
+        const auto it = progress.find(std::string(topic));
+        return it == progress.end() ? std::string() : it->second;
+    }
 };
 
 }  // namespace sz::ui::tutorial

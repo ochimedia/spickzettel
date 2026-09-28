@@ -42,8 +42,10 @@ struct DeleteTarget {
 };
 
 // One of the tutorial card's own buttons. Done ends the tutorial and puts
-// its folder in the trash, DoneKeep ends it and keeps the folder.
-enum class TutorialButton { Next, Back, Skip, Done, DoneKeep };
+// its folder in the trash, DoneKeep ends it and keeps the folder;
+// MoreTopics opens the list of topics, and CloseList leaves it - back to
+// the topic running, if one is.
+enum class TutorialButton { Next, Back, Skip, Done, DoneKeep, MoreTopics, CloseList };
 
 namespace action {
 
@@ -130,6 +132,9 @@ struct StartTutorial {
 // A start after quitting partway: the topic kept as running, at the step
 // kept, in the folder kept - or a new one when that is gone (section 13.7).
 struct ResumeTutorial {};
+// Open the tutorial: its list of topics (section 13.4), with the Overview,
+// which Settings is in, closed for it.
+struct OpenTutorialList {};
 // Go back to the tutorial: to its folder, made again when it is gone.
 struct BackToTutorial {};
 // Put one here: a snippet to practice on, on the canvas being looked at.
@@ -142,7 +147,8 @@ using ViewAction =
                  action::ReorderFolder, action::ReorderCanvas, action::MoveCanvasToFolder, action::RenameFolder,
                  action::RenameCanvas, action::NewFolder, action::NewCanvas, action::SendPicked, action::Restore,
                  action::Delete, action::RestoreMinimized, action::ClosePanel, action::FinishNoteEdit,
-                 action::TutorialPress, action::StartTutorial, action::ResumeTutorial, action::BackToTutorial,
+                 action::TutorialPress, action::StartTutorial, action::ResumeTutorial, action::OpenTutorialList,
+                 action::BackToTutorial,
                  action::PracticeSnippet>;
 
 }  // namespace sz::ui
