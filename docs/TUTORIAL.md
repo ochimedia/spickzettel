@@ -2337,8 +2337,8 @@ Two pieces of work:
 
 ## 18. Profiles
 
-Status: **designed** (2026-09-28), for review. Its questions are in
-18.7.
+Status: **agreed** (2026-09-28). Its questions and their answers are in
+18.7, and the design below matches them.
 
 ### 18.1 What it teaches, and why
 
@@ -2585,33 +2585,33 @@ Two pieces of work, as in 17.6:
 2. **The chain:** its strings and its row, with the walk-through, the
    matrix and the hand check.
 
-### 18.7 Questions for review
+### 18.7 Questions for review, and the answers
 
 39. **Seven steps and the end card** (18.2), with a trip to another
     program (`otherProgram`, `elsewhere`) as the demonstration that a
     profile runs only over its program. The alternative, for five and
     the end card, is to pick Defaults in Showing and see the row ticked
     there, which shows the layers but not that the profile follows the
-    program. *Recommended:* the trip.
+    program. *Answer:* as recommended (the trip).
 40. **Don't steal focus is the setting the card names,** for the reason
     the `programs` card gives and for the rows that gray out under it.
-    The goal counts any Behavior row. *Recommended:* as proposed.
+    The goal counts any Behavior row. *Answer:* as recommended.
 41. **The revert is a step,** with the tick-back as its near miss, since
     a row set back by hand stays the profile's own and nothing on screen
     says so but its color. The alternative is a line on the end card.
-    *Recommended:* the step.
+    *Answer:* as recommended (the step).
 42. **Showing follows a profile just made,** by either button: a change
     to the Settings page outside the tutorial. Without it, `change`
     needs a step of its own to pick the profile in Showing, and a user
     who makes a profile without the tutorial changes the defaults next.
-    *Recommended:* the change.
+    *Answer:* as recommended (the change).
 43. **The topic makes no folder,** and Done deletes the tutorial's
     profile, with "Done, keep the profile" to keep it. The alternative
     is a folder as every topic has, which stays empty, and a keep button
-    that keeps both. *Recommended:* no folder.
+    that keeps both. *Answer:* as recommended (no folder).
 44. **A program with a profile of the user's already:** the step makes a
     second one anyway, for practice, and the card says it won't run
     while the user's comes first. The alternative, the steps working on
     the user's own profile, would have `change` and `revert` edit it,
-    and Done could not delete what it did not make. *Recommended:* a
-    second one.
+    and Done could not delete what it did not make. *Answer:* as
+    recommended (a second one).
