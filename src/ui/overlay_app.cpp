@@ -727,6 +727,7 @@ void OverlayApp::Do(const ViewAction& action) {
 }
 
 void OverlayApp::OnOverlayShown() {
+    tutorialWorld_.CountShowing();
     settingsPage_.OnOverlayShown();
     // Something the app did while nobody was looking - see
     // SayDeletedForGoodAtStart.

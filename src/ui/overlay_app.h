@@ -23,6 +23,7 @@
 #include "ui/view/popups.h"
 #include "ui/view/screen_chrome.h"
 #include "ui/view/settings_page.h"
+#include "ui/view/tutorial_world.h"
 #include "ui/view/view_host.h"
 #include "ui/view_action.h"
 #include "ui/interaction/gestures.h"
@@ -240,6 +241,8 @@ public:
     // Where an anchored widget was drawn in the last frame, if it was -
     // see AnchorBoard.
     std::optional<AnchorRect> AnchorAt(Anchor anchor) const { return anchors_.Find(anchor); }
+    // What the tutorial reads of the app - see AppWorld.
+    const tutorial::World& TutorialWorld() const { return tutorialWorld_; }
 
     // Captures a fullscreen screenshot onto a canvas made for it (see the
     // definition, and the other declaration of this below).
@@ -541,6 +544,9 @@ private:
     // See RequestWelcomeNote/PlaceWelcomeNotes. Cleared the moment the notes
     // are placed, so they can never be placed twice.
     bool welcomeNotePending_ = false;
+
+    // What the tutorial reads of the app, and the showings it counts.
+    AppWorld tutorialWorld_{session_, settings_, editor_};
 
     // ===== The owners of the surfaces (docs/VIEW_LAYER.md, section 7) =====
     //

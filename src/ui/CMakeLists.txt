@@ -33,6 +33,7 @@ add_library(sz_ui STATIC
     view/popups.cpp
     view/screen_chrome.cpp
     view/settings_page.cpp
+    view/tutorial_world.cpp
     widgets.cpp
 )
 
