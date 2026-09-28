@@ -2000,8 +2000,8 @@ of 16.5 and the hand check.
 
 ## 17. Folders and canvases
 
-Status: **designed** (2026-09-28), for review. Its questions are in
-17.7.
+Status: **agreed** (2026-09-28). Its questions and their answers are in
+17.7, and the design below matches them.
 
 ### 17.1 What it teaches, and why
 
@@ -2255,31 +2255,36 @@ Two pieces of work:
 2. **The chain:** its strings and its row, with the walk-through, the
    matrix and the hand check.
 
-### 17.7 Questions for review
+### 17.7 Questions for review, and the answers
 
 32. **Ten steps and the end card, the trash last** (17.2). The
     alternative is the trash before the folders, which leaves Show
     deleted on under `newFolder`, with the new folder dimmed.
+    *Answer:* as recommended.
 33. **Cut and paste is the move,** with Alt and the wheel as the way to
     the other canvas, since both are hidden from sight (question 27).
     Move to canvas and Move to new canvas get a line on the end card.
+    *Answer:* as recommended.
 34. **Renaming, and dragging a tile onto a folder, are steps,** since
     the Overview shows no sign of either. The alternative is a line each
-    on the end card, for nine cards in all.
+    on the end card, for nine cards in all. *Answer:* as recommended.
 35. **The trash steps use a canvas,** the one the snippet is on, so the
     restore brings a snippet back into sight. A folder is deleted and
-    restored the same way, and would do as well.
+    restored the same way, and would do as well. *Answer:* the canvas
+    with the snippet on it.
 36. **The run's folders are those made while `newFolder` is up,** with
     the tutorial's own. They count as the tutorial folder for every
     step, and Done puts them all in the trash under one confirmation
     that names each. They are not kept across a restart. The
     alternative, every folder made while the topic runs, would put a
     folder made for real work during a topic left partway in the trash
-    with the tutorial's.
+    with the tutorial's. *Answer:* as recommended.
 37. **`newCanvas` and `newFolder` wait for their goal,** since later
     steps use what they make. `deleteCanvas` does not: `restore` has a
-    need, with its line, for something in the trash.
+    need, with its line, for something in the trash. *Answer:* as
+    recommended.
 38. **Inside the Overview,** the spotlight rings the Overview's own
     widgets, and the card keeps its places. If the hand check finds it
     covering what a step needs, the fix is a place of its own over the
     Overview, the lower right corner, where the grid is usually empty.
+    *Answer:* as recommended.
