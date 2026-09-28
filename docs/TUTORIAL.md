@@ -3,7 +3,9 @@
 Status: **agreed** (2026-09-28), for 0.2.0, and to be built in the
 phases of section 10. It was proposed on 2026-09-27. Its questions and
 their answers are in section 12, and the design below was changed to
-match them.
+match them. Phases 1 to 3 are built. **Topics** (section 13), several
+chains chosen from a list, are proposed as an addition to build before
+phase 4.
 
 It fits into the designs that are built: `docs/INTERACTIONS.md` for
 input, `docs/OVERLAY_STATES.md` for the overlay's states,
@@ -91,6 +93,9 @@ These are sequences, and a sequence is learned by doing it once.
 
 - **Chain**: an ordered list of steps. The first is the *welcome chain*.
   More may follow (section 8).
+- **Topic**: a chain the user picks from the tutorial's list, such as
+  Basics or Drawing (section 13, proposed). The welcome chain is split
+  into the first two.
 - **Step**: what one card shows. There are two kinds:
   - a *read step* is done when Next is pressed;
   - a *do step* is done when its goal is met.
@@ -211,6 +216,9 @@ user.
   card has the same two buttons.
 
 ## 4. The welcome chain
+
+*Section 13 (proposed) splits this chain: steps 4 to 6 become the
+Drawing topic, and the rest is Basics.*
 
 It runs in the tutorial folder (section 6.5), and "the tutorial's
 snippets" means the snippets in it. The keys in braces are named as they
@@ -677,6 +685,12 @@ across steps and each carries a text and a button.
 
 ### 7.6 Start, resume and start again
 
+*Section 13 (proposed) changes this section:*
+
+- *the progress is kept per topic (13.7);*
+- *an install from before 0.2.0 starts Basics, with no offer (13.4);*
+- *the Settings button opens the list of topics.*
+
 **The settings.** Two catalog rows (`docs/SETTINGS.md`, section 3):
 
 | Key | Field | Default | Rule | Edited from | Effect |
@@ -815,6 +829,9 @@ gesture.
 
 ## 10. Getting there
 
+*With section 13 (proposed), a phase for topics comes before phase 4,
+which becomes phase 5 (13.10).*
+
 Each phase is a set of reviewable commits, and the app is whole after
 each.
 
@@ -927,3 +944,266 @@ Asked after the first answers:
    is one click, for someone who took a screenshot they want. The
    alternatives are always keeping it, or always putting it in the
    trash. *Answer:* as recommended.
+
+Asked with the topics (section 13), after phase 3 was built:
+
+10. **Topics and a list.** Asked for by the review: several chains,
+    chosen from a list on the card. Recommended, with four decisions:
+    - progress kept per topic, and only the running topic resumed after
+      a restart (13.7);
+    - one folder per run of a topic, named for it, with the folders
+      made during a run counted as its space (13.5);
+    - the two warnings stay in Basics, and the skip card of any topic
+      shows them until Basics is finished (13.6);
+    - the derail matrix, the walk-through and the chain's shape test
+      run per topic (13.9).
+
+    *Answer (2026-09-28):* as recommended.
+11. **Installs from before 0.2.0, with topics.** Recommended: the offer
+    card's Start opens the list, since those users know the basics.
+    *Answer:* treat them as new users. Basics starts, as on a first run,
+    and the offer card goes (13.4). This revises the answer to question
+    5.
+12. **A topic left partway, chosen again from the list.** Recommended:
+    it goes on at its step, in a new folder, where its needs say what
+    is missing. The alternatives are:
+    - starting it over;
+    - going back to its old folder, which needs a folder kept per topic.
+13. **Another topic chosen while one runs.** Recommended: the running
+    one ends as "Done, keep the folder" would, with its progress kept at
+    its step. The alternative is asking first, which adds a box for
+    something the user can undo by choosing the first topic again.
+14. **The folder's name.** Recommended: "Tutorial: {topic}", such as
+    "Tutorial: Drawing". The alternative is "Tutorial" for every topic,
+    which leaves several folders of one name in the Overview.
+15. **How much of Drawing in the first build.** Recommended: the three
+    steps that exist, so topics can ship without new steps to design.
+    The pen, eraser, color, width and text steps are the next piece of
+    work. The alternative is designing and building them now, in phase
+    4.
+
+## 13. Topics
+
+Status: **proposed** (2026-09-28), after phases 1 to 3 were built.
+Question 10 answered its four decisions, and question 11 answered how
+installs from before 0.2.0 start. Questions 12 to 15 are still open.
+
+It changes sections 3, 4, 7.6, 9 and 10 where they meet it. Each of
+them says so. They are brought in line with it when it is built.
+
+### 13.1 What changes, and why
+
+One chain becomes several **topics**. Each topic is a chain of its own,
+and the user chooses one from a list on the card:
+
+- **Each chain stays short.** The welcome chain already has 13 steps,
+  and every step about the Overview or a profile would add to it.
+- **Each topic can go into more detail** than one long chain could
+  afford. The drawing topic can show the eraser, the colors and text,
+  where the welcome chain had room for one stroke.
+- **A refresher.** A user who comes back later picks the one topic they
+  need, rather than walking the whole chain again.
+
+Most of what is needed is built already, and stays as it is:
+
+- the runner, which already takes whichever chain it is given (section
+  7.5);
+- the needs and the hints;
+- the spotlight and the card;
+- the folder;
+- the first run and the resume.
+
+The new parts are:
+
+- the table of topics;
+- the list, a state of the card;
+- the progress, kept per topic;
+- the steps of section 4, split between two topics;
+- each later topic's own steps, as it is written.
+
+### 13.2 The topics
+
+| Id | Title | What it covers | In the first build |
+|---|---|---|---|
+| `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the two warnings; putting the overlay away and back | yes: section 4's steps, but three |
+| `drawing` | Drawing | drawing on a snippet: drawing mode, a stroke, stopping; later the pen, the eraser, the color, the width and text | yes: section 4's three drawing steps |
+| `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas | no: its own piece of work (13.8) |
+| `profiles` | Profiles | what a profile is for; making one for a program; what it can change | no: its own piece of work |
+
+**Basics** is section 4's chain without steps 4 to 6 (`drawingMode`,
+`draw`, `stopDrawing`), in the same order: `welcome`, `screenshot`,
+`move`, `resize`, `delete`, `undo`, `programs`, `antiCheat`, `away`,
+`end`. Nothing in it depends on the steps that leave. `delete` needs
+drawing mode off, and already has its line for when it is on. The end
+card names the other topics.
+
+**Drawing** is:
+
+| # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when |
+|---|---|---|---|---|---|---|---|
+| 0 | `drawingMode` | do | **waits** | A snippet can be drawn on. Double-click it, or hold the button down on it, to draw on it. | the subject | in the tutorial folder; canvas uncovered; a subject | drawing mode on the subject |
+| 1 | `draw` | do | moves on | as in section 4 | the drawing bar's pen | drawing mode on the subject | one stroke more than when the step began |
+| 2 | `stopDrawing` | do | moves on | as in section 4 | - | - | no drawing mode |
+| 3 | `end` | read | Done | That's drawing. The list has more topics. | - | - | Done |
+
+A new folder has no snippet, so step 0 starts with its need for a
+subject unmet. The need's line says to make one, and its button, Put
+one here, places the practice snippet (6.4). This is the case that
+button was made for.
+
+The later steps (the eraser, the color, the width, text) are rows added
+to this table, as section 8 says, each with its tests.
+
+### 13.3 The list
+
+The list is a state of the card, like the skip card. It shows one row
+per topic, with:
+
+- the title, and one line on what the topic covers;
+- how many steps it has;
+- where the user is with it: *New*, *At step 4 of 10*, or *Done*.
+
+**Pressing a row** starts that topic:
+
+- **New, done or skipped:** at its first step. A done topic taken again
+  is the refresher.
+- **Partway:** at the step it was on, in a new folder. The steps' needs
+  say what the new folder lacks, and Put one here supplies it (question
+  12).
+
+**While a topic runs,** the list marks it as the current one:
+
+- Pressing it goes back to its step.
+- Pressing another topic ends the running one the way "Done, keep the
+  folder" does. Its progress stays at its step, and its folder stays
+  (question 13).
+
+Only one topic runs at a time.
+
+The list has a Close button, which takes the card away. Opening the
+list keeps nothing.
+
+### 13.4 Where the list shows, and where a topic starts
+
+- **A first run starts Basics** at its first step, without the list. A
+  user who has never seen the app cannot yet judge what "Profiles"
+  means.
+- **An install from before 0.2.0 starts Basics the same way** (question
+  11). Such an install is a library with nothing in
+  `tutorial.progress`. The offer card of section 7.6 goes: a user from
+  before is treated as a new one.
+- **Every topic's end card, and the skip card,** gain a "More topics"
+  button that opens the list. That is how Basics leads on.
+- **Settings > Interaction:** "Take the tutorial again" becomes "Open
+  the tutorial". It closes the Overview and opens the list.
+
+### 13.5 The folder of a run
+
+- **Each run of a topic has a folder of its own**, named for the topic:
+  "Tutorial: Drawing" (question 14). A refresher starts in a new
+  folder, a clean place to practice.
+- **At the end,** Done puts the folder in the trash, and "Done, keep
+  the folder" keeps it, as now (question 9).
+- **A topic that makes folders** (Folders and canvases):
+  - The folders made during the run count as part of the run's space.
+    A step in one of them counts as in the tutorial folder.
+  - Done puts them in the trash with the run's folder. Deleting several
+    folders under one confirmation is new, and is settled when that
+    topic is built.
+
+### 13.6 The warnings on the skip card
+
+The two warnings are steps of Basics. The skip card of **any** topic
+shows them until Basics has been finished once, so a user who skips
+straight to Drawing on the first day still sees them. Within Basics,
+the rule of section 3 stays: warnings already passed in this run are
+left out.
+
+### 13.7 What is kept
+
+`tutorial.welcome` is replaced. No release has shipped with it, so no
+migration and no version bump are needed. The rows are:
+
+| Key | Field | Default | Rule |
+|---|---|---|---|
+| `tutorial.progress` | `tutorialProgress` | `{}` | each topic's id, mapped to a step id, `"finished"` or `"skipped"`; a topic never started has no entry |
+| `tutorial.current` | `tutorialCurrent` | `""` | the topic running, or empty |
+| `tutorial.folder` | `tutorialFolder` | `"0"` | as in section 7.6: the running topic's folder |
+
+The progress is a new kind of row, an object mapping text to text, and
+needs a new rule in `core/config/setting.h`. The tutorial writes it as
+it goes, as it wrote `tutorial.welcome`.
+
+**At a start:**
+
+- **A first run** starts Basics (13.4).
+- **`tutorial.current` names a topic whose progress is a step id.** That
+  topic goes on at that step the next time edit mode comes up, as a
+  resume does now (7.6). A step id no longer in that topic starts the
+  topic again.
+- **A library, and `tutorial.progress` empty:** Basics starts (13.4).
+- **Anything else:** nothing starts.
+
+### 13.8 How it fits
+
+- **`ui/tutorial/topics.{h,cpp}`** holds the table, `struct Topic {
+  id, title, gist, chain }`, and `Topics()`. `welcome_chain.{h,cpp}`
+  becomes the Basics chain, and the Drawing chain is a file beside it.
+  Each later topic is a chain file and a row in the table.
+- **The runner** is unchanged. The card makes one for the chosen
+  topic's chain, and holds which topic it is.
+- **The card** gains the list state and loses the offer. The Offer
+  state, `TutorialButton::NoThanks`, `"offered"` and the
+  `tutorial.offer.*` strings go.
+- **Actions:** `StartTutorial` names its topic, and `OpenTutorialList`
+  is new.
+- **The world** needs nothing new for Basics and Drawing. Folders and
+  canvases will need:
+  - more of the world: the canvases of a folder, the folders made since
+    the run began, and the Overview's tab;
+  - the Overview's widgets marked on the anchor board as the Overview
+    draws them;
+  - a need of the opposite kind, "the Overview open";
+  - the spotlight shown inside the Overview for such a step.
+
+  Those are argued with that topic.
+
+### 13.9 Tests
+
+Section 9's tests, per topic:
+
+- the chain's shape, for every topic in the table;
+- a walk-through by the real gestures, for every topic;
+- the derail matrix, for every do step of every topic.
+
+And for the list:
+
+- a first run, and an install from before, start Basics without the
+  list;
+- "More topics" on an end card and on the skip card opens the list;
+- a new, a done and a skipped topic start at their first step, and a
+  topic left partway starts at its step, in a new folder;
+- choosing another topic while one runs keeps the old one's folder and
+  progress;
+- Drawing's skip card shows the two warnings until Basics has been
+  finished;
+- the progress is kept per topic, and the running topic resumes.
+
+### 13.10 Getting there
+
+Phase 4 of section 10 becomes phase 5, and a new phase 4 comes before
+it:
+
+4. **Topics:**
+   - the topic table, with Basics and Drawing split out of the welcome
+     chain;
+   - the progress rows, replacing `tutorial.welcome`;
+   - the list on the card, and "More topics";
+   - Basics started on a first run and for installs from before, with
+     the offer gone;
+   - "Open the tutorial" in Settings;
+   - the tests of 13.9.
+
+Folders and canvases, Profiles and the later drawing steps are each a
+piece of work of their own after phase 5, each with its table in this
+document first.
