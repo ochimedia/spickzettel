@@ -1345,7 +1345,7 @@ snippet can do, and the selection bar's Pin.
 |---|---|---|---|---|---|---|---|---|
 | 0 | `pin` | do | **waits** | A pinned snippet stays on screen when you put the overlay away, so it can sit over your game. Press the pin on its bar, or right-click it and choose Pin. The right-click menu has everything a snippet can do. | the selection bar's Pin, or the subject while its bar is not shown | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen | the subject pinned | - |
 | 1 | `pinnedAway` | do | moves on | Press {editMode} to put the overlay away. The pinned snippet stays over your program, and your clicks go through to it. Press {editMode} again to come back here. With the hotkey unbound, the tray icon, as in Basics' `away`. | - | in the tutorial folder; a subject; the subject here and on screen; the subject pinned | the pinned view has come up since the step began | view mode instead: "That was view mode, which keeps everything on screen; it comes next. Press {editMode} to put the overlay away." |
-| 2 | `opacity` | do | moves on | Make it see-through, so it hides less of what's underneath: hold Ctrl and turn the wheel. Shift and the wheel fade what's drawn on it instead, and the wheel alone resizes it. Right-click it and choose Properties to set these with sliders. | the subject | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen; the subject selected | the subject's picture or drawing opacity changed by 0.10 or more (two notches) from the step's start | resized instead: "That changed its size. Hold Ctrl as you turn the wheel." |
+| 2 | `opacity` | do | moves on | Make it see-through, so it hides less of what's underneath: hold Ctrl and turn the wheel. Shift and the wheel fade what's drawn on it instead, and the wheel alone resizes it. Right-click it and choose Properties to set these with sliders. | the subject | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen; the subject selected | a change that shows: the subject's picture opacity changed by 0.10 or more (two notches) from the step's start, or the opacity of what is drawn on it, while something is | resized instead: "That changed its size. Hold Ctrl as you turn the wheel." Shift with nothing drawn: "Shift fades what's drawn on it, and nothing is yet. Hold Ctrl instead." |
 | 3 | `viewMode` | do | moves on | View mode keeps everything on this canvas on screen, pinned or not, and your clicks go through to your program. Press {viewMode} to switch to it, and {editMode} to come back here. With {viewMode} unbound: "View mode has no key yet. Set one in Settings > Hotkeys to use it." With {editMode} unbound, the tray icon comes back. | - | - | view mode has come up since the step began | the pinned view instead: "That put the overlay away, and only pinned snippets stayed. Press {viewMode} for view mode." |
 | 4 | `unpin` | do | moves on | A pinned snippet stays on screen until you unpin it, even after the tutorial. Press the pin on its bar again, or choose Pin in its menu again. | the selection bar's Pin, or the subject | as `pinnedAway`, and canvas uncovered | a snippet of the tutorial's seen pinned during the step is not pinned now | - |
 | 5 | `end` | read | Done | That's keeping it on screen. Pin what you need while you play, and make it see-through so it doesn't hide the game. The bar's full-screen button fills the screen with a snippet, and the right-click menu has the rest. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
@@ -1367,16 +1367,24 @@ text says, before the user leaves, how to come back. Its goal is
 checked when edit mode is back, and the step then shows its check and
 moves on.
 
-**Opacity, either way.** The practice snippet's backing starts at 50%,
-and a screenshot at the default in Settings > Defaults, so the text
-asks for "see-through", and the goal accepts a change either way.
-Properties' sliders count too, since the goal reads the snippet, not
-the wheel (6.3).
+**Opacity, only what shows** (question 18). A change counts only when
+it can be seen:
+
+- **The picture's opacity** always shows: it is a screenshot's image, or
+  a drawing's backing in its tint.
+- **The opacity of what is drawn** shows only while the snippet has
+  strokes or text. The practice snippet has neither, so Shift and the
+  wheel on it change a value and nothing on screen. That gets the near
+  miss's line instead of a check.
+
+The practice snippet's backing starts at 50%, and a screenshot at the
+default in Settings > Defaults, so the text asks for "see-through", and
+the goal accepts a change either way. Properties' sliders count too,
+since the goal reads the snippet, not the wheel (6.3).
 
 **Left out:** full screen and the order of snippets (Bring forward,
-Send backward). Full screen gets a line on the end card. The order
-matters once snippets overlap, which a topic with one snippet cannot
-show.
+Send backward). Both are understood without a demonstration (question
+19); full screen gets a line on the end card.
 
 ### 14.3 What it needs that is new
 
@@ -1384,9 +1392,11 @@ Each of these is one of section 8's changes that fit: rows, a need, a
 subject rule, an anchor.
 
 - **The world** (7.1):
-  - three facts per snippet: pinned, the picture's opacity and the
-    drawing's opacity (`Item::pinned`, `Picture::opacity`,
-    `Item::foregroundOpacity`);
+  - four facts per snippet: pinned, the picture's opacity, the
+    drawing's opacity, and whether it has text (`Item::pinned`,
+    `Picture::opacity`, `Item::foregroundOpacity`, `Item::noteText`),
+    the last beside the strokes it already counts, for 14.2's "while
+    something is drawn";
   - two counts beside the showings: how many times the pinned view has
     come up, and how many times view mode has. They are counted where
     `OverlayApp` takes its mode (`SetMode`), and read only. The
@@ -1447,7 +1457,8 @@ Section 9's, for the new topic:
     Overview up;
   - `pinnedAway`: unpinned first; minimized first; view mode instead
     (the near miss);
-  - `opacity`: not selected; the wheel alone (the near miss);
+  - `opacity`: not selected; the wheel alone, and Shift on the
+    practice snippet (the near misses, no check);
   - `viewMode`: the pinned view instead (the near miss); the view
     hotkey unbound (the text, and Next);
   - `unpin`: nothing pinned at the step's start; another snippet
@@ -1465,18 +1476,23 @@ One piece of work, in two commits:
 2. The chain, its strings and its row in the table, with the
    walk-through, the derail rows and the hand check.
 
-### 14.7 Questions for review
+### 14.7 Questions for review, and the answers
 
-16. **The title and id:** "Keeping it on screen", `onscreen`.
+16. **The title and id:** "Keeping it on screen", `onscreen`. *Open:*
+    alternatives are being weighed.
 17. **Unpin as a step,** rather than only a line on the end card. The
     reason for a step: after "Done, keep the folder", a snippet still
     pinned would come up over every program whenever that canvas is
-    current.
+    current. *Answer:* a small step of its own.
 18. **Both opacities count** for `opacity`, and the text leads with
     Ctrl (the picture), since the practice snippet has nothing drawn on
-    it for Shift to fade.
+    it for Shift to fade. *Answer:* only a change that can be seen
+    counts; a check for a change that shows nothing is irritating
+    (14.2).
 19. **Full screen and the order of snippets are left out** (14.2), full
-    screen with a line on the end card.
+    screen with a line on the end card. *Answer:* as proposed; both are
+    understood without a demonstration.
 20. **View mode with no key:** the step says where to set one and moves
     on with Next. It does not wait, since nothing later needs it.
+    *Answer:* as proposed, to be judged in the hand check.
 
