@@ -18,17 +18,18 @@
 #include "core/session/settings.h"
 #include "ui/editor.h"
 #include "ui/view/overview_panel.h"
+#include "ui/view/settings_page.h"
 #include "ui/tutorial/world.h"
 
 namespace sz::ui {
 
 class AppWorld final : public tutorial::World {
 public:
-    // `overview` is only read, once the app is running - it may be
-    // constructed after this.
+    // `overview` and `settingsPage` are only read, once the app is
+    // running - they may be constructed after this.
     AppWorld(const core::Session& session, const core::Settings& settings, const Editor& editor,
-             const OverviewPanel& overview)
-        : session_(session), settings_(settings), editor_(editor), overview_(overview) {}
+             const OverviewPanel& overview, const SettingsPage& settingsPage)
+        : session_(session), settings_(settings), editor_(editor), overview_(overview), settingsPage_(settingsPage) {}
 
     // The overlay has come up - see OverlayApp::OnOverlayShown - and a
     // transition has entered the pinned view, or view mode (see
@@ -63,6 +64,11 @@ public:
     bool OverviewShowsCanvases() const override { return overview_.ShowsCanvases(); }
     bool OverviewShowsDeleted() const override { return overview_.IsOpen() && overview_.ShowingDeleted(); }
     bool CanvasBarOn() const override { return settings_.Stored().showCanvasBar; }
+    std::string Underneath() const override;
+    std::vector<tutorial::ProfileFacts> Profiles() const override;
+    bool OverviewShowsSettings() const override { return overview_.OnSettingsTab(); }
+    tutorial::SettingsSection SettingsSectionShown() const override;
+    std::optional<std::string> SettingsShowing() const override;
     std::optional<std::string> KeyLabel(CommandId command) const override;
     core::CreationTrigger ScreenshotTrigger() const override { return settings_.Stored().screenshotTrigger; }
     core::CreationTrigger DrawingTrigger() const override { return settings_.Stored().drawingTrigger; }
@@ -77,6 +83,7 @@ private:
     const core::Settings& settings_;
     const Editor& editor_;
     const OverviewPanel& overview_;
+    const SettingsPage& settingsPage_;
     uint64_t showings_ = 0;
     uint64_t pinnedViews_ = 0;
     uint64_t viewModes_ = 0;

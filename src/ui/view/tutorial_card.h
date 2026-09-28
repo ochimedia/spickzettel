@@ -72,6 +72,11 @@ public:
     // What the spotlight rings this frame, if anything - read from the
     // anchor board, so only once the canvas has been drawn.
     std::optional<AnchorRect> SpotRect() const;
+    // The tutorial's profile's name, for the card's words - empty for none.
+    std::string_view ProfileName() const {
+        const std::optional<std::string>& profile = runner_.Profile();
+        return profile ? std::string_view(*profile) : std::string_view();
+    }
     // Where the spotlight is drawn this frame: the spot, while the step
     // up waits for its goal and nothing covers it.
     std::optional<AnchorRect> SpotlightRect() const;

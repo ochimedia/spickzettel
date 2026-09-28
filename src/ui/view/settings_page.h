@@ -63,6 +63,21 @@ class SettingsPage {
 public:
     SettingsPage(core::Settings& settings, Editor& editor, ViewHost& host);
 
+    // Which body the tab shows - see settingsSection_.
+    //
+    // Appearance/Drawing/Diagnostics are about you and are global;
+    // Input/Shortcuts are about whatever is underneath, and are what a
+    // per-application profile may override - see Draw.
+    enum class SettingsSection { Appearance, Interaction, Behavior, Defaults, Hotkeys, Profiles, Debug };
+    SettingsSection Section() const { return settingsSection_; }
+    // Whose values the Behavior and Hotkeys sections show: nothing for the
+    // defaults, else an index into Settings::Profiles. See editProfile_.
+    std::optional<size_t> Showing() const { return editProfile_; }
+    // Deletes the profiles of these names, as their rows' trash buttons
+    // would, with Showing following the list as it does then - the
+    // tutorial's Done (docs/TUTORIAL.md, section 18.3).
+    void RemoveProfiles(const std::vector<std::string>& names);
+
     // The tab's body, inside the Overview's: the section list, and the
     // section picked.
     void Draw();
@@ -192,15 +207,11 @@ private:
     // Which body the tab shows. Not reset with the panel: coming back to
     // Settings usually means coming back to the same section, and the list
     // down the side makes where you are obvious anyway.
-    //
-    // Appearance/Drawing/Diagnostics are about you and are global;
-    // Input/Shortcuts are about whatever is underneath, and are what a
-    // per-application profile may override - see Draw.
-    enum class SettingsSection { Appearance, Interaction, Behavior, Defaults, Hotkeys, Profiles, Debug };
     SettingsSection settingsSection_ = SettingsSection::Appearance;
     // Whose values the Input and Shortcuts sections are showing. Nullopt is
     // the defaults; otherwise an index into Settings::Profiles. See
-    // OnOverlayShown.
+    // OnOverlayShown, and RenderProfileMakers, which point it at a profile
+    // just made.
     std::optional<size_t> editProfile_;
     // A profile's name field while it says another profile's name, which
     // the rename refused: the row, and what was typed - said under the field

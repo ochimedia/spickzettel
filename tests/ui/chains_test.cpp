@@ -145,6 +145,40 @@ protected:
     }
 };
 
+class ProfilesChainTest : public ChainTest {
+protected:
+    ProfilesChainTest() : ChainTest(ProfilesChain()) {}
+
+    const char* TextOf(std::string_view id) {
+        for (const Step& step : ProfilesChain()) {
+            if (step.id == id) {
+                return step.text(world_);
+            }
+        }
+        return "";
+    }
+    std::string Expanded(const char* text) { return Expand(text, world_, 0, tutorial_.Profile().value_or("")); }
+    // "Game" made for game.exe at `makeProfile`, and the steps after it
+    // walked to `id` - `change` by unticking a row, the rest with Next:
+    // the profile stays the tutorial's, which a Resume would forget.
+    void MadeAProfileThenAt(std::string_view id) {
+        At("makeProfile");
+        world_.OpenSettings(SettingsSection::Profiles);
+        world_.MakeProfile("Game");
+        Settle();
+        while (Id() != id) {
+            if (Id() == "change") {
+                world_.OpenSettings(SettingsSection::Behavior);
+                world_.Profile("Game").stated = 1;
+                Settle();
+                continue;
+            }
+            tutorial_.Next();
+            Frame();
+        }
+    }
+};
+
 TEST_F(BasicsChainTest, CanBeWalkedTheWayAUserWould) {
     Frame();
     EXPECT_EQ(Id(), "welcome");
@@ -1230,6 +1264,200 @@ TEST_F(BasicsChainTest, TheTextsFollowTheTriggersAndTheKeys) {
     EXPECT_STREQ(textOf("end"), strings::kTutorialEndTextNoCheatSheetKey);
 }
 
+TEST_F(ProfilesChainTest, CanBeWalkedTheWayAUserWould) {
+    Frame();
+    ASSERT_EQ(Id(), "openProfiles");
+    world_.OpenSettings(SettingsSection::Profiles);
+    Settle();
+
+    ASSERT_EQ(Id(), "makeProfile");
+    EXPECT_FALSE(tutorial_.NextEnabled()) << "it waits";
+    world_.MakeProfile("Game");
+    Settle();
+
+    ASSERT_EQ(Id(), "behavior");
+    EXPECT_EQ(tutorial_.Profile(), "Game");
+    world_.section = SettingsSection::Behavior;
+    Settle();
+
+    ASSERT_EQ(Id(), "change");
+    EXPECT_FALSE(tutorial_.NextEnabled()) << "it waits";
+    EXPECT_EQ(Expanded(TextOf("change")).find("{"), std::string::npos);
+    world_.Profile("Game").stated = 1;
+    Settle();
+
+    ASSERT_EQ(Id(), "otherProgram");
+    world_.ComeUpOver("explorer.exe");
+    Settle();
+
+    ASSERT_EQ(Id(), "elsewhere");
+    EXPECT_EQ(NeedShown(), std::nullopt);
+    const std::string elsewhere = Expanded(TextOf("elsewhere"));
+    EXPECT_NE(elsewhere.find("explorer.exe"), std::string::npos) << elsewhere;
+    EXPECT_NE(elsewhere.find(strings::kProfilesDefaults), std::string::npos) << elsewhere;
+    EXPECT_NE(elsewhere.find("game.exe"), std::string::npos) << elsewhere;
+    tutorial_.Next();
+    Frame();
+
+    ASSERT_EQ(Id(), "revert");
+    EXPECT_EQ(NeedShown(), Need::ShowingIt) << "Showing came up on the defaults";
+    world_.showing = "Game";
+    Frame();
+    EXPECT_EQ(NeedShown(), std::nullopt);
+    world_.Profile("Game").stated = 0;
+    Settle();
+
+    ASSERT_EQ(Id(), "end");
+    tutorial_.Done();
+    EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
+    EXPECT_EQ(tutorial_.MadeProfiles(), std::vector<std::string>{"Game"});
+}
+
+TEST_F(ProfilesChainTest, ABlankProfileIsNotItAndTheOneForTheProgramIs) {
+    At("makeProfile");
+    world_.OpenSettings(SettingsSection::Profiles);
+    world_.MakeProfile("Profile 1", false);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialMakeProfileMissBlank);
+    EXPECT_EQ(tutorial_.Profile(), "Profile 1") << "the only one there is";
+    world_.MakeProfile("Game");
+    Settle();
+    EXPECT_EQ(Id(), "behavior");
+    EXPECT_EQ(tutorial_.Profile(), "Game");
+    EXPECT_EQ(tutorial_.MadeProfiles(), (std::vector<std::string>{"Profile 1", "Game"}));
+}
+
+TEST_F(ProfilesChainTest, AProfileMadeAsProfilesOpensIsTheTutorials) {
+    Frame();
+    world_.OpenSettings(SettingsSection::Profiles);
+    Frame();  // met, and the second it waits begun
+    world_.MakeProfile("Game");
+    Settle();  // on to makeProfile
+    Settle();  // met as it began
+    EXPECT_EQ(Id(), "behavior") << "makeProfile met by the one made";
+    EXPECT_EQ(tutorial_.Profile(), "Game");
+}
+
+TEST_F(ProfilesChainTest, AProgramWithAProfileAlreadySaysTheNewOneWillNotRun) {
+    world_.MakeProfile("Mine");
+    world_.showing.reset();
+    At("makeProfile");
+    world_.OpenSettings(SettingsSection::Profiles);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialMakeProfileMissTaken);
+    EXPECT_NE(Expanded(HintText()).find("Mine"), std::string::npos);
+    world_.MakeProfile("Game");
+    EXPECT_FALSE(world_.Profile("Game").running);
+    Settle();
+    EXPECT_EQ(Id(), "behavior") << "it matches, running or not";
+    EXPECT_EQ(tutorial_.Profile(), "Game");
+}
+
+TEST_F(ProfilesChainTest, OnlyAProfileMadeAtMakeProfileIsTheTutorials) {
+    At("behavior");
+    world_.OpenSettings(SettingsSection::Profiles);
+    world_.MakeProfile("Game");
+    Frame();
+    EXPECT_EQ(tutorial_.Profile(), std::nullopt);
+    EXPECT_EQ(NeedShown(), Need::TutorialsProfile);
+}
+
+TEST_F(ProfilesChainTest, TheNeedsSayWhereInSettingsToGo) {
+    MadeAProfileThenAt("behavior");
+    world_.section = SettingsSection::Behavior;
+    Settle();
+    ASSERT_EQ(Id(), "change");
+
+    world_.cover = Cover::None;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::SettingsUp);
+    world_.cover = Cover::Overview;
+    world_.overviewShowsSettings = false;
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::SettingsTab);
+    world_.OpenSettings(SettingsSection::Profiles);
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::BehaviorSection);
+    world_.OpenSettings(SettingsSection::Behavior);
+    world_.showing.reset();
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::ShowingIt);
+    EXPECT_NE(Expanded(HintText()).find(strings::kProfilesDefaults), std::string::npos);
+    EXPECT_EQ(tutorial_.CurrentSpot(), Spot::Showing) << "rung while its line is up";
+    world_.showing = "Game";
+    Frame();
+    EXPECT_EQ(NeedShown(), std::nullopt);
+}
+
+TEST_F(ProfilesChainTest, TheTutorialsProfileDeletedIsTheNeedForOne) {
+    MadeAProfileThenAt("revert");
+    world_.profiles.clear();
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::TutorialsProfile);
+}
+
+TEST_F(ProfilesChainTest, NothingUnderneathIsTheNeedForAProgram) {
+    world_.underneath.clear();
+    At("makeProfile");
+    world_.OpenSettings(SettingsSection::Profiles);
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::AProgramUnderneath);
+    EXPECT_STREQ(HintText(), strings::kTutorialNeedAProgramUnderneath);
+    world_.keys.erase(CommandId::ToggleEditMode);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialNeedAProgramUnderneathTray);
+}
+
+TEST_F(ProfilesChainTest, BackOverTheSameProgramSaysToClickAnother) {
+    MadeAProfileThenAt("otherProgram");
+    world_.ComeUpOver("game.exe");
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialOtherProgramMissSame);
+    world_.ComeUpOver("explorer.exe");
+    Settle();
+    EXPECT_EQ(Id(), "elsewhere");
+}
+
+TEST_F(ProfilesChainTest, ElsewhereSaysHowToSeeItWhenTheOverlayNeverLeft) {
+    MadeAProfileThenAt("elsewhere");
+    EXPECT_EQ(NeedShown(), Need::OverAnotherProgram);
+    world_.keys.erase(CommandId::ToggleEditMode);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialNeedOverAnotherProgramTray);
+    EXPECT_TRUE(tutorial_.NextEnabled());
+}
+
+TEST_F(ProfilesChainTest, ARowTickedBackIsNotHandedBack) {
+    MadeAProfileThenAt("revert");
+    world_.Profile("Game").statedAsDefaults = 1;
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialRevertMissTickedBack);
+    world_.Profile("Game").stated = 0;
+    world_.Profile("Game").statedAsDefaults = 0;
+    Settle();
+    EXPECT_EQ(Id(), "end");
+}
+
+TEST_F(ProfilesChainTest, RevertNeedsSomethingSetInTheProfile) {
+    MadeAProfileThenAt("revert");
+    world_.Profile("Game").stated = 0;
+    tutorial_.Back();
+    Frame();
+    tutorial_.Next();
+    Frame();
+    ASSERT_EQ(Id(), "revert");
+    EXPECT_EQ(NeedShown(), Need::SomethingSetInIt);
+}
+
+TEST_F(ProfilesChainTest, TheTextsFollowTheOverviewAndTheKeys) {
+    EXPECT_STREQ(TextOf("openProfiles"), strings::kTutorialOpenProfilesText);
+    world_.cover = Cover::Overview;
+    EXPECT_STREQ(TextOf("openProfiles"), strings::kTutorialOpenProfilesTextOverview);
+    EXPECT_STREQ(TextOf("otherProgram"), strings::kTutorialOtherProgramText);
+    world_.keys.erase(CommandId::ToggleEditMode);
+    EXPECT_STREQ(TextOf("otherProgram"), strings::kTutorialOtherProgramTextTray);
+}
+
 TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
     std::vector<const char*> texts = {
         strings::kTutorialNeedInTutorialFolder, strings::kTutorialNeedCloseOverview,
@@ -1253,6 +1481,13 @@ TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
         strings::kTutorialNewCanvasTextKey,     strings::kTutorialNewCanvasTextOverview,
         strings::kTutorialMoveSnippetTextNoBar, strings::kTutorialMoveSnippetTextMenu,
         strings::kTutorialMoveSnippetTextMenuNoBar, strings::kTutorialOverviewTextMenu,
+        strings::kTutorialNeedSettingsUp,       strings::kTutorialNeedSettingsTab,
+        strings::kTutorialNeedProfilesSection,  strings::kTutorialNeedBehaviorSection,
+        strings::kTutorialNeedAProgramUnderneath, strings::kTutorialNeedAProgramUnderneathTray,
+        strings::kTutorialNeedTutorialsProfile, strings::kTutorialNeedShowingIt,
+        strings::kTutorialNeedSomethingSetInIt, strings::kTutorialNeedOverAnotherProgram,
+        strings::kTutorialNeedOverAnotherProgramTray, strings::kTutorialOpenProfilesTextOverview,
+        strings::kTutorialOtherProgramTextTray,
     };
     world_.keys[CommandId::NewCanvas] = "Ctrl+N";
     for (const Topic& topic : Topics()) {
@@ -1291,10 +1526,11 @@ TEST(TopicsTest, HaveTheShapeTheRunnerReliesOn) {
         for (const Step& step : chain) {
             EXPECT_TRUE(ids.insert(step.id).second) << topic.id << "/" << step.id;
             EXPECT_NE(step.text, nullptr) << step.id;
+            // A read step may have needs: a line for when its words do not
+            // hold, as Profiles' `elsewhere` has (docs/TUTORIAL.md, 18.8).
             if (step.kind == StepKind::Read) {
                 EXPECT_EQ(step.goal, nullptr) << step.id;
                 EXPECT_FALSE(step.gated) << step.id;
-                EXPECT_TRUE(step.needs.empty()) << step.id;
             } else {
                 EXPECT_NE(step.goal, nullptr) << step.id;
                 EXPECT_FALSE(step.warning) << step.id;

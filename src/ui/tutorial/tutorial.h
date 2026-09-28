@@ -94,6 +94,12 @@ public:
     // while a step that keeps them was up - kept for this run only.
     std::vector<core::FolderId> Folders() const;
     const std::vector<core::FolderId>& MadeFolders() const { return madeFolders_; }
+    // The profiles made while a step that keeps them was up (section
+    // 18.3), by name, kept for this run only; and the tutorial's profile
+    // among them: the newest still there that matches a program, else the
+    // newest still there.
+    const std::vector<std::string>& MadeProfiles() const { return madeProfiles_; }
+    const std::optional<std::string>& Profile() const { return profile_; }
     size_t StepIndex() const { return index_; }
     size_t StepCount() const { return chain_->size(); }
     const std::vector<Step>& Chain() const { return *chain_; }
@@ -106,7 +112,7 @@ public:
     const std::optional<Hint>& CurrentHint() const { return hint_; }
     std::optional<core::ItemId> Subject() const { return lookSubject_; }
     // What the spotlight rings now: the step's spot, or the subject's
-    // chip in the dock while that is what the step needs.
+    // chip in the dock, or Showing, while that is what the step needs.
     Spot CurrentSpot() const;
     // The warnings the skip card repeats: those not reached before the
     // skip.
@@ -164,6 +170,10 @@ private:
     // The folders made while a step that keeps them was up, in the order
     // they were made.
     std::vector<core::FolderId> madeFolders_;
+    // The profiles made while a step that keeps them was up, and the
+    // tutorial's among them.
+    std::vector<std::string> madeProfiles_;
+    std::optional<std::string> profile_;
 };
 
 // `text` with its placeholders filled in from `world`:
@@ -171,8 +181,13 @@ private:
 //    kCommands - "undo", "toggleEditMode" - or nothing when unbound;
 //  - {trigger:screenshot} and {trigger:drawing}, the trigger's key - Ctrl,
 //    Alt - or nothing when it is plain or off;
-//  - {canvas}, the name of `canvas`.
+//  - {canvas}, the name of `canvas`;
+//  - {profile}, `profile`, the tutorial's profile, and {program}, what
+//    that is matched on;
+//  - {underneath}, the program the overlay is up over; {running}, the
+//    profile that runs; and {showing}, whose values Settings shows.
 // Anything else in braces is left as it is.
-std::string Expand(std::string_view text, const World& world, core::CanvasId canvas = 0);
+std::string Expand(std::string_view text, const World& world, core::CanvasId canvas = 0,
+                   std::string_view profile = {});
 
 }  // namespace sz::ui::tutorial

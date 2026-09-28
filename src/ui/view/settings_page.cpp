@@ -285,8 +285,10 @@ void SettingsPage::Draw() {
     constexpr float kSectionListWidth = 150.0f;
     ImGui::BeginChild("##settings_sections", ImVec2(Px(kSectionListWidth), 0.0f), ImGuiChildFlags_None);
     for (const SectionRow& row : kSections) {
-        if (SettingsSectionButton(row.id, row.label, settingsSection_ == row.section) &&
-            settingsSection_ != row.section) {
+        const bool pressed = SettingsSectionButton(row.id, row.label, settingsSection_ == row.section);
+        host_.Mark(Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(row.section)}, ImGui::GetItemRectMin(),
+                   ImGui::GetItemRectMax());
+        if (pressed && settingsSection_ != row.section) {
             // A row waiting for its key goes out of sight with its section,
             // and stops waiting: left to wait, the next key - Escape to
             // close the Overview - went to a row no one could see.
@@ -879,9 +881,25 @@ void SettingsPage::RenderSettingsBehavior() {
     const bool counterAvailable =
         edited.InputOptions().CounterRawMouseInputCanBeUsed(edited.dontStealFocus);
 
+    // Each row's revert arrow is marked for the tutorial (docs/TUTORIAL.md,
+    // section 18.3): the last item a row draws, when the target states it.
+    uint64_t rowIndex = 0;
+    const auto markRevert = [&](bool stated) {
+        if (stated) {
+            host_.Mark(Anchor{AnchorId::SettingsRevert, rowIndex}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+        }
+        ++rowIndex;
+    };
+
     ImVec2 rowPos = ImGui::GetCursorScreenPos();
     SettingCheckbox(settings_, editProfile_, setting::kDontStealFocus, "dontstealfocus",
                     strings::kHudDontStealFocus, strings::kInputDontStealFocusHelp);
+    markRevert(settings_.IsOverridden(setting::kDontStealFocus, editProfile_));
+    // The box and its label, which is what the tutorial points at.
+    host_.Mark(Anchor{AnchorId::SettingsDontStealFocus}, rowPos,
+               ImVec2(rowPos.x + ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x +
+                          ImGui::CalcTextSize(strings::kHudDontStealFocus).x,
+                      rowPos.y + ImGui::GetFrameHeight()));
     float focusTrunk = TrunkFrom(rowPos);
 
     ImGui::Indent(Px(kTreeIndent));
@@ -892,16 +910,19 @@ void SettingsPage::RenderSettingsBehavior() {
     SettingCheckbox(settings_, editProfile_, setting::kTakeFocusOverElevated, "takefocusoverelevated",
                     strings::kInputTakeFocusOverElevatedLabel, strings::kInputTakeFocusOverElevatedHelp,
                     !edited.dontStealFocus);
+    markRevert(settings_.IsOverridden(setting::kTakeFocusOverElevated, editProfile_));
     TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
 
     rowPos = ImGui::GetCursorScreenPos();
     SettingCheckbox(settings_, editProfile_, setting::kDontForwardKeystrokes, "dontforwardkeys",
                     strings::kHudDontForwardKeystrokes, strings::kInputDontForwardKeystrokesHelp, !keystrokesAvailable);
+    markRevert(settings_.IsOverridden(setting::kDontForwardKeystrokes, editProfile_));
     TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
 
     rowPos = ImGui::GetCursorScreenPos();
     SettingCheckbox(settings_, editProfile_, setting::kRawMouseInput, "rawmouse",
                     strings::kHudUseRawMouseInput, strings::kInputRawMouseHelp, !rawAvailable);
+    markRevert(settings_.IsOverridden(setting::kRawMouseInput, editProfile_));
     TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
     float rawTrunk = TrunkFrom(rowPos);
 
@@ -909,6 +930,7 @@ void SettingsPage::RenderSettingsBehavior() {
     rowPos = ImGui::GetCursorScreenPos();
     SettingCheckbox(settings_, editProfile_, setting::kCounterRawMouseInput, "counterrawmouse",
                     strings::kInputCounterRawMouseLabel, strings::kInputCounterRawMouseHelp, !counterAvailable);
+    markRevert(settings_.IsOverridden(setting::kCounterRawMouseInput, editProfile_));
     TreeBranch(rawTrunk, rowPos, Px(kTreeIndent));
     float counterTrunk = TrunkFrom(rowPos);
 
@@ -919,6 +941,7 @@ void SettingsPage::RenderSettingsBehavior() {
     SettingNumber(settings_, editProfile_, setting::kCounterThreshold, "counterthreshold",
                   strings::kInputCounterThresholdLabel, strings::kInputCounterThresholdUnit, 10,
                   strings::kInputCounterThresholdHelp, !counterAvailable || !edited.counterRawMouseInput);
+    markRevert(settings_.IsOverridden(setting::kCounterThreshold, editProfile_));
     TreeBranch(counterTrunk, rowPos, Px(kTreeIndent));
 
     ImGui::Unindent(Px(kTreeIndent) * 3.0f);
@@ -930,9 +953,11 @@ void SettingsPage::RenderSettingsBehavior() {
     // EditModeInputOptions::useSoftwarePointer.
     SettingCheckbox(settings_, editProfile_, setting::kSoftwarePointer, "softwarepointer",
                     strings::kHudUseSoftwarePointer, strings::kInputSoftwarePointerHelp);
+    markRevert(settings_.IsOverridden(setting::kSoftwarePointer, editProfile_));
 
     SettingCheckbox(settings_, editProfile_, setting::kFreezeScreen, "freezescreen",
                     strings::kHudFreezeScreenWhileEditing, strings::kInputFreezeScreenHelp);
+    markRevert(settings_.IsOverridden(setting::kFreezeScreen, editProfile_));
     // What it does to a frozen screen already held is the tray's, after the
     // frame - see TrayController::ApplySettingsToWindow.
     EndSettingsScope(profileBox);
@@ -1025,6 +1050,11 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kProfilesShowing);
     ImGui::SameLine(Px(90.0f));
     ImGui::SetNextItemWidth(Px(280.0f));
+    // The whole box, for the tutorial: after it, the last item is its
+    // preview's text alone.
+    const ImVec2 showingAt = ImGui::GetCursorScreenPos();
+    host_.Mark(Anchor{AnchorId::SettingsShowing}, showingAt,
+               ImVec2(showingAt.x + Px(280.0f), showingAt.y + ImGui::GetFrameHeight()));
     // A profile's name is drawn as text, never passed as a label: ImGui
     // reads "##" in a label as the start of an id, so a name holding one
     // was cut short where it showed and, with "###", shared its id with any
@@ -1037,6 +1067,7 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
             DisarmCapture();
             editProfile_.reset();
         }
+        host_.Mark(Anchor{AnchorId::SettingsShowingEntry, 0}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
         for (size_t i = 0; i < settings_.Profiles().size(); ++i) {
             ImGui::PushID(static_cast<int>(i));
             const ImVec2 at = ImGui::GetCursorPos();
@@ -1044,6 +1075,8 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
                 DisarmCapture();
                 editProfile_ = i;
             }
+            host_.Mark(Anchor{AnchorId::SettingsShowingEntry, i + 1}, ImGui::GetItemRectMin(),
+                       ImGui::GetItemRectMax());
             ImGui::SetCursorPos(at);
             ImGui::TextUnformatted(nameOf(i).c_str());
             ImGui::PopID();
@@ -1249,6 +1282,30 @@ void SettingsPage::RenderSettingsProfiles() {
     }
 }
 
+void SettingsPage::RemoveProfiles(const std::vector<std::string>& names) {
+    std::vector<Profile> kept;
+    std::optional<size_t> showing;
+    const std::vector<Profile>& profiles = settings_.Profiles();
+    for (size_t i = 0; i < profiles.size(); ++i) {
+        if (std::find(names.begin(), names.end(), profiles[i].name) != names.end()) {
+            continue;
+        }
+        // Showing follows its profile down the list, and lets go of it
+        // when it goes - as a row's trash button has it.
+        if (editProfile_ == i) {
+            showing = kept.size();
+        }
+        kept.push_back(profiles[i]);
+    }
+    if (kept.size() == profiles.size()) {
+        return;
+    }
+    DisarmCapture();
+    editProfile_ = showing;
+    takenProfileName_.reset();
+    settings_.SetProfiles(std::move(kept));
+}
+
 bool SettingsPage::RenderProfileMakers(std::vector<Profile>& edited) {
     bool changed = false;
     ImGui::AlignTextToFramePadding();
@@ -1271,8 +1328,14 @@ bool SettingsPage::RenderProfileMakers(std::vector<Profile>& edited) {
                 profile.match.titleContains.push_back(app.title);
             }
             edited.push_back(std::move(profile));
+            // What is made is edited next: Showing points at it, as it
+            // points at the profile that runs when the overlay comes up
+            // (docs/TUTORIAL.md, question 42). Left where it was, the
+            // first change after making a profile went to the defaults.
+            editProfile_ = edited.size() - 1;
             changed = true;
         }
+        host_.Mark(Anchor{AnchorId::SettingsMakeProfile}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
         if (ImGui::IsItemHovered()) {
             ImGui::SetTooltip("%s", strings::kProfilesMakeForThisTooltip);
         }
@@ -1282,8 +1345,10 @@ bool SettingsPage::RenderProfileMakers(std::vector<Profile>& edited) {
         Profile profile;
         profile.name = UniqueProfileName(edited, strings::kProfilesNamePrefix);
         edited.push_back(std::move(profile));
+        editProfile_ = edited.size() - 1;
         changed = true;
     }
+    host_.Mark(Anchor{AnchorId::SettingsNewProfile}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kProfilesNewProfileTooltip);
     }
@@ -1343,6 +1408,7 @@ bool SettingsPage::RenderProfileRow(size_t index, Profile& profile, bool& remove
     if (DangerIconButton(deleteId, icons::kTrash)) {
         remove = true;
     }
+    host_.Mark(Anchor{AnchorId::SettingsDeleteProfile, index}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kProfilesDeleteThis);
     }

@@ -66,6 +66,30 @@ const CanvasFacts* Look::CanvasNow(core::CanvasId id) const {
     return nullptr;
 }
 
+const ProfileFacts* Look::Profile() const {
+    if (!profile) {
+        return nullptr;
+    }
+    for (const ProfileFacts& facts : profiles) {
+        if (facts.name == *profile) {
+            return &facts;
+        }
+    }
+    return nullptr;
+}
+
+const ProfileFacts* Look::ProfileAtStart() const {
+    if (!profile) {
+        return nullptr;
+    }
+    for (const ProfileFacts& facts : start.profiles) {
+        if (facts.name == *profile) {
+            return &facts;
+        }
+    }
+    return nullptr;
+}
+
 void Tutorial::Start(core::FolderId folder) { Resume({}, folder); }
 
 void Tutorial::Resume(std::string_view id, core::FolderId folder) {
@@ -89,6 +113,8 @@ void Tutorial::Resume(std::string_view id, core::FolderId folder) {
     lastDeleted_.reset();
     subject_.reset();
     madeFolders_.clear();
+    madeProfiles_.clear();
+    profile_.reset();
     Begin();
 }
 
@@ -171,6 +197,9 @@ Spot Tutorial::CurrentSpot() const {
     }
     if (hint_ && hint_->need == Need::SubjectOnScreen) {
         return Spot::DockChip;
+    }
+    if (hint_ && hint_->need == Need::ShowingIt) {
+        return Spot::Showing;
     }
     return CurrentStep().spot;
 }
@@ -353,6 +382,7 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const Look& look) co
     };
     // A need about the subject, with no subject, is the need for one.
     const Hint noSubject = unmet(Need::ASubject, strings::kTutorialNeedASubject, HintButton::PutOneHere);
+    const Hint noProfile = unmet(Need::TutorialsProfile, strings::kTutorialNeedTutorialsProfile);
     for (const Need need : CurrentStep().needs) {
         switch (need) {
             case Need::InTutorialFolder:
@@ -486,6 +516,66 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const Look& look) co
                 }
                 break;
             }
+            case Need::SettingsUp:
+                if (world.CanvasCover() != Cover::Overview) {
+                    return unmet(need, strings::kTutorialNeedSettingsUp);
+                }
+                break;
+            case Need::SettingsTab:
+                if (!world.OverviewShowsSettings()) {
+                    return unmet(need, strings::kTutorialNeedSettingsTab);
+                }
+                break;
+            case Need::ProfilesSection:
+                if (world.SettingsSectionShown() != SettingsSection::Profiles) {
+                    return unmet(need, strings::kTutorialNeedProfilesSection);
+                }
+                break;
+            case Need::BehaviorSection:
+                if (world.SettingsSectionShown() != SettingsSection::Behavior) {
+                    return unmet(need, strings::kTutorialNeedBehaviorSection);
+                }
+                break;
+            case Need::AProgramUnderneath:
+                if (world.Underneath().empty()) {
+                    return unmet(need, world.KeyLabel(CommandId::ToggleEditMode)
+                                           ? strings::kTutorialNeedAProgramUnderneath
+                                           : strings::kTutorialNeedAProgramUnderneathTray);
+                }
+                break;
+            // The three about the tutorial's profile are, with none, the
+            // need for one.
+            case Need::TutorialsProfile:
+                if (look.Profile() == nullptr) {
+                    return noProfile;
+                }
+                break;
+            case Need::ShowingIt:
+                if (look.Profile() == nullptr) {
+                    return noProfile;
+                }
+                if (world.SettingsShowing() != look.Profile()->name) {
+                    return unmet(need, strings::kTutorialNeedShowingIt);
+                }
+                break;
+            case Need::SomethingSetInIt:
+                if (look.Profile() == nullptr) {
+                    return noProfile;
+                }
+                if (look.Profile()->stated == 0) {
+                    return unmet(need, strings::kTutorialNeedSomethingSetInIt);
+                }
+                break;
+            case Need::OverAnotherProgram:
+                if (look.Profile() == nullptr) {
+                    return noProfile;
+                }
+                if (look.Profile()->matchesUnderneath) {
+                    return unmet(need, world.KeyLabel(CommandId::ToggleEditMode)
+                                           ? strings::kTutorialNeedOverAnotherProgram
+                                           : strings::kTutorialNeedOverAnotherProgramTray);
+                }
+                break;
         }
     }
     return std::nullopt;
@@ -508,6 +598,36 @@ void Tutorial::Update(const World& world, double now) {
             }
         }
     }
+    const std::vector<ProfileFacts> profiles = world.Profiles();
+    // So are the profiles made while a step that keeps them is up.
+    if (begun_ && CurrentStep().keepsProfiles) {
+        for (const ProfileFacts& facts : profiles) {
+            const bool wasThere = std::any_of(start_.profiles.begin(), start_.profiles.end(),
+                                              [&](const ProfileFacts& was) { return was.name == facts.name; });
+            if (!wasThere &&
+                std::find(madeProfiles_.begin(), madeProfiles_.end(), facts.name) == madeProfiles_.end()) {
+                madeProfiles_.push_back(facts.name);
+            }
+        }
+    }
+    // The tutorial's among them: the newest still there that matches a
+    // program - a blank one made first by mistake is not it - else the
+    // newest still there.
+    profile_.reset();
+    for (auto it = madeProfiles_.rbegin(); it != madeProfiles_.rend(); ++it) {
+        const auto facts = std::find_if(profiles.begin(), profiles.end(),
+                                        [&](const ProfileFacts& each) { return each.name == *it; });
+        if (facts == profiles.end()) {
+            continue;
+        }
+        if (!facts->program.empty()) {
+            profile_ = *it;
+            break;
+        }
+        if (!profile_) {
+            profile_ = *it;
+        }
+    }
     const std::vector<core::FolderId> folders = Folders();
     std::vector<SnippetFacts> snippets;
     std::vector<CanvasFacts> canvases;
@@ -522,6 +642,7 @@ void Tutorial::Update(const World& world, double now) {
         start_.canvas = world.CurrentCanvas();
         start_.folders = allFolders;
         start_.canvases = canvases;
+        start_.profiles = profiles;
         start_.showings = world.Showings();
         start_.pinnedViews = world.PinnedViews();
         start_.viewModes = world.ViewModes();
@@ -570,7 +691,7 @@ void Tutorial::Update(const World& world, double now) {
     // snippet leaves no subject. The needs guide only while it is not met.
     const Look look{world,    start_,           snippets,         folder_,          folders,
                     allFolders, canvases,       lookSubject_,     deletedThisStep_, pinnedThisStep_,
-                    inkGoneThisStep_, trashedThisStep_};
+                    inkGoneThisStep_, trashedThisStep_, profiles, profile_};
     if (step.goal != nullptr && step.goal(look)) {
         metThisVisit_ = true;
         done_[index_] = true;
@@ -590,7 +711,7 @@ void Tutorial::Update(const World& world, double now) {
     }
 }
 
-std::string Expand(std::string_view text, const World& world, core::CanvasId canvas) {
+std::string Expand(std::string_view text, const World& world, core::CanvasId canvas, std::string_view profile) {
     auto trigger = [](core::CreationTrigger held) -> std::string {
         switch (held) {
             case core::CreationTrigger::Ctrl:
@@ -628,6 +749,21 @@ std::string Expand(std::string_view text, const World& world, core::CanvasId can
             value = trigger(world.DrawingTrigger());
         } else if (name == "canvas") {
             value = world.CanvasName(canvas);
+        } else if (name == "profile") {
+            value = std::string(profile);
+        } else if (name == "program" || name == "running") {
+            value = std::string();
+            for (const ProfileFacts& facts : world.Profiles()) {
+                if (name == "program" && facts.name == profile) {
+                    value = facts.program;
+                } else if (name == "running" && facts.running) {
+                    value = facts.name;
+                }
+            }
+        } else if (name == "underneath") {
+            value = world.Underneath();
+        } else if (name == "showing") {
+            value = world.SettingsShowing().value_or(strings::kProfilesDefaults);
         }
         out.append(value ? *value : std::string(text.substr(open, close - open + 1)));
         at = close + 1;

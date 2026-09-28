@@ -5,6 +5,7 @@
 #include <string>
 
 #include "fakes/ui_test.h"
+#include "generated/ui_strings.h"
 #include "ui/tutorial/topics.h"
 #include "ui/tutorial/tutorial.h"
 
@@ -293,6 +294,43 @@ TEST_F(TutorialUiTest, MoreTopicsOpensTheListAndBackReturnsToTheCardItCameFrom) 
     EXPECT_EQ(StepUp(), "drawingMode");
     EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Started)
         << "skipped, so started";
+}
+
+// Profiles by name: Make a profile for this in Settings, and the skip
+// card's keep button, which on this topic keeps the profile made
+// (docs/TUTORIAL.md, section 18.3).
+TEST_F(TutorialUiTest, ProfilesMakesOneInSettingsAndItsKeepButtonKeepsIt) {
+    host_.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "Game"};
+    ShowEditMode();
+    StepFrame();
+    Overlay().StartTutorial("profiles");
+    StepFrames(2);
+    OpenOverviewUi();
+    RunUi("open profiles", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionprofiles");
+    });
+    StepFrames(75);  // the second the card waits before it moves on
+    ASSERT_EQ(StepUp(), "makeProfile");
+    RunUi("make a profile", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###makeprofile");
+    });
+    StepFrames(75);
+    EXPECT_EQ(StepUp(), "behavior");
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u);
+
+    ClickOnCard("**/###tutorial_skip");
+    std::string label;
+    RunUi("the keep button", [&label](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##tutorial_card");
+        label = ctx->ItemInfo("**/###tutorial_donekeep").DebugLabel;
+    });
+    EXPECT_EQ(label.rfind(strings::kTutorialCardDoneKeepProfile, 0), 0u) << label;
+    ClickOnCard("**/###tutorial_donekeep");
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(AppSettings().Profiles().size(), 1u) << "kept";
 }
 
 }  // namespace

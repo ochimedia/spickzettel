@@ -40,6 +40,20 @@ enum class AnchorId {
     OverviewCanvasTile,
     OverviewCanvasDelete,
     OverviewRestore,
+    // The Settings panel's section buttons, by section; Make a profile for
+    // this and New profile; a profile's trash button, by its place in the
+    // list; Showing, and each entry of its list - 0 the defaults, then each
+    // profile by its place plus one; the Don't steal focus row; and the
+    // revert arrow of each Behavior row the target states, by the row's
+    // place in the section.
+    SettingsSection,
+    SettingsMakeProfile,
+    SettingsNewProfile,
+    SettingsDeleteProfile,
+    SettingsShowing,
+    SettingsShowingEntry,
+    SettingsDontStealFocus,
+    SettingsRevert,
 };
 
 // An anchor, and what it is for when there is one on screen per snippet,

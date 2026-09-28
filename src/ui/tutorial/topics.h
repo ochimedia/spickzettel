@@ -19,6 +19,9 @@ struct Topic {
     // One line on what it covers, for the list.
     const char* gist = "";
     const std::vector<Step>& (*chain)() = nullptr;
+    // Whether a run has a folder of its own (section 13.5). Profiles has
+    // none: nothing in it is on a canvas (section 18.3).
+    bool folder = true;
 };
 
 // The id of the topic a first run starts, and whose warnings a skip card

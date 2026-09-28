@@ -13,6 +13,8 @@ const std::vector<Topic>& Topics() {
         {"capturing", strings::kTutorialTopicsCapturingTitle, strings::kTutorialTopicsCapturingGist,
          &CapturingChain},
         {"folders", strings::kTutorialTopicsFoldersTitle, strings::kTutorialTopicsFoldersGist, &FoldersChain},
+        {"profiles", strings::kTutorialTopicsProfilesTitle, strings::kTutorialTopicsProfilesGist, &ProfilesChain,
+         false},
     };
     return topics;
 }

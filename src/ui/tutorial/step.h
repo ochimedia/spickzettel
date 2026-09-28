@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -70,6 +71,21 @@ enum class Need {
     // A canvas or folder of the tutorial's in the trash, for the step that
     // restores it.
     SomethingInTrash,
+    // The Overview up on its Settings tab - opened by the menu's Settings -
+    // and the section picked there.
+    SettingsUp,
+    SettingsTab,
+    ProfilesSection,
+    BehaviorSection,
+    // The overlay up over a program it can name, to make a profile for.
+    AProgramUnderneath,
+    // The tutorial's profile there (section 18.3); Showing on it; a
+    // Behavior setting stated in it; and the overlay up over a program it
+    // does not match.
+    TutorialsProfile,
+    ShowingIt,
+    SomethingSetInIt,
+    OverAnotherProgram,
 };
 
 // Which snippet a step is about - section 6.5.
@@ -119,6 +135,15 @@ enum class Spot {
     DeleteCanvas,
     // The Restore of what of the tutorial's is in the trash.
     Restore,
+    // The Settings panel's Profiles and Behavior in its section list; Make
+    // a profile for this; Showing; the Don't steal focus row; and the
+    // first revert arrow in Behavior.
+    SectionProfiles,
+    SectionBehavior,
+    MakeProfile,
+    Showing,
+    DontStealFocus,
+    Revert,
 };
 
 // A button a hint line carries - section 6.4.
@@ -132,6 +157,8 @@ struct StartRecord {
     core::CanvasId canvas = 0;
     std::vector<FolderFacts> folders;
     std::vector<CanvasFacts> canvases;
+    // Every profile (section 18.3).
+    std::vector<ProfileFacts> profiles;
     uint64_t showings = 0;
     uint64_t pinnedViews = 0;
     uint64_t viewModes = 0;
@@ -183,6 +210,10 @@ struct Look {
     // The tutorial's canvases and folders seen in the trash during this
     // step - those in it when it began among them.
     const std::unordered_set<uint64_t>& trashedThisStep;
+    // Every profile, and the tutorial's by name, if it has one (section
+    // 18.3).
+    const std::vector<ProfileFacts>& profiles;
+    const std::optional<std::string>& profile;
 
     // A snippet of the tutorial's as it is now, or null.
     const SnippetFacts* Now(core::ItemId id) const;
@@ -199,6 +230,10 @@ struct Look {
     // A folder or a canvas of the tutorial's as it is now, or null.
     const FolderFacts* FolderNow(core::FolderId id) const;
     const CanvasFacts* CanvasNow(core::CanvasId id) const;
+    // The tutorial's profile as it is now, and as the step began - null
+    // for none, or one not there then.
+    const ProfileFacts* Profile() const;
+    const ProfileFacts* ProfileAtStart() const;
 };
 
 using Check = bool (*)(const Look& look);
@@ -220,6 +255,8 @@ struct Step {
     // The folders made while it is up are the tutorial's (section 17.3):
     // for the step that asks for one.
     bool keepsFolders = false;
+    // The profiles made while it is up are the tutorial's (section 18.3).
+    bool keepsProfiles = false;
     const char* title = "";
     // The text, chosen for the world as it is - a trigger set, a key
     // unbound - with the {placeholders} of Expand in it.

@@ -4,6 +4,7 @@
 // a field the test sets, and snippets a test makes, moves and deletes by
 // hand - the app's side of docs/TUTORIAL.md, section 7.1, with no app.
 
+#include <algorithm>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -47,6 +48,13 @@ struct FakeWorld : World {
     bool overviewShowsCanvases = true;
     bool overviewShowsDeleted = false;
     bool canvasBarOn = true;
+    // The program underneath, the profiles, and the Settings tab - on it
+    // while the Overview is up and overviewShowsSettings is set.
+    std::string underneath = "game.exe";
+    std::vector<ProfileFacts> profiles;
+    bool overviewShowsSettings = false;
+    SettingsSection section = SettingsSection::Other;
+    std::optional<std::string> showing;
     std::vector<SnippetFacts> snippets;
     std::unordered_map<CommandId, std::string> keys{{CommandId::Undo, "Ctrl+Z"},
                                                     {CommandId::CheatSheet, "Ctrl+H"},
@@ -107,6 +115,51 @@ struct FakeWorld : World {
         canvases.push_back(CanvasFacts{canvas, folder, "2026-09-28 12:00:00"});
         current = canvas;
     }
+    // The Overview up on its Settings tab, at `at`.
+    void OpenSettings(SettingsSection at) {
+        cover = Cover::Overview;
+        overviewShowsCanvases = false;
+        overviewShowsSettings = true;
+        section = at;
+    }
+    // A profile made at the end of the list, as Make a profile for this
+    // makes one for the program underneath - or a blank one, as New
+    // profile does - and Showing on it, as either button leaves it.
+    ProfileFacts& MakeProfile(const std::string& name, bool forUnderneath = true) {
+        ProfileFacts facts;
+        facts.name = name;
+        facts.program = forUnderneath ? underneath : std::string();
+        facts.matchesUnderneath = forUnderneath;
+        facts.running = forUnderneath && std::none_of(profiles.begin(), profiles.end(),
+                                                      [](const ProfileFacts& p) { return p.running; });
+        profiles.push_back(facts);
+        showing = name;
+        return profiles.back();
+    }
+    ProfileFacts& Profile(const std::string& name) {
+        for (ProfileFacts& profile : profiles) {
+            if (profile.name == name) {
+                return profile;
+            }
+        }
+        throw std::out_of_range("no such profile");
+    }
+    // The overlay brought up over `program`: which profiles match it, and
+    // Showing on the one that runs, as coming up has it.
+    void ComeUpOver(const std::string& program) {
+        underneath = program;
+        ++showings;
+        showing.reset();
+        bool first = true;
+        for (ProfileFacts& profile : profiles) {
+            profile.matchesUnderneath = !profile.program.empty() && profile.program == program;
+            profile.running = profile.matchesUnderneath && first;
+            if (profile.running) {
+                first = false;
+                showing = profile.name;
+            }
+        }
+    }
     SnippetFacts& At(core::ItemId id) {
         for (SnippetFacts& snippet : snippets) {
             if (snippet.id == id) {
@@ -165,6 +218,11 @@ struct FakeWorld : World {
     bool OverviewShowsCanvases() const override { return cover == Cover::Overview && overviewShowsCanvases; }
     bool OverviewShowsDeleted() const override { return cover == Cover::Overview && overviewShowsDeleted; }
     bool CanvasBarOn() const override { return canvasBarOn; }
+    std::string Underneath() const override { return underneath; }
+    std::vector<ProfileFacts> Profiles() const override { return profiles; }
+    bool OverviewShowsSettings() const override { return cover == Cover::Overview && overviewShowsSettings; }
+    SettingsSection SettingsSectionShown() const override { return section; }
+    std::optional<std::string> SettingsShowing() const override { return showing; }
     std::optional<std::string> KeyLabel(CommandId command) const override {
         const auto it = keys.find(command);
         return it == keys.end() ? std::nullopt : std::optional<std::string>(it->second);

@@ -28,5 +28,9 @@ const std::vector<Step>& CapturingChain();
 // Overview, a folder made, renamed and gone back from, a canvas sorted
 // into it, and a canvas deleted and restored from the trash.
 const std::vector<Step>& FoldersChain();
+// Profiles: one made for the program underneath, a setting changed in
+// it, the overlay brought up over another program, and the setting
+// handed back to the defaults.
+const std::vector<Step>& ProfilesChain();
 
 }  // namespace sz::ui::tutorial

@@ -52,14 +52,57 @@ protected:
         return hint.has_value() ? hint->need : std::nullopt;
     }
 
-    // Edit mode, and a topic at its first step in a folder of its own.
+    // Edit mode, and a topic at its first step in a folder of its own -
+    // or, for Profiles, in none, over a program it can make a profile for.
     void StartTheTutorial(std::string_view topic = tutorial::kBasicsTopic) {
+        if (topic == "profiles" && !host_.overlayWindow.underlyingApp.Known()) {
+            host_.overlayWindow.underlyingApp = kGame;
+        }
         ShowEditMode();
         StepFrame();
         Overlay().StartTutorial(topic);
         StepFrames(2);
         ASSERT_TRUE(Runner().On());
-        ASSERT_EQ(App().TutorialWorld().FolderOf(Canvases().CurrentCanvasId()), Runner().Folder());
+        if (tutorial::FindTopic(topic)->folder) {
+            ASSERT_EQ(App().TutorialWorld().FolderOf(Canvases().CurrentCanvasId()), Runner().Folder());
+        } else {
+            ASSERT_EQ(Runner().Folder(), 0u);
+        }
+    }
+    // The programs the overlay comes up over in Profiles' steps.
+    inline static const platform::ForegroundApp kGame{"game.exe", "Game"};
+    inline static const platform::ForegroundApp kDesktop{"explorer.exe", "Program Manager"};
+    // The overlay put away, `app` clicked, and the overlay brought back
+    // over it.
+    void ComeBackOver(const platform::ForegroundApp& app) {
+        ShowEditMode();  // away
+        StepFrame();
+        host_.overlayWindow.underlyingApp = app;
+        ShowEditMode();  // and back
+        StepFrame();
+    }
+    // A profile's place in the list, by name.
+    size_t ProfileIndex(const std::string& name) const {
+        const std::vector<Profile>& profiles = AppSettings().Profiles();
+        for (size_t i = 0; i < profiles.size(); ++i) {
+            if (profiles[i].name == name) {
+                return i;
+            }
+        }
+        ADD_FAILURE() << "no profile " << name;
+        return 0;
+    }
+    // One of the Settings panel's sections, pressed in its list.
+    void PickSection(SettingsPage::SettingsSection section) {
+        ClickAnchor(Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(section)});
+    }
+    // Showing's list opened, and the entry of profile `name` picked - or
+    // the defaults, for none.
+    void PickShowing(std::optional<std::string> name) {
+        ClickAnchor(Anchor{AnchorId::SettingsShowing});
+        StepFrames(2);
+        ClickAnchor(Anchor{AnchorId::SettingsShowingEntry, name ? ProfileIndex(*name) + 1 : 0});
+        StepFrames(2);
     }
     // Long enough for a step whose goal is met to move on by itself.
     void Settle() { StepFrames(75); }
@@ -394,6 +437,29 @@ protected:
             const std::optional<AnchorRect> restore = App().TutorialSpot();
             ASSERT_TRUE(restore.has_value());
             Click(Center(*restore).x, Center(*restore).y);
+        } else if (id == "openProfiles") {
+            // "Right-click an empty spot, choose Settings": the menu's item
+            // has no handle here, as for the Overview's.
+            ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+            StepFrames(2);
+            PickSection(SettingsPage::SettingsSection::Profiles);
+        } else if (id == "makeProfile") {
+            ClickAnchor(Anchor{AnchorId::SettingsMakeProfile});
+        } else if (id == "behavior") {
+            PickSection(SettingsPage::SettingsSection::Behavior);
+        } else if (id == "change") {
+            ClickAnchor(Anchor{AnchorId::SettingsDontStealFocus});
+        } else if (id == "otherProgram") {
+            ComeBackOver(kDesktop);
+        } else if (id == "elsewhere") {
+            Press(TutorialButton::Next);
+        } else if (id == "revert") {
+            if (NeedUp() == tutorial::Need::ShowingIt) {
+                PickShowing(Runner().Profile());  // as its line says
+            }
+            const std::optional<AnchorRect> arrow = App().TutorialSpot();
+            ASSERT_TRUE(arrow.has_value());
+            Click(Center(*arrow).x, Center(*arrow).y);
         } else if (id == "end") {
             Press(TutorialButton::Done);
         } else {
@@ -1379,6 +1445,211 @@ TEST_F(TutorialAppTest, DoneTakesTheFolderMadeInTheRunWithTheTutorials) {
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(own)));
 }
 
+// ===== Profiles (section 18) =====
+
+TEST_F(TutorialAppTest, TheSettingsPagesWidgetsAreMarkedWhereTheyAreDrawn) {
+    host_.overlayWindow.underlyingApp = kGame;
+    ShowEditMode();
+    StepFrame();
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+    StepFrames(2);
+    PickSection(SettingsPage::SettingsSection::Profiles);
+    ASSERT_TRUE(App().AnchorAt(Anchor{AnchorId::SettingsNewProfile}).has_value());
+
+    ClickAnchor(Anchor{AnchorId::SettingsMakeProfile});
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u);
+    EXPECT_EQ(AppSettings().Profiles()[0].match.executables, std::vector<std::string>{"game.exe"});
+    EXPECT_EQ(AppSettings().ActiveProfile(), 0u) << "running at once";
+    EXPECT_TRUE(App().AnchorAt(Anchor{AnchorId::SettingsDeleteProfile, 0}).has_value());
+
+    PickSection(SettingsPage::SettingsSection::Behavior);
+    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), "Game") << "Showing follows the profile made";
+    const std::optional<AnchorRect> showing = App().AnchorAt(Anchor{AnchorId::SettingsShowing});
+    ASSERT_TRUE(showing.has_value());
+    EXPECT_GT(showing->max.x - showing->min.x, 200.0f) << "the whole box, not its text";
+    EXPECT_FALSE(App().AnchorAt(Anchor{AnchorId::SettingsRevert, 0}).has_value()) << "nothing stated yet";
+    ClickAnchor(Anchor{AnchorId::SettingsDontStealFocus});
+    ASSERT_TRUE(AppSettings().Profiles()[0].overrides.dontStealFocus.has_value());
+    EXPECT_FALSE(*AppSettings().Profiles()[0].overrides.dontStealFocus);
+    EXPECT_TRUE(AppSettings().Base().dontStealFocus) << "the defaults as they were";
+
+    ClickAnchor(Anchor{AnchorId::SettingsRevert, 0});
+    EXPECT_FALSE(AppSettings().Profiles()[0].overrides.dontStealFocus.has_value()) << "handed back";
+
+    PickShowing(std::nullopt);
+    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), std::nullopt);
+    PickShowing("Game");
+    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), "Game");
+}
+
+TEST_F(TutorialAppTest, NewProfilePointsShowingAtTheProfileItMakes) {
+    ShowEditMode();
+    StepFrame();
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+    StepFrames(2);
+    PickSection(SettingsPage::SettingsSection::Profiles);
+    ClickAnchor(Anchor{AnchorId::SettingsNewProfile});
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u);
+    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), AppSettings().Profiles()[0].name);
+}
+
+TEST_F(TutorialAppTest, TheWorldTellsTheProgramTheProfilesAndSettings) {
+    AppConfig config = DefaultConfig();
+    Profile mine;
+    mine.name = "Mine";
+    mine.match.executables.push_back("game.exe");
+    mine.overrides.freezeScreen = true;           // not the default
+    mine.overrides.softwarePointer = true;        // the default's value, stated
+    Profile blank;
+    blank.name = "Blank";
+    config.profiles = {mine, blank};
+    host_.overlayWindow.underlyingApp = kGame;
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    const tutorial::World& world = App().TutorialWorld();
+
+    EXPECT_EQ(world.Underneath(), "game.exe");
+    const std::vector<tutorial::ProfileFacts> profiles = world.Profiles();
+    ASSERT_EQ(profiles.size(), 2u);
+    EXPECT_EQ(profiles[0].name, "Mine");
+    EXPECT_EQ(profiles[0].program, "game.exe");
+    EXPECT_TRUE(profiles[0].matchesUnderneath);
+    EXPECT_TRUE(profiles[0].running);
+    EXPECT_EQ(profiles[0].stated, 2u);
+    EXPECT_EQ(profiles[0].statedAsDefaults, 1u);
+    EXPECT_EQ(profiles[1].program, "");
+    EXPECT_FALSE(profiles[1].matchesUnderneath);
+    EXPECT_FALSE(profiles[1].running);
+
+    EXPECT_FALSE(world.OverviewShowsSettings());
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+    StepFrames(2);
+    EXPECT_TRUE(world.OverviewShowsSettings());
+    PickSection(SettingsPage::SettingsSection::Profiles);
+    EXPECT_EQ(world.SettingsSectionShown(), tutorial::SettingsSection::Profiles);
+    PickSection(SettingsPage::SettingsSection::Appearance);
+    EXPECT_EQ(world.SettingsSectionShown(), tutorial::SettingsSection::Other);
+    PickSection(SettingsPage::SettingsSection::Behavior);
+    EXPECT_EQ(world.SettingsSectionShown(), tutorial::SettingsSection::Behavior);
+    EXPECT_EQ(world.SettingsShowing(), "Mine") << "the profile that runs, as the overlay came up";
+
+    ComeBackOver(platform::ForegroundApp{});
+    EXPECT_EQ(world.Underneath(), "");
+    ComeBackOver(platform::ForegroundApp{"", "Some Window"});
+    EXPECT_EQ(world.Underneath(), "Some Window") << "the title, where the file can't be read";
+    EXPECT_EQ(world.SettingsShowing(), std::nullopt) << "the defaults, over another program";
+}
+
+TEST_F(TutorialAppTest, ProfilesMakesNoFolderAndLeavesTheCanvasUp) {
+    ShowEditMode();
+    StepFrame();
+    const CanvasId before = Canvases().CurrentCanvasId();
+    const size_t folders = Canvases().Folders().size();
+    host_.overlayWindow.underlyingApp = kGame;
+    Overlay().StartTutorial("profiles");
+    StepFrames(2);
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(Runner().Folder(), 0u);
+    EXPECT_EQ(Canvases().Folders().size(), folders);
+    EXPECT_EQ(Canvases().CurrentCanvasId(), before);
+    EXPECT_EQ(AppSettings().Stored().tutorialFolder, 0u);
+}
+
+// Done deletes the profile made in the run, and only that one, without
+// asking; Done, keep the profile keeps it.
+TEST_F(TutorialAppTest, DoneDeletesTheTutorialsProfileAndDoneKeepKeepsIt) {
+    AppConfig config = DefaultConfig();
+    Profile mine;
+    mine.name = "Mine";
+    mine.match.executables.push_back("other.exe");
+    config.profiles = {mine};
+    StartWith(config);
+    WalkTo("end", "profiles");
+    ASSERT_EQ(Runner().MadeProfiles(), std::vector<std::string>{"Game"});
+    const size_t folders = Canvases().Folders().size();
+    Press(TutorialButton::Done);
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos) << "not asked";
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u);
+    EXPECT_EQ(AppSettings().Profiles()[0].name, "Mine");
+    EXPECT_EQ(Canvases().Folders().size(), folders) << "no folder to trash";
+    EXPECT_EQ(Kept("profiles"), "finished");
+
+    ShowEditMode();  // put away, for the next start
+    StepFrame();
+    host_.overlayWindow.underlyingApp = kGame;
+    WalkTo("end", "profiles");
+    Press(TutorialButton::DoneKeep);
+    ASSERT_EQ(AppSettings().Profiles().size(), 2u);
+    EXPECT_EQ(AppSettings().Profiles()[1].name, "Game");
+}
+
+// Showing follows the list when Done takes a profile out of it, as when a
+// row's trash button does.
+TEST_F(TutorialAppTest, DoneMovesShowingWithTheListAsARowsTrashButtonDoes) {
+    WalkTo("end", "profiles");
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+    StepFrames(2);
+    PickSection(SettingsPage::SettingsSection::Profiles);
+    ClickAnchor(Anchor{AnchorId::SettingsNewProfile});  // after the tutorial's, and shown
+    const std::string shown = AppSettings().Profiles().back().name;
+    ASSERT_EQ(App().TutorialWorld().SettingsShowing(), shown);
+    Press(TutorialButton::Done);
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u);
+    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), shown) << "still the one it showed";
+}
+
+TEST_F(TutorialAppTest, TheSpotlightRingsInsideSettings) {
+    WalkTo("makeProfile", "profiles");
+    const std::optional<AnchorRect> ring = App().TutorialSpotlight();
+    const std::optional<AnchorRect> button = App().AnchorAt(Anchor{AnchorId::SettingsMakeProfile});
+    ASSERT_TRUE(ring.has_value());
+    ASSERT_TRUE(button.has_value());
+    EXPECT_FLOAT_EQ(ring->min.x, button->min.x);
+    EXPECT_FLOAT_EQ(ring->min.y, button->min.y);
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    EXPECT_FALSE(card->Pos.x < button->max.x && button->min.x < card->Pos.x + card->Size.x &&
+                 card->Pos.y < button->max.y && button->min.y < card->Pos.y + card->Size.y);
+}
+
+// The tutorial's profile deleted partway: the line says to go Back and
+// make one, and doing so brings the steps back.
+TEST_F(TutorialAppTest, TheTutorialsProfileDeletedIsMadeAgainByGoingBack) {
+    WalkTo("change", "profiles");
+    PickSection(SettingsPage::SettingsSection::Profiles);
+    ClickAnchor(Anchor{AnchorId::SettingsDeleteProfile, ProfileIndex("Game")});
+    PickSection(SettingsPage::SettingsSection::Behavior);
+    StepFrames(2);
+    EXPECT_EQ(NeedUp(), tutorial::Need::TutorialsProfile);
+    Press(TutorialButton::Back);
+    Press(TutorialButton::Back);
+    ASSERT_EQ(StepUp(), "makeProfile");
+    PickSection(SettingsPage::SettingsSection::Profiles);
+    DoStep("makeProfile");
+    DoStep("behavior");
+    ASSERT_EQ(StepUp(), "change");
+    EXPECT_FALSE(NeedUp().has_value()) << HintUp();
+}
+
+// Over a program that already has a profile of the user's, the card says
+// the one made won't run - and the steps go on with it.
+TEST_F(TutorialAppTest, AProgramWithAProfileAlreadyGetsASecondOneForPractice) {
+    AppConfig config = DefaultConfig();
+    Profile mine;
+    mine.name = "Mine";
+    mine.match.executables.push_back("game.exe");
+    config.profiles = {mine};
+    StartWith(config);
+    WalkTo("makeProfile", "profiles");
+    EXPECT_EQ(HintUp(), std::string(strings::kTutorialMakeProfileMissTaken));
+    DoStep("makeProfile");
+    ASSERT_EQ(StepUp(), "behavior") << HintUp();
+    EXPECT_EQ(Runner().Profile(), "Game");
+    EXPECT_EQ(AppSettings().ActiveProfile(), 0u) << "the user's, first in the list";
+}
+
 // ===== Progress, kept (section 13.7) =====
 
 TEST_F(TutorialAppTest, TheProgressIsKeptInTheSettingsAsItGoes) {
@@ -1733,6 +2004,13 @@ enum class Way {
     OtherFolderBrowsed,
     NewCanvasMade,
     ShowDeletedOff,
+    CanvasesTabPicked,
+    OtherSection,
+    NothingUnderneath,
+    NewProfileMade,
+    ShowingDefaults,
+    SameProgramAgain,
+    TickedBack,
 };
 
 const char* WayName(Way way) {
@@ -1770,6 +2048,13 @@ const char* WayName(Way way) {
         case Way::OtherFolderBrowsed: return "OtherFolderBrowsed";
         case Way::NewCanvasMade: return "NewCanvasMade";
         case Way::ShowDeletedOff: return "ShowDeletedOff";
+        case Way::CanvasesTabPicked: return "CanvasesTabPicked";
+        case Way::OtherSection: return "OtherSection";
+        case Way::NothingUnderneath: return "NothingUnderneath";
+        case Way::NewProfileMade: return "NewProfileMade";
+        case Way::ShowingDefaults: return "ShowingDefaults";
+        case Way::SameProgramAgain: return "SameProgramAgain";
+        case Way::TickedBack: return "TickedBack";
     }
     return "?";
 }
@@ -1927,6 +2212,34 @@ std::vector<Derail> Matrix() {
         cases.push_back({"folders", step, SettingsTab, Need::CanvasesTab});
         cases.push_back({"folders", step, OtherFolderBrowsed, nothing});
     }
+    // Profiles' steps in Settings: each needs it up, on its Settings tab,
+    // in its section. Put away and back over the same program keeps both
+    // the panel and Showing; over another, revert's Showing is the
+    // defaults, which it came up over.
+    for (const char* step : {"makeProfile", "behavior", "change", "elsewhere", "revert"}) {
+        cases.push_back({"profiles", step, OverviewClosed, Need::SettingsUp});
+        cases.push_back({"profiles", step, CanvasesTabPicked, Need::SettingsTab});
+    }
+    const std::vector<Derail> profiles = {
+        {"profiles", "makeProfile", HiddenAndShown, nothing},
+        {"profiles", "makeProfile", OtherSection, Need::ProfilesSection},
+        {"profiles", "makeProfile", NothingUnderneath, Need::AProgramUnderneath},
+        {"profiles", "makeProfile", NewProfileMade, nothing},
+        {"profiles", "behavior", HiddenAndShown, nothing},
+        {"profiles", "behavior", OtherSection, nothing},
+        {"profiles", "change", HiddenAndShown, nothing},
+        {"profiles", "change", OtherSection, Need::BehaviorSection},
+        {"profiles", "change", ShowingDefaults, Need::ShowingIt},
+        {"profiles", "otherProgram", OverviewClosed, nothing},
+        {"profiles", "otherProgram", SameProgramAgain, nothing},
+        {"profiles", "elsewhere", HiddenAndShown, nothing},
+        {"profiles", "elsewhere", OtherSection, Need::BehaviorSection},
+        {"profiles", "revert", HiddenAndShown, Need::ShowingIt},
+        {"profiles", "revert", OtherSection, Need::BehaviorSection},
+        {"profiles", "revert", ShowingDefaults, Need::ShowingIt},
+        {"profiles", "revert", TickedBack, nothing},
+    };
+    cases.insert(cases.end(), profiles.begin(), profiles.end());
     return cases;
 }
 
@@ -2082,6 +2395,35 @@ protected:
             case Way::ShowDeletedOff:
                 ClickAnchor(Anchor{AnchorId::OverviewShowDeleted});
                 break;
+            case Way::CanvasesTabPicked:
+                // Its tab pressed - which opening the Overview comes back
+                // to, as a press has no anchor to find it by.
+                ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+                break;
+            case Way::OtherSection:
+                PickSection(SettingsPage::SettingsSection::Appearance);
+                break;
+            case Way::NothingUnderneath:
+                ComeBackOver(platform::ForegroundApp{});
+                break;
+            case Way::NewProfileMade:
+                ClickAnchor(Anchor{AnchorId::SettingsNewProfile});
+                StepFrames(2);
+                ASSERT_EQ(HintUp(), std::string(strings::kTutorialMakeProfileMissBlank));
+                break;
+            case Way::ShowingDefaults:
+                PickShowing(std::nullopt);
+                break;
+            case Way::SameProgramAgain:
+                ComeBackOver(kGame);
+                StepFrames(2);
+                ASSERT_EQ(HintUp(), std::string(strings::kTutorialOtherProgramMissSame));
+                break;
+            case Way::TickedBack:
+                ClickAnchor(Anchor{AnchorId::SettingsDontStealFocus});
+                StepFrames(2);
+                ASSERT_EQ(HintUp(), std::string(strings::kTutorialRevertMissTickedBack));
+                break;
             case Way::TypingLeftOpen:
                 PressBar(ChromeButton::Text);
                 RawClick(SubjectMiddle().x, SubjectMiddle().y);
@@ -2151,6 +2493,27 @@ protected:
                 case tutorial::Need::DeletedShown:
                     ClickAnchor(Anchor{AnchorId::OverviewShowDeleted});
                     break;
+                case tutorial::Need::SettingsUp:
+                case tutorial::Need::SettingsTab:
+                    // "Right-click an empty spot and choose Settings", or
+                    // "Press Settings, at the top of the Overview".
+                    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+                    break;
+                case tutorial::Need::ProfilesSection:
+                    PickSection(SettingsPage::SettingsSection::Profiles);
+                    break;
+                case tutorial::Need::BehaviorSection:
+                    PickSection(SettingsPage::SettingsSection::Behavior);
+                    break;
+                case tutorial::Need::AProgramUnderneath:
+                    ComeBackOver(kGame);
+                    break;
+                case tutorial::Need::ShowingIt:
+                    PickShowing(Runner().Profile());
+                    break;
+                case tutorial::Need::OverAnotherProgram:
+                    ComeBackOver(kDesktop);
+                    break;
                 default:
                     FAIL() << "a line with nothing to do: " << hint->text;
             }
@@ -2172,10 +2535,14 @@ TEST_P(TutorialDerailTest, TheCardSaysALineAndFollowingItGetsTheStepDone) {
         ASSERT_TRUE(Runner().Subject().has_value());
     }
     // A step that begins with the Overview closed - the tile the step
-    // before pressed closes it: first open, as its line says.
+    // before pressed closes it: first open, as its line says. Or with
+    // Showing on the defaults, which the overlay came up over.
     if (NeedUp() == tutorial::Need::OverviewUp) {
         ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
         StepFrames(3);
+    }
+    if (NeedUp() == tutorial::Need::ShowingIt) {
+        PickShowing(Runner().Profile());
     }
     const bool gated = Runner().CurrentStep().gated;
 

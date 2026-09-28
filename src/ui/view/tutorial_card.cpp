@@ -17,6 +17,7 @@
 #include "ui/selection_layout.h"
 #include "ui/theme.h"
 #include "ui/ui_scale.h"
+#include "ui/view/settings_page.h"
 #include "ui/widgets.h"
 
 namespace sz::ui {
@@ -38,9 +39,16 @@ bool Overlap(const AnchorRect& a, const AnchorRect& b) {
     return a.min.x < b.max.x && b.min.x < a.max.x && a.min.y < b.max.y && b.min.y < a.max.y;
 }
 
-// Whether a spot is one of the Overview's own, which only it draws.
+// Whether a spot is one of the Overview's own, which only it draws - its
+// Settings tab's among them.
 bool InOverview(tutorial::Spot spot) {
     switch (spot) {
+        case tutorial::Spot::SectionProfiles:
+        case tutorial::Spot::SectionBehavior:
+        case tutorial::Spot::MakeProfile:
+        case tutorial::Spot::Showing:
+        case tutorial::Spot::DontStealFocus:
+        case tutorial::Spot::Revert:
         case tutorial::Spot::NewFolder:
         case tutorial::Spot::ShowDeleted:
         case tutorial::Spot::MadeFolder:
@@ -245,6 +253,26 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
             return DeleteCanvasRect();
         case tutorial::Spot::Restore:
             return RestoreRect();
+        case tutorial::Spot::SectionProfiles:
+            return anchors_.Find(
+                Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(SettingsPage::SettingsSection::Profiles)});
+        case tutorial::Spot::SectionBehavior:
+            return anchors_.Find(
+                Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(SettingsPage::SettingsSection::Behavior)});
+        case tutorial::Spot::MakeProfile:
+            return anchors_.Find(Anchor{AnchorId::SettingsMakeProfile});
+        case tutorial::Spot::Showing:
+            return anchors_.Find(Anchor{AnchorId::SettingsShowing});
+        case tutorial::Spot::DontStealFocus:
+            return anchors_.Find(Anchor{AnchorId::SettingsDontStealFocus});
+        case tutorial::Spot::Revert:
+            // The first arrow drawn, of the section's eight rows.
+            for (uint64_t row = 0; row < 8; ++row) {
+                if (const std::optional<AnchorRect> arrow = anchors_.Find(Anchor{AnchorId::SettingsRevert, row})) {
+                    return arrow;
+                }
+            }
+            return std::nullopt;
     }
     return std::nullopt;
 }
@@ -359,6 +387,9 @@ void TutorialCard::Draw(float displayW, float displayH) {
                 least = weight;
             }
         }
+        // All of it on screen: the list is tall, and a small display or a
+        // large scale leaves less below the top place than it needs.
+        best.y = std::max(0.0f, std::min(best.y, displayH - height - Px(kCardSideMargin)));
         ImGui::SetNextWindowPos(best);
     }
     ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0.0f), ImVec2(width, FLT_MAX));
@@ -402,7 +433,7 @@ void TutorialCard::DrawStep() {
         ImGui::SameLine();
         CheckMark();
     }
-    Wrapped(theme::kGraphite100, tutorial::Expand(step.text(world_), world_));
+    Wrapped(theme::kGraphite100, tutorial::Expand(step.text(world_), world_, 0, ProfileName()));
     if (const std::optional<tutorial::Hint>& hint = runner_.CurrentHint()) {
         ImGui::Spacing();
         DrawHint(*hint);
@@ -462,7 +493,7 @@ std::optional<ViewAction> TutorialCard::HintAction() const {
 }
 
 void TutorialCard::DrawHint(const tutorial::Hint& hint) {
-    Wrapped(theme::kTutorialHighlight, tutorial::Expand(hint.text, world_, hint.canvas));
+    Wrapped(theme::kTutorialHighlight, tutorial::Expand(hint.text, world_, hint.canvas, ProfileName()));
     const char* label = nullptr;
     switch (hint.button) {
         case tutorial::HintButton::None:
@@ -573,8 +604,15 @@ void TutorialCard::DrawList() {
                 std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListDone);
                 break;
         }
-        char steps[32];
-        std::snprintf(steps, sizeof(steps), strings::kTutorialListSteps, static_cast<int>(topic.chain().size()));
+        // How many steps it has, on the status's line - a line of its own
+        // made six topics taller than a small display (docs/TUTORIAL.md,
+        // section 18.8). Not beside "At step 3 of 8", which says it.
+        std::string statusLine = statusText;
+        if (status != Status::Running) {
+            char steps[32];
+            std::snprintf(steps, sizeof(steps), strings::kTutorialListSteps, static_cast<int>(topic.chain().size()));
+            statusLine.append(", ").append(steps);
+        }
 
         const ImGuiStyle& style = ImGui::GetStyle();
         const ImVec2 pad(style.FramePadding.x, style.FramePadding.y);
@@ -587,11 +625,10 @@ void TutorialCard::DrawList() {
         ImGui::TextColored(theme::kWhite, "%s", topic.title);
         ImGui::SameLine();
         ImGui::TextColored(status == Status::Running ? theme::kTutorialHighlight : theme::kGraphite300, "%s",
-                           statusText);
+                           statusLine.c_str());
         ImGui::PushStyleColor(ImGuiCol_Text, theme::kGraphite100);
         ImGui::TextUnformatted(topic.gist);
         ImGui::PopStyleColor();
-        ImGui::TextColored(theme::kGraphite300, "%s", steps);
         ImGui::PopTextWrapPos();
         ImGui::EndGroup();
         const ImVec2 end(start.x + ImGui::GetContentRegionAvail().x, ImGui::GetItemRectMax().y + pad.y);
@@ -629,8 +666,10 @@ void TutorialCard::DrawList() {
 
 void TutorialCard::DoneKeepButton() {
     // Done puts the folder in the trash; this is the way to keep it
-    // (question 9), so it is the quieter of the two.
-    if (QuietButton(Labeled(strings::kTutorialCardDoneKeep, "tutorial_donekeep"))) {
+    // (question 9), so it is the quieter of the two. A topic with no folder
+    // keeps its profile by it (section 18.3).
+    const char* label = topic_->folder ? strings::kTutorialCardDoneKeep : strings::kTutorialCardDoneKeepProfile;
+    if (QuietButton(Labeled(label, "tutorial_donekeep"))) {
         host_.Act(action::TutorialPress{TutorialButton::DoneKeep});
     }
 }

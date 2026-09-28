@@ -1031,6 +1031,148 @@ std::vector<Step> MakeFolders() {
     return chain;
 }
 
+// A profile there now that was not when the step began.
+bool AProfileMade(const Look& look, bool (*wanted)(const ProfileFacts& facts)) {
+    return std::any_of(look.profiles.begin(), look.profiles.end(), [&](const ProfileFacts& now) {
+        const bool wasThere = std::any_of(look.start.profiles.begin(), look.start.profiles.end(),
+                                          [&](const ProfileFacts& then) { return then.name == now.name; });
+        return !wasThere && wanted(now);
+    });
+}
+
+// The Behavior settings the tutorial's profile states, now and as the
+// step began - none when it was not there.
+size_t StatedNow(const Look& look) { return look.Profile() != nullptr ? look.Profile()->stated : 0; }
+size_t StatedAtStart(const Look& look) { return look.ProfileAtStart() != nullptr ? look.ProfileAtStart()->stated : 0; }
+
+bool OnSection(const World& world, SettingsSection section) {
+    return world.OverviewShowsSettings() && world.SettingsSectionShown() == section;
+}
+
+std::vector<Step> MakeProfiles() {
+    using enum Need;
+    std::vector<Step> chain;
+    // A profile made in the second before the card moves on is the
+    // tutorial's too (section 18.8).
+    chain.push_back(Step{
+        .id = "openProfiles",
+        .kind = StepKind::Do,
+        .keepsProfiles = true,
+        .title = strings::kTutorialOpenProfilesTitle,
+        .text =
+            [](const World& world) {
+                return Fixed(world.CanvasCover() == Cover::Overview && !world.OverviewShowsSettings()
+                                 ? strings::kTutorialOpenProfilesTextOverview
+                                 : strings::kTutorialOpenProfilesText);
+            },
+        .spot = Spot::SectionProfiles,
+        .goal = [](const Look& look) { return OnSection(look.world, SettingsSection::Profiles); },
+    });
+    // Waits: every later step is about the profile it makes, which is the
+    // tutorial's from then on (section 18.3).
+    chain.push_back(Step{
+        .id = "makeProfile",
+        .kind = StepKind::Do,
+        .gated = true,
+        .keepsProfiles = true,
+        .title = strings::kTutorialMakeProfileTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialMakeProfileText); },
+        .spot = Spot::MakeProfile,
+        .needs = {SettingsUp, SettingsTab, ProfilesSection, AProgramUnderneath},
+        .goal = [](const Look& look) { return look.Profile() != nullptr && look.Profile()->matchesUnderneath; },
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     return AProfileMade(look, [](const ProfileFacts& facts) { return facts.program.empty(); });
+                 },
+                 strings::kTutorialMakeProfileMissBlank},
+                // Not a mistake: a profile of the user's comes first, and a
+                // second one made for practice will not run (question 44).
+                {[](const Look& look) {
+                     return std::any_of(look.profiles.begin(), look.profiles.end(),
+                                        [](const ProfileFacts& facts) { return facts.matchesUnderneath; });
+                 },
+                 strings::kTutorialMakeProfileMissTaken},
+            },
+    });
+    chain.push_back(Step{
+        .id = "behavior",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialBehaviorTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialBehaviorText); },
+        .spot = Spot::SectionBehavior,
+        .needs = {SettingsUp, SettingsTab, TutorialsProfile},
+        .goal = [](const Look& look) { return OnSection(look.world, SettingsSection::Behavior); },
+    });
+    // Waits: the next two show what it set, and revert hands it back. Any
+    // Behavior row counts, stated in the profile - its mark, not its value.
+    chain.push_back(Step{
+        .id = "change",
+        .kind = StepKind::Do,
+        .gated = true,
+        .title = strings::kTutorialChangeTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialChangeText); },
+        .spot = Spot::DontStealFocus,
+        .needs = {SettingsUp, SettingsTab, BehaviorSection, TutorialsProfile, ShowingIt},
+        .goal = [](const Look& look) { return StatedNow(look) > StatedAtStart(look); },
+    });
+    // Not running is not asked: another profile of the user's may match
+    // the other program.
+    chain.push_back(Step{
+        .id = "otherProgram",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialOtherProgramTitle,
+        .text =
+            [](const World& world) {
+                return Fixed(world.KeyLabel(CommandId::ToggleEditMode) ? strings::kTutorialOtherProgramText
+                                                                        : strings::kTutorialOtherProgramTextTray);
+            },
+        .needs = {TutorialsProfile},
+        .goal =
+            [](const Look& look) {
+                return look.world.Showings() > look.start.showings && look.Profile() != nullptr &&
+                       !look.Profile()->matchesUnderneath;
+            },
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     return look.world.Showings() > look.start.showings && look.Profile() != nullptr &&
+                            look.Profile()->matchesUnderneath;
+                 },
+                 strings::kTutorialOtherProgramMissSame},
+            },
+    });
+    // What the trip shows. Its need says what to do when the overlay did
+    // not leave (section 18.8).
+    chain.push_back(Step{
+        .id = "elsewhere",
+        .title = strings::kTutorialElsewhereTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialElsewhereText); },
+        .spot = Spot::Showing,
+        .needs = {SettingsUp, SettingsTab, BehaviorSection, OverAnotherProgram},
+    });
+    chain.push_back(Step{
+        .id = "revert",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialRevertTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialRevertText); },
+        .spot = Spot::Revert,
+        .needs = {SettingsUp, SettingsTab, BehaviorSection, TutorialsProfile, ShowingIt, SomethingSetInIt},
+        .goal = [](const Look& look) { return StatedNow(look) < StatedAtStart(look); },
+        .nearMisses =
+            {
+                {[](const Look& look) { return look.Profile() != nullptr && look.Profile()->statedAsDefaults > 0; },
+                 strings::kTutorialRevertMissTickedBack},
+            },
+    });
+    chain.push_back(Step{
+        .id = "end",
+        .title = strings::kTutorialProfilesEndTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialProfilesEndText); },
+    });
+    return chain;
+}
+
 }  // namespace
 
 const std::vector<Step>& BasicsChain() {
@@ -1055,6 +1197,11 @@ const std::vector<Step>& CapturingChain() {
 
 const std::vector<Step>& FoldersChain() {
     static const std::vector<Step> chain = MakeFolders();
+    return chain;
+}
+
+const std::vector<Step>& ProfilesChain() {
+    static const std::vector<Step> chain = MakeProfiles();
     return chain;
 }
 

@@ -81,6 +81,27 @@ struct CanvasFacts {
     bool deleted = false;
 };
 
+// A profile, as the tutorial sees it - docs/TUTORIAL.md, section 18.3.
+// Known by its name, which is unique; a profile has no other identity.
+struct ProfileFacts {
+    std::string name;
+    // What it is matched on first: a program's file, else part of a
+    // window's title - empty when it matches nothing.
+    std::string program;
+    // Its rules match the program the overlay is up over; and it is the
+    // one that runs, the first in the list whose rules do.
+    bool matchesUnderneath = false;
+    bool running = false;
+    // The Behavior settings it states for itself, and how many of those
+    // hold the defaults' value all the same.
+    size_t stated = 0;
+    size_t statedAsDefaults = 0;
+};
+
+// The Settings panel's section, as far as a card needs to tell them
+// apart.
+enum class SettingsSection { Other, Behavior, Profiles };
+
 // What covers the canvas, if anything - the machine's Panel and Popup
 // levels, as far as a card needs to tell them apart. A snippet's own
 // popups, the color chooser and Properties, cover nothing: a step may
@@ -141,6 +162,17 @@ public:
     virtual bool OverviewShowsCanvases() const = 0;
     virtual bool OverviewShowsDeleted() const = 0;
     virtual bool CanvasBarOn() const = 0;
+
+    // The program the overlay is up over: its file, else its window's
+    // title - empty when it is known by neither. The profiles, in their
+    // order. And the Settings panel: whether the Overview is on its
+    // Settings tab, the section picked there, and whose values Showing
+    // shows - a profile's name, or nothing for the defaults.
+    virtual std::string Underneath() const = 0;
+    virtual std::vector<ProfileFacts> Profiles() const = 0;
+    virtual bool OverviewShowsSettings() const = 0;
+    virtual SettingsSection SettingsSectionShown() const = 0;
+    virtual std::optional<std::string> SettingsShowing() const = 0;
 
     // Words for the card: the key that runs `command`, as bound now -
     // nothing when it is unbound, or is a global hotkey another program

@@ -689,6 +689,7 @@ void OverlayApp::Do(const ViewAction& action) {
                    [&](const action::FinishNoteEdit& a) { editor_.EndEditingNote(a.text); },
                    [&](const action::TutorialPress& a) {
                        const std::vector<FolderId> folders = tutorialCard_.Runner().Folders();
+                       const std::vector<std::string> profiles = tutorialCard_.Runner().MadeProfiles();
                        const bool on = tutorialCard_.Runner().On();
                        tutorialCard_.Press(a.button);
                        // Done ends the tutorial with its folders in the trash,
@@ -697,6 +698,10 @@ void OverlayApp::Do(const ViewAction& action) {
                        // run (section 17.3), under one confirmation. Done, keep
                        // the folder keeps them.
                        if (a.button == TutorialButton::Done && on && !tutorialCard_.Runner().On()) {
+                           // And the profiles made in the run, without asking,
+                           // as a profile's own trash button has it (section
+                           // 18.3).
+                           settingsPage_.RemoveProfiles(profiles);
                            DeleteTarget target{DeleteTarget::Kind::Folder};
                            for (const FolderId each : folders) {
                                const Folder* found = Manager().FindFolder(each);
@@ -730,7 +735,11 @@ void OverlayApp::Do(const ViewAction& action) {
                            tutorialCard_.Leave();
                            KeepTutorialProgress();
                        }
-                       if (const FolderId folder = MakeTutorialFolder(*topic); folder != 0) {
+                       // A topic with nothing on a canvas has no folder, and
+                       // leaves the canvas up as it is (section 18.3).
+                       if (!topic->folder) {
+                           tutorialCard_.Start(*topic, 0);
+                       } else if (const FolderId folder = MakeTutorialFolder(*topic); folder != 0) {
                            tutorialCard_.Start(*topic, folder);
                        }
                    },
@@ -740,6 +749,10 @@ void OverlayApp::Do(const ViewAction& action) {
                        const auto& progress = settings_.Get(setting::kTutorialProgress);
                        const auto at = progress.find(current);
                        if (topic == nullptr || at == progress.end()) {
+                           return;
+                       }
+                       if (!topic->folder) {
+                           tutorialCard_.Resume(*topic, at->second, 0);
                            return;
                        }
                        if (const FolderId folder =
