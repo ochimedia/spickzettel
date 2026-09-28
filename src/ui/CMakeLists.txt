@@ -21,6 +21,7 @@ add_library(sz_ui STATIC
     selection_layout.cpp
     settings_widgets.cpp
     theme.cpp
+    tutorial/tutorial.cpp
     ui_scale.cpp
     view/canvas_bar.cpp
     view/canvas_view.cpp

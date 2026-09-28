@@ -276,14 +276,21 @@ this, in order:
    - the subject, with its place, its size and its strokes;
    - how many times the overlay has come up.
 2. **It chooses the subject** (section 6.5).
-3. **It checks the step's needs, in order.** The first need not met
-   gives the hint line. The goal is not checked while a need is not
-   met.
-4. **It checks the goal.** Once met, a goal stays met (it is latched),
+3. **It checks the goal.** Once met, a goal stays met (it is latched),
    even if what met it is undone.
-5. **It checks the near misses**, while the goal is not met. The first
-   that holds gives the hint line.
-6. **A step done for a second moves on.**
+4. **It checks the step's needs, in order**, while the goal is not met.
+   The first need not met gives the hint line.
+5. **It checks the near misses**, while the goal is not met and every
+   need is. The first that holds gives the hint line.
+6. **A step done for a second moves on.** In that second nothing is
+   checked, and no hint is shown.
+
+*Found while building phase 1:* the needs were first checked before the
+goal, and the goal was not checked while one was not met. But what meets
+a goal can itself leave a need unmet. Deleting the only snippet leaves
+the delete step with no subject, so the step waited for a snippet
+instead of moving on. A result is a result (6.3), so the goal comes
+first, and the needs only guide while it is not met.
 
 **Next and Back:**
 
@@ -393,8 +400,9 @@ and where it can, a way back in one click:
 | Drawing mode on the subject | no drawing mode on it | "Double-click it to draw on it again." | - |
 | A deleted subject | the subject is on the canvas: brought back before the step began (section 5) | "Delete it again to try this, or go on with Next." | - |
 
-The needs are checked before the goal, in the step's order. So a card
-never shows a text that is wrong for what is on screen. Where the
+The needs are checked in the step's order, every frame the goal is not
+met (section 5). So a card never shows a text that is wrong for what is
+on screen. Where the
 situation is not the one the text assumes, the line under it says what
 to do.
 
