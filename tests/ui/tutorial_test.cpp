@@ -48,7 +48,7 @@ const std::vector<Step>& Toy() {
             .goal =
                 [](const Look& look) {
                     return look.Subject() != nullptr && look.SubjectAtStart() != nullptr &&
-                           look.Subject()->strokes > look.SubjectAtStart()->strokes;
+                           look.Subject()->strokes.size() > look.SubjectAtStart()->strokes.size();
                 },
         });
         steps.push_back(Step{.id = "warn", .warning = true, .title = "Warn", .text = text});
@@ -181,7 +181,7 @@ TEST_F(TutorialTest, MetOnThisVisitAStepMovesOnWhateverItsNeedsSay) {
     tutorial_.Resume("free", FakeWorld::kTutorialFolder);
     world_.Make(1);
     Frame(0.0);
-    world_.At(1).strokes = 1;
+    world_.Draw(1);
     Frame(1.0);
     ASSERT_TRUE(tutorial_.GoalMet());
     world_.At(1).deleted = true;  // no subject left

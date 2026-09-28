@@ -30,6 +30,11 @@ struct FakeWorld : World {
     std::optional<core::ItemId> drawing;
     std::vector<core::ItemId> selection;
     std::optional<core::ItemCreationKind> tool;
+    core::Tool hand = core::Tool::Select;
+    core::DrawShape eraserShape = core::DrawShape::Freehand;
+    uint32_t penColor = 0xFF0000FFu;
+    float penWidth = 3.0f;
+    std::optional<core::ItemId> typing;
     core::CanvasId current = kCanvas;
     std::unordered_map<core::CanvasId, core::FolderId> folderOf{
         {kCanvas, kTutorialFolder}, {kSecondCanvas, kTutorialFolder}, {kOtherCanvas, kOtherFolder}};
@@ -53,6 +58,17 @@ struct FakeWorld : World {
         snippets.push_back(snippet);
         return snippets.back();
     }
+    // A stroke on snippet `id`, drawn with the pen as it is now: freehand
+    // unless said, 100 px long.
+    StrokeFacts& Draw(core::ItemId id, core::DrawShape shape = core::DrawShape::Freehand, float lengthPx = 100.0f) {
+        StrokeFacts stroke;
+        stroke.colorRGBA = penColor;
+        stroke.widthPx = penWidth;
+        stroke.lengthPx = lengthPx;
+        stroke.shape = shape;
+        At(id).strokes.push_back(stroke);
+        return At(id).strokes.back();
+    }
     SnippetFacts& At(core::ItemId id) {
         for (SnippetFacts& snippet : snippets) {
             if (snippet.id == id) {
@@ -69,6 +85,11 @@ struct FakeWorld : World {
     std::optional<core::ItemId> DrawingItem() const override { return drawing; }
     std::vector<core::ItemId> Selection() const override { return selection; }
     std::optional<core::ItemCreationKind> CreationToolInHand() const override { return tool; }
+    core::Tool ToolInHand() const override { return hand; }
+    core::DrawShape EraserShape() const override { return eraserShape; }
+    uint32_t PenColor() const override { return penColor; }
+    float PenWidth() const override { return penWidth; }
+    std::optional<core::ItemId> NoteBeingTyped() const override { return typing; }
     core::CanvasId CurrentCanvas() const override { return current; }
     core::FolderId FolderOf(core::CanvasId canvas) const override {
         const auto it = folderOf.find(canvas);

@@ -37,6 +37,11 @@ public:
     std::optional<core::ItemId> DrawingItem() const override { return editor_.DrawingItem(); }
     std::vector<core::ItemId> Selection() const override { return editor_.Selection(); }
     std::optional<core::ItemCreationKind> CreationToolInHand() const override;
+    core::Tool ToolInHand() const override { return editor_.ActiveTool(); }
+    core::DrawShape EraserShape() const override { return editor_.EraserShape(); }
+    uint32_t PenColor() const override { return editor_.DrawColorRGBA(); }
+    float PenWidth() const override { return editor_.DrawWidth(); }
+    std::optional<core::ItemId> NoteBeingTyped() const override { return editor_.EditingNote(); }
     core::CanvasId CurrentCanvas() const override { return session_.Manager().CurrentCanvasId(); }
     core::FolderId FolderOf(core::CanvasId canvas) const override;
     std::string CanvasName(core::CanvasId canvas) const override;

@@ -21,6 +21,17 @@
 
 namespace sz::ui::tutorial {
 
+// One stroke drawn on a snippet, as it looks on screen.
+struct StrokeFacts {
+    uint32_t colorRGBA = 0;
+    // Its width and its length on screen: the stored ones, scaled by the
+    // snippet's size, since a stroke is kept at the snippet's own scale.
+    float widthPx = 0.0f;
+    float lengthPx = 0.0f;
+    // A straight line or a rectangle, as the pen's shapes store them.
+    core::DrawShape shape = core::DrawShape::Freehand;
+};
+
 // One snippet, as the tutorial sees it.
 struct SnippetFacts {
     core::ItemId id = 0;
@@ -33,17 +44,32 @@ struct SnippetFacts {
     bool minimized = false;
     // Marked deleted: still in the library, for undo to bring back.
     bool deleted = false;
-    size_t strokes = 0;
+    std::vector<StrokeFacts> strokes;
+    // Its note: a caption typed with Text (Item::noteText), on the snippet
+    // as it is typed.
+    std::string note;
     // Stays on screen when the overlay is put away (Item::pinned).
     bool pinned = false;
     // The picture's opacity - a screenshot's image, a drawing's backing -
     // and the strokes' (Item::foregroundOpacity).
     float pictureOpacity = 1.0f;
     float drawingOpacity = 1.0f;
+
+    // How much is drawn on it: the strokes' length on screen, all told.
+    float InkPx() const {
+        float ink = 0.0f;
+        for (const StrokeFacts& stroke : strokes) {
+            ink += stroke.lengthPx;
+        }
+        return ink;
+    }
 };
 
 // What covers the canvas, if anything - the machine's Panel and Popup
-// levels, as far as a card needs to tell them apart.
+// levels, as far as a card needs to tell them apart. A snippet's own
+// popups, the color chooser and Properties, cover nothing: a step may
+// well be using them, and a press outside either closes it and does
+// nothing else (docs/TUTORIAL.md, section 15.3).
 enum class Cover { None, Overview, CheatSheet, Popup };
 
 class World {
@@ -65,6 +91,15 @@ public:
     virtual std::optional<core::ItemId> DrawingItem() const = 0;
     virtual std::vector<core::ItemId> Selection() const = 0;
     virtual std::optional<core::ItemCreationKind> CreationToolInHand() const = 0;
+    // The tool in hand, Select for the hand at rest, and the shape the
+    // eraser is cycled to while it is in hand.
+    virtual core::Tool ToolInHand() const = 0;
+    virtual core::DrawShape EraserShape() const = 0;
+    // What the pen draws with: its color, and its width on screen.
+    virtual uint32_t PenColor() const = 0;
+    virtual float PenWidth() const = 0;
+    // The snippet whose note is being typed, if one is.
+    virtual std::optional<core::ItemId> NoteBeingTyped() const = 0;
 
     // The canvas being looked at, the folder a canvas is in (0 for none,
     // or a deleted one), and a canvas's name.

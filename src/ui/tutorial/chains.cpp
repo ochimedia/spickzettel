@@ -1,6 +1,8 @@
 #include "ui/tutorial/chains.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 #include "generated/ui_strings.h"
 
@@ -23,6 +25,13 @@ constexpr float kOpacityChanged = 0.10f - 0.005f;
 bool Resized(const SnippetFacts& now, const SnippetFacts& then) {
     auto changed = [](float a, float b) { return b > 0.0f && std::fabs(a - b) >= kResizedShare * b; };
     return changed(now.rect.w, then.rect.w) || changed(now.rect.h, then.rect.h);
+}
+
+bool PictureFaded(const SnippetFacts& now, const SnippetFacts& then) {
+    return std::fabs(now.pictureOpacity - then.pictureOpacity) >= kOpacityChanged;
+}
+bool DrawingFaded(const SnippetFacts& now, const SnippetFacts& then) {
+    return std::fabs(now.drawingOpacity - then.drawingOpacity) >= kOpacityChanged;
 }
 
 bool Moved(const SnippetFacts& now, const SnippetFacts& then) {
@@ -231,6 +240,60 @@ std::vector<Step> MakeBasics() {
     return chain;
 }
 
+// What counts as a change that shows in what is drawn - section 15.2: a
+// color a channel 64 apart, a width two notches of the wheel (a pixel
+// each) less a rounding's worth, since a stroke's width is stored scaled
+// and scaled back, and the ink 16 px shorter.
+constexpr int kColorApart = 64;
+constexpr float kWidthChanged = 2.0f - 0.25f;
+constexpr float kInkGone = 16.0f;
+
+bool ColorsApart(uint32_t a, uint32_t b) {
+    for (const int shift : {24, 16, 8}) {
+        const int one = static_cast<int>((a >> shift) & 0xFFu);
+        const int other = static_cast<int>((b >> shift) & 0xFFu);
+        if (std::abs(one - other) >= kColorApart) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Strokes on the subject that `drawn` says yes to, now and as the step
+// first saw it - so a stroke from before the step never counts, and
+// undoing the new one takes the step back to waiting.
+using StrokeCheck = bool (*)(const Look& look, const StrokeFacts& stroke);
+bool MoreDrawn(const Look& look, StrokeCheck drawn) {
+    const SnippetFacts* now = nullptr;
+    const SnippetFacts* then = nullptr;
+    if (!SubjectBoth(look, now, then)) {
+        return false;
+    }
+    auto count = [&](const SnippetFacts& snippet) {
+        return std::count_if(snippet.strokes.begin(), snippet.strokes.end(),
+                             [&](const StrokeFacts& stroke) { return drawn(look, stroke); });
+    };
+    return count(*now) > count(*then);
+}
+
+bool InNewColor(const Look& look, const StrokeFacts& stroke) {
+    return ColorsApart(stroke.colorRGBA, look.start.penColor);
+}
+bool InNewWidth(const Look& look, const StrokeFacts& stroke) {
+    return std::fabs(stroke.widthPx - look.start.penWidth) >= kWidthChanged;
+}
+bool IsFreehand(const Look&, const StrokeFacts& stroke) { return stroke.shape == core::DrawShape::Freehand; }
+bool IsLine(const Look&, const StrokeFacts& stroke) { return stroke.shape == core::DrawShape::Line; }
+bool IsRectangle(const Look&, const StrokeFacts& stroke) { return stroke.shape == core::DrawShape::Rectangle; }
+
+// Whether the subject's opacity changed in a way the wheel's width step
+// could be mistaken for - Ctrl or Shift held.
+bool SubjectFaded(const Look& look) {
+    const SnippetFacts* now = nullptr;
+    const SnippetFacts* then = nullptr;
+    return SubjectBoth(look, now, then) && (PictureFaded(*now, *then) || DrawingFaded(*now, *then));
+}
+
 std::vector<Step> MakeDrawing() {
     using enum Need;
     std::vector<Step> chain;
@@ -259,7 +322,151 @@ std::vector<Step> MakeDrawing() {
             [](const Look& look) {
                 const SnippetFacts* now = nullptr;
                 const SnippetFacts* then = nullptr;
-                return SubjectBoth(look, now, then) && now->strokes > then->strokes;
+                return SubjectBoth(look, now, then) && now->strokes.size() > then->strokes.size();
+            },
+    });
+    // The bar, a button at a time. Each counts once it shows on the
+    // snippet: a color or a width once something is drawn with it.
+    chain.push_back(Step{
+        .id = "color",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialColorTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialColorText); },
+        .spot = Spot::DrawingBarColor,
+        .needs = With({DrawingOnSubject, PenInHand}),
+        .subject = SubjectRule::Any,
+        .goal = [](const Look& look) { return MoreDrawn(look, &InNewColor); },
+        .nearMisses =
+            {
+                {[](const Look& look) { return ColorsApart(look.world.PenColor(), look.start.penColor); },
+                 strings::kTutorialColorMissNothingDrawn},
+            },
+    });
+    chain.push_back(Step{
+        .id = "width",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialWidthTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialWidthText); },
+        .spot = Spot::Subject,
+        .needs = With({DrawingOnSubject, PenInHand}),
+        .subject = SubjectRule::Any,
+        .goal = [](const Look& look) { return MoreDrawn(look, &InNewWidth); },
+        .nearMisses =
+            {
+                {&SubjectFaded, strings::kTutorialWidthMissOpacity},
+                {[](const Look& look) {
+                     return std::fabs(look.world.PenWidth() - look.start.penWidth) >= kWidthChanged;
+                 },
+                 strings::kTutorialWidthMissNothingDrawn},
+            },
+    });
+    // The pen's shapes, cycled by its button: a shape is the pen's while
+    // it stays in hand, so both come before the eraser.
+    chain.push_back(Step{
+        .id = "line",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialLineTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialLineText); },
+        .spot = Spot::DrawingBarPen,
+        .needs = With({DrawingOnSubject, PenInHand}),
+        .subject = SubjectRule::Any,
+        .goal = [](const Look& look) { return MoreDrawn(look, &IsLine); },
+        .nearMisses =
+            {
+                {[](const Look& look) { return MoreDrawn(look, &IsFreehand); }, strings::kTutorialLineMissFreehand},
+            },
+    });
+    chain.push_back(Step{
+        .id = "rectangle",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialRectangleTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialRectangleText); },
+        .spot = Spot::DrawingBarPen,
+        .needs = With({DrawingOnSubject, PenInHand}),
+        .subject = SubjectRule::Any,
+        .goal = [](const Look& look) { return MoreDrawn(look, &IsRectangle); },
+        .nearMisses =
+            {
+                {[](const Look& look) { return MoreDrawn(look, &IsLine); }, strings::kTutorialRectangleMissLine},
+            },
+    });
+    // The eraser, and its two other ways. The first counts ink gone
+    // however it went; the other two ask what was in hand as it went.
+    chain.push_back(Step{
+        .id = "erase",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialEraseTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialEraseText); },
+        .spot = Spot::DrawingBarEraser,
+        .needs = With({DrawingOnSubject, SubjectDrawnOn}),
+        .subject = SubjectRule::Any,
+        .goal =
+            [](const Look& look) {
+                const SnippetFacts* now = nullptr;
+                const SnippetFacts* then = nullptr;
+                return SubjectBoth(look, now, then) && then->InkPx() - now->InkPx() >= kInkGone;
+            },
+    });
+    chain.push_back(Step{
+        .id = "eraseRect",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialEraseRectTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialEraseRectText); },
+        .spot = Spot::DrawingBarEraser,
+        .needs = With({DrawingOnSubject, SubjectDrawnOn}),
+        .subject = SubjectRule::Any,
+        .goal = [](const Look& look) { return look.SubjectInkGone().rectangleEraser >= kInkGone; },
+        .nearMisses =
+            {
+                {[](const Look& look) { return look.SubjectInkGone().eraser >= kInkGone; },
+                 strings::kTutorialEraseRectMissRound},
+            },
+    });
+    chain.push_back(Step{
+        .id = "eraseRight",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialEraseRightTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialEraseRightText); },
+        .spot = Spot::DrawingBarPen,
+        // No need for the pen: the eraser comes in hand from the step
+        // before, and what it erases gets the near miss's line, which a
+        // need's would hide.
+        .needs = With({DrawingOnSubject, SubjectDrawnOn}),
+        .subject = SubjectRule::Any,
+        .goal = [](const Look& look) { return look.SubjectInkGone().otherTool >= kInkGone; },
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     const InkGone gone = look.SubjectInkGone();
+                     return gone.eraser + gone.rectangleEraser >= kInkGone;
+                 },
+                 strings::kTutorialEraseRightMissEraser},
+            },
+    });
+    // The note is on the snippet as it is typed, but the step waits for
+    // the typing to end, and says so while it goes on: moved on at the
+    // first letter, the next card would talk over the typing.
+    chain.push_back(Step{
+        .id = "note",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialNoteTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialNoteText); },
+        .spot = Spot::DrawingBarText,
+        .needs = With({DrawingOnSubject}),
+        .subject = SubjectRule::Any,
+        .goal =
+            [](const Look& look) {
+                const SnippetFacts* now = nullptr;
+                const SnippetFacts* then = nullptr;
+                return SubjectBoth(look, now, then) && !now->note.empty() && now->note != then->note &&
+                       look.world.NoteBeingTyped() != look.subject;
+            },
+        .nearMisses =
+            {
+                {[](const Look& look) {
+                     return look.subject.has_value() && look.world.NoteBeingTyped() == look.subject;
+                 },
+                 strings::kTutorialNoteMissTyping},
             },
     });
     chain.push_back(Step{
@@ -286,12 +493,6 @@ bool AnyPinned(const Look& look) {
     return false;
 }
 
-bool PictureFaded(const SnippetFacts& now, const SnippetFacts& then) {
-    return std::fabs(now.pictureOpacity - then.pictureOpacity) >= kOpacityChanged;
-}
-bool DrawingFaded(const SnippetFacts& now, const SnippetFacts& then) {
-    return std::fabs(now.drawingOpacity - then.drawingOpacity) >= kOpacityChanged;
-}
 
 std::vector<Step> MakePinning() {
     using enum Need;
@@ -347,7 +548,7 @@ std::vector<Step> MakePinning() {
                 const SnippetFacts* now = nullptr;
                 const SnippetFacts* then = nullptr;
                 return SubjectBoth(look, now, then) &&
-                       (PictureFaded(*now, *then) || (now->strokes > 0 && DrawingFaded(*now, *then)));
+                       (PictureFaded(*now, *then) || (!now->strokes.empty() && DrawingFaded(*now, *then)));
             },
         .nearMisses =
             {
@@ -360,7 +561,7 @@ std::vector<Step> MakePinning() {
                 {[](const Look& look) {
                      const SnippetFacts* now = nullptr;
                      const SnippetFacts* then = nullptr;
-                     return SubjectBoth(look, now, then) && now->strokes == 0 && DrawingFaded(*now, *then);
+                     return SubjectBoth(look, now, then) && now->strokes.empty() && DrawingFaded(*now, *then);
                  },
                  strings::kTutorialOpacityMissNothingDrawn},
             },

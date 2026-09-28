@@ -459,6 +459,8 @@ and where it can, a way back in one click:
 | Drawing mode on the subject | no drawing mode on it | "Double-click it to draw on it again." | - |
 | A deleted subject | the subject is on the canvas: brought back before the step began (section 5) | "Delete it again to try this, or go on with Next." | - |
 | The subject pinned | the subject is not pinned | "It isn't pinned. Select it, and press Pin on its bar." | - |
+| The pen in hand | another tool is in hand | "Press the pen on the bar." | - |
+| Something drawn on the subject | the subject has no strokes | "Nothing is drawn on it to erase. Draw something with the pen first." | - |
 
 The needs are checked in the step's order, every frame the goal is not
 met (section 5). So a card never shows a text that is wrong for what is
@@ -582,9 +584,11 @@ the settings and the anchors, and a test fakes it. It answers:
 - **The overlay:** its mode; how many times it has come up (counted in
   `OverlayApp::OnOverlayShown`), and how many times the pinned view and
   view mode have (14.3).
-- **What covers the canvas:** the panel or popup that is up, if any.
+- **What covers the canvas:** the panel or popup that is up, if any,
+  but a snippet's own popups, the color chooser and Properties (15.3).
 - **The hand:** the selection; the snippet in drawing mode; the tool in
-  hand.
+  hand, and the eraser's shape; the pen's color and width; the snippet
+  whose note is being typed (15.3).
 - **The canvas:** the current canvas's id, name and folder; the
   snippets on it; whether a folder exists and is not deleted, and its
   canvases.
@@ -593,7 +597,9 @@ the settings and the anchors, and a test fakes it. It answers:
   - its rectangle;
   - whether it is fullscreen, minimized or deleted;
   - its canvas;
-  - how many strokes it has;
+  - its strokes, each with its color, its width and length on screen,
+    and whether it is a line or a rectangle (15.3);
+  - its note's text;
   - whether it is pinned, and its picture's and strokes' opacity.
 - **Anchors:** where an anchor is this frame, if it is on screen (7.2).
 - **Words:** the label of the keys that run a command, or of a hotkey,
@@ -617,7 +623,7 @@ point at, and a board of where each is this frame. There are two kinds:
   cleared in Prepare, so an anchor not drawn this frame is not on screen.
   The topics mark:
   - the selection bar's close button and its Pin;
-  - the drawing bar's pen;
+  - the drawing bar's pen, eraser, Text and color;
   - a dock chip, by its snippet.
 - **Worked out from the model:** the subject, and its handles, from the
   snippet's rectangle and the selection's layout
@@ -1088,7 +1094,7 @@ The new parts are:
 |---|---|---|---|
 | `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the two warnings; putting the overlay away and back | built: section 4's steps, but three |
 | `pinning` | Pinning and view mode | pinning a snippet, and the pinned view; making it see-through with the wheel or Properties; view mode; unpinning | built: section 14 |
-| `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; a line and a rectangle; the eraser, its rectangle and the right button; a note | its first three steps built; the rest agreed in section 15 |
+| `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; a line and a rectangle; the eraser, its rectangle and the right button; a note | built: section 15 |
 | `capturing` | Capturing | the quick and silent capture hotkeys, which work while the overlay is away; a full-screen screenshot; pasting an image; a blank drawing | to design |
 | `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | to design (13.8) |
 | `profiles` | Profiles | what a profile is for; making one for a program; what it can change | to design |
@@ -1541,8 +1547,9 @@ the hand check.
 
 ## 15. Drawing and notes
 
-Status: **agreed** (2026-09-28). Its questions and their answers are in
-15.7, and the design below matches them.
+Status: **built** (2026-09-28). Its questions and their answers are in
+15.7, and the design below matches them. What building it found is in
+15.8.
 
 ### 15.1 What it teaches, and why
 
@@ -1589,8 +1596,8 @@ progress is kept, and a run's folder is "Tutorial: Drawing and notes".
 | 5 | `rectangle` | do | moves on | Press the pen once more for rectangles, and drag one. Holding Ctrl does the same for one stroke. A third press brings the pen back. | the drawing bar's pen | as `color` | a rectangle on the subject, more than at the start | a line instead: "That was a line. Press the pen once more for a rectangle." |
 | 6 | `erase` | do | moves on | Press the eraser on the bar, and drag over what you drew. It cuts through strokes. | the drawing bar's eraser | drawing mode on the subject; something drawn on the subject | the strokes on the subject 16 px shorter, or more, than at the start | - |
 | 7 | `eraseRect` | do | moves on | Press the eraser again: it now erases a rectangle. Drag one across what's left. Holding Ctrl does the same for one drag. | the drawing bar's eraser | as `erase` | 16 px of ink or more gone from the subject during the step while the rectangle eraser was in hand | ink gone with the round eraser: "That was the round eraser. Press the eraser on the bar again for the rectangle." |
-| 8 | `eraseRight` | do | moves on | The right button erases with any tool. Press the pen, then hold the right button and drag across what's left. | the drawing bar's pen | as `erase`, and the pen in hand | 16 px of ink or more gone from the subject during the step while the pen was in hand | ink gone with the eraser: "That was the eraser. Press the pen, then drag with the right button." |
-| 9 | `text` | do | moves on | Press Text on the bar, click the snippet, and type a note. Press Esc or click outside it when you're done. | the drawing bar's Text | drawing mode on the subject | the subject's note is not empty, and differs from the start | the note being typed: "Press Esc or click outside it when you're done." |
+| 8 | `eraseRight` | do | moves on | The right button erases with any tool. Press the pen, then hold the right button and drag across what's left. | the drawing bar's pen | as `erase` | 16 px of ink or more gone from the subject during the step while another tool than the eraser was in hand | ink gone with the eraser: "That was the eraser. Press the pen, then drag with the right button." |
+| 9 | `note` | do | moves on | Press Text on the bar, click the snippet, and type a note. Press Esc or click outside it when you're done. | the drawing bar's Text | drawing mode on the subject | the subject's note is not empty, differs from the start, and is not being typed | the note being typed: "Press Esc or click outside it when you're done." |
 | 10 | `stopDrawing` | do | moves on | as built | - | - | as built | - |
 | 11 | `end` | read | Done | That's drawing and notes. Double-click any snippet to draw on it. Clear drawing, in its right-click menu, takes every stroke away; More, on its bar, has the note's color and size. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
 
@@ -1636,15 +1643,18 @@ before it is met.
   eraser cuts strokes into pieces, so their count can grow as ink goes.
   Undo of a stroke, and Clear drawing, count for `erase` too: the ink is
   gone, whatever took it (6.3).
-- **Note:** the text, which the snippet holds once typing ends. What is
-  typed sits in the editor's buffer until then, so the step waits for
-  the typing to end, and says so while it goes on.
+- **Note:** the text. The snippet shows it as it is typed, but the step
+  waits for the typing to end, and says so while it goes on (question
+  25): moved on at the first letter, the next card would talk over the
+  typing.
 
 **A shape is the tool's while it is in hand.** Picking another tool
 puts the pen and the eraser back to their first shapes
 (`DrawingMode::SetTool`), so `line` and `rectangle` come together
 before `erase`, and `eraseRect` right after `erase`. The pen steps need
-the pen in hand (15.3), and so does `eraseRight`.
+the pen in hand (15.3). `eraseRight` does not: the eraser comes to it
+in hand from `eraseRect`, and a drag with it gets the near miss's line,
+which a need's line would hide.
 
 **The color is the user's from then on.** The chooser's color is kept
 for the next time the app starts. The step does not put it back: the
@@ -1675,7 +1685,9 @@ user picked it.
     Draw something first." No button.
 - **Three spots, with their anchors:** the drawing bar's color, eraser
   and Text, marked in `canvas_view.cpp` beside the pen (7.2). While the
-  bar is not drawn, each falls back to the subject, as Pin does.
+  bar is not drawn, each falls back to the subject, as Pin does, and so
+  does the pen's now. The card keeps clear of all four, as of the other
+  bar buttons (section 3).
 - **The color chooser and Properties do not cover the canvas** (question
   24). Both are a snippet's own popups, opened from its bar, and today
   the need "canvas uncovered" tells the user to close them: in `color`
@@ -1695,7 +1707,7 @@ user picked it.
 - The runner, the card, the list and the settings rows.
 - The input machine and the drawing tools: the steps use them as they
   are.
-- Steps 0, 1 and 7, but `draw`'s text, which no longer lists the bar
+- Steps 0, 1 and 10, but `draw`'s text, which no longer lists the bar
   since the steps after it go through it.
 
 ### 15.5 Tests
@@ -1721,10 +1733,13 @@ user picked it.
   - Ctrl and the wheel in `width` (the near miss);
   - a freehand stroke in `line`, and a line in `rectangle` (the near
     misses);
-  - the strokes cleared before each erasing step (the need);
   - the round eraser in `eraseRect`, and the eraser in `eraseRight`
     (the near misses, no check);
-  - the note left typing in `text` (the near miss).
+  - the note left typing in `note` (the near miss).
+
+  An erasing step begun with nothing drawn shows its need in
+  `chains_test`: in the matrix, a way taken during the step that clears
+  the strokes is ink gone, which is the goal.
 - **By hand:** every card with real input, and typing a note.
 
 ### 15.6 Getting there
@@ -1736,7 +1751,8 @@ hand check.
 
 ### 15.7 Questions for review, and the answers
 
-21. **Five new steps** (`color`, `width`, `shape`, `erase`, `text`),
+21. **Five new steps** (`color`, `width`, `shape`, `erase`, `text`,
+    which was built as `note`),
     for nine cards in all. The alternative is fewer, longer cards:
     color and width as one "your pen" step, and shapes as a line on the
     end card. *Answer:* small steps, as recommended; question 23 made
@@ -1762,3 +1778,23 @@ hand check.
     reaches the snippet only then. *Answer:* as recommended.
 26. **Undo and Clear drawing count for `erase`,** since the goal reads
     the ink, not the eraser (6.3). *Answer:* as recommended.
+
+### 15.8 Found while building
+
+- **The note is on the snippet as it is typed** (`Session::PreviewText`),
+  not only once the typing ends, as the design first had it. So the
+  goal asks that the typing has ended too, which is what question 25
+  settled, and the step is called `note` after its strings.
+- **`eraseRight` needs no pen in hand.** The eraser comes to it in hand
+  from `eraseRect`, and a need's line is shown before a near miss's: with
+  the need, a drag with the eraser would get "Press the pen on the bar",
+  and never the line that says why it did not count.
+- **Drawing mode outlived a cleared selection.** `Editor::PruneSelection`
+  returned early on an empty selection, so Minimize, which clears it,
+  left drawing mode on with nothing selected, and the snippet, back from
+  the dock, had no bar. The derail matrix found it; fixed in the editor.
+  Minimize is not on the drawing bar, so a user could hardly get there.
+- **Properties holds the wheel.** With Properties up, the wheel over the
+  canvas does nothing, so in `opacity` the sliders stand in for it. The
+  card now says nothing while Properties is up, where it asked to close
+  it before.

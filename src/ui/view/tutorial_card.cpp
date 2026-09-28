@@ -192,7 +192,17 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
             return pin.has_value() ? pin : SubjectRect();
         }
         case tutorial::Spot::DrawingBarPen:
-            return anchors_.Find(Anchor{AnchorId::DrawingBarPen});
+        case tutorial::Spot::DrawingBarEraser:
+        case tutorial::Spot::DrawingBarText:
+        case tutorial::Spot::DrawingBarColor: {
+            // The snippet itself until the drawing bar is drawn over it.
+            const AnchorId id = runner_.CurrentSpot() == tutorial::Spot::DrawingBarPen      ? AnchorId::DrawingBarPen
+                                : runner_.CurrentSpot() == tutorial::Spot::DrawingBarEraser ? AnchorId::DrawingBarEraser
+                                : runner_.CurrentSpot() == tutorial::Spot::DrawingBarText   ? AnchorId::DrawingBarText
+                                                                                            : AnchorId::DrawingBarColor;
+            const std::optional<AnchorRect> button = anchors_.Find(Anchor{id});
+            return button.has_value() ? button : SubjectRect();
+        }
         case tutorial::Spot::DockChip: {
             const std::optional<core::ItemId> subject = runner_.Subject();
             return subject.has_value() ? anchors_.Find(Anchor{AnchorId::DockChip, *subject}) : std::nullopt;
@@ -225,9 +235,10 @@ void TutorialCard::Draw(float displayW, float displayH) {
         const ImVec2 bottom(top.x, displayH - height - Px(kCardBottomMargin));
         const std::optional<AnchorRect> spot = SpotRect();
         const std::optional<AnchorRect> subject = SubjectRect();
-        const std::optional<AnchorRect> bars[] = {anchors_.Find(Anchor{AnchorId::SelectionBarPin}),
-                                                  anchors_.Find(Anchor{AnchorId::SelectionBarClose}),
-                                                  anchors_.Find(Anchor{AnchorId::DrawingBarPen})};
+        const std::optional<AnchorRect> bars[] = {
+            anchors_.Find(Anchor{AnchorId::SelectionBarPin}),  anchors_.Find(Anchor{AnchorId::SelectionBarClose}),
+            anchors_.Find(Anchor{AnchorId::DrawingBarPen}),    anchors_.Find(Anchor{AnchorId::DrawingBarEraser}),
+            anchors_.Find(Anchor{AnchorId::DrawingBarText}),   anchors_.Find(Anchor{AnchorId::DrawingBarColor})};
         const auto covered = [&](ImVec2 at) {
             const AnchorRect card{at, ImVec2(at.x + width, at.y + height)};
             const auto under = [&](const std::optional<AnchorRect>& rect) {

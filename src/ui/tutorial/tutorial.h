@@ -118,6 +118,9 @@ private:
     // Notes what the tutorial's snippets are now: first seen, the order
     // they turned up in, and which went from live to deleted.
     void Observe(const std::vector<SnippetFacts>& snippets);
+    // Adds the ink gone from each of the tutorial's snippets since the
+    // last frame to the step's tally, by what is in hand in this one.
+    void TallyInk(const World& world, const std::vector<SnippetFacts>& snippets);
     void ChooseSubject(const World& world, const std::vector<SnippetFacts>& snippets);
     // The first need not met, as the hint, or nothing.
     std::optional<Hint> UnmetNeed(const World& world, const std::vector<SnippetFacts>& snippets) const;
@@ -139,6 +142,9 @@ private:
     StartRecord start_;
     std::unordered_set<core::ItemId> deletedThisStep_;
     std::unordered_set<core::ItemId> pinnedThisStep_;
+    std::unordered_map<core::ItemId, InkGone> inkGoneThisStep_;
+    // Each live snippet's ink in the last frame, for TallyInk.
+    std::unordered_map<core::ItemId, float> inkLastFrame_;
     std::optional<Hint> hint_;
 
     // Across steps: the tutorial's snippets in the order they turned up,

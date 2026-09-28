@@ -85,10 +85,36 @@ protected:
             RawClick(SubjectMiddle().x, SubjectMiddle().y);
         }
     }
-    void PressBarPin() {
-        const std::optional<ImVec2> pin = App().SelectionBarButtonCenter(ChromeButton::Pin);
-        ASSERT_TRUE(pin.has_value());
-        RawClick(pin->x, pin->y);
+    void PressBarPin() { PressBar(ChromeButton::Pin); }
+    // A button of the selection bar, or of the drawing bar in drawing mode.
+    void PressBar(ChromeButton button) {
+        const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
+        ASSERT_TRUE(center.has_value());
+        RawClick(center->x, center->y);
+    }
+    // The pen pressed until its icon shows `shape`: pressed again, it
+    // cycles through its shapes.
+    void PressPenFor(DrawShape shape) {
+        for (int i = 0; i < 4 && (App().ActiveTool() != Tool::Draw || App().PenShape() != shape); ++i) {
+            PressBar(ChromeButton::Pen);
+            StepFrames(20);  // no double-click of two presses
+        }
+    }
+    // A stroke across the subject, `dy` below its middle.
+    void DrawAcross(float dy = 0.0f) {
+        const ImVec2 middle = SubjectMiddle();
+        Drag(middle.x - 60.0f, middle.y + dy, middle.x + 60.0f, middle.y + dy);
+    }
+    // A color picked in the chooser: near white, by the top left of its
+    // square - to ImGui alone, as a widget is pressed.
+    void PickAColor() {
+        PressBar(ChromeButton::Color);
+        StepFrames(2);
+        ASSERT_TRUE(App().IsColorChooserOpen());
+        const ImGuiContext& g = *ImGui::GetCurrentContext();
+        ASSERT_FALSE(g.OpenPopupStack.empty());
+        const ImRect square = g.OpenPopupStack.back().Window->InnerRect;
+        Click(square.Min.x + 30.0f, square.Min.y + 30.0f);
     }
 
     // What a hand does for each step of every topic, as the step's text
@@ -119,6 +145,48 @@ protected:
         } else if (id == "draw") {
             const ImVec2 middle = SubjectMiddle();
             Drag(middle.x - 60.0f, middle.y - 20.0f, middle.x + 60.0f, middle.y + 20.0f);
+        } else if (id == "color") {
+            PickAColor();
+            PressKey(ImGuiKey_Escape);  // the chooser closed
+            DrawAcross(30.0f);
+        } else if (id == "width") {
+            MoveTo(SubjectMiddle().x, SubjectMiddle().y);
+            Wheel(1.0f);
+            Wheel(1.0f);
+            Wheel(1.0f);
+            DrawAcross(-30.0f);
+        } else if (id == "line") {
+            PressPenFor(DrawShape::Line);
+            DrawAcross(50.0f);
+        } else if (id == "rectangle") {
+            PressPenFor(DrawShape::Rectangle);
+            const ImVec2 middle = SubjectMiddle();
+            Drag(middle.x - 80.0f, middle.y - 60.0f, middle.x - 20.0f, middle.y + 60.0f);
+        } else if (id == "erase") {
+            PressBar(ChromeButton::Eraser);
+            const ImVec2 middle = SubjectMiddle();
+            Drag(middle.x, middle.y - 80.0f, middle.x, middle.y + 80.0f);
+        } else if (id == "eraseRect") {
+            for (int i = 0; i < 3 && (App().ActiveTool() != Tool::Erase || App().EraserShape() != DrawShape::Rectangle);
+                 ++i) {
+                PressBar(ChromeButton::Eraser);
+                StepFrames(20);  // no double-click of two presses
+            }
+            const ImVec2 middle = SubjectMiddle();
+            Drag(middle.x + 20.0f, middle.y - 80.0f, middle.x + 50.0f, middle.y + 80.0f);
+        } else if (id == "eraseRight") {
+            PressBar(ChromeButton::Pen);
+            const ImVec2 middle = SubjectMiddle();
+            Drag(middle.x - 40.0f, middle.y - 80.0f, middle.x - 40.0f, middle.y + 80.0f, 4,
+                 platform::MouseButton::Right);
+        } else if (id == "note") {
+            PressBar(ChromeButton::Text);
+            RawClick(SubjectMiddle().x, SubjectMiddle().y);
+            for (const char letter : std::string("gate")) {
+                ImGui::GetIO().AddInputCharacter(letter);
+                StepFrame();
+            }
+            PressKey(ImGuiKey_Escape);  // the typing ended
         } else if (id == "stopDrawing") {
             RawClick(1200.0f, 120.0f);  // outside it
         } else if (id == "delete") {
@@ -140,6 +208,11 @@ protected:
             ShowEditMode();  // and back
             StepFrame();
         } else if (id == "opacity") {
+            // Properties up holds the wheel, which its own sliders stand in
+            // for: put away, the wheel is the canvas's again.
+            if (App().InputStack().find("ItemProperties") != std::string::npos) {
+                PressKey(ImGuiKey_Escape);
+            }
             SelectTheSubject();
             MoveTo(SubjectMiddle().x, SubjectMiddle().y);
             KeyEvent(ImGuiMod_Ctrl, true);
@@ -233,6 +306,23 @@ TEST_F(TutorialAppTest, TheDrawingBarsPenIsMarkedWhereItIsDrawn) {
     EXPECT_FALSE(App().AnchorAt(Anchor{AnchorId::SelectionBarClose}).has_value()) << "not the selection bar";
 }
 
+TEST_F(TutorialAppTest, TheDrawingBarsOtherButtonsAreMarkedWhereTheyAreDrawn) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    StepFrame();
+    for (const auto [id, button] : {std::pair{AnchorId::DrawingBarEraser, ChromeButton::Eraser},
+                                    std::pair{AnchorId::DrawingBarText, ChromeButton::Text},
+                                    std::pair{AnchorId::DrawingBarColor, ChromeButton::Color}}) {
+        const std::optional<AnchorRect> anchor = App().AnchorAt(Anchor{id});
+        const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
+        ASSERT_TRUE(anchor.has_value());
+        ASSERT_TRUE(center.has_value());
+        EXPECT_FLOAT_EQ(Center(*anchor).x, center->x);
+        EXPECT_FLOAT_EQ(Center(*anchor).y, center->y);
+    }
+}
+
 TEST_F(TutorialAppTest, ADockChipIsMarkedForItsSnippet) {
     ShowEditMode();
     StepFrame();
@@ -277,6 +367,27 @@ TEST_F(TutorialAppTest, TheWorldSaysWhatCoversTheCanvas) {
     RightClick(900.0f, 400.0f);
     ASSERT_TRUE(App().IsEmptyCanvasMenuOpen());
     EXPECT_EQ(world.CanvasCover(), tutorial::Cover::Popup);
+}
+
+// A snippet's own popups, opened from its bar, cover nothing: a step may
+// be using them (docs/TUTORIAL.md, section 15.3).
+TEST_F(TutorialAppTest, TheColorChooserAndPropertiesCoverNothing) {
+    ShowEditMode();
+    StepFrame();
+    const tutorial::World& world = App().TutorialWorld();
+    MakeASnippet(300.0f, 300.0f, 700.0f, 550.0f);
+    PressBar(ChromeButton::More);
+    StepFrames(2);
+    ASSERT_NE(App().InputStack().find("ItemProperties"), std::string::npos) << App().InputStack();
+    EXPECT_EQ(world.CanvasCover(), tutorial::Cover::None);
+    PressKey(ImGuiKey_Escape);
+
+    DoubleClick(500.0f, 420.0f);
+    ASSERT_TRUE(App().DrawingItem().has_value());
+    PressBar(ChromeButton::Color);
+    StepFrames(2);
+    ASSERT_TRUE(App().IsColorChooserOpen());
+    EXPECT_EQ(world.CanvasCover(), tutorial::Cover::None);
 }
 
 TEST_F(TutorialAppTest, TheWorldSaysWhatIsInTheHand) {
@@ -354,13 +465,86 @@ TEST_F(TutorialAppTest, TheWorldCountsTheStrokesAndSeesFullscreen) {
         }
         return tutorial::SnippetFacts{};
     };
-    EXPECT_EQ(factsOf(drawing).strokes, 1u);
+    EXPECT_EQ(factsOf(drawing).strokes.size(), 1u);
     EXPECT_FALSE(factsOf(drawing).fullscreen);
 
     PressKey(ImGuiKey_Escape);  // out of drawing mode
     ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::ToggleFullscreen, drawing}));
     StepFrame();
     EXPECT_TRUE(factsOf(drawing).fullscreen);
+}
+
+// Each stroke as it looks on screen - its color, its width at the
+// snippet's size now, a line or a rectangle - and the ink, and the note.
+TEST_F(TutorialAppTest, TheWorldReadsTheStrokesAsTheyLookAndTheNote) {
+    ShowEditMode();
+    StepFrame();
+    const tutorial::World& world = App().TutorialWorld();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    const ItemId drawing = Canvases().CurrentOrNull()->items.back().id;
+    const FolderId folder = world.FolderOf(world.CurrentCanvas());
+    const auto factsOf = [&]() {
+        for (const tutorial::SnippetFacts& f : world.SnippetsIn(folder)) {
+            if (f.id == drawing) {
+                return f;
+            }
+        }
+        return tutorial::SnippetFacts{};
+    };
+    EXPECT_EQ(world.ToolInHand(), Tool::Draw);
+    Drag(350.0f, 350.0f, 600.0f, 500.0f, 8);
+    DragWith(ImGuiMod_Shift, 350.0f, 400.0f, 650.0f, 400.0f);
+    DragWith(ImGuiMod_Ctrl, 400.0f, 350.0f, 500.0f, 450.0f);
+
+    tutorial::SnippetFacts facts = factsOf();
+    ASSERT_EQ(facts.strokes.size(), 3u);
+    EXPECT_EQ(facts.strokes[0].shape, DrawShape::Freehand);
+    EXPECT_EQ(facts.strokes[1].shape, DrawShape::Line);
+    EXPECT_EQ(facts.strokes[2].shape, DrawShape::Rectangle);
+    EXPECT_EQ(facts.strokes[0].colorRGBA, world.PenColor());
+    EXPECT_NEAR(facts.strokes[0].widthPx, world.PenWidth(), 0.01f);
+    EXPECT_NEAR(facts.strokes[1].lengthPx, 300.0f, 0.5f);
+    EXPECT_NEAR(facts.strokes[2].lengthPx, 400.0f, 0.5f);
+
+    // Bigger by the wheel: as much wider and longer on screen.
+    const float ink = facts.InkPx();
+    const float widthBefore = Canvases().FindItemAnywhere(drawing)->rect.w;
+    PressKey(ImGuiKey_Escape);  // out of drawing mode, still selected
+    MoveTo(500.0f, 420.0f);
+    Wheel(2.0f);
+    const float scale = Canvases().FindItemAnywhere(drawing)->rect.w / widthBefore;
+    ASSERT_GT(scale, 1.05f) << "the wheel resized nothing";
+    facts = factsOf();
+    EXPECT_NEAR(facts.strokes[0].widthPx, scale * world.PenWidth(), 0.05f);
+    EXPECT_NEAR(facts.InkPx(), scale * ink, 1.0f);
+    const Rect grown = Canvases().FindItemAnywhere(drawing)->rect;
+    DoubleClick(grown.x + grown.w * 0.5f, grown.y + grown.h * 0.5f);
+    ASSERT_EQ(App().DrawingItem(), drawing);
+
+    // Erased across: less ink.
+    const std::optional<ImVec2> eraser = App().SelectionBarButtonCenter(ChromeButton::Eraser);
+    ASSERT_TRUE(eraser.has_value());
+    RawClick(eraser->x, eraser->y);
+    EXPECT_EQ(world.ToolInHand(), Tool::Erase);
+    EXPECT_EQ(world.EraserShape(), DrawShape::Freehand);
+    const Rect r = Canvases().FindItemAnywhere(drawing)->rect;
+    Drag(r.x + r.w * 0.5f, r.y + 10.0f, r.x + r.w * 0.5f, r.y + r.h - 10.0f);
+    EXPECT_LT(factsOf().InkPx(), facts.InkPx() - 16.0f);
+
+    // A note: being typed, and then on the snippet.
+    const std::optional<ImVec2> text = App().SelectionBarButtonCenter(ChromeButton::Text);
+    ASSERT_TRUE(text.has_value());
+    RawClick(text->x, text->y);
+    RawClick(r.x + 40.0f, r.y + 40.0f);
+    EXPECT_EQ(world.NoteBeingTyped(), drawing);
+    ImGui::GetIO().AddInputCharacter('h');
+    StepFrame();
+    ImGui::GetIO().AddInputCharacter('i');
+    StepFrame();
+    EXPECT_EQ(factsOf().note, "hi") << "on the snippet as it is typed";
+    PressKey(ImGuiKey_Escape);
+    EXPECT_FALSE(world.NoteBeingTyped().has_value());
+    EXPECT_EQ(factsOf().note, "hi");
 }
 
 TEST_F(TutorialAppTest, ADeletedCanvasIsInNoFolderAndADeletedFolderHoldsNothing) {
@@ -766,7 +950,7 @@ TEST_F(TutorialAppTest, AnotherTopicStartedLeavesTheRunningOnesStepAndFolder) {
     EXPECT_EQ(Overlay().TutorialTopic().id, "drawing");
     EXPECT_EQ(StepUp(), "drawingMode");
     EXPECT_NE(Runner().Folder(), basics);
-    EXPECT_EQ(Canvases().FindFolder(Runner().Folder())->name, "Tutorial: Drawing");
+    EXPECT_EQ(Canvases().FindFolder(Runner().Folder())->name, "Tutorial: Drawing and notes");
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(basics))) << "kept";
     EXPECT_EQ(Kept(), "move") << "left partway";
     EXPECT_EQ(Kept("drawing"), "drawingMode");
@@ -1056,6 +1240,15 @@ enum class Way {
     LeftDrawingMode,
     EnteredDrawingMode,
     Unpinned,
+    EraserPicked,
+    ColorChooserUp,
+    PropertiesUp,
+    OpacityByWheel,
+    DrewFreehand,
+    DrewALine,
+    ErasedRound,
+    ErasedWithTheEraser,
+    TypingLeftOpen,
 };
 
 const char* WayName(Way way) {
@@ -1074,6 +1267,15 @@ const char* WayName(Way way) {
         case Way::LeftDrawingMode: return "LeftDrawingMode";
         case Way::EnteredDrawingMode: return "EnteredDrawingMode";
         case Way::Unpinned: return "Unpinned";
+        case Way::EraserPicked: return "EraserPicked";
+        case Way::ColorChooserUp: return "ColorChooserUp";
+        case Way::PropertiesUp: return "PropertiesUp";
+        case Way::OpacityByWheel: return "OpacityByWheel";
+        case Way::DrewFreehand: return "DrewFreehand";
+        case Way::DrewALine: return "DrewALine";
+        case Way::ErasedRound: return "ErasedRound";
+        case Way::ErasedWithTheEraser: return "ErasedWithTheEraser";
+        case Way::TypingLeftOpen: return "TypingLeftOpen";
     }
     return "?";
 }
@@ -1173,8 +1375,26 @@ std::vector<Derail> Matrix() {
         {"pinning", "unpin", Deleted, Need::ASubject},
         {"pinning", "unpin", Minimized, Need::SubjectOnScreen},
         {"pinning", "unpin", EnteredDrawingMode, Need::NoDrawingMode},
+        {"pinning", "opacity", PropertiesUp, nothing},
+        {"drawing", "color", ColorChooserUp, nothing},
+        {"drawing", "width", OpacityByWheel, nothing},
+        {"drawing", "line", DrewFreehand, nothing},
+        {"drawing", "rectangle", DrewALine, nothing},
+        {"drawing", "eraseRect", ErasedRound, nothing},
+        {"drawing", "eraseRight", ErasedWithTheEraser, nothing},
+        {"drawing", "note", TypingLeftOpen, nothing},
     };
     cases.insert(cases.end(), more.begin(), more.end());
+    // Drawing's steps after the stroke: each needs drawing mode on its
+    // snippet, and those that draw need the pen.
+    for (const char* step : {"color", "width", "line", "rectangle", "erase", "eraseRect", "eraseRight", "note"}) {
+        cases.push_back({"drawing", step, LeftDrawingMode, Need::DrawingOnSubject});
+        cases.push_back({"drawing", step, CheatSheet, Need::CanvasUncovered});
+        cases.push_back({"drawing", step, Minimized, Need::SubjectOnScreen});
+    }
+    for (const char* step : {"color", "width", "line", "rectangle"}) {
+        cases.push_back({"drawing", step, EraserPicked, Need::PenInHand});
+    }
     return cases;
 }
 
@@ -1247,6 +1467,54 @@ protected:
                 ASSERT_TRUE(subject.has_value());
                 controller_->GetSession().SetPinned({*subject}, false);
                 break;
+            case Way::EraserPicked:
+                PressBar(ChromeButton::Eraser);
+                break;
+            case Way::ColorChooserUp:
+                PressBar(ChromeButton::Color);
+                StepFrames(2);
+                ASSERT_TRUE(App().IsColorChooserOpen());
+                break;
+            case Way::PropertiesUp:
+                SelectTheSubject();
+                PressBar(ChromeButton::More);
+                StepFrames(2);
+                break;
+            case Way::OpacityByWheel:
+                MoveTo(SubjectMiddle().x, SubjectMiddle().y);
+                KeyEvent(ImGuiMod_Ctrl, true);
+                Wheel(-1.0f);
+                Wheel(-1.0f);
+                Wheel(-1.0f);
+                KeyEvent(ImGuiMod_Ctrl, false);
+                StepFrame();
+                break;
+            case Way::DrewFreehand:
+                DrawAcross(-50.0f);
+                break;
+            case Way::DrewALine:
+                ASSERT_EQ(App().PenShape(), DrawShape::Line) << "the pen as the step before left it";
+                DrawAcross(-50.0f);
+                break;
+            case Way::ErasedRound: {
+                ASSERT_EQ(App().ActiveTool(), Tool::Erase) << "the eraser as the step before left it";
+                const ImVec2 middle = SubjectMiddle();
+                Drag(middle.x - 20.0f, middle.y - 80.0f, middle.x - 20.0f, middle.y + 80.0f);
+                break;
+            }
+            case Way::ErasedWithTheEraser: {
+                ASSERT_EQ(App().ActiveTool(), Tool::Erase) << "the eraser as the step before left it";
+                const ImVec2 middle = SubjectMiddle();
+                Drag(middle.x - 50.0f, middle.y - 80.0f, middle.x - 30.0f, middle.y + 80.0f);
+                break;
+            }
+            case Way::TypingLeftOpen:
+                PressBar(ChromeButton::Text);
+                RawClick(SubjectMiddle().x, SubjectMiddle().y);
+                ImGui::GetIO().AddInputCharacter('x');
+                StepFrame();
+                ASSERT_TRUE(App().EditingNote().has_value());
+                break;
         }
         StepFrames(3);
     }
@@ -1293,6 +1561,9 @@ protected:
                     // "Select it, and press Pin on its bar."
                     SelectTheSubject();
                     PressBarPin();
+                    break;
+                case tutorial::Need::PenInHand:
+                    PressBar(ChromeButton::Pen);
                     break;
                 default:
                     FAIL() << "a line with nothing to do: " << hint->text;

@@ -22,6 +22,14 @@ const SnippetFacts* Look::AtStart(core::ItemId id) const {
     return it == start.firstSeen.end() ? nullptr : &it->second;
 }
 
+InkGone Look::SubjectInkGone() const {
+    if (!subject) {
+        return {};
+    }
+    const auto it = inkGoneThisStep.find(*subject);
+    return it == inkGoneThisStep.end() ? InkGone{} : it->second;
+}
+
 std::vector<const SnippetFacts*> Look::MadeHere() const {
     std::vector<const SnippetFacts*> made;
     const core::CanvasId here = world.CurrentCanvas();
@@ -181,6 +189,32 @@ void Tutorial::Observe(const std::vector<SnippetFacts>& snippets) {
         if (snippet.pinned && !snippet.deleted) {
             pinnedThisStep_.insert(snippet.id);
         }
+    }
+}
+
+void Tutorial::TallyInk(const World& world, const std::vector<SnippetFacts>& snippets) {
+    const core::Tool tool = world.ToolInHand();
+    for (const SnippetFacts& snippet : snippets) {
+        if (snippet.deleted) {
+            // Gone as a whole, which is no erasing; back, it starts again
+            // from what it has then.
+            inkLastFrame_.erase(snippet.id);
+            continue;
+        }
+        const float ink = snippet.InkPx();
+        const auto [last, isNew] = inkLastFrame_.try_emplace(snippet.id, ink);
+        if (!isNew && ink < last->second) {
+            InkGone& gone = inkGoneThisStep_[snippet.id];
+            const float less = last->second - ink;
+            if (tool != core::Tool::Erase) {
+                gone.otherTool += less;
+            } else if (world.EraserShape() == core::DrawShape::Rectangle) {
+                gone.rectangleEraser += less;
+            } else {
+                gone.eraser += less;
+            }
+        }
+        last->second = ink;
     }
 }
 
@@ -387,6 +421,19 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const std::vector<Sn
                     return unmet(need, strings::kTutorialNeedSubjectPinned);
                 }
                 break;
+            case Need::PenInHand:
+                if (world.ToolInHand() != core::Tool::Draw) {
+                    return unmet(need, strings::kTutorialNeedPenInHand);
+                }
+                break;
+            case Need::SubjectDrawnOn:
+                if (subject == nullptr) {
+                    return noSubject;
+                }
+                if (subject->strokes.empty()) {
+                    return unmet(need, strings::kTutorialNeedSubjectDrawnOn);
+                }
+                break;
         }
     }
     return std::nullopt;
@@ -402,14 +449,19 @@ void Tutorial::Update(const World& world, double now) {
         start_.showings = world.Showings();
         start_.pinnedViews = world.PinnedViews();
         start_.viewModes = world.ViewModes();
+        start_.penColor = world.PenColor();
+        start_.penWidth = world.PenWidth();
         for (const SnippetFacts& snippet : snippets) {
             start_.present.insert(snippet.id);
         }
         deletedThisStep_.clear();
         pinnedThisStep_.clear();
+        inkGoneThisStep_.clear();
+        inkLastFrame_.clear();
         begun_ = true;
     }
     Observe(snippets);
+    TallyInk(world, snippets);
     ChooseSubject(world, snippets);
 
     const Step& step = CurrentStep();
@@ -427,7 +479,7 @@ void Tutorial::Update(const World& world, double now) {
     // The goal first: a result is a result, however it came about, and
     // what makes it may itself leave a need unmet - deleting the only
     // snippet leaves no subject. The needs guide only while it is not met.
-    const Look look{world, start_, snippets, lookSubject_, deletedThisStep_, pinnedThisStep_};
+    const Look look{world, start_, snippets, lookSubject_, deletedThisStep_, pinnedThisStep_, inkGoneThisStep_};
     if (step.goal != nullptr && step.goal(look)) {
         metThisVisit_ = true;
         done_[index_] = true;

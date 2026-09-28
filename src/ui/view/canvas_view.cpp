@@ -437,6 +437,33 @@ void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, b
 // border style.FrameBorderSize asks for is there too. Hover comes from the
 // resolver (`hotButton`), and a press shows as pressed only while the
 // pointer is still on it, the way a held Button does.
+namespace {
+
+// The bar's buttons a step may point at.
+std::optional<AnchorId> AnchorOf(ChromeButton button) {
+    switch (button) {
+        case ChromeButton::Close:
+            return AnchorId::SelectionBarClose;
+        case ChromeButton::Pin:
+            return AnchorId::SelectionBarPin;
+        case ChromeButton::Pen:
+            return AnchorId::DrawingBarPen;
+        case ChromeButton::Eraser:
+            return AnchorId::DrawingBarEraser;
+        case ChromeButton::Text:
+            return AnchorId::DrawingBarText;
+        case ChromeButton::Color:
+            return AnchorId::DrawingBarColor;
+        case ChromeButton::Maximize:
+        case ChromeButton::Minimize:
+        case ChromeButton::More:
+            break;
+    }
+    return std::nullopt;
+}
+
+}  // namespace
+
 void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<ChromeButton>& hotButton) {
     const std::optional<Rect> bounds = editor_.SelectionBounds();
     const std::optional<ItemId> primaryId = editor_.PrimarySelection();
@@ -484,12 +511,8 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
             fill = danger ? theme::kDanger : active ? theme::AccentHover() : theme::kHoverWash;
         }
         ImGui::RenderFrame(Im(rect.min), Im(rect.max), ImGui::GetColorU32(fill), true, theme::kRadiusPill);
-        if (button == ChromeButton::Close) {
-            host_.Mark(Anchor{AnchorId::SelectionBarClose}, Im(rect.min), Im(rect.max));
-        } else if (button == ChromeButton::Pin) {
-            host_.Mark(Anchor{AnchorId::SelectionBarPin}, Im(rect.min), Im(rect.max));
-        } else if (button == ChromeButton::Pen) {
-            host_.Mark(Anchor{AnchorId::DrawingBarPen}, Im(rect.min), Im(rect.max));
+        if (const std::optional<AnchorId> anchor = AnchorOf(button)) {
+            host_.Mark(Anchor{*anchor}, Im(rect.min), Im(rect.max));
         }
 
         if (button == ChromeButton::Color) {

@@ -56,6 +56,11 @@ enum class Need {
     DeletedSubject,
     // The subject is pinned.
     SubjectPinned,
+    // The pen in hand, in any of its shapes: with the eraser or Text, a
+    // drag erases or opens the note instead.
+    PenInHand,
+    // Something drawn on the subject, for a step that erases.
+    SubjectDrawnOn,
 };
 
 // Which snippet a step is about - section 6.5.
@@ -82,7 +87,12 @@ enum class Spot {
     SelectionBarClose,
     // The selection bar's Pin, or the subject while no bar is drawn.
     SelectionBarPin,
+    // The drawing bar's buttons, or the subject while no drawing bar is
+    // drawn.
     DrawingBarPen,
+    DrawingBarEraser,
+    DrawingBarText,
+    DrawingBarColor,
     // The subject's chip in the dock, while it is minimized.
     DockChip,
 };
@@ -96,10 +106,23 @@ struct StartRecord {
     uint64_t showings = 0;
     uint64_t pinnedViews = 0;
     uint64_t viewModes = 0;
+    // What the pen drew with.
+    uint32_t penColor = 0;
+    float penWidth = 0.0f;
     // The tutorial's snippets there were when the step began.
     std::unordered_set<core::ItemId> present;
     // Each snippet of the tutorial's as the step first saw it.
     std::unordered_map<core::ItemId, SnippetFacts> firstSeen;
+};
+
+// Ink gone from a snippet during a step, by what was in hand as it went -
+// section 15.2: the eraser drags it off, the rectangle eraser cuts it out
+// on the release, and with another tool in hand it went by the right
+// button, or by undo.
+struct InkGone {
+    float rectangleEraser = 0.0f;
+    float eraser = 0.0f;
+    float otherTool = 0.0f;
 };
 
 // What a goal or a near miss is asked with: the world, the step's start
@@ -116,6 +139,8 @@ struct Look {
     // Those seen pinned during this step - pinned when it began among
     // them.
     const std::unordered_set<core::ItemId>& pinnedThisStep;
+    // The ink gone from each of the tutorial's snippets during this step.
+    const std::unordered_map<core::ItemId, InkGone>& inkGoneThisStep;
 
     // A snippet of the tutorial's as it is now, or null.
     const SnippetFacts* Now(core::ItemId id) const;
@@ -123,6 +148,8 @@ struct Look {
     const SnippetFacts* AtStart(core::ItemId id) const;
     const SnippetFacts* Subject() const { return subject ? Now(*subject) : nullptr; }
     const SnippetFacts* SubjectAtStart() const { return subject ? AtStart(*subject) : nullptr; }
+    // The ink gone from the subject during this step - none without one.
+    InkGone SubjectInkGone() const;
     // The live ones made since the step began, on the current canvas.
     std::vector<const SnippetFacts*> MadeHere() const;
 };

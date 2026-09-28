@@ -204,7 +204,7 @@ TEST_F(TutorialUiTest, OpenTheTutorialInSettingsShowsTheTopicsToPickFrom) {
     EXPECT_EQ(App().TutorialTopic().id, "drawing");
     EXPECT_EQ(StepUp(), "drawingMode");
     ASSERT_EQ(Canvases().Folders().size(), folders + 1);
-    EXPECT_EQ(Canvases().Folders().back().name, "Tutorial: Drawing");
+    EXPECT_EQ(Canvases().Folders().back().name, "Tutorial: Drawing and notes");
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 

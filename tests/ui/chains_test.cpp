@@ -59,7 +59,20 @@ protected:
 
 class DrawingChainTest : public ChainTest {
 protected:
+    static constexpr uint32_t kGreen = 0x00FF00FFu;
+
     DrawingChainTest() : ChainTest(DrawingChain()) {}
+
+    // Snippet 1 in drawing mode with the pen, a stroke on it, and the step
+    // `id` begun.
+    void DrawingAt(std::string_view id) {
+        world_.Make(1);
+        world_.drawing = 1;
+        world_.selection = {1};
+        world_.hand = core::Tool::Draw;
+        world_.Draw(1);
+        At(id);
+    }
 };
 
 class PinningChainTest : public ChainTest {
@@ -138,11 +151,53 @@ TEST_F(DrawingChainTest, CanBeWalkedTheWayAUserWould) {
     Settle();
 
     ASSERT_EQ(Id(), "draw");
-    world_.At(5).strokes = 1;
+    world_.hand = core::Tool::Draw;
+    world_.Draw(5);
+    Settle();
+
+    ASSERT_EQ(Id(), "color");
+    world_.penColor = kGreen;
+    world_.Draw(5);
+    Settle();
+
+    ASSERT_EQ(Id(), "width");
+    world_.penWidth = 6.0f;
+    world_.Draw(5);
+    Settle();
+
+    ASSERT_EQ(Id(), "line");
+    world_.Draw(5, core::DrawShape::Line);
+    Settle();
+
+    ASSERT_EQ(Id(), "rectangle");
+    world_.Draw(5, core::DrawShape::Rectangle);
+    Settle();
+
+    ASSERT_EQ(Id(), "erase");
+    world_.hand = core::Tool::Erase;
+    world_.At(5).strokes[0].lengthPx -= 30.0f;
+    Settle();
+
+    ASSERT_EQ(Id(), "eraseRect");
+    world_.eraserShape = core::DrawShape::Rectangle;
+    Frame();
+    world_.At(5).strokes[1].lengthPx -= 30.0f;
+    Settle();
+
+    ASSERT_EQ(Id(), "eraseRight");
+    world_.hand = core::Tool::Draw;
+    world_.eraserShape = core::DrawShape::Freehand;
+    world_.At(5).strokes[2].lengthPx -= 30.0f;
+    Settle();
+
+    ASSERT_EQ(Id(), "note");
+    world_.hand = core::Tool::Text;
+    world_.At(5).note = "Boss at the gate";
     Settle();
 
     ASSERT_EQ(Id(), "stopDrawing");
     world_.drawing.reset();
+    world_.hand = core::Tool::Select;
     Settle();
 
     ASSERT_EQ(Id(), "end");
@@ -235,7 +290,7 @@ TEST_F(PinningChainTest, SeeThroughCountsOnlyWhatShows) {
     EXPECT_FALSE(tutorial_.GoalMet());
     EXPECT_STREQ(HintText(), strings::kTutorialOpacityMissNothingDrawn);
 
-    world_.At(1).strokes = 1;  // something drawn: now it shows
+    world_.Draw(1);  // something drawn: now it shows
     Frame();
     EXPECT_TRUE(tutorial_.GoalMet());
 }
@@ -428,6 +483,179 @@ TEST_F(DrawingChainTest, DrawingOnAnotherOfTheTutorialsSnippetsCounts) {
     world_.drawing = 1;
     Frame();
     EXPECT_EQ(tutorial_.Subject(), 1u);
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// Only a color that shows, and only once something is drawn with it.
+TEST_F(DrawingChainTest, TheColorCountsOnceAStrokeShowsIt) {
+    DrawingAt("color");
+    world_.penColor = 0xF01010FFu;  // a nudge from red
+    world_.Draw(1);
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    EXPECT_FALSE(tutorial_.CurrentHint().has_value());
+
+    world_.penColor = kGreen;
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialColorMissNothingDrawn);
+    world_.Draw(1);
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(DrawingChainTest, AStrokeInAnotherColorFromBeforeTheStepDoesNotCount) {
+    world_.Make(1);
+    world_.drawing = 1;
+    world_.hand = core::Tool::Draw;
+    world_.Draw(1);  // red, drawn earlier
+    world_.penColor = kGreen;
+    At("color");
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    world_.penColor = 0xFF0000FFu;
+    world_.Draw(1);
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet()) << "red is new against the green in hand at the start";
+}
+
+TEST_F(DrawingChainTest, TheColorWidthAndShapesNeedThePenInHand) {
+    for (const std::string_view id : {"color", "width", "line", "rectangle"}) {
+        SCOPED_TRACE(id);
+        world_ = FakeWorld{};
+        DrawingAt(id);
+        world_.hand = core::Tool::Erase;
+        Frame();
+        EXPECT_EQ(NeedShown(), Need::PenInHand);
+        world_.hand = core::Tool::Draw;
+        Frame();
+        EXPECT_FALSE(tutorial_.CurrentHint().has_value());
+    }
+}
+
+TEST_F(DrawingChainTest, TheWidthCountsTwoNotchesDrawnWith) {
+    DrawingAt("width");
+    world_.penWidth = 4.0f;  // one notch
+    world_.Draw(1);
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+
+    world_.penWidth = 1.0f;  // two the other way
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialWidthMissNothingDrawn);
+    world_.Draw(1);
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(DrawingChainTest, TheWidthSaysWhenTheWheelChangedTheOpacityInstead) {
+    DrawingAt("width");
+    world_.At(1).pictureOpacity -= 0.15f;
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialWidthMissOpacity);
+    EXPECT_FALSE(tutorial_.GoalMet());
+}
+
+TEST_F(DrawingChainTest, TheShapesSayWhenAnotherWasDrawn) {
+    DrawingAt("line");
+    world_.Draw(1);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialLineMissFreehand);
+    world_.Draw(1, core::DrawShape::Rectangle);
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "a rectangle is not a line";
+    world_.Draw(1, core::DrawShape::Line);
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+
+    At("rectangle");
+    world_.Draw(1, core::DrawShape::Line);
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialRectangleMissLine);
+    world_.Draw(1, core::DrawShape::Rectangle);
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// The eraser cuts a stroke into pieces: more strokes, less ink.
+TEST_F(DrawingChainTest, TheEraseStepCountsTheInkGoneNotTheStrokes) {
+    DrawingAt("erase");
+    world_.hand = core::Tool::Erase;
+    world_.At(1).strokes[0].lengthPx = 45.0f;
+    world_.Draw(1, core::DrawShape::Freehand, 50.0f);  // the other piece
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "5 px is a touch";
+    world_.At(1).strokes[1].lengthPx = 30.0f;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+// Begun on a snippet with nothing drawn on it - cleared, undone. Clearing
+// it during the step is ink gone, which counts.
+TEST_F(DrawingChainTest, TheErasingStepsNeedSomethingDrawn) {
+    for (const std::string_view id : {"erase", "eraseRect", "eraseRight"}) {
+        SCOPED_TRACE(id);
+        world_ = FakeWorld{};
+        world_.Make(1);
+        world_.drawing = 1;
+        world_.hand = core::Tool::Erase;
+        At(id);
+        EXPECT_EQ(NeedShown(), Need::SubjectDrawnOn);
+    }
+}
+
+// What was in hand as the ink went: the round eraser first, and the
+// rectangle picked after it, is no rectangle erased.
+TEST_F(DrawingChainTest, TheRectangleEraserCountsOnlyWhatItErased) {
+    DrawingAt("eraseRect");
+    world_.hand = core::Tool::Erase;
+    world_.At(1).strokes[0].lengthPx -= 40.0f;
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialEraseRectMissRound);
+    world_.eraserShape = core::DrawShape::Rectangle;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    world_.At(1).strokes[0].lengthPx -= 20.0f;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(DrawingChainTest, TheRightButtonCountsWhatWentWithoutTheEraserInHand) {
+    DrawingAt("eraseRight");
+    world_.hand = core::Tool::Erase;
+    world_.eraserShape = core::DrawShape::Rectangle;
+    Frame();
+    EXPECT_FALSE(tutorial_.CurrentHint().has_value()) << "the eraser in hand is where the step begins";
+    world_.At(1).strokes[0].lengthPx -= 40.0f;
+    Frame();
+    EXPECT_STREQ(HintText(), strings::kTutorialEraseRightMissEraser);
+    world_.hand = core::Tool::Draw;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet());
+    world_.At(1).strokes[0].lengthPx -= 20.0f;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+}
+
+TEST_F(DrawingChainTest, TheNoteCountsOnceTypedAndSaysSoWhileTyping) {
+    world_.Make(1);
+    world_.At(1).note = "old";
+    world_.drawing = 1;
+    At("note");
+    world_.hand = core::Tool::Text;
+    world_.typing = 1;
+    world_.At(1).note = "old, and more";
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "still being typed";
+    EXPECT_STREQ(HintText(), strings::kTutorialNoteMissTyping);
+    world_.At(1).note = "old";
+    world_.typing.reset();
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "the same note as before";
+    world_.At(1).note.clear();
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "no note at all";
+    world_.At(1).note = "new";
+    Frame();
     EXPECT_TRUE(tutorial_.GoalMet());
 }
 
