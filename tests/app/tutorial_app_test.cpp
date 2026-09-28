@@ -2,7 +2,14 @@
 // anchors the owners mark as they draw, what the app answers the tutorial,
 // the card and the spotlight, and the welcome chain walked through with
 // real gestures.
+#include <cmath>
+#include <string>
+#include <vector>
+
 #include "fakes/headless_app.h"
+#include "generated/ui_strings.h"
+#include "support/view_stack.h"
+#include "ui/tutorial/welcome_chain.h"
 
 namespace sz::test {
 namespace {
@@ -19,6 +26,100 @@ protected:
 
     static ImVec2 Center(const AnchorRect& rect) {
         return ImVec2((rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f);
+    }
+
+    // ===== The tutorial =====
+
+    const tutorial::Tutorial& Runner() const { return App().TutorialRunner(); }
+    std::string StepUp() const {
+        return Runner().GetState() == tutorial::Tutorial::State::OnStep ? std::string(Runner().CurrentStep().id)
+                                                                         : "(" + Runner().Progress() + ")";
+    }
+    // The hint under the step's text, or empty.
+    std::string HintUp() const {
+        const std::optional<tutorial::Hint>& hint = Runner().CurrentHint();
+        return hint.has_value() ? std::string(hint->text) : std::string();
+    }
+    std::optional<tutorial::Need> NeedUp() const {
+        const std::optional<tutorial::Hint>& hint = Runner().CurrentHint();
+        return hint.has_value() ? hint->need : std::nullopt;
+    }
+
+    // Edit mode, and the tutorial at its first step in a folder of its own.
+    void StartTheTutorial() {
+        ShowEditMode();
+        StepFrame();
+        Overlay().StartTutorial();
+        StepFrames(2);
+        ASSERT_TRUE(Runner().On());
+        ASSERT_EQ(App().TutorialWorld().FolderOf(Canvases().CurrentCanvasId()), Runner().Folder());
+    }
+    // Long enough for a step whose goal is met to move on by itself.
+    void Settle() { StepFrames(75); }
+    void Press(TutorialButton button) {
+        Overlay().PressTutorial(button);
+        StepFrames(2);
+    }
+
+    // The subject as the model has it now.
+    const Item& Subject() const { return *Canvases().FindItemAnywhere(*Runner().Subject()); }
+    ImVec2 SubjectMiddle() const {
+        const Rect& r = Subject().rect;
+        return ImVec2(r.x + r.w * 0.5f, r.y + r.h * 0.5f);
+    }
+
+    // What a hand does for each step of the welcome chain, as the step's
+    // text says it: real gestures, keys and hotkeys.
+    void DoStep(const std::string& id) {
+        if (id == "welcome" || id == "programs" || id == "antiCheat") {
+            Press(TutorialButton::Next);
+        } else if (id == "screenshot") {
+            Drag(300.0f, 360.0f, 600.0f, 560.0f);
+        } else if (id == "move") {
+            const ImVec2 from = SubjectMiddle();
+            Drag(from.x, from.y, from.x + 120.0f, from.y - 60.0f);
+        } else if (id == "resize") {
+            if (!App().IsSelected(Subject().id)) {
+                RawClick(SubjectMiddle().x, SubjectMiddle().y);
+            }
+            const Rect r = Subject().rect;
+            // On the bottom-right corner's handle.
+            const float x = std::round(r.x + r.w);
+            const float y = std::round(r.y + r.h);
+            Drag(x, y, x + 80.0f, y + 60.0f);
+        } else if (id == "drawingMode") {
+            DoubleClick(SubjectMiddle().x, SubjectMiddle().y);
+        } else if (id == "draw") {
+            const ImVec2 middle = SubjectMiddle();
+            Drag(middle.x - 60.0f, middle.y - 20.0f, middle.x + 60.0f, middle.y + 20.0f);
+        } else if (id == "stopDrawing") {
+            RawClick(1200.0f, 120.0f);  // outside it
+        } else if (id == "delete") {
+            RawClick(SubjectMiddle().x, SubjectMiddle().y);
+            PressKey(ImGuiKey_Delete);
+        } else if (id == "undo") {
+            PressCtrlKey(ImGuiKey_Z);
+        } else if (id == "away") {
+            ShowEditMode();  // away
+            StepFrame();
+            ShowEditMode();  // and back
+            StepFrame();
+        } else if (id == "end") {
+            Press(TutorialButton::Done);
+        } else {
+            FAIL() << "no hand for step " << id;
+        }
+        Settle();
+    }
+    // The steps done, one after the other, until `id` is up.
+    void WalkTo(const std::string& id) {
+        StartTheTutorial();
+        for (int guard = 0; guard < 20 && StepUp() != id; ++guard) {
+            const std::string before = StepUp();
+            DoStep(before);
+            ASSERT_NE(StepUp(), before) << "the step " << before << " did not move on: " << HintUp();
+        }
+        ASSERT_EQ(StepUp(), id);
     }
 };
 
@@ -237,6 +338,162 @@ TEST_F(TutorialAppTest, TheWorldCountsTheOverlayComingUp) {
     ShowEditMode();  // and back
     StepFrame();
     EXPECT_EQ(world.Showings(), before + 1);
+}
+
+// ===== The card, the spotlight and the walk-through (section 9) =====
+
+TEST_F(TutorialAppTest, AStartMakesAFolderOfItsOwnAndSwitchesToIt) {
+    ShowEditMode();
+    StepFrame();
+    const CanvasId before = Canvases().CurrentCanvasId();
+    const size_t folders = Canvases().Folders().size();
+    Overlay().StartTutorial();
+    StepFrames(2);
+
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(StepUp(), "welcome");
+    ASSERT_EQ(Canvases().Folders().size(), folders + 1);
+    const Folder& made = Canvases().Folders().back();
+    EXPECT_EQ(made.id, Runner().Folder());
+    EXPECT_EQ(made.name, strings::kTutorialFolderName);
+    EXPECT_NE(Canvases().CurrentCanvasId(), before);
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, made.id);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u) << "an empty canvas to start on";
+}
+
+TEST_F(TutorialAppTest, TheWelcomeChainIsWalkedThroughWithRealGestures) {
+    StartTheTutorial();
+    std::vector<std::string> seen;
+    for (int guard = 0; guard < 20 && Runner().On(); ++guard) {
+        const std::string step = StepUp();
+        seen.push_back(step);
+        DoStep(step);
+        if (Runner().On()) {
+            ASSERT_NE(StepUp(), step) << "the step " << step << " did not move on: " << HintUp();
+        }
+    }
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(Runner().GetOutcome(), tutorial::Tutorial::Outcome::Finished);
+    std::vector<std::string> chain;
+    for (const tutorial::Step& step : tutorial::WelcomeChain()) {
+        chain.emplace_back(step.id);
+    }
+    EXPECT_EQ(seen, chain) << "every step, in order, none skipped";
+}
+
+TEST_F(TutorialAppTest, ADoStepShowsItsCheckAndMovesOnASecondLater) {
+    WalkTo("screenshot");
+    Drag(300.0f, 360.0f, 600.0f, 560.0f);
+    EXPECT_EQ(StepUp(), "screenshot");
+    EXPECT_TRUE(Runner().GoalMet());
+    StepFrames(30);
+    EXPECT_EQ(StepUp(), "screenshot") << "half a second on, still showing its check";
+    StepFrames(40);
+    EXPECT_EQ(StepUp(), "move");
+}
+
+TEST_F(TutorialAppTest, TheCardIsDrawnWhileTheTutorialIsOnInEditModeOnly) {
+    ShowEditMode();
+    StepFrame();
+    EXPECT_EQ(ImGui::FindWindowByName("##tutorial_card"), nullptr) << "no tutorial, no card";
+    Overlay().StartTutorial();
+    StepFrames(2);
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    EXPECT_TRUE(card->Active);
+
+    ShowViewMode();
+    StepFrames(2);
+    EXPECT_FALSE(card->Active) << "view only is click-through";
+    ShowEditMode();
+    StepFrames(2);
+    EXPECT_TRUE(card->Active);
+    EXPECT_EQ(StepUp(), "welcome") << "back where it was";
+}
+
+TEST_F(TutorialAppTest, TheCardSitsAboveThePanelsAndBelowTheDeleteConfirmation) {
+    StartTheTutorial();
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::CheatSheet}));
+    StepFrames(2);
+    const std::vector<std::string> overSheet = {"canvas", "items", "hud", "chrome", "cheat sheet backdrop",
+                                                "cheat sheet", "tutorial card"};
+    ASSERT_TRUE(InStackOrder(overSheet));
+    EXPECT_EQ(Describe(SurfacesBackToFront()), Describe(overSheet));
+    PressKey(ImGuiKey_Escape);
+
+    // The tutorial's own canvas deleted: asked first. Which comes out
+    // from under the canvas bar for a moment - in the table's order all
+    // the same.
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::DeleteCanvas, 0, Canvases().CurrentCanvasId()}));
+    StepFrames(3);
+    const std::vector<std::string> stack = SurfacesBackToFront("delete confirmation");
+    EXPECT_TRUE(InStackOrder(stack)) << Describe(stack);
+    ASSERT_GE(stack.size(), 2u);
+    EXPECT_EQ(stack[stack.size() - 2], "tutorial card") << Describe(stack);
+    EXPECT_EQ(stack.back(), "delete confirmation") << Describe(stack);
+}
+
+TEST_F(TutorialAppTest, TheSpotlightRingsTheSubjectAndTheCardStaysClearOfIt) {
+    WalkTo("move");
+    const std::optional<AnchorRect> spot = App().TutorialSpot();
+    ASSERT_TRUE(spot.has_value());
+    const Rect& r = Subject().rect;
+    EXPECT_FLOAT_EQ(spot->min.x, r.x);
+    EXPECT_FLOAT_EQ(spot->max.y, r.y + r.h);
+
+    // Moved up under the card, the card goes to the bottom.
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    EXPECT_LT(card->Pos.y, kDisplayHeight * 0.5f) << "at the top to begin with";
+    const ImVec2 from = SubjectMiddle();
+    const ImVec2 to(card->Pos.x + card->Size.x * 0.5f, card->Pos.y + card->Size.y * 0.5f);
+    Drag(from.x, from.y, to.x, to.y);
+    StepFrames(2);
+    EXPECT_GT(card->Pos.y, kDisplayHeight * 0.5f);
+}
+
+TEST_F(TutorialAppTest, TheSpotlightRingsTheBarsCloseOnTheDeleteStep) {
+    WalkTo("delete");
+    RawClick(SubjectMiddle().x, SubjectMiddle().y);
+    StepFrame();
+    const std::optional<AnchorRect> spot = App().TutorialSpot();
+    const std::optional<AnchorRect> close = App().AnchorAt(Anchor{AnchorId::SelectionBarClose});
+    ASSERT_TRUE(spot.has_value());
+    ASSERT_TRUE(close.has_value());
+    EXPECT_FLOAT_EQ(spot->min.x, close->min.x);
+    EXPECT_FLOAT_EQ(spot->min.y, close->min.y);
+
+    // Pressed where the ring is, it is the step done.
+    RawClick(Center(*spot).x, Center(*spot).y);
+    Settle();
+    EXPECT_EQ(StepUp(), "undo");
+}
+
+TEST_F(TutorialAppTest, TheSpotlightRingsTheDrawingBarsPen) {
+    WalkTo("draw");
+    const std::optional<AnchorRect> spot = App().TutorialSpot();
+    const std::optional<AnchorRect> pen = App().AnchorAt(Anchor{AnchorId::DrawingBarPen});
+    ASSERT_TRUE(spot.has_value());
+    ASSERT_TRUE(pen.has_value());
+    EXPECT_FLOAT_EQ(spot->min.x, pen->min.x);
+}
+
+TEST_F(TutorialAppTest, SkipShowsTheWarningsNotReachedAndDoneLetsGo) {
+    WalkTo("move");
+    Press(TutorialButton::Skip);
+    EXPECT_EQ(Runner().GetState(), tutorial::Tutorial::State::Skipped);
+    EXPECT_EQ(Runner().WarningsNotReached().size(), 2u);
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    EXPECT_TRUE(card->Active) << "the skip card";
+
+    Press(TutorialButton::Back);
+    EXPECT_EQ(StepUp(), "move") << "a misclick costs nothing";
+    Press(TutorialButton::Skip);
+    Press(TutorialButton::Done);
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(Runner().GetOutcome(), tutorial::Tutorial::Outcome::Skipped);
+    EXPECT_FALSE(card->Active);
 }
 
 }  // namespace

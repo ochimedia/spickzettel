@@ -428,6 +428,7 @@ void OverlayApp::StackSurfaces() {
     Front("##overview_panel");
     Front("##cheat_sheet_backdrop");
     Front("##cheat_sheet_panel");
+    Front("##tutorial_card");
     Front(AppPopupWindow(PopupKind::ConfirmDelete));
 }
 
@@ -575,6 +576,10 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     // how far out - before anything is drawn, since the minimized chips
     // the canvas view draws have to clear the ones on the bottom edge.
     canvasBar_.Update(displayW, displayH, popups_.Up(PopupKind::CanvasMenu));
+
+    // The tutorial's step brought up to date with what the input above
+    // did - its own state, and nothing else.
+    tutorialCard_.Update(ImGui::GetTime());
 }
 
 void OverlayApp::DrawCanvas(float displayW, float displayH) {
@@ -595,6 +600,9 @@ void OverlayApp::DrawOverCanvas(float displayW, float displayH) {
 void OverlayApp::DrawPanels(float displayW, float displayH) {
     overview_.Draw(displayW, displayH, [this] { settingsPage_.Draw(); });
     cheatSheet_.Draw(displayW, displayH);
+    // Above the panels, so a step can talk about them, and below the
+    // delete confirmation, which must stay reachable.
+    tutorialCard_.Draw(displayW, displayH);
     popups_.DrawConfirmDelete();
 }
 
@@ -605,6 +613,10 @@ void OverlayApp::DrawMessages() {
     // costs a frame that was being drawn anyway, and click-through means it
     // cannot get in the way of anything.
     messages_.Draw();
+    // Like the messages, it changes nothing - and only where the card is.
+    if (!IsViewOnly()) {
+        tutorialCard_.DrawSpotlight();
+    }
 }
 
 void OverlayApp::DrawPointer() {
@@ -722,8 +734,62 @@ void OverlayApp::Do(const ViewAction& action) {
                        }
                    },
                    [&](const action::FinishNoteEdit& a) { editor_.EndEditingNote(a.text); },
+                   [&](const action::TutorialPress& a) { tutorialCard_.Press(a.button); },
+                   [&](const action::StartTutorial&) {
+                       if (const FolderId folder = MakeTutorialFolder(); folder != 0) {
+                           tutorialCard_.Start(folder);
+                       }
+                   },
+                   [&](const action::BackToTutorial&) {
+                       // Its folder's first canvas - or, the folder gone, a new
+                       // one to go on in.
+                       const FolderId folder = tutorialCard_.Runner().Folder();
+                       for (const Canvas& canvas : Manager().Canvases()) {
+                           if (canvas.folderId == folder && !Manager().IsDeleted(canvas)) {
+                               editor_.SwitchCanvas(canvas.id);
+                               return;
+                           }
+                       }
+                       if (const FolderId made = MakeTutorialFolder(); made != 0) {
+                           tutorialCard_.MoveTo(made);
+                       }
+                   },
+                   [&](const action::PracticeSnippet&) { PlacePracticeSnippet(); },
                },
                action);
+}
+
+FolderId OverlayApp::MakeTutorialFolder() {
+    // As the Overview's New folder makes one: current once it is made, and
+    // with a canvas in it, switched to.
+    const FolderId folder = session_.AddFolder(strings::kTutorialFolderName);
+    if (folder == 0) {
+        return 0;
+    }
+    overview_.ScrollToFolder(folder);
+    overview_.ForgetDeletedFolderShown();
+    if (const CanvasId canvas = editor_.CreateCanvasInCurrentFolder(); canvas != 0) {
+        editor_.SwitchCanvas(canvas);
+    }
+    return folder;
+}
+
+void OverlayApp::PlacePracticeSnippet() {
+    const float displayW = editor_.DisplayWidth();
+    const float displayH = editor_.DisplayHeight();
+    if (displayW <= 0.0f || displayH <= 0.0f || Manager().CurrentOrNull() == nullptr) {
+        return;
+    }
+    // A drawing with a backing, so it is seen: centered, and low enough to
+    // stay clear of the card at the top.
+    const ImVec2 size = Px(360.0f, 220.0f);
+    Item practice;
+    practice.name = strings::kTutorialPracticeName;
+    practice.rect = ClampRectToViewport(
+        Rect{(displayW - size.x) * 0.5f, displayH * 0.6f - size.y * 0.5f, size.x, size.y}, displayW, displayH);
+    practice.picture.tintColorRGBA = kNoteBackgroundColorRGBA;
+    practice.picture.opacity = kNoteBackgroundOpacity;
+    session_.CreateItem(std::move(practice), /*undoable=*/false);
 }
 
 void OverlayApp::OnOverlayShown() {

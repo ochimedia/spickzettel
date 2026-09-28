@@ -83,6 +83,7 @@ if(SPICKZETTEL_UI_TESTS)
         ui/context_menu_ui_test.cpp
         ui/overview_ui_test.cpp
         ui/settings_ui_test.cpp
+        ui/tutorial_ui_test.cpp
         ui/view_layer_ui_test.cpp
     )
     target_include_directories(sz_ui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

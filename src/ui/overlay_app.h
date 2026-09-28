@@ -23,6 +23,7 @@
 #include "ui/view/popups.h"
 #include "ui/view/screen_chrome.h"
 #include "ui/view/settings_page.h"
+#include "ui/view/tutorial_card.h"
 #include "ui/view/tutorial_world.h"
 #include "ui/view/view_host.h"
 #include "ui/view_action.h"
@@ -243,6 +244,15 @@ public:
     std::optional<AnchorRect> AnchorAt(Anchor anchor) const { return anchors_.Find(anchor); }
     // What the tutorial reads of the app - see AppWorld.
     const tutorial::World& TutorialWorld() const { return tutorialWorld_; }
+    // The tutorial: started at its first step, in a folder made for it, as
+    // the next frame is done (see action::StartTutorial); where it is; and
+    // what its spotlight rings in the last frame.
+    void StartTutorial() { Act(action::StartTutorial{}); }
+    // One of the card's buttons, pressed as the card presses it - for a
+    // test, as Dispatch is for a key.
+    void PressTutorial(TutorialButton button) { Act(action::TutorialPress{button}); }
+    const tutorial::Tutorial& TutorialRunner() const { return tutorialCard_.Runner(); }
+    std::optional<AnchorRect> TutorialSpot() const { return tutorialCard_.SpotRect(); }
 
     // Captures a fullscreen screenshot onto a canvas made for it (see the
     // definition, and the other declaration of this below).
@@ -473,6 +483,13 @@ private:
     // would teach nothing about how the app actually works.
     void PlaceWelcomeNotes(float displayW, float displayH);
 
+    // The tutorial's folder, made and switched to, with a canvas in it - 0
+    // when it could not be written. And a snippet to practice on, in the
+    // middle of the canvas being looked at, off the history: undo cannot
+    // take it from under a step (docs/TUTORIAL.md, section 7.3).
+    FolderId MakeTutorialFolder();
+    void PlacePracticeSnippet();
+
     // What the popover's Delete does, and what a delete Settings > Behavior
     // says not to ask about does (see AppConfig::confirmDelete) - the Delete
     // action's.
@@ -558,6 +575,7 @@ private:
     CanvasBar canvasBar_{session_, settings_, editor_, *this};
     ScreenChrome chrome_{session_, settings_, *this};
     Messages messages_{session_};
+    TutorialCard tutorialCard_{session_, editor_, tutorialWorld_, anchors_, *this};
     Pointer pointer_{settings_, editor_, *this};
     CanvasView canvasView_{session_, settings_, editor_, *this};
 };

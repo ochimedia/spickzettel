@@ -40,6 +40,9 @@ struct DeleteTarget {
     bool forGood = false;
 };
 
+// One of the tutorial card's own buttons.
+enum class TutorialButton { Next, Back, Skip, Done };
+
 namespace action {
 
 // A command - a context menu's row, the canvas bar's two buttons - run
@@ -112,12 +115,25 @@ struct FinishNoteEdit {
     std::string text;
 };
 
+// The tutorial (docs/TUTORIAL.md, section 7.3). The card's own buttons -
+// the runner's state and nothing else.
+struct TutorialPress {
+    TutorialButton button = TutorialButton::Next;
+};
+// A start, in a folder made for it.
+struct StartTutorial {};
+// Go back to the tutorial: to its folder, made again when it is gone.
+struct BackToTutorial {};
+// Put one here: a snippet to practice on, on the canvas being looked at.
+struct PracticeSnippet {};
+
 }  // namespace action
 
 using ViewAction =
     std::variant<action::RunCommand, action::SwitchCanvas, action::SwitchFolder, action::ShowDeletedFolder,
                  action::ReorderFolder, action::ReorderCanvas, action::MoveCanvasToFolder, action::RenameFolder,
                  action::RenameCanvas, action::NewFolder, action::NewCanvas, action::SendPicked, action::Restore,
-                 action::Delete, action::RestoreMinimized, action::ClosePanel, action::FinishNoteEdit>;
+                 action::Delete, action::RestoreMinimized, action::ClosePanel, action::FinishNoteEdit,
+                 action::TutorialPress, action::StartTutorial, action::BackToTutorial, action::PracticeSnippet>;
 
 }  // namespace sz::ui

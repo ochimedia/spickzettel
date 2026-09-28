@@ -42,6 +42,7 @@ inline const std::vector<std::string>& StackTable() {
         "popup in overview",
         "cheat sheet backdrop",
         "cheat sheet",
+        "tutorial card",
         "delete confirmation",
     };
     return table;
@@ -82,6 +83,7 @@ inline std::string SurfaceOf(const ImGuiWindow* window) {
     if (starts("##overview_panel")) return "overview";
     if (starts("##cheat_sheet_backdrop")) return "cheat sheet backdrop";
     if (starts("##cheat_sheet_panel")) return "cheat sheet";
+    if (starts("##tutorial_card")) return "tutorial card";
     return name;  // a window with no row: the comparison shows it
 }
 
