@@ -206,7 +206,7 @@
   "tutorial.eraseRight.text": "The right button erases with any tool. Press the pen, then hold the right button and drag across what's left.",
   "tutorial.eraseRight.missEraser": "That was the eraser. Press the pen, then drag with the right button.",
   "tutorial.note.title": "Write a note",
-  "tutorial.note.text": "Press Text on the bar, click the snippet, and type a note. Press Esc or click outside it when you're done.",
+  "tutorial.note.text": "Press Text on the bar, click the snippet, and type a note.",
   "tutorial.note.missTyping": "Press Esc or click outside it when you're done.",
   "tutorial.stopDrawing.title": "Stop drawing",
   "tutorial.stopDrawing.text": "Click outside it, or press Esc, to stop drawing.",
