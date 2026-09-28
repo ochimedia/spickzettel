@@ -1095,7 +1095,7 @@ The new parts are:
 | `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the two warnings; putting the overlay away and back | built: section 4's steps, but three |
 | `pinning` | Pinning and view mode | pinning a snippet, and the pinned view; making it see-through with the wheel or Properties; view mode; unpinning | built: section 14 |
 | `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; a line and a rectangle; the eraser, its rectangle and the right button; a note | built: section 15 |
-| `capturing` | Capturing | the quick and silent capture hotkeys, which work while the overlay is away; a full-screen screenshot; pasting an image; a blank drawing | to design |
+| `capturing` | Capturing | a blank drawing; a full-screen screenshot; the quick and silent capture hotkeys, which work while the overlay is away | designed: section 16 |
 | `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | to design (13.8) |
 | `profiles` | Profiles | what a profile is for; making one for a program; what it can change | to design |
 
@@ -1798,3 +1798,175 @@ hand check.
   canvas does nothing, so in `opacity` the sliders stand in for it. The
   card now says nothing while Properties is up, where it asked to close
   it before.
+
+## 16. Capturing
+
+Status: **proposed** (2026-09-28), for review. The questions are in
+16.7.
+
+### 16.1 What it teaches, and why
+
+Basics makes one kind of snippet: a screenshot of a box dragged on the
+canvas. There are three more ways in, each with a use of its own:
+
+- **A drawing:** a blank snippet to draw or write on, made by dragging
+  with the drawing trigger held (Ctrl by default). It comes ready to
+  draw on, in drawing mode with the pen.
+- **A screenshot of the whole screen:** a double-click on an empty
+  spot, or the button held down on one.
+- **The quick capture hotkey:** a screenshot of the whole screen, taken
+  from any program with the overlay away, which brings the overlay up
+  with it. The fastest way to get a reference in, and the only one that
+  does not need the overlay up first.
+- **The silent capture hotkey:** the same capture, but the overlay stays
+  away, so the program underneath keeps the focus. The capture waits
+  for the next time the overlay comes up.
+
+Each hotkey's capture goes onto a new canvas of its own, beside the
+current one, and the overlay goes there (`Editor::QuickCapture`). The
+card says so, since the snippets made before seem to vanish.
+
+**The order** keeps the canvas steps first. A full-screen screenshot
+covers the canvas, so it comes after the drawing, which needs an empty
+spot; the hotkeys come last, since each moves the overlay to a new
+canvas.
+
+**Left out:**
+
+- **Pasting an image.** Section 13.2 listed it, but the app has no such
+  thing: Paste pastes snippets copied or cut inside the app
+  (`Editor::PasteFromClipboard`), not an image from another program's
+  clipboard. Copy, cut and paste of snippets belong to Folders and
+  canvases, as a way to move a snippet (question 27).
+- **The creation tools** (S and D by default) and **the right-click
+  menu's** New and Fullscreen rows. They are other ways to the same
+  results, and the end card names the menu (question 30).
+- **A full-screen drawing,** a double-click with the drawing trigger
+  held: a blank tint over the whole screen, understood from the two
+  steps before it.
+
+### 16.2 The chain
+
+| # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
+|---|---|---|---|---|---|---|---|---|
+| 0 | `drawing` | do | moves on | A drawing is a blank snippet to draw or write on. Hold {trigger:drawing} and drag a box on an empty spot to make one. | - | in the tutorial folder; canvas uncovered; no drawing mode | a drawing made here since the step began, not full screen | a screenshot instead: "That made a screenshot rather than a drawing. Make one as above." A full-screen drawing: "That took the whole screen - a double-click does that. Press {key:deleteSelection} to delete it, and drag a box instead." |
+| 1 | `fullscreen` | do | moves on | Double-click an empty spot, or hold the button down on it, to take a screenshot of the whole screen. | - | in the tutorial folder; canvas uncovered; no creation tool but the screenshot tool | a screenshot made here since the step began, full screen | a box instead: "That took a part of the screen. Double-click instead of dragging." A drawing: "That made a drawing rather than a screenshot. Take one as above." |
+| 2 | `quickCapture` | do | moves on | The capture hotkeys work while the overlay is away, so you can grab your game without opening the overlay first. Press {key:toggleEditMode} to put the overlay away, then press {key:quickCapture}. It takes a screenshot of the whole screen and brings the overlay back with it, on a new canvas of its own. | - | in the tutorial folder | the quick capture has taken a screenshot since the step began | the silent capture instead: "That was the silent capture, which comes next. Press {key:quickCapture} for this one." |
+| 3 | `silentCapture` | do | moves on | {key:silentCapture} captures the same way, but the overlay stays away, so your game keeps the focus. Put the overlay away, press {key:silentCapture}, then press {key:toggleEditMode} to come back and see the capture. | - | in the tutorial folder | the silent capture has taken a screenshot since the step began | the quick capture instead: "That was the quick capture, which brings the overlay up. Put it away, and press {key:silentCapture} instead." |
+| 4 | `end` | read | Done | That's capturing. Each capture is on a canvas of its own, so they're easy to tell apart: the Overview, in the right-click menu, shows them side by side. A right-click on an empty spot also has every way to make a snippet. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
+
+**No step waits.** Nothing later needs what a step makes: the hotkeys
+make their own canvas, and a step can always be left with Next.
+
+**The text follows the settings,** as Basics' `screenshot` does:
+
+- `drawing`, by the drawing trigger: with it plain, "Drag a box on an
+  empty spot"; with it off, "Press {key:newDrawingTool}, then drag a
+  box", or, with that unbound too, "Right-click an empty spot and choose
+  New drawing, then drag a box".
+- `fullscreen`, by the screenshot trigger: with a key, "Hold
+  {trigger:screenshot} and double-click an empty spot"; with it off,
+  "Press {key:newScreenshotTool}, then click anywhere", or "Right-click
+  an empty spot and choose Fullscreen screenshot".
+- `quickCapture` and `silentCapture`, by the hotkeys: with the edit
+  hotkey unbound, the tray icon puts the overlay away and brings it
+  back, as in Basics' `away`. With the capture's own hotkey unbound:
+  what it does, then "It has no working key yet. Set one in Settings >
+  Hotkeys to use it, and go on with Next", as Pinning's `viewMode`.
+
+**The hotkeys count wherever they are pressed** (question 28). Pressed
+with the overlay up, a capture leaves the overlay out and is the same
+screenshot of what is underneath; the text asks for the overlay away,
+since that is the point, but the goal reads the capture (6.3). The
+silent capture's check shows once the overlay is back, as the away
+steps' do.
+
+**The near misses between the two hotkeys** are the one place where the
+result alone cannot tell them apart: both make a new canvas with a
+screenshot on it. What differs is whether the overlay came up, so the
+world counts each hotkey's captures (16.3).
+
+### 16.3 What it needs that is new
+
+- **The world** (7.1): two counts beside the showings, how many
+  captures each hotkey has taken since the app started. The tray asks
+  the overlay for a capture as it does today, and says which hotkey
+  asked; `OverlayApp` counts it when the snippet is made (not when the
+  canvas for it could not be written).
+- **The start record** keeps both counts.
+- **A hotkey another program holds reads as unbound** (question 29).
+  Its combination stays in the settings, but it does nothing, and a
+  card that says to press it would wait for a key that never arrives.
+  The tray tells the overlay which of its hotkeys registered, and
+  `KeyLabel` gives nothing for one that did not. That changes the
+  away, pinned-view and view-mode cards as well, for the better.
+- **No new need, subject rule, spot or anchor.** The steps are about
+  empty canvas and the hotkeys, not a snippet; every need they use
+  exists.
+- **The strings:** each step's title, texts and near misses, the end
+  card (`tutorial.capturingEnd.*`), and `tutorial.topics.capturing.*`
+  ("Capturing": "Make a drawing, screenshot the whole screen, and
+  capture from your program with a hotkey.").
+- **A row in the topic table,** fourth, after Drawing and notes.
+
+### 16.4 What does not change
+
+- The runner, the card, the list and the settings rows.
+- The input machine, the capture hotkeys and the overlay's states: the
+  tutorial counts captures as it counts the pinned view.
+- Where a capture lands: on a new canvas in the current folder, which
+  during the topic is the tutorial's, so Done takes the captures with
+  it.
+
+### 16.5 Tests
+
+- **`chains_test`,** against the fake world: each goal and near miss,
+  the texts for each trigger and each unbound key, the two counts in
+  the start record. `TopicsTest` covers the shape.
+- **`AppWorld`:** the counts after each hotkey, pressed with the
+  overlay up and away; nothing counted when the capture's canvas could
+  not be written; `KeyLabel` empty for a hotkey that did not register.
+- **The walk-through,** with hands: a drag with the drawing trigger; a
+  double-click on an empty spot; the edit hotkey, then the quick
+  capture; the edit hotkey, the silent capture, and the edit hotkey
+  again.
+- **The derail matrix,** a row per way:
+  - `drawing`: a plain drag (the screenshot near miss); a double-click
+    with the trigger (the full-screen near miss, then deleted and
+    done); another folder; the Overview up;
+  - `fullscreen`: a drag (the box near miss); the drawing tool in hand
+    (the need); from drawing mode, which the double-click leaves;
+  - `quickCapture`: the silent capture (the near miss); pressed with
+    the overlay up (done); another folder (the need and its button);
+  - `silentCapture`: the quick capture (the near miss); pressed with
+    the overlay up (done);
+  - both hotkeys unbound (the text, and Next).
+- **By hand:** every card with real input, and both hotkeys over
+  another program.
+
+### 16.6 Getting there
+
+One piece of work: the counts, the hotkeys' registration told to the
+overlay, the chain, its strings and its row in the table, with the tests
+of 16.5 and the hand check.
+
+### 16.7 Questions for review
+
+27. **Pasting an image is left out,** since the app has none: Paste is
+    of snippets copied inside it. Copy, cut and paste go to Folders and
+    canvases, as a way to move a snippet. Pasting an image from another
+    program would be a feature of its own, not part of this topic.
+    *Recommended:* leave it out here.
+28. **The capture hotkeys count wherever they are pressed,** the overlay
+    up or away, though the text asks for it away (16.2).
+    *Recommended:* count both; the result is the same.
+29. **A hotkey another program holds reads as unbound** on every card,
+    so the card says to set one rather than to press one that does
+    nothing (16.3). *Recommended:* yes.
+30. **The creation tools and the right-click menu's rows** get a line
+    on the end card, not steps: they reach the same results as the
+    steps. *Recommended:* a line.
+31. **Basics' full-screen near miss** says "Drag a box instead", but the
+    screenshot it made covers the canvas, and a drag on it does not
+    frame. Its line, like `drawing`'s here, should say to delete it
+    first. *Recommended:* change it with this topic.
