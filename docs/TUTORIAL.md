@@ -2686,7 +2686,8 @@ Two pieces of work, as in 17.6:
 
 ## 19. Where the card sits, steadier
 
-Status: **proposed** (2026-09-28). Its questions are in 19.4.
+Status: **agreed** (2026-09-28). Its questions and their answers are in
+19.4, and the design below matches them.
 
 ### 19.1 Why
 
@@ -2740,15 +2741,16 @@ test:
   not in the way, and the edge it leaves by is wider than the one it
   comes back by, so it does not flicker there.
 
-### 19.4 Questions for review
+### 19.4 Questions for review, and the answers
 
 45. **What makes it leave** is what the user must click: the ring's
     anchor and the bars. The alternative also counts the subject, which
     keeps the snippet clear but brings back most of the moves the hand
-    test found.
+    test found. *Answer:* as recommended.
 46. **It stays across steps,** and is not placed anew when a step
     begins. The alternative, placing it anew at each step and keeping it
     only within one, is what made it jump "when the step moved on".
+    *Answer:* as recommended.
 47. **The slide:** 150 ms, easing out, from where it is drawn. The
     alternative is no slide, which is less code but keeps the "where did
-    it go" moment.
+    it go" moment. *Answer:* as recommended.
