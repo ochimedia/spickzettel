@@ -2683,3 +2683,72 @@ Two pieces of work, as in 17.6:
   ticked back and its line; the arrow; Done, which deleted both the
   blank profile and the tutorial's, and Done, keep the profile, which
   kept it with nothing set. `tutorial.folder` stayed "0".
+
+## 19. Where the card sits, steadier
+
+Status: **proposed** (2026-09-28). Its questions are in 19.4.
+
+### 19.1 Why
+
+A hand test at 150 % interface scale found the card restless: on the
+right, then on the left after the practice snippet was moved a little,
+then at the bottom when the step moved on. Section 3 places it anew on
+every frame, from scratch, and four things make it jump:
+
+- **It goes back to the first free place.** As soon as top center is
+  clear, the card returns there, however well it sat elsewhere.
+- **One pixel covered counts.** A snippet moved a little under the
+  card's edge sends it away.
+- **It moves in the middle of a gesture,** while the user still drags
+  what it made room for.
+- **Its height changes** with the step's text and its lines, so the
+  same place can come to cover something with nothing else moved. At a
+  large scale all of this happens more often.
+
+This design takes on the first, and makes a move easy to follow. The
+middle two are left for a second look after trying it (19.3).
+
+### 19.2 The design
+
+- **The card stays unless it is in the way.** It keeps its place, across
+  steps as well, as long as it covers none of what the user is asked to
+  click: the anchor the ring is on, and the bars over the selection,
+  whose buttons a line may name. Covering the subject alone, such as the
+  practice snippet, is not a reason to leave.
+- **Where it goes when it must,** the places and their weights are
+  section 3's: of the places that cover least, the nearest to where it
+  is, not the first in the list. So a card in the top right that must
+  leave goes to the top left or center before the bottom.
+- **Its place is one of the places, not a point.** It keeps "bottom
+  center", not a y, so a card whose text grows stays at the bottom,
+  growing upward, and a changed display size keeps its place as well.
+- **Where it starts:** as section 3 has it, when a run begins or the list
+  opens, with nothing to keep.
+- **A move slides.** From where it is drawn to its new place, over about
+  150 ms, easing out, so the eye follows it. A move while it slides
+  starts from where it is drawn then. A card the user dragged does not
+  move again, as before.
+
+### 19.3 Left for later
+
+If the card still feels restless, two more steps, from the same hand
+test:
+
+- **No move while a button is held:** it reconsiders when the button is
+  let go, so it does not slide away under the hand.
+- **Only a real overlap counts:** a few pixels over a snippet's edge are
+  not in the way, and the edge it leaves by is wider than the one it
+  comes back by, so it does not flicker there.
+
+### 19.4 Questions for review
+
+45. **What makes it leave** is what the user must click: the ring's
+    anchor and the bars. The alternative also counts the subject, which
+    keeps the snippet clear but brings back most of the moves the hand
+    test found.
+46. **It stays across steps,** and is not placed anew when a step
+    begins. The alternative, placing it anew at each step and keeping it
+    only within one, is what made it jump "when the step moved on".
+47. **The slide:** 150 ms, easing out, from where it is drawn. The
+    alternative is no slide, which is less code but keeps the "where did
+    it go" moment.
