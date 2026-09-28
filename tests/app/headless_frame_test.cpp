@@ -2423,6 +2423,22 @@ TEST_F(HeadlessAppTest, EscapeLeavesDrawingModeBeforeClearingTheSelection) {
     EXPECT_TRUE(App().Selection().empty());
 }
 
+// Drawing mode is on a selected snippet, so a command that takes the whole
+// selection off the screen ends it too: back from the dock, the snippet is
+// not in drawing mode with no bar over it.
+TEST_F(HeadlessAppTest, AMinimizeFromDrawingModeEndsIt) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    const std::optional<ItemId> drawing = App().DrawingItem();
+    ASSERT_TRUE(drawing.has_value());
+
+    ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::Minimize, *drawing}));
+    StepFrame();
+    EXPECT_TRUE(App().Selection().empty());
+    EXPECT_FALSE(App().DrawingItem().has_value());
+}
+
 // A double-click on another snippet moves drawing mode to it.
 TEST_F(HeadlessAppTest, ADoubleClickOnAnotherSnippetMovesDrawingModeThere) {
     ShowEditMode();

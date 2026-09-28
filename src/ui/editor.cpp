@@ -165,9 +165,6 @@ void Editor::ToggleSelected(ItemId id) {
 void Editor::ClearSelection() { selection_.clear(); }
 
 void Editor::PruneSelection() {
-    if (selection_.empty()) {
-        return;
-    }
     const Canvas* canvas = Manager().CurrentOrNull();
     const auto onScreen = [&](ItemId id) {
         if (canvas == nullptr) {
