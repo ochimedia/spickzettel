@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdio>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include <imgui.h>
@@ -34,6 +35,8 @@ constexpr float kCardTop = 72.0f;
 constexpr float kCardBottomMargin = 96.0f;
 // In a top corner, this far from the side.
 constexpr float kCardSideMargin = 24.0f;
+// How long the card slides to a new place, in seconds.
+constexpr float kCardSlide = 0.15f;
 
 bool Overlap(const AnchorRect& a, const AnchorRect& b) {
     return a.min.x < b.max.x && b.min.x < a.max.x && a.min.y < b.max.y && b.min.y < a.max.y;
@@ -125,6 +128,8 @@ void TutorialCard::Resume(const tutorial::Topic& topic, std::string_view id, cor
     runner_ = tutorial::Tutorial(topic.chain());
     runner_.Resume(id, folder);
     moved_ = false;
+    place_.reset();
+    drawnAt_.reset();
     hasRun_ = true;
     listing_ = false;
 }
@@ -330,67 +335,155 @@ std::optional<AnchorRect> TutorialCard::RestoreRect() const {
 
 // ================= The card =================
 
+ImVec2 TutorialCard::Placed(float displayW, float displayH) {
+    // Top center to begin with, unless what the step is about lies under
+    // it; then bottom center, then the top corners, where a large snippet
+    // on a small display leaves room at neither. Over the Overview, the
+    // lower right first. What the step is about is what the ring is on
+    // and the subject, and after them the bars over the selection, whose
+    // buttons a line may name when nothing rings them: where every place
+    // covers something, the one that covers least.
+    //
+    // Once placed, it stays - across steps too - until it covers what the
+    // user is asked to click, the ring's anchor or a bar; the subject
+    // alone does not move it. Then it goes to the place least in the way,
+    // then covering least, then nearest, and slides there. The Overview
+    // opened or closed has changed all that is under it: placed anew, as
+    // at the start (docs/TUTORIAL.md, section 19).
+    const float width = Px(kCardWidth);
+    const ImGuiWindow* last = ImGui::FindWindowByName(kCardWindow);
+    const float height = last != nullptr ? last->Size.y : Px(160.0f);
+    const float side = Px(kCardSideMargin);
+    const auto at = [&](Place place) {
+        const float top = Px(kCardTop);
+        const float bottom = displayH - height - Px(kCardBottomMargin);
+        ImVec2 pos;
+        switch (place) {
+            case Place::Top:
+                pos = ImVec2((displayW - width) * 0.5f, top);
+                break;
+            case Place::Bottom:
+                pos = ImVec2((displayW - width) * 0.5f, bottom);
+                break;
+            case Place::TopLeft:
+                pos = ImVec2(side, top);
+                break;
+            case Place::TopRight:
+                pos = ImVec2(displayW - width - side, top);
+                break;
+            case Place::LowerRight:
+                pos = ImVec2(displayW - width - side, bottom);
+                break;
+        }
+        // All of it on screen: the list is tall, and a small display or a
+        // large scale leaves less below the top place than it needs.
+        pos.y = std::max(0.0f, std::min(pos.y, displayH - height - side));
+        return pos;
+    };
+
+    const std::optional<AnchorRect> spot = SpotRect();
+    const std::optional<AnchorRect> subject = SubjectRect();
+    const std::optional<AnchorRect> bars[] = {
+        anchors_.Find(Anchor{AnchorId::SelectionBarPin}),  anchors_.Find(Anchor{AnchorId::SelectionBarClose}),
+        anchors_.Find(Anchor{AnchorId::DrawingBarPen}),    anchors_.Find(Anchor{AnchorId::DrawingBarEraser}),
+        anchors_.Find(Anchor{AnchorId::DrawingBarText}),   anchors_.Find(Anchor{AnchorId::DrawingBarColor})};
+    const auto under = [&](Place place, const std::optional<AnchorRect>& rect) {
+        const ImVec2 pos = at(place);
+        return rect.has_value() && Overlap(AnchorRect{pos, ImVec2(pos.x + width, pos.y + height)}, *rect) ? 1 : 0;
+    };
+    // What the user is asked to click, under the card there.
+    const auto inTheWay = [&](Place place) {
+        int weight = under(place, spot);
+        for (const std::optional<AnchorRect>& bar : bars) {
+            weight += under(place, bar);
+        }
+        return weight;
+    };
+    // And all it covers, the anchor and the subject counting double.
+    const auto covered = [&](Place place) {
+        return inTheWay(place) + under(place, spot) + 2 * under(place, subject);
+    };
+
+    // Over the Overview, whose grid fills from the top left and runs under
+    // top center, the lower right comes first: the grid is usually empty
+    // there (docs/TUTORIAL.md, question 38).
+    std::vector<Place> places = {Place::Top, Place::Bottom, Place::TopLeft, Place::TopRight};
+    const bool overOverview = world_.CanvasCover() == tutorial::Cover::Overview;
+    if (overOverview) {
+        places.insert(places.begin(), Place::LowerRight);
+    }
+    if (overOverview != placedOverOverview_) {
+        place_.reset();
+    }
+    if (!place_) {
+        Place best = places.front();
+        int least = covered(best);
+        for (const Place place : places) {
+            if (least == 0) {
+                break;
+            }
+            if (const int weight = covered(place); weight < least) {
+                best = place;
+                least = weight;
+            }
+        }
+        place_ = best;
+        placedOverOverview_ = overOverview;
+        slideFrom_ = drawnAt_.value_or(at(best));
+        slideAge_ = 0.0f;
+    } else if (inTheWay(*place_) > 0) {
+        const ImVec2 here = at(*place_);
+        const auto distance = [&](Place place) {
+            const ImVec2 there = at(place);
+            return std::hypot(there.x - here.x, there.y - here.y);
+        };
+        // Where it is stays a candidate: if every place is in the way as
+        // much, it need not move.
+        if (std::find(places.begin(), places.end(), *place_) == places.end()) {
+            places.push_back(*place_);
+        }
+        const auto rank = [&](Place place) { return std::tuple(inTheWay(place), covered(place), distance(place)); };
+        Place best = *place_;
+        for (const Place place : places) {
+            if (rank(place) < rank(best)) {
+                best = place;
+            }
+        }
+        if (best != *place_) {
+            place_ = best;
+            slideFrom_ = drawnAt_.value_or(here);
+            slideAge_ = 0.0f;
+        }
+    }
+
+    // The slide: from where it was drawn when the place changed, easing
+    // out. Its place is followed as it is, so a card that grows while it
+    // slides still lands where it should.
+    const ImVec2 target = at(*place_);
+    ImVec2 pos = target;
+    if (slideAge_ < kCardSlide) {
+        const float t = slideAge_ / kCardSlide;
+        const float eased = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);
+        pos = ImVec2(slideFrom_.x + (target.x - slideFrom_.x) * eased, slideFrom_.y + (target.y - slideFrom_.y) * eased);
+        slideAge_ += ImGui::GetIO().DeltaTime;
+    }
+    drawnAt_ = pos;
+    return pos;
+}
+
 void TutorialCard::Draw(float displayW, float displayH) {
     if (!runner_.On() && !listing_) {
         return;
     }
     const float width = Px(kCardWidth);
     // Where the user put it - ImGui moves a window dragged by its body -
-    // or top center, unless what the step is about lies under that; then
-    // bottom center, then the top corners, where a large snippet on a small
-    // display leaves room at neither. Over the Overview, the lower right
-    // first. What the step is about is what the
-    // ring is on and the subject, and after them the bars over the
-    // selection, whose buttons a line may name when nothing rings them:
-    // where every place covers something, the one that covers least.
+    // or its place.
     const ImGuiWindow* last = ImGui::FindWindowByName(kCardWindow);
     if (last != nullptr && ImGui::GetCurrentContext()->MovingWindow == last) {
         moved_ = true;
     }
     if (!moved_) {
-        const float height = last != nullptr ? last->Size.y : Px(160.0f);
-        const ImVec2 top((displayW - width) * 0.5f, Px(kCardTop));
-        const ImVec2 bottom(top.x, displayH - height - Px(kCardBottomMargin));
-        const std::optional<AnchorRect> spot = SpotRect();
-        const std::optional<AnchorRect> subject = SubjectRect();
-        const std::optional<AnchorRect> bars[] = {
-            anchors_.Find(Anchor{AnchorId::SelectionBarPin}),  anchors_.Find(Anchor{AnchorId::SelectionBarClose}),
-            anchors_.Find(Anchor{AnchorId::DrawingBarPen}),    anchors_.Find(Anchor{AnchorId::DrawingBarEraser}),
-            anchors_.Find(Anchor{AnchorId::DrawingBarText}),   anchors_.Find(Anchor{AnchorId::DrawingBarColor})};
-        const auto covered = [&](ImVec2 at) {
-            const AnchorRect card{at, ImVec2(at.x + width, at.y + height)};
-            const auto under = [&](const std::optional<AnchorRect>& rect) {
-                return rect.has_value() && Overlap(card, *rect) ? 1 : 0;
-            };
-            int weight = 2 * (under(spot) + under(subject));
-            for (const std::optional<AnchorRect>& bar : bars) {
-                weight += under(bar);
-            }
-            return weight;
-        };
-        const float side = Px(kCardSideMargin);
-        // Over the Overview, whose grid fills from the top left and runs
-        // under top center, the lower right comes first: the grid is
-        // usually empty there (docs/TUTORIAL.md, question 38).
-        std::vector<ImVec2> places = {top, bottom, ImVec2(side, top.y), ImVec2(displayW - width - side, top.y)};
-        if (world_.CanvasCover() == tutorial::Cover::Overview) {
-            places.insert(places.begin(), ImVec2(displayW - width - side, bottom.y));
-        }
-        ImVec2 best = places.front();
-        int least = covered(best);
-        for (const ImVec2 at : places) {
-            if (least == 0) {
-                break;
-            }
-            if (const int weight = covered(at); weight < least) {
-                best = at;
-                least = weight;
-            }
-        }
-        // All of it on screen: the list is tall, and a small display or a
-        // large scale leaves less below the top place than it needs.
-        best.y = std::max(0.0f, std::min(best.y, displayH - height - Px(kCardSideMargin)));
-        ImGui::SetNextWindowPos(best);
+        ImGui::SetNextWindowPos(Placed(displayW, displayH));
     }
     ImGui::SetNextWindowSizeConstraints(ImVec2(width, 0.0f), ImVec2(width, FLT_MAX));
     ImGui::Begin(kCardWindow, nullptr,

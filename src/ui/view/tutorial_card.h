@@ -41,7 +41,11 @@ public:
     bool HasRun() const { return hasRun_; }
     // The list of topics (section 13.3), up until one is chosen or it is
     // left.
-    void OpenList() { listing_ = true; }
+    void OpenList() {
+        listing_ = true;
+        place_.reset();
+        drawnAt_.reset();
+    }
     bool Listing() const { return listing_; }
 
     // Where the user is with a topic, as the list says it.
@@ -109,8 +113,23 @@ private:
 
     const tutorial::Topic* topic_;
     tutorial::Tutorial runner_;
+    // Where the card sits unless the user dragged it (docs/TUTORIAL.md,
+    // section 19): one of a few places, kept until it is in the way.
+    enum class Place { Top, Bottom, TopLeft, TopRight, LowerRight };
+    // Where the card is drawn this frame: its place, or on the way there.
+    ImVec2 Placed(float displayW, float displayH);
+
     // Dragged by the user: left where it was put for the rest of the run.
     bool moved_ = false;
+    // Its place, none until the first frame of a run or of the list, and
+    // whether it was chosen over the Overview.
+    std::optional<Place> place_;
+    bool placedOverOverview_ = false;
+    // Where it was drawn last frame, and where the slide to its place
+    // began and how long ago, in seconds.
+    std::optional<ImVec2> drawnAt_;
+    ImVec2 slideFrom_;
+    float slideAge_ = 0.0f;
     bool hasRun_ = false;
     bool listing_ = false;
 };

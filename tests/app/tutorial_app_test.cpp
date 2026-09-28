@@ -1213,6 +1213,84 @@ TEST_F(TutorialAppTest, TheSpotlightRingsTheSubjectAndTheCardStaysClearOfIt) {
     EXPECT_GT(card->Pos.y, kDisplayHeight * 0.5f);
 }
 
+// The card leaves only what the user is asked to click: the snippet
+// moved under it on a step that rings nothing leaves it where it is, and
+// so does the next step (docs/TUTORIAL.md, section 19).
+// The card leaves only for what the user is asked to click: the snippet
+// moved under it, on a step that rings nothing, leaves it where it is
+// (docs/TUTORIAL.md, section 19).
+TEST_F(TutorialAppTest, TheCardStaysOverTheSubjectAlone) {
+    WalkTo("pinnedAway", "pinning");
+    StepFrames(2);
+    ASSERT_FALSE(App().TutorialSpot().has_value()) << "rings nothing";
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    PressKey(ImGuiKey_Escape);  // put down: no bar to keep clear of
+    StepFrames(15);
+    ASSERT_FALSE(App().AnchorAt(Anchor{AnchorId::SelectionBarPin}).has_value());
+    ASSERT_FALSE(App().TutorialSpot().has_value());
+    const ImVec2 before = card->Pos;
+    // Its top edge under the card's lower edge - moved as a drag ends, with
+    // no bar over it.
+    Rect r = Subject().rect;
+    r.x = card->Pos.x + (card->Size.x - r.w) * 0.5f;
+    r.y = card->Pos.y + card->Size.y - 20.0f;
+    ASSERT_TRUE(controller_->GetSession().SetRects({{Subject().id, r}}));
+    StepFrames(15);
+    const Rect& moved = Subject().rect;
+    ASSERT_TRUE(card->Pos.x < moved.x + moved.w && moved.x < card->Pos.x + card->Size.x &&
+                card->Pos.y < moved.y + moved.h && moved.y < card->Pos.y + card->Size.y)
+        << "the snippet under it";
+    EXPECT_FLOAT_EQ(card->Pos.x, before.x);
+    EXPECT_FLOAT_EQ(card->Pos.y, before.y);
+}
+
+// Once moved, the card stays where it went, across steps too, although
+// the place it left is clear again.
+TEST_F(TutorialAppTest, TheCardStaysWhereItWentWhenTheStepMovesOn) {
+    WalkTo("move");
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    const ImVec2 from = SubjectMiddle();
+    Drag(from.x, from.y, card->Pos.x + card->Size.x * 0.5f, card->Pos.y + card->Size.y * 0.5f);
+    StepFrames(15);
+    ASSERT_GT(card->Pos.y, kDisplayHeight * 0.5f) << "out of the way, at the bottom";
+    const ImVec2 went = card->Pos;
+    const float wentBottom = card->Pos.y + card->Size.y;
+    // In the top left, clear of the top and the bottom both.
+    Rect r = Subject().rect;
+    r.x = 24.0f;
+    r.y = 100.0f;
+    ASSERT_TRUE(controller_->GetSession().SetRects({{Subject().id, r}}));
+    Settle();
+    ASSERT_EQ(StepUp(), "resize");
+    StepFrames(15);
+    EXPECT_FLOAT_EQ(card->Pos.x, went.x);
+    EXPECT_FLOAT_EQ(card->Pos.y + card->Size.y, wentBottom) << "at the bottom, grown upward";
+}
+
+// A move slides: part of the way on the frame after, all of it once the
+// slide is over. The Overview opened places the card anew, in its lower
+// right.
+TEST_F(TutorialAppTest, TheCardSlidesToANewPlace) {
+    StartTheTutorial();
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    const ImVec2 before = card->Pos;
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+    StepFrames(3);
+    const ImVec2 midway = card->Pos;
+    StepFrames(15);
+    const ImVec2 after = card->Pos;
+    EXPECT_GT(midway.x, before.x) << "on its way";
+    EXPECT_LT(midway.x, after.x);
+    EXPECT_GT(after.x, kDisplayWidth * 0.5f) << "on the right";
+    EXPECT_GT(after.y, kDisplayHeight * 0.5f) << "at the bottom";
+    StepFrames(3);
+    EXPECT_FLOAT_EQ(card->Pos.x, after.x) << "there";
+    EXPECT_FLOAT_EQ(card->Pos.y, after.y);
+}
+
 TEST_F(TutorialAppTest, TheSpotlightRingsTheBarsCloseOnTheDeleteStep) {
     WalkTo("delete");
     RawClick(SubjectMiddle().x, SubjectMiddle().y);

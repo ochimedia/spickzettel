@@ -142,16 +142,19 @@ at 100%. It holds:
   - Next, which says Done on the last step;
   - Skip tutorial, a quieter button.
 
-**Where it sits.** At the top center by default, clear of what the
+**Where it sits.** At the top center to begin with, clear of what the
 step is about: the anchor the ring is on, the subject, and the bars
 over the selection, whose buttons a hint may name with no ring on them.
 If any of these lies under it, the card tries the bottom center, then
 the top corners, and takes the first place that covers none of them, or
 else the one that covers least, the anchor and the subject counting
 double. Over the Overview, the lower right corner comes before all of
-them (17.8). Wherever it goes, all of it stays on screen: the list is
-tall (18.8). The user can drag the card by its title, and it stays where
-it is left for the rest of the run.
+them (17.8). Once placed, it stays, across steps too, until it covers
+the ring's anchor or a bar; then it slides to the nearest place that
+covers least. The Overview opened or closed places it anew (section 19).
+Wherever it goes, all of it stays on screen: the list is tall (18.8).
+The user can drag the card by its title, and it stays where it is left
+for the rest of the run.
 
 **Keys.** The card takes none:
 
@@ -2686,8 +2689,9 @@ Two pieces of work, as in 17.6:
 
 ## 19. Where the card sits, steadier
 
-Status: **agreed** (2026-09-28). Its questions and their answers are in
-19.4, and the design below matches them.
+Status: **built** (2026-09-28). Its questions and their answers are in
+19.4, and the design below matches them. What building it found is in
+19.5.
 
 ### 19.1 Why
 
@@ -2754,3 +2758,24 @@ test:
 47. **The slide:** 150 ms, easing out, from where it is drawn. The
     alternative is no slide, which is less code but keeps the "where did
     it go" moment. *Answer:* as recommended.
+
+### 19.5 Found while building
+
+- **The Overview opened places the card anew.** Kept where it was, the
+  card left the Settings section buttons for the nearest place, bottom
+  center, and sat there over the Behavior rows and Showing, which a user
+  off the path clicks, as two tests did. The lower right is first over
+  the Overview because its grid and pages fill the middle (question 38);
+  the nearest place does not know that. Opening or closing the Overview
+  changes all that is under the card, so the card is placed as at the
+  start, and slides there.
+- **Where it goes when it must** is ranked by what is in the way first,
+  then by what it covers, then by distance. Ranked by the weights alone,
+  a place over the subject weighs as much as its own over the anchor,
+  and the nearer, its own, would win.
+- **A card that grows at the bottom grows upward,** since its place is
+  "bottom center" and not a y: `resize`'s text is taller than `move`'s.
+- **Tests:** the card stays over the subject alone; stays at the bottom
+  when the step moves on and the top is clear again; and slides, part
+  of the way on the frame after and all of it once the slide is over.
+  All three fail with section 3's placing anew.
