@@ -685,7 +685,18 @@ void OverlayApp::Do(const ViewAction& action) {
                        if (a.button == TutorialButton::NoThanks) {
                            settings_.Set(setting::kTutorialWelcome, std::string("offered"));
                        }
+                       const FolderId folder = tutorialCard_.Runner().Folder();
+                       const bool on = tutorialCard_.Runner().On();
                        tutorialCard_.Press(a.button);
+                       // Done ends the tutorial with its folder in the trash,
+                       // asked first where Settings says to, as any folder's
+                       // Delete is (question 9). Done, keep the folder keeps it.
+                       if (a.button == TutorialButton::Done && on && !tutorialCard_.Runner().On()) {
+                           if (const Folder* found = Manager().FindFolder(folder);
+                               found != nullptr && !Manager().IsDeleted(*found)) {
+                               AskToDelete(DeleteTarget{DeleteTarget::Kind::Folder, folder, found->name});
+                           }
+                       }
                    },
                    [&](const action::StartTutorial&) {
                        // From Settings, which is in the Overview: the tutorial

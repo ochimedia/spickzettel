@@ -569,6 +569,76 @@ TEST_F(TutorialAppTest, StartingAgainMakesANewFolderAndLeavesTheOldOne) {
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 
+// Done ends the tutorial with its folder in the trash; Done, keep the
+// folder keeps it (question 9) - on the end card and on the skip card.
+TEST_F(TutorialAppTest, DoneOnTheEndCardPutsTheFolderInTheTrash) {
+    AppConfig config = DefaultConfig();
+    config.confirmDelete = false;
+    StartWith(config);
+    WalkTo("end");
+    const FolderId folder = Runner().Folder();
+    Press(TutorialButton::Done);
+    EXPECT_FALSE(Runner().On());
+    ASSERT_NE(Canvases().FindFolder(folder), nullptr);
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindFolder(folder))) << "in the trash, to restore";
+    ASSERT_NE(Canvases().CurrentOrNull(), nullptr);
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().CurrentOrNull())) << "left for a canvas not deleted";
+    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "finished");
+}
+
+TEST_F(TutorialAppTest, DoneAsksFirstWhereSettingsSaysTo) {
+    WalkTo("end");
+    const FolderId folder = Runner().Folder();
+    Press(TutorialButton::Done);
+    EXPECT_FALSE(Runner().On());
+    EXPECT_NE(App().InputStack().find("ConfirmDelete"), std::string::npos) << App().InputStack();
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(folder))) << "until the confirmation says so";
+}
+
+TEST_F(TutorialAppTest, DoneKeepTheFolderKeepsIt) {
+    WalkTo("end");
+    const FolderId folder = Runner().Folder();
+    Press(TutorialButton::DoneKeep);
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(Runner().GetOutcome(), tutorial::Tutorial::Outcome::Finished);
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(folder)));
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, folder) << "and stays in it";
+    EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos);
+    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "finished");
+}
+
+TEST_F(TutorialAppTest, TheSkipCardEndsWithTheFolderTrashedOrKept) {
+    AppConfig config = DefaultConfig();
+    config.confirmDelete = false;
+    StartWith(config);
+    WalkTo("move");
+    const FolderId first = Runner().Folder();
+    Press(TutorialButton::Skip);
+    Press(TutorialButton::DoneKeep);
+    EXPECT_FALSE(Runner().On());
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(first)));
+    EXPECT_EQ(AppSettings().Stored().tutorialWelcome, "skipped");
+
+    Overlay().StartTutorial();
+    StepFrames(2);
+    const FolderId second = Runner().Folder();
+    Press(TutorialButton::Skip);
+    Press(TutorialButton::Done);
+    EXPECT_FALSE(Runner().On());
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindFolder(second)));
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(first))) << "only this run's";
+}
+
+TEST_F(TutorialAppTest, ADoneWithNoTutorialOnTrashesNothing) {
+    StartWithLibraryFromBefore();
+    ShowEditMode();
+    StepFrames(2);
+    ASSERT_TRUE(App().TutorialOffered());
+    Press(TutorialButton::Done);  // not on the offer: nothing to end
+    EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos);
+    EXPECT_TRUE(App().TutorialOffered());
+}
+
 // ===== The start (sections 7.6 and 9) =====
 
 TEST_F(TutorialAppTest, AFirstRunPlacesNoNotesAndStartsTheChain) {

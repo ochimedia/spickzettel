@@ -127,6 +127,34 @@ TEST_F(TutorialUiTest, PutOneHereMakesASnippetToPracticeOn) {
     EXPECT_FALSE(Canvases().IsItemDeleted(*Runner().Subject()));
 }
 
+// The skip card's two ways to end: Done, keep the folder; and Done, which
+// asks first and then puts the folder in the trash (question 9).
+TEST_F(TutorialUiTest, TheSkipCardsDoneTrashesTheFolderAndDoneKeepKeepsIt) {
+    StartTheTutorial();
+    const FolderId kept = Runner().Folder();
+    ClickOnCard("**/###tutorial_skip");
+    ClickOnCard("**/###tutorial_donekeep");
+    EXPECT_FALSE(Runner().On());
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(kept)));
+
+    Overlay().StartTutorial();
+    StepFrames(2);
+    const FolderId trashed = Runner().Folder();
+    ClickOnCard("**/###tutorial_skip");
+    RunUi("done, and confirm", [this, trashed](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##tutorial_card");
+        ctx->ItemClick("**/###tutorial_done");
+        ctx->Yield(3);
+        IM_CHECK(!Runner().On());
+        IM_CHECK(!Canvases().IsDeleted(*Canvases().FindFolder(trashed)));  // asked first
+        ctx->SetRef("//$FOCUSED");
+        ctx->ItemClick("##confirmdelete");
+        ctx->Yield(3);
+    });
+    EXPECT_TRUE(Canvases().IsDeleted(*Canvases().FindFolder(trashed)));
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(kept)));
+}
+
 // Settings > Interaction: the Overview closes, and the tutorial starts at
 // its first step in a new folder (section 7.6).
 TEST_F(TutorialUiTest, TakeTheTutorialAgainStartsItFromSettings) {

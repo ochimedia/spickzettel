@@ -112,6 +112,7 @@ void TutorialCard::Press(TutorialButton button) {
             runner_.Skip();
             return;
         case TutorialButton::Done:
+        case TutorialButton::DoneKeep:
             runner_.Done();
             return;
         case TutorialButton::NoThanks:
@@ -277,7 +278,10 @@ void TutorialCard::DrawStep() {
     if (next) {
         host_.Act(action::TutorialPress{last ? TutorialButton::Done : TutorialButton::Next});
     }
-    if (!last) {
+    if (last) {
+        ImGui::SameLine();
+        DoneKeepButton();
+    } else {
         // The way out, right-aligned and quieter.
         const char* skip = Labeled(strings::kTutorialCardSkip, "tutorial_skip");
         const float skipW = ImGui::CalcTextSize(strings::kTutorialCardSkip).x + ImGui::GetStyle().FramePadding.x * 2.0f;
@@ -352,6 +356,16 @@ void TutorialCard::DrawSkipped() {
     ImGui::SameLine();
     if (AccentButton(Labeled(strings::kTutorialCardDone, "tutorial_done"))) {
         host_.Act(action::TutorialPress{TutorialButton::Done});
+    }
+    ImGui::SameLine();
+    DoneKeepButton();
+}
+
+void TutorialCard::DoneKeepButton() {
+    // Done puts the folder in the trash; this is the way to keep it
+    // (question 9), so it is the quieter of the two.
+    if (QuietButton(Labeled(strings::kTutorialCardDoneKeep, "tutorial_donekeep"))) {
+        host_.Act(action::TutorialPress{TutorialButton::DoneKeep});
     }
 }
 

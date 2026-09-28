@@ -40,9 +40,10 @@ struct DeleteTarget {
     bool forGood = false;
 };
 
-// One of the tutorial card's own buttons - NoThanks is the offer's (see
-// OverlayApp::WelcomeAtStart).
-enum class TutorialButton { Next, Back, Skip, Done, NoThanks };
+// One of the tutorial card's own buttons. Done ends the tutorial and puts
+// its folder in the trash, DoneKeep ends it and keeps the folder; NoThanks
+// is the offer's (see OverlayApp::WelcomeAtStart).
+enum class TutorialButton { Next, Back, Skip, Done, DoneKeep, NoThanks };
 
 namespace action {
 
@@ -117,7 +118,7 @@ struct FinishNoteEdit {
 };
 
 // The tutorial (docs/TUTORIAL.md, section 7.3). The card's own buttons:
-// the runner's state, and the offer's answer, kept.
+// the runner's state, the offer's answer, kept, and the folder at the end.
 struct TutorialPress {
     TutorialButton button = TutorialButton::Next;
 };

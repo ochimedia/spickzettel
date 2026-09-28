@@ -63,6 +63,8 @@ private:
     void DrawStep();
     void DrawSkipped();
     void DrawOffer();
+    // Done, keep the folder - on the end card and the skip card.
+    void DoneKeepButton();
     // The hint under a step's text, and its button.
     void DrawHint(const tutorial::Hint& hint);
 
