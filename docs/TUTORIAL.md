@@ -1112,7 +1112,7 @@ The new parts are:
 | `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; a line and a rectangle; the eraser, its rectangle and the right button; a note | built: section 15 |
 | `capturing` | Capturing | a blank drawing; a full-screen screenshot; the quick and silent capture hotkeys, which work while the overlay is away | built: section 16 |
 | `folders` | Folders and canvases | the Overview; a new canvas; switching canvases; a new folder; moving a snippet to another canvas; the trash, and restoring from it | built: section 17 |
-| `profiles` | Profiles | what a profile is for; making one for a program; what it can change | to design |
+| `profiles` | Profiles | what a profile is for; making one for a program; what it can change | designed: section 18 |
 
 The first build had Basics, Drawing, Folders and canvases, and Profiles
 in the table. After it, the list was reordered and grew by two topics
@@ -2334,3 +2334,284 @@ Two pieces of work:
   tile dragged onto the new folder; the trash and its confirmation, with
   no ring through it; Show deleted and Restore; Done, whose confirmation
   names both folders and puts both in the trash.
+
+## 18. Profiles
+
+Status: **designed** (2026-09-28), for review. Its questions are in
+18.7.
+
+### 18.1 What it teaches, and why
+
+Basics' `programs` card says to look through Settings > Behavior and
+make a profile for each program that needs its own. This topic shows
+how, and what a profile does:
+
+- **What a profile is for.** The overlay runs over other programs, and
+  they differ: some games break when the overlay takes focus, others
+  need it to. A profile keeps the Behavior settings and the shortcuts
+  for one program. It runs whenever the overlay comes up over that
+  program, and the defaults run everywhere else.
+- **Making one.** Settings > Profiles has Make a profile for this, for
+  the program the overlay is up over. It is matched on the program's
+  file (`ProfileMatch`), and it runs at once: its row says "running
+  now".
+- **What it can change:** what is in the boxes marked Per profile, the
+  settings in Behavior and the shortcuts in Hotkeys. Showing, at the top
+  of each box, says whose values are below: the defaults, or a
+  profile's.
+- **Three things the panel shows no sign of,** which the steps make
+  concrete:
+  - A profile only runs over its program. Brought up over another one,
+    the same rows show the defaults.
+  - A profile states only what it changes. The rest comes from the
+    defaults.
+  - A row set in a profile stays the profile's own, even set back to the
+    default's value. Only the arrow beside it hands it back.
+
+**The setting the steps change is Don't steal focus** (question 40). It
+is the reason the `programs` card gives for profiles, and unticking it
+shows at once: the row turns to the accent color with its arrow, and
+the three rows under it gray out, since they only matter while focus
+stays with the program. Over the program, the overlay then takes focus.
+The revert at the end puts it back.
+
+**Left out:**
+
+- **New profile,** for a program that is not in front. The end card
+  names it.
+- **The match rules,** the Applications and Title contains lists inside
+  a profile's row, and renaming a profile. The row opens with a click;
+  the end card names the lists.
+- **The order of profiles:** the first that matches runs. The end card
+  says so.
+- **The shortcuts in a profile:** the same marks and arrow as in
+  Behavior, so no step of their own. The `behavior` card names them.
+- **What each Behavior setting does.** Each row has its "?".
+
+### 18.2 The chain
+
+| # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
+|---|---|---|---|---|---|---|---|---|
+| 0 | `openProfiles` | do | moves on | Programs differ: some games break when the overlay takes focus, others need it to. A profile keeps settings for one program. Right-click an empty spot, choose Settings, and pick Profiles on the left. | Profiles, in the section list | - | Settings up on its Profiles section | - |
+| 1 | `makeProfile` | do | **waits** | The overlay is up over {underneath}. Press Make a profile for this: it runs whenever the overlay comes up over {underneath}, and says "running now" while it does. | Make a profile for this | Settings up; its Settings tab; the Profiles section; a program underneath | a profile that was not there when the step began, whose rules match the program underneath | a blank profile made: "That made a blank profile, which matches no program until you name one. Make a profile for this is the button to its left." |
+| 2 | `behavior` | do | moves on | A profile can change what is in the boxes marked Per profile: the settings in Behavior, and the shortcuts in Hotkeys. Pick Behavior on the left. | Behavior, in the section list | Settings up; its Settings tab; the tutorial's profile | Settings up on its Behavior section | - |
+| 3 | `change` | do | **waits** | Showing, at the top of the box, says whose settings are below: {profile}'s. Untick Don't steal focus. Over {program}, the overlay will now take focus, and the rows under it gray out: they only matter while it doesn't. | the Don't steal focus row | Settings up; its Settings tab; the Behavior section; the tutorial's profile; Showing on it | the tutorial's profile states more Behavior settings than when the step began | - |
+| 4 | `otherProgram` | do | moves on | A profile only runs over its program. Press {key:toggleEditMode} to put the overlay away, click another program (the desktop will do), and press it again to bring the overlay back over that one. | - | the tutorial's profile | the overlay has come up again, over a program the tutorial's profile does not match | back over the same program: "It came back over {program}, which {profile} is for. Click another program first, then bring the overlay back." |
+| 5 | `elsewhere` | read | Next | Underneath, at the top of Behavior, now says {underneath}. Showing is on {showing}, and Don't steal focus is ticked there: {profile} only runs over {program}. | Showing | - | - | - |
+| 6 | `revert` | do | moves on | To hand a setting back to the defaults, press the arrow beside it. Ticking it again would keep it {profile}'s own, in the accent color. | the first arrow in the box | Settings up; its Settings tab; the Behavior section; the tutorial's profile; Showing on it; something set in it | the tutorial's profile states fewer Behavior settings than when the step began | ticked back by hand: "That keeps it {profile}'s own - the row is still in the accent color. The arrow beside it hands it back to the defaults." |
+| 7 | `end` | read | Done | That's profiles. New profile makes one for a program that isn't in front. Open a profile's row to add more programs to it, or part of a window's title. The first profile in the list that matches is the one that runs. Done deletes the tutorial's profile; Done, keep the profile keeps it. | - | - | Done | - |
+
+**The words in braces** are filled by `Expand()` from the world (18.3):
+`{underneath}` is the program the overlay is up over now, `{profile}`
+the tutorial's profile's name, `{program}` what it is matched on, and
+`{showing}` the name Showing shows ("the defaults" for Defaults).
+
+**"The tutorial's profile"** is the one made while `makeProfile` is up
+(18.3), as the run's folders are those made while `newFolder` is up.
+
+**Which steps wait** (question 37's rule). `makeProfile` does, since
+every later step is about the profile it makes. `change` does, since
+`otherProgram` and `elsewhere` show what it set, and `revert` takes it
+back. `otherProgram` does not: a user with nothing else open can go on
+with Next, and `elsewhere` says what they would have seen (below).
+
+**What each goal reads.** Each is a change between the step's start and
+now, as in 6.3, and none looks at what was pressed:
+
+- **A profile made:** New profile, with the program's file typed into
+  its Applications, counts as well. A profile made that matches nothing
+  is the near miss.
+- **A setting stated:** any Behavior row of the tutorial's profile, not
+  only Don't steal focus. What counts is the profile stating it (the
+  row's mark), not its value: a row ticked and unticked again is still
+  stated.
+- **Over another program:** `Showings()` has grown, and the program
+  underneath is not one the profile's rules match. That it is running or
+  not is not asked: another profile of the user's may match the new
+  program, and Showing then names that one.
+- **A setting handed back:** the tutorial's profile states fewer
+  Behavior settings. The near miss is a stated row whose value is the
+  defaults' again.
+
+**The text follows the world:**
+
+- **`openProfiles` with the Overview already up** on its Canvases tab:
+  "Press Settings, at the top of the Overview, and pick Profiles on the
+  left."
+- **With the edit-mode hotkey unbound,** `otherProgram` names the tray
+  icon, as Basics' `away` does (`tutorial.away.textTray`).
+- **`elsewhere` when the overlay never left** (Next pressed on
+  `otherProgram`, and the profile still matches): "Brought up over
+  another program, Showing would say the defaults, and Don't steal focus
+  would be ticked: {profile} only runs over {program}."
+- **`makeProfile` when a profile of the user's already matches the
+  program** (question 44): "{other} is already the profile for
+  {underneath}, and the first in the list that matches is the one that
+  runs. Make another anyway, for practice: it won't run, but the steps
+  work the same." `change` then leaves out "the overlay will now take
+  focus".
+
+### 18.3 What it needs that is new
+
+- **A topic without a folder** (question 43). Nothing in this topic is
+  on a canvas, so it makes none: `Topic` gains a flag, and for such a
+  topic `StartTutorial` and a resume go to no folder, `tutorial.folder`
+  stays `"0"`, and no step needs the tutorial folder. The canvas that was
+  up stays up. The keep button is "Done, keep the profile" on this
+  topic's end card and skip card.
+- **The tutorial's profile.** The profiles that appear while a step
+  flagged `keepsProfiles` is up, `makeProfile`, as `keepsFolders` does
+  for folders:
+  - Known by name. Names are unique (`docs/SETTINGS.md`, section 5), and
+    a profile has no other identity. One renamed during the topic is
+    lost to it, and the need for it says so.
+  - Not kept across a restart, as the run's folders are not. After one,
+    the need's line sends the user Back to make it again.
+- **Done** deletes the tutorial's profile, without asking, as its row's
+  trash button does. Done, keep the profile keeps it. The deletion goes
+  through the Settings page (`SettingsPage::RemoveProfile`), so that
+  Showing, which holds an index, follows the list as it does when a row
+  is deleted there.
+- **Showing follows a profile just made** (question 42). Both makers
+  point Showing at the profile they made. Today it stays where it was,
+  on the defaults when no profile was running, and the first change a
+  user makes after making a profile lands in the defaults, for every
+  program. The overlay coming up already points it at the profile that
+  runs (`SettingsPage::OnOverlayShown`); making one is as strong a sign.
+- **The world** (7.1):
+  - the program underneath: its file, its title, and whether it is known
+    (`Settings::UnderlyingApplication`);
+  - the profiles: each one's name, whether its rules match the program
+    underneath, whether it is running, and how many Behavior settings it
+    states, with how many of those hold the defaults' value
+    (`ProfileFacts`);
+  - the Settings panel: whether the Overview is on its Settings tab, the
+    section picked, and whose values Showing shows.
+- **The start record** keeps the profiles by name and the tutorial's
+  profile's stated count.
+- **Eight needs:**
+
+  | Need | Not met when | The card says | Button |
+  |---|---|---|---|
+  | Settings up | the Overview is not up | "Open Settings: right-click an empty spot and choose Settings." | - |
+  | Its Settings tab | the Overview is on Canvases or About | "Press Settings, at the top of the Overview." | - |
+  | The Profiles section | another section is picked | "Pick Profiles in the list on the left." | - |
+  | The Behavior section | another section is picked | "Pick Behavior in the list on the left." | - |
+  | A program underneath | the program underneath is not known | "The overlay is up over nothing it can name, such as the desktop. Press {key:toggleEditMode} to put it away, click the program you want a profile for, and press it again." | - |
+  | The tutorial's profile | there is none, or it is gone | "The tutorial has no profile of its own: it was deleted, or the app has restarted since. Go Back to make one, or go on with Next." | - |
+  | Showing on it | Showing shows the defaults or another profile | "Showing is on {showing}. Pick {profile} there: a change is made to whose settings it shows." | - |
+  | Something set in it | the tutorial's profile states no Behavior setting | "{profile} sets nothing of its own yet. Untick Don't steal focus in it first, or go on with Next." | - |
+
+  "Settings up" opens the Overview by the menu's Settings item, where
+  17's "the Overview up" says to choose Overview. Four of the needs are
+  for where the user is in the panel, as 17's were for the Overview.
+- **Anchors, marked by the Settings page** (7.2):
+  - a section's button in the list, by its section;
+  - Make a profile for this;
+  - Showing;
+  - the Don't steal focus row;
+  - the revert arrow of each Behavior row the target states, by its
+    row. The arrow is drawn by `SettingCheckbox`, a free function; the
+    page marks the last item after it, when the row is stated.
+- **Spots:** `SectionProfiles`, `SectionBehavior`, `MakeProfile`,
+  `Showing`, `DontStealFocus`, and `Revert`, the first arrow marked.
+  They are the Overview's own (`TutorialCard::InOverview`), so they are
+  drawn while the Overview is up and nothing is over it, and the card
+  takes the lower right corner first (17.8).
+- **The strings:** each step's title, texts and near misses, the needs,
+  the end card (`tutorial.profilesEnd.*`), the keep button's second
+  label, and `tutorial.topics.profiles.*` ("Profiles": "Make a profile
+  for a program, change a setting in it, and see it run only there.").
+- **A row in the topic table,** sixth and last.
+
+### 18.4 What does not change
+
+- The runner's loop, the card, the list and the settings rows.
+- The Settings panel's layout, and how profiles are matched, resolved
+  and stored. The page only marks anchors, points Showing at a profile
+  it made, and removes the tutorial's profile for Done.
+- Settings are edited through `Settings` as always; the tutorial writes
+  none of them.
+
+### 18.5 Tests
+
+- **`chains_test`,** against the fake world:
+  - each goal and near miss, and the eight needs;
+  - the tutorial's profile: one made while `makeProfile` is up is the
+    tutorial's, and one made during another step is not;
+  - the texts for the Overview already up, the hotkey unbound, the
+    overlay that never left, and a program that has a profile already.
+
+  `TopicsTest` covers the shape, and the flag for no folder.
+- **`AppWorld`:** the program underneath; the profiles, with their
+  matches, stated counts and which runs; the Settings tab, its section
+  and Showing; each new anchor marked where its widget is drawn.
+- **The page:** Showing follows a profile made by either button; the
+  removal for Done moves Showing as a row's trash button does.
+- **Done:** deletes the tutorial's profile, and only that one; Done,
+  keep the profile keeps it; a topic without a folder trashes none.
+- **The walk-through,** with hands, the headless app's program
+  underneath set before each showing
+  (`host_.overlayWindow.underlyingApp`):
+  - the right-click menu's Settings, and Profiles;
+  - Make a profile for this;
+  - Behavior;
+  - the Don't steal focus checkbox;
+  - put away, another program set, and back;
+  - Showing's list, and the profile in it (the UI engine, where the
+    headless app has no handle on a combo's list);
+  - the arrow;
+  - Done.
+- **The derail matrix,** a row per way:
+  - each step from `makeProfile` to `revert`: the Overview closed (the
+    need for Settings up); the Canvases tab (its need); another section
+    (the section's need); the tutorial's profile deleted (its need);
+  - `makeProfile`: nothing underneath (its need); New profile (the near
+    miss);
+  - `change` and `revert`: Showing on the defaults (its need);
+  - `otherProgram`: back over the same program (the near miss);
+  - `revert`: the row ticked back (the near miss).
+- **By hand:** every card with real input, over a real program and the
+  desktop, and where the card lands over Settings.
+
+### 18.6 Getting there
+
+Two pieces of work, as in 17.6:
+
+1. **What the chain stands on:** the topic without a folder; the
+   tutorial's profile and Done with it; Showing following a made
+   profile; the world's program, profiles and Settings; the needs; the
+   anchors and spots. Each with its tests, before any step uses it.
+2. **The chain:** its strings and its row, with the walk-through, the
+   matrix and the hand check.
+
+### 18.7 Questions for review
+
+39. **Seven steps and the end card** (18.2), with a trip to another
+    program (`otherProgram`, `elsewhere`) as the demonstration that a
+    profile runs only over its program. The alternative, for five and
+    the end card, is to pick Defaults in Showing and see the row ticked
+    there, which shows the layers but not that the profile follows the
+    program. *Recommended:* the trip.
+40. **Don't steal focus is the setting the card names,** for the reason
+    the `programs` card gives and for the rows that gray out under it.
+    The goal counts any Behavior row. *Recommended:* as proposed.
+41. **The revert is a step,** with the tick-back as its near miss, since
+    a row set back by hand stays the profile's own and nothing on screen
+    says so but its color. The alternative is a line on the end card.
+    *Recommended:* the step.
+42. **Showing follows a profile just made,** by either button: a change
+    to the Settings page outside the tutorial. Without it, `change`
+    needs a step of its own to pick the profile in Showing, and a user
+    who makes a profile without the tutorial changes the defaults next.
+    *Recommended:* the change.
+43. **The topic makes no folder,** and Done deletes the tutorial's
+    profile, with "Done, keep the profile" to keep it. The alternative
+    is a folder as every topic has, which stays empty, and a keep button
+    that keeps both. *Recommended:* no folder.
+44. **A program with a profile of the user's already:** the step makes a
+    second one anyway, for practice, and the card says it won't run
+    while the user's comes first. The alternative, the steps working on
+    the user's own profile, would have `change` and `revert` edit it,
+    and Done could not delete what it did not make. *Recommended:* a
+    second one.
