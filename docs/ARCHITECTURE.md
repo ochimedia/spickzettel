@@ -483,7 +483,8 @@ per frame - 1.1 ms for the forty of `heavy`, which holds 120 fps either
 way - and keeping them would cost a texture per snippet on screen at its
 size there: 0.9 MB for a third of a 1080p screen, 8.3 MB for all of it,
 four times that at 4K. That is video memory a game behind the overlay
-is using, spent for canvases far busier than annotations get.
+is using, spent for canvases far busier than annotations get. See
+`docs/PERF.md` for the measurements.
 
 **Before this, three render modes** and a setting to choose: the
 tessellator stroke by stroke, ImGui's polyline to judge it against, and

@@ -4,14 +4,23 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <functional>
+#include <optional>
 #include <vector>
 
 #include <imgui.h>
 
 #include "core/canvas/item.h"
 #include "core/drawing/stroke.h"
+#include "core/drawing/stroke_mesh_cache.h"
+#include "core/persistence/library_store.h"
 #include "platform/platform_types.h"
 #include "ui/item_painting.h"
 
@@ -476,6 +485,249 @@ TEST_F(Win32Dx11RendererTest, TranslucentInksBlendBeforeTheSnippetsOpacity) {
     EXPECT_NEAR(AlphaAt(pixels, 16, 32), 64, 2);
     EXPECT_NEAR(AlphaAt(pixels, 32, 32), 96, 2);
     EXPECT_NEAR(ChannelAt(pixels, 32, 32, 0), 32, 2) << "the red under the blue, faded with it";
+}
+
+// Not a test: a picture for a person to look at, written only when
+// SZ_STROKE_COMPARE_OUT names a .bmp file. The same snippet drawn by
+// DrawItemContent stroke by stroke, as strokes were drawn before they had
+// the depth test and the layer, and as they are now (columns); at full and
+// half opacity, enlarged twice over, and with opaque inks at half opacity
+// (rows) - over white with a black bar, so darkening, sharpness and how
+// opacity fades stacked strokes all show.
+TEST_F(Win32Dx11RendererTest, StrokesSideBySide) {
+    const char* out = std::getenv("SZ_STROKE_COMPARE_OUT");
+    if (out == nullptr || *out == '\0') {
+        GTEST_SKIP() << "set SZ_STROKE_COMPARE_OUT to a .bmp path";
+    }
+    constexpr int kCell = 240;
+    constexpr int kColumns = 2;
+    constexpr int kRows = 4;
+    constexpr int kWidth = kCell * kColumns;
+    constexpr int kHeight = kCell * kRows;
+
+    core::Item item;
+    item.id = 1;
+    item.nativeW = static_cast<float>(kCell);
+    item.nativeH = static_cast<float>(kCell);
+    core::Stroke loop;  // a figure eight, crossing itself in the middle
+    loop.colorRGBA = 0xE0201080;
+    loop.width = 22.0f;
+    for (int i = 0; i <= 200; ++i) {
+        const float t = 6.2831853f * static_cast<float>(i) / 200.0f;
+        loop.points.push_back({120.0f + 84.0f * std::sin(t), 120.0f + 60.0f * std::sin(t) * std::cos(t)});
+    }
+    core::Stroke diagonal;
+    diagonal.colorRGBA = 0x2050E080;
+    diagonal.width = 16.0f;
+    diagonal.points = {{24.0f, 216.0f}, {216.0f, 24.0f}};
+    core::Stroke zigzag;  // turns tighter than it is wide
+    zigzag.colorRGBA = 0x20A040A0;
+    zigzag.width = 14.0f;
+    for (int i = 0; i <= 16; ++i) {
+        zigzag.points.push_back({30.0f + 11.0f * static_cast<float>(i), i % 2 == 0 ? 200.0f : 186.0f});
+    }
+    item.strokes = {loop, diagonal, zigzag};
+    core::Item opaque = item;
+    for (core::Stroke& stroke : opaque.strokes) {
+        stroke.colorRGBA |= 0xFFu;
+    }
+
+    ID3D11ShaderResourceView* probe = WatchedTexture();
+    ASSERT_NE(probe, nullptr);
+    ComPtr<ID3D11Device> device;
+    probe->GetDevice(&device);
+    renderer_.ReleaseTexture(probe);
+    probe->Release();
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = kWidth;
+    desc.Height = kHeight;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    ComPtr<ID3D11Texture2D> target;
+    ComPtr<ID3D11RenderTargetView> targetView;
+    ASSERT_TRUE(SUCCEEDED(device->CreateTexture2D(&desc, nullptr, &target)) &&
+                SUCCEEDED(device->CreateRenderTargetView(target.Get(), nullptr, &targetView)));
+
+    // ImGui takes the display size from the window as the frame starts.
+    SetWindowPos(hwnd_, nullptr, 0, 0, kWidth, kHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    renderer_.NewFrame();
+    ImDrawList* drawList = ImGui::GetForegroundDrawList();
+    const ui::PaintHooks hooks[kColumns] = {ui::PaintHooks{}, RendererHooks()};
+    const char* names[kColumns] = {"Stroke by stroke", "Layered"};
+    const char* rows[kRows] = {"opacity 100%", "opacity 50%", "100%, enlarged 2x", "opaque inks, 50%"};
+    for (int row = 0; row < kRows; ++row) {
+        for (int column = 0; column < kColumns; ++column) {
+            const ImVec2 cellMin(static_cast<float>(column * kCell), static_cast<float>(row * kCell));
+            const ImVec2 cellMax(cellMin.x + kCell, cellMin.y + kCell);
+            drawList->PushClipRect(cellMin, cellMax, true);
+            drawList->AddRectFilled(cellMin, cellMax, IM_COL32(255, 255, 255, 255));
+            drawList->AddRectFilled(ImVec2(cellMin.x + 100.0f, cellMin.y), ImVec2(cellMin.x + 140.0f, cellMax.y),
+                                    IM_COL32(0, 0, 0, 255));
+            core::Item& drawn = row == 3 ? opaque : item;
+            drawn.foregroundOpacity = row == 1 || row == 3 ? 0.5f : 1.0f;
+            // Enlarged about the cell's middle: the snippet twice the cell.
+            const float scale = row == 2 ? 2.0f : 1.0f;
+            const ImVec2 pMin(cellMin.x + kCell * 0.5f * (1.0f - scale), cellMin.y + kCell * 0.5f * (1.0f - scale));
+            const ImVec2 pMax(pMin.x + kCell * scale, pMin.y + kCell * scale);
+            ui::DrawItemContent(drawList, drawn, pMin, pMax, 0, false, {}, hooks[column]);
+            drawList->AddText(ImVec2(cellMin.x + 4.0f, cellMin.y + 2.0f), IM_COL32(0, 0, 0, 255), names[column]);
+            drawList->AddText(ImVec2(cellMin.x + 4.0f, cellMax.y - 18.0f), IM_COL32(0, 0, 0, 255), rows[row]);
+            drawList->AddRect(cellMin, cellMax, IM_COL32(160, 160, 160, 255));
+            drawList->PopClipRect();
+        }
+    }
+    renderer_.RenderTo(targetView.Get());
+    const std::vector<uint8_t> pixels = ReadBack(device.Get(), target.Get(), 0, kWidth, kHeight);
+    ASSERT_EQ(pixels.size(), static_cast<size_t>(kWidth) * kHeight * 4);
+
+    // A 24-bit BMP, bottom row first.
+    const uint32_t rowBytes = kWidth * 3;
+    const uint32_t imageBytes = rowBytes * kHeight;
+    std::vector<uint8_t> file(54, 0);
+    const auto put32 = [&](size_t at, uint32_t v) {
+        for (int i = 0; i < 4; ++i) {
+            file[at + i] = static_cast<uint8_t>(v >> (8 * i));
+        }
+    };
+    file[0] = 'B';
+    file[1] = 'M';
+    put32(2, 54 + imageBytes);
+    put32(10, 54);
+    put32(14, 40);
+    put32(18, kWidth);
+    put32(22, kHeight);
+    file[26] = 1;
+    file[28] = 24;
+    put32(34, imageBytes);
+    for (int y = kHeight - 1; y >= 0; --y) {
+        for (int x = 0; x < kWidth; ++x) {
+            const size_t at = (static_cast<size_t>(y) * kWidth + x) * 4;
+            file.insert(file.end(), {pixels[at + 2], pixels[at + 1], pixels[at]});
+        }
+    }
+    std::ofstream(out, std::ios::binary).write(reinterpret_cast<const char*>(file.data()),
+                                               static_cast<std::streamsize>(file.size()));
+}
+
+// Not a test: what the GPU spends on one frame of a generated library's
+// current canvas, run only when SZ_PERF_LIBRARY names a library file (see
+// tools/perf_library), stroke by stroke and layered. Offscreen at
+// 1920x1080, timed with timestamp queries, so the number is the GPU's own
+// and no window, vsync or input is involved; the CPU side is PerfBench's.
+// The two take turns frame by frame, so the GPU's clocks moving under a
+// run move under both alike; the minimum is the GPU at full speed.
+TEST_F(Win32Dx11RendererTest, StrokesGpuTime) {
+    const char* root = std::getenv("SZ_PERF_LIBRARY");
+    if (root == nullptr || *root == '\0') {
+        GTEST_SKIP() << "set SZ_PERF_LIBRARY to a library file (see tools/perf_library)";
+    }
+    core::persistence::LibraryStore store{std::filesystem::path(root)};
+    const std::optional<core::CanvasManagerSnapshot> snapshot = store.Load();
+    ASSERT_TRUE(snapshot.has_value());
+    std::vector<core::Item> items;
+    for (const core::Canvas& canvas : snapshot->canvases) {
+        if (canvas.id == snapshot->currentCanvasId) {
+            items = canvas.items;
+        }
+    }
+    ASSERT_FALSE(items.empty());
+
+    constexpr int kWidth = 1920;
+    constexpr int kHeight = 1080;
+    ID3D11ShaderResourceView* probe = WatchedTexture();
+    ASSERT_NE(probe, nullptr);
+    ComPtr<ID3D11Device> device;
+    probe->GetDevice(&device);
+    renderer_.ReleaseTexture(probe);
+    probe->Release();
+    ComPtr<ID3D11DeviceContext> context;
+    device->GetImmediateContext(&context);
+
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = kWidth;
+    desc.Height = kHeight;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+    ComPtr<ID3D11Texture2D> target;
+    ComPtr<ID3D11RenderTargetView> targetView;
+    ASSERT_TRUE(SUCCEEDED(device->CreateTexture2D(&desc, nullptr, &target)) &&
+                SUCCEEDED(device->CreateRenderTargetView(target.Get(), nullptr, &targetView)));
+    SetWindowPos(hwnd_, nullptr, 0, 0, kWidth, kHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+
+    D3D11_QUERY_DESC disjointDesc{D3D11_QUERY_TIMESTAMP_DISJOINT, 0};
+    D3D11_QUERY_DESC stampDesc{D3D11_QUERY_TIMESTAMP, 0};
+    ComPtr<ID3D11Query> disjoint;
+    ComPtr<ID3D11Query> begin;
+    ComPtr<ID3D11Query> end;
+    ASSERT_TRUE(SUCCEEDED(device->CreateQuery(&disjointDesc, &disjoint)) &&
+                SUCCEEDED(device->CreateQuery(&stampDesc, &begin)) &&
+                SUCCEEDED(device->CreateQuery(&stampDesc, &end)));
+
+    core::StrokeMeshCache meshes;
+    // From RenderTo's start to the GPU done with it: ImGui's submission on
+    // the CPU and the GPU's work, which the timestamps alone can mix up -
+    // a GPU waiting on commands still to come counts as busy.
+    double lastWallMs = 0.0;
+    const auto frameMs = [&](const ui::PaintHooks& hooks) {
+        renderer_.NewFrame();
+        ImDrawList* drawList = ImGui::GetForegroundDrawList();
+        meshes.BeginFrame();
+        for (const core::Item& item : items) {
+            const ImVec2 pMin(item.rect.x, item.rect.y);
+            const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
+            drawList->PushClipRect(pMin, pMax, true);
+            ui::DrawItemContent(drawList, item, pMin, pMax, 0, false, core::StrokeMeshSlot{&meshes, 1}, hooks);
+            drawList->PopClipRect();
+        }
+        meshes.EndFrame();
+        const auto submitted = std::chrono::steady_clock::now();
+        context->Begin(disjoint.Get());
+        context->End(begin.Get());
+        renderer_.RenderTo(targetView.Get());
+        context->End(end.Get());
+        context->End(disjoint.Get());
+        D3D11_QUERY_DATA_TIMESTAMP_DISJOINT clock{};
+        while (context->GetData(disjoint.Get(), &clock, sizeof(clock), 0) == S_FALSE) {
+        }
+        lastWallMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - submitted).count();
+        UINT64 from = 0;
+        UINT64 to = 0;
+        while (context->GetData(begin.Get(), &from, sizeof(from), 0) == S_FALSE) {
+        }
+        while (context->GetData(end.Get(), &to, sizeof(to), 0) == S_FALSE) {
+        }
+        return clock.Disjoint ? -1.0 : static_cast<double>(to - from) * 1000.0 / static_cast<double>(clock.Frequency);
+    };
+
+    const std::pair<ui::PaintHooks, const char*> ways[] = {
+        {ui::PaintHooks{}, "stroke by stroke"},
+        {RendererHooks(), "layered"},
+    };
+    std::vector<double> samples[std::size(ways)];
+    std::vector<double> walls[std::size(ways)];
+    for (int i = 0; i < 330; ++i) {
+        for (size_t w = 0; w < std::size(ways); ++w) {
+            const double ms = frameMs(ways[w].first);
+            if (i >= 30 && ms >= 0.0) {
+                samples[w].push_back(ms);
+                walls[w].push_back(lastWallMs);
+            }
+        }
+    }
+    for (size_t w = 0; w < std::size(ways); ++w) {
+        ASSERT_FALSE(samples[w].empty());
+        std::sort(samples[w].begin(), samples[w].end());
+        std::sort(walls[w].begin(), walls[w].end());
+        std::printf("gpu %-16s min=%.3f median=%.3f p95=%.3f ms | submit+gpu min=%.3f median=%.3f ms\n",
+                    ways[w].second, samples[w].front(), samples[w][samples[w].size() / 2],
+                    samples[w][samples[w].size() * 95 / 100], walls[w].front(), walls[w][walls[w].size() / 2]);
+    }
 }
 
 }  // namespace

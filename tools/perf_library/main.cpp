@@ -14,9 +14,12 @@
 //
 //   perf_library --out <file> [--canvases N] [--items N] [--strokes N]
 //                [--points N] [--width W] [--height H] [--seed N]
+//                [--opacity P]
 //
 // `--width/--height` are the display the layout is meant for, so the items
 // land where they would if someone had drawn them on that screen.
+// `--opacity` is every snippet's stroke opacity, 0..1 (default 1) - below 1
+// the Layered render mode draws each snippet through a layer of its own.
 
 #include <cmath>
 #include <cstdio>
@@ -40,6 +43,7 @@ struct Options {
     float displayW = 1920.0f;
     float displayH = 1080.0f;
     unsigned seed = 1;
+    float opacity = 1.0f;
 };
 
 bool ParseArgs(int argc, char** argv, Options& options) {
@@ -63,6 +67,8 @@ bool ParseArgs(int argc, char** argv, Options& options) {
             options.displayH = static_cast<float>(std::atof(value().c_str()));
         } else if (flag == "--seed" && hasValue) {
             options.seed = static_cast<unsigned>(std::atoi(value().c_str()));
+        } else if (flag == "--opacity" && hasValue) {
+            options.opacity = static_cast<float>(std::atof(value().c_str()));
         } else {
             std::fprintf(stderr, "unknown or incomplete argument: %s\n", flag.c_str());
             return false;
@@ -112,7 +118,8 @@ int main(int argc, char** argv) {
     if (!ParseArgs(argc, argv, options)) {
         std::fprintf(stderr,
                      "usage: perf_library --out <file> [--canvases N] [--items N] [--strokes N]\n"
-                     "                    [--points N] [--width W] [--height H] [--seed N]\n");
+                     "                    [--points N] [--width W] [--height H] [--seed N]\n"
+                     "                    [--opacity P]\n");
         return 2;
     }
 
@@ -161,6 +168,7 @@ int main(int argc, char** argv) {
             item->anchorRect = item->rect;
             item->anchorDisplayWidth = options.displayW;
             item->anchorDisplayHeight = options.displayH;
+            item->foregroundOpacity = options.opacity;
             for (int s = 0; s < options.strokes; ++s) {
                 item->strokes.push_back(MakeScribble(random, itemW, itemH, options.points));
             }

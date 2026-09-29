@@ -54,9 +54,11 @@ target_link_libraries(sz_core_tests PRIVATE sz_app sqlite GTest::gtest_main)
 target_compile_features(sz_core_tests PRIVATE cxx_std_20)
 spickzettel_set_warnings(sz_core_tests)
 
-# The benchmark reads its scenario from the environment; MSVC deprecates
-# getenv for a shared-state reason that does not apply to a test.
+# The benchmarks read their scenario from the environment, and the
+# renderer's side-by-side picture where to write it; MSVC deprecates getenv
+# for a shared-state reason that does not apply to a test.
 set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
+set_source_files_properties(platform/win32_dx11_renderer_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 
 # The string catalog as it is in the source tree, for the test that parses
 # it strictly - see ui/ui_strings_file_test.cpp.

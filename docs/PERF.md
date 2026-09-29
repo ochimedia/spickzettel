@@ -16,6 +16,11 @@ a fraction as much, so a generator that produced those would flatter the app.
     build/windows-release/tools/perf_library/perf_library.exe --out %TEMP%/libs/medium.db \
         --canvases 1 --items 11 --strokes 13 --points 130 --width 1920 --height 1080
 
+`--opacity P` gives every snippet that opacity (default 1). Below 1 each
+snippet's strokes are drawn through a layer of their own (see
+ARCHITECTURE.md, "Drawing strokes"), which is the costlier case; the
+stroke-layer results below use 0.8.
+
 The scenarios used below, all laid out for 1920x1080:
 
 | name      | canvases | items | strokes | points  | what it is for |
@@ -35,7 +40,7 @@ a similar-sounding one.
 
 ## Instrument 1: the headless frame benchmark (use this one)
 
-`PerfBench.OneFrameAgainstAGeneratedLibrary` in `tests/core/perf_bench_test.cpp`.
+`PerfBench.OneFrameAgainstAGeneratedLibrary` in `tests/app/perf_bench_test.cpp`.
 Opt-in - it skips unless `SZ_PERF_LIBRARY` names a library file:
 
     set SZ_PERF_LIBRARY=%TEMP%\libs\medium.db
@@ -50,7 +55,7 @@ What it does **not** measure is what the GPU then does with the draw lists.
 That is deliberate: the CPU side is where the app's own decisions show up.
 One consequence worth knowing - the strokes' depth test and layers are
 callbacks the headless window only names, so what they cost the driver and
-the GPU is not in this number. Measure that with instrument 2.
+the GPU is not in this number. Measure that with instruments 2 and 3.
 
 ## Instrument 2: the real app
 
@@ -85,6 +90,63 @@ plausible-looking numbers:
   0.0% - the app sitting in the tray with the loop parked in `GetMessage`,
   drawing nothing. The script now polls for visibility and checks it either
   side of every sample.
+
+## Instrument 3: the GPU, offscreen
+
+`Win32Dx11RendererTest.StrokesGpuTime` in `sz_win32_tests`, with the same
+`SZ_PERF_LIBRARY` opt-in, draws the library's current canvas into a
+1920x1080 target with the real renderer, stroke by stroke and layered,
+and times each frame with D3D timestamp queries - the GPU's own time, no
+window, no vsync, no input. Two lessons are built in. The ways take turns
+frame by frame: run one after the other, the same one varied up to 4x as
+the GPU's clocks moved, and the minimum is the GPU at full speed. And it
+reports submission plus GPU as well, from `RenderTo`'s start to the GPU
+done, because a timestamp pair also counts a GPU waiting on commands the
+CPU has not sent yet.
+
+`Win32Dx11RendererTest.StrokesSideBySide`, with `SZ_STROKE_COMPARE_OUT`
+naming a `.bmp`, writes a picture of the same snippet drawn both ways -
+what a person looks at to judge the drawing, not a number.
+
+## Results: strokes drawn layered
+
+Measured 2026-09-29 while the render modes still stood side by side:
+Tessellated is stroke by stroke, Depth-tested is the depth test alone,
+Layered is what the app now does. RTX 2080 SUPER, 1920x1080 at 120 Hz.
+
+Headless, median ms of CPU per frame, snippets at full opacity (two rounds):
+
+| scenario  | tessellated   | depth-tested  |
+| --------- | ------------- | ------------- |
+| `medium`  | 0.857-0.905   | 0.869-0.905   |
+| `heavy`   | 3.289-3.332   | 3.358-3.469   |
+| `extreme` | 14.854-14.881 | 14.799-15.070 |
+
+Within noise - once the body-first order moved into the tessellator,
+whose meshes are cached. Reordered in `DrawStroke` every frame it had
+cost 18-21%.
+
+The GPU offscreen (instrument 3), snippets at 80%, fastest frame: `medium`
+0.260 ms tessellated, 0.262 depth-tested, 0.287 layered; `heavy` 0.93,
+0.96, 1.06. `heavy`'s median was higher for layered in every round (3.5
+ms against 1.96), with submission plus GPU the same for all three (12.0
+against 11.9) - the GPU waiting on commands after the layers' target
+switches, most likely, rather than drawing more.
+
+The real app (instrument 2), snippets at 80%, three samples of 5 s:
+
+| scenario  | tessellated               | depth-tested    | layered                   | rasterized |
+| --------- | ------------------------- | --------------- | ------------------------- | ---------- |
+| `heavy`   | 120 fps, 4.7-5.1 ms CPU   | 120 fps, 4.9 ms | 120 fps, 5.8-6.2 ms CPU   | 120 fps, 0.23 ms CPU |
+| `extreme` | 21.3 / 22.2 ms            | 22.4 / 22.6 ms  | 23.0 / 22.9 ms            | 120 fps, 0.47 ms CPU |
+
+A layer costs about 25 microseconds of CPU a frame - 1.1 ms for `heavy`'s
+forty - most likely the driver's work for switching targets. Rasterized
+drew each snippet as one finished bitmap, which is why its frames cost
+nothing; it paid at every change, in memory, and in sharpness. Keeping
+each layer between frames would bring a still canvas down to that too, at
+a texture per snippet in video memory; not built (ARCHITECTURE.md,
+"Drawing strokes").
 
 ## Results: what the stroke-mesh cache bought
 
