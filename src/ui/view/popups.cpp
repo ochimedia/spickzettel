@@ -610,13 +610,16 @@ void Popups::RenderColorChooser(float displayW, float displayH) {
         ImGui::EndPopup();
         return;
     }
-    float rgb[3];
-    ColorRGBAToFloats(editor_.DrawColorRGBA(), rgb);
+    // With the ink's own alpha, the stroke's opacity: a stroke at half
+    // strength blends with the ones under it, where the snippet's opacity
+    // fades all of them together (see DrawItemContent).
+    float rgba[4];
+    ColorRGBAToFloats4(editor_.DrawColorRGBA(), rgba);
     ImGui::SetNextItemWidth(Px(220.0f));
-    if (ImGui::ColorPicker3("##picker", rgb,
+    if (ImGui::ColorPicker4("##picker", rgba,
                             ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoInputs |
-                                ImGuiColorEditFlags_NoLabel)) {
-        editor_.SetDrawColor(FloatsToColorRGBA(rgb, 0xFF));
+                                ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar)) {
+        editor_.SetDrawColor(FloatsToColorRGBA4(rgba));
     }
     ImGui::EndPopup();
 }

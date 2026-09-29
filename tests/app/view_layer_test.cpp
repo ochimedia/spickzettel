@@ -441,6 +441,49 @@ TEST_F(ViewLayerTest, TheColorChooserKeepsThePensColorWhenItCloses) {
     EXPECT_EQ(AppSettings().Stored().strokeColorRGBA, App().DrawColorRGBA());
 }
 
+// The chooser's alpha bar is the ink's own alpha - the stroke's opacity -
+// and it goes with the color: into the strokes drawn with it, and kept for
+// the next start as the rest of the color is.
+TEST_F(ViewLayerTest, ThePensAlphaIsChosenWithItsColor) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    const std::optional<ImVec2> color = App().SelectionBarButtonCenter(ChromeButton::Color);
+    ASSERT_TRUE(color.has_value());
+    RawClick(color->x, color->y);
+    StepFrames(2);
+    ASSERT_TRUE(App().IsColorChooserOpen());
+
+    // Down the alpha bar, the picker's rightmost part - to ImGui alone, as
+    // a widget is dragged.
+    const ImGuiContext& g = *ImGui::GetCurrentContext();
+    ASSERT_FALSE(g.OpenPopupStack.empty());
+    const ImGuiWindow* chooser = g.OpenPopupStack.back().Window;
+    const float barX = chooser->InnerRect.Max.x - chooser->WindowPadding.x - ImGui::GetFrameHeight() * 0.5f;
+    const float top = chooser->InnerRect.Min.y + chooser->WindowPadding.y;
+    MoveTo(barX, top + 10.0f);
+    StepFrame();
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
+    StepFrame();
+    MoveTo(barX, top + 110.0f);
+    StepFrames(2);
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrames(2);
+    const uint32_t pen = App().DrawColorRGBA();
+    ASSERT_LT(pen & 0xFFu, 0xC0u) << "the drag did not reach the alpha bar";
+    ASSERT_GT(pen & 0xFFu, 0u);
+
+    PressKey(ImGuiKey_Escape);
+    StepFrame();
+    ASSERT_FALSE(App().IsColorChooserOpen());
+    EXPECT_EQ(AppSettings().Stored().strokeColorRGBA, pen) << "kept, alpha and all";
+
+    const size_t before = StrokeCountOnCurrentCanvas();
+    Drag(400.0f, 400.0f, 600.0f, 480.0f);
+    ASSERT_EQ(StrokeCountOnCurrentCanvas(), before + 1);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items.back().strokes.back().colorRGBA, pen);
+}
+
 // Escape during a drag calls it off, and what the drag changed goes back:
 // the pen's color in its chooser, and a setting a slider was previewing.
 // Only a snippet's style went back, and the next frame ImGui reported the

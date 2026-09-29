@@ -424,8 +424,8 @@ having to know the cache exists.
 
 A snippet's strokes are drawn as one layer. Each stroke reaches a pixel
 once, however it crosses or folds over itself; each blends over the
-strokes before it by its own ink's alpha, the pen color's; and the
-snippet's opacity
+strokes before it by its own ink's alpha, the pen color's, chosen with
+the color in its chooser; and the snippet's opacity
 (`Item::foregroundOpacity`) fades the finished layer once. So a scribble
 fills an area evenly, two translucent strokes mix where they cross, and
 opaque strokes on a faded snippet stay flat against each other - the top

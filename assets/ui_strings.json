@@ -15,7 +15,7 @@
   "bar.eraserTip": "Eraser - drag over marks to erase them",
   "bar.eraserAgainTip": "Eraser - drag over marks to erase them; click again to erase a rectangle",
   "bar.eraserRectTip": "Rectangle eraser - drag over the region to erase; click again for the eraser",
-  "bar.colorTip": "Color - choose the color to draw with",
+  "bar.colorTip": "Color - choose the color to draw with, and how see-through it is",
   "tool.textTip": "Text - click the snippet to type into it",
   "tool.selectTip": "Select - click a snippet to select it, drag to move it, resize it by its handles (or right-drag it); double-click or hold on it to draw on it; Delete removes it",
   "tool.newScreenshot": "Screenshot",

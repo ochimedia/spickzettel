@@ -177,7 +177,7 @@ Edited from Settings > Hotkeys, upper box. Effect: Registration.
 
 | Key | Field | Default | Rule | Edited from | Effect |
 |---|---|---|---|---|---|
-| `strokeColor` | `strokeColorRGBA` | `#FF0000` | color | the color chooser, as it closes | Start (the pen holds its own) |
+| `strokeColor` | `strokeColorRGBA` | `#FF0000` | color; its alpha is the stroke's opacity | the color chooser, as it closes | Start (the pen holds its own) |
 | `strokeWidth` | `strokeWidth` | 3 | >0, held to 256 | the wheel, once its preview fades | Start |
 | `raiseSelected` | `raiseSelectedSnippet` | true | bool | Settings > Interaction | Use |
 | `screenshotTrigger` | `screenshotTrigger` | plain | plain, ctrl, alt, off; distinct | Settings > Interaction | Use |
