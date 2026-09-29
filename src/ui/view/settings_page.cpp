@@ -138,6 +138,9 @@ struct SettingsScopeBox {
     SettingsScope scope = SettingsScope::Global;
 };
 constexpr float kScopeBoxPadding = 12.0f;
+// A column of short rows side by side - a swatch and its caption - as
+// Appearance has them.
+constexpr float kColorColumnWidth = 170.0f;
 
 void BeginSettingsScope(SettingsScopeBox& box, SettingsScope scope) {
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -500,13 +503,16 @@ void SettingsPage::RenderSettingsAppearance() {
 
     SettingsHeading("appearancesnippetcolorsheading", strings::kAppearanceSnippetColorsHeading,
                      strings::kAppearanceSnippetColorsHelp);
-    // A swatch with its alpha rather than the swatch-plus-opacity-slider
-    // pair the edit-mode border uses: here the alpha *is* the setting half
-    // the time, and two widgets per color would make four rows into eight.
+    // Swatches with their alpha rather than each a swatch and an opacity
+    // slider: here the alpha *is* the setting half the time. Side by side,
+    // in columns, since each is short and the page is long.
+    const float colorsX = ImGui::GetCursorPosX();
     SettingColor(settings_, setting::kBorderFront, "##snipcolfrontborder", strings::kAppearanceFrontmostBorder,
                  SwatchAlpha::Bar);
+    ImGui::SameLine(colorsX + Px(kColorColumnWidth));
     SettingColor(settings_, setting::kBorderOther, "##snipcolotherborder", strings::kAppearanceOtherBorders,
                  SwatchAlpha::Bar);
+    ImGui::SameLine(colorsX + Px(2.0f * kColorColumnWidth));
     SettingColor(settings_, setting::kBorderPinned, "##snipcolpinnedborder", strings::kAppearancePinnedBorder,
                  SwatchAlpha::Bar);
 
