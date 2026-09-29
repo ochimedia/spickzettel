@@ -898,7 +898,7 @@ struct BuiltWithRow {
 const BuiltWithRow kBuiltWith[] = {
     {strings::kAboutComponentImgui, strings::kAboutLicenseMit},
     {strings::kAboutComponentJson, strings::kAboutLicenseMit},
-    {strings::kAboutComponentStb, strings::kAboutLicenseMitOrPublicDomain},
+    {strings::kAboutComponentSqlite, strings::kAboutLicensePublicDomain},
     {strings::kAboutComponentQoi, strings::kAboutLicenseMit},
     {strings::kAboutComponentManrope, strings::kAboutLicenseOfl},
     {strings::kAboutComponentIcons, strings::kAboutLicenseIscMit},
