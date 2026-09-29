@@ -367,4 +367,43 @@ constexpr IconCmd kKeyboardCmds[] = {
 };
 constexpr Icon kKeyboard = {kKeyboardCmds, IM_ARRAYSIZE(kKeyboardCmds)};
 
+constexpr IconCmd kSettingsCmds[] = {
+    {IconOp::MoveTo, 9.9300f, 4.7900f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 10.4400f, 2.1200f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 13.5600f, 2.1200f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 14.0700f, 4.7900f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 15.6400f, 5.4400f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 17.8800f, 3.9100f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 20.0900f, 6.1200f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 18.5600f, 8.3600f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 19.2100f, 9.9300f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 21.8800f, 10.4400f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 21.8800f, 13.5600f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 19.2100f, 14.0700f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 18.5600f, 15.6400f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 20.0900f, 17.8800f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 17.8800f, 20.0900f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 15.6400f, 18.5600f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 14.0700f, 19.2100f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 13.5600f, 21.8800f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 10.4400f, 21.8800f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 9.9300f, 19.2100f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 8.3600f, 18.5600f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 6.1200f, 20.0900f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 3.9100f, 17.8800f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 5.4400f, 15.6400f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 4.7900f, 14.0700f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 2.1200f, 13.5600f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 2.1200f, 10.4400f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 4.7900f, 9.9300f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 5.4400f, 8.3600f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 3.9100f, 6.1200f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 6.1200f, 3.9100f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 8.3600f, 5.4400f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 9.9300f, 4.7900f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::EndSubpath, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::Circle, 12.0000f, 12.0000f, 3.0000f, 0.0000f, 0.0000f, 0.0000f},
+};
+constexpr Icon kSettings = {kSettingsCmds, IM_ARRAYSIZE(kSettingsCmds)};
+
 }  // namespace sz::ui::icons
