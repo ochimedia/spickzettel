@@ -2529,21 +2529,25 @@ the columns so that the tallest column is as short as it can be.
 
 A card that leads through the app one step at a time, in topics picked
 from a list: Basics (a screenshot, moving, resizing, deleting and
-undoing, two warnings, getting back to your program) and Drawing. A
+undoing, two warnings, getting back to your program), Pinning and view
+mode, Drawing and notes, Capturing, Folders and canvases, and Profiles. A
 first run starts Basics; so does the first start of an install from
 before it. `docs/TUTORIAL.md` is the design, and says why.
 
 **It reads the app, and is not part of it.** The runner
 (`ui/tutorial/`, no ImGui) sees the app only through `tutorial::World`,
 an interface of `const` queries that `OverlayApp` answers from the
-editor, the session and the settings (`AppWorld`), and that the tests
-fake. It changes nothing but its own state. What the card's buttons
-want - a topic started, the folder made again, a practice snippet - is a
+editor, the session, the settings, the Overview and the Settings page
+(`AppWorld`), and that the tests fake. It changes nothing but its own
+state. What the card's buttons want - a topic started, the folder made
+again, a practice snippet, what the topic made deleted at its end - is a
 view action, done in Apply like every other. The rest of the app knows
-the tutorial in three places: a widget marks where it was drawn on an
-anchor board (`ViewHost::Mark`, one line per anchored widget), one owner
-draws the card and the spotlight (`TutorialCard`), and three settings
-rows keep its progress.
+the tutorial in a few named places: a widget marks where it was drawn
+on an anchor board (`ViewHost::Mark`, one line per anchored widget); one
+owner draws the card and the spotlight (`TutorialCard`); `OverlayApp`
+answers the world, counts what nothing else counts, such as showings
+and captures, and applies the tutorial's actions; the tray says what its
+start found; and three settings rows keep its progress.
 
 **It guides, and does not guard.** Nothing is held back while it runs:
 no command, gesture or key is blocked, and the card takes no keys, so
@@ -2558,10 +2562,10 @@ every widget, and could trap someone over their game.
 **Each run has a folder of its own**, named for its topic, as a
 lightweight sandbox: the user's own canvases are never what a step asks
 to move or delete, and a capture hotkey pressed meanwhile lands there by
-the ordinary current-folder rule. At the end Done puts the folder in the
-trash, asked first like any folder's delete, unless the card's "Keep
-the tutorial folder" is ticked. A throwaway library was considered instead, and set
-aside: every owner holds the session, and much of the view's state would
+the ordinary current-folder rule. At the end Done, or More topics, puts
+the folder in the trash, asked first like any folder's delete, unless
+the card's "Keep the tutorial folder" is ticked. A throwaway library was
+considered instead, and set aside: every owner holds the session, and much of the view's state would
 need an answer to "the library was replaced".
 
 **A step is a row of a table** (`chains.cpp`): its text, what it points

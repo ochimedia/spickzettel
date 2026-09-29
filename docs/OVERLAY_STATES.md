@@ -197,8 +197,8 @@ Four requests change no state, and do the same in every state:
   destroyed along with the host, and `Destroy` takes the input grab down
   first.
 
-**Start**, from Hidden, once: on a first run, Edit, up, with the welcome
-notes; otherwise, Away.
+**Start**, from Hidden, once: on a first run, Edit, up, with the
+tutorial starting (`docs/TUTORIAL.md`, section 7.6); otherwise, Away.
 
 ## 6. What a transition does, in order
 
