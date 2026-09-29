@@ -2,7 +2,8 @@ The .svg files in this directory, and the generated command tables built
 from them (src/ui/icons_generated.h, via scripts/gen_icons.py), are
 hand-transcribed from icon path data used in this project's own early UI
 mockup, itself styled after the Lucide/Feather icon set - not copies of
-upstream Lucide's own .svg files; settings.svg, a gear, was drawn for
+upstream Lucide's own .svg files; settings.svg (a gear), and
+maximize.svg and restore.svg (four arrows out, and in), were drawn for
 this project in the same style. Both licenses below apply to the
 underlying design.
 
