@@ -986,6 +986,8 @@ uint64_t Win32OverlayWindow::TextureGeneration() const {
 }
 
 DrawCallback Win32OverlayWindow::ImageFilterCallback() const { return &Win32Dx11Renderer::ApplyImageFilter; }
+DrawCallback Win32OverlayWindow::StrokeDepthCallback() const { return &Win32Dx11Renderer::ApplyStrokeDepth; }
+DrawCallback Win32OverlayWindow::StrokeLayerCallback() const { return &Win32Dx11Renderer::ApplyStrokeLayer; }
 
 void Win32OverlayWindow::Destroy() {
     // Before the window goes: the grab posts messages to it, and its hooks

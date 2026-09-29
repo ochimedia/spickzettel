@@ -13,6 +13,7 @@
 #include <backends/imgui_impl_win32.h>
 #include <imgui.h>
 
+#include "platform/i_overlay_window.h"
 #include "platform/platform_types.h"
 #include "platform/spickzettel_fonts.h"
 
@@ -153,6 +154,18 @@ float4 main(PS_INPUT input) : SV_Target {
 }
 )";
 
+// Lays a stroke layer down: its pixel under this one, times the snippet's
+// opacity. The layer is premultiplied already - ImGui's blend, straight
+// alpha into a target cleared to nothing, leaves color times alpha - so
+// the blend that takes this is premultiplied too (see MakeStrokeLayer).
+constexpr const char* kLayerPS = R"(
+Texture2D layer : register(t0);
+cbuffer Composite : register(b0) { float4 opacity; };
+float4 main(float4 pos : SV_POSITION) : SV_Target {
+    return layer.Load(int3(int2(pos.xy), 0)) * opacity.x;
+}
+)";
+
 ComPtr<ID3DBlob> CompileShader(const char* source, const char* target, const D3D_SHADER_MACRO* defines = nullptr) {
     ComPtr<ID3DBlob> code;
     ComPtr<ID3DBlob> errors;
@@ -276,6 +289,20 @@ void Win32Dx11Renderer::ReleaseDevice() {
     mipPS_.Reset();
     bicubicPS_.Reset();
     lanczosPS_.Reset();
+    depthView_.Reset();
+    depthWidth_ = 0;
+    depthHeight_ = 0;
+    strokeDepthOn_.Reset();
+    strokeDepthOff_.Reset();
+    context1_.Reset();
+    layerTarget_.Reset();
+    layerView_.Reset();
+    layerWidth_ = 0;
+    layerHeight_ = 0;
+    layerPS_.Reset();
+    layerBlend_.Reset();
+    layerConstants_.Reset();
+    layerOpen_ = false;
     swapChain_.Reset();
     context_.Reset();
     device_.Reset();
@@ -655,6 +682,256 @@ void Win32Dx11Renderer::ApplyImageFilter(const ImDrawList* parentList, const ImD
     }
 }
 
+// Strokes are given depths from the far end forward, a step apart: 1 for
+// nothing drawn, then 1 - step, 1 - 2 step... Each is exact in a float and
+// in the D32_FLOAT buffer - the step is a power of two, and every value is
+// in [0.5, 1], where floats are 2^-24 apart - so equal really is equal.
+constexpr float kStrokeDepthStep = 1.0f / (1 << 20);
+constexpr uint32_t kStrokeDepthsPerClear = (1u << 19) - 1;
+
+void Win32Dx11Renderer::ApplyStrokeDepth(const ImDrawList* /*parentList*/, const ImDrawCmd* cmd) {
+    Win32Dx11Renderer* const self = g_rendering;
+    if (!self || !self->depthBound_ || !self->strokeDepthOn_ || !self->strokeDepthOff_) {
+        return;
+    }
+    ID3D11DeviceContext* const context = self->context_.Get();
+    if (cmd->UserCallbackData == nullptr) {
+        context->OMSetDepthStencilState(self->strokeDepthOff_.Get(), 0);
+        return;
+    }
+    // Out of depths - half a million strokes in one frame - the buffer is
+    // cleared and counted again. Only a stroke's own fragments have to meet
+    // its depth; the ones before it need only be farther than what follows.
+    if (self->strokesInFrame_ >= kStrokeDepthsPerClear) {
+        ID3D11DepthStencilView* dsv = nullptr;
+        ID3D11RenderTargetView* rtv = nullptr;
+        context->OMGetRenderTargets(1, &rtv, &dsv);
+        if (dsv) {
+            context->ClearDepthStencilView(dsv, D3D11_CLEAR_DEPTH, 1.0f, 0);
+            dsv->Release();
+        }
+        if (rtv) {
+            rtv->Release();
+        }
+        self->strokesInFrame_ = 0;
+    }
+    ++self->strokesInFrame_;
+    // ImGui's vertex shader puts every vertex at z = 0.5 of the viewport's
+    // depth range, so a range of one value is the depth of every fragment.
+    // No shader of its own, and ImGui's batching stays as it is.
+    UINT count = 1;
+    D3D11_VIEWPORT viewport{};
+    context->RSGetViewports(&count, &viewport);
+    viewport.MinDepth = viewport.MaxDepth = 1.0f - static_cast<float>(self->strokesInFrame_) * kStrokeDepthStep;
+    context->RSSetViewports(1, &viewport);
+    context->OMSetDepthStencilState(self->strokeDepthOn_.Get(), 0);
+}
+
+void Win32Dx11Renderer::ApplyStrokeLayer(const ImDrawList* /*parentList*/, const ImDrawCmd* cmd) {
+    Win32Dx11Renderer* const self = g_rendering;
+    if (!self || !self->layerTarget_ || !self->frameTarget_ ||
+        cmd->UserCallbackDataSize != static_cast<int>(sizeof(StrokeLayerStep))) {
+        return;
+    }
+    StrokeLayerStep step;
+    std::memcpy(&step, cmd->UserCallbackData, sizeof(step));
+    ID3D11DeviceContext* const context = self->context_.Get();
+
+    // The command's clip rectangle - the snippet's - in target pixels, the
+    // way ImGui's backend turns one into a scissor.
+    const ImVec2 origin = ImGui::GetDrawData()->DisplayPos;
+    const auto clamped = [](float v, UINT limit) {
+        return static_cast<LONG>(std::clamp(v, 0.0f, static_cast<float>(limit)));
+    };
+    const D3D11_RECT area{clamped(cmd->ClipRect.x - origin.x, self->layerWidth_),
+                          clamped(cmd->ClipRect.y - origin.y, self->layerHeight_),
+                          clamped(cmd->ClipRect.z - origin.x, self->layerWidth_),
+                          clamped(cmd->ClipRect.w - origin.y, self->layerHeight_)};
+    const bool empty = area.right <= area.left || area.bottom <= area.top;
+
+    if (step.open) {
+        if (self->layerOpen_) {
+            return;  // one at a time: a second opening draws into the first
+        }
+        self->layerOpen_ = true;
+        ID3D11RenderTargetView* const layer = self->layerTarget_.Get();
+        // The depth buffer goes along: the layer is the frame's size, and
+        // the strokes before it are all farther than the ones in it.
+        context->OMSetRenderTargets(1, &layer, self->depthView_.Get());
+        const float nothing[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        if (empty) {
+            return;
+        }
+        if (self->context1_) {
+            self->context1_->ClearView(layer, nothing, &area, 1);
+        } else {
+            context->ClearRenderTargetView(layer, nothing);
+        }
+        return;
+    }
+
+    if (!self->layerOpen_) {
+        return;
+    }
+    self->layerOpen_ = false;
+    ID3D11RenderTargetView* const frame = self->frameTarget_;
+    context->OMSetRenderTargets(1, &frame, self->depthView_.Get());
+    if (empty) {
+        return;
+    }
+    D3D11_MAPPED_SUBRESOURCE mapped{};
+    if (FAILED(context->Map(self->layerConstants_.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped))) {
+        return;
+    }
+    const float constants[4] = {std::clamp(step.opacity, 0.0f, 1.0f), 0.0f, 0.0f, 0.0f};
+    std::memcpy(mapped.pData, constants, sizeof(constants));
+    context->Unmap(self->layerConstants_.Get(), 0);
+
+    // One triangle over the whole target, scissored to the snippet. What
+    // it changes, ImGui's DrawCallback_ResetRenderState puts back.
+    D3D11_VIEWPORT viewport{};
+    viewport.Width = static_cast<float>(self->layerWidth_);
+    viewport.Height = static_cast<float>(self->layerHeight_);
+    viewport.MaxDepth = 1.0f;
+    context->RSSetViewports(1, &viewport);
+    context->RSSetScissorRects(1, &area);
+    context->IASetInputLayout(nullptr);
+    context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    context->VSSetShader(self->fullscreenVS_.Get(), nullptr, 0);
+    context->PSSetShader(self->layerPS_.Get(), nullptr, 0);
+    context->PSSetConstantBuffers(0, 1, self->layerConstants_.GetAddressOf());
+    context->PSSetShaderResources(0, 1, self->layerView_.GetAddressOf());
+    context->OMSetBlendState(self->layerBlend_.Get(), nullptr, 0xFFFFFFFFu);
+    context->OMSetDepthStencilState(self->strokeDepthOff_.Get(), 0);
+    context->Draw(3, 0);
+    // Let go of, or the next opening binds as a target what is still bound
+    // to be read.
+    ID3D11ShaderResourceView* const noTexture = nullptr;
+    context->PSSetShaderResources(0, 1, &noTexture);
+}
+
+bool Win32Dx11Renderer::MakeStrokeLayer(UINT width, UINT height) {
+    if (!fullscreenVS_) {
+        return false;
+    }
+    if (!layerPS_ || !layerBlend_ || !layerConstants_) {
+        const ComPtr<ID3DBlob> ps = CompileShader(kLayerPS, "ps_4_0");
+        D3D11_BLEND_DESC blend{};
+        blend.RenderTarget[0].BlendEnable = TRUE;
+        blend.RenderTarget[0].SrcBlend = D3D11_BLEND_ONE;
+        blend.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
+        blend.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
+        blend.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
+        blend.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_INV_SRC_ALPHA;
+        blend.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+        blend.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        D3D11_BUFFER_DESC constants{};
+        constants.ByteWidth = 16;
+        constants.Usage = D3D11_USAGE_DYNAMIC;
+        constants.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        constants.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        if (!ps ||
+            FAILED(device_->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, &layerPS_)) ||
+            FAILED(device_->CreateBlendState(&blend, &layerBlend_)) ||
+            FAILED(device_->CreateBuffer(&constants, nullptr, &layerConstants_))) {
+            layerPS_.Reset();
+            layerBlend_.Reset();
+            layerConstants_.Reset();
+            return false;
+        }
+        // For clearing only the snippet's part of the layer; without it,
+        // the whole layer.
+        context_.As(&context1_);
+    }
+    if (layerTarget_ && layerWidth_ == width && layerHeight_ == height) {
+        return true;
+    }
+    layerTarget_.Reset();
+    layerView_.Reset();
+    D3D11_TEXTURE2D_DESC desc{};
+    desc.Width = width;
+    desc.Height = height;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+    ComPtr<ID3D11Texture2D> texture;
+    if (FAILED(device_->CreateTexture2D(&desc, nullptr, &texture)) ||
+        FAILED(device_->CreateRenderTargetView(texture.Get(), nullptr, &layerTarget_)) ||
+        FAILED(device_->CreateShaderResourceView(texture.Get(), nullptr, &layerView_))) {
+        layerTarget_.Reset();
+        layerView_.Reset();
+        return false;
+    }
+    layerWidth_ = width;
+    layerHeight_ = height;
+    return true;
+}
+
+bool Win32Dx11Renderer::BindDepthFor(ID3D11RenderTargetView* target) {
+    depthBound_ = false;
+    ComPtr<ID3D11Resource> resource;
+    target->GetResource(&resource);
+    ComPtr<ID3D11Texture2D> targetTexture;
+    if (!resource || FAILED(resource.As(&targetTexture))) {
+        return false;
+    }
+    D3D11_TEXTURE2D_DESC targetDesc{};
+    targetTexture->GetDesc(&targetDesc);
+    layerOpen_ = false;
+    if (!MakeStrokeLayer(targetDesc.Width, targetDesc.Height)) {
+        layerTarget_.Reset();
+    }
+
+    if (!strokeDepthOn_ || !strokeDepthOff_) {
+        // Strictly less: a stroke's second fragment on a pixel, at the same
+        // depth as its first, fails; the next stroke, nearer, passes.
+        D3D11_DEPTH_STENCIL_DESC on{};
+        on.DepthEnable = TRUE;
+        on.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+        on.DepthFunc = D3D11_COMPARISON_LESS;
+        // ImGui's own: no test. Not null, which is D3D's default - with the
+        // test on.
+        D3D11_DEPTH_STENCIL_DESC off{};
+        off.DepthEnable = FALSE;
+        off.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+        off.DepthFunc = D3D11_COMPARISON_ALWAYS;
+        if (FAILED(device_->CreateDepthStencilState(&on, &strokeDepthOn_)) ||
+            FAILED(device_->CreateDepthStencilState(&off, &strokeDepthOff_))) {
+            strokeDepthOn_.Reset();
+            strokeDepthOff_.Reset();
+            return false;
+        }
+    }
+    if (!depthView_ || depthWidth_ != targetDesc.Width || depthHeight_ != targetDesc.Height) {
+        depthView_.Reset();
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = targetDesc.Width;
+        desc.Height = targetDesc.Height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_D32_FLOAT;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+        ComPtr<ID3D11Texture2D> texture;
+        if (FAILED(device_->CreateTexture2D(&desc, nullptr, &texture)) ||
+            FAILED(device_->CreateDepthStencilView(texture.Get(), nullptr, &depthView_))) {
+            depthView_.Reset();
+            return false;
+        }
+        depthWidth_ = targetDesc.Width;
+        depthHeight_ = targetDesc.Height;
+    }
+    context_->OMSetRenderTargets(1, &target, depthView_.Get());
+    context_->ClearDepthStencilView(depthView_.Get(), D3D11_CLEAR_DEPTH, 1.0f, 0);
+    strokesInFrame_ = 0;
+    depthBound_ = true;
+    return true;
+}
+
 void Win32Dx11Renderer::RenderAndPresent() {
     RenderTo(renderTargetView_.Get());
     if (!renderTargetView_) {
@@ -682,10 +959,14 @@ void Win32Dx11Renderer::RenderTo(ID3D11RenderTargetView* target) {
     RefreshMips();
 
     const float clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};  // fully transparent backdrop
-    context_->OMSetRenderTargets(1, &target, nullptr);
+    if (!BindDepthFor(target)) {
+        context_->OMSetRenderTargets(1, &target, nullptr);
+    }
     context_->ClearRenderTargetView(target, clearColor);
     g_rendering = this;
+    frameTarget_ = target;
     ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    frameTarget_ = nullptr;
     g_rendering = nullptr;
 
     ReleaseDeferredTextures();

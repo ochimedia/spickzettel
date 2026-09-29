@@ -17,6 +17,15 @@ namespace sz::platform {
 // ImGui's ImDrawCallback, spelled out.
 using DrawCallback = void (*)(const ImDrawList* parentList, const ImDrawCmd* cmd);
 
+// What IOverlayWindow::StrokeLayerCallback is told, copied into the draw
+// command (ImDrawList::AddCallback with its size).
+struct StrokeLayerStep {
+    // True opens the layer, false closes it and lays it down.
+    bool open = true;
+    // How much of the finished layer is laid down; read on closing.
+    float opacity = 1.0f;
+};
+
 // A fullscreen overlay window covering one display. Created lazily and
 // then hidden and shown without tearing down GPU resources, so that
 // toggling it by hotkey many times a session costs nothing after the first.
@@ -173,6 +182,23 @@ public:
     // default back. Null from a backend that draws nothing, whose pictures
     // then just keep the default.
     virtual DrawCallback ImageFilterCallback() const = 0;
+
+    // A draw callback around one stroke: with non-null user data it gives the triangles after it a depth of
+    // their own, nearer than every stroke's before, and a test that lets
+    // only the first of them reach each pixel; with null user data it
+    // takes the test away again. Null from a backend that draws nothing,
+    // or that has no depth buffer, and the stroke is drawn untested.
+    virtual DrawCallback StrokeDepthCallback() const = 0;
+
+    // A draw callback around one snippet's strokes, below full opacity,
+    // with a StrokeLayerStep as its data. Opening, what is drawn
+    // after it goes into a layer of its own, cleared within the command's
+    // clip rectangle; closing, the layer is laid over what was there within
+    // that rectangle, once, at the step's opacity. ImGui's
+    // DrawCallback_ResetRenderState has to follow the closing one. Null
+    // from a backend that draws nothing, and the strokes are drawn straight
+    // onto the frame, each at the opacity.
+    virtual DrawCallback StrokeLayerCallback() const = 0;
 };
 
 }  // namespace sz::platform

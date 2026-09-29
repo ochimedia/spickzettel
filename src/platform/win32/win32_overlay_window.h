@@ -62,6 +62,8 @@ public:
     void ReleaseTexture(uint64_t textureHandle) override;
     uint64_t TextureGeneration() const override;
     DrawCallback ImageFilterCallback() const override;
+    DrawCallback StrokeDepthCallback() const override;
+    DrawCallback StrokeLayerCallback() const override;
     void Destroy() override;
 
     // Called from the host's event loop while visible: pumps one ImGui +

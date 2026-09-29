@@ -192,9 +192,23 @@ public:
     }
 
     // Never run - nothing renders the fake's draw lists - only looked for
-    // among their commands.
-    static void FakeImageFilterCallback(const ImDrawList* /*parentList*/, const ImDrawCmd* /*cmd*/) {}
+    // among their commands, by address. Each counts into a counter of its
+    // own so that no two have the same body: a release build folds
+    // identical functions into one (/OPT:ICF), and three empty ones came
+    // to one address, which told a stroke's depth from its layer no more.
+    static inline int callbacksRun[3] = {};
+    static void FakeImageFilterCallback(const ImDrawList* /*parentList*/, const ImDrawCmd* /*cmd*/) {
+        ++callbacksRun[0];
+    }
     platform::DrawCallback ImageFilterCallback() const override { return &FakeImageFilterCallback; }
+    static void FakeStrokeDepthCallback(const ImDrawList* /*parentList*/, const ImDrawCmd* /*cmd*/) {
+        ++callbacksRun[1];
+    }
+    platform::DrawCallback StrokeDepthCallback() const override { return &FakeStrokeDepthCallback; }
+    static void FakeStrokeLayerCallback(const ImDrawList* /*parentList*/, const ImDrawCmd* /*cmd*/) {
+        ++callbacksRun[2];
+    }
+    platform::DrawCallback StrokeLayerCallback() const override { return &FakeStrokeLayerCallback; }
 
     void Destroy() override {
         calls.push_back("Destroy");

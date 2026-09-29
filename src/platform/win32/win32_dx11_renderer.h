@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <vector>
 
-#include <d3d11.h>
+#include <d3d11_1.h>
 #include <wrl/client.h>
 
 struct ImDrawList;
@@ -114,6 +114,10 @@ public:
     // with nothing but the draw command; the renderer it acts for is the
     // one inside RenderTo, which is the only place it runs.
     static void ApplyImageFilter(const ImDrawList* parentList, const ImDrawCmd* cmd);
+    // IOverlayWindow::StrokeDepthCallback, static for the same reason.
+    static void ApplyStrokeDepth(const ImDrawList* parentList, const ImDrawCmd* cmd);
+    // IOverlayWindow::StrokeLayerCallback, static for the same reason.
+    static void ApplyStrokeLayer(const ImDrawList* parentList, const ImDrawCmd* cmd);
 
     // Brings every mip chain up to date with its top level - what
     // RenderTo does first. Public for tests, which read mips back.
@@ -134,6 +138,15 @@ private:
     // Bicubic and Lanczos drawing as Bilinear rather than the overlay not
     // starting.
     bool CreateFilterShaders();
+    // A depth buffer the size of `target`, bound with it and cleared to
+    // the farthest depth; made again when the size changes. False, with
+    // none bound, when it could not be made - strokes then draw untested.
+    // The stroke layer is made the same size alongside, when it can be.
+    bool BindDepthFor(ID3D11RenderTargetView* target);
+    // The stroke layer at `width` x `height`, and what laying it down
+    // takes. False when any of it could not be made: layered strokes are
+    // then drawn straight onto the frame.
+    bool MakeStrokeLayer(UINT width, UINT height);
     // Rebuilds levels 1.. of `srv`'s texture from level 0.
     void BuildMips(ID3D11ShaderResourceView* srv);
     void ForgetTexture(ID3D11ShaderResourceView* srv);
@@ -173,6 +186,26 @@ private:
     Microsoft::WRL::ComPtr<ID3D11PixelShader> mipPS_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> bicubicPS_;
     Microsoft::WRL::ComPtr<ID3D11PixelShader> lanczosPS_;
+    // See BindDepthFor and ApplyStrokeDepth. The depth each stroke takes
+    // comes from strokesInFrame_, counted from the frame's start.
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilView> depthView_;
+    UINT depthWidth_ = 0;
+    UINT depthHeight_ = 0;
+    bool depthBound_ = false;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilState> strokeDepthOn_;
+    Microsoft::WRL::ComPtr<ID3D11DepthStencilState> strokeDepthOff_;
+    uint32_t strokesInFrame_ = 0;
+    // See ApplyStrokeLayer. frameTarget_ is RenderTo's target, while it runs.
+    ID3D11RenderTargetView* frameTarget_ = nullptr;
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext1> context1_;
+    Microsoft::WRL::ComPtr<ID3D11RenderTargetView> layerTarget_;
+    Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> layerView_;
+    UINT layerWidth_ = 0;
+    UINT layerHeight_ = 0;
+    Microsoft::WRL::ComPtr<ID3D11PixelShader> layerPS_;
+    Microsoft::WRL::ComPtr<ID3D11BlendState> layerBlend_;
+    Microsoft::WRL::ComPtr<ID3D11Buffer> layerConstants_;
+    bool layerOpen_ = false;
     // See SetMousePositionOverride.
     bool mouseOverrideActive_ = false;
     float mouseOverrideX_ = 0.0f;
