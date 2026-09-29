@@ -37,6 +37,17 @@
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     },
     {
+      "name": "windows-msvc-strings",
+      "displayName": "Windows (MSVC + Ninja, Release, string editor)",
+      "inherits": "windows-msvc-release",
+      "binaryDir": "${sourceDir}/build/windows-strings",
+      "cacheVariables": {
+        "SPICKZETTEL_STRING_EDITOR": "ON",
+        "SPICKZETTEL_EXE_NAME": "Spickzettel Strings",
+        "SPICKZETTEL_BUILD_TESTS": "OFF"
+      }
+    },
+    {
       "name": "linux-tests",
       "displayName": "Linux (portable core and its tests only)",
       "generator": "Ninja",
@@ -52,6 +63,7 @@
     { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug" },
     { "name": "windows-msvc-asan", "configurePreset": "windows-msvc-asan" },
     { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release" },
+    { "name": "windows-msvc-strings", "configurePreset": "windows-msvc-strings" },
     { "name": "linux-tests", "configurePreset": "linux-tests" }
   ],
   "testPresets": [

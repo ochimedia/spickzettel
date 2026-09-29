@@ -49,6 +49,7 @@ add_executable(sz_core_tests
     ui/tutorial_test.cpp
     ui/ui_strings_file_test.cpp
     ui/chains_test.cpp
+    ui/string_match_test.cpp
     support/shared_library.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -67,8 +68,9 @@ set_source_files_properties(app/perf_bench_test.cpp PROPERTIES COMPILE_DEFINITIO
 set_source_files_properties(platform/win32_dx11_renderer_test.cpp PROPERTIES COMPILE_DEFINITIONS _CRT_SECURE_NO_WARNINGS)
 
 # The string catalog as it is in the source tree, for the test that parses
-# it strictly - see ui/ui_strings_file_test.cpp.
-set_source_files_properties(ui/ui_strings_file_test.cpp PROPERTIES COMPILE_DEFINITIONS
+# it strictly - see ui/ui_strings_file_test.cpp - and for the string
+# editor's, which writes every value back.
+set_source_files_properties(ui/ui_strings_file_test.cpp ui/string_match_test.cpp PROPERTIES COMPILE_DEFINITIONS
     "SPICKZETTEL_UI_STRINGS_JSON=\"${CMAKE_SOURCE_DIR}/assets/ui_strings.json\"")
 
 # Settings files as released builds wrote them and as this one writes them,

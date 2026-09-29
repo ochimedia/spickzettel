@@ -19,7 +19,13 @@
 # of its own.
 #
 # Usage: spickzettel_generate_ui_strings(<input-json> <output-header>
-#                                         <namespace>)
+#                                         <namespace> [EDITABLE])
+#
+# EDITABLE is the string editor's build (SPICKZETTEL_STRING_EDITOR, see
+# docs/STRING_EDITOR.md): each string is then a char array with room to
+# grow, which the editor rewrites in place, and the constant a pointer to
+# it - still a constant, so every table that holds one sees the edit. And
+# a list of them all, by key, with the path of the file they came from.
 
 # The delimiter for the raw string literals below. Raw literals are what
 # make this safe: no escaping of quotes, backslashes or percent signs, so
@@ -29,6 +35,7 @@
 set(SPICKZETTEL_UI_STRING_DELIM "SZTXT")
 
 function(spickzettel_generate_ui_strings INPUT_JSON OUTPUT_HEADER NAMESPACE)
+    cmake_parse_arguments(PARSE_ARGV 3 _arg "EDITABLE" "" "")
     file(READ "${INPUT_JSON}" _json)
 
     string(JSON _count ERROR_VARIABLE _err LENGTH "${_json}")
@@ -56,6 +63,7 @@ function(spickzettel_generate_ui_strings INPUT_JSON OUTPUT_HEADER NAMESPACE)
     endforeach()
 
     set(_body "")
+    set(_editable "")
     set(_seen "")
     math(EXPR _last "${_count} - 1")
     foreach(_i RANGE 0 ${_last})
@@ -106,10 +114,38 @@ function(spickzettel_generate_ui_strings INPUT_JSON OUTPUT_HEADER NAMESPACE)
                 "')${SPICKZETTEL_UI_STRING_DELIM}\"', which would end its literal early")
         endif()
 
-        string(APPEND _body
-            "inline constexpr const char* ${_ident} =\n"
-            "    R\"${SPICKZETTEL_UI_STRING_DELIM}(${_value})${SPICKZETTEL_UI_STRING_DELIM}\";\n")
+        if(_arg_EDITABLE)
+            # Twice its length and a little more: room for an edit to be
+            # shown as it is typed. A longer one is saved all the same, and
+            # shown once built.
+            string(LENGTH "${_value}" _length)
+            math(EXPR _room "${_length} * 2 + 64")
+            string(APPEND _body
+                "inline char ${_ident}_text[${_room}] =\n"
+                "    R\"${SPICKZETTEL_UI_STRING_DELIM}(${_value})${SPICKZETTEL_UI_STRING_DELIM}\";\n"
+                "inline constexpr const char* ${_ident} = ${_ident}_text;\n")
+            string(APPEND _editable "    {\"${_key}\", ${_ident}_text, sizeof(${_ident}_text)},\n")
+        else()
+            string(APPEND _body
+                "inline constexpr const char* ${_ident} =\n"
+                "    R\"${SPICKZETTEL_UI_STRING_DELIM}(${_value})${SPICKZETTEL_UI_STRING_DELIM}\";\n")
+        endif()
     endforeach()
+
+    if(_arg_EDITABLE)
+        string(APPEND _body "
+// The string editor's: every string by its key, where it lives and how much
+// it holds, terminator included.
+struct EditableString {
+    const char* key;
+    char* text;
+    unsigned long long room;
+};
+inline EditableString kEditable[] = {
+${_editable}};
+inline constexpr const char* kCatalogFile = R\"${SPICKZETTEL_UI_STRING_DELIM}(${INPUT_JSON})${SPICKZETTEL_UI_STRING_DELIM}\";
+")
+    endif()
 
     file(WRITE "${OUTPUT_HEADER}"
 "// Generated at configure time from ${INPUT_JSON} by cmake/UiStrings.cmake

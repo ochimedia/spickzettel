@@ -21,6 +21,7 @@ add_library(sz_ui STATIC
     overlay_app_tutorial.cpp
     selection_layout.cpp
     settings_widgets.cpp
+    string_editor/string_match.cpp
     text_spans.cpp
     theme.cpp
     tutorial/tutorial.cpp
@@ -48,4 +49,10 @@ target_include_directories(sz_ui PUBLIC ${CMAKE_SOURCE_DIR}/src)
 target_include_directories(sz_ui PUBLIC ${CMAKE_BINARY_DIR})
 target_compile_features(sz_ui PUBLIC cxx_std_20)
 target_link_libraries(sz_ui PUBLIC sz_core imgui_core)
+# The string editor's build: its window and what it knows of the text drawn
+# - see docs/STRING_EDITOR.md.
+if(SPICKZETTEL_STRING_EDITOR)
+    target_sources(sz_ui PRIVATE string_editor/string_editor.cpp string_editor/text_ledger.cpp)
+    target_compile_definitions(sz_ui PUBLIC SPICKZETTEL_STRING_EDITOR=1)
+endif()
 spickzettel_set_warnings(sz_ui)

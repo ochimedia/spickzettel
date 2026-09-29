@@ -163,6 +163,11 @@ void OverlayApp::OnInput(const platform::InputEvent& event) {
     if (IsViewOnly()) {
         return;
     }
+#if SPICKZETTEL_STRING_EDITOR
+    if (stringEditor_.Offer(event)) {
+        return;
+    }
+#endif
     editor_.SetHeld(event.modifiers);
     editor_.SetNow(event.seconds);
     // The display as the last frame saw it, which is what the event's
@@ -322,6 +327,9 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
     DrawPanels(display.x, display.y);
     DrawMessages();
     StackSurfaces();
+#if SPICKZETTEL_STRING_EDITOR
+    stringEditor_.Draw(window_, display.x, display.y);
+#endif
     DrawPointer();
     Apply();
 }

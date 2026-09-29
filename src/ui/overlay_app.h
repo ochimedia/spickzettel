@@ -28,6 +28,9 @@
 #include "ui/view/tutorial_world.h"
 #include "ui/view/view_host.h"
 #include "ui/view_action.h"
+#if SPICKZETTEL_STRING_EDITOR
+#include "ui/string_editor/string_editor.h"
+#endif
 #include "ui/interaction/gestures.h"
 #include "ui/icon_draw.h"
 #include "ui/interaction/command.h"
@@ -688,6 +691,11 @@ private:
     TutorialCard tutorialCard_{session_, editor_, tutorialWorld_, anchors_, *this};
     Pointer pointer_{settings_, editor_, *this};
     CanvasView canvasView_{session_, settings_, editor_, *this};
+#if SPICKZETTEL_STRING_EDITOR
+    // The string editor's build: F2 over any text - see
+    // docs/STRING_EDITOR.md.
+    string_editor::StringEditor stringEditor_;
+#endif
 };
 
 }  // namespace sz::ui

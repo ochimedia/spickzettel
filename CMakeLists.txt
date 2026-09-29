@@ -62,6 +62,10 @@ option(SPICKZETTEL_BUILD_TESTS "Build the unit tests" ON)
 # Off by default because it defines IMGUI_ENABLE_TEST_ENGINE for ImGui
 # itself, which every consumer then has to link. On in the debug preset.
 option(SPICKZETTEL_UI_TESTS "Build the UI tests, which drive real widgets by name" OFF)
+# A build for rewording the app in place: F2 over any text edits the string
+# it came from, and saves it to assets/ui_strings.json. Never handed out -
+# see docs/STRING_EDITOR.md.
+option(SPICKZETTEL_STRING_EDITOR "Build the string editor into the app" OFF)
 # What the exe is called. The PDB takes the same name, which is the name
 # the exe records for it.
 set(SPICKZETTEL_EXE_NAME "Spickzettel" CACHE STRING "The exe's file name, without .exe")
@@ -123,10 +127,14 @@ spickzettel_configure_build_info()
 # cmake/UiStrings.cmake. A configure dependency like the About text: editing
 # what the app says is editing a source file.
 include(UiStrings)
+if(SPICKZETTEL_STRING_EDITOR)
+    set(_ui_strings_editable EDITABLE)
+endif()
 spickzettel_generate_ui_strings(
     "${CMAKE_SOURCE_DIR}/assets/ui_strings.json"
     "${CMAKE_BINARY_DIR}/generated/ui_strings.h"
     sz::strings
+    ${_ui_strings_editable}
 )
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
     "${CMAKE_SOURCE_DIR}/assets/ui_strings.json")

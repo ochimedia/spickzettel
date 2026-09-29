@@ -11,9 +11,33 @@ FetchContent_MakeAvailable(imgui)
 # Only the OS-independent part of Dear ImGui. The Win32/D3D11 backend
 # sources are compiled into sz_platform_win32 from IMGUI_BACKENDS_DIR, so
 # nothing above the platform layer can reach an OS header through ImGui.
+set(_imgui_draw ${imgui_SOURCE_DIR}/imgui_draw.cpp)
+# The string editor's build (docs/STRING_EDITOR.md) needs to know what text
+# was drawn where, and every piece of text ImGui draws, a widget's or an
+# AddText's, goes through ImFont::RenderText. A copy of imgui_draw.cpp with
+# one call added at its start, to SzTextDrawn (ui/string_editor/
+# text_ledger.cpp); the fetched source stays as it is. The copy's includes
+# are found on imgui_core's include path, as they are next to the original.
+if(SPICKZETTEL_STRING_EDITOR)
+    file(READ ${_imgui_draw} _source)
+    set(_render_text "void ImFont::RenderText(ImDrawList* draw_list, float size, const ImVec2& pos, ImU32 col, const ImVec4& clip_rect, const char* text_begin, const char* text_end, float wrap_width, ImDrawTextFlags flags)\n{\n")
+    string(FIND "${_source}" "${_render_text}" _at)
+    if(_at EQUAL -1)
+        message(FATAL_ERROR "spickzettel: ImFont::RenderText is not where the string editor's hook expects it - "
+                            "update cmake/FetchImGui.cmake with ImGui")
+    endif()
+    string(REPLACE "${_render_text}"
+        "void SzTextDrawn(ImDrawList* draw_list, ImFont* font, float size, const ImVec2& pos, const ImVec4& clip_rect, const char* text_begin, const char* text_end, float wrap_width);\n${_render_text}    SzTextDrawn(draw_list, this, size, pos, clip_rect, text_begin, text_end, wrap_width);\n"
+        _source "${_source}")
+    # Written only when it differs, so a configure does not rebuild it.
+    file(WRITE ${CMAKE_BINARY_DIR}/imgui_text_hook/imgui_draw.cpp.new "${_source}")
+    configure_file(${CMAKE_BINARY_DIR}/imgui_text_hook/imgui_draw.cpp.new
+                   ${CMAKE_BINARY_DIR}/imgui_text_hook/imgui_draw.cpp COPYONLY)
+    set(_imgui_draw ${CMAKE_BINARY_DIR}/imgui_text_hook/imgui_draw.cpp)
+endif()
 add_library(imgui_core STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp
-    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${_imgui_draw}
     ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp
 )
