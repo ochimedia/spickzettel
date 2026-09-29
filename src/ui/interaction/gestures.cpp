@@ -443,12 +443,33 @@ void Widget::Cancel(Editor& editor) {
 
 // ================= BarPress =================
 
+Answer BarPress::Moved(const Event& event, Editor& /*editor*/) {
+    at_ = event.position;
+    if (Distance(pressedAt_, event.position) > kDoubleClickPx) {
+        strayed_ = true;  // a hold is a finger on one spot
+    }
+    return Answer::Claim();
+}
+
 Answer BarPress::Released(const Event& event, Editor& editor) {
     const PointerTarget target = editor.ResolvePointerTarget(event.position.x, event.position.y);
     if (target.kind != PointerTarget::Kind::Button || target.button != chrome_) {
         return Answer::Finish();  // let go elsewhere: nothing
     }
+    if (button_ == platform::MouseButton::Right) {
+        return Answer::Finish(/*usedUp=*/true, editor.BarButtonMenuCommand(chrome_, event.position));
+    }
     return Answer::Finish(/*usedUp=*/true, editor.BarButtonCommand(chrome_));
+}
+
+Answer BarPress::Ticked(const Event& event, Editor& editor) {
+    if (strayed_ || event.seconds - pressSeconds_ < kHoldSeconds) {
+        return Answer::Pass();
+    }
+    // The menu, where the finger is; the command's scope ends this, and
+    // the rest of the press is spent - the release fires nothing.
+    const std::optional<Command> menu = editor.BarButtonMenuCommand(chrome_, at_);
+    return menu.has_value() ? Answer::Start(menu) : Answer::Pass();
 }
 
 // ================= Stroke =================

@@ -2,7 +2,7 @@
 
 // The app's own popups - docs/VIEW_LAYER.md, sections 4 and 7: the snippet
 // menu, the canvas tile menu, empty canvas's menu, Properties, the color
-// chooser and the delete confirmation. The machine's Popup level says
+// chooser, the pen's or the eraser's shapes and the delete confirmation. The machine's Popup level says
 // which is up, one at a time, and opening one ends the one that was there;
 // this keeps one record of it, set when it is asked for and let go of when
 // its closing is done, and the queue of what only a frame can do to ImGui's
@@ -27,6 +27,7 @@ namespace sz::ui {
 inline constexpr const char* kItemContextMenuId = "##item_context_menu";
 inline constexpr const char* kCanvasContextMenuId = "##canvas_context_menu";
 inline constexpr const char* kEmptyCanvasMenuId = "##empty_canvas_menu";
+inline constexpr const char* kShapeMenuId = "##shape_menu";
 // The rest of the popups, by the ids their draws begin them with.
 inline constexpr const char* kItemPropertiesPopupId = "##item_properties_popover";
 inline constexpr const char* kColorChooserPopupId = "##color_chooser";
@@ -61,6 +62,8 @@ public:
     void OpenItemProperties(core::ItemId item, std::optional<platform::Vec2> at);
     // The color chooser, beside `from`, the point it was asked from.
     void OpenColorChooser(ImVec2 from);
+    // The shapes of `tool` - the pen's or the eraser's - at `at`.
+    void OpenShapeMenu(core::Tool tool, ImVec2 at);
     // The delete confirmation, for `target`.
     void OpenConfirmDelete(DeleteTarget target);
 
@@ -125,6 +128,7 @@ private:
         core::ItemId item = 0;
         core::CanvasId canvas = 0;
         std::optional<DeleteTarget> deleteTarget;
+        core::Tool tool = core::Tool::Draw;  // the shape menu's
         ImVec2 at{0.0f, 0.0f};
         bool drawn = false;
     };
@@ -194,6 +198,12 @@ private:
     // The color chooser: one picker, and what it is set to is the color
     // drawn with - changed as it is dragged.
     void RenderColorChooser(float displayW, float displayH);
+    // The shapes of the pen or the eraser, each a row that puts that tool
+    // in hand drawing it, the one in hand marked, and beside a shape the
+    // modifier that draws it for one drag - what the bar button cycles
+    // through, to pick from at once.
+    void RenderShapeMenu();
+    void BuildShapeMenuRows(core::Tool tool, std::vector<ContextMenuEntry>& rows) const;
     // Cancel or Delete, for a canvas or a folder, or what is deleted in a
     // folder. A snippet asks nothing: its delete is undoable instead (see
     // Session::DeleteItem), and a canvas takes every snippet on it along.
@@ -234,11 +244,12 @@ private:
     Editor& editor_;
     ViewHost& host_;
 
-    // The three context menus - drawn from the record, which says whether
+    // The four context menus - drawn from the record, which says whether
     // one is up and over what.
     ContextMenu itemContextMenu_{kItemContextMenuId};
     ContextMenu canvasContextMenu_{kCanvasContextMenuId};
     ContextMenu emptyCanvasMenu_{kEmptyCanvasMenuId};
+    ContextMenu shapeMenu_{kShapeMenuId};
 };
 
 }  // namespace sz::ui

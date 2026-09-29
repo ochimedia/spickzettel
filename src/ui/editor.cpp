@@ -91,6 +91,7 @@ public:
     void ToggleCheatSheet() override {}
     void OpenItemProperties(ItemId /*item*/, std::optional<platform::Vec2> /*at*/) override {}
     void OpenColorChooser(platform::Vec2 /*at*/) override {}
+    void OpenShapeMenu(Tool /*tool*/, platform::Vec2 /*at*/) override {}
     void AskToDeleteCanvas(CanvasId /*canvas*/) override {}
     void CanvasMade(CanvasId /*canvas*/) override {}
     void OpenItemMenu(ItemId /*item*/, platform::Vec2 /*at*/) override {}
@@ -1304,6 +1305,17 @@ std::optional<Command> Editor::BarButtonCommand(ChromeButton button) const {
             command.at = *center;
         }
     }
+    return command;
+}
+
+std::optional<Command> Editor::BarButtonMenuCommand(ChromeButton button, platform::Vec2 at) const {
+    const std::optional<ItemId> primaryId = PrimarySelection();
+    const std::optional<CommandId> menu = MenuForBarButton(button);
+    if (!primaryId.has_value() || !menu.has_value()) {
+        return std::nullopt;
+    }
+    Command command{*menu, *primaryId};
+    command.at = at;
     return command;
 }
 

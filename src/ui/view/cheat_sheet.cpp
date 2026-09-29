@@ -113,6 +113,7 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
     shortcut(drawing, CommandId::TextTool, strings::kCheatSheetText);
     shortcut(drawing, CommandId::SelectTool, strings::kCheatSheetSelectTool);
     drawing.push_back({strings::kCheatSheetShapeKeys, strings::kCheatSheetShape});
+    drawing.push_back({strings::kCheatSheetShapeMenuKey, strings::kCheatSheetShapeMenu});
     drawing.push_back({strings::kCheatSheetRightDragKey, strings::kCheatSheetRightDrag});
     drawing.push_back({strings::kCheatSheetEraseRectKeys, strings::kCheatSheetEraseRect});
     drawing.push_back({strings::kCheatSheetWheelKey, strings::kCheatSheetToolSize});

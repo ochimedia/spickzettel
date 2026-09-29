@@ -269,20 +269,34 @@ private:
 
 // A selection bar button held down, fired by a release over it - the rule
 // ImGui's own Button follows. Nothing else on the bar reacts meanwhile.
+// The pen's and the eraser's have a menu of their shapes as well (see
+// MenuForBarButton): a right press opens it on its release over the
+// button, as a right click opens a snippet's, and a press held still for
+// kHoldSeconds opens it then - for a finger or a pen, which cannot
+// right-click - and the rest of the press is spent.
 class BarPress final : public Gesture {
 public:
-    BarPress(const Event& press, core::ChromeButton button) : Gesture(press.button), chrome_(button) {}
+    BarPress(const Event& press, core::ChromeButton button)
+        : Gesture(press.button), chrome_(button), pressedAt_(press.position), pressSeconds_(press.seconds),
+          at_(press.position) {}
     const char* Name() const override { return "BarPress"; }
     void Interrupt(Editor& /*editor*/) override {}
     void Cancel(Editor& /*editor*/) override {}
     core::ChromeButton Pressed() const { return chrome_; }
 
 protected:
-    Answer Moved(const Event& /*event*/, Editor& /*editor*/) override { return Answer::Claim(); }
+    Answer Moved(const Event& event, Editor& editor) override;
     Answer Released(const Event& event, Editor& editor) override;
+    Answer Ticked(const Event& event, Editor& editor) override;
 
 private:
     core::ChromeButton chrome_;
+    platform::Vec2 pressedAt_;
+    double pressSeconds_ = 0.0;
+    // Where the pointer is, for the menu a hold opens there.
+    platform::Vec2 at_;
+    // Moved too far for a hold: past kDoubleClickPx, as for Pending.
+    bool strayed_ = false;
 };
 
 // A mark on the snippet in drawing mode: a freehand stroke, a line or a

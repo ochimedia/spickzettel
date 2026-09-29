@@ -42,6 +42,7 @@ void Popups::DrawOverCanvas(float displayW, float displayH) {
     RenderCanvasContextMenu();
     RenderEmptyCanvasMenu();
     RenderColorChooser(displayW, displayH);
+    RenderShapeMenu();
 }
 
 void Popups::DrawConfirmDelete() { RenderConfirmDeletePopover(); }
@@ -409,6 +410,8 @@ const char* PopupId(PopupKind kind) {
             return kItemPropertiesPopupId;
         case PopupKind::ColorChooser:
             return kColorChooserPopupId;
+        case PopupKind::ShapeMenu:
+            return kShapeMenuId;
         case PopupKind::ConfirmDelete:
             return kConfirmDeletePopupId;
     }
@@ -444,6 +447,7 @@ void Popups::Closed(PopupKind kind) {
         case PopupKind::ItemMenu:
         case PopupKind::CanvasMenu:
         case PopupKind::EmptyCanvasMenu:
+        case PopupKind::ShapeMenu:
         case PopupKind::ConfirmDelete:
             break;  // what it was about goes with the record
     }
@@ -508,6 +512,9 @@ void Popups::ApplyEffects() {
                         break;
                     case PopupKind::EmptyCanvasMenu:
                         emptyCanvasMenu_.Open();
+                        break;
+                    case PopupKind::ShapeMenu:
+                        shapeMenu_.Open();
                         break;
                     case PopupKind::ItemProperties:
                     case PopupKind::ColorChooser:
@@ -623,6 +630,55 @@ void Popups::RenderColorChooser(float displayW, float displayH) {
         editor_.SetDrawColor(FloatsToColorRGBA4(rgba));
     }
     ImGui::EndPopup();
+}
+
+// ================= The shape menu =================
+
+void Popups::OpenShapeMenu(Tool tool, ImVec2 at) {
+    PopupRecord popup;
+    popup.kind = PopupKind::ShapeMenu;
+    popup.tool = tool;
+    popup.at = at;
+    Open(std::move(popup));
+}
+
+void Popups::RenderShapeMenu() {
+    const bool up = Up(PopupKind::ShapeMenu);
+    const Tool tool = up ? popup_->tool : Tool::Draw;
+    const ContextMenu::Drawn drawn =
+        shapeMenu_.Render(up ? popup_->at : ImVec2(0.0f, 0.0f), [&](std::vector<ContextMenuEntry>& rows) {
+            if (up) {
+                BuildShapeMenuRows(tool, rows);
+            }
+        });
+    Drawn(PopupKind::ShapeMenu, drawn.up);
+    if (drawn.chosen.has_value()) {
+        host_.Act(action::RunCommand{Command{static_cast<CommandId>(*drawn.chosen)}});
+    }
+}
+
+void Popups::BuildShapeMenuRows(Tool tool, std::vector<ContextMenuEntry>& rows) const {
+    const bool inHand = editor_.ActiveTool() == tool;
+    const DrawShape shape = tool == Tool::Draw ? editor_.PenShape() : editor_.EraserShape();
+    const auto add = [&](CommandId id, const char* widgetId, const Icon* icon, const char* label, DrawShape drawn,
+                         const char* keys) {
+        ContextMenuEntry row = MenuRow(Command{id}, widgetId, icon, label);
+        row.shortcut = keys;
+        row.current = inHand && shape == drawn;
+        rows.push_back(std::move(row));
+    };
+    if (tool == Tool::Draw) {
+        add(CommandId::PickPen, "##shapemenu_pen", &icons::kPen, strings::kMenuPen, DrawShape::Freehand, "");
+        add(CommandId::PickLine, "##shapemenu_line", &icons::kLine, strings::kMenuLine, DrawShape::Line,
+            strings::kMenuLineKeys);
+        add(CommandId::PickRectangle, "##shapemenu_rectangle", &icons::kRectangle, strings::kMenuRectangle,
+            DrawShape::Rectangle, strings::kMenuRectangleKeys);
+    } else {
+        add(CommandId::PickEraser, "##shapemenu_eraser", &icons::kEraser, strings::kMenuEraser, DrawShape::Freehand,
+            "");
+        add(CommandId::PickRectangleEraser, "##shapemenu_rectangle_eraser", &icons::kEraserRect,
+            strings::kMenuRectangleEraser, DrawShape::Rectangle, strings::kMenuRectangleKeys);
+    }
 }
 
 // ================= A tile's context menu =================

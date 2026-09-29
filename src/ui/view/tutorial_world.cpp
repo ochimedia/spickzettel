@@ -15,7 +15,8 @@ tutorial::Cover AppWorld::CanvasCover() const {
     }
     // A snippet's own popups cover nothing (see tutorial::Cover).
     const Popup* popup = input.As<Popup>(Level::Popup);
-    if (popup == nullptr || popup->Kind() == PopupKind::ColorChooser || popup->Kind() == PopupKind::ItemProperties) {
+    if (popup == nullptr || popup->Kind() == PopupKind::ColorChooser || popup->Kind() == PopupKind::ItemProperties ||
+        popup->Kind() == PopupKind::ShapeMenu) {
         return tutorial::Cover::None;
     }
     return tutorial::Cover::Popup;

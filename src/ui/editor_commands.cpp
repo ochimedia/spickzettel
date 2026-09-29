@@ -111,7 +111,15 @@ bool Editor::Available(const Command& command) const {
         case CommandId::PenButton:
         case CommandId::EraserButton:
         case CommandId::TextButton:
+        case CommandId::PickPen:
+        case CommandId::PickLine:
+        case CommandId::PickRectangle:
+        case CommandId::PickEraser:
+        case CommandId::PickRectangleEraser:
             return !selection_.empty();
+        case CommandId::PenMenu:
+        case CommandId::EraserMenu:
+            return !selection_.empty() && command.at.has_value();
         case CommandId::ColorButton:
             return !selection_.empty() && command.at.has_value();
         case CommandId::Paste:
@@ -310,6 +318,23 @@ void Editor::Run(const Command& command, Filing filing) {
         case CommandId::TextButton:
             PickTool(Tool::Text);
             return;
+        // Or the shape picked from the button's menu, whichever tool was in
+        // hand - not cycled to.
+        case CommandId::PickPen:
+            PickShape(Tool::Draw, DrawShape::Freehand);
+            return;
+        case CommandId::PickLine:
+            PickShape(Tool::Draw, DrawShape::Line);
+            return;
+        case CommandId::PickRectangle:
+            PickShape(Tool::Draw, DrawShape::Rectangle);
+            return;
+        case CommandId::PickEraser:
+            PickShape(Tool::Erase, DrawShape::Freehand);
+            return;
+        case CommandId::PickRectangleEraser:
+            PickShape(Tool::Erase, DrawShape::Rectangle);
+            return;
         case CommandId::ColorButton:
             // The chooser opens next to the button.
             if (views_ != nullptr) {
@@ -377,6 +402,25 @@ void Editor::Run(const Command& command, Filing filing) {
                 views_->OpenEmptyCanvasMenu(*command.at);
             }
             return;
+        case CommandId::PenMenu:
+        case CommandId::EraserMenu:
+            if (views_ != nullptr) {
+                views_->OpenShapeMenu(command.id == CommandId::PenMenu ? Tool::Draw : Tool::Erase, *command.at);
+            }
+            return;
+    }
+}
+
+void Editor::PickShape(Tool tool, DrawShape shape) {
+    PickTool(tool);
+    DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
+    if (drawing == nullptr) {
+        return;  // nothing to draw on
+    }
+    if (tool == Tool::Draw) {
+        drawing->SetPenShape(shape);
+    } else {
+        drawing->SetEraserShape(shape);
     }
 }
 

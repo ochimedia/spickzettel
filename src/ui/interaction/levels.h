@@ -42,6 +42,9 @@ public:
     core::DrawShape EraserShape() const { return eraserShape_; }
     void CyclePenShape();
     void CycleEraserShape();
+    // A shape picked from the button's menu instead.
+    void SetPenShape(core::DrawShape shape) { penShape_ = shape; }
+    void SetEraserShape(core::DrawShape shape) { eraserShape_ = shape; }
     Answer Offer(const Event& event, Editor& editor) override;
     void Interrupt(Editor& editor) override;
     void Cancel(Editor& editor) override { Interrupt(editor); }
@@ -95,8 +98,16 @@ private:
 };
 
 // Every popup the app opens itself, by what it is.
-enum class PopupKind { ItemMenu, CanvasMenu, EmptyCanvasMenu, ItemProperties, ColorChooser, ConfirmDelete };
-inline constexpr size_t kPopupKindCount = 6;
+enum class PopupKind {
+    ItemMenu,
+    CanvasMenu,
+    EmptyCanvasMenu,
+    ItemProperties,
+    ColorChooser,
+    ShapeMenu,
+    ConfirmDelete,
+};
+inline constexpr size_t kPopupKindCount = 7;
 const char* PopupName(PopupKind kind);
 
 // A popup up over the canvas (section 5): the pointer is its - a press

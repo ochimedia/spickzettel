@@ -72,6 +72,13 @@ enum class CommandId {
     EraserButton,  // the eraser, or its next shape when it is in hand
     TextButton,
     ColorButton,
+    // The pen or the eraser in hand, drawing that shape - a row of the
+    // menu their bar buttons open (PenMenu, EraserMenu).
+    PickPen,
+    PickLine,
+    PickRectangle,
+    PickEraser,
+    PickRectangleEraser,
     FullscreenScreenshot,
     FullscreenDrawing,
     DeleteCanvas,
@@ -83,6 +90,8 @@ enum class CommandId {
     LeaveDrawingMode,  // a press elsewhere, a right click on the snippet
     ItemMenu,          // `item`'s context menu, at `at` - a right click
     EmptyCanvasMenu,   // at `at` - a right click on empty canvas
+    PenMenu,           // the pen's shapes, at `at` - a right click or a hold on its bar button
+    EraserMenu,        // the eraser's, likewise
     FrameSnippet,      // of `kind`, at `rect` - a drag on empty canvas, or with a creation tool
 };
 
@@ -223,6 +232,11 @@ inline constexpr std::array kCommands = [] {
         Clicked(CommandId::EraserButton, "eraserButton"),
         Clicked(CommandId::TextButton, "textButton"),
         Clicked(CommandId::ColorButton, "colorButton"),
+        Clicked(CommandId::PickPen, "pickPen"),
+        Clicked(CommandId::PickLine, "pickLine"),
+        Clicked(CommandId::PickRectangle, "pickRectangle"),
+        Clicked(CommandId::PickEraser, "pickEraser"),
+        Clicked(CommandId::PickRectangleEraser, "pickRectangleEraser"),
         Clicked(CommandId::FullscreenScreenshot, "fullscreenScreenshot"),
         Clicked(CommandId::FullscreenDrawing, "fullscreenDrawing"),
         Clicked(CommandId::DeleteCanvas, "deleteCanvas"),
@@ -232,6 +246,8 @@ inline constexpr std::array kCommands = [] {
         Clicked(CommandId::LeaveDrawingMode, "leaveDrawingMode"),
         Clicked(CommandId::ItemMenu, "itemMenu"),
         Clicked(CommandId::EmptyCanvasMenu, "emptyCanvasMenu"),
+        Clicked(CommandId::PenMenu, "penMenu"),
+        Clicked(CommandId::EraserMenu, "eraserMenu"),
         Clicked(CommandId::FrameSnippet, "frameSnippet"),
     };
 }();
@@ -257,6 +273,9 @@ constexpr const CommandInfo& InfoFor(CommandId id) { return kCommands[static_cas
 std::optional<CommandId> CommandForShortcut(core::ShortcutAction action);
 std::optional<CommandId> CommandForHotkey(core::HotkeySlot slot);
 CommandId CommandForBarButton(core::ChromeButton button);
+// The menu a selection bar button opens on a right click or a hold - the
+// pen's and the eraser's shapes - or none.
+std::optional<CommandId> MenuForBarButton(core::ChromeButton button);
 
 // The name a shortcut gives a mouse button it may be - the middle one and
 // the two side ones - or 0 for the two gestures are made with.

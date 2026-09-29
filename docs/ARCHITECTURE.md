@@ -1954,7 +1954,12 @@ pen is in hand, a press on it draws, a right-drag on it erases whatever
 tool is in hand, and a click anywhere else, a right click on the snippet
 or Escape leaves. The Pen and Eraser buttons pressed again cycle their
 tool through its shapes, so a hand with no keyboard can draw a line with
-a plain drag. Holding Alt picks the snippet up instead of drawing on it.
+a plain drag. A right click or a hold on either lists its shapes instead,
+the one in hand marked and the modifier that draws each beside it:
+cycling takes up to two clicks to reach a shape, and test feedback
+asked for picking one directly. The click still cycles, which is the quickest
+way between two shapes used in turn. Holding Alt picks the snippet up
+instead of drawing on it.
 
 The mode exists so a plain press on a snippet can mean one thing: with
 drawing the default, every click on a snippet made a mark, and with a

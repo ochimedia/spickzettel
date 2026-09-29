@@ -153,7 +153,7 @@ ContextMenu::Drawn ContextMenu::Render(ImVec2 anchor, const Builder& build) {
         // put it at the left edge, where the icon goes. What it is given
         // is the row's id alone (see ContextMenuEntry::id), which shows
         // nothing.
-        if (ImGui::Selectable(entry.id, false, ImGuiSelectableFlags_None,
+        if (ImGui::Selectable(entry.id, entry.current, ImGuiSelectableFlags_None,
                                ImVec2(metrics.innerWidth, metrics.rowHeight))) {
             drawn.chosen = entry.action;
         }

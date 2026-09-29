@@ -132,7 +132,7 @@ states where the innermost active one sees an event first.
 | Canvas | the canvas and its selection - always there | 1 |
 | Mode | drawing mode on a snippet; a creation tool in hand | 1 |
 | Panel | the Overview; the cheat sheet | 1 |
-| Popup | a context menu; the Properties popover; the color chooser; a delete confirmation | 1 |
+| Popup | a context menu (a snippet's, a canvas tile's, empty canvas's, the pen's or the eraser's shapes); the Properties popover; the color chooser; a delete confirmation | 1 |
 | Text | a note being typed; a name being edited; a key being captured in Settings | 1 |
 | Gesture | what a held button or key is doing: a press not yet understood, a stroke, a drag, a widget drag, a spent button, a nudge or wheel burst | 1 |
 
@@ -365,7 +365,7 @@ drawing mode and the modifiers. Today the same decisions are spread over
 | # | Press | At once (prefix) | Click | Drag | Hold | Double |
 |---|---|---|---|---|---|---|
 | 1 | left or right, over an ImGui window | - | - | Widget (ImGui's) | - | - |
-| 2 | left, on a bar button | - | - | Bar button held | - | - |
+| 2 | left, on a bar button; right, on the pen's or the eraser's | - | - | Bar button held | its menu (the pen's, the eraser's) | - |
 | 3 | left, on a selected snippet's handle | - | - | Resize | - | - |
 | 4 | left, on the drawing snippet, drawing mode, no Alt | - | - | Stroke / Shape / Erase / Rectangle erase / Text, by tool and modifiers | - | - |
 | 5 | left, elsewhere, drawing mode, no Alt | leave drawing mode | - | - | drawing mode there, or fullscreen of the trigger's kind on empty canvas | - |
@@ -386,6 +386,23 @@ those buttons, and the one that opened the cheat sheet has to close it
 again (see ARCHITECTURE.md on mouse button shortcuts). Every row carries its cheat sheet line, so the cheat sheet's
 gesture rows are generated from the rules rather than kept in step with
 them by hand, as they are today.
+
+Added on 2026-09-30, from test feedback: the pen's and the eraser's
+bar buttons have a menu of their shapes, so any shape is one pick away
+rather than up to two clicks of cycling. A right click opens it on its
+release over the button, as a right click opens a snippet's menu; a
+press held still for 0.5 s opens it at once, as a hold stands in for a
+double-click on a snippet - the right click of a finger or a pen. It
+fits the rules as they are, with no change to the structure: the press
+is Bar button held, as before, which now also answers a Tick (the hold)
+and a right release (the menu). Nothing is done at the press, so a click
+still cycles the shape on its release (6.1); a hold ends the press and
+leaves the rest of it Spent, so its release fires nothing (6.3) - nor
+does the right press Windows injects into a finger held still, which
+comes after the hold has matured. A drag past 6 px is no hold, as on a
+snippet. The menu is a context menu on the Popup level, and each row a
+command (`PickLine`, `PickRectangleEraser`, ...). The other bar buttons
+take a right press for nothing, as before, and a hold on them is a click.
 
 ## 7. Commands and bindings
 
@@ -481,7 +498,7 @@ Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.
 | Hold | rules 5, 8, 10: Pending, 0.5 s still | - | the hold's command; Spent | - | - |
 | Double-click | second press matches the remembered click | - | its command at the press; Spent | - | - |
 | Right click | rules 13, 14: Pending | - | release: a menu (an effect), pushed on the Popup level | - | - |
-| Bar button | rule 2 | lit only over its own button | release over it: its command | nothing | nothing |
+| Bar button | rule 2 | lit only over its own button | release over it: its command, or with the right button the pen's or the eraser's menu; held still 0.5 s on those two: the menu, then Spent | nothing | nothing |
 | Tile dragged (canvas bar, Overview) | rule 1: Widget | ImGui draws the drag | dropped on a tile: reorder command | nothing (nothing done yet) | ImGui's drag cleared; Spent |
 | Slider (Properties) | rule 1: Widget over the Popup level | the value previews | release: one step | filed | rolled back; ImGui's active item cleared; Spent |
 | Typing a note | the Text tool's press, pushed on the Text level | keys are the field's | press outside: kept, and the press goes on (it makes no snippet) | kept (committed) | kept (today's choice) |

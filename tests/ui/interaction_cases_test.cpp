@@ -412,6 +412,75 @@ TEST_F(InteractionCasesTest, ABarButtonFiresOnlyOnAReleaseOverItself) {
     EXPECT_EQ(editor_.ResolvePointerTarget(400.0f, 350.0f).kind, PointerTarget::Kind::None) << "deleted";
 }
 
+// The pen's and the eraser's buttons have a menu of their shapes (rule 2):
+// a right click opens it, and so does a press held still - whose release
+// then fires nothing. A press that strays is no hold, and let go of over
+// the button is its click after all. The other buttons have no menu.
+TEST_F(InteractionCasesTest, ThePenAndEraserButtonsOpenTheirShapesOnARightClickOrAHold) {
+    const ItemId drawing = MakeSnippet(Rect{300, 300, 300, 200});
+    editor_.EnterDrawingMode(drawing);
+    const std::optional<platform::Vec2> pen = editor_.SelectionBarButtonCenter(ChromeButton::Pen);
+    const std::optional<platform::Vec2> eraser = editor_.SelectionBarButtonCenter(ChromeButton::Eraser);
+    const std::optional<platform::Vec2> text = editor_.SelectionBarButtonCenter(ChromeButton::Text);
+    ASSERT_TRUE(pen.has_value() && eraser.has_value() && text.has_value());
+
+    Down(pen->x, pen->y, MouseButton::Right);
+    EXPECT_EQ(GestureLevel(), "BarPress");
+    Up(pen->x, pen->y, MouseButton::Right);
+    EXPECT_EQ(editor_.LastCommand(), CommandId::PenMenu);
+    EXPECT_EQ(editor_.PenShape(), DrawShape::Freehand) << "the menu, and nothing picked";
+    Pause();
+
+    Down(eraser->x, eraser->y);
+    Tick(kHoldSeconds);
+    EXPECT_EQ(editor_.LastCommand(), CommandId::EraserMenu);
+    EXPECT_EQ(GestureLevel(), "Spent") << "the rest of the press";
+    Up(eraser->x, eraser->y);
+    EXPECT_EQ(editor_.ActiveTool(), Tool::Draw) << "the release fired nothing";
+    Pause();
+
+    Down(pen->x, pen->y);
+    Move(pen->x, pen->y + kDoubleClickPx + 2.0f);
+    Move(pen->x, pen->y);
+    Tick(kHoldSeconds);
+    EXPECT_EQ(GestureLevel(), "BarPress") << "a hold is a finger on one spot";
+    Up(pen->x, pen->y);
+    EXPECT_EQ(editor_.LastCommand(), CommandId::PenButton);
+    EXPECT_EQ(editor_.PenShape(), DrawShape::Line) << "a click after all";
+    Pause();
+
+    Click(text->x, text->y, MouseButton::Right);
+    Down(text->x, text->y);
+    Tick(kHoldSeconds);
+    Up(text->x, text->y);
+    Pause();
+    EXPECT_EQ(editor_.LastCommand(), CommandId::TextButton) << "no menu: its click, on the release";
+    EXPECT_EQ(editor_.DrawingItem(), drawing) << "and the right click did nothing";
+}
+
+// A row of the menu puts its tool in hand drawing its shape, whichever
+// tool was in hand - and, from the snippet bar, enters drawing mode as the
+// pen's button does.
+TEST_F(InteractionCasesTest, AShapePickedFromTheMenuIsTheToolsAtOnce) {
+    const ItemId drawing = MakeSnippet(Rect{300, 300, 300, 200});
+    Click(350.0f, 350.0f);
+    Pause();
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PickRectangle}));
+    EXPECT_EQ(editor_.DrawingItem(), drawing);
+    EXPECT_EQ(editor_.ActiveTool(), Tool::Draw);
+    EXPECT_EQ(editor_.PenShape(), DrawShape::Rectangle);
+
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PickRectangleEraser}));
+    EXPECT_EQ(editor_.ActiveTool(), Tool::Erase);
+    EXPECT_EQ(editor_.EraserShape(), DrawShape::Rectangle);
+
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PickLine}));
+    EXPECT_EQ(editor_.ActiveTool(), Tool::Draw);
+    EXPECT_EQ(editor_.PenShape(), DrawShape::Line) << "not the plain pen a tool change gives";
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PickPen}));
+    EXPECT_EQ(editor_.PenShape(), DrawShape::Freehand);
+}
+
 // ===== Making a snippet =====
 
 TEST_F(InteractionCasesTest, ADragOnEmptyCanvasFramesAndAClickMakesNothing) {

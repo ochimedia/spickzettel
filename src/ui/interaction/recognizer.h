@@ -7,7 +7,7 @@
 //
 //  #  | Press                                            | At once           | Click       | Drag          | Hold          | Double
 //  1  | any, over an ImGui window                        | -                 | -           | (ImGui's)     | -             | -
-//  2  | left, on a bar button                            | -                 | -           | Bar button    | -             | -
+//  2  | left, on a bar button; right, on the pen's or the eraser's | -       | -           | Bar button    | its menu      | -
 //  3  | left, on a selected snippet's handle             | -                 | -           | Resize        | -             | -
 //  4  | left, on the drawing snippet, drawing mode       | -                 | -           | Stroke / Text | -             | -
 //  5  | left, elsewhere, drawing mode                    | leave drawing mode| -           | -             | drawing mode there, or fullscreen | -

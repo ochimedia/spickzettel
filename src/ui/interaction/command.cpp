@@ -47,6 +47,24 @@ CommandId CommandForBarButton(core::ChromeButton button) {
     return CommandId::DeleteSelection;  // unreachable: the switch names every button
 }
 
+std::optional<CommandId> MenuForBarButton(core::ChromeButton button) {
+    switch (button) {
+        case core::ChromeButton::Pen:
+            return CommandId::PenMenu;
+        case core::ChromeButton::Eraser:
+            return CommandId::EraserMenu;
+        case core::ChromeButton::Close:
+        case core::ChromeButton::Maximize:
+        case core::ChromeButton::Minimize:
+        case core::ChromeButton::More:
+        case core::ChromeButton::Pin:
+        case core::ChromeButton::Text:
+        case core::ChromeButton::Color:
+            break;
+    }
+    return std::nullopt;
+}
+
 int ComboKeyForMouseButton(platform::MouseButton button) {
     switch (button) {
         case platform::MouseButton::Middle:

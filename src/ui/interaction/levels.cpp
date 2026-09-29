@@ -130,6 +130,8 @@ const char* PopupName(PopupKind kind) {
             return "ItemProperties";
         case PopupKind::ColorChooser:
             return "ColorChooser";
+        case PopupKind::ShapeMenu:
+            return "ShapeMenu";
         case PopupKind::ConfirmDelete:
             return "ConfirmDelete";
     }

@@ -211,7 +211,7 @@ order, including where that is surprising (section 9, finding 3).
 | 3 | The note editor | window `##noteedit<id>` | a note is being typed | Canvas view |
 | 4 | The dock | window `##dock` | a snippet on the canvas is minimized | Canvas view |
 | 5 | The canvas bar | window `##canvas_bar` | the pointer is at the bottom edge or on the bar, or its menu is up; not under a panel | Canvas bar |
-| 6 | The snippet menu, the canvas tile menu, the empty canvas menu, Properties, the color chooser | popups | the Popup level holds it | Popups |
+| 6 | The snippet menu, the canvas tile menu, the empty canvas menu, Properties, the color chooser, the shape menu | popups | the Popup level holds it | Popups |
 | 7 | The input options HUD | layer `##sz_input_hud_layer` | its setting is on | Screen chrome |
 | 8 | The edit-mode border, the demo mark | layer `##sz_chrome_layer` | always, each as its setting says | Screen chrome |
 | 9 | The Overview: its backdrop, its panel, and ImGui's popups inside it | panel | the Panel level holds the Overview | Overview; Settings page |
@@ -294,7 +294,7 @@ review on 2026-09-27.*
 | Popup | Closing does |
 |---|---|
 | Snippet menu, canvas tile menu | forget what it was about |
-| Empty canvas menu | nothing |
+| Empty canvas menu, shape menu | nothing |
 | Properties | end the style edit; forget the snippet |
 | Color chooser | keep the pen's color (C4) |
 | Delete confirmation | forget the target |

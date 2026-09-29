@@ -55,6 +55,9 @@ struct ContextMenuEntry {
     // Draws a divider above this row. Ignored on the first row, where
     // there is nothing to divide from.
     bool separatorAbove = false;
+    // The row for what is picked already - the shape in hand, in a menu of
+    // them - shown as a dropdown shows its chosen row.
+    bool current = false;
 };
 
 class ContextMenu {

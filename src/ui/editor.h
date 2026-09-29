@@ -95,6 +95,8 @@ public:
     virtual void ToggleCheatSheet() = 0;
     virtual void OpenItemProperties(ItemId item, std::optional<platform::Vec2> at) = 0;
     virtual void OpenColorChooser(platform::Vec2 at) = 0;
+    // The pen's shapes, or the eraser's (`tool`), at `at`.
+    virtual void OpenShapeMenu(Tool tool, platform::Vec2 at) = 0;
     // A canvas's delete, through the confirmation Settings > Behavior asks
     // for.
     virtual void AskToDeleteCanvas(CanvasId canvas) = 0;
@@ -291,6 +293,9 @@ public:
     // with no snippet to draw on; a creation tool leaves drawing mode and
     // is picked up.
     void PickTool(Tool tool);
+    // The pen or the eraser (`tool`) in hand, as PickTool, drawing `shape`
+    // on a plain drag - a row of the menu of its bar button.
+    void PickShape(Tool tool, DrawShape shape);
     // Puts down the creation tool in hand, if one is - after a screenshot
     // is placed, and wherever nothing may be made (view-only). Select is
     // in hand after it.
@@ -493,6 +498,10 @@ public:
     // snippet selected last and from where the button sits. Nothing with
     // nothing selected.
     std::optional<Command> BarButtonCommand(ChromeButton button) const;
+    // The menu a right click or a hold on it opens (see MenuForBarButton),
+    // at `at`, about the snippet selected last. Nothing for a button with
+    // no menu, or with nothing selected.
+    std::optional<Command> BarButtonMenuCommand(ChromeButton button, platform::Vec2 at) const;
 
     // ===== Commands =====
     //

@@ -215,6 +215,8 @@ public:
     std::optional<CanvasId> CanvasContextMenuCanvas() const { return popups_.CanvasOf(PopupKind::CanvasMenu); }
     // And for empty canvas.
     bool IsEmptyCanvasMenuOpen() const { return popups_.Up(PopupKind::EmptyCanvasMenu); }
+    // Whether the pen's or the eraser's shapes are up - see Popups.
+    bool IsShapeMenuOpen() const { return popups_.Up(PopupKind::ShapeMenu); }
     // How far out the canvas bar is, 0 to 1 - see CanvasBar.
     float CanvasBarReveal() const { return canvasBar_.Reveal(); }
     // Whether a note is being typed into, and which.
@@ -413,6 +415,7 @@ private:
         popups_.OpenItemProperties(item, at);
     }
     void OpenColorChooser(platform::Vec2 at) override { popups_.OpenColorChooser(ImVec2(at.x, at.y)); }
+    void OpenShapeMenu(Tool tool, platform::Vec2 at) override { popups_.OpenShapeMenu(tool, ImVec2(at.x, at.y)); }
     void AskToDeleteCanvas(CanvasId canvas) override;
     void CanvasMade(CanvasId canvas) override { overview_.ScrollToCanvas(canvas); }
     void OpenItemMenu(ItemId item, platform::Vec2 at) override { popups_.OpenItemMenu(item, ImVec2(at.x, at.y)); }

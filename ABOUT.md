@@ -32,7 +32,9 @@ the Overview.
   resize it. Shift adds to the selection; Shift-drag on open canvas draws
   a box to select by.
 - Double-click a snippet, or hold a press on it, to draw on it. Its bar
-  then shows Pen, Eraser, Text and the color. Right-drag on it erases.
+  then shows Pen, Eraser, Text and the color. Click Pen or Eraser again
+  for a line or a rectangle; right-click or hold it to pick one.
+  Right-drag on the snippet erases.
   Click anywhere else, or press Escape, to stop.
 - Delete removes the selection; Ctrl+Z brings it back. Ctrl+C, Ctrl+X and
   Ctrl+V copy, cut and paste snippets, between canvases too.
@@ -84,6 +86,7 @@ the Overview.
 - Semi-transparent pen colors
 - Mouse buttons as shortcuts (middle and side buttons)
 - Per-snippet aspect ratio setting
+- Pen and eraser shapes to pick from: right-click or hold the button
 
 #### Changes
 

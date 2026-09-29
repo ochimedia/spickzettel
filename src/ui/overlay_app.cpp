@@ -333,7 +333,7 @@ void OverlayApp::StackSurfaces() {
     Front("##canvas_bar");
     // The popups over the canvas, one up at a time.
     for (const PopupKind kind : {PopupKind::ItemProperties, PopupKind::ItemMenu, PopupKind::CanvasMenu,
-                                 PopupKind::EmptyCanvasMenu, PopupKind::ColorChooser}) {
+                                 PopupKind::EmptyCanvasMenu, PopupKind::ColorChooser, PopupKind::ShapeMenu}) {
         Front(AppPopupWindow(kind));
     }
     Front("##sz_input_hud_layer");

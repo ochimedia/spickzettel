@@ -88,6 +88,43 @@ TEST_F(ContextMenuUiTest, MoveToNewCanvasFromTheMenuTakesTheSnippetThere) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "the snippet came along";
 }
 
+// The drawing bar's pen and eraser have a menu of their shapes: a right
+// click on the button opens it, and so does a hold, for a finger or a pen.
+// A row puts that shape in hand at once - the pen from the eraser too.
+TEST_F(ContextMenuUiTest, ThePenAndEraserButtonsOfferTheirShapes) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
+    ASSERT_EQ(App().ActiveTool(), Tool::Draw);
+    const std::optional<ImVec2> pen = App().SelectionBarButtonCenter(ChromeButton::Pen);
+    const std::optional<ImVec2> eraser = App().SelectionBarButtonCenter(ChromeButton::Eraser);
+    ASSERT_TRUE(pen.has_value() && eraser.has_value());
+
+    RightClick(pen->x, pen->y);
+    ASSERT_TRUE(App().IsShapeMenuOpen());
+    EXPECT_EQ(App().PenShape(), DrawShape::Freehand);
+    ClickRow("##shapemenu_rectangle");
+    EXPECT_FALSE(App().IsShapeMenuOpen()) << "choosing a row closes the menu";
+    EXPECT_EQ(App().ActiveTool(), Tool::Draw);
+    EXPECT_EQ(App().PenShape(), DrawShape::Rectangle);
+
+    Hold(eraser->x, eraser->y);
+    ASSERT_TRUE(App().IsShapeMenuOpen());
+    EXPECT_EQ(App().ActiveTool(), Tool::Draw) << "the hold's release picked nothing";
+    ClickRow("##shapemenu_rectangle_eraser");
+    EXPECT_EQ(App().ActiveTool(), Tool::Erase);
+    EXPECT_EQ(App().EraserShape(), DrawShape::Rectangle);
+
+    // Escape closes it and nothing more.
+    RightClick(pen->x, pen->y);
+    ASSERT_TRUE(App().IsShapeMenuOpen());
+    PressKey(ImGuiKey_Escape);
+    StepFrames(2);
+    EXPECT_FALSE(App().IsShapeMenuOpen());
+    EXPECT_EQ(App().ActiveTool(), Tool::Erase);
+    EXPECT_TRUE(App().DrawingItem().has_value());
+}
+
 // A row that cannot be chosen right now is grayed rather than dropped, so
 // the menu keeps the same shape over every snippet. Clear drawing is the
 // one that starts out unavailable on a fresh screenshot: there is no ink

@@ -164,6 +164,15 @@ Answer RecognizeLeft(const Event& press, const PointerTarget& target, bool isDou
 
 Answer RecognizeRight(const Event& press, const PointerTarget& target, bool noteOpen, Editor& editor) {
     const std::optional<core::ItemId> drawing = editor.DrawingItem();
+    // 2: the pen's or the eraser's bar button, whose menu opens on the
+    // release over it. The other buttons have none, and take the press
+    // for nothing, as they always have.
+    if (target.kind == PointerTarget::Kind::Button) {
+        if (!MenuForBarButton(target.button).has_value()) {
+            return Answer::Claim();
+        }
+        return Answer::Start(std::nullopt, std::make_unique<BarPress>(press, target.button));
+    }
     if (target.kind == PointerTarget::Kind::Body) {
         const core::ItemId item = target.item;
         // 12: on the snippet being drawn on, the right button is the eraser,
