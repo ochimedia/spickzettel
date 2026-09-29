@@ -6,10 +6,14 @@
 // and the spotlight, a ring around what the step points at, drawn over
 // everything but the pointer. What it keeps of its own is the runner -
 // which step is up, and what it has seen - and whether the card has been
-// dragged somewhere. It reads the app through the world, and asks for
-// everything else as an action.
+// dragged somewhere. It reads the app through the world - but for where
+// things are on screen, which the world leaves out (docs/TUTORIAL.md,
+// section 7.1): the anchor board, and the subject and its handles as the
+// session and the editor have them this frame - and asks for everything
+// else as an action.
 
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -65,6 +69,15 @@ public:
     // Whether the end or skip card's checkbox says to keep what the topic
     // made, at its Done or More topics.
     bool Keep() const { return keep_; }
+    // What the topic made that is still there: its folders not deleted,
+    // its own first, and its profiles still in the list. What the checkbox
+    // keeps, and Done and More topics otherwise delete (docs/TUTORIAL.md,
+    // section 20).
+    struct Made {
+        std::vector<tutorial::FolderFacts> folders;
+        std::vector<std::string> profiles;
+    };
+    Made LeftToKeep() const;
 
     // Stage 1, in edit mode: the runner brought up to date with the app.
     // `now` in seconds.

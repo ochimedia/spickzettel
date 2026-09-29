@@ -48,8 +48,7 @@ void OverlayApp::WelcomeAtStart(LibraryAtStart library) {
 }
 
 void OverlayApp::DoTutorial(const action::TutorialPress& a) {
-    const std::vector<FolderId> folders = tutorialCard_.Runner().Folders();
-    const std::vector<std::string> profiles = tutorialCard_.Runner().MadeProfiles();
+    const TutorialCard::Made made = tutorialCard_.LeftToKeep();
     const bool on = tutorialCard_.Runner().On();
     const bool keep = tutorialCard_.Keep();
     tutorialCard_.Press(a.button);
@@ -62,21 +61,12 @@ void OverlayApp::DoTutorial(const action::TutorialPress& a) {
     if (ends && on && !tutorialCard_.Runner().On() && !keep) {
         // And the profiles made in the run, without asking, as a profile's
         // own trash button has it (section 18.3).
-        settingsPage_.RemoveProfiles(profiles);
-        DeleteTarget target{DeleteTarget::Kind::Folder};
-        for (const FolderId each : folders) {
-            const Folder* found = Manager().FindFolder(each);
-            if (found == nullptr || Manager().IsDeleted(*found)) {
-                continue;
+        settingsPage_.RemoveProfiles(made.profiles);
+        if (!made.folders.empty()) {
+            DeleteTarget target{DeleteTarget::Kind::Folder, made.folders.front().id, made.folders.front().name};
+            for (size_t i = 1; i < made.folders.size(); ++i) {
+                target.alsoFolders.push_back(made.folders[i].id);
             }
-            if (target.id == 0) {
-                target.id = each;
-                target.name = found->name;
-            } else {
-                target.alsoFolders.push_back(each);
-            }
-        }
-        if (target.id != 0) {
             AskToDelete(std::move(target));
         }
     }

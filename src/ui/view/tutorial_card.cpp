@@ -671,28 +671,37 @@ void TutorialCard::EndButtons() {
     }
 }
 
+TutorialCard::Made TutorialCard::LeftToKeep() const {
+    Made left;
+    const std::vector<tutorial::FolderFacts> folders = world_.Folders();
+    for (const core::FolderId each : runner_.Folders()) {
+        const auto found =
+            std::find_if(folders.begin(), folders.end(), [&](const tutorial::FolderFacts& f) { return f.id == each; });
+        if (found != folders.end() && !found->deleted) {
+            left.folders.push_back(*found);
+        }
+    }
+    const std::vector<tutorial::ProfileFacts> profiles = world_.Profiles();
+    for (const std::string& made : runner_.MadeProfiles()) {
+        if (std::any_of(profiles.begin(), profiles.end(),
+                        [&](const tutorial::ProfileFacts& p) { return p.name == made; })) {
+            left.profiles.push_back(made);
+        }
+    }
+    return left;
+}
+
 const char* TutorialCard::KeepLabel() const {
+    const Made left = LeftToKeep();
     // A topic with nothing on a canvas keeps its profiles (section 18.3).
     if (!topic_->folder) {
-        size_t left = 0;
-        const std::vector<tutorial::ProfileFacts> profiles = world_.Profiles();
-        for (const std::string& made : runner_.MadeProfiles()) {
-            left += static_cast<size_t>(std::count_if(profiles.begin(), profiles.end(),
-                                                      [&](const tutorial::ProfileFacts& p) { return p.name == made; }));
-        }
-        return left == 0   ? nullptr
-               : left == 1 ? strings::kTutorialCardKeepProfile
-                           : strings::kTutorialCardKeepProfiles;
+        return left.profiles.empty()       ? nullptr
+               : left.profiles.size() == 1 ? strings::kTutorialCardKeepProfile
+                                           : strings::kTutorialCardKeepProfiles;
     }
-    const core::CanvasManager& manager = session_.Manager();
-    size_t left = 0;
-    for (const core::FolderId each : runner_.Folders()) {
-        const core::Folder* found = manager.FindFolder(each);
-        if (found != nullptr && !manager.IsDeleted(*found)) {
-            ++left;
-        }
-    }
-    return left == 0 ? nullptr : left == 1 ? strings::kTutorialCardKeepFolder : strings::kTutorialCardKeepFolders;
+    return left.folders.empty()       ? nullptr
+           : left.folders.size() == 1 ? strings::kTutorialCardKeepFolder
+                                      : strings::kTutorialCardKeepFolders;
 }
 
 TutorialCard::Status TutorialCard::StatusOf(const tutorial::Topic& topic) const {
