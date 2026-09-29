@@ -382,7 +382,7 @@
   "tutorial.list.done": "Done",
   "tutorial.list.close": "Close",
   "tutorial.settings.heading": "Tutorial",
-  "tutorial.settings.help": "The tutorial shows you around, one topic at a time: the basics, pinning and view mode, drawing and notes, capturing, folders and canvases, and more to come. Take any topic again whenever you want a refresher.\n\nEach topic runs in a new folder of its own, away from your canvases. A folder from an earlier run is left as it is.",
+  "tutorial.settings.help": "The tutorial shows you around, one topic at a time: the basics, pinning and view mode, drawing and notes, capturing, folders and canvases, and profiles. Take any topic again whenever you want a refresher.\n\nMost topics run in a new folder of their own, away from your canvases. A folder from an earlier run is left as it is.",
   "tutorial.settings.open": "Open the tutorial",
   "tutorial.topics.basics.title": "Basics",
   "tutorial.topics.basics.gist": "Take a screenshot, move and resize it, delete it and bring it back, and go back to your program.",
