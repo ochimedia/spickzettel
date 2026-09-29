@@ -682,13 +682,26 @@ TutorialCard::Made TutorialCard::LeftToKeep() const {
         }
     }
     const std::vector<tutorial::ProfileFacts> profiles = world_.Profiles();
-    for (const std::string& made : runner_.MadeProfiles()) {
+    for (const core::ProfileId made : runner_.MadeProfiles()) {
         if (std::any_of(profiles.begin(), profiles.end(),
-                        [&](const tutorial::ProfileFacts& p) { return p.name == made; })) {
+                        [&](const tutorial::ProfileFacts& p) { return p.id == made; })) {
             left.profiles.push_back(made);
         }
     }
     return left;
+}
+
+std::string TutorialCard::ProfileName() const {
+    const std::optional<core::ProfileId>& profile = runner_.Profile();
+    if (!profile) {
+        return {};
+    }
+    for (const tutorial::ProfileFacts& facts : world_.Profiles()) {
+        if (facts.id == *profile) {
+            return facts.name;
+        }
+    }
+    return {};
 }
 
 const char* TutorialCard::KeepLabel() const {

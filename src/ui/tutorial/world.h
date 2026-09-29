@@ -82,8 +82,10 @@ struct CanvasFacts {
 };
 
 // A profile, as the tutorial sees it - docs/TUTORIAL.md, section 18.3.
-// Known by its name, which is unique; a profile has no other identity.
+// Known by its id, which a rename keeps; its name is unique too, but only
+// at any one moment.
 struct ProfileFacts {
+    core::ProfileId id = 0;
     std::string name;
     // What it is matched on first: a program's file, else part of a
     // window's title - empty when it matches nothing.

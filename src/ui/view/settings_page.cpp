@@ -1273,12 +1273,12 @@ void SettingsPage::RenderSettingsProfiles() {
     }
 }
 
-void SettingsPage::RemoveProfiles(const std::vector<std::string>& names) {
+void SettingsPage::RemoveProfiles(const std::vector<ProfileId>& ids) {
     std::vector<Profile> kept;
     std::optional<size_t> showing;
     const std::vector<Profile>& profiles = settings_.Profiles();
     for (size_t i = 0; i < profiles.size(); ++i) {
-        if (std::find(names.begin(), names.end(), profiles[i].name) != names.end()) {
+        if (std::find(ids.begin(), ids.end(), profiles[i].id) != ids.end()) {
             continue;
         }
         // Showing follows its profile down the list, and lets go of it

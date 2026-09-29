@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -170,14 +171,27 @@ struct ProfileableSettings {
     bool operator==(const ProfileableSettings&) const = default;
 };
 
+// Which profile a Profile is, as long as the app runs: given when one is
+// made or read, kept by its copies, and never written to the file. Its
+// name can be edited, so it cannot be what follows a profile through a
+// rename - the tutorial's own profiles (docs/TUTORIAL.md, section 18.3).
+using ProfileId = uint64_t;
+ProfileId NewProfileId();
+
 struct Profile {
     // What it is called. Free text, and the handle a person uses - which is
     // why matching is on the fields below rather than on this.
     std::string name;
     ProfileMatch match;
     ProfileOverrides overrides;
+    // Last, so that {name, match, overrides} still makes one.
+    ProfileId id = NewProfileId();
 
-    bool operator==(const Profile&) const = default;
+    // What it says, not which one it is: a profile read back from the file
+    // equals the one written, under a new id.
+    bool operator==(const Profile& other) const {
+        return name == other.name && match == other.match && overrides == other.overrides;
+    }
 };
 
 // The first profile in `profiles` that matches, or nullopt. First rather

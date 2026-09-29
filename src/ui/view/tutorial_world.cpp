@@ -133,6 +133,7 @@ std::vector<tutorial::ProfileFacts> AppWorld::Profiles() const {
         const core::Profile& profile = profiles[i];
         const core::ProfileMatch& match = profile.match;
         tutorial::ProfileFacts each;
+        each.id = profile.id;
         each.name = profile.name;
         each.program = !match.executables.empty()    ? match.executables.front()
                        : !match.titleContains.empty() ? match.titleContains.front()

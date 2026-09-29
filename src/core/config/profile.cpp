@@ -1,6 +1,7 @@
 #include "core/config/profile.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <unordered_set>
 
@@ -88,6 +89,13 @@ bool ProfileMatch::Matches(const platform::ForegroundApp& app) const {
 
 bool ProfileOverrides::Empty() const {
     return OverriddenCount(ProfileGroup::Behavior) == 0 && OverriddenCount(ProfileGroup::Shortcuts) == 0;
+}
+
+ProfileId NewProfileId() {
+    // From 1, so that 0 is never one. Atomic because a Profile can be made
+    // on any thread that reads a settings file.
+    static std::atomic<ProfileId> next{1};
+    return next.fetch_add(1, std::memory_order_relaxed);
 }
 
 std::optional<size_t> FindMatchingProfile(const std::vector<Profile>& profiles,

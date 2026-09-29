@@ -52,6 +52,7 @@ struct FakeWorld : World {
     // while the Overview is up and overviewShowsSettings is set.
     std::string underneath = "game.exe";
     std::vector<ProfileFacts> profiles;
+    core::ProfileId lastProfileId = 0;
     bool overviewShowsSettings = false;
     SettingsSection section = SettingsSection::Other;
     std::optional<std::string> showing;
@@ -127,6 +128,7 @@ struct FakeWorld : World {
     // profile does - and Showing on it, as either button leaves it.
     ProfileFacts& MakeProfile(const std::string& name, bool forUnderneath = true) {
         ProfileFacts facts;
+        facts.id = ++lastProfileId;
         facts.name = name;
         facts.program = forUnderneath ? underneath : std::string();
         facts.matchesUnderneath = forUnderneath;

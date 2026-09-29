@@ -96,6 +96,27 @@ protected:
     void PickSection(SettingsPage::SettingsSection section) {
         ClickAnchor(Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(section)});
     }
+    // The tutorial's profile, and those it made, by the names they have
+    // now.
+    std::string NameOf(core::ProfileId id) const {
+        for (const Profile& profile : AppSettings().Profiles()) {
+            if (profile.id == id) {
+                return profile.name;
+            }
+        }
+        return "(gone)";
+    }
+    std::optional<std::string> TutorialsProfile() const {
+        const std::optional<core::ProfileId> profile = Runner().Profile();
+        return profile ? std::optional<std::string>(NameOf(*profile)) : std::nullopt;
+    }
+    std::vector<std::string> MadeProfiles() const {
+        std::vector<std::string> names;
+        for (const core::ProfileId id : Runner().MadeProfiles()) {
+            names.push_back(NameOf(id));
+        }
+        return names;
+    }
     // Showing's list opened, and the entry of profile `name` picked - or
     // the defaults, for none.
     void PickShowing(std::optional<std::string> name) {
@@ -476,7 +497,7 @@ protected:
             Press(TutorialButton::Next);
         } else if (id == "revert") {
             if (NeedUp() == tutorial::Need::ShowingIt) {
-                PickShowing(Runner().Profile());  // as its line says
+                PickShowing(TutorialsProfile());  // as its line says
             }
             const std::optional<AnchorRect> arrow = App().TutorialSpot();
             ASSERT_TRUE(arrow.has_value());
@@ -1665,7 +1686,7 @@ TEST_F(TutorialAppTest, DoneDeletesTheTutorialsProfileAndKeepKeepsIt) {
     config.profiles = {mine};
     StartWith(config);
     WalkTo("end", "profiles");
-    ASSERT_EQ(Runner().MadeProfiles(), std::vector<std::string>{"Game"});
+    ASSERT_EQ(MadeProfiles(), std::vector<std::string>{"Game"});
     const size_t folders = Canvases().Folders().size();
     Press(TutorialButton::Done);
     EXPECT_FALSE(Runner().On());
@@ -1682,6 +1703,29 @@ TEST_F(TutorialAppTest, DoneDeletesTheTutorialsProfileAndKeepKeepsIt) {
     DoneKeeping();
     ASSERT_EQ(AppSettings().Profiles().size(), 2u);
     EXPECT_EQ(AppSettings().Profiles()[1].name, "Game");
+}
+
+// A profile of the user's renamed as makeProfile is up is not the
+// tutorial's: Done leaves it, under its new name.
+TEST_F(TutorialAppTest, DoneLeavesAProfileOfTheUsersRenamedOnTheWay) {
+    AppConfig config = DefaultConfig();
+    Profile mine;
+    mine.name = "Mine";
+    mine.match.executables.push_back("game.exe");
+    config.profiles = {mine};
+    StartWith(config);
+    WalkTo("makeProfile", "profiles");
+    ASSERT_TRUE(controller_->GetSettings().RenameProfile(0, "Mine 2"));  // as its name field does
+    StepFrames(2);
+    EXPECT_TRUE(MadeProfiles().empty());
+    for (int guard = 0; guard < 20 && StepUp() != "end"; ++guard) {
+        DoStep(StepUp());
+    }
+    ASSERT_EQ(StepUp(), "end");
+    EXPECT_EQ(TutorialsProfile(), "Game");
+    Press(TutorialButton::Done);
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u);
+    EXPECT_EQ(AppSettings().Profiles()[0].name, "Mine 2");
 }
 
 // Showing follows the list when Done takes a profile out of it, as when a
@@ -1745,7 +1789,7 @@ TEST_F(TutorialAppTest, AProgramWithAProfileAlreadyGetsASecondOneForPractice) {
     EXPECT_EQ(HintUp(), std::string(strings::kTutorialMakeProfileMissTaken));
     DoStep("makeProfile");
     ASSERT_EQ(StepUp(), "behavior") << HintUp();
-    EXPECT_EQ(Runner().Profile(), "Game");
+    EXPECT_EQ(TutorialsProfile(), "Game");
     EXPECT_EQ(AppSettings().ActiveProfile(), 0u) << "the user's, first in the list";
 }
 
@@ -2679,7 +2723,7 @@ protected:
                     ComeBackOver(kGame);
                     break;
                 case tutorial::Need::ShowingIt:
-                    PickShowing(Runner().Profile());
+                    PickShowing(TutorialsProfile());
                     break;
                 case tutorial::Need::OverAnotherProgram:
                     ComeBackOver(kDesktop);
@@ -2712,7 +2756,7 @@ TEST_P(TutorialDerailTest, TheCardSaysALineAndFollowingItGetsTheStepDone) {
         StepFrames(3);
     }
     if (NeedUp() == tutorial::Need::ShowingIt) {
-        PickShowing(Runner().Profile());
+        PickShowing(TutorialsProfile());
     }
     const bool gated = Runner().CurrentStep().gated;
 

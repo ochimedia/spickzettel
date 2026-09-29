@@ -46,6 +46,27 @@ protected:
         return tutorial_.CurrentHint() ? tutorial_.CurrentHint()->need : std::nullopt;
     }
     const char* HintText() const { return tutorial_.CurrentHint() ? tutorial_.CurrentHint()->text : ""; }
+    // The tutorial's profile, and those it made, by the names they have
+    // now.
+    std::string NameOf(core::ProfileId id) const {
+        for (const ProfileFacts& facts : world_.profiles) {
+            if (facts.id == id) {
+                return facts.name;
+            }
+        }
+        return "(gone)";
+    }
+    std::optional<std::string> TutorialsProfile() const {
+        const std::optional<core::ProfileId> profile = tutorial_.Profile();
+        return profile ? std::optional<std::string>(NameOf(*profile)) : std::nullopt;
+    }
+    std::vector<std::string> MadeProfiles() const {
+        std::vector<std::string> names;
+        for (const core::ProfileId id : tutorial_.MadeProfiles()) {
+            names.push_back(NameOf(id));
+        }
+        return names;
+    }
 
     FakeWorld world_;
     Tutorial tutorial_;
@@ -157,7 +178,7 @@ protected:
         }
         return "";
     }
-    std::string Expanded(const char* text) { return Expand(text, world_, 0, tutorial_.Profile().value_or("")); }
+    std::string Expanded(const char* text) { return Expand(text, world_, 0, TutorialsProfile().value_or("")); }
     // "Game" made for game.exe at `makeProfile`, and the steps after it
     // walked to `id` - `change` by unticking a row, the rest with Next:
     // the profile stays the tutorial's, which a Resume would forget.
@@ -1276,7 +1297,7 @@ TEST_F(ProfilesChainTest, CanBeWalkedTheWayAUserWould) {
     Settle();
 
     ASSERT_EQ(Id(), "behavior");
-    EXPECT_EQ(tutorial_.Profile(), "Game");
+    EXPECT_EQ(TutorialsProfile(), "Game");
     world_.section = SettingsSection::Behavior;
     Settle();
 
@@ -1310,7 +1331,7 @@ TEST_F(ProfilesChainTest, CanBeWalkedTheWayAUserWould) {
     ASSERT_EQ(Id(), "end");
     tutorial_.Done();
     EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
-    EXPECT_EQ(tutorial_.MadeProfiles(), std::vector<std::string>{"Game"});
+    EXPECT_EQ(MadeProfiles(), std::vector<std::string>{"Game"});
 }
 
 TEST_F(ProfilesChainTest, ABlankProfileIsNotItAndTheOneForTheProgramIs) {
@@ -1319,12 +1340,12 @@ TEST_F(ProfilesChainTest, ABlankProfileIsNotItAndTheOneForTheProgramIs) {
     world_.MakeProfile("Profile 1", false);
     Frame();
     EXPECT_STREQ(HintText(), strings::kTutorialMakeProfileMissBlank);
-    EXPECT_EQ(tutorial_.Profile(), "Profile 1") << "the only one there is";
+    EXPECT_EQ(TutorialsProfile(), "Profile 1") << "the only one there is";
     world_.MakeProfile("Game");
     Settle();
     EXPECT_EQ(Id(), "behavior");
-    EXPECT_EQ(tutorial_.Profile(), "Game");
-    EXPECT_EQ(tutorial_.MadeProfiles(), (std::vector<std::string>{"Profile 1", "Game"}));
+    EXPECT_EQ(TutorialsProfile(), "Game");
+    EXPECT_EQ(MadeProfiles(), (std::vector<std::string>{"Profile 1", "Game"}));
 }
 
 TEST_F(ProfilesChainTest, AProfileMadeAsProfilesOpensIsTheTutorials) {
@@ -1335,7 +1356,7 @@ TEST_F(ProfilesChainTest, AProfileMadeAsProfilesOpensIsTheTutorials) {
     Settle();  // on to makeProfile
     Settle();  // met as it began
     EXPECT_EQ(Id(), "behavior") << "makeProfile met by the one made";
-    EXPECT_EQ(tutorial_.Profile(), "Game");
+    EXPECT_EQ(TutorialsProfile(), "Game");
 }
 
 TEST_F(ProfilesChainTest, AProgramWithAProfileAlreadySaysTheNewOneWillNotRun) {
@@ -1350,7 +1371,35 @@ TEST_F(ProfilesChainTest, AProgramWithAProfileAlreadySaysTheNewOneWillNotRun) {
     EXPECT_FALSE(world_.Profile("Game").running);
     Settle();
     EXPECT_EQ(Id(), "behavior") << "it matches, running or not";
-    EXPECT_EQ(tutorial_.Profile(), "Game");
+    EXPECT_EQ(TutorialsProfile(), "Game");
+}
+
+// A profile of the user's renamed while makeProfile is up is not one
+// made: it is not the tutorial's, and Done leaves it (section 18.3).
+TEST_F(ProfilesChainTest, AProfileOfTheUsersRenamedIsNotOneMade) {
+    world_.MakeProfile("Mine");
+    world_.showing.reset();
+    At("makeProfile");
+    world_.OpenSettings(SettingsSection::Profiles);
+    world_.Profile("Mine").name = "Mine 2";
+    Frame();
+    EXPECT_EQ(TutorialsProfile(), std::nullopt);
+    EXPECT_TRUE(MadeProfiles().empty());
+    world_.MakeProfile("Game");
+    Settle();
+    EXPECT_EQ(Id(), "behavior");
+    EXPECT_EQ(TutorialsProfile(), "Game");
+    EXPECT_EQ(MadeProfiles(), std::vector<std::string>{"Game"});
+}
+
+// And the tutorial's own, renamed, is still the tutorial's.
+TEST_F(ProfilesChainTest, TheTutorialsProfileRenamedIsStillTheTutorials) {
+    MadeAProfileThenAt("behavior");
+    world_.Profile("Game").name = "My game";
+    Frame();
+    EXPECT_EQ(TutorialsProfile(), "My game");
+    EXPECT_NE(NeedShown(), Need::TutorialsProfile);
+    EXPECT_NE(Expanded("{profile}").find("My game"), std::string::npos);
 }
 
 TEST_F(ProfilesChainTest, OnlyAProfileMadeAtMakeProfileIsTheTutorials) {
@@ -1358,7 +1407,7 @@ TEST_F(ProfilesChainTest, OnlyAProfileMadeAtMakeProfileIsTheTutorials) {
     world_.OpenSettings(SettingsSection::Profiles);
     world_.MakeProfile("Game");
     Frame();
-    EXPECT_EQ(tutorial_.Profile(), std::nullopt);
+    EXPECT_EQ(TutorialsProfile(), std::nullopt);
     EXPECT_EQ(NeedShown(), Need::TutorialsProfile);
 }
 

@@ -2530,9 +2530,14 @@ now, as in 6.3, and none looks at what was pressed:
   `keepsFolders` does for folders. Of several, it is the newest still
   there that matches a program, so a blank one made first by mistake is
   not it; with none matching, the newest blank one:
-  - Known by name. Names are unique (`docs/SETTINGS.md`, section 5), and
-    a profile has no other identity. One renamed during the topic is
-    lost to it, and the need for it says so.
+  - Known by its id (`core::ProfileId`), which each profile is given
+    when it is read or made and keeps through a rename, and which is
+    never written to the file. It was known by name at first, names
+    being unique (`docs/SETTINGS.md`, section 5). Found in review on
+    2026-09-29: a profile of the user's renamed while `makeProfile` was
+    up was a name not there when the step began, so it counted as made,
+    could become the tutorial's, and went at Done without a question.
+    And the tutorial's own, renamed, was lost to it.
   - Not kept across a restart, as the run's folders are not. After one,
     the need's line sends the user Back to make it again.
 - **Done**, and More topics, delete the profiles made in the run, the
@@ -2557,7 +2562,7 @@ now, as in 6.3, and none looks at what was pressed:
     (`ProfileFacts`);
   - the Settings panel: whether the Overview is on its Settings tab, the
     section picked, and whose values Showing shows.
-- **The start record** keeps the profiles by name and the tutorial's
+- **The start record** keeps the profiles, by id, and the tutorial's
   profile's stated count.
 - **Nine needs** (the ninth, over another program, is 18.8's):
 

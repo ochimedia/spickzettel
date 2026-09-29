@@ -210,10 +210,9 @@ struct Look {
     // The tutorial's canvases and folders seen in the trash during this
     // step - those in it when it began among them.
     const std::unordered_set<uint64_t>& trashedThisStep;
-    // Every profile, and the tutorial's by name, if it has one (section
-    // 18.3).
+    // Every profile, and the tutorial's, if it has one (section 18.3).
     const std::vector<ProfileFacts>& profiles;
-    const std::optional<std::string>& profile;
+    const std::optional<core::ProfileId>& profile;
 
     // A snippet of the tutorial's as it is now, or null.
     const SnippetFacts* Now(core::ItemId id) const;

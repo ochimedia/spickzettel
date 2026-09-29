@@ -95,11 +95,11 @@ public:
     std::vector<core::FolderId> Folders() const;
     const std::vector<core::FolderId>& MadeFolders() const { return madeFolders_; }
     // The profiles made while a step that keeps them was up (section
-    // 18.3), by name, kept for this run only; and the tutorial's profile
-    // among them: the newest still there that matches a program, else the
+    // 18.3), kept for this run only; and the tutorial's profile among
+    // them: the newest still there that matches a program, else the
     // newest still there.
-    const std::vector<std::string>& MadeProfiles() const { return madeProfiles_; }
-    const std::optional<std::string>& Profile() const { return profile_; }
+    const std::vector<core::ProfileId>& MadeProfiles() const { return madeProfiles_; }
+    const std::optional<core::ProfileId>& Profile() const { return profile_; }
     size_t StepIndex() const { return index_; }
     size_t StepCount() const { return chain_->size(); }
     const std::vector<Step>& Chain() const { return *chain_; }
@@ -172,8 +172,8 @@ private:
     std::vector<core::FolderId> madeFolders_;
     // The profiles made while a step that keeps them was up, and the
     // tutorial's among them.
-    std::vector<std::string> madeProfiles_;
-    std::optional<std::string> profile_;
+    std::vector<core::ProfileId> madeProfiles_;
+    std::optional<core::ProfileId> profile_;
 };
 
 // `text` with its placeholders filled in from `world`:

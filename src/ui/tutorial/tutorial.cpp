@@ -71,7 +71,7 @@ const ProfileFacts* Look::Profile() const {
         return nullptr;
     }
     for (const ProfileFacts& facts : profiles) {
-        if (facts.name == *profile) {
+        if (facts.id == *profile) {
             return &facts;
         }
     }
@@ -83,7 +83,7 @@ const ProfileFacts* Look::ProfileAtStart() const {
         return nullptr;
     }
     for (const ProfileFacts& facts : start.profiles) {
-        if (facts.name == *profile) {
+        if (facts.id == *profile) {
             return &facts;
         }
     }
@@ -599,14 +599,14 @@ void Tutorial::Update(const World& world, double now) {
         }
     }
     const std::vector<ProfileFacts> profiles = world.Profiles();
-    // So are the profiles made while a step that keeps them is up.
+    // So are the profiles made while a step that keeps them is up - made,
+    // not renamed: one of the user's given a new name keeps its id.
     if (begun_ && CurrentStep().keepsProfiles) {
         for (const ProfileFacts& facts : profiles) {
             const bool wasThere = std::any_of(start_.profiles.begin(), start_.profiles.end(),
-                                              [&](const ProfileFacts& was) { return was.name == facts.name; });
-            if (!wasThere &&
-                std::find(madeProfiles_.begin(), madeProfiles_.end(), facts.name) == madeProfiles_.end()) {
-                madeProfiles_.push_back(facts.name);
+                                              [&](const ProfileFacts& was) { return was.id == facts.id; });
+            if (!wasThere && std::find(madeProfiles_.begin(), madeProfiles_.end(), facts.id) == madeProfiles_.end()) {
+                madeProfiles_.push_back(facts.id);
             }
         }
     }
@@ -616,7 +616,7 @@ void Tutorial::Update(const World& world, double now) {
     profile_.reset();
     for (auto it = madeProfiles_.rbegin(); it != madeProfiles_.rend(); ++it) {
         const auto facts = std::find_if(profiles.begin(), profiles.end(),
-                                        [&](const ProfileFacts& each) { return each.name == *it; });
+                                        [&](const ProfileFacts& each) { return each.id == *it; });
         if (facts == profiles.end()) {
             continue;
         }

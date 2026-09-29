@@ -1035,7 +1035,7 @@ std::vector<Step> MakeFolders() {
 bool AProfileMade(const Look& look, bool (*wanted)(const ProfileFacts& facts)) {
     return std::any_of(look.profiles.begin(), look.profiles.end(), [&](const ProfileFacts& now) {
         const bool wasThere = std::any_of(look.start.profiles.begin(), look.start.profiles.end(),
-                                          [&](const ProfileFacts& then) { return then.name == now.name; });
+                                          [&](const ProfileFacts& then) { return then.id == now.id; });
         return !wasThere && wanted(now);
     });
 }
