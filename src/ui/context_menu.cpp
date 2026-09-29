@@ -127,8 +127,11 @@ ContextMenu::Drawn ContextMenu::Render(ImVec2 anchor, const Builder& build) {
     // style gives a dropdown's chosen row the accent in - borrowed from the
     // frame colors here instead, so a menu row is washed the way every other
     // hover in the app is, and pressed without turning accent, without this
-    // file naming a color.
+    // file naming a color. The row for what is picked already keeps its
+    // accent under the pointer, a shade stronger - the style's own pressed
+    // accent - rather than turning gray like the rest.
     const ImGuiStyle& style = ImGui::GetStyle();
+    const ImVec4 currentHovered = style.Colors[ImGuiCol_HeaderActive];
     ImGui::PushStyleColor(ImGuiCol_HeaderHovered, style.Colors[ImGuiCol_FrameBgHovered]);
     ImGui::PushStyleColor(ImGuiCol_HeaderActive, style.Colors[ImGuiCol_FrameBgActive]);
 
@@ -153,9 +156,16 @@ ContextMenu::Drawn ContextMenu::Render(ImVec2 anchor, const Builder& build) {
         // put it at the left edge, where the icon goes. What it is given
         // is the row's id alone (see ContextMenuEntry::id), which shows
         // nothing.
+        if (entry.current) {
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, currentHovered);
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, currentHovered);
+        }
         if (ImGui::Selectable(entry.id, entry.current, ImGuiSelectableFlags_None,
                                ImVec2(metrics.innerWidth, metrics.rowHeight))) {
             drawn.chosen = entry.action;
+        }
+        if (entry.current) {
+            ImGui::PopStyleColor(2);
         }
         const ImU32 ink = ImGui::GetColorU32(ImGuiCol_Text);
         if (entry.icon != nullptr) {
