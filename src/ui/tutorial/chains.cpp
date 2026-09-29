@@ -1104,8 +1104,8 @@ std::vector<Step> MakeProfiles() {
         .needs = {SettingsUp, SettingsTab, TutorialsProfile},
         .goal = [](const Look& look) { return OnSection(look.world, SettingsSection::Behavior); },
     });
-    // Waits: the next two show what it set, and revert hands it back. Any
-    // Behavior row counts, stated in the profile - its mark, not its value.
+    // Waits: revert hands back what it set. Any Behavior row counts,
+    // stated in the profile - its mark, not its value.
     chain.push_back(Step{
         .id = "change",
         .kind = StepKind::Do,
@@ -1115,41 +1115,6 @@ std::vector<Step> MakeProfiles() {
         .spot = Spot::DontStealFocus,
         .needs = {SettingsUp, SettingsTab, BehaviorSection, TutorialsProfile, ShowingIt},
         .goal = [](const Look& look) { return StatedNow(look) > StatedAtStart(look); },
-    });
-    // Not running is not asked: another profile of the user's may match
-    // the other program.
-    chain.push_back(Step{
-        .id = "otherProgram",
-        .kind = StepKind::Do,
-        .title = strings::kTutorialOtherProgramTitle,
-        .text =
-            [](const World& world) {
-                return Fixed(world.KeyLabel(CommandId::ToggleEditMode) ? strings::kTutorialOtherProgramText
-                                                                        : strings::kTutorialOtherProgramTextTray);
-            },
-        .needs = {TutorialsProfile},
-        .goal =
-            [](const Look& look) {
-                return look.world.Showings() > look.start.showings && look.Profile() != nullptr &&
-                       !look.Profile()->matchesUnderneath;
-            },
-        .nearMisses =
-            {
-                {[](const Look& look) {
-                     return look.world.Showings() > look.start.showings && look.Profile() != nullptr &&
-                            look.Profile()->matchesUnderneath;
-                 },
-                 strings::kTutorialOtherProgramMissSame},
-            },
-    });
-    // What the trip shows. Its need says what to do when the overlay did
-    // not leave (section 18.8).
-    chain.push_back(Step{
-        .id = "elsewhere",
-        .title = strings::kTutorialElsewhereTitle,
-        .text = [](const World&) { return Fixed(strings::kTutorialElsewhereText); },
-        .spot = Spot::Showing,
-        .needs = {SettingsUp, SettingsTab, BehaviorSection, OverAnotherProgram},
     });
     chain.push_back(Step{
         .id = "revert",

@@ -79,13 +79,11 @@ enum class Need {
     BehaviorSection,
     // The overlay up over a program it can name, to make a profile for.
     AProgramUnderneath,
-    // The tutorial's profile there (section 18.3); Showing on it; a
-    // Behavior setting stated in it; and the overlay up over a program it
-    // does not match.
+    // The tutorial's profile there (section 18.3); Showing on it; and a
+    // Behavior setting stated in it.
     TutorialsProfile,
     ShowingIt,
     SomethingSetInIt,
-    OverAnotherProgram,
 };
 
 // Which snippet a step is about - section 6.5.

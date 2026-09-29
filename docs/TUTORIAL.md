@@ -500,7 +500,6 @@ and where it can, a way back in one click:
 | Settings up, its tab, and a section | the Overview is not up, is on another tab, or on another section (18.3) | "Open Settings: right-click an empty spot and choose Settings.", and so on | - |
 | A program underneath | the overlay is up over nothing it can name | "The overlay is up over nothing it can name. ..." | - |
 | The tutorial's profile, Showing on it, something set in it | none; Showing on another; it states nothing (18.3) | "The tutorial has no profile of its own ...", and so on | - |
-| Over another program | the tutorial's profile matches the program underneath | "The overlay is still up over {program}. ..." | - |
 
 The needs are checked in the step's order, every frame the goal is not
 met (section 5). So a card never shows a text that is wrong for what is
@@ -2429,7 +2428,8 @@ how, and what a profile does:
 - **Three things the panel shows no sign of,** which the steps make
   concrete:
   - A profile only runs over its program. Brought up over another one,
-    the same rows show the defaults.
+    the same rows show the defaults. `change` says so in a sentence;
+    no step goes there any more (question 39).
   - A profile states only what it changes. The rest comes from the
     defaults.
   - A row set in a profile stays the profile's own, even set back to the
@@ -2462,11 +2462,9 @@ The revert at the end puts it back.
 | 0 | `openProfiles` | do | moves on | Programs differ: some games break when the overlay takes focus, others need it to. A profile keeps settings for one program. Right-click an empty spot, choose Settings, and pick Profiles on the left. | Profiles, in the section list | - | Settings up on its Profiles section | - |
 | 1 | `makeProfile` | do | **waits** | The overlay is up over {underneath}. Press Make a profile for this: it runs whenever the overlay comes up over {underneath}, and says "currently active" while it does. | Make a profile for this | Settings up; its Settings tab; the Profiles section; a program underneath | the tutorial's profile matches the program underneath (18.8) | a blank profile made: "That made a blank profile, which matches no program until you name one. Make a profile for this is the button to its left." |
 | 2 | `behavior` | do | moves on | A profile can change what is in the boxes marked Per profile: the settings in Behavior, and the shortcuts in Hotkeys. Pick Behavior on the left. | Behavior, in the section list | Settings up; its Settings tab; the tutorial's profile | Settings up on its Behavior section | - |
-| 3 | `change` | do | **waits** | Profile, at the top of the box, says whose settings are below: {profile}'s. Untick Don't steal focus. Over {program}, the overlay will now take focus, and the rows under it gray out: they only matter while it doesn't. | the Don't steal focus row | Settings up; its Settings tab; the Behavior section; the tutorial's profile; Showing on it | the tutorial's profile states more Behavior settings than when the step began | - |
-| 4 | `otherProgram` | do | moves on | A profile only runs over its program. Press {key:toggleEditMode} to put the overlay away, click another program (the desktop will do), and press it again to bring the overlay back over that one. | - | the tutorial's profile | the overlay has come up again, over a program the tutorial's profile does not match | back over the same program: "It came back over {program}, which {profile} is for. Click another program first, then bring the overlay back." |
-| 5 | `elsewhere` | read | Next | At the top of Behavior, the application underneath is now {underneath}. Profile is on {showing}, and Don't steal focus is ticked there: {profile} only runs over {program}. | Showing | Settings up; its Settings tab; the Behavior section; over another program (18.8) | - | - |
-| 6 | `revert` | do | moves on | To hand a setting back to the defaults, press the arrow beside it. Ticking it again would keep it {profile}'s own, in the accent color. | the first arrow in the box | Settings up; its Settings tab; the Behavior section; the tutorial's profile; Showing on it; something set in it | the tutorial's profile states fewer Behavior settings than when the step began | ticked back by hand: "That keeps it {profile}'s own - the row is still in the accent color. The arrow beside it hands it back to the defaults." |
-| 7 | `end` | read | Done | That's profiles. New empty profile makes one for a program that isn't in front. Open a profile's row to add more programs to it, or part of a window's title. The first profile in the list that matches is the one that runs. | - | - | Done | - |
+| 3 | `change` | do | **waits** | Profile, at the top of the box, says whose settings are below: {profile}'s. Untick Don't steal focus. Over {program}, the overlay will now take focus, and the rows under it gray out: they only matter while it doesn't. Over any other program the defaults apply, and Profile shows them. | the Don't steal focus row | Settings up; its Settings tab; the Behavior section; the tutorial's profile; Showing on it | the tutorial's profile states more Behavior settings than when the step began | - |
+| 4 | `revert` | do | moves on | To hand a setting back to the defaults, press the arrow beside it. Ticking it again would keep it {profile}'s own, in the accent color. | the first arrow in the box | Settings up; its Settings tab; the Behavior section; the tutorial's profile; Showing on it; something set in it | the tutorial's profile states fewer Behavior settings than when the step began | ticked back by hand: "That keeps it {profile}'s own - the row is still in the accent color. The arrow beside it hands it back to the defaults." |
+| 5 | `end` | read | Done | That's profiles. New empty profile makes one for a program that isn't in front. Open a profile's row to add more programs to it, or part of a window's title. The first profile in the list that matches is the one that runs. | - | - | Done | - |
 
 **The words in braces** are filled by `Expand()` from the world (18.3):
 `{underneath}` is the program the overlay is up over now, `{profile}`
@@ -2478,9 +2476,7 @@ the tutorial's profile's name, `{program}` what it is matched on, and
 
 **Which steps wait** (question 37's rule). `makeProfile` does, since
 every later step is about the profile it makes. `change` does, since
-`otherProgram` and `elsewhere` show what it set, and `revert` takes it
-back. `otherProgram` does not: a user with nothing else open can go on
-with Next, and `elsewhere` says what they would have seen (below).
+`revert` takes back what it set.
 
 **What each goal reads.** Each is a change between the step's start and
 now, as in 6.3, and none looks at what was pressed:
@@ -2493,10 +2489,6 @@ now, as in 6.3, and none looks at what was pressed:
   only Don't steal focus. What counts is the profile stating it (the
   row's mark), not its value: a row ticked and unticked again is still
   stated.
-- **Over another program:** `Showings()` has grown, and the program
-  underneath is not one the profile's rules match. That it is running or
-  not is not asked: another profile of the user's may match the new
-  program, and Showing then names that one.
 - **A setting handed back:** the tutorial's profile states fewer
   Behavior settings. The near miss is a stated row whose value is the
   defaults' again.
@@ -2506,11 +2498,6 @@ now, as in 6.3, and none looks at what was pressed:
 - **`openProfiles` with the Overview already up** on its Canvases tab:
   "Press Settings, at the top of the Overview, and pick Profiles on the
   left."
-- **With the edit-mode hotkey unbound,** `otherProgram` names the tray
-  icon, as Basics' `away` does (`tutorial.away.textTray`).
-- **`elsewhere` when the overlay never left** (Next pressed on
-  `otherProgram`, and the profile still matches): its need for another
-  program says how to see it (18.8).
 - **`makeProfile` when a profile of the user's already matches the
   program** (question 44): a line under the text, "{running} is already
   the profile for {underneath}, and the first in the list that matches
@@ -2564,7 +2551,7 @@ now, as in 6.3, and none looks at what was pressed:
     section picked, and whose values Showing shows.
 - **The start record** keeps the profiles, by id, and the tutorial's
   profile's stated count.
-- **Nine needs** (the ninth, over another program, is 18.8's):
+- **Eight needs:**
 
   | Need | Not met when | The card says | Button |
   |---|---|---|---|
@@ -2576,7 +2563,6 @@ now, as in 6.3, and none looks at what was pressed:
   | The tutorial's profile | there is none, or it is gone | "The tutorial has no profile of its own: it was deleted, or the app has restarted since. Go Back to make one, or go on with Next." | - |
   | Showing on it | Showing shows the defaults or another profile | "Profile is on {showing}. Pick {profile} there: a change is made to whose settings it shows." | - |
   | Something set in it | the tutorial's profile states no Behavior setting | "{profile} sets nothing of its own yet. Untick Don't steal focus in it first, or go on with Next." | - |
-  | Over another program | the tutorial's profile matches the program underneath | "The overlay is still up over {program}. Press {key:toggleEditMode} to put it away, click another program, and press it again to see the difference." | - |
 
   "Settings up" opens the Overview by the menu's Settings item, where
   17's "the Overview up" says to choose Overview. Four of the needs are
@@ -2636,7 +2622,6 @@ now, as in 6.3, and none looks at what was pressed:
   - Make a profile for this;
   - Behavior;
   - the Don't steal focus checkbox;
-  - put away, another program set, and back;
   - Showing's list, and the profile in it (the UI engine, where the
     headless app has no handle on a combo's list);
   - the arrow;
@@ -2648,7 +2633,6 @@ now, as in 6.3, and none looks at what was pressed:
   - `makeProfile`: nothing underneath (its need); New profile (the near
     miss);
   - `change` and `revert`: Showing on the defaults (its need);
-  - `otherProgram`: back over the same program (the near miss);
   - `revert`: the row ticked back (the near miss).
 - **By hand:** every card with real input, over a real program and the
   desktop, and where the card lands over Settings.
@@ -2671,7 +2655,21 @@ Two pieces of work, as in 17.6:
     profile runs only over its program. The alternative, for five and
     the end card, is to pick Defaults in Showing and see the row ticked
     there, which shows the layers but not that the profile follows the
-    program. *Answer:* as recommended (the trip).
+    program. *Answer:* as recommended (the trip). *Revised on
+    2026-09-29, after a test run:* the trip is gone, and `change` says
+    in a sentence that over any other program the defaults apply. A
+    first run starts over the desktop, so the profile was usually for
+    explorer.exe, and the desktop, the easiest other place to click,
+    is that same program, as every File Explorer window is. The card
+    had to leave it out there and explain why, the icon in the
+    notification area likely raises the taskbar, explorer.exe again,
+    and naming a program to go to (Notepad, Calculator) has
+    exceptions of its own: a profile of the user's for it, a Store app
+    known only by its host, a program that is not installed. What the
+    trip showed, Settings already says: "currently active" or "not
+    active" beside Profile, and Profile on the defaults over any other
+    program. With it went `otherProgram`, `elsewhere` and the need
+    for another program: five steps and the end card.
 40. **Don't steal focus is the setting the card names,** for the reason
     the `programs` card gives and for the rows that gray out under it.
     The goal counts any Behavior row. *Answer:* as recommended.
@@ -2714,12 +2712,13 @@ Two pieces of work, as in 17.6:
 - **Text variants became lines.** The step text is chosen from the world
   alone, and "a profile of the user's" and "the overlay never left" are
   about the tutorial's profile, which only the runner knows. The first
-  is a line under `makeProfile`'s text, the second a need of
-  `elsewhere`'s, over another program. `change` says "over {program},
+  is a line under `makeProfile`'s text, the second was a need of
+  `elsewhere`'s, over another program (both gone since; question 39).
+  `change` says "over {program},
   the overlay will now take focus" either way: of a practice profile
   that does not run, `makeProfile`'s line has said so already.
-- **A read step may have needs.** `elsewhere` is one; its lines guide
-  and do not hold Next. The shape test said read steps had none, and no
+- **A read step may have needs.** `elsewhere` was one, until it went
+  (question 39); its lines guided and did not hold Next. The shape test said read steps had none, and no
   longer does.
 - **`Expand()` takes the tutorial's profile's name,** for {profile} and
   {program}, from the card. {running} is the profile that runs.
@@ -2730,11 +2729,18 @@ Two pieces of work, as in 17.6:
   underneath is explorer.exe, and Make a profile for this makes one for
   it, which File Explorer's windows match too. So the need for a program
   no longer says "such as the desktop". Settings' own line for nothing
-  identifiable still names it, and is left as it is here. `otherProgram`'s "(the desktop will do)" holds unless the
-  profile is for explorer.exe, where its near miss says to click
-  another.
+  identifiable still names it, and is left as it is here.
+  `otherProgram`'s "(the desktop will do)" held unless the profile was
+  for explorer.exe, where its near miss said to click another - the
+  usual case, as it turned out (question 39).
+- **The ring shows the way to a spot in Settings** not drawn yet: the
+  Overview's Settings tab while it is on another tab, then the row of
+  the section the spot is in while another section is picked. Found in
+  a test run on 2026-09-29: over the Overview's Canvases tab,
+  `openProfiles` said to press Settings and ringed nothing, since its
+  spot, the Profiles row, is only drawn on the Settings tab.
 - **Hand check,** at 1920 by 1080 with real input, over Notepad and the
-  desktop: the ring on Profiles, the card in the lower right; New
+  desktop, while the chain still had its trip (question 39): the ring on Profiles, the card in the lower right; New
   profile's line; Make a profile for this, "running now", Showing on it
   in Behavior; Don't steal focus unticked, the arrow and the gray rows
   under it, "sets 1 setting of its own"; put away, the desktop clicked,

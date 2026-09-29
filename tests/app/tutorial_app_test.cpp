@@ -69,9 +69,8 @@ protected:
             ASSERT_EQ(Runner().Folder(), 0u);
         }
     }
-    // The programs the overlay comes up over in Profiles' steps.
+    // The program the overlay comes up over in Profiles' steps.
     inline static const platform::ForegroundApp kGame{"game.exe", "Game"};
-    inline static const platform::ForegroundApp kDesktop{"explorer.exe", "Program Manager"};
     // The overlay put away, `app` clicked, and the overlay brought back
     // over it.
     void ComeBackOver(const platform::ForegroundApp& app) {
@@ -491,10 +490,6 @@ protected:
             PickSection(SettingsPage::SettingsSection::Behavior);
         } else if (id == "change") {
             ClickAnchor(Anchor{AnchorId::SettingsDontStealFocus});
-        } else if (id == "otherProgram") {
-            ComeBackOver(kDesktop);
-        } else if (id == "elsewhere") {
-            Press(TutorialButton::Next);
         } else if (id == "revert") {
             if (NeedUp() == tutorial::Need::ShowingIt) {
                 PickShowing(TutorialsProfile());  // as its line says
@@ -2252,7 +2247,6 @@ enum class Way {
     NothingUnderneath,
     NewProfileMade,
     ShowingDefaults,
-    SameProgramAgain,
     TickedBack,
 };
 
@@ -2296,7 +2290,6 @@ const char* WayName(Way way) {
         case Way::NothingUnderneath: return "NothingUnderneath";
         case Way::NewProfileMade: return "NewProfileMade";
         case Way::ShowingDefaults: return "ShowingDefaults";
-        case Way::SameProgramAgain: return "SameProgramAgain";
         case Way::TickedBack: return "TickedBack";
     }
     return "?";
@@ -2457,9 +2450,8 @@ std::vector<Derail> Matrix() {
     }
     // Profiles' steps in Settings: each needs it up, on its Settings tab,
     // in its section. Put away and back over the same program keeps both
-    // the panel and Showing; over another, revert's Showing is the
-    // defaults, which it came up over.
-    for (const char* step : {"makeProfile", "behavior", "change", "elsewhere", "revert"}) {
+    // the panel and Showing.
+    for (const char* step : {"makeProfile", "behavior", "change", "revert"}) {
         cases.push_back({"profiles", step, OverviewClosed, Need::SettingsUp});
         cases.push_back({"profiles", step, CanvasesTabPicked, Need::SettingsTab});
     }
@@ -2473,11 +2465,7 @@ std::vector<Derail> Matrix() {
         {"profiles", "change", HiddenAndShown, nothing},
         {"profiles", "change", OtherSection, Need::BehaviorSection},
         {"profiles", "change", ShowingDefaults, Need::ShowingIt},
-        {"profiles", "otherProgram", OverviewClosed, nothing},
-        {"profiles", "otherProgram", SameProgramAgain, nothing},
-        {"profiles", "elsewhere", HiddenAndShown, nothing},
-        {"profiles", "elsewhere", OtherSection, Need::BehaviorSection},
-        {"profiles", "revert", HiddenAndShown, Need::ShowingIt},
+        {"profiles", "revert", HiddenAndShown, nothing},
         {"profiles", "revert", OtherSection, Need::BehaviorSection},
         {"profiles", "revert", ShowingDefaults, Need::ShowingIt},
         {"profiles", "revert", TickedBack, nothing},
@@ -2657,11 +2645,6 @@ protected:
             case Way::ShowingDefaults:
                 PickShowing(std::nullopt);
                 break;
-            case Way::SameProgramAgain:
-                ComeBackOver(kGame);
-                StepFrames(2);
-                ASSERT_EQ(HintUp(), std::string(strings::kTutorialOtherProgramMissSame));
-                break;
             case Way::TickedBack:
                 ClickAnchor(Anchor{AnchorId::SettingsDontStealFocus});
                 StepFrames(2);
@@ -2753,9 +2736,6 @@ protected:
                     break;
                 case tutorial::Need::ShowingIt:
                     PickShowing(TutorialsProfile());
-                    break;
-                case tutorial::Need::OverAnotherProgram:
-                    ComeBackOver(kDesktop);
                     break;
                 default:
                     FAIL() << "a line with nothing to do: " << hint->text;

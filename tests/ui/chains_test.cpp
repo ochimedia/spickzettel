@@ -1307,21 +1307,11 @@ TEST_F(ProfilesChainTest, CanBeWalkedTheWayAUserWould) {
     world_.Profile("Game").stated = 1;
     Settle();
 
-    ASSERT_EQ(Id(), "otherProgram");
-    world_.ComeUpOver("explorer.exe");
-    Settle();
-
-    ASSERT_EQ(Id(), "elsewhere");
-    EXPECT_EQ(NeedShown(), std::nullopt);
-    const std::string elsewhere = Expanded(TextOf("elsewhere"));
-    EXPECT_NE(elsewhere.find("explorer.exe"), std::string::npos) << elsewhere;
-    EXPECT_NE(elsewhere.find(strings::kProfilesDefaults), std::string::npos) << elsewhere;
-    EXPECT_NE(elsewhere.find("game.exe"), std::string::npos) << elsewhere;
-    tutorial_.Next();
-    Frame();
-
     ASSERT_EQ(Id(), "revert");
-    EXPECT_EQ(NeedShown(), Need::ShowingIt) << "Showing came up on the defaults";
+    EXPECT_EQ(NeedShown(), std::nullopt);
+    world_.showing.reset();
+    Frame();
+    EXPECT_EQ(NeedShown(), Need::ShowingIt);
     world_.showing = "Game";
     Frame();
     EXPECT_EQ(NeedShown(), std::nullopt);
@@ -1457,25 +1447,6 @@ TEST_F(ProfilesChainTest, NothingUnderneathIsTheNeedForAProgram) {
     EXPECT_STREQ(HintText(), strings::kTutorialNeedAProgramUnderneathTray);
 }
 
-TEST_F(ProfilesChainTest, BackOverTheSameProgramSaysToClickAnother) {
-    MadeAProfileThenAt("otherProgram");
-    world_.ComeUpOver("game.exe");
-    Frame();
-    EXPECT_STREQ(HintText(), strings::kTutorialOtherProgramMissSame);
-    world_.ComeUpOver("explorer.exe");
-    Settle();
-    EXPECT_EQ(Id(), "elsewhere");
-}
-
-TEST_F(ProfilesChainTest, ElsewhereSaysHowToSeeItWhenTheOverlayNeverLeft) {
-    MadeAProfileThenAt("elsewhere");
-    EXPECT_EQ(NeedShown(), Need::OverAnotherProgram);
-    world_.keys.erase(CommandId::ToggleEditMode);
-    Frame();
-    EXPECT_STREQ(HintText(), strings::kTutorialNeedOverAnotherProgramTray);
-    EXPECT_TRUE(tutorial_.NextEnabled());
-}
-
 TEST_F(ProfilesChainTest, ARowTickedBackIsNotHandedBack) {
     MadeAProfileThenAt("revert");
     world_.Profile("Game").statedAsDefaults = 1;
@@ -1498,13 +1469,10 @@ TEST_F(ProfilesChainTest, RevertNeedsSomethingSetInTheProfile) {
     EXPECT_EQ(NeedShown(), Need::SomethingSetInIt);
 }
 
-TEST_F(ProfilesChainTest, TheTextsFollowTheOverviewAndTheKeys) {
+TEST_F(ProfilesChainTest, TheTextFollowsTheOverview) {
     EXPECT_STREQ(TextOf("openProfiles"), strings::kTutorialOpenProfilesText);
     world_.cover = Cover::Overview;
     EXPECT_STREQ(TextOf("openProfiles"), strings::kTutorialOpenProfilesTextOverview);
-    EXPECT_STREQ(TextOf("otherProgram"), strings::kTutorialOtherProgramText);
-    world_.keys.erase(CommandId::ToggleEditMode);
-    EXPECT_STREQ(TextOf("otherProgram"), strings::kTutorialOtherProgramTextTray);
 }
 
 TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
@@ -1534,9 +1502,7 @@ TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
         strings::kTutorialNeedProfilesSection,  strings::kTutorialNeedBehaviorSection,
         strings::kTutorialNeedAProgramUnderneath, strings::kTutorialNeedAProgramUnderneathTray,
         strings::kTutorialNeedTutorialsProfile, strings::kTutorialNeedShowingIt,
-        strings::kTutorialNeedSomethingSetInIt, strings::kTutorialNeedOverAnotherProgram,
-        strings::kTutorialNeedOverAnotherProgramTray, strings::kTutorialOpenProfilesTextOverview,
-        strings::kTutorialOtherProgramTextTray,
+        strings::kTutorialNeedSomethingSetInIt, strings::kTutorialOpenProfilesTextOverview,
     };
     world_.keys[CommandId::NewCanvas] = "Ctrl+N";
     for (const Topic& topic : Topics()) {

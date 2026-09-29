@@ -566,16 +566,6 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const Look& look) co
                     return unmet(need, strings::kTutorialNeedSomethingSetInIt);
                 }
                 break;
-            case Need::OverAnotherProgram:
-                if (look.Profile() == nullptr) {
-                    return noProfile;
-                }
-                if (look.Profile()->matchesUnderneath) {
-                    return unmet(need, world.KeyLabel(CommandId::ToggleEditMode)
-                                           ? strings::kTutorialNeedOverAnotherProgram
-                                           : strings::kTutorialNeedOverAnotherProgramTray);
-                }
-                break;
         }
     }
     return std::nullopt;
