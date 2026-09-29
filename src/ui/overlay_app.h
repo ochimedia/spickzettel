@@ -605,7 +605,7 @@ private:
     Welcome welcomePending_ = Welcome::Nothing;
 
     // What the tutorial reads of the app, and the showings it counts.
-    AppWorld tutorialWorld_{session_, settings_, editor_, overview_, settingsPage_};
+    AppWorld tutorialWorld_{session_, settings_, editor_, overview_, settingsPage_, *this};
 
     // ===== The owners of the surfaces (docs/VIEW_LAYER.md, section 7) =====
     //

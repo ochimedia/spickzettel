@@ -51,6 +51,7 @@ struct FakeWorld : World {
     // The program underneath, the profiles, and the Settings tab - on it
     // while the Overview is up and overviewShowsSettings is set.
     std::string underneath = "game.exe";
+    std::string desktop = "explorer.exe";
     std::vector<ProfileFacts> profiles;
     core::ProfileId lastProfileId = 0;
     bool overviewShowsSettings = false;
@@ -221,6 +222,7 @@ struct FakeWorld : World {
     bool OverviewShowsDeleted() const override { return cover == Cover::Overview && overviewShowsDeleted; }
     bool CanvasBarOn() const override { return canvasBarOn; }
     std::string Underneath() const override { return underneath; }
+    std::string DesktopProgram() const override { return desktop; }
     std::vector<ProfileFacts> Profiles() const override { return profiles; }
     bool OverviewShowsSettings() const override { return cover == Cover::Overview && overviewShowsSettings; }
     SettingsSection SettingsSectionShown() const override { return section; }

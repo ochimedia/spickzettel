@@ -171,6 +171,9 @@ public:
     // Settings tab, the section picked there, and whose values Showing
     // shows - a profile's name, or nothing for the defaults.
     virtual std::string Underneath() const = 0;
+    // The program the desktop belongs to, named as Underneath names one -
+    // empty when it can't be told. See IOverlayWindow::DesktopProgram.
+    virtual std::string DesktopProgram() const = 0;
     virtual std::vector<ProfileFacts> Profiles() const = 0;
     virtual bool OverviewShowsSettings() const = 0;
     virtual SettingsSection SettingsSectionShown() const = 0;

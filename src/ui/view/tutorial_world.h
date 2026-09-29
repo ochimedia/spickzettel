@@ -19,6 +19,7 @@
 #include "ui/editor.h"
 #include "ui/view/overview_panel.h"
 #include "ui/view/settings_page.h"
+#include "ui/view/view_host.h"
 #include "ui/tutorial/world.h"
 
 namespace sz::ui {
@@ -28,8 +29,13 @@ public:
     // `overview` and `settingsPage` are only read, once the app is
     // running - they may be constructed after this.
     AppWorld(const core::Session& session, const core::Settings& settings, const Editor& editor,
-             const OverviewPanel& overview, const SettingsPage& settingsPage)
-        : session_(session), settings_(settings), editor_(editor), overview_(overview), settingsPage_(settingsPage) {}
+             const OverviewPanel& overview, const SettingsPage& settingsPage, const ViewHost& host)
+        : session_(session),
+          settings_(settings),
+          editor_(editor),
+          overview_(overview),
+          settingsPage_(settingsPage),
+          host_(host) {}
 
     // The overlay has come up - see OverlayApp::OnOverlayShown - and a
     // transition has entered the pinned view, or view mode (see
@@ -65,6 +71,7 @@ public:
     bool OverviewShowsDeleted() const override { return overview_.IsOpen() && overview_.ShowingDeleted(); }
     bool CanvasBarOn() const override { return settings_.Stored().showCanvasBar; }
     std::string Underneath() const override;
+    std::string DesktopProgram() const override;
     std::vector<tutorial::ProfileFacts> Profiles() const override;
     bool OverviewShowsSettings() const override { return overview_.OnSettingsTab(); }
     tutorial::SettingsSection SettingsSectionShown() const override;
@@ -84,6 +91,7 @@ private:
     const Editor& editor_;
     const OverviewPanel& overview_;
     const SettingsPage& settingsPage_;
+    const ViewHost& host_;
     uint64_t showings_ = 0;
     uint64_t pinnedViews_ = 0;
     uint64_t viewModes_ = 0;

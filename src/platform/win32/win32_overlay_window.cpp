@@ -522,6 +522,26 @@ int Win32OverlayWindow::ScalePercent() const {
     return dpi > 0 ? MulDiv(static_cast<int>(dpi), 100, USER_DEFAULT_SCREEN_DPI) : 100;
 }
 
+namespace {
+
+// The file name of a process's executable, lowercased because Windows
+// compares file names that way and a profile matching "EldenRing.exe" must
+// match a process reported as "eldenring.exe". Empty when it can't be read.
+std::string ExecutableName(HANDLE process) {
+    wchar_t path[MAX_PATH] = {};
+    DWORD length = static_cast<DWORD>(std::size(path));
+    if (!QueryFullProcessImageNameW(process, 0, path, &length) || length == 0) {
+        return {};
+    }
+    const std::filesystem::path imagePath(std::wstring_view(path, length));
+    std::string name = Narrow(imagePath.filename().wstring());
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return name;
+}
+
+}  // namespace
+
 ForegroundApp Win32OverlayWindow::UnderlyingApplication() const {
     // Whoever holds the foreground, unless that is this window - which it
     // is only in the configuration where edit mode takes focus, and where
@@ -558,22 +578,30 @@ ForegroundApp Win32OverlayWindow::UnderlyingApplication() const {
         // above is read first and unconditionally.
         if (const HANDLE process =
                 OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId)) {
-            wchar_t path[MAX_PATH] = {};
-            DWORD length = static_cast<DWORD>(std::size(path));
-            if (QueryFullProcessImageNameW(process, 0, path, &length) && length > 0) {
-                const std::filesystem::path imagePath(std::wstring_view(path, length));
-                app.executable = Narrow(imagePath.filename().wstring());
-                // Lowercased because Windows filenames are compared that
-                // way and a profile matching "EldenRing.exe" must match a
-                // process reported as "eldenring.exe".
-                std::transform(app.executable.begin(), app.executable.end(), app.executable.begin(),
-                                [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            }
+            app.executable = ExecutableName(process);
             app.integrity = IntegrityComparedToOurs(process);
             CloseHandle(process);
         }
     }
     return app;
+}
+
+std::string Win32OverlayWindow::DesktopProgram() const {
+    // The shell's window is the desktop's, and it does not change while
+    // the shell runs - nor, restarted, what it is called.
+    if (desktopProgram_.empty()) {
+        DWORD processId = 0;
+        if (const HWND shell = GetShellWindow()) {
+            GetWindowThreadProcessId(shell, &processId);
+        }
+        if (processId != 0) {
+            if (const HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, processId)) {
+                desktopProgram_ = ExecutableName(process);
+                CloseHandle(process);
+            }
+        }
+    }
+    return desktopProgram_;
 }
 
 namespace {

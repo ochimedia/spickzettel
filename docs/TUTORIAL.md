@@ -2508,6 +2508,17 @@ now, as in 6.3, and none looks at what was pressed:
   left."
 - **With the edit-mode hotkey unbound,** `otherProgram` names the tray
   icon, as Basics' `away` does (`tutorial.away.textTray`).
+- **`otherProgram` over the desktop's own program** (explorer.exe, which
+  every File Explorer window is too) does not offer the desktop: "...
+  click another program, and press it again to bring the overlay back
+  over that one. Not the desktop: it belongs to {underneath}, as every
+  File Explorer window does." Back over it, the near miss says the same:
+  "It came back over {program}, which {profile} is for: the desktop
+  belongs to it, as every File Explorer window does. Click another
+  program first, then bring the overlay back." The desktop's program is
+  the platform's to say (`World::DesktopProgram`, from
+  `IOverlayWindow::DesktopProgram`: on Windows the shell window's
+  process); not known, the text is the plain one.
 - **`elsewhere` when the overlay never left** (Next pressed on
   `otherProgram`, and the profile still matches): its need for another
   program says how to see it (18.8).
@@ -2730,9 +2741,19 @@ Two pieces of work, as in 17.6:
   underneath is explorer.exe, and Make a profile for this makes one for
   it, which File Explorer's windows match too. So the need for a program
   no longer says "such as the desktop". Settings' own line for nothing
-  identifiable still names it, and is left as it is here. `otherProgram`'s "(the desktop will do)" holds unless the
-  profile is for explorer.exe, where its near miss says to click
-  another.
+  identifiable still names it, and is left as it is here.
+  `otherProgram`'s "(the desktop will do)" was to hold unless the
+  profile is for explorer.exe, where its near miss said to click
+  another. Found in a test run on 2026-09-29: a first run starts over the
+  desktop, so that is the usual case, and the card sent the user to the
+  one place that could not work before saying so. Over explorer.exe the
+  text now leaves the desktop out (18.2).
+- **The ring shows the way to a spot in Settings** not drawn yet: the
+  Overview's Settings tab while it is on another tab, then the row of
+  the section the spot is in while another section is picked. Found in
+  the same test run: over the Overview's Canvases tab, `openProfiles`
+  said to press Settings and ringed nothing, since its spot, the
+  Profiles row, is only drawn on the Settings tab.
 - **Hand check,** at 1920 by 1080 with real input, over Notepad and the
   desktop: the ring on Profiles, the card in the lower right; New
   profile's line; Make a profile for this, "running now", Showing on it
