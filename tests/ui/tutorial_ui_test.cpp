@@ -130,13 +130,14 @@ TEST_F(TutorialUiTest, PutOneHereMakesASnippetToPracticeOn) {
     EXPECT_FALSE(Canvases().IsItemDeleted(*Runner().Subject()));
 }
 
-// The skip card's two ways to end: Done, keep the folder; and Done, which
+// The skip card's Done, with Keep ticked, keeps the folder; without, it
 // asks first and then puts the folder in the trash (question 9).
-TEST_F(TutorialUiTest, TheSkipCardsDoneTrashesTheFolderAndDoneKeepKeepsIt) {
+TEST_F(TutorialUiTest, TheSkipCardsDoneTrashesTheFolderAndKeepKeepsIt) {
     StartTheTutorial();
     const FolderId kept = Runner().Folder();
     ClickOnCard("**/###tutorial_skip");
-    ClickOnCard("**/###tutorial_donekeep");
+    ClickOnCard("**/###tutorial_keep");
+    ClickOnCard("**/###tutorial_done");
     EXPECT_FALSE(Runner().On());
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(kept)));
 
@@ -314,24 +315,19 @@ TEST_F(TutorialUiTest, TheListShowsTheTopicsInTwoColumnsWhereThereIsRoom) {
     EXPECT_FLOAT_EQ(rects[1].Min.x, rects[0].Min.x);
 }
 
-// More topics, from the skip card: the list, where Back returns to the
-// skip card, the running topic's row to it too, and another row starts
-// that topic.
-TEST_F(TutorialUiTest, MoreTopicsOpensTheListAndBackReturnsToTheCardItCameFrom) {
+// More topics, from the skip card, with Keep ticked: the topic ended and
+// its folder kept, and a row of the list starts another topic.
+TEST_F(TutorialUiTest, MoreTopicsEndsTheTopicAndARowStartsAnother) {
     StartTheTutorial();
+    const FolderId kept = Runner().Folder();
     ClickOnCard("**/###tutorial_skip");
+    ClickOnCard("**/###tutorial_keep");
     ClickOnCard("**/###tutorial_moretopics");
     ASSERT_TRUE(App().TutorialListed());
-    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Running);
+    EXPECT_FALSE(Runner().On());
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(kept)));
     EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("drawing")), TutorialCard::Status::New);
 
-    ClickOnCard("**/###tutorial_closelist");
-    EXPECT_EQ(Runner().GetState(), tutorial::Tutorial::State::Skipped) << "back on the skip card";
-    ClickOnCard("**/###tutorial_moretopics");
-    ClickOnCard("**/tutorial_topic_basics");
-    EXPECT_EQ(Runner().GetState(), tutorial::Tutorial::State::Skipped) << "the running one goes on where it is";
-
-    ClickOnCard("**/###tutorial_moretopics");
     ClickOnCard("**/tutorial_topic_drawing");
     EXPECT_EQ(App().TutorialTopic().id, "drawing");
     EXPECT_EQ(StepUp(), "drawingMode");
@@ -366,12 +362,13 @@ TEST_F(TutorialUiTest, ProfilesMakesOneInSettingsAndItsKeepButtonKeepsIt) {
 
     ClickOnCard("**/###tutorial_skip");
     std::string label;
-    RunUi("the keep button", [&label](ImGuiTestContext* ctx) {
+    RunUi("the keep checkbox", [&label](ImGuiTestContext* ctx) {
         ctx->SetRef("//##tutorial_card");
-        label = ctx->ItemInfo("**/###tutorial_donekeep").DebugLabel;
+        label = ctx->ItemInfo("**/###tutorial_keep").DebugLabel;
     });
-    EXPECT_EQ(label.rfind(strings::kTutorialCardDoneKeepProfile, 0), 0u) << label;
-    ClickOnCard("**/###tutorial_donekeep");
+    EXPECT_EQ(label.rfind(strings::kTutorialCardKeepProfile, 0), 0u) << label;
+    ClickOnCard("**/###tutorial_keep");
+    ClickOnCard("**/###tutorial_done");
     EXPECT_FALSE(Runner().On());
     EXPECT_EQ(AppSettings().Profiles().size(), 1u) << "kept";
 }

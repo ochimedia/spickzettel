@@ -270,6 +270,7 @@ public:
     // it says of a topic.
     void OpenTutorialList() { Act(action::OpenTutorialList{}); }
     bool TutorialListed() const { return tutorialCard_.Listing(); }
+    bool TutorialKeep() const { return tutorialCard_.Keep(); }
     TutorialCard::Status TutorialStatus(const tutorial::Topic& topic) const { return tutorialCard_.StatusOf(topic); }
     std::vector<const tutorial::Step*> TutorialSkipWarnings() const { return tutorialCard_.SkipWarnings(); }
     std::optional<AnchorRect> TutorialSpot() const { return tutorialCard_.SpotRect(); }

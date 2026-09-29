@@ -47,10 +47,11 @@ struct DeleteTarget {
 };
 
 // One of the tutorial card's own buttons. Done ends the tutorial and puts
-// its folder in the trash, DoneKeep ends it and keeps the folder;
-// MoreTopics opens the list of topics, and CloseList leaves it - back to
-// the topic running, if one is.
-enum class TutorialButton { Next, Back, Skip, Done, DoneKeep, MoreTopics, CloseList };
+// its folder in the trash, unless Keep - the end and skip cards' checkbox,
+// toggled - says to keep it; MoreTopics does the same and opens the list
+// of topics, and CloseList leaves the list - back to the topic running,
+// if one is (docs/TUTORIAL.md, section 20).
+enum class TutorialButton { Next, Back, Skip, Done, Keep, MoreTopics, CloseList };
 
 namespace action {
 

@@ -62,6 +62,9 @@ public:
     const tutorial::Tutorial& Runner() const { return runner_; }
     // The topic running, or run last.
     const tutorial::Topic& CurrentTopic() const { return *topic_; }
+    // Whether the end or skip card's checkbox says to keep what the topic
+    // made, at its Done or More topics.
+    bool Keep() const { return keep_; }
 
     // Stage 1, in edit mode: the runner brought up to date with the app.
     // `now` in seconds.
@@ -97,10 +100,12 @@ private:
     void DrawStep();
     void DrawSkipped();
     void DrawList();
-    // More topics - on the end card and the skip card.
-    void MoreTopicsButton();
-    // Done, keep the folder - on the end card and the skip card.
-    void DoneKeepButton();
+    // The end card's and the skip card's way out: the checkbox that keeps
+    // what the topic made, over Back, Done and More topics.
+    void EndButtons();
+    // What the checkbox keeps, as it says it - none with nothing left to
+    // keep.
+    const char* KeepLabel() const;
     // The hint under a step's text, and its button.
     void DrawHint(const tutorial::Hint& hint);
 
@@ -143,6 +148,7 @@ private:
     float slideAge_ = 0.0f;
     bool hasRun_ = false;
     bool listing_ = false;
+    bool keep_ = false;
 };
 
 }  // namespace sz::ui

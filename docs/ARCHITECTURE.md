@@ -2559,8 +2559,8 @@ every widget, and could trap someone over their game.
 lightweight sandbox: the user's own canvases are never what a step asks
 to move or delete, and a capture hotkey pressed meanwhile lands there by
 the ordinary current-folder rule. At the end Done puts the folder in the
-trash, asked first like any folder's delete, and "Done, keep the
-folder" keeps it. A throwaway library was considered instead, and set
+trash, asked first like any folder's delete, unless the card's "Keep
+the tutorial folder" is ticked. A throwaway library was considered instead, and set
 aside: every owner holds the session, and much of the view's state would
 need an answer to "the library was replaced".
 

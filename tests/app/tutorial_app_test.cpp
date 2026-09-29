@@ -120,6 +120,11 @@ protected:
         MouseButtonEvent(ImGuiMouseButton_Left, false);
         StepFrames(2);
     }
+    // Done, with the end or skip card's Keep checkbox ticked.
+    void DoneKeeping() {
+        Press(TutorialButton::Keep);
+        Press(TutorialButton::Done);
+    }
     // Long enough for a step whose goal is met to move on by itself.
     void Settle() { StepFrames(75); }
     void Press(TutorialButton button) {
@@ -1361,7 +1366,7 @@ TEST_F(TutorialAppTest, AnyTopicsSkipCardShowsTheWarningsUntilBasicsIsFinished) 
     ASSERT_EQ(warnings.size(), 2u);
     EXPECT_EQ(warnings[0]->id, "programs");
     EXPECT_EQ(warnings[1]->id, "antiCheat");
-    Press(TutorialButton::DoneKeep);
+    DoneKeeping();
 
     AppConfig config = DefaultConfig();
     config.tutorialProgress = {{"basics", "finished"}};
@@ -1504,7 +1509,7 @@ TEST_F(TutorialAppTest, ACopyPastedOnTheOtherCanvasIsNotTheMove) {
 }
 
 // The folder made at `newFolder` is the tutorial's: Done asks once, for
-// both, and puts both in the trash; Done, keep the folder keeps both.
+// both, and puts both in the trash; with Keep ticked, it keeps both.
 TEST_F(TutorialAppTest, DoneTakesTheFolderMadeInTheRunWithTheTutorials) {
     WalkTo("end", "folders");
     ASSERT_EQ(Runner().MadeFolders().size(), 1u);
@@ -1533,7 +1538,7 @@ TEST_F(TutorialAppTest, DoneTakesTheFolderMadeInTheRunWithTheTutorials) {
     WalkTo("end", "folders");
     const FolderId own3 = Runner().Folder();
     const FolderId made3 = Runner().MadeFolders().front();
-    Press(TutorialButton::DoneKeep);
+    DoneKeeping();
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(own3)));
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(made3)));
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(own)));
@@ -1651,8 +1656,8 @@ TEST_F(TutorialAppTest, ProfilesMakesNoFolderAndLeavesTheCanvasUp) {
 }
 
 // Done deletes the profile made in the run, and only that one, without
-// asking; Done, keep the profile keeps it.
-TEST_F(TutorialAppTest, DoneDeletesTheTutorialsProfileAndDoneKeepKeepsIt) {
+// asking; with Keep ticked, it keeps it.
+TEST_F(TutorialAppTest, DoneDeletesTheTutorialsProfileAndKeepKeepsIt) {
     AppConfig config = DefaultConfig();
     Profile mine;
     mine.name = "Mine";
@@ -1674,7 +1679,7 @@ TEST_F(TutorialAppTest, DoneDeletesTheTutorialsProfileAndDoneKeepKeepsIt) {
     StepFrame();
     host_.overlayWindow.underlyingApp = kGame;
     WalkTo("end", "profiles");
-    Press(TutorialButton::DoneKeep);
+    DoneKeeping();
     ASSERT_EQ(AppSettings().Profiles().size(), 2u);
     EXPECT_EQ(AppSettings().Profiles()[1].name, "Game");
 }
@@ -1812,25 +1817,62 @@ TEST_F(TutorialAppTest, AnotherTopicStartedFromAnEndCardOrASkipCardCountsItsEnd)
 
 // ===== The list (section 13.3) =====
 
-TEST_F(TutorialAppTest, TheEndCardLeadsOnToTheListAndATopicDoneSaysSo) {
+// More topics ends the topic as Done does - the folder kept with Keep
+// ticked - and opens the list, which has no way back to it (section 20).
+TEST_F(TutorialAppTest, MoreTopicsEndsTheTopicAsDoneDoesAndOpensTheList) {
     WalkTo("end");
+    const FolderId folder = Runner().Folder();
+    Press(TutorialButton::Keep);
     Press(TutorialButton::MoreTopics);
     ASSERT_TRUE(App().TutorialListed());
-    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Running);
-    EXPECT_FALSE(App().TutorialSpot().has_value());
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(Runner().GetOutcome(), tutorial::Tutorial::Outcome::Finished);
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Done);
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("drawing")), TutorialCard::Status::New);
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(folder))) << "kept";
+    EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos);
+    EXPECT_EQ(Kept(), "finished");
     Press(TutorialButton::CloseList);
     EXPECT_FALSE(App().TutorialListed());
-    EXPECT_EQ(StepUp(), "end") << "back on the card it came from";
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    ASSERT_NE(card, nullptr);
+    EXPECT_FALSE(card->Active) << "nothing to go back to";
 
-    Press(TutorialButton::DoneKeep);
+    // Not ticked: asked, as at Done, with the list open behind.
+    Overlay().StartTutorial();
+    StepFrames(2);
+    const FolderId second = Runner().Folder();
+    Press(TutorialButton::Skip);
+    Press(TutorialButton::MoreTopics);
+    EXPECT_TRUE(App().TutorialListed());
+    EXPECT_NE(App().InputStack().find("ConfirmDelete"), std::string::npos);
+    EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(second))) << "asked first";
+    EXPECT_EQ(Kept(), "skipped");
+}
+
+// The list opened from Settings during a topic: its Close goes back to the
+// topic, where it was.
+TEST_F(TutorialAppTest, TheListOpenedDuringATopicClosesBackToIt) {
+    WalkTo("move");
     Overlay().OpenTutorialList();
     StepFrames(2);
     ASSERT_TRUE(App().TutorialListed());
-    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Done);
-    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("drawing")), TutorialCard::Status::New);
-    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
-    ASSERT_NE(card, nullptr);
-    EXPECT_TRUE(card->Active) << "the list, with no topic running";
+    EXPECT_EQ(App().TutorialStatus(*tutorial::FindTopic("basics")), TutorialCard::Status::Running);
+    Press(TutorialButton::CloseList);
+    EXPECT_FALSE(App().TutorialListed());
+    EXPECT_EQ(StepUp(), "move");
+}
+
+// Keep starts unticked on every end and skip card: going Back from one
+// leaves it unticked for the next.
+TEST_F(TutorialAppTest, KeepStartsUntickedOnEachCard) {
+    WalkTo("move");
+    Press(TutorialButton::Skip);
+    Press(TutorialButton::Keep);
+    EXPECT_TRUE(App().TutorialKeep());
+    Press(TutorialButton::Back);
+    Press(TutorialButton::Skip);
+    EXPECT_FALSE(App().TutorialKeep());
 }
 
 // The list always at the top center, where it first was: a card dragged
@@ -1852,25 +1894,16 @@ TEST_F(TutorialAppTest, TheListForgetsWhereTheCardWasDragged) {
     StepFrames(20);
     EXPECT_FLOAT_EQ(card->Pos.x, cardAt.x - 200.0f) << "left where it was put";
 
+    // Over the Overview, the list still at the top center.
     Press(TutorialButton::Skip);
+    Press(TutorialButton::Keep);
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+    StepFrames(2);
     Press(TutorialButton::MoreTopics);
     StepFrames(2);
     ASSERT_TRUE(App().TutorialListed());
     EXPECT_FLOAT_EQ(card->Pos.x, listAt.x);
     EXPECT_FLOAT_EQ(card->Pos.y, listAt.y);
-
-    Press(TutorialButton::CloseList);
-    StepFrames(20);
-    EXPECT_FLOAT_EQ(card->Pos.x, cardAt.x) << "back on its card, placed anew";
-    EXPECT_FLOAT_EQ(card->Pos.y, cardAt.y);
-
-    // Over the Overview, the list still at the top center.
-    DragCard(-200.0f, 150.0f);
-    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
-    StepFrames(2);
-    Press(TutorialButton::MoreTopics);
-    StepFrames(2);
-    EXPECT_FLOAT_EQ(card->Pos.x, listAt.x);
     Overlay().StartTutorial("pinning");
     StepFrames(20);
     EXPECT_NE(card->Pos.x, cardAt.x - 200.0f) << "a new topic placed as at the start";
@@ -1918,8 +1951,8 @@ TEST_F(TutorialAppTest, StartingAgainMakesANewFolderAndLeavesTheOldOne) {
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 
-// Done ends the tutorial with its folder in the trash; Done, keep the
-// folder keeps it (question 9) - on the end card and on the skip card.
+// Done ends the tutorial with its folder in the trash; with Keep ticked,
+// it keeps it (question 9) - on the end card and on the skip card.
 TEST_F(TutorialAppTest, DoneOnTheEndCardPutsTheFolderInTheTrash) {
     AppConfig config = DefaultConfig();
     config.confirmDelete = false;
@@ -1944,10 +1977,10 @@ TEST_F(TutorialAppTest, DoneAsksFirstWhereSettingsSaysTo) {
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(folder))) << "until the confirmation says so";
 }
 
-TEST_F(TutorialAppTest, DoneKeepTheFolderKeepsIt) {
+TEST_F(TutorialAppTest, DoneWithKeepTickedKeepsTheFolder) {
     WalkTo("end");
     const FolderId folder = Runner().Folder();
-    Press(TutorialButton::DoneKeep);
+    DoneKeeping();
     EXPECT_FALSE(Runner().On());
     EXPECT_EQ(Runner().GetOutcome(), tutorial::Tutorial::Outcome::Finished);
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(folder)));
@@ -1963,7 +1996,7 @@ TEST_F(TutorialAppTest, TheSkipCardEndsWithTheFolderTrashedOrKept) {
     WalkTo("move");
     const FolderId first = Runner().Folder();
     Press(TutorialButton::Skip);
-    Press(TutorialButton::DoneKeep);
+    DoneKeeping();
     EXPECT_FALSE(Runner().On());
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(first)));
     EXPECT_EQ(Kept(), "skipped");

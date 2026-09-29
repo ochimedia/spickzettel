@@ -131,6 +131,7 @@ void TutorialCard::Resume(const tutorial::Topic& topic, std::string_view id, cor
     runner_ = tutorial::Tutorial(topic.chain());
     runner_.Resume(id, folder);
     PlaceAnew();
+    keep_ = false;
     hasRun_ = true;
     listing_ = false;
 }
@@ -142,15 +143,22 @@ void TutorialCard::Press(TutorialButton button) {
             return;
         case TutorialButton::Back:
             runner_.Back();
+            keep_ = false;
             return;
         case TutorialButton::Skip:
             runner_.Skip();
+            keep_ = false;
             return;
         case TutorialButton::Done:
-        case TutorialButton::DoneKeep:
             runner_.Done();
             return;
+        case TutorialButton::Keep:
+            keep_ = !keep_;
+            return;
         case TutorialButton::MoreTopics:
+            // The topic ends here, as at Done: the list has no way back
+            // to it (docs/TUTORIAL.md, section 20).
+            runner_.Done();
             OpenList();
             return;
         case TutorialButton::CloseList:
@@ -546,6 +554,10 @@ void TutorialCard::DrawStep() {
         ImGui::Spacing();
         DrawHint(*hint);
     }
+    if (last) {
+        EndButtons();
+        return;
+    }
     ImGui::Spacing();
     ImGui::Separator();
 
@@ -557,28 +569,21 @@ void TutorialCard::DrawStep() {
     }
     const bool enabled = runner_.NextEnabled();
     ImGui::BeginDisabled(!enabled);
-    const bool next = last ? AccentButton(Labeled(strings::kTutorialCardDone, "tutorial_done"))
-                           : AccentButton(Labeled(strings::kTutorialCardNext, "tutorial_next"));
+    const bool next = AccentButton(Labeled(strings::kTutorialCardNext, "tutorial_next"));
     ImGui::EndDisabled();
     if (!enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
         ImGui::SetTooltip("%s", strings::kTutorialCardNextWaits);
     }
     if (next) {
-        host_.Act(action::TutorialPress{last ? TutorialButton::Done : TutorialButton::Next});
+        host_.Act(action::TutorialPress{TutorialButton::Next});
     }
-    if (last) {
-        ImGui::SameLine();
-        DoneKeepButton();
-        MoreTopicsButton();
-    } else {
-        // The way out, right-aligned and quieter.
-        const char* skip = Labeled(strings::kTutorialCardSkip, "tutorial_skip");
-        const float skipW = ImGui::CalcTextSize(strings::kTutorialCardSkip).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        ImGui::SameLine();
-        ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - skipW));
-        if (QuietButton(skip)) {
-            host_.Act(action::TutorialPress{TutorialButton::Skip});
-        }
+    // The way out, right-aligned and quieter.
+    const char* skip = Labeled(strings::kTutorialCardSkip, "tutorial_skip");
+    const float skipW = ImGui::CalcTextSize(strings::kTutorialCardSkip).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - skipW));
+    if (QuietButton(skip)) {
+        host_.Act(action::TutorialPress{TutorialButton::Skip});
     }
 }
 
@@ -637,6 +642,19 @@ void TutorialCard::DrawSkipped() {
     }
     ImGui::Spacing();
     Wrapped(theme::kGraphite300, strings::kTutorialSkippedAgain);
+    EndButtons();
+}
+
+void TutorialCard::EndButtons() {
+    // Above the buttons, since it changes what two of them do: read
+    // before either is pressed (docs/TUTORIAL.md, section 20).
+    if (const char* label = KeepLabel()) {
+        ImGui::Spacing();
+        bool keep = keep_;
+        if (ImGui::Checkbox(Labeled(label, "tutorial_keep"), &keep)) {
+            host_.Act(action::TutorialPress{TutorialButton::Keep});
+        }
+    }
     ImGui::Spacing();
     ImGui::Separator();
     if (ImGui::Button(Labeled(strings::kTutorialCardBack, "tutorial_back"))) {
@@ -646,18 +664,35 @@ void TutorialCard::DrawSkipped() {
     if (AccentButton(Labeled(strings::kTutorialCardDone, "tutorial_done"))) {
         host_.Act(action::TutorialPress{TutorialButton::Done});
     }
+    // As plain to see as Done: the other way on from here.
     ImGui::SameLine();
-    DoneKeepButton();
-    MoreTopicsButton();
-}
-
-void TutorialCard::MoreTopicsButton() {
-    // On a row of its own, right-aligned: the end card's row is full.
-    const float w = ImGui::CalcTextSize(strings::kTutorialCardMoreTopics).x + ImGui::GetStyle().FramePadding.x * 2.0f;
-    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - w));
-    if (QuietButton(Labeled(strings::kTutorialCardMoreTopics, "tutorial_moretopics"))) {
+    if (AccentButton(Labeled(strings::kTutorialCardMoreTopics, "tutorial_moretopics"))) {
         host_.Act(action::TutorialPress{TutorialButton::MoreTopics});
     }
+}
+
+const char* TutorialCard::KeepLabel() const {
+    // A topic with nothing on a canvas keeps its profiles (section 18.3).
+    if (!topic_->folder) {
+        size_t left = 0;
+        const std::vector<tutorial::ProfileFacts> profiles = world_.Profiles();
+        for (const std::string& made : runner_.MadeProfiles()) {
+            left += static_cast<size_t>(std::count_if(profiles.begin(), profiles.end(),
+                                                      [&](const tutorial::ProfileFacts& p) { return p.name == made; }));
+        }
+        return left == 0   ? nullptr
+               : left == 1 ? strings::kTutorialCardKeepProfile
+                           : strings::kTutorialCardKeepProfiles;
+    }
+    const core::CanvasManager& manager = session_.Manager();
+    size_t left = 0;
+    for (const core::FolderId each : runner_.Folders()) {
+        const core::Folder* found = manager.FindFolder(each);
+        if (found != nullptr && !manager.IsDeleted(*found)) {
+            ++left;
+        }
+    }
+    return left == 0 ? nullptr : left == 1 ? strings::kTutorialCardKeepFolder : strings::kTutorialCardKeepFolders;
 }
 
 TutorialCard::Status TutorialCard::StatusOf(const tutorial::Topic& topic) const {
@@ -789,20 +824,11 @@ void TutorialCard::DrawList() {
         ImGui::Spacing();
     }
     ImGui::Separator();
-    // Back to the topic running, or Close with none.
-    const char* leave = runner_.On() ? strings::kTutorialCardBack : strings::kTutorialListClose;
-    if (ImGui::Button(Labeled(leave, "tutorial_closelist"))) {
+    // Close: back to the topic running, if the list was opened from
+    // Settings during one; the end and skip cards' More topics ended theirs
+    // (section 20).
+    if (ImGui::Button(Labeled(strings::kTutorialListClose, "tutorial_closelist"))) {
         host_.Act(action::TutorialPress{TutorialButton::CloseList});
-    }
-}
-
-void TutorialCard::DoneKeepButton() {
-    // Done puts the folder in the trash; this is the way to keep it
-    // (question 9), so it is the quieter of the two. A topic with no folder
-    // keeps its profile by it (section 18.3).
-    const char* label = topic_->folder ? strings::kTutorialCardDoneKeep : strings::kTutorialCardDoneKeepProfile;
-    if (QuietButton(Labeled(label, "tutorial_donekeep"))) {
-        host_.Act(action::TutorialPress{TutorialButton::DoneKeep});
     }
 }
 

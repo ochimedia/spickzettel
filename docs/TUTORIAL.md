@@ -226,18 +226,20 @@ user.
   finished once (13.6). Someone who skips at once still sees them.
 - It offers Back, to the step skipped from, so a misclick costs nothing.
   That is why no confirmation box is needed.
-- Its Done ends the topic and puts its folder in the trash. Its "Done,
-  keep the folder" keeps the folder (question 9). The end card has the
-  same two buttons.
-- Its "More topics" opens the list, and it says the tutorial is also in
-  Settings > Interaction. The end card has "More topics" too.
+- Its Done ends the topic and puts its folder in the trash, unless
+  "Keep the tutorial folder", a checkbox above the buttons, is ticked
+  (question 9, section 20).
+- Its "More topics" ends the topic as Done does and opens the list, and
+  it says the tutorial is also in Settings > Interaction. The end card
+  has the same checkbox and buttons: Back, Done and More topics, in one
+  row.
 
 **The list.** A state of the card, with a cell per topic, two to a row
 where the display has room (19.5): its title, one line on what it
 covers, its number of steps, and where the user is with it (New, At
-step 4 of 10, Started, Done). A cell starts its topic; the
-list's Back goes back to the topic running, and its Close, with none
-running, takes the card away (13.3).
+step 4 of 10, Started, Done). A cell starts its topic; the list's
+Close takes the card away, or goes back to the topic running where the
+list was opened from Settings during one (13.3, section 20).
 
 ## 4. The chains
 
@@ -260,7 +262,7 @@ column, "waits" marks a gated step (section 3).
 | 6 | `programs` | read | moves on | Set it up for your programs. Some games break when the overlay takes focus; others need it to. Look through Settings > Behavior, and make a profile for each program that needs its own. | - | - | Next | - |
 | 7 | `antiCheat` | read | moves on | Careful with anti-cheat. Some games watch for tools that draw over them or read their input. If a game might object, quit Spickzettel before you start it. | - | - | Next | - |
 | 8 | `away` | do | moves on | Press {editMode} to put the overlay away and go back to your program. Press it again to come back here. | - | - | the overlay has come back since the step began | with the hotkey unbound, the text names the tray icon instead |
-| 9 | `end` | read | Done | That's the basics. {cheatSheet} shows every key and gesture, and a right-click on anything shows what it can do. More topics has the others. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
+| 9 | `end` | read | Done | That's the basics. {cheatSheet} shows every key and gesture, and a right-click on anything shows what it can do. More topics has the others. | - | - | Done | - |
 
 **Drawing:**
 
@@ -269,7 +271,7 @@ column, "waits" marks a gated step (section 3).
 | 0 | `drawingMode` | do | **waits** | Any snippet can be drawn on, a screenshot as well as a drawing. Double-click it, or hold the button down on it, to draw on it. | the subject | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen | drawing mode on the subject |
 | 1 | `draw` | do | moves on | Drag across it to draw. The bar above it has the pen, the eraser, text and the color. | the drawing bar's pen | the same, and drawing mode on the subject | the subject has more strokes than when the step began |
 | 2 | `stopDrawing` | do | moves on | Click outside it, or press Esc, to stop drawing. | - | - | no drawing mode |
-| 3 | `end` | read | Done | That's drawing. Double-click any snippet to draw on it. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done |
+| 3 | `end` | read | Done | That's drawing. Double-click any snippet to draw on it. | - | - | Done |
 
 A new folder has no snippet, so Drawing starts with its need for a
 subject unmet: its line says to take a screenshot, and its button, Put
@@ -801,7 +803,7 @@ time edit mode comes up):
   out.
 - **A row of the list** starts its topic at its first step, in a new
   folder, whatever its status (question 12). A topic running is let go
-  of first, as "Done, keep the folder" would (question 13).
+  of first, keeping its folder (question 13).
 
 **Open the tutorial** is a button in Settings > Interaction (question
 7). It closes the Overview and opens the list.
@@ -891,7 +893,7 @@ gesture.
     switches back;
   - the folder deleted, the button makes a new one, and so does a resume;
   - starting again makes a new folder and leaves the old one;
-  - Done puts it in the trash, and Done, keep the folder keeps it.
+  - Done puts it in the trash, and with Keep ticked keeps it.
 - **The start:**
   - a first run places no notes and starts Basics;
   - an install from before starts Basics too;
@@ -901,8 +903,9 @@ gesture.
 - **Progress:** kept per topic as it goes; another topic started keeps
   the running one's folder, and what it ended as.
 - **The list:** More topics on the end card and the skip card, and the
-  Settings button, open it; Back returns to the card it came from; a
-  row starts its topic at its first step; each topic's status; Drawing's
+  Settings button, open it; More topics ends the topic as Done does,
+  and Close goes back to a topic still running (section 20); a row
+  starts its topic at its first step; each topic's status; Drawing's
   skip card shows the two warnings until Basics is finished.
 - **The stack.** The table in `tests/support/view_stack.h` gains the
   card's row.
@@ -1210,8 +1213,10 @@ refresher.
 **While a topic runs,** the list marks it as the current one:
 
 - Pressing it goes back to its step.
-- Pressing another topic ends the running one the way "Done, keep the
-  folder" does, and starts the other (question 13):
+- Pressing another topic ends the running one, keeping its folder, and
+  starts the other (question 13). Since section 20 this is only the
+  list opened from Settings: the end and skip cards' More topics ends
+  the topic itself.
   - on its end card, the running topic counts as finished;
   - on its skip card, it counts as skipped;
   - on any other step, its progress stays at that step, which the list
@@ -1240,9 +1245,9 @@ Opening the list keeps nothing.
   `tutorial.progress`. The offer card built in phase 3 goes: a user from
   before is treated as a new one.
 - **Every topic's end card, and the skip card,** gain a "More topics"
-  button that opens the list. The topic stays where it is until another
-  is chosen, so Back on the list returns to the card it came from. That
-  is how Basics leads on.
+  button that opens the list. That is how Basics leads on. (Built first
+  with the topic kept until another is chosen, and a Back on the list;
+  section 20 ends the topic at the press instead.)
 - **Settings > Interaction:** "Take the tutorial again" becomes "Open
   the tutorial". It closes the Overview and opens the list.
 
@@ -1252,7 +1257,8 @@ Opening the list keeps nothing.
   "Tutorial: Drawing" (question 14). A refresher starts in a new
   folder, a clean place to practice.
 - **At the end,** Done puts the folder in the trash, and "Done, keep
-  the folder" keeps it, as now (question 9).
+  the folder" keeps it, as now (question 9). Section 20 makes the keep a
+  checkbox for Done and More topics both.
 - **Runs of one topic** leave folders of one name, found by hand. Done
   puts each in the trash, so they pile up only for someone who keeps
   every run. A number after the name is the fix, if that turns out to
@@ -1404,7 +1410,7 @@ not send the user there.
 | 2 | `opacity` | do | moves on | Make it see-through, so it hides less of what's underneath: hold Ctrl and turn the wheel. Shift and the wheel fade what's drawn on it instead, and the wheel alone resizes it. More, on its bar, has the same as sliders. | the subject | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen; the subject selected | a change that shows: the subject's picture opacity changed by 0.10 or more (two notches) from the step's start, or the opacity of what is drawn on it, while something is | resized instead: "That changed its size. Hold Ctrl as you turn the wheel." Shift with nothing drawn: "Shift fades what's drawn on it, and nothing is yet. Hold Ctrl instead." |
 | 3 | `viewMode` | do | moves on | View mode keeps everything on this canvas on screen, pinned or not, and your clicks go through to your program. Press {viewMode} to switch to it, and {editMode} to come back here. With {viewMode} unbound: "View mode has no key yet. Set one in Settings > Hotkeys to use it." With {editMode} unbound, the tray icon comes back. | - | - | view mode has come up since the step began | the pinned view instead: "That put the overlay away, and only pinned snippets stayed. Press {viewMode} for view mode." |
 | 4 | `unpin` | do | moves on | A pinned snippet stays on screen until you unpin it, even after the tutorial. Press Pin on its bar again. | the selection bar's Pin, or the subject | as `pinnedAway`, and canvas uncovered, no drawing mode and the subject selected | a snippet of the tutorial's seen pinned during the step is not pinned now | - |
-| 5 | `end` | read | Done | That's pinning and view mode. Pin what you need while you play, and make it see-through so it doesn't hide the game. The bar's Fullscreen fills the screen with a snippet, and its More has the opacity, the background color and the text. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
+| 5 | `end` | read | Done | That's pinning and view mode. Pin what you need while you play, and make it see-through so it doesn't hide the game. The bar's Fullscreen fills the screen with a snippet, and its More has the opacity, the background color and the text. | - | - | Done | - |
 
 **The subject.** Steps 0 and 2 take any of the tutorial's snippets
 (`SubjectRule::Any`), and step 0 is done by any of them pinned, since
@@ -1637,7 +1643,7 @@ progress is kept, and a run's folder is "Tutorial: Drawing and notes".
 | 8 | `eraseRight` | do | moves on | The right button erases with any tool. Press the pen, then hold the right button and drag across what's left. | the drawing bar's pen | as `erase` | 16 px of ink or more gone from the subject during the step while another tool than the eraser was in hand | ink gone with the eraser: "That was the eraser. Press the pen, then drag with the right button." |
 | 9 | `note` | do | moves on | Press Text on the bar, click the snippet, and type a note. How to finish shows as the line under it once typing begins. | the drawing bar's Text | drawing mode on the subject | the subject's note is not empty, differs from the start, and is not being typed | the note being typed: "Press Esc or click outside it when you're done." |
 | 10 | `stopDrawing` | do | moves on | as built | - | - | as built | - |
-| 11 | `end` | read | Done | That's drawing and notes. Double-click any snippet to draw on it. Clear drawing, in its right-click menu, takes every stroke away; More, on its bar, has the note's color and size. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
+| 11 | `end` | read | Done | That's drawing and notes. Double-click any snippet to draw on it. Clear drawing, in its right-click menu, takes every stroke away; More, on its bar, has the note's color and size. | - | - | Done | - |
 
 **Which step waits.** Only `drawingMode`, as built: every later step
 needs drawing mode on the subject, and its line says how to get it back.
@@ -1892,7 +1898,7 @@ canvas.
 | 1 | `fullscreen` | do | moves on | Double-click an empty spot, or hold the button down on it, to take a screenshot of the whole screen. | - | in the tutorial folder; canvas uncovered; no creation tool but the screenshot tool | a screenshot made here since the step began, full screen | a drawing of the whole screen, in drawing mode: "That made a drawing of the whole screen. Press Esc to stop drawing on it." Then, out of it: "... Press {key:deleteSelection} to delete it, and take a screenshot as above." A box instead: "That took a part of the screen. Double-click instead of dragging." A drawing: "That made a drawing rather than a screenshot. Take one as above." |
 | 2 | `quickCapture` | do | moves on | The capture hotkeys work while the overlay is away, so you can grab your game without opening the overlay first. Press {key:toggleEditMode} to put the overlay away, then press {key:quickCapture}. It takes a screenshot of the whole screen and brings the overlay back with it, on a new canvas of its own. | - | in the tutorial folder | the quick capture has taken a screenshot since the step began | the silent capture instead: "That was the silent capture, which comes next. Press {key:quickCapture} for this one." |
 | 3 | `silentCapture` | do | moves on | {key:silentCapture} captures the same way, but the overlay stays away, so your game keeps the focus. Put the overlay away, press {key:silentCapture}, then press {key:toggleEditMode} to come back and see the capture. | - | in the tutorial folder | the silent capture has taken a screenshot since the step began | the quick capture instead: "That was the quick capture, which brings the overlay up. Put it away, and press {key:silentCapture} instead." |
-| 4 | `end` | read | Done | That's capturing. Each capture is on a canvas of its own, so they're easy to tell apart: the Overview, in the right-click menu, shows them side by side. A right-click on an empty spot also has every way to make a snippet. Done puts the folder in the trash; Done, keep the folder keeps it. | - | - | Done | - |
+| 4 | `end` | read | Done | That's capturing. Each capture is on a canvas of its own, so they're easy to tell apart: the Overview, in the right-click menu, shows them side by side. A right-click on an empty spot also has every way to make a snippet. | - | - | Done | - |
 
 **No step waits.** Nothing later needs what a step makes: the hotkeys
 make their own canvas, and a step can always be left with Next.
@@ -2105,7 +2111,7 @@ the rest of the grid dimmed.
 | 7 | `deleteCanvas` | do | moves on | The trash button under a tile deletes that canvas, with its snippets. Delete the one your snippet is on. | that tile's trash button | the Overview up; its Canvases tab | a canvas or folder of the tutorial's deleted since the step began | - |
 | 8 | `showDeleted` | do | moves on | Nothing deleted is gone yet. Tick Show deleted, at the top right: what's in the trash shows in red, where it was. | Show deleted | the Overview up; its Canvases tab | Show deleted on | - |
 | 9 | `restore` | do | moves on | Press Restore, the arrow under its tile: the canvas comes back, with its snippet. | that Restore | the Overview up; its Canvases tab; Show deleted on; something in the trash | a canvas or folder of the tutorial's that was in the trash during the step is back | - |
-| 10 | `end` | read | Done | That's folders and canvases. A snippet's right-click menu has two more ways to move it: Move to canvas, which picks one in the Overview, and Move to new canvas. A right-click on a tile of the canvas bar deletes that canvas. Done puts the tutorial's folders in the trash; Done, keep the folder keeps them. | - | - | Done | - |
+| 10 | `end` | read | Done | That's folders and canvases. A snippet's right-click menu has two more ways to move it: Move to canvas, which picks one in the Overview, and Move to new canvas. A right-click on a tile of the canvas bar deletes that canvas. | - | - | Done | - |
 
 **"The tutorial's"** means the run's folders (17.3): the tutorial's own
 folder and the one made in `newFolder`. "In the tutorial folder" is met
@@ -2421,7 +2427,7 @@ The revert at the end puts it back.
 | 4 | `otherProgram` | do | moves on | A profile only runs over its program. Press {key:toggleEditMode} to put the overlay away, click another program (the desktop will do), and press it again to bring the overlay back over that one. | - | the tutorial's profile | the overlay has come up again, over a program the tutorial's profile does not match | back over the same program: "It came back over {program}, which {profile} is for. Click another program first, then bring the overlay back." |
 | 5 | `elsewhere` | read | Next | Underneath, at the top of Behavior, now says {underneath}. Showing is on {showing}, and Don't steal focus is ticked there: {profile} only runs over {program}. | Showing | Settings up; its Settings tab; the Behavior section; over another program (18.8) | - | - |
 | 6 | `revert` | do | moves on | To hand a setting back to the defaults, press the arrow beside it. Ticking it again would keep it {profile}'s own, in the accent color. | the first arrow in the box | Settings up; its Settings tab; the Behavior section; the tutorial's profile; Showing on it; something set in it | the tutorial's profile states fewer Behavior settings than when the step began | ticked back by hand: "That keeps it {profile}'s own - the row is still in the accent color. The arrow beside it hands it back to the defaults." |
-| 7 | `end` | read | Done | That's profiles. New profile makes one for a program that isn't in front. Open a profile's row to add more programs to it, or part of a window's title. The first profile in the list that matches is the one that runs. Done deletes the tutorial's profile; Done, keep the profile keeps it. | - | - | Done | - |
+| 7 | `end` | read | Done | That's profiles. New profile makes one for a program that isn't in front. Open a profile's row to add more programs to it, or part of a window's title. The first profile in the list that matches is the one that runs. | - | - | Done | - |
 
 **The words in braces** are filled by `Expand()` from the world (18.3):
 `{underneath}` is the program the overlay is up over now, `{profile}`
@@ -2799,3 +2805,58 @@ test:
   when the step moves on and the top is clear again; and slides, part
   of the way on the frame after and all of it once the slide is over.
   All three fail with section 3's placing anew.
+
+## 20. The end card's buttons
+
+Status: **built** (2026-09-29), asked for after trying the tutorial at
+150 %.
+
+### 20.1 Why
+
+The end card and the skip card had four buttons in two rows: Back, Done,
+"Done, keep the folder", and More topics alone on a row below, quiet and
+right-aligned. Trying them found three things:
+
+- **More topics was overlooked,** quiet beside an accent Done.
+- **Two rows of buttons** looked crowded for a card that ends a topic.
+- **Keeping the folder was Done's alone.** More topics kept the topic
+  running until another was chosen, which then kept its folder: a second
+  way out, with the other choice and nothing on screen to say so.
+
+### 20.2 The design
+
+- **One row: Back, Done, More topics,** Done and More topics both accent
+  buttons. Back stays: on the skip card it is the way back to the step,
+  so a misclick costs nothing.
+- **A checkbox above them keeps what the topic made:** "Keep the
+  tutorial folder", "... folders" where the topic made more than one
+  (Folders and canvases), and "Keep the tutorial profile" for Profiles.
+  Unticked to begin with, on every end and skip card: Back and Skip
+  untick it. With nothing left to keep, such as a folder the user
+  already deleted, it is left out. It is above the buttons because it
+  changes what two of them do, and is read before either is pressed.
+- **More topics ends the topic as Done does,** at the press: the folders
+  in the trash, asked first where Settings says to, or kept with the box
+  ticked; the profiles deleted or kept. Then the list opens. The list's
+  Back, which went back to the card, goes: returning to a card whose
+  folder was just trashed has nothing to return to, and it was seldom
+  wanted.
+- **The list's one button is Close.** With no topic running, it takes
+  the card away. Opened from Settings during a topic, it goes back to
+  that topic, as pressing the topic's own row does; a topic left that
+  way, by starting another from the list, keeps its folder, as before
+  (13.3): there was no card and no box to choose with.
+- **The end texts lose their last paragraph,** "Done puts the tutorial's
+  folder in the trash. To keep what you made, choose Done, keep the
+  folder.": the checkbox says it.
+
+### 20.3 Tests
+
+- More topics ends the topic as Done does and opens the list: with the
+  box ticked, the folder kept and no question; without, the question,
+  with the list behind it.
+- The list opened during a topic closes back to it.
+- The box starts unticked on each card.
+- Done and Keep on the end card and the skip card, for a folder, the
+  Folders topic's two, and Profiles' profile; by name in the UI tests,
+  the checkbox's label for Profiles among them.

@@ -691,13 +691,16 @@ void OverlayApp::Do(const ViewAction& action) {
                        const std::vector<FolderId> folders = tutorialCard_.Runner().Folders();
                        const std::vector<std::string> profiles = tutorialCard_.Runner().MadeProfiles();
                        const bool on = tutorialCard_.Runner().On();
+                       const bool keep = tutorialCard_.Keep();
                        tutorialCard_.Press(a.button);
-                       // Done ends the tutorial with its folders in the trash,
-                       // asked first where Settings says to, as any folder's
-                       // Delete is (question 9): its own, and those made in the
-                       // run (section 17.3), under one confirmation. Done, keep
-                       // the folder keeps them.
-                       if (a.button == TutorialButton::Done && on && !tutorialCard_.Runner().On()) {
+                       // Done, and More topics, end the tutorial with its
+                       // folders in the trash, asked first where Settings says
+                       // to, as any folder's Delete is (question 9): its own,
+                       // and those made in the run (section 17.3), under one
+                       // confirmation. The card's Keep checkbox keeps them
+                       // (section 20).
+                       const bool ends = a.button == TutorialButton::Done || a.button == TutorialButton::MoreTopics;
+                       if (ends && on && !tutorialCard_.Runner().On() && !keep) {
                            // And the profiles made in the run, without asking,
                            // as a profile's own trash button has it (section
                            // 18.3).
@@ -728,9 +731,8 @@ void OverlayApp::Do(const ViewAction& action) {
                        if (topic == nullptr) {
                            topic = tutorial::FindTopic(tutorial::kBasicsTopic);
                        }
-                       // The topic running let go of first, as Done, keep the
-                       // folder would, and what it ended as kept for it
-                       // (section 13.3).
+                       // The topic running let go of first, keeping its folder,
+                       // and what it ended as kept for it (section 13.3).
                        if (tutorialCard_.Runner().On()) {
                            tutorialCard_.Leave();
                            KeepTutorialProgress();
