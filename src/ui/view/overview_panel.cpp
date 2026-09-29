@@ -321,6 +321,7 @@ void OverviewPanel::RenderOverviewHeader() {
     if (TabButton("overviewtabsettings", strings::kOverviewTabSettings, overviewTab_ == OverviewTab::Settings)) {
         SwitchOverviewTab(OverviewTab::Settings);
     }
+    host_.Mark(Anchor{AnchorId::OverviewSettingsTab}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     ImGui::SameLine();
     if (TabButton("overviewtababout", strings::kOverviewTabAbout, overviewTab_ == OverviewTab::About)) {
         SwitchOverviewTab(OverviewTab::About);

@@ -107,6 +107,11 @@ private:
     // a snippet on it first; and the Restore of what of the tutorial's is
     // in the trash - under its tile, or on its folder's row.
     std::optional<AnchorRect> DeleteCanvasRect() const;
+    // A spot in Settings, or the way to it while it is not drawn: the
+    // Overview's Settings tab while another tab is up, else the row of
+    // `section` while another section is picked (docs/TUTORIAL.md,
+    // section 18.3).
+    std::optional<AnchorRect> WayTo(tutorial::SettingsSection section, std::optional<AnchorRect> spot) const;
     std::optional<AnchorRect> RestoreRect() const;
     void DrawStep();
     void DrawSkipped();

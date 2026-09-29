@@ -1743,6 +1743,35 @@ TEST_F(TutorialAppTest, DoneMovesShowingWithTheListAsARowsTrashButtonDoes) {
     EXPECT_EQ(App().TutorialWorld().SettingsShowing(), shown) << "still the one it showed";
 }
 
+// A spot in Settings not on screen: the ring is on the way to it - the
+// Overview's Settings tab, then the section it is in (section 18.3).
+TEST_F(TutorialAppTest, TheSpotlightRingsTheWayToASpotInSettings) {
+    StartTheTutorial("profiles");
+    ASSERT_EQ(StepUp(), "openProfiles");
+    const auto ringsOn = [this](const Anchor& anchor) {
+        const std::optional<AnchorRect> ring = App().TutorialSpotlight();
+        const std::optional<AnchorRect> at = App().AnchorAt(anchor);
+        return ring.has_value() && at.has_value() && ring->min.x == at->min.x && ring->min.y == at->min.y;
+    };
+    const Anchor profilesRow{AnchorId::SettingsSection,
+                             static_cast<uint64_t>(SettingsPage::SettingsSection::Profiles)};
+
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
+    StepFrames(2);
+    ASSERT_FALSE(App().TutorialWorld().OverviewShowsSettings());
+    EXPECT_TRUE(ringsOn(Anchor{AnchorId::OverviewSettingsTab})) << "the Canvases tab up";
+    ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Settings}));
+    StepFrames(2);
+    EXPECT_TRUE(ringsOn(profilesRow));
+
+    PickSection(SettingsPage::SettingsSection::Profiles);
+    Settle();
+    ASSERT_EQ(StepUp(), "makeProfile");
+    EXPECT_TRUE(ringsOn(Anchor{AnchorId::SettingsMakeProfile}));
+    PickSection(SettingsPage::SettingsSection::Appearance);
+    EXPECT_TRUE(ringsOn(profilesRow)) << "another section picked";
+}
+
 TEST_F(TutorialAppTest, TheSpotlightRingsInsideSettings) {
     WalkTo("makeProfile", "profiles");
     const std::optional<AnchorRect> ring = App().TutorialSpotlight();

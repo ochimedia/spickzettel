@@ -30,6 +30,8 @@ enum class AnchorId {
     // The canvas bar's two buttons: a new canvas, and the Overview.
     CanvasBarNew,
     CanvasBarOverview,
+    // The Overview's Settings tab.
+    OverviewSettingsTab,
     // The Overview's New folder and Show deleted; a folder's row, by its
     // folder; a canvas's tile and the trash button under it, by its
     // canvas; and the Restore of something deleted, by its folder or

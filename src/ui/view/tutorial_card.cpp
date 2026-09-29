@@ -269,17 +269,16 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
         case tutorial::Spot::Restore:
             return RestoreRect();
         case tutorial::Spot::SectionProfiles:
-            return anchors_.Find(
-                Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(SettingsPage::SettingsSection::Profiles)});
+            return WayTo(tutorial::SettingsSection::Profiles, std::nullopt);
         case tutorial::Spot::SectionBehavior:
-            return anchors_.Find(
-                Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(SettingsPage::SettingsSection::Behavior)});
+            return WayTo(tutorial::SettingsSection::Behavior, std::nullopt);
         case tutorial::Spot::MakeProfile:
-            return anchors_.Find(Anchor{AnchorId::SettingsMakeProfile});
+            return WayTo(tutorial::SettingsSection::Profiles, anchors_.Find(Anchor{AnchorId::SettingsMakeProfile}));
         case tutorial::Spot::Showing:
-            return anchors_.Find(Anchor{AnchorId::SettingsShowing});
+            return WayTo(tutorial::SettingsSection::Behavior, anchors_.Find(Anchor{AnchorId::SettingsShowing}));
         case tutorial::Spot::DontStealFocus:
-            return anchors_.Find(Anchor{AnchorId::SettingsDontStealFocus});
+            return WayTo(tutorial::SettingsSection::Behavior,
+                         anchors_.Find(Anchor{AnchorId::SettingsDontStealFocus}));
         case tutorial::Spot::Revert:
             // The first arrow drawn, of the section's eight rows.
             for (uint64_t row = 0; row < 8; ++row) {
@@ -287,9 +286,30 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
                     return arrow;
                 }
             }
-            return std::nullopt;
+            return WayTo(tutorial::SettingsSection::Behavior, std::nullopt);
     }
     return std::nullopt;
+}
+
+std::optional<AnchorRect> TutorialCard::WayTo(tutorial::SettingsSection section,
+                                              std::optional<AnchorRect> spot) const {
+    if (spot.has_value() || world_.CanvasCover() != tutorial::Cover::Overview) {
+        return spot;
+    }
+    // The Overview on its Canvases or About tab: its Settings tab first.
+    if (!world_.OverviewShowsSettings()) {
+        return anchors_.Find(Anchor{AnchorId::OverviewSettingsTab});
+    }
+    // Another section picked: the row of the one the spot is in. On it
+    // already, the spot is only not drawn yet - a revert arrow before
+    // anything is set - and nothing is ringed.
+    if (world_.SettingsSectionShown() == section) {
+        return std::nullopt;
+    }
+    const SettingsPage::SettingsSection row = section == tutorial::SettingsSection::Profiles
+                                                  ? SettingsPage::SettingsSection::Profiles
+                                                  : SettingsPage::SettingsSection::Behavior;
+    return anchors_.Find(Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(row)});
 }
 
 std::optional<AnchorRect> TutorialCard::DeleteCanvasRect() const {
