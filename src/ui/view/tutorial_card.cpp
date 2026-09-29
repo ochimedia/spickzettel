@@ -35,6 +35,9 @@ constexpr float kCardTop = 72.0f;
 constexpr float kCardBottomMargin = 96.0f;
 // In a top corner, this far from the side.
 constexpr float kCardSideMargin = 24.0f;
+// The list's two columns, and the gap between them.
+constexpr float kListWidth = 2.0f * kCardWidth;
+constexpr float kListColumnGap = 12.0f;
 // How long the card slides to a new place, in seconds.
 constexpr float kCardSlide = 0.15f;
 
@@ -334,6 +337,13 @@ std::optional<AnchorRect> TutorialCard::RestoreRect() const {
 
 // ================= The card =================
 
+float TutorialCard::Width(float displayW) const {
+    if (listing_ && Px(kListWidth) + 2.0f * Px(kCardSideMargin) <= displayW) {
+        return Px(kListWidth);
+    }
+    return Px(kCardWidth);
+}
+
 ImVec2 TutorialCard::Placed(float displayW, float displayH) {
     // The list at the top center, always: it points at nothing.
     //
@@ -351,7 +361,7 @@ ImVec2 TutorialCard::Placed(float displayW, float displayH) {
     // then covering least, then nearest, and slides there. The Overview
     // opened or closed has changed all that is under it: placed anew, as
     // at the start (docs/TUTORIAL.md, section 19).
-    const float width = Px(kCardWidth);
+    const float width = Width(displayW);
     const ImGuiWindow* last = ImGui::FindWindowByName(kCardWindow);
     const float height = last != nullptr ? last->Size.y : Px(160.0f);
     const float side = Px(kCardSideMargin);
@@ -480,7 +490,7 @@ void TutorialCard::Draw(float displayW, float displayH) {
     if (!runner_.On() && !listing_) {
         return;
     }
-    const float width = Px(kCardWidth);
+    const float width = Width(displayW);
     // Where the user put it - ImGui moves a window dragged by its body -
     // or its place.
     const ImGuiWindow* last = ImGui::FindWindowByName(kCardWindow);
@@ -681,77 +691,101 @@ void TutorialCard::DrawList() {
     ImGui::TextColored(theme::kWhite, "%s", strings::kTutorialListTitle);
     Wrapped(theme::kGraphite100, strings::kTutorialListText);
     ImGui::Spacing();
-    // A row per topic, pressed as a whole: its text drawn first, on the
-    // upper channel, and the row's button and hover behind it.
+    // The topics in two columns where the list is wide enough, read row by
+    // row; the two in a row as tall as the taller (docs/TUTORIAL.md,
+    // section 19.5).
+    const std::vector<tutorial::Topic>& topics = tutorial::Topics();
+    const int columns = ImGui::GetContentRegionAvail().x > Px(kListWidth) * 0.75f ? 2 : 1;
+    const float gap = Px(kListColumnGap);
+    const float cellW = (ImGui::GetContentRegionAvail().x - gap * static_cast<float>(columns - 1)) /
+                        static_cast<float>(columns);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const ImVec2 pad(style.FramePadding.x, style.FramePadding.y);
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    for (const tutorial::Topic& topic : tutorial::Topics()) {
-        const Status status = StatusOf(topic);
-        char statusText[64];
-        switch (status) {
-            case Status::New:
-                std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListNew);
-                break;
-            case Status::Running:
-                std::snprintf(statusText, sizeof(statusText), strings::kTutorialListAtStep,
-                              static_cast<int>(runner_.StepIndex() + 1), static_cast<int>(runner_.StepCount()));
-                break;
-            case Status::Started:
-                std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListStarted);
-                break;
-            case Status::Done:
-                std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListDone);
-                break;
-        }
-        // How many steps it has, on the status's line - a line of its own
-        // made six topics taller than a small display (docs/TUTORIAL.md,
-        // section 18.8). Not beside "At step 3 of 8", which says it.
-        std::string statusLine = statusText;
-        if (status != Status::Running) {
-            char steps[32];
-            std::snprintf(steps, sizeof(steps), strings::kTutorialListSteps, static_cast<int>(topic.chain().size()));
-            statusLine.append(", ").append(steps);
-        }
-
-        const ImGuiStyle& style = ImGui::GetStyle();
-        const ImVec2 pad(style.FramePadding.x, style.FramePadding.y);
+    for (size_t first = 0; first < topics.size(); first += static_cast<size_t>(columns)) {
+        const size_t last = std::min(topics.size(), first + static_cast<size_t>(columns));
+        const ImVec2 rowStart = ImGui::GetCursorScreenPos();
+        // A cell per topic, pressed as a whole: its text drawn first, on
+        // the upper channel, and its button and hover behind it once the
+        // row's height is known.
         drawList->ChannelsSplit(2);
         drawList->ChannelsSetCurrent(1);
-        const ImVec2 start = ImGui::GetCursorScreenPos();
-        ImGui::SetCursorScreenPos(ImVec2(start.x + pad.x, start.y + pad.y));
-        ImGui::BeginGroup();
-        ImGui::PushTextWrapPos(ImGui::GetWindowContentRegionMax().x - pad.x);
-        ImGui::TextColored(theme::kWhite, "%s", topic.title);
-        ImGui::SameLine();
-        ImGui::TextColored(status == Status::Running ? theme::kTutorialHighlight : theme::kGraphite300, "%s",
-                           statusLine.c_str());
-        ImGui::PushStyleColor(ImGuiCol_Text, theme::kGraphite100);
-        ImGui::TextUnformatted(topic.gist);
-        ImGui::PopStyleColor();
-        ImGui::PopTextWrapPos();
-        ImGui::EndGroup();
-        const ImVec2 end(start.x + ImGui::GetContentRegionAvail().x, ImGui::GetItemRectMax().y + pad.y);
+        float rowH = 0.0f;
+        for (size_t i = first; i < last; ++i) {
+            const tutorial::Topic& topic = topics[i];
+            const Status status = StatusOf(topic);
+            char statusText[64];
+            switch (status) {
+                case Status::New:
+                    std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListNew);
+                    break;
+                case Status::Running:
+                    std::snprintf(statusText, sizeof(statusText), strings::kTutorialListAtStep,
+                                  static_cast<int>(runner_.StepIndex() + 1), static_cast<int>(runner_.StepCount()));
+                    break;
+                case Status::Started:
+                    std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListStarted);
+                    break;
+                case Status::Done:
+                    std::snprintf(statusText, sizeof(statusText), "%s", strings::kTutorialListDone);
+                    break;
+            }
+            // How many steps it has, on the status's line - a line of its
+            // own made six topics taller than a small display
+            // (docs/TUTORIAL.md, section 18.8). Not beside "At step 3 of
+            // 8", which says it.
+            std::string statusLine = statusText;
+            if (status != Status::Running) {
+                char steps[32];
+                std::snprintf(steps, sizeof(steps), strings::kTutorialListSteps,
+                              static_cast<int>(topic.chain().size()));
+                statusLine.append(", ").append(steps);
+            }
+            const float cellX = rowStart.x + static_cast<float>(i - first) * (cellW + gap);
+            ImGui::SetCursorScreenPos(ImVec2(cellX + pad.x, rowStart.y + pad.y));
+            ImGui::BeginGroup();
+            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + cellW - 2.0f * pad.x);
+            ImGui::TextColored(theme::kWhite, "%s", topic.title);
+            ImGui::SameLine();
+            ImGui::TextColored(status == Status::Running ? theme::kTutorialHighlight : theme::kGraphite300, "%s",
+                               statusLine.c_str());
+            ImGui::PushStyleColor(ImGuiCol_Text, theme::kGraphite100);
+            ImGui::TextUnformatted(topic.gist);
+            ImGui::PopStyleColor();
+            ImGui::PopTextWrapPos();
+            ImGui::EndGroup();
+            rowH = std::max(rowH, ImGui::GetItemRectMax().y + pad.y - rowStart.y);
+        }
 
         drawList->ChannelsSetCurrent(0);
-        ImGui::SetCursorScreenPos(start);
-        const std::string id = "tutorial_topic_" + std::string(topic.id);
-        const bool pressed = ImGui::InvisibleButton(id.c_str(), ImVec2(end.x - start.x, end.y - start.y));
-        if (status == Status::Running) {
-            drawList->AddRect(start, end, ImGui::GetColorU32(theme::kTutorialHighlight), Px(6.0f), ImDrawFlags_None,
-                              Px(1.5f));
-        }
-        if (ImGui::IsItemHovered()) {
-            drawList->AddRectFilled(start, end, ImGui::GetColorU32(theme::kHoverWash), Px(6.0f));
-        }
-        drawList->ChannelsMerge();
-        if (pressed) {
-            // The topic running goes on where it is; any other starts at
-            // its first step (question 12).
+        for (size_t i = first; i < last; ++i) {
+            const tutorial::Topic& topic = topics[i];
+            const Status status = StatusOf(topic);
+            const ImVec2 start(rowStart.x + static_cast<float>(i - first) * (cellW + gap), rowStart.y);
+            const ImVec2 end(start.x + cellW, start.y + rowH);
+            ImGui::SetCursorScreenPos(start);
+            const std::string id = "tutorial_topic_" + std::string(topic.id);
+            const bool pressed = ImGui::InvisibleButton(id.c_str(), ImVec2(cellW, rowH));
             if (status == Status::Running) {
-                host_.Act(action::TutorialPress{TutorialButton::CloseList});
-            } else {
-                host_.Act(action::StartTutorial{std::string(topic.id)});
+                drawList->AddRect(start, end, ImGui::GetColorU32(theme::kTutorialHighlight), Px(6.0f),
+                                  ImDrawFlags_None, Px(1.5f));
+            }
+            if (ImGui::IsItemHovered()) {
+                drawList->AddRectFilled(start, end, ImGui::GetColorU32(theme::kHoverWash), Px(6.0f));
+            }
+            if (pressed) {
+                // The topic running goes on where it is; any other starts
+                // at its first step (question 12).
+                if (status == Status::Running) {
+                    host_.Act(action::TutorialPress{TutorialButton::CloseList});
+                } else {
+                    host_.Act(action::StartTutorial{std::string(topic.id)});
+                }
             }
         }
+        drawList->ChannelsMerge();
+        ImGui::SetCursorScreenPos(ImVec2(rowStart.x, rowStart.y + rowH));
+        ImGui::Dummy(ImVec2(0.0f, 0.0f));
         ImGui::Spacing();
     }
     ImGui::Separator();

@@ -154,9 +154,10 @@ the ring's anchor or a bar; then it slides to the nearest place that
 covers least. The Overview opened or closed places it anew (section 19).
 Wherever it goes, all of it stays on screen: the list is tall (18.8).
 The user can drag the card by its title, and it stays where it is left
-until the list opens. The list is always at the top center, and the
-card placed as at the start once it closes or a topic starts from it
-(19.5).
+until the list opens. The list is always at the top center, twice as
+wide as a step's card with the topics in two columns where the display
+has room, and the card placed as at the start once it closes or a topic
+starts from it (19.5).
 
 **Keys.** The card takes none:
 
@@ -231,9 +232,10 @@ user.
 - Its "More topics" opens the list, and it says the tutorial is also in
   Settings > Interaction. The end card has "More topics" too.
 
-**The list.** A state of the card, with a row per topic: its title, one
-line on what it covers, its number of steps, and where the user is with
-it (New, At step 4 of 10, Started, Done). A row starts its topic; the
+**The list.** A state of the card, with a cell per topic, two to a row
+where the display has room (19.5): its title, one line on what it
+covers, its number of steps, and where the user is with it (New, At
+step 4 of 10, Started, Done). A cell starts its topic; the
 list's Back goes back to the topic running, and its Close, with none
 running, takes the card away (13.3).
 
@@ -1191,7 +1193,7 @@ to this table, as section 8 says, each with its tests.
 ### 13.3 The list
 
 The list is a state of the card, like the skip card. It shows one row
-per topic, with:
+per topic, with (two topics to a row where the display has room, 19.5):
 
 - the title, and one line on what the topic covers;
 - how many steps it has, beside where the user is with it (18.8);
@@ -2783,6 +2785,16 @@ test:
   card was is hard to find. A card dragged during a topic is placed as
   at the start again when the list opens, and stays so for the card
   the list closes to and for the topic started from it.
+- **The list in two columns** (asked for after trying it at 150 %). One
+  column of six topics was long, and at a step's card's width each
+  topic's line took three lines. The list is now twice as wide, with the
+  topics in two columns read row by row, the two in a row as tall as
+  each other, each pressed as a whole as before: three rows of two
+  lines instead of six of three. Only the list is wider; a step's card
+  stays narrow beside what the user works on. Where the display has no
+  room for twice the width, at a large scale on a small display, the
+  list stays one column at a step's card's width. Checked at 150 % on
+  1920 by 1080.
 - **Tests:** the card stays over the subject alone; stays at the bottom
   when the step moves on and the top is clear again; and slides, part
   of the way on the frame after and all of it once the slide is over.

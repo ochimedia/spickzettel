@@ -271,6 +271,49 @@ TEST_F(TutorialUiTest, TheListClosesWithNothingStarted) {
     EXPECT_EQ(ImGui::FindWindowByName("##tutorial_card")->Active, false);
 }
 
+// Two columns, read row by row, the two in a row as tall as each other;
+// one where the display has no room for two (docs/TUTORIAL.md, section
+// 19.5).
+TEST_F(TutorialUiTest, TheListShowsTheTopicsInTwoColumnsWhereThereIsRoom) {
+    // The topics' rows, in the list's order.
+    const auto topicRects = [this] {
+        std::vector<ImRect> rects;
+        RunUi("the rows", [&rects](ImGuiTestContext* ctx) {
+            ctx->SetRef("//##tutorial_card");
+            for (const tutorial::Topic& topic : tutorial::Topics()) {
+                rects.push_back(ctx->ItemInfo(("**/tutorial_topic_" + std::string(topic.id)).c_str()).RectFull);
+            }
+        });
+        return rects;
+    };
+    ShowEditMode();
+    StepFrame();
+    Overlay().OpenTutorialList();
+    StepFrames(2);
+    std::vector<ImRect> rects = topicRects();
+    ASSERT_EQ(rects.size(), 6u);
+    for (size_t i = 0; i < rects.size(); i += 2) {
+        EXPECT_FLOAT_EQ(rects[i].Min.y, rects[i + 1].Min.y) << "a row: " << i;
+        EXPECT_FLOAT_EQ(rects[i].GetHeight(), rects[i + 1].GetHeight()) << "as tall: " << i;
+        EXPECT_LT(rects[i].Max.x, rects[i + 1].Min.x) << "side by side: " << i;
+    }
+    EXPECT_GT(rects[2].Min.y, rects[0].Max.y) << "the next row below";
+    const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
+    EXPECT_FLOAT_EQ(card->Pos.x + card->Size.x * 0.5f, kDisplayWidth * 0.5f) << "centered";
+    EXPECT_LE(card->Pos.y + card->Size.y, kDisplayHeight);
+
+    // At 200%, twice a step's card is wider than the display: a step's
+    // card's width, one column. (The list is taller than this display
+    // then, so only its first rows are on it.)
+    controller_->GetSettings().Set(setting::kUiScale, 200);
+    StepFrames(3);
+    EXPECT_FLOAT_EQ(card->Size.x, 2.0f * 360.0f);
+    rects = topicRects();
+    ASSERT_EQ(rects.size(), 6u);
+    EXPECT_GT(rects[1].Min.y, rects[0].Max.y) << "one below the other";
+    EXPECT_FLOAT_EQ(rects[1].Min.x, rects[0].Min.x);
+}
+
 // More topics, from the skip card: the list, where Back returns to the
 // skip card, the running topic's row to it too, and another row starts
 // that topic.

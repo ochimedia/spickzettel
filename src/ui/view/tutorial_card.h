@@ -117,6 +117,10 @@ private:
     enum class Place { Top, Bottom, TopLeft, TopRight, LowerRight };
     // Where the card is drawn this frame: its place, or on the way there.
     ImVec2 Placed(float displayW, float displayH);
+    // How wide the card is: the list twice a step's card, where the
+    // display has room for it, in two columns (docs/TUTORIAL.md, section
+    // 19.5).
+    float Width(float displayW) const;
     // Placed as at the start - where the user dragged it forgotten - as a
     // topic starts, and as the list opens or closes (docs/TUTORIAL.md,
     // section 19.5).
