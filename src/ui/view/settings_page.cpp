@@ -522,10 +522,12 @@ void SettingsPage::RenderSettingsAppearance() {
     SettingCheckbox(settings_, setting::kShowEditModeBorder, "appearanceshoweditborder",
                     strings::kAppearanceShowEditBorder, strings::kAppearanceShowEditBorderHelp);
     ImGui::BeginDisabled(!Cfg().showEditModeBorder);
+    // The color with its alpha, as the snippet colors have it, and the
+    // width in the next column.
+    const float borderX = ImGui::GetCursorPosX();
     SettingColor(settings_, setting::kEditModeBorderColor, "##editbordercolor", strings::kAppearanceEditBorderColor,
-                 SwatchAlpha::None);
-    SettingPercent(settings_, setting::kEditModeBorderOpacity, "editborderopacity",
-                   strings::kAppearanceEditBorderOpacity);
+                 SwatchAlpha::Bar);
+    ImGui::SameLine(borderX + Px(kColorColumnWidth));
     SettingPixels(settings_, setting::kEditModeBorderWidth, "editborderwidth", strings::kAppearanceEditBorderWidth);
     SettingCheckbox(settings_, setting::kEditModeBorderOnlyWhenEmpty, "appearanceeditborderemptyonly",
                     strings::kAppearanceEditBorderEmptyOnly, strings::kAppearanceEditBorderEmptyOnlyHelp);

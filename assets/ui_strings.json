@@ -615,7 +615,6 @@
   "appearance.showEditBorder": "Show a border around the screen while edit mode is active",
   "appearance.showEditBorderHelp": "A frame around the whole screen for as long as the overlay is up in edit mode, so it's obvious your clicks are landing here rather than in whatever's underneath.\n\nView-only mode never draws it - input passes straight through there, so there's nothing to warn about.",
   "appearance.editBorderColor": "Color",
-  "appearance.editBorderOpacity": "Opacity",
   "appearance.editBorderWidth": "Width",
   "appearance.editBorderEmptyOnly": "Show border only while the canvas is still empty",
   "appearance.editBorderEmptyOnlyHelp": "The border disappears as soon as there's anything on the current canvas - by then that content is itself the proof the overlay is up, and the frame has nothing left to say.",

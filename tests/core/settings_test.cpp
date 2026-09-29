@@ -116,7 +116,7 @@ TEST(SettingsTest, APreviewIsShownAtOnceAndCommittedWhenFinished) {
     EXPECT_EQ(commits, 1) << "nothing left to finish";
 
     // Any other edit's commit takes a preview with it.
-    settings.Preview(setting::kEditModeBorderOpacity, 0.5f);
+    settings.Preview(setting::kEditModeBorderWidth, 20.0f);
     settings.Set(setting::kShowCanvasBar, false);
     EXPECT_EQ(commits, 2);
     EXPECT_FALSE(settings.Previewing());
@@ -129,14 +129,14 @@ TEST(SettingsTest, APreviewCalledOffIsPutBack) {
     int commits = 0;
     settings.SetChangedCallback([&commits] { ++commits; });
     const uint32_t accent = settings.Get(setting::kAccentColor);
-    const float opacity = settings.Get(setting::kEditModeBorderOpacity);
+    const float width = settings.Get(setting::kEditModeBorderWidth);
 
     settings.Preview(setting::kAccentColor, 0x112233FFu);
     settings.Preview(setting::kAccentColor, 0x445566FFu);
-    settings.Preview(setting::kEditModeBorderOpacity, 0.5f);
+    settings.Preview(setting::kEditModeBorderWidth, 20.0f);
     settings.CancelPreviews();
     EXPECT_EQ(settings.Get(setting::kAccentColor), accent);
-    EXPECT_EQ(settings.Get(setting::kEditModeBorderOpacity), opacity);
+    EXPECT_EQ(settings.Get(setting::kEditModeBorderWidth), width);
     EXPECT_FALSE(settings.Previewing());
     settings.CommitPreviews();
     EXPECT_EQ(commits, 0);

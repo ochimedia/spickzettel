@@ -263,8 +263,7 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.confirmDelete = false;
     config.confirmDeleteForGood = false;
     config.showEditModeBorder = false;
-    config.editModeBorderColorRGBA = 0x5AA9FFFFu;
-    config.editModeBorderOpacity = 0.4f;
+    config.editModeBorderColorRGBA = 0x5AA9FF66u;
     config.editModeBorderWidthPx = 16.0f;
     config.editModeBorderOnlyWhenEmpty = true;
     config.profileable.freezeScreen = true;
@@ -658,7 +657,7 @@ TEST(AppConfigTest, CreationTriggersDefaultParseAndNeverCoincide) {
 }
 
 // The version is what the file says; anything that cannot be a version is
-// read as 1, what every build so far has written. A file from a newer build
+// read as 1, what every build before 0.2.0 wrote. A file from a newer build
 // is read as well as this one can, and is not a repair.
 TEST(AppConfigTest, TheVersionIsReadAndIsOneWhenTheFileSaysNothingUsable) {
     const auto version = [](const std::string& text) { return TryParseConfig(text)->version; };
@@ -699,20 +698,27 @@ TEST(AppConfigTest, ReadingReportsEveryLoadRepairAndNothingElse) {
              R"({"hotkeys": {"editMode": "Ctrl+Alt+V"}})",
              R"({"profiles": [{"name": "", "match": {"exe": ["a.exe"]}}]})",
              R"({"profiles": [{"name": "Game"}, {"name": "Game"}]})",
+             R"({"version": 1})",  // migrated
          }) {
         SCOPED_TRACE(text);
         const std::optional<ParsedConfig> parsed = TryParseConfig(text);
         ASSERT_TRUE(parsed);
         EXPECT_TRUE(parsed->changed);
     }
+    // At this build's version: a file without one is version 1's, and
+    // migrated.
+    const auto current = [](const std::string& text) {
+        return std::string(R"({"version": )") + std::to_string(kConfigVersion) + (text.size() > 2 ? ", " : "") +
+               text.substr(1);
+    };
     for (const std::string& text : {
-             std::string("{}"),
-             One("drawing", "strokeWidth", "1000"),
-             One("drawing", "strokeWidth", R"("wide")"),
-             One("hotkeys", "viewMode", "null"),
-             One("drawing", "somethingNewer", "true"),
-             std::string(R"({"drawing": {"screenshotTrigger": "off", "drawingTrigger": "off"}})"),
-             std::string(R"({"profiles": [{"name": "Game"}, {"name": "Game 2"}, 7]})"),
+             current("{}"),
+             current(One("drawing", "strokeWidth", "1000")),
+             current(One("drawing", "strokeWidth", R"("wide")")),
+             current(One("hotkeys", "viewMode", "null")),
+             current(One("drawing", "somethingNewer", "true")),
+             current(R"({"drawing": {"screenshotTrigger": "off", "drawingTrigger": "off"}})"),
+             current(R"({"profiles": [{"name": "Game"}, {"name": "Game 2"}, 7]})"),
              SerializeConfig(DefaultConfig()),
          }) {
         SCOPED_TRACE(text);
@@ -756,23 +762,19 @@ TEST(AppConfigTest, DeletingAsksFirstByDefaultAndEachCanBeTurnedOff) {
 TEST(AppConfigTest, EditModeBorderDefaultsToTranslucentWhiteTenPixelsAlwaysShown) {
     const AppConfig config = DefaultConfig();
     EXPECT_TRUE(config.showEditModeBorder);
-    EXPECT_EQ(config.editModeBorderColorRGBA, 0xFFFFFFFFu);
-    EXPECT_GT(config.editModeBorderOpacity, 0.0f);
-    EXPECT_LT(config.editModeBorderOpacity, 1.0f);
+    EXPECT_EQ(config.editModeBorderColorRGBA, 0xFFFFFF38u);
     EXPECT_FLOAT_EQ(config.editModeBorderWidthPx, 10.0f);
     EXPECT_FALSE(config.editModeBorderOnlyWhenEmpty);
 }
 
 TEST(AppConfigTest, ParsesEditModeBorderSettings) {
-    const AppConfig config = ParseConfig(R"({"appearance": {"editModeBorder": {
+    const AppConfig config = ParseConfig(R"({"version": 2, "appearance": {"editModeBorder": {
         "show": false,
-        "color": "#5AA9FF",
-        "opacity": 0.75,
+        "color": "#5AA9FFBF",
         "width": 20,
         "onlyWhenEmpty": true}}})");
     EXPECT_FALSE(config.showEditModeBorder);
-    EXPECT_EQ(config.editModeBorderColorRGBA, 0x5AA9FFFFu);
-    EXPECT_FLOAT_EQ(config.editModeBorderOpacity, 0.75f);
+    EXPECT_EQ(config.editModeBorderColorRGBA, 0x5AA9FFBFu);
     EXPECT_FLOAT_EQ(config.editModeBorderWidthPx, 20.0f);
     EXPECT_TRUE(config.editModeBorderOnlyWhenEmpty);
 }
@@ -795,17 +797,11 @@ TEST(AppConfigTest, ParsesAndSerializesFreezeScreenInEditMode) {
 // Both are pulled into range rather than reverted to the default - see
 // their own parse comments; every value in between means something, it's
 // only the ends that need holding.
-TEST(AppConfigTest, ClampsOutOfRangeEditModeBorderOpacityAndWidth) {
-    const auto opacity = [](const char* value) {
-        return ParseConfig(std::string(R"({"appearance":{"editModeBorder":{"opacity":)") + value + "}}}")
-            .editModeBorderOpacity;
-    };
+TEST(AppConfigTest, ClampsOutOfRangeEditModeBorderWidth) {
     const auto width = [](const char* value) {
         return ParseConfig(std::string(R"({"appearance":{"editModeBorder":{"width":)") + value + "}}}")
             .editModeBorderWidthPx;
     };
-    EXPECT_FLOAT_EQ(opacity("5"), 1.0f);
-    EXPECT_FLOAT_EQ(opacity("-2"), 0.0f);
     EXPECT_FLOAT_EQ(width("999"), kEditModeBorderWidthMax);
     EXPECT_FLOAT_EQ(width("0.1"), kEditModeBorderWidthMin);
     // Non-positive is rejected outright (falls back to the default) - a

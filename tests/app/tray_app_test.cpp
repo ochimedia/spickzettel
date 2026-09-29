@@ -13,6 +13,7 @@
 #include <gtest/gtest.h>
 #include <sqlite3.h>
 
+#include "core/config/config_migrations.h"
 #include "core/persistence/library_store.h"
 #include "fakes/fake_platform_host.h"
 #include "generated/ui_strings.h"
@@ -1062,7 +1063,9 @@ TEST_F(TrayControllerPersistenceTest, AFileReadingRepairedIsWrittenBackAtStart) 
 // held to its rule included, until a settings change writes it anyway.
 TEST_F(TrayControllerPersistenceTest, AFileReadingLeftAsItWasIsNotWrittenAtStart) {
     std::filesystem::create_directories(dir_);
-    const std::string text = R"({"drawing": {"strokeWidth": 1000}})";
+    // At this build's version: a file without one is migrated, and written.
+    const std::string text =
+        R"({"version": )" + std::to_string(kConfigVersion) + R"(, "drawing": {"strokeWidth": 1000}})";
     std::ofstream(dir_ / "config.json", std::ios::binary) << text;
     const LoadedConfig loaded = LoadOrCreateConfig(dir_ / "config.json", "stamp");
     ASSERT_FALSE(loaded.writeBack);
@@ -1083,10 +1086,10 @@ TEST_F(TrayControllerPersistenceTest, ExitWritesAPreviewStillBeingDragged) {
     TrayController controller(host, DefaultConfig());
     ASSERT_TRUE(controller.Initialize());
 
-    controller.GetSettings().Preview(setting::kEditModeBorderOpacity, 0.5f);
+    controller.GetSettings().Preview(setting::kEditModeBorderWidth, 20.0f);
     host.TriggerTrayCommand(platform::TrayCommand::Exit);
     EXPECT_TRUE(host.quitCalled);
-    EXPECT_FLOAT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).editModeBorderOpacity, 0.5f);
+    EXPECT_FLOAT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).editModeBorderWidthPx, 20.0f);
 }
 
 TEST_F(TrayControllerPersistenceTest, ExitWritesASettingsFileStillOwed) {

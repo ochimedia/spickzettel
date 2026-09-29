@@ -455,7 +455,7 @@ TEST_F(UiTest, ADragCutShortByLeavingEditModeIsCommitted) {
     controller_->GetSettings().Set(setting::kShowEditModeBorder, true);
     ShowEditMode();
     StepFrame();
-    const float before = AppSettings().Stored().editModeBorderOpacity;
+    const float before = AppSettings().Stored().editModeBorderWidthPx;
 
     OpenOverviewUi();
     RunUi("start dragging a slider", [&](ImGuiTestContext* ctx) {
@@ -463,12 +463,12 @@ TEST_F(UiTest, ADragCutShortByLeavingEditModeIsCommitted) {
         ctx->ItemClick("**/###overviewtabsettings");
         ctx->ItemClick("**/###sectionappearance");
         const ImGuiID body = ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID;
-        ctx->MouseMove(ImHashStr("###editborderopacity", 0, body));
+        ctx->MouseMove(ImHashStr("###editborderwidth", 0, body));
         ctx->MouseDown(ImGuiMouseButton_Left);
         const ImVec2 at = ImGui::GetIO().MousePos;
         ctx->MouseMoveToPos(ImVec2(at.x - 60.0f, at.y));
         ctx->Yield(2);
-        IM_CHECK(AppSettings().Stored().editModeBorderOpacity != before);  // shown as it moves
+        IM_CHECK(AppSettings().Stored().editModeBorderWidthPx != before);  // shown as it moves
         IM_CHECK(AppSettings().Previewing());
         // View mode's hotkey, the button still down: edit mode left in place.
         ShowViewMode();
@@ -479,7 +479,7 @@ TEST_F(UiTest, ADragCutShortByLeavingEditModeIsCommitted) {
     ASSERT_TRUE(App().IsViewOnly());
     ASSERT_FALSE(App().IsOverviewOpen()) << "the slider is not drawn again";
     EXPECT_FALSE(AppSettings().Previewing()) << "committed as the overlay settled";
-    EXPECT_NE(AppSettings().Stored().editModeBorderOpacity, before);
+    EXPECT_NE(AppSettings().Stored().editModeBorderWidthPx, before);
 }
 
 // A bar's buttons are reordered by dragging them along their own row. One

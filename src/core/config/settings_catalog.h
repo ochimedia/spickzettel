@@ -86,9 +86,6 @@ inline constexpr GlobalSetting<BoolRule> kShowEditModeBorder{
 inline constexpr GlobalSetting<ColorRule> kEditModeBorderColor{
     {"appearance", "editModeBorder", "color"}, {}, E::Frame,
     [](AppConfig& c) { return &c.editModeBorderColorRGBA; }};
-inline constexpr GlobalSetting<FloatRule> kEditModeBorderOpacity{
-    {"appearance", "editModeBorder", "opacity"}, {0.0f, 1.0f}, E::Frame,
-    [](AppConfig& c) { return &c.editModeBorderOpacity; }};
 inline constexpr GlobalSetting<PositiveBandRule> kEditModeBorderWidth{
     {"appearance", "editModeBorder", "width"}, {kEditModeBorderWidthMin, kEditModeBorderWidthMax}, E::Frame,
     [](AppConfig& c) { return &c.editModeBorderWidthPx; }};
@@ -204,7 +201,7 @@ inline constexpr auto kAll = std::tuple{
     &kStrokeColor, &kStrokeWidth, &kRaiseSelected, &kScreenshotTrigger, &kDrawingTrigger,
     &kShowItemBorders, &kShowToastsWhileHidden, &kImageFilter, &kAccentColor, &kUiScale,
     &kBorderFront, &kBorderOther, &kBorderPinned, &kShowCanvasBar,
-    &kShowEditModeBorder, &kEditModeBorderColor, &kEditModeBorderOpacity, &kEditModeBorderWidth,
+    &kShowEditModeBorder, &kEditModeBorderColor, &kEditModeBorderWidth,
     &kEditModeBorderOnlyWhenEmpty,
     &kSnippetBar, &kDrawingBar,
     &kOverviewShowsStrokes, &kOverviewShowsBitmaps,

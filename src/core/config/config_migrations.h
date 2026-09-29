@@ -14,7 +14,7 @@ namespace sz::core {
 // in - a key renamed or moved, a value whose meaning changed. Adding a key
 // or dropping one is not: an absent key reads as its default, and an
 // unknown one is ignored. See docs/SETTINGS.md, section 8.
-inline constexpr int kConfigVersion = 1;
+inline constexpr int kConfigVersion = 2;
 
 // One step: a settings file of version n, as JSON, made into version n + 1.
 using ConfigMigration = void (*)(nlohmann::ordered_json& doc);

@@ -134,7 +134,7 @@ auto Fields(const AppConfig& c) {
                  itemBorderColorOtherRGBA, itemBorderColorPinnedRGBA, imageFilter,
                  raiseSelectedSnippet, screenshotTrigger, drawingTrigger, snippetBar, drawingBar, overviewShowsStrokes,
                  overviewShowsBitmaps, showCanvasBar, showEditModeBorder, editModeBorderColorRGBA,
-                 editModeBorderOpacity, editModeBorderWidthPx, editModeBorderOnlyWhenEmpty, purgeDeleted,
+                 editModeBorderWidthPx, editModeBorderOnlyWhenEmpty, purgeDeleted,
                  purgeDeletedAfterDays, confirmDelete, confirmDeleteForGood, screenshotDefaults, drawingDefaults,
                  drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId, overlayDisplayName,
                  tutorialProgress, tutorialCurrent, tutorialFolder] = c;
@@ -144,7 +144,7 @@ auto Fields(const AppConfig& c) {
                     itemBorderColorOtherRGBA, itemBorderColorPinnedRGBA, imageFilter,
                     raiseSelectedSnippet, screenshotTrigger, drawingTrigger, snippetBar, drawingBar,
                     overviewShowsStrokes, overviewShowsBitmaps, showCanvasBar, showEditModeBorder,
-                    editModeBorderColorRGBA, editModeBorderOpacity, editModeBorderWidthPx, editModeBorderOnlyWhenEmpty,
+                    editModeBorderColorRGBA, editModeBorderWidthPx, editModeBorderOnlyWhenEmpty,
                     purgeDeleted, purgeDeletedAfterDays, confirmDelete, confirmDeleteForGood, screenshotDefaults,
                     drawingDefaults, drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId,
                     overlayDisplayName, tutorialProgress, tutorialCurrent, tutorialFolder);

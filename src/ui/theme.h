@@ -119,8 +119,8 @@ ImU32 ToImColor(uint32_t colorRGBA, float opacity = 1.0f);
 // colors and the float[3] every ImGui color widget (ColorEdit3/
 // ColorPicker3) reads and writes. The alpha byte round-trips separately -
 // none of those widgets touch it, and every color that goes through here
-// carries its opacity in a field of its own anyway (Item::
-// backgroundOpacity, AppConfig::editModeBorderOpacity).
+// is opaque or carries its opacity in a field of its own anyway (Item::
+// backgroundOpacity).
 void ColorRGBAToFloats(uint32_t colorRGBA, float out[3]);
 uint32_t FloatsToColorRGBA(const float in[3], uint8_t alpha);
 // The same, for the colors whose alpha the user edits along with the hue

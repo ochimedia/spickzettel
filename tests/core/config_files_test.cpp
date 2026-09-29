@@ -116,8 +116,7 @@ AppConfig Everything() {
     c.overviewShowsBitmaps = false;
     c.showCanvasBar = false;
     c.showEditModeBorder = false;
-    c.editModeBorderColorRGBA = 0x5AA9FFFFu;
-    c.editModeBorderOpacity = 0.4f;
+    c.editModeBorderColorRGBA = 0x5AA9FF66u;
     c.editModeBorderWidthPx = 16.0f;
     c.editModeBorderOnlyWhenEmpty = true;
     c.profileable.freezeScreen = true;

@@ -198,8 +198,7 @@ one row noted.
 | `snippetColors.borderPinned` | `itemBorderColorPinnedRGBA` | `#FF6A3D99` | the same | Frame |
 | `canvasBar.show` | `showCanvasBar` | true | bool | Frame |
 | `editModeBorder.show` | `showEditModeBorder` | true | bool | Frame |
-| `editModeBorder.color` | `editModeBorderColorRGBA` | `#FFFFFF` | color; previewed | Frame |
-| `editModeBorder.opacity` | `editModeBorderOpacity` | 0.22 | 0..1 held; previewed | Frame |
+| `editModeBorder.color` | `editModeBorderColorRGBA` | `#FFFFFF38` | color; its alpha is the border's opacity (version 2; see section 8); previewed | Frame |
 | `editModeBorder.width` | `editModeBorderWidthPx` | 10 | ≤0 rejected, else 1..48 held; previewed | Frame |
 | `editModeBorder.onlyWhenEmpty` | `editModeBorderOnlyWhenEmpty` | false | bool | Frame |
 
@@ -559,9 +558,22 @@ Tests: each step on its own, from a small document of its source
 version. And the files each release wrote, read through the whole chain
 to the config they were written from (below).
 
-**No migration exists yet.** Version 1 is current, and C10 adds only the
-means. Settings files are kept as test fixtures in
-`tests/core/config_files/`, of two kinds:
+**Version 2 (0.2.0): the edit-mode border's opacity went into its
+color.** Version 1 had `editModeBorder.opacity` beside
+`editModeBorder.color`, a swatch and a slider in Settings, where the
+snippet colors are a swatch with an alpha each. One swatch for each
+color keeps the Appearance page short and every color edited the same
+way. The meaning of `color`'s alpha changed with it, so this is a
+version rather than a dropped key: read as it was, a version 1 file
+would show its border opaque. `MigrateV1ToV2` writes as the alpha what
+version 1 drew, the color's alpha times the opacity, and drops
+`opacity`. A key missing or of the wrong kind counts as what version 1
+read in its place, its default: white, and 0.22. With neither key
+written the step writes nothing, since version 2's default is that
+same product (`#FFFFFF38`).
+
+Settings files are kept as test fixtures in `tests/core/config_files/`,
+of two kinds:
 
 - **What a release wrote**: `v0.1.0-defaults.json` and
   `v0.1.0-everything.json`, the second with every setting that release

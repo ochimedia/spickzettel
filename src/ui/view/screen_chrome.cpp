@@ -449,7 +449,7 @@ void ScreenChrome::DrawDemoMark(ImDrawList* drawList, float displayW, float disp
 // at the actual edge would have half of every side clipped away off-screen
 // and the border would render at half the width the user asked for.
 void ScreenChrome::DrawEditModeBorder(ImDrawList* drawList, float displayW, float displayH) const {
-    if (!Cfg().showEditModeBorder || Cfg().editModeBorderOpacity <= 0.0f || Cfg().editModeBorderWidthPx <= 0.0f) {
+    if (!Cfg().showEditModeBorder || (Cfg().editModeBorderColorRGBA & 0xFFu) == 0 || Cfg().editModeBorderWidthPx <= 0.0f) {
         return;
     }
     if (Cfg().editModeBorderOnlyWhenEmpty) {
@@ -469,7 +469,7 @@ void ScreenChrome::DrawEditModeBorder(ImDrawList* drawList, float displayW, floa
     }
     const float half = Cfg().editModeBorderWidthPx * 0.5f;
     drawList->AddRect(ImVec2(half, half), ImVec2(displayW - half, displayH - half),
-                       ToImColor(Cfg().editModeBorderColorRGBA, Cfg().editModeBorderOpacity), 0.0f, ImDrawFlags_None,
+                       ToImColor(Cfg().editModeBorderColorRGBA), 0.0f, ImDrawFlags_None,
                        Cfg().editModeBorderWidthPx);
 }
 

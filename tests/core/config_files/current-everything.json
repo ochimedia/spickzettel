@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "hotkeys": {
     "editMode": "Ctrl+Shift+D",
     "viewMode": "F9",
@@ -29,8 +29,7 @@
     },
     "editModeBorder": {
       "show": false,
-      "color": "#5AA9FF",
-      "opacity": 0.4,
+      "color": "#5AA9FF66",
       "width": 16.0,
       "onlyWhenEmpty": true
     }

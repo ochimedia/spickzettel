@@ -218,10 +218,10 @@ struct AppConfig {
     // (a diagnostic, always-on-in-both-modes, with a status line attached);
     // this one is part of the normal look.
     bool showEditModeBorder = true;
-    // 0xRRGGBBAA-packed like Picture::tintColorRGBA - the alpha byte is
-    // unused here too, editModeBorderOpacity is the alpha actually drawn.
-    uint32_t editModeBorderColorRGBA = 0xFFFFFFFFu;  // white
-    float editModeBorderOpacity = 0.22f;             // 0..1, translucent by default
+    // 0xRRGGBBAA-packed, its alpha part of the color as the snippet
+    // colors have it: translucent white by default. Version 1 of the file
+    // kept the alpha in an opacity of its own (config_migrations.cpp).
+    uint32_t editModeBorderColorRGBA = 0xFFFFFF38u;
     // Thickness in px, drawn fully inside the screen (inset by half its
     // own width, so all of it is visible rather than half of it hanging
     // off the edge). Clamped to kEditModeBorderWidthMin..Max by
