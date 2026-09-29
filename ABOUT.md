@@ -73,6 +73,28 @@ menu with every way to make one, Paste, the Overview and Settings.
 
 ## Changelog
 
+### 0.2.0
+
+#### Features
+
+- Interactive tutorials (see Settings > Interaction > Open the tutorial)
+- Interface scaling
+- Configurable defaults for snippets
+- Semi-transparent pen colors
+- Mouse buttons as shortcuts (middle and side buttons)
+- Per-snippet aspect ratio setting
+
+#### Changes
+
+- Breaking change: the 0.1.0 library is not carried over
+- Removed pixel-based drawing
+- Reworked and unified stroke rendering
+
+#### Internals
+
+- Lots of stability and correctness fixes
+- Storage, interaction and UI overhauls
+
 ### 0.1.0
 
 - First release.
