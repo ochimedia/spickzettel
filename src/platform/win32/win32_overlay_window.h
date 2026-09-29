@@ -45,7 +45,6 @@ public:
     bool IsVisible() const override;
     int ScalePercent() const override;
     ForegroundApp UnderlyingApplication() const override;
-    std::string DesktopProgram() const override;
     void SetEditModeInput(const EditModeInputOptions& options) override;
     void SetInputOptionsHudDigits(int digitCount) override;
     void SetEditModeNoActivate(bool enabled) override;
@@ -133,8 +132,6 @@ private:
     // closes. Noted at the show, as it once was, it could be hours old by
     // then, or a window the user had since left.
     HWND focusTakenFrom_ = nullptr;
-    // See DesktopProgram: read once.
-    mutable std::string desktopProgram_;
     bool visible_ = false;
     bool inputPassthrough_ = false;
     // See SetEditModeInput. Held here so a presentation can

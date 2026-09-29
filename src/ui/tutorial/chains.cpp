@@ -1045,20 +1045,6 @@ bool AProfileMade(const Look& look, bool (*wanted)(const ProfileFacts& facts)) {
 size_t StatedNow(const Look& look) { return look.Profile() != nullptr ? look.Profile()->stated : 0; }
 size_t StatedAtStart(const Look& look) { return look.ProfileAtStart() != nullptr ? look.ProfileAtStart()->stated : 0; }
 
-// The overlay is up over the program the desktop belongs to, which every
-// File Explorer window is too.
-bool OverTheDesktopsProgram(const World& world) {
-    const std::string desktop = world.DesktopProgram();
-    return !desktop.empty() && world.Underneath() == desktop;
-}
-
-// The overlay has come up again, and over what the tutorial's profile is
-// for.
-bool BackOverTheSame(const Look& look) {
-    return look.world.Showings() > look.start.showings && look.Profile() != nullptr &&
-           look.Profile()->matchesUnderneath;
-}
-
 bool OnSection(const World& world, SettingsSection section) {
     return world.OverviewShowsSettings() && world.SettingsSectionShown() == section;
 }
@@ -1138,14 +1124,8 @@ std::vector<Step> MakeProfiles() {
         .title = strings::kTutorialOtherProgramTitle,
         .text =
             [](const World& world) {
-                const bool hotkey = world.KeyLabel(CommandId::ToggleEditMode).has_value();
-                // Over the desktop's own program, the desktop is not
-                // another one (section 18.8).
-                if (OverTheDesktopsProgram(world)) {
-                    return Fixed(hotkey ? strings::kTutorialOtherProgramTextNotDesktop
-                                        : strings::kTutorialOtherProgramTextTrayNotDesktop);
-                }
-                return Fixed(hotkey ? strings::kTutorialOtherProgramText : strings::kTutorialOtherProgramTextTray);
+                return Fixed(world.KeyLabel(CommandId::ToggleEditMode) ? strings::kTutorialOtherProgramText
+                                                                        : strings::kTutorialOtherProgramTextTray);
             },
         .needs = {TutorialsProfile},
         .goal =
@@ -1155,9 +1135,11 @@ std::vector<Step> MakeProfiles() {
             },
         .nearMisses =
             {
-                {[](const Look& look) { return BackOverTheSame(look) && OverTheDesktopsProgram(look.world); },
-                 strings::kTutorialOtherProgramMissSameDesktop},
-                {BackOverTheSame, strings::kTutorialOtherProgramMissSame},
+                {[](const Look& look) {
+                     return look.world.Showings() > look.start.showings && look.Profile() != nullptr &&
+                            look.Profile()->matchesUnderneath;
+                 },
+                 strings::kTutorialOtherProgramMissSame},
             },
     });
     // What the trip shows. Its need says what to do when the overlay did

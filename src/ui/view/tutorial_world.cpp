@@ -125,11 +125,6 @@ std::string AppWorld::Underneath() const {
     return !app.executable.empty() ? app.executable : app.title;
 }
 
-std::string AppWorld::DesktopProgram() const {
-    const platform::IOverlayWindow* window = host_.Window();
-    return window != nullptr ? window->DesktopProgram() : std::string();
-}
-
 std::vector<tutorial::ProfileFacts> AppWorld::Profiles() const {
     const std::vector<core::Profile>& profiles = settings_.Profiles();
     const core::ProfileableSettings& base = settings_.Base();

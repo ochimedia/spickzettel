@@ -115,13 +115,6 @@ public:
     // Which application the overlay is up over - see ForegroundApp. Asked
     // at the moment the overlay is shown, when the answer means something.
     virtual ForegroundApp UnderlyingApplication() const = 0;
-    // The program the desktop itself belongs to, named as
-    // ForegroundApp::executable names one - on Windows "explorer.exe",
-    // which every File Explorer window is too. Empty when it can't be read.
-    // For the tutorial, which must not send someone to the desktop to be
-    // somewhere other than the program underneath when that is the same
-    // program (docs/TUTORIAL.md, section 18.8).
-    virtual std::string DesktopProgram() const = 0;
 
     // Overrides the cursor over this window for the shapes ImGui does not
     // have - see CursorShape. Called once per frame with whatever is wanted,

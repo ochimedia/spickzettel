@@ -102,8 +102,6 @@ public:
         calls.push_back("UnderlyingApplication");
         return underlyingApp;
     }
-    std::string desktopProgram = "explorer.exe";
-    std::string DesktopProgram() const override { return desktopProgram; }
 
     void SetEditModeNoActivate(bool enabled) override {
         calls.push_back(enabled ? "NoActivate(on)" : "NoActivate(off)");

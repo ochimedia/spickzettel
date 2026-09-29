@@ -1459,35 +1459,12 @@ TEST_F(ProfilesChainTest, NothingUnderneathIsTheNeedForAProgram) {
 
 TEST_F(ProfilesChainTest, BackOverTheSameProgramSaysToClickAnother) {
     MadeAProfileThenAt("otherProgram");
-    EXPECT_STREQ(TextOf("otherProgram"), strings::kTutorialOtherProgramText) << "the desktop will do";
     world_.ComeUpOver("game.exe");
     Frame();
     EXPECT_STREQ(HintText(), strings::kTutorialOtherProgramMissSame);
     world_.ComeUpOver("explorer.exe");
     Settle();
     EXPECT_EQ(Id(), "elsewhere");
-}
-
-// Over the desktop's own program, the desktop is not another one: the
-// text does not send the user there, and coming back to it says why
-// (section 18.8).
-TEST_F(ProfilesChainTest, OverTheDesktopsProgramTheDesktopIsNotAnotherOne) {
-    world_.underneath = "explorer.exe";
-    MadeAProfileThenAt("otherProgram");
-    EXPECT_STREQ(TextOf("otherProgram"), strings::kTutorialOtherProgramTextNotDesktop);
-    EXPECT_NE(Expanded(TextOf("otherProgram")).find("explorer.exe"), std::string::npos);
-    world_.ComeUpOver("explorer.exe");
-    Frame();
-    EXPECT_STREQ(HintText(), strings::kTutorialOtherProgramMissSameDesktop);
-    world_.ComeUpOver("notepad.exe");
-    Settle();
-    EXPECT_EQ(Id(), "elsewhere");
-
-    world_.underneath = "explorer.exe";
-    world_.keys.erase(CommandId::ToggleEditMode);
-    EXPECT_STREQ(TextOf("otherProgram"), strings::kTutorialOtherProgramTextTrayNotDesktop);
-    world_.desktop.clear();
-    EXPECT_STREQ(TextOf("otherProgram"), strings::kTutorialOtherProgramTextTray) << "not known, not claimed";
 }
 
 TEST_F(ProfilesChainTest, ElsewhereSaysHowToSeeItWhenTheOverlayNeverLeft) {
