@@ -1,0 +1,39 @@
+// Generated at configure time from src/app_main/version.rc.in by CMake -
+// do not edit.
+//
+// The exe's version resource: what Explorer shows under Properties >
+// Details, and the name Task Manager lists the process under
+// (FileDescription). From the VERSION file, the same number the About tab
+// states; the git description stays out, since it changes on every commit
+// and this is configured once per build tree.
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION  @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       @SPICKZETTEL_VERSION_FLAGS@
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_APP
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        // US English, Unicode.
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName",      "The Spickzettel Authors"
+            VALUE "FileDescription",  "@SPICKZETTEL_EXE_NAME@"
+            VALUE "FileVersion",      "@SPICKZETTEL_VERSION@"
+            VALUE "InternalName",     "spickzettel"
+            VALUE "LegalCopyright",   "Copyright (c) 2026 The Spickzettel Authors. All rights reserved."
+            VALUE "OriginalFilename", "@SPICKZETTEL_EXE_NAME@.exe"
+            VALUE "ProductName",      "Spickzettel"
+            VALUE "ProductVersion",   "@SPICKZETTEL_VERSION_TEXT@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

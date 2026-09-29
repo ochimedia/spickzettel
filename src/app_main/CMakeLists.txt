@@ -3,9 +3,40 @@ if(WIN32)
     # app_icon.rc embeds assets/app_icon/spickzettel.ico into the .exe. A
     # resource script has to be compiled into the final executable rather
     # than a static library to end up in the PE resource section.
+    # version.rc gives it its version resource, configured from VERSION and
+    # the build's kind: the product version names a demo or a prerelease
+    # as VersionLine does, and a prerelease or debug build says so in its
+    # flags as well.
+    set(SPICKZETTEL_VERSION_TEXT "${SPICKZETTEL_VERSION}")
+    set(_kinds "")
+    if(SPICKZETTEL_DEMO_MODE)
+        list(APPEND _kinds "demo")
+    endif()
+    if(SPICKZETTEL_PRERELEASE_NOTICE)
+        list(APPEND _kinds "prerelease")
+    endif()
+    if(_kinds)
+        list(JOIN _kinds ", " _kinds)
+        string(APPEND SPICKZETTEL_VERSION_TEXT " - ${_kinds}")
+    endif()
+    set(_flags "")
+    if(SPICKZETTEL_PRERELEASE_NOTICE)
+        list(APPEND _flags "VS_FF_PRERELEASE")
+    endif()
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        list(APPEND _flags "VS_FF_DEBUG")
+    endif()
+    if(_flags)
+        list(JOIN _flags "|" SPICKZETTEL_VERSION_FLAGS)
+    else()
+        set(SPICKZETTEL_VERSION_FLAGS "0")
+    endif()
+    configure_file(version.rc.in "${CMAKE_CURRENT_BINARY_DIR}/version.rc" @ONLY)
+
     add_executable(spickzettel WIN32
         main_win32.cpp
         ${CMAKE_SOURCE_DIR}/src/platform/win32/resources/app_icon.rc
+        "${CMAKE_CURRENT_BINARY_DIR}/version.rc"
     )
     # Spickzettel.exe, not spickzettel.exe: a proper noun wherever a person
     # sees it (Explorer, the taskbar, Task Manager). OUTPUT_NAME rather than

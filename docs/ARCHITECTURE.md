@@ -186,7 +186,11 @@ The version lives in `VERSION` at the repo root, read by CMake and fed to
 both `project()` and the header, so a release script can bump it without
 parsing CMake. (A file named `VERSION` can shadow `#include <version>` on
 a case-insensitive filesystem. It is safe here only because the repo root
-is never an include directory; do not add it to one.)
+is never an include directory; do not add it to one.) The exe's version
+resource is configured from it too (`src/app_main/version.rc.in`), for
+Explorer's Details tab and the name Task Manager shows. It carries the
+version and the build's kind, not the git description, which would go
+stale in a resource configured once per build tree.
 
 The git stamp is regenerated per build from an always-run target and
 written through `copy_if_different`, so it costs one `git` call per
