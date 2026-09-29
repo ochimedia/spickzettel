@@ -383,7 +383,10 @@ so no triangle is drawn over another. That is what a *translucent*
 stroke needs: every overlap is a place the color lands twice, which at
 less than full opacity is a visibly darker patch. `StrokeMeshTest`
 measures this as area, since a screenshot cannot tell a double-covered
-pixel from a slightly darker one. A one-pixel anti-aliasing fringe is
+pixel from a slightly darker one. A stroke that crosses itself still
+overlaps where it crosses; the renderer's depth test is what keeps that
+to once (see "Drawing strokes"), and the reason the mesh comes body
+first, fringes after. A one-pixel anti-aliasing fringe is
 carried in screen space so it stays a pixel wide whatever an item is
 scaled to.
 
@@ -417,62 +420,81 @@ against. `EndFrame` drops whatever was not drawn that frame, so
 switching canvas or deleting an item releases the memory without either
 having to know the cache exists.
 
-### Rasterized strokes
+### Drawing strokes: once a pixel, one layer a snippet
 
-The Rasterized render mode (`StrokeRenderMode::Rasterized`) draws an
-item's strokes into a bitmap, `StrokeBitmap`, and composites it once -
-the only mode in which a translucent stroke crossing itself does not
-darken at the crossing. The bitmap is a cache of the strokes, rebuilt
-from them and never saved. Each stroke is a capsule per segment - the
-same figure the tessellator builds - with coverage taken analytically
-from each pixel's distance to the centerline, so round caps, round joins
-and anti-aliasing come out of the arithmetic, and a zero-length segment
-is a dab and therefore a dot.
+A snippet's strokes are drawn as one layer. Each stroke reaches a pixel
+once, however it crosses or folds over itself; each blends over the
+strokes before it by its own ink's alpha, the pen color's; and the
+snippet's opacity
+(`Item::foregroundOpacity`) fades the finished layer once. So a scribble
+fills an area evenly, two translucent strokes mix where they cross, and
+opaque strokes on a faded snippet stay flat against each other - the top
+one hides what it covers, as if the drawing were a picture laid down at
+that opacity. The two opacities are different things: the ink's belongs
+to a stroke, the snippet's to the drawing.
 
-A stroke is a session, not a run of stamps. Compositing each segment as
-it arrives would darken every overlap, and consecutive segments overlap
-at every join, so a translucent line would go darker at each one.
-Instead a stroke accumulates coverage into a mask (taking the maximum)
-and recomposites each touched tile from the pixels it held *before* the
-stroke began. Tiles are 64x64 (16 KB), so a stroke keeps copies of only
-the part of the bitmap it touched.
+**Once a pixel: a depth test.** Each stroke is drawn between two calls
+of `IOverlayWindow::StrokeDepthCallback`. The renderer gives it a depth
+of its own, nearer than every stroke before it in the frame, under a
+strictly-less test that writes depth: a stroke's second fragment on a
+pixel meets its own depth and fails, and the next stroke, nearer,
+passes. The depth is set by narrowing the viewport's depth range to one
+value - ImGui's vertex shader puts every vertex at z = 0.5 - so ImGui's
+shaders stay as they are. Depths run 1 - k/2^20 down from the far end,
+exact in a float and in the `D32_FLOAT` buffer; past 2^19 strokes in a
+frame the buffer is cleared and counted again, since only a stroke's own
+fragments have to meet. The buffer is the size of the target, made when
+that changes and cleared each frame.
 
-A bitmap's size is capped at 4096 on a side, and the cap is applied to
-the *resolution scale*, not to the bitmap: `FitResolutionScale` lowers
-the scale uniformly until the longer side fits, and because every
-coordinate on the way in is multiplied by that same scale, the strokes
-of a 5120-wide capture land where they were drawn. Clamping the
-bitmap's width and height while still mapping coordinates 1:1 cropped
-everything past the cap and stretched the rest.
+The first fragment on a pixel is the one that stays, so the mesh comes
+body first and fringes after (`RibsToMesh`). In the old interleaved
+order, where a stroke crossed itself the first pass's anti-aliasing edge
+took pixels the second pass's body covered fully, and left a fainter line
+either side of every crossing - alpha 61 and 47 where 128 was right.
+Where only two edges meet, at a crossing's corners, the first edge wins
+over the stronger one: a pixel a shade light, never dark. The order is
+the tessellator's, so the mesh cache keeps it; made in `DrawStroke`
+every frame instead, it cost 18-21% of a frame's CPU.
 
-A drawn bitmap is what shows, not the strokes, so it has to be brought
-up to date before every frame that draws it (`CanvasView::
-RefreshStrokeRasters`), which costs nothing while the library has not
-changed. View-only frames skipped it. Going view-only settles whatever
-edit mode left in progress, after edit mode's last frame: a stroke still
-being drawn is filed, and an erase whose write failed is rolled back.
-The view then drew the bitmap from before that - the stroke missing, or
-the erase still there - until edit mode came back.
+**One layer: a scratch target.** Below full opacity, a snippet's strokes
+go between the two steps of `IOverlayWindow::StrokeLayerCallback`.
+Opening, drawing switches to a scratch layer the size of the frame, with
+the frame's depth buffer, cleared within the command's clip rectangle -
+the snippet's - by `ClearView` (the whole layer where D3D 11.1 is
+missing). Closing, it switches back and lays that rectangle down once,
+one triangle scissored to it, times the snippet's opacity. ImGui's blend,
+straight alpha into a target cleared to nothing, leaves the layer
+premultiplied, so it is laid down with a premultiplied blend; the frame
+is premultiplied the same way, which is what DWM composites. At full
+opacity no layer is opened: source-over is associative, so drawing
+straight onto the frame comes to the same. The stroke being drawn is
+drawn with the snippet's own (`DrawItemContent`'s `moreStrokes`), into
+the same layer, and looks as it will once let go.
 
-A bitmap's texture is brought up to date by its revision
-(`TextureCache::Get`), and revisions come from one count for every
-bitmap. Each counted its own from zero. A snippet whose strokes are all
-undone loses its bitmap, but the texture stays a frame longer, and a
-bitmap made again inside that frame came to the old one's revision and
-was drawn with the old texture: the undone stroke on screen, the new one
-not, until the next stroke moved the revision on.
+Without the callbacks - a backend that draws nothing - strokes are drawn
+untested and each at the snippet's opacity, which is how every stroke was
+drawn before these.
 
-A bitmap is held only for a snippet that can be drawn: one on the
-current canvas, and not deleted. A minimized snippet keeps its bitmap,
-since its chip in the dock is drawn from it. A deleted snippet stays in
-its canvas's items until the retention purge, for undo and Show deleted,
-and each one kept its bitmap - up to 64 MB of pixels, plus the copy of
-the strokes it was built from - and was drawn into a new one every time
-its canvas came back. Its texture went, since nothing asked for it, but
-the pixels behind it did not. Now a deleted snippet loses its bitmap
-the way one on another canvas does. An undo or restore moves the
-generation like any change, so the snippet is drawn into a new bitmap
-under a new revision. Found in review on 2026-09-27.
+**Drawn every frame, not kept.** A snippet's layer could be kept as a
+texture and drawn again only when its strokes, its size or its place
+within a pixel changed; a still canvas would then cost one textured
+rectangle a snippet. The layers cost about 25 microseconds of CPU each
+per frame - 1.1 ms for the forty of `heavy`, which holds 120 fps either
+way - and keeping them would cost a texture per snippet on screen at its
+size there: 0.9 MB for a third of a 1080p screen, 8.3 MB for all of it,
+four times that at 4K. That is video memory a game behind the overlay
+is using, spent for canvases far busier than annotations get.
+
+**Before this, three render modes** and a setting to choose: the
+tessellator stroke by stroke, ImGui's polyline to judge it against, and
+Rasterized - the strokes drawn into a bitmap at the snippet's native size,
+coverage taken per stroke and the color applied once, composited at the
+snippet's opacity. Rasterized had this look, as pixels: soft when a
+snippet was enlarged, capped at 4096 a side, up to 64 MB a snippet plus
+a copy of its strokes, rebuilt on the CPU at every erase, and the stroke
+being drawn shown tessellated beside it until let go. The layered drawing
+gives its look at the tessellator's sharpness, and the modes and the
+setting went (see "Dead ends").
 
 ## Canvases, items and folders
 
@@ -529,9 +551,7 @@ average of the two was used before, and one way times the other came to
 to twice its width grew to 1.125 times what it was while drawn - 1.33 at
 three times. The geometric mean is the one that undoes itself exactly.
 Strokes kept from before on a stretched snippet draw a little thinner
-than they used to, by the same factor. Rasterized strokes are the
-snippet's own space stretched, so on an uneven stretch a line along the
-wider axis still draws thinner than one across it. Found in review on
+than they used to, by the same factor. Found in review on
 2026-09-27.
 
 ### Resolution-relative item sizing
@@ -1782,7 +1802,7 @@ through `ViewHost`, which `OverlayApp` implements. No owner knows another,
 and `OverlayApp` is the one object that knows them all:
 
 - `CanvasView`: the canvas and items layers, the note editor, the dock and
-  the view-only layer, with the stroke rasters, both mesh caches and the
+  the view-only layer, with both mesh caches and the
   previews' pictures, which the Overview and the canvas bar reach through
   `ViewHost::Previews`.
 - `CanvasBar`: the bar along the bottom edge, whose tile menu it asks for
@@ -3438,12 +3458,11 @@ The exclusion is not left on: a screenshot or a stream the user takes of
 their own screen should show the overlay. The rectangle goes through `ClientToScreen`, so a capture
 comes from the overlay's display rather than from wherever its
 coordinates land on the primary. Textures are `D3D11_USAGE_DEFAULT`
-rather than immutable so a stroke raster can be updated in place.
+rather than immutable so one can be updated in place (`TextureCache::Get`).
 
 ### Picture scaling
 
-Every picture in a snippet - a screenshot, the Rasterized strokes - is
-drawn through `DrawPicture`, resampled the way
+Every picture in a snippet is drawn through `DrawPicture`, resampled the way
 Settings > Appearance says (`AppConfig::imageFilter`). Bilinear is the
 default and what every picture had before there was a choice; drawn
 below about half size it lands on one texel in two or three and text
@@ -3474,9 +3493,9 @@ on every resize and stroke; a separable two-pass filter needs an
 intermediate target per picture per frame.
 
 **The mips are built by hand.** `GenerateMips` averages what it is
-given, and the pictures are straight alpha: a stroke raster is mostly
-(0,0,0,0) around its ink, so a plain average darkens every edge toward
-black as the picture shrinks. `BuildMips` averages premultiplied instead,
+given, and the pictures are straight alpha: one with transparent parts
+is (0,0,0,0) around what it shows, so a plain average darkens every edge
+toward black as the picture shrinks. `BuildMips` averages premultiplied instead,
 one full-target triangle per level, and the resampling shader sums
 premultiplied too, then clamps - both kernels have negative lobes that
 ring past 0 and 1 at a hard edge. A texture's chain is rebuilt once at
@@ -3672,6 +3691,10 @@ one twice.
   pointer drawing, an integral term for counter-injection, a dedicated
   sink thread, `BlockInput`, and a null-device-handle fallback for
   recognizing injected input. All in the input grab section.
+- **Three stroke render modes**, a setting to choose between them, and a
+  stroke bitmap per snippet for the one that composited strokes right.
+  Replaced by one way of drawing, a depth test and a layer per snippet,
+  in "Drawing strokes".
 - **A Linux dev harness** (GLFW/OpenGL, an ordinary window showing the
   same UI) and a **MinGW cross-compile preset**. Useful once for
   iterating without a Windows machine; not carried into this repository.

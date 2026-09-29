@@ -12,7 +12,6 @@
 #include "core/config/bar_layout.h"
 #include "core/config/profile.h"
 #include "core/config/shortcut_action.h"
-#include "core/drawing/stroke_render_mode.h"
 #include "platform/platform_types.h"
 
 namespace sz::core {
@@ -169,16 +168,8 @@ struct AppConfig {
     // showItemBorders is on: a pinned snippet stays on screen when the
     // overlay is put away, and which ones will has to be seen at a glance.
     uint32_t itemBorderColorPinnedRGBA = 0xFF6A3D99;  // the accent, ~60%
-    // Which of the three stroke renderers draws vector strokes - see
-    // StrokeRenderMode for what each one is and what it costs. Purely a
-    // rendering choice: the strokes are the same data either way, and
-    // switching applies to what is already drawn as well as to new marks,
-    // so the same drawing can be looked at three ways without redrawing it.
-    // "Does this look better" is not a question any test answers.
-    StrokeRenderMode strokeRenderMode = StrokeRenderMode::Tessellated;
-    // How every picture in a snippet - a screenshot, the Rasterized
-    // strokes - is resampled when shown at a size other than its
-    // own. The same kind of choice: nothing stored changes, and switching
+    // How every picture in a snippet - a screenshot, a fill's own pixels -
+    // is resampled when shown at a size other than its own. The same kind of choice: nothing stored changes, and switching
     // redraws what is already there. See platform::ImageFilter.
     platform::ImageFilter imageFilter = platform::ImageFilter::Bilinear;
     // Whether selecting a snippet - a click on it, or the press that starts

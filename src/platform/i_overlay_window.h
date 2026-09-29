@@ -161,8 +161,8 @@ public:
     // `pixelsRGBA` is the *whole* image the texture was created from, with
     // `sourceWidth` its width; x/y/w/h select the changed part. Returns false
     // for an unknown handle, a rectangle outside the texture, or a backend
-    // that cannot do this. What a rasterized stroke list is brought up to
-    // date with (see TextureCache::Get).
+    // that cannot do this. What a texture whose pixels changed is brought up
+    // to date with (see TextureCache::Get).
     virtual bool UpdateTextureRegion(uint64_t textureHandle, const uint8_t* pixelsRGBA, int sourceWidth,
                                       int x, int y, int w, int h) = 0;
 

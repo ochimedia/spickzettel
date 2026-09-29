@@ -601,7 +601,7 @@
   "appearance.showItemBorders": "Show item borders",
   "appearance.showItemBordersHelp": "Every snippet gets a border, not just the one in front - handy for spotting a still-empty Drawing item.\n\nThe frontmost snippet keeps its own border either way: that border is what says it is in front.",
   "appearance.imageFilterHeading": "Picture scaling",
-  "appearance.imageFilterHelp": "How screenshots and rasterized strokes are drawn at a size other than their own.\n\nBilinear: what the graphics card does by default. Soft when enlarged; below about half size, thin lines and text break up.\n\nNearest: whole pixels, unblended. Blocky when enlarged, which suits pixel art and small captures blown up.\n\nBicubic: sharper than bilinear when enlarged, and clean when shrunk.\n\nLanczos: the sharpest, at a little more cost. Hard edges can show a faint halo.\n\nTakes effect immediately; the pictures themselves are not changed.",
+  "appearance.imageFilterHelp": "How screenshots are drawn at a size other than their own.\n\nBilinear: what the graphics card does by default. Soft when enlarged; below about half size, thin lines and text break up.\n\nNearest: whole pixels, unblended. Blocky when enlarged, which suits pixel art and small captures blown up.\n\nBicubic: sharper than bilinear when enlarged, and clean when shrunk.\n\nLanczos: the sharpest, at a little more cost. Hard edges can show a faint halo.\n\nTakes effect immediately; the pictures themselves are not changed.",
   "appearance.imageFilterBilinear": "Bilinear (default)",
   "appearance.imageFilterNearest": "Nearest",
   "appearance.imageFilterBicubic": "Bicubic",
@@ -627,7 +627,6 @@
   "canvasBar.tileTip": "%s  (%d of %d)",
 
   "_drawing": "Settings > Drawing.",
-  "drawing.penHeading": "Pen",
   "drawing.snippetsHeading": "Snippets",
 
   "_bars": "Settings > Interaction: the two bars that float over the selection, and the buttons they carry.",
@@ -666,11 +665,6 @@
   "settings.purgeDeleted": "Delete permanently after",
   "settings.purgeDeletedDays": "days",
   "settings.purgeDeletedHelp": "Off: a deleted folder or canvas stays deleted until you restore it or delete it permanently, both with Show deleted in the Overview.\n\nOn: once it has been deleted for longer than this, it is deleted permanently the next time Spickzettel starts. A canvas deleted along with its folder goes with the folder.\n\nDeleted snippets are never kept past a restart: undo brings them back, and nothing else does.",
-  "drawing.strokeRenderingHeading": "Stroke rendering",
-  "drawing.strokeRenderingHelp": "Tessellated: shaped by this app - round joins, a miter that can't spike however sharp the turn, and geometry that never overlaps itself. Stays sharp at any size.\n\nPolyline: a plain polyline, with a disc on each end so the ends stay round either way - for comparing the tessellation against something.\n\nRasterized: drawn into a bitmap and composited once - the only one where a stroke crossing over itself doesn't darken at the crossing. The cost is pixels: scaling a snippet up softens the strokes.\n\nTakes effect immediately, on strokes already drawn as well as new ones - it changes how they are drawn, not what was stored.",
-  "drawing.tessellated": "Tessellated",
-  "drawing.polyline": "Polyline",
-  "drawing.rasterized": "Rasterized",
 
   "_debugTab": "Settings > Debug.",
   "debug.heading": "What to draw on top",

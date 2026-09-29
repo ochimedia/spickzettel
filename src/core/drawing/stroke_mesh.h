@@ -17,7 +17,10 @@ struct StrokeVertex {
     float coverage = 1.0f;
 };
 
-// Triangles, as an indexed mesh. Indices are triplets into `vertices`.
+// Triangles, as an indexed mesh. Indices are triplets into `vertices`: every
+// triangle of the stroke's solid body first, then every triangle of its
+// anti-aliasing fringe - the order the renderer's depth test needs (see
+// IOverlayWindow::StrokeDepthCallback).
 struct StrokeMesh {
     std::vector<StrokeVertex> vertices;
     std::vector<uint32_t> indices;
@@ -46,11 +49,10 @@ struct StrokeMesh {
 //   - one point becomes a disc, which is the dot.
 //
 // The result is a single connected mesh with no overlapping triangles along
-// its length. That is what makes a *translucent* stroke look like one
-// stroke: every overlap is a place where the color gets applied twice. A
-// stroke that genuinely crosses over itself still darkens where it crosses
-// - that needs the stroke composited as a layer rather than drawn as
-// triangles, which is what StrokeRenderMode::Rasterized is for.
+// its length. A stroke that crosses over itself still overlaps where it
+// crosses, and a translucent one would take its color twice there; the
+// renderer's depth test is what keeps that to once (see
+// IOverlayWindow::StrokeDepthCallback), and why the mesh comes body first.
 //
 // `halfWidth` is half the pen width. `fringePx` is how wide the
 // anti-aliasing edge should be, in the same space - one pixel, normally.

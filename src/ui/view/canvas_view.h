@@ -5,9 +5,8 @@
 // selection's outline, handles and bar, a box being dragged), the note
 // editor, the dock of minimized snippets, and in the read-only modes the
 // view-only layer. What it keeps of its own is what drawing a canvas is
-// made of: the stroke rasters and their generation, both mesh caches, the
-// previews' reading budgets, and the debug readout of the handle under the
-// pointer.
+// made of: both mesh caches, the previews' reading budgets, and the debug
+// readout of the handle under the pointer.
 
 #include <cstdint>
 #include <functional>
@@ -20,7 +19,6 @@
 
 #include "core/canvas/item.h"
 #include "core/drawing/stroke.h"
-#include "core/drawing/stroke_bitmap.h"
 #include "core/drawing/stroke_mesh_cache.h"
 #include "core/session/session.h"
 #include "core/session/settings.h"
@@ -47,13 +45,6 @@ public:
     // let go of (see TextureCache::BeginFrame), and the current canvas's
     // pictures asked for, which is what keeps them.
     void KeepTextures();
-    // Brings the current canvas's rasters in line with its items, and
-    // drops every other one. A no-op in the other two render modes, which
-    // also frees whatever was cached the moment the mode changes. Once a
-    // frame, after every input that could have changed what is on the
-    // canvas and before anything draws it.
-    void RefreshStrokeRasters();
-
     // Stage 2: the canvas layer, then every item on the current canvas,
     // back to front, into one layer, the selection's outline, handles and
     // bar over all of them, and the note editor and the dock above it.
@@ -81,10 +72,6 @@ public:
     // which never draw the items that set it.
     const std::string& DebugHoveredResizeHandle() const { return debugHoveredResizeHandle_; }
     void ForgetHoveredHandle() { debugHoveredResizeHandle_.clear(); }
-    // Whether `itemId`'s strokes are held drawn into a bitmap - see
-    // RefreshStrokeRasters.
-    bool HasStrokeRaster(core::ItemId itemId) const { return strokeRasters_.contains(itemId); }
-
 private:
     const core::CanvasManager& Manager() const { return session_.Manager(); }
     core::persistence::LibraryStore* Store() const { return session_.Store(); }
@@ -127,51 +114,6 @@ private:
     // it (unset minimized, bring to front). A no-op (renders nothing) if
     // nothing's minimized.
     void RenderDock(float displayW, float displayH, float bottomPanelsTop);
-
-    // ===== Rasterized vector strokes (StrokeRenderMode::Rasterized) =====
-
-    // An item's vector strokes, drawn into a bitmap so they can be
-    // composited in one go. Purely derived - the strokes are still the
-    // truth, this is thrown away and rebuilt from them, and is never
-    // persisted.
-    struct StrokeRaster {
-        core::StrokeBitmap pixels;
-        // Moved on whenever `pixels` change: what its texture is told to
-        // bring itself up to date by (see TextureCache::Get). Taken from
-        // one count for every raster (rasterRevisions_), never counted
-        // from 0 by each: a texture outlives its raster by a frame, and a
-        // raster made again in that frame - its strokes undone to none and
-        // new ones drawn - came to the same revision, and was drawn with
-        // the old texture.
-        uint64_t revision = 0;
-        // What it was built from, kept so a stale raster is recognized by
-        // comparing rather than by guessing. A count is not enough and
-        // never could be: undoing back to nothing and drawing something new
-        // leaves the count exactly where it started, which is how the last
-        // undone stroke stayed on screen and the next one didn't appear.
-        //
-        // A copy of the strokes, not a summary of them. It costs a second
-        // copy of the points - a couple of hundred kilobytes for a heavy
-        // item - and buys an exact answer with no hash and no probability
-        // attached. The comparison is only reached when something has
-        // actually changed; see strokeRasterGeneration_.
-        float nativeW = 0.0f;
-        float nativeH = 0.0f;
-        std::vector<core::Stroke> builtFrom;
-    };
-    // Brings `raster` in line with `item`'s strokes: nothing at all when it
-    // already matches, just the new strokes on top of what is there when
-    // only new ones have been appended since it was built, and everything
-    // from scratch otherwise - all decided by one comparison of what it
-    // was built from against what is there now. Appending is the common
-    // case by a long way: it is what finishing a stroke does, and
-    // rebuilding every stroke each time would make a busy item cost more
-    // with every mark on it.
-    void BuildStrokeRaster(const core::Item& item, StrokeRaster& raster);
-    // The texture for `itemId`'s rasterized strokes, or 0 if there isn't
-    // one - which DrawItemContent takes as "draw them tessellated instead".
-    uint64_t StrokeRasterTextureFor(core::ItemId itemId);
-    void ReleaseStrokeRasters();
 
     // ===== Textures =====
 
@@ -216,47 +158,19 @@ private:
     // nothing - an empty lookup, which DrawCanvasPreview tests for.
     PreviewTextureFn PreviewTextureLookup();
 
-    // How the stroke currently being drawn is rendered. Never Rasterized:
-    // a live stroke isn't in item.strokes yet and so isn't in the raster,
-    // and rebuilding one per mouse-move to include it would cost far more
-    // than the difference is worth. It joins the raster the moment it is
-    // finished.
-    core::StrokeRenderMode LiveStrokeRenderMode() const {
-        return Cfg().strokeRenderMode == core::StrokeRenderMode::Polyline ? core::StrokeRenderMode::Polyline
-                                                                          : core::StrokeRenderMode::Tessellated;
-    }
     // Each cache aimed at the current generation, which is all a drawing
     // call needs to be handed - see StrokeMeshSlot.
     core::StrokeMeshSlot CanvasMeshSlot() { return core::StrokeMeshSlot{&strokeMeshCache_, Manager().Generation()}; }
     core::StrokeMeshSlot PreviewMeshSlot() { return core::StrokeMeshSlot{&previewMeshCache_, Manager().Generation()}; }
-    // The picture filter from settings, with the callback that applies it -
-    // what every drawing call that may meet a picture is handed.
-    ImageSampling PictureSampling() const;
+    // The picture filter from settings, and the window's callbacks for it
+    // and for strokes - what every call that paints a snippet is handed.
+    PaintHooks Hooks() const;
 
     core::Session& session_;
     core::Settings& settings_;
     Editor& editor_;
     ViewHost& host_;
 
-    // Per item, and only while the mode is Rasterized - see
-    // RefreshStrokeRasters, which is also what empties this again when the
-    // mode changes or a canvas stops being current.
-    std::unordered_map<core::ItemId, StrokeRaster> strokeRasters_;
-    // The canvas generation these rasters were last checked against, and
-    // the reason comparing whole stroke lists costs nothing in practice:
-    // while it hasn't moved, nothing anywhere has changed and there is
-    // nothing to compare. Only a gate on *when* to look - the comparison
-    // itself is still what decides the answer, so this never has to be
-    // precise about what changed, only that something did.
-    //
-    // Leaning on the generation counter rather than on a new
-    // "remember to invalidate" rule at each mutation site is deliberate:
-    // every change goes through the session's commands, which bump it, so
-    // there is one place to get it right. nullopt means "check regardless"
-    // - a fresh start, or the mode having just been switched on.
-    std::optional<uint64_t> strokeRasterGeneration_;
-    // The last revision given a raster - see StrokeRaster::revision.
-    uint64_t rasterRevisions_ = 0;
     // The tessellated shape of each stroke, kept between frames - see
     // StrokeMeshCache for what that saves and what invalidates an entry.
     //

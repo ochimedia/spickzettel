@@ -179,7 +179,6 @@ Edited from Settings > Hotkeys, upper box. Effect: Registration.
 |---|---|---|---|---|---|
 | `strokeColor` | `strokeColorRGBA` | `#FF0000` | color | the color chooser, as it closes | Start (the pen holds its own) |
 | `strokeWidth` | `strokeWidth` | 3 | >0, held to 256 | the wheel, once its preview fades | Start |
-| `renderMode` | `strokeRenderMode` | tessellated | tessellated, polyline, rasterized | Settings > Interaction | Frame |
 | `raiseSelected` | `raiseSelectedSnippet` | true | bool | Settings > Interaction | Use |
 | `screenshotTrigger` | `screenshotTrigger` | plain | plain, ctrl, alt, off; distinct | Settings > Interaction | Use |
 | `drawingTrigger` | `drawingTrigger` | ctrl | the same | the same | Use |
@@ -349,7 +348,7 @@ The kinds are those the parser has today, named once:
 | positive number, capped | ≤0 rejected, held to the cap | `strokeWidth` |
 | positive number in a band | ≤0 rejected, held to the band | `editModeBorder.width`, `text.size` |
 | color | `#RRGGBB` or `#RRGGBBAA`; written with eight digits only when not opaque | every color |
-| choice | one of a list of names, any case | render mode, image filter, triggers |
+| choice | one of a list of names, any case | image filter, triggers |
 | auto or percent | `"auto"`, or a whole number held to the band | `uiScale` |
 | hotkey | a key combination, or `null`; a mouse button rejected | summon hotkeys |
 | shortcut | a key or Mouse3-5, or `null` | tool shortcuts |

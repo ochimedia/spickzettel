@@ -60,8 +60,12 @@ bool CanvasView::ItemsFadedForCreation() const {
     return CreationKindFor(editor_.ActiveTool()).has_value() || editor_.Input().As<Framing>(Level::Gesture) != nullptr;
 }
 
-ImageSampling CanvasView::PictureSampling() const {
-    return ImageSampling{Cfg().imageFilter, host_.Window() != nullptr ? host_.Window()->ImageFilterCallback() : nullptr};
+PaintHooks CanvasView::Hooks() const {
+    if (host_.Window() == nullptr) {
+        return PaintHooks{Cfg().imageFilter};
+    }
+    return PaintHooks{Cfg().imageFilter, host_.Window()->ImageFilterCallback(), host_.Window()->StrokeDepthCallback(),
+                      host_.Window()->StrokeLayerCallback()};
 }
 
 namespace {
@@ -313,33 +317,28 @@ void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
     const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
     drawList->PushClipRect(pMin, pMax, true);
 
-    DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, PictureTexture(item),
-                    StrokeRasterTextureFor(item.id), /*skipNoteText=*/editor_.EditingNote() == item.id, CanvasMeshSlot(),
-                    PictureSampling());
-
-    if (drawing) {
-        // The stroke currently being drawn (not yet baked into
-        // item.strokes - see Session::CommitLiveStroke,
-        // which only runs on mouse-up) is screen-space, same as
-        // item.strokes' own draw call just above but without the
-        // native->screen scale factors. Drawn here, after this item's
-        // own fill/strokes, rather than in the separate background
-        // canvas layer behind every item: a Shot item's opaque
-        // gradient/image fill would otherwise completely hide it until
-        // the stroke finished, since that layer sits behind items in
-        // z-order - a Drawing item's fill-less background just
-        // happened to let it show through regardless, which is what
-        // made this easy to miss. At the item's foreground opacity, as
-        // it is drawn once it is let go: opaque, it faded on the release.
+    // The stroke currently being drawn (not yet baked into item.strokes -
+    // see Session::CommitLiveStroke, which only runs on mouse-up) is
+    // screen-space, same as item.strokes' own draw call but without the
+    // native->screen scale factors. Drawn with this item's own strokes,
+    // rather than in the separate background canvas layer behind every
+    // item: a Shot item's opaque gradient/image fill would otherwise
+    // completely hide it until the stroke finished, since that layer sits
+    // behind items in z-order. With them, so it is drawn at the opacity -
+    // and, under Layered, into the layer - it will be once it is let go.
+    const PaintHooks hooks = Hooks();
+    const auto liveStrokes = [&](float opacity) {
         const CanvasState& live = session_.LiveLayer();
         for (const Stroke& stroke : live.Strokes()) {
-            DrawStroke(drawList, stroke, LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f, item.foregroundOpacity);
+            DrawStroke(drawList, stroke, 0.0f, 0.0f, 1.0f, 1.0f, opacity, {}, hooks.strokeDepth);
         }
         if (live.ActiveStroke().has_value()) {
-            DrawStroke(drawList, *live.ActiveStroke(), LiveStrokeRenderMode(), 0.0f, 0.0f, 1.0f, 1.0f,
-                       item.foregroundOpacity);
+            DrawStroke(drawList, *live.ActiveStroke(), 0.0f, 0.0f, 1.0f, 1.0f, opacity, {}, hooks.strokeDepth);
         }
-    }
+    };
+    DrawItemContent(drawList, item, pMin, pMax, PictureTexture(item), /*skipNoteText=*/editor_.EditingNote() == item.id,
+                    CanvasMeshSlot(), hooks,
+                    drawing ? std::function<void(float)>(liveStrokes) : std::function<void(float)>());
     // Cut, and waiting for the paste that will move it: faded where it
     // stands, the way a file manager fades a file that has been cut. A
     // cut takes nothing away until it is pasted (see Editor::IsWaitingToBeCut), so
@@ -757,9 +756,8 @@ void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTo
         // very different scale: RenderItems skips minimized items and this
         // draws only those, so no item is ever in both in one frame - see
         // strokeMeshCache_'s own doc comment.
-        DrawItemContent(dl, *item, contentMin, contentMax, Cfg().strokeRenderMode, PictureTexture(*item),
-                        StrokeRasterTextureFor(item->id), /*skipNoteText=*/false, CanvasMeshSlot(),
-                        PictureSampling());
+        DrawItemContent(dl, *item, contentMin, contentMax, PictureTexture(*item), /*skipNoteText=*/false,
+                        CanvasMeshSlot(), Hooks());
         dl->PopClipRect();
 
         dl->AddRect(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBorderStrong), Px(theme::kRadiusSm));
@@ -779,27 +777,11 @@ void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTo
     ImGui::End();
 }
 
-
-
-// ================= Textures, stroke rasters and overview previews =================
+// ================= Textures and overview previews =================
 //
-// What the UI draws pictures with: the textures of snippets' pictures, the
-// bitmaps strokes are drawn into in the rasterized render mode, and the
-// thumbnails the Overview shows - every one of them asked of the
+// What the UI draws pictures with: the textures of snippets' pictures and
+// the thumbnails the Overview shows - every one of them asked of the
 // TextureCache as it is drawn.
-
-namespace {
-
-// A stroke raster is not allowed to be enormous no matter how the item is
-// sized - 4096 on a side is well past a fullscreen capture and is where
-// the memory (64 MB at RGBA8) stops being reasonable to hold per item. An
-// item larger than this gets a *smaller resolution scale*, not a cropped
-// bitmap - see FitResolutionScale for why the distinction is the
-// difference between a stroke landing where it was drawn and a quarter of
-// the way across the screen from it.
-constexpr int kMaxRasterExtent = 4096;
-
-}  // namespace
 
 // ================= Pictures =================
 
@@ -829,7 +811,6 @@ void CanvasView::KeepCurrentCanvasTextures() {
         // canvas is as far from being drawn as one on another canvas.
         if (!Manager().IsDeleted(*canvas, item)) {
             PictureTexture(item);
-            StrokeRasterTextureFor(item.id);
         }
     }
 }
@@ -866,7 +847,7 @@ void CanvasView::BeginOverviewPreviewFrame() {
 
 ViewHost::PreviewDrawing CanvasView::Previews() {
     BeginOverviewPreviewFrame();
-    return ViewHost::PreviewDrawing{PreviewTextureLookup(), PreviewMeshSlot(), PictureSampling()};
+    return ViewHost::PreviewDrawing{PreviewTextureLookup(), PreviewMeshSlot(), Hooks()};
 }
 
 PreviewTextureFn CanvasView::PreviewTextureLookup() {
@@ -930,152 +911,6 @@ std::optional<uint64_t> CanvasView::PicturePreviewTexture(const Item& item) {
     return Textures().Put(key, TexturePixels{small.pixelsRGBA.data(), small.width, small.height});
 }
 
-// ================= Rasterized vector strokes =================
-
-void CanvasView::BuildStrokeRaster(const Item& item, StrokeRaster& raster) {
-    // Native-sized when that fits the cap, uniformly smaller when it
-    // doesn't - and then every coordinate below goes through the same
-    // scale, so the raster stays in register with the strokes whatever
-    // size it came out at.
-    const float scale = FitResolutionScale(item.nativeW, item.nativeH, 1.0f, kMaxRasterExtent);
-    const int width = ScaledPixelExtent(item.nativeW, scale);
-    const int height = ScaledPixelExtent(item.nativeH, scale);
-
-    // Only new strokes to draw? Put them on top of what is already there.
-    // Finishing a stroke is by far the most common reason to get here, and
-    // redrawing every earlier stroke each time would make an item cost more
-    // with every mark ever made on it.
-    //
-    // "Only new strokes" has to mean the ones already drawn are untouched,
-    // which a count cannot say: undo, redo and the eraser all rewrite the
-    // list, and the eraser can rewrite the middle of it without changing
-    // its length. So the strokes this raster was built from are compared
-    // against the ones now there - element by element, and each of those
-    // rejects on point count before it looks at a single point.
-    const bool sameShape = raster.nativeW == item.nativeW && raster.nativeH == item.nativeH &&
-                           !raster.pixels.Empty();
-    const bool prefixUnchanged =
-        raster.builtFrom.size() <= item.strokes.size() &&
-        std::equal(raster.builtFrom.begin(), raster.builtFrom.end(), item.strokes.begin());
-    // The same comparison answers "is there anything to do at all": the
-    // whole list unchanged, and the same shape. Asked here rather than by
-    // the caller - one comparison that decides both whether and how much
-    // to draw.
-    if (sameShape && prefixUnchanged && raster.builtFrom.size() == item.strokes.size()) {
-        return;
-    }
-    size_t firstStroke = 0;
-    if (sameShape && prefixUnchanged) {
-        firstStroke = raster.builtFrom.size();
-    } else {
-        raster.pixels = StrokeBitmap(width, height);
-    }
-
-    // Strokes are in the item's own native space; the image is that space
-    // times `scale` (1 for anything under the cap). Each stroke is one brush
-    // session: coverage accumulated across all of its segments and the
-    // color laid down once, which is exactly what stops a stroke that
-    // crosses itself darkening at the crossing.
-    for (size_t i = firstStroke; i < item.strokes.size(); ++i) {
-        const Stroke& stroke = item.strokes[i];
-        if (stroke.points.empty()) {
-            continue;
-        }
-        raster.pixels.BeginStroke(stroke.colorRGBA, stroke.width * 0.5f * scale);
-        if (stroke.points.size() == 1) {
-            const StrokePoint& p = stroke.points.front();
-            raster.pixels.ExtendStroke(p.x * scale, p.y * scale, p.x * scale, p.y * scale);  // a dot
-        }
-        for (size_t s = 1; s < stroke.points.size(); ++s) {
-            raster.pixels.ExtendStroke(stroke.points[s - 1].x * scale, stroke.points[s - 1].y * scale,
-                                        stroke.points[s].x * scale, stroke.points[s].y * scale);
-        }
-        raster.pixels.EndStroke();
-    }
-
-    raster.nativeW = item.nativeW;
-    raster.nativeH = item.nativeH;
-    raster.builtFrom = item.strokes;
-    // Its texture follows the next time it is drawn - uploaded whole rather
-    // than by dirty rectangle: this runs once per finished stroke, not
-    // several times a frame.
-    raster.revision = ++rasterRevisions_;
-}
-
-void CanvasView::RefreshStrokeRasters() {
-    if (Cfg().strokeRenderMode != StrokeRenderMode::Rasterized) {
-        // Includes the moment the mode is switched away: the textures and
-        // the megabytes behind them go with it.
-        ReleaseStrokeRasters();
-        return;
-    }
-    const Canvas* canvas = Manager().CurrentOrNull();
-    if (!canvas || !host_.Window()) {
-        ReleaseStrokeRasters();
-        return;
-    }
-
-    // The gate. While the generation hasn't moved, nothing on any canvas
-    // has changed, so there is nothing for the comparisons below to find -
-    // which is what makes comparing whole stroke lists affordable at all.
-    const uint64_t generation = Manager().Generation();
-    if (strokeRasterGeneration_.has_value() && *strokeRasterGeneration_ == generation) {
-        return;
-    }
-
-    for (const Item& item : canvas->items) {
-        // An item with nothing on it must *lose* its raster, not keep the
-        // one it had. Skipping it here is what left the last undone stroke
-        // on screen with nothing left in the model to explain it.
-        if (item.strokes.empty() || item.nativeW <= 0.0f || item.nativeH <= 0.0f) {
-            strokeRasters_.erase(item.id);
-            continue;
-        }
-        // A deleted snippet is as far from being drawn as one on another
-        // canvas, and loses its bitmap the same way - though it stays in
-        // `items` until the retention purge, for undo and Show deleted.
-        // Undone or restored, it moves the generation like any change, and
-        // is drawn into a bitmap from scratch. A minimized one keeps its
-        // bitmap: the dock's chip draws from it.
-        if (Manager().IsDeleted(*canvas, item)) {
-            strokeRasters_.erase(item.id);
-            continue;
-        }
-        // The builder decides for itself whether there is anything to do -
-        // nothing, the new strokes only, or everything from scratch - from
-        // one comparison of what it built from against what is there now.
-        BuildStrokeRaster(item, strokeRasters_[item.id]);
-    }
-
-    // Anything not on this canvas any more - switched away from, or cut
-    // to another - goes, and its texture with it, unasked for (see
-    // TextureCache).
-    for (auto it = strokeRasters_.begin(); it != strokeRasters_.end();) {
-        const bool stillHere = std::any_of(canvas->items.begin(), canvas->items.end(),
-                                            [&](const Item& item) { return item.id == it->first; });
-        it = stillHere ? std::next(it) : strokeRasters_.erase(it);
-    }
-    strokeRasterGeneration_ = generation;
-}
-
-uint64_t CanvasView::StrokeRasterTextureFor(ItemId itemId) {
-    const auto it = strokeRasters_.find(itemId);
-    if (it == strokeRasters_.end() || it->second.pixels.Empty()) {
-        return 0;
-    }
-    const StrokeBitmap& pixels = it->second.pixels;
-    return Textures().Get(TextureKey{TextureKey::Kind::StrokeRaster, itemId}, it->second.revision,
-                          TexturePixels{pixels.PixelsRGBA().data(), pixels.Width(), pixels.Height()});
-}
-
-void CanvasView::ReleaseStrokeRasters() {
-    // Cleared, not left at the current generation: the next pass has to
-    // rebuild from nothing, which is exactly what switching the mode back
-    // on needs.
-    strokeRasterGeneration_.reset();
-    strokeRasters_.clear();
-}
-
 // ================= View-only mode =================
 
 void CanvasView::DrawViewOnly(float displayW, float displayH, bool pinnedOnly,
@@ -1096,9 +931,8 @@ void CanvasView::DrawViewOnly(float displayW, float displayH, bool pinnedOnly,
             const ImVec2 pMin(item.rect.x, item.rect.y);
             const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
             drawList->PushClipRect(pMin, pMax, true);
-            DrawItemContent(drawList, item, pMin, pMax, Cfg().strokeRenderMode, PictureTexture(item),
-                            StrokeRasterTextureFor(item.id), /*skipNoteText=*/false, CanvasMeshSlot(),
-                            PictureSampling());
+            DrawItemContent(drawList, item, pMin, pMax, PictureTexture(item), /*skipNoteText=*/false,
+                            CanvasMeshSlot(), Hooks());
             drawList->PopClipRect();
         }
     }

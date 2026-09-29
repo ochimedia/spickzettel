@@ -6,7 +6,7 @@
 # directory, so a measurement can never touch - or be perturbed by - the real
 # library and config.
 #
-#   .\measure.ps1 -Exe <path> [-Scenario name] [-Mode tessellated|polyline|rasterized]
+#   .\measure.ps1 -Exe <path> [-Scenario name]
 #                 [-Seconds 8] [-Screenshot <path>]
 #
 # The CPU figure is a percentage of ONE core. The overlay presents on vsync,
@@ -18,7 +18,6 @@
 param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [string]$LibrarySource,
-    [ValidateSet('tessellated', 'polyline', 'rasterized')][string]$Mode = 'tessellated',
     [int]$Seconds = 8,
     [int]$Repeat = 1,
     [int]$SettleSeconds = 6,
@@ -67,12 +66,12 @@ public static class SzMeasure {
 # input, and the grab/software-pointer paths would fight it. Everything else
 # is the shipped default, so a measurement reflects the app as delivered.
 function New-MeasurementConfig {
-    param([string]$Path, [string]$Mode, [bool]$Hud)
+    param([string]$Path, [bool]$Hud)
     $json = @"
 {
   "version": 1,
   "hotkeys": { "editMode": "Ctrl+Alt+O", "viewMode": "Ctrl+Alt+V", "quickCapture": "Ctrl+Alt+C", "silentCapture": "Ctrl+Alt+S" },
-  "drawing": { "strokeColor": "#FF0000", "strokeWidth": 3.0, "renderMode": "$Mode" },
+  "drawing": { "strokeColor": "#FF0000", "strokeWidth": 3.0 },
   "appearance": { "showItemBorders": true },
   "overview": { "showStrokes": true, "showBitmaps": false },
   "behavior": { "dontStealFocus": false, "softwarePointer": false, "rawMouseInput": false,
@@ -91,7 +90,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $sandbox 'Spickzettel') | O
 if ($LibrarySource -and (Test-Path $LibrarySource)) {
     Copy-Item $LibrarySource (Join-Path $sandbox 'Spickzettel\library.db') -Force
 }
-New-MeasurementConfig -Path (Join-Path $sandbox 'Spickzettel\config.json') -Mode $Mode -Hud ([bool]$ShowFpsHud)
+New-MeasurementConfig -Path (Join-Path $sandbox 'Spickzettel\config.json') -Hud ([bool]$ShowFpsHud)
 
 try {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -156,7 +155,6 @@ try {
 
     [PSCustomObject]@{
         Label       = $Label
-        Mode        = $Mode
         CpuPctOfOne = [math]::Round($pct, 1)
         # What one frame costs in CPU, at whatever rate the display actually
         # refreshes - so this needs the real rate, read off the HUD. Once

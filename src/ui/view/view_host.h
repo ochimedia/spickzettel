@@ -53,11 +53,11 @@ public:
 
     // What a canvas's preview is drawn with - see DrawCanvasPreview: each
     // picture's thumbnail-sized pixels, the previews' own mesh cache, and
-    // the picture filter. The textures and the caches are the canvas view's.
+    // the renderer's hooks. The textures and the caches are the canvas view's.
     struct PreviewDrawing {
         PreviewTextureFn textures;
         core::StrokeMeshSlot meshes;
-        ImageSampling sampling;
+        PaintHooks hooks;
     };
     // Asked once a frame by what draws previews, which starts that frame's
     // budget for reading pictures over.

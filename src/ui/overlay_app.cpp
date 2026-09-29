@@ -438,16 +438,8 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     session_.SyncItemsToDisplaySize(displayW, displayH);
 
     if (IsViewOnly()) {
-        // The strokes' bitmaps, as below, since view-only draws them too.
-        // Going view-only settles what edit mode left in progress - a
-        // stroke in flight is filed, an erase the write refused is rolled
-        // back - after edit mode's last frame, and with this skipped the
-        // view drew the bitmap from before that: the last stroke missing,
-        // until edit mode came back.
-        canvasView_.RefreshStrokeRasters();
         return;
     }
-
 
     // Nothing acts on a snippet that has gone - see Editor::Selection. The
     // keys and the wheel have been handled as they came (see OnInput).
@@ -472,11 +464,6 @@ void OverlayApp::Prepare(float displayW, float displayH) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeAll);
         }
     }
-
-    // In the rasterized mode, the bitmaps the strokes are drawn into. Last
-    // thing before anything item-shaped is drawn: everything above this
-    // line is input handling, and Alt+wheel canvas stepping lives up there.
-    canvasView_.RefreshStrokeRasters();
 
     // Where the panels docked against the screen's edges are this frame, and
     // how far out - before anything is drawn, since the minimized chips

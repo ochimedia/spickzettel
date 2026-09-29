@@ -16,7 +16,6 @@ struct TextureKey {
     enum class Kind : uint8_t {
         Picture,       // a snippet's picture, full size
         Thumbnail,     // the same scaled down, for a preview of a canvas
-        StrokeRaster,  // a snippet's strokes drawn into a bitmap
         FrozenScreen,  // the screen held while the overlay is up
     };
     Kind kind = Kind::Picture;

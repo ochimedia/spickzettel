@@ -20,8 +20,9 @@ using namespace ::sz::core;
 // rescales by 1/cos^2 of half the turn - a miter clamped only at 100x the
 // half width, so a near-reversal threw a spike out the side of a wide pen.
 // It also has no cap but a flat one and no round join at all. See
-// stroke_mesh.h for the geometry this builds instead, and why one connected
-// mesh with no overlapping triangles is what a translucent stroke needs.
+// stroke_mesh.h for the geometry this builds instead, and why it comes
+// body first: drawn under the renderer's depth test, the stroke reaches
+// each pixel once, wherever it crosses or folds over itself.
 //
 // The fringe is one pixel in *screen* space, so it stays a pixel wide
 // whatever the item is scaled to - see kStrokeFringePx, which both this and
@@ -30,8 +31,8 @@ using namespace ::sz::core;
 // The scale is baked into the geometry and the offset is not: the mesh comes
 // out around the origin and is translated as its vertices are written. That
 // is what makes a mesh worth keeping between frames - see StrokeMeshSlot.
-void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode rendering, float offsetX,
-                 float offsetY, float scaleX, float scaleY, float opacity, StrokeMeshSlot meshSlot) {
+void DrawStroke(ImDrawList* drawList, const Stroke& stroke, float offsetX, float offsetY, float scaleX, float scaleY,
+                 float opacity, StrokeMeshSlot meshSlot, platform::DrawCallback strokeDepth) {
     if (stroke.points.empty() || opacity <= 0.0f) {
         return;
     }
@@ -40,42 +41,6 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
     const float widthScale = core::LengthScale(scaleX, scaleY);
     const float halfWidth = stroke.width * widthScale * 0.5f;
     const ImU32 color = ToImColor(stroke.colorRGBA, opacity);
-
-    if (rendering == StrokeRenderMode::Polyline) {
-        // Reused between calls rather than allocated per stroke - and,
-        // unlike the tessellated path below, positioned rather than merely
-        // scaled: AddPolyline takes screen coordinates and there is nothing
-        // here to translate afterwards.
-        static std::vector<StrokePoint> screenPoints;
-        screenPoints.clear();
-        screenPoints.reserve(stroke.points.size());
-        for (const StrokePoint& p : stroke.points) {
-            screenPoints.push_back(StrokePoint{offsetX + p.x * scaleX, offsetY + p.y * scaleY});
-        }
-        // Kept switchable to compare the tessellator against - see
-        // StrokeRenderMode::Polyline. ImGui's AddPolyline
-        // leaves flat ends, so a disc goes on each one: the caps are not
-        // what is being compared, and without them the two renderers differ
-        // in an obvious way that has nothing to do with the tessellation.
-        //
-        // Those discs do overlap the line they cap, which a translucent
-        // stroke shows as a darker blob at each end - a fair part of what
-        // the tessellated path exists to avoid, and the reason it can't
-        // simply be done this way.
-        if (screenPoints.size() >= 2) {
-            static std::vector<ImVec2> polyline;
-            polyline.clear();
-            polyline.reserve(screenPoints.size());
-            for (const StrokePoint& p : screenPoints) {
-                polyline.push_back(ImVec2(p.x, p.y));
-            }
-            drawList->AddPolyline(polyline.data(), static_cast<int>(polyline.size()), color,
-                                   stroke.width * widthScale);
-        }
-        drawList->AddCircleFilled(ImVec2(screenPoints.front().x, screenPoints.front().y), halfWidth, color);
-        drawList->AddCircleFilled(ImVec2(screenPoints.back().x, screenPoints.back().y), halfWidth, color);
-        return;
-    }
 
     // The mesh is built around the origin and translated as it is written
     // out below, rather than built at the position it will appear. That is
@@ -111,6 +76,14 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
     const ImU32 transparent = color & ~IM_COL32_A_MASK;
     const ImVec2 uv = drawList->_Data->TexUvWhitePixel;
 
+    // Under the depth test the first fragment on a pixel is the one that
+    // stays, which is why the mesh comes body first: an edge drawn first
+    // would take a pixel the stroke's own body covers fully, and leave a
+    // faint line across every crossing (see StrokeMesh).
+    if (strokeDepth != nullptr) {
+        drawList->AddCallback(strokeDepth, reinterpret_cast<void*>(intptr_t{1}));
+    }
+
     // One reservation for the whole mesh, which a stroke drawn for half a
     // minute without lifting the pen takes past 65536 vertices: ImGui's
     // indices are 32 bits here for that (see cmake/FetchImGui.cmake).
@@ -123,13 +96,72 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, StrokeRenderMode ren
     for (const uint32_t index : mesh->indices) {
         drawList->PrimWriteIdx(static_cast<ImDrawIdx>(base + index));
     }
+    if (strokeDepth != nullptr) {
+        drawList->AddCallback(strokeDepth, nullptr);
+    }
 }
 
-void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint,
-                  ImageSampling sampling) {
-    const bool filtered = sampling.apply != nullptr && sampling.filter != platform::ImageFilter::Bilinear;
+namespace {
+
+// Opens what a snippet's strokes are drawn into at `opacity`, the snippet's:
+// below full opacity and with a layer to be had, a layer of its own, and the
+// strokes go in at full strength - the opacity is the layer's, applied once
+// by CloseStrokeLayer. Otherwise nothing, and each stroke takes the opacity
+// itself: fully opaque, the layer laid down would change nothing drawing
+// straight onto the frame does not, since source-over is associative.
+// Returns what to draw each stroke at.
+bool UsesLayer(float opacity, const PaintHooks& hooks) { return hooks.strokeLayer != nullptr && opacity < 1.0f; }
+
+float OpenStrokeLayer(ImDrawList* drawList, float opacity, const PaintHooks& hooks) {
+    if (!UsesLayer(opacity, hooks)) {
+        return opacity;
+    }
+    platform::StrokeLayerStep step;
+    step.open = true;
+    drawList->AddCallback(hooks.strokeLayer, &step, sizeof(step));
+    return 1.0f;
+}
+
+void CloseStrokeLayer(ImDrawList* drawList, float opacity, const PaintHooks& hooks) {
+    if (!UsesLayer(opacity, hooks)) {
+        return;
+    }
+    platform::StrokeLayerStep step;
+    step.open = false;
+    step.opacity = opacity;
+    drawList->AddCallback(hooks.strokeLayer, &step, sizeof(step));
+    // Null only where no renderer backend is set up, which is also where
+    // nothing is drawn.
+    if (const ImDrawCallback reset = ImGui::GetPlatformIO().DrawCallback_ResetRenderState) {
+        drawList->AddCallback(reset, nullptr);
+    }
+}
+
+// A snippet's strokes, native space into `pMin..pMax`, as one layer - see
+// DrawItemContent.
+void DrawStrokeLayer(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeMeshSlot meshCache,
+                     const PaintHooks& hooks, const std::function<void(float opacity)>& moreStrokes) {
+    const float boxW = pMax.x - pMin.x;
+    const float boxH = pMax.y - pMin.y;
+    const float scaleX = item.nativeW != 0.0f ? boxW / item.nativeW : (item.rect.w != 0.0f ? boxW / item.rect.w : 1.0f);
+    const float scaleY = item.nativeH != 0.0f ? boxH / item.nativeH : (item.rect.h != 0.0f ? boxH / item.rect.h : 1.0f);
+    const float strokeOpacity = OpenStrokeLayer(drawList, item.foregroundOpacity, hooks);
+    for (size_t index = 0; index < item.strokes.size(); ++index) {
+        DrawStroke(drawList, item.strokes[index], pMin.x, pMin.y, scaleX, scaleY, strokeOpacity,
+                   meshCache.For(item.id, index), hooks.strokeDepth);
+    }
+    if (moreStrokes) {
+        moreStrokes(strokeOpacity);
+    }
+    CloseStrokeLayer(drawList, item.foregroundOpacity, hooks);
+}
+
+}  // namespace
+
+void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint, PaintHooks hooks) {
+    const bool filtered = hooks.applyFilter != nullptr && hooks.filter != platform::ImageFilter::Bilinear;
     if (filtered) {
-        drawList->AddCallback(sampling.apply, reinterpret_cast<void*>(static_cast<intptr_t>(sampling.filter)));
+        drawList->AddCallback(hooks.applyFilter, reinterpret_cast<void*>(static_cast<intptr_t>(hooks.filter)));
     }
     drawList->AddImage(ImTextureRef(static_cast<ImTextureID>(texture)), pMin, pMax, ImVec2(0.0f, 0.0f),
                         ImVec2(1.0f, 1.0f), tint);
@@ -143,7 +175,7 @@ void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMa
 }
 
 void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMin, ImVec2 pMax, uint64_t texture,
-                        ImageSampling sampling) {
+                        PaintHooks hooks) {
     if (picture.opacity <= 0.0f) {
         return;
     }
@@ -154,7 +186,7 @@ void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMi
         // no extra handling here. The tint multiplies the sampled texture
         // (see Picture::tintColorRGBA) - white, the default, leaves a
         // capture unmodified; any other color mixes into it.
-        DrawPicture(drawList, texture, pMin, pMax, ToImColor(picture.tintColorRGBA, picture.opacity), sampling);
+        DrawPicture(drawList, texture, pMin, pMax, ToImColor(picture.tintColorRGBA, picture.opacity), hooks);
     } else if (picture.showsPlaceholder) {
         // No pixels to show (the OS-level capture failed, or the picture
         // cannot be read) - a placeholder gradient, faded by the same
@@ -169,31 +201,11 @@ void DrawSnippetPicture(ImDrawList* drawList, const Picture& picture, ImVec2 pMi
     }
 }
 
-void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
-                      uint64_t pictureTexture, uint64_t strokeRasterTexture, bool skipNoteText,
-                      StrokeMeshSlot meshCache, ImageSampling sampling) {
-    DrawSnippetPicture(drawList, item.picture, pMin, pMax, pictureTexture, sampling);
-
-    if (rendering == StrokeRenderMode::Rasterized && strokeRasterTexture != 0) {
-        // Every stroke, already drawn into one bitmap and composited here
-        // as a single image - which is what makes a stroke that crosses
-        // over itself one even color instead of darker at the crossing.
-        // The opacity is applied once, to the finished picture, rather than
-        // per stroke.
-        DrawPicture(drawList, strokeRasterTexture, pMin, pMax, ToImColor(0xFFFFFFFFu, item.foregroundOpacity),
-                    sampling);
-    } else {
-        const float scaleX = item.nativeW != 0.0f ? (pMax.x - pMin.x) / item.nativeW : 1.0f;
-        const float scaleY = item.nativeH != 0.0f ? (pMax.y - pMin.y) / item.nativeH : 1.0f;
-        // Rasterized with no raster to draw falls back to Tessellated
-        // rather than to nothing - see this function's own declaration.
-        const StrokeRenderMode perStroke =
-            rendering == StrokeRenderMode::Rasterized ? StrokeRenderMode::Tessellated : rendering;
-        for (size_t index = 0; index < item.strokes.size(); ++index) {
-            DrawStroke(drawList, item.strokes[index], perStroke, pMin.x, pMin.y, scaleX, scaleY,
-                        item.foregroundOpacity, meshCache.For(item.id, index));
-        }
-    }
+void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, uint64_t pictureTexture,
+                     bool skipNoteText, StrokeMeshSlot meshCache, PaintHooks hooks,
+                     const std::function<void(float opacity)>& moreStrokes) {
+    DrawSnippetPicture(drawList, item.picture, pMin, pMax, pictureTexture, hooks);
+    DrawStrokeLayer(drawList, item, pMin, pMax, meshCache, hooks, moreStrokes);
 
     // Text (Item::noteText, see its own doc comment) is a caption layered
     // on top of whatever's already here - a background image, strokes, or
@@ -234,9 +246,8 @@ void DrawItemContent(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
 // the same items the canvas behind it does, at a wholly different scale, in
 // the same frame - see CanvasView::previewMeshCache_.
 void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax, float displayW,
-                        float displayH, StrokeRenderMode rendering, bool showStrokes,
-                        const PreviewTextureFn& previewTexture,
-                        StrokeMeshSlot meshCache, ImageSampling sampling) {
+                       float displayH, bool showStrokes, const PreviewTextureFn& previewTexture,
+                       StrokeMeshSlot meshCache, PaintHooks hooks) {
     drawList->PushClipRect(thumbMin, thumbMax, true);
     drawList->AddRectFilled(thumbMin, thumbMax, IM_COL32(14, 16, 20, 255));
 
@@ -254,17 +265,15 @@ void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbM
             }
             const ImVec2 pMin(offsetX + item.rect.x * scale, offsetY + item.rect.y * scale);
             const ImVec2 pMax(offsetX + (item.rect.x + item.rect.w) * scale, offsetY + (item.rect.y + item.rect.h) * scale);
-            DrawItemPreview(drawList, item, pMin, pMax, rendering, showStrokes, previewTexture, meshCache, sampling);
+            DrawItemPreview(drawList, item, pMin, pMax, showStrokes, previewTexture, meshCache, hooks);
         }
     }
 
     drawList->PopClipRect();
 }
 
-void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, StrokeRenderMode rendering,
-                     bool showStrokes,
-                     const PreviewTextureFn& previewTexture,
-                     StrokeMeshSlot meshCache, ImageSampling sampling) {
+void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, bool showStrokes,
+                     const PreviewTextureFn& previewTexture, StrokeMeshSlot meshCache, PaintHooks hooks) {
     // The picture with whichever texture it can have here: the real one for
     // the current canvas (already loaded), a thumbnail-sized copy for the
     // rest if previews are on, and none at all otherwise - in which case
@@ -282,7 +291,7 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
         const std::optional<uint64_t> texture =
             previewTexture ? previewTexture(item) : std::optional<uint64_t>(0);
         if (texture.has_value()) {
-            DrawSnippetPicture(drawList, item.picture, pMin, pMax, *texture, sampling);
+            DrawSnippetPicture(drawList, item.picture, pMin, pMax, *texture, hooks);
             drewAnything = true;
         }
     }
@@ -294,21 +303,8 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
     }
 
     // Native -> preview is one scale factor per axis: the box over the
-    // item's native size. pMin is already the item's origin in the preview,
-    // so it doubles as DrawStroke's offset.
-    const float boxW = pMax.x - pMin.x;
-    const float boxH = pMax.y - pMin.y;
-    const float strokeScaleX = item.nativeW != 0.0f ? boxW / item.nativeW : (item.rect.w != 0.0f ? boxW / item.rect.w : 1.0f);
-    const float strokeScaleY = item.nativeH != 0.0f ? boxH / item.nativeH : (item.rect.h != 0.0f ? boxH / item.rect.h : 1.0f);
-    // Rasterized has no bitmap to draw here - a preview keeps no cache of its
-    // own, and building one for a thumbnail would cost more than the
-    // difference could possibly show at this size.
-    const StrokeRenderMode previewMode =
-        rendering == StrokeRenderMode::Rasterized ? StrokeRenderMode::Tessellated : rendering;
-    for (size_t index = 0; index < item.strokes.size(); ++index) {
-        DrawStroke(drawList, item.strokes[index], previewMode, pMin.x, pMin.y, strokeScaleX, strokeScaleY,
-                   item.foregroundOpacity, meshCache.For(item.id, index));
-    }
+    // item's native size, the same as on the canvas.
+    DrawStrokeLayer(drawList, item, pMin, pMax, meshCache, hooks, {});
 }
 
 }  // namespace sz::ui

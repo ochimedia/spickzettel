@@ -15,59 +15,74 @@
 #include "core/canvas/item.h"
 #include "core/drawing/stroke.h"
 #include "core/drawing/stroke_mesh_cache.h"
-#include "core/drawing/stroke_render_mode.h"
 #include "platform/i_overlay_window.h"
 
 namespace sz::ui {
 
-// How a snippet's pictures are resampled: the setting (AppConfig::
-// imageFilter) and the renderer's callback that applies it, which is null
-// where nothing renders. See DrawPicture.
-struct ImageSampling {
+// What the renderer lends the painting: how pictures are resampled (the
+// setting, AppConfig::imageFilter, and the callback that applies it), and
+// the two callbacks strokes are drawn between (see DrawStroke and
+// DrawItemContent). The callbacks are null where nothing renders, and the
+// painting then does without them: pictures keep ImGui's own sampler,
+// strokes are drawn untested and each at the snippet's opacity.
+struct PaintHooks {
     platform::ImageFilter filter = platform::ImageFilter::Bilinear;
-    platform::DrawCallback apply = nullptr;
+    // IOverlayWindow::ImageFilterCallback.
+    platform::DrawCallback applyFilter = nullptr;
+    // IOverlayWindow::StrokeDepthCallback.
+    platform::DrawCallback strokeDepth = nullptr;
+    // IOverlayWindow::StrokeLayerCallback.
+    platform::DrawCallback strokeLayer = nullptr;
 };
 
 // Draws one stroke, transformed from its own native/stroke space into
 // screen space via (offsetX/Y, scaleX/Y). The scale reaches the tessellator;
 // the offset is applied to the finished vertices, which is what lets a
-// cached mesh outlive its item being moved - see StrokeMeshSlot. Which
-// renderer draws it is StrokeRenderMode, the setting's own enum.
-void DrawStroke(ImDrawList* drawList, const core::Stroke& stroke, core::StrokeRenderMode rendering, float offsetX,
-                float offsetY, float scaleX, float scaleY, float opacity = 1.0f, core::StrokeMeshSlot meshSlot = {});
+// cached mesh outlive its item being moved - see StrokeMeshSlot.
+// Between two `strokeDepth` calls, so the stroke reaches each pixel once
+// however it crosses itself - see IOverlayWindow::StrokeDepthCallback.
+void DrawStroke(ImDrawList* drawList, const core::Stroke& stroke, float offsetX, float offsetY, float scaleX,
+                float scaleY, float opacity = 1.0f, core::StrokeMeshSlot meshSlot = {},
+                platform::DrawCallback strokeDepth = nullptr);
 
 // `texture` stretched to fill `pMin..pMax`, tinted by `tint`, resampled
-// the way `sampling` says - every snippet picture is drawn through here.
+// the way `hooks` say - every snippet picture is drawn through here.
 // Bilinear is ImGui's own sampler and adds nothing to the draw list; any
 // other filter is the picture between two callbacks, the renderer's and
 // ImGui's reset.
-void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint, ImageSampling sampling);
+void DrawPicture(ImDrawList* drawList, uint64_t texture, ImVec2 pMin, ImVec2 pMax, ImU32 tint, PaintHooks hooks);
 
 // A snippet's picture stretched to fill `pMin..pMax`, at its own opacity:
 // its pixels from `texture`, or, for 0, its placeholder gradient or its
 // plain fill (see picture.h). Nothing is drawn at zero opacity. `texture`
 // is the full-size picture's or, in the Overview's previews, a
-// thumbnail-sized copy of it. `sampling` is how the pixels, if there are
-// some, are resampled - see ImageSampling.
+// thumbnail-sized copy of it. `hooks` say how the pixels, if there are
+// some, are resampled.
 void DrawSnippetPicture(ImDrawList* drawList, const core::Picture& picture, ImVec2 pMin, ImVec2 pMax,
-                        uint64_t texture, ImageSampling sampling = {});
+                        uint64_t texture, PaintHooks hooks = {});
 
 // An item's picture, from `pictureTexture` (see DrawSnippetPicture), plus
 // its baked strokes and its text, into `pMin..pMax` - shared by the items
 // layer, the view-only layer and the dock's chips. Caller owns clipping
-// (PushClipRect/PopClipRect) around this. `skipNoteText`, true only for
+// (PushClipRect/PopClipRect) around this; the clip rectangle is also the
+// part of the stroke layer used (see below). `skipNoteText`, true only for
 // the note being typed into, skips just the read-only text so it doesn't
 // double up with the editor's own on top of it.
-// `strokeRasterTexture` is only consulted in StrokeRenderMode::Rasterized:
-// it's the item's strokes already drawn into a bitmap, composited in one
-// AddImage instead of stroke by stroke. 0 means there isn't one - a
-// preview that keeps no cache, or an item whose raster hasn't been built
-// yet - and the strokes are drawn tessellated instead, which is the right
-// thing to fall back to rather than nothing.
+//
+// The strokes are one layer: each blends over the ones before it by its own
+// ink's alpha, and the snippet's opacity fades the finished layer once, so
+// opaque strokes stay flat against each other however faded the snippet.
+// Below full opacity that takes the renderer's stroke layer (see
+// IOverlayWindow::StrokeLayerCallback); at full opacity, drawing straight
+// onto the frame comes to the same, since source-over is associative.
+//
 // `meshCache` is passed straight down to each stroke - see StrokeMeshSlot.
-void DrawItemContent(ImDrawList* drawList, const core::Item& item, ImVec2 pMin, ImVec2 pMax,
-                     core::StrokeRenderMode rendering, uint64_t pictureTexture, uint64_t strokeRasterTexture = 0,
-                     bool skipNoteText = false, core::StrokeMeshSlot meshCache = {}, ImageSampling sampling = {});
+// `moreStrokes`, when given, draws strokes that are not in the item yet -
+// the one being drawn - after its own and into the same layer, at the
+// opacity it is handed.
+void DrawItemContent(ImDrawList* drawList, const core::Item& item, ImVec2 pMin, ImVec2 pMax, uint64_t pictureTexture,
+                     bool skipNoteText = false, core::StrokeMeshSlot meshCache = {}, PaintHooks hooks = {},
+                     const std::function<void(float opacity)>& moreStrokes = {});
 
 // A picture's thumbnail-sized pixels, for a preview: a handle to draw with,
 // 0 for a picture with none to show, and nothing at all for one whose turn
@@ -84,14 +99,12 @@ using PreviewTextureFn = std::function<std::optional<uint64_t>(const core::Item&
 // which for a deleted canvas is also what restoring it brings back. So is
 // a minimized one, which the canvas shows only as a chip.
 void DrawCanvasPreview(ImDrawList* drawList, const core::Canvas& canvas, ImVec2 thumbMin, ImVec2 thumbMax,
-                       float displayW, float displayH, core::StrokeRenderMode rendering, bool showStrokes,
-                       const PreviewTextureFn& previewTexture, core::StrokeMeshSlot meshCache,
-                       ImageSampling sampling);
+                       float displayW, float displayH, bool showStrokes, const PreviewTextureFn& previewTexture,
+                       core::StrokeMeshSlot meshCache, PaintHooks hooks);
 // One item as a preview draws it into `pMin..pMax`: its picture with the
 // texture `previewTexture` has for it, then its strokes scaled from the
 // item's native size to the box. What DrawCanvasPreview draws per item.
-void DrawItemPreview(ImDrawList* drawList, const core::Item& item, ImVec2 pMin, ImVec2 pMax,
-                     core::StrokeRenderMode rendering, bool showStrokes, const PreviewTextureFn& previewTexture,
-                     core::StrokeMeshSlot meshCache, ImageSampling sampling);
+void DrawItemPreview(ImDrawList* drawList, const core::Item& item, ImVec2 pMin, ImVec2 pMax, bool showStrokes,
+                     const PreviewTextureFn& previewTexture, core::StrokeMeshSlot meshCache, PaintHooks hooks);
 
 }  // namespace sz::ui

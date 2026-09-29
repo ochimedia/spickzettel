@@ -330,7 +330,7 @@ Every frame of edit mode runs these stages, in order:
 
 | Stage | What it does | What it may change | Today |
 |---|---|---|---|
-| 1. Prepare | tells the editor the display size; the anchor board cleared; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the selection pruned; a note edit ended elsewhere put away (C5); the stroke rasters; where the canvas bar is; what the start decided for the tutorial, asked for once as an action; the tutorial's runner brought up to date, its own state only | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
+| 1. Prepare | tells the editor the display size; the anchor board cleared; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the selection pruned; a note edit ended elsewhere put away (C5); where the canvas bar is; what the start decided for the tutorial, asked for once as an action; the tutorial's runner brought up to date, its own state only | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
 | 2. Canvas | surfaces 1 to 5 | a widget's own value (section 6); records actions | `RenderCanvasLayer`, `RenderItems`, `RenderCanvasBar` |
 | 3. Open | the effect queue: popups opened and closed, ImGui's active widget let go | ImGui's popups and focus | `ApplyEffects` |
 | 4. Popups | surface 6 | as stage 2 | the five popups' `Render...` functions |
@@ -453,7 +453,7 @@ what it is handed, and records actions:
 
 | Owner | Surfaces (section 3) | Its state, from today's members | From |
 |---|---|---|---|
-| Canvas view | 1 to 4; the view-only layer | the stroke rasters and their generation; both mesh caches; the preview budgets; the debug handle readout | `overlay_app_items.cpp`, `overlay_app_rasters.cpp`, part of `overlay_app.cpp` |
+| Canvas view | 1 to 4; the view-only layer | both mesh caches; the preview budgets; the debug handle readout | `overlay_app_items.cpp`, `overlay_app_rasters.cpp`, part of `overlay_app.cpp` |
 | Canvas bar | 5 | its reveal, place, scroll, last canvas and scroll request; the flash request; the top of the bottom edge | `overlay_app_docks.cpp` |
 | Popups | 6, 11 | the record (C2); the effect queue | `overlay_app_popovers.cpp`; `ContextMenu` stays a widget |
 | Overview | 9, but for the Settings tab | the tab; the picker; Show deleted and the deleted folder shown; the renames; the scroll requests; About's page | `overlay_app_overview.cpp` (Canvases, About), `overlay_app_deleted.cpp` |

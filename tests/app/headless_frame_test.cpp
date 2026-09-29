@@ -5,6 +5,7 @@
 #include "fakes/headless_app.h"
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <map>
 #include <iostream>
@@ -388,29 +389,59 @@ TEST_F(HeadlessAppTest, DraggingOverAnItemDrawsAStroke) {
     EXPECT_GT(StrokeCountOnCurrentCanvas(), before);
 }
 
-// The most opaque of the last frame's vertices on the items layer inside
-// `min..max` that are `colorRGBA`'s color, whatever its alpha: 0 for none.
-// Inside, because the drawing bar's swatch is the pen's color too.
-int StrongestAlphaOnItemsLayer(uint32_t colorRGBA, ImVec2 min, ImVec2 max) {
+// How strongly the last frame laid `colorRGBA`'s color down on the items
+// layer inside `min..max`, whatever its alpha: the most opaque of those
+// vertices, times the opacity of the stroke layer they were drawn into, if
+// they were. 0 for none. Inside, because the drawing bar's swatch is the
+// pen's color too.
+float StrengthOnItemsLayer(uint32_t colorRGBA, ImVec2 min, ImVec2 max) {
     const ImGuiWindow* layer = ImGui::FindWindowByName("##sz_items_layer");
     if (layer == nullptr) {
         ADD_FAILURE() << "no items layer";
-        return 0;
+        return 0.0f;
     }
+    const ImDrawList& drawList = *layer->DrawList;
     const ImU32 color = ui::ToImColor(colorRGBA) & ~IM_COL32_A_MASK;
-    int strongest = 0;
-    for (const ImDrawVert& vertex : layer->DrawList->VtxBuffer) {
-        const bool inside = vertex.pos.x >= min.x && vertex.pos.x <= max.x && vertex.pos.y >= min.y &&
-                            vertex.pos.y <= max.y;
-        if (inside && (vertex.col & ~IM_COL32_A_MASK) == color) {
-            strongest = std::max(strongest, static_cast<int>((vertex.col & IM_COL32_A_MASK) >> IM_COL32_A_SHIFT));
+    float strongest = 0.0f;
+    float strongestInLayer = 0.0f;
+    bool inLayer = false;
+    for (const ImDrawCmd& cmd : drawList.CmdBuffer) {
+        if (cmd.UserCallback == &FakeOverlayWindow::FakeStrokeLayerCallback) {
+            // By its offset: ImGui points UserCallbackData at the copy only
+            // as it renders, and a draw list read here may not have been.
+            platform::StrokeLayerStep step;
+            if (cmd.UserCallbackDataOffset < 0 || cmd.UserCallbackDataSize != static_cast<int>(sizeof(step))) {
+                ADD_FAILURE() << "a stroke layer step without its data";
+                return 0.0f;
+            }
+            std::memcpy(&step, drawList._CallbacksDataBuf.Data + cmd.UserCallbackDataOffset, sizeof(step));
+            if (!step.open) {
+                strongest = std::max(strongest, strongestInLayer * step.opacity);
+                strongestInLayer = 0.0f;
+            }
+            inLayer = step.open;
+            continue;
+        }
+        if (cmd.UserCallback != nullptr) {
+            continue;
+        }
+        for (unsigned int e = cmd.IdxOffset; e < cmd.IdxOffset + cmd.ElemCount; ++e) {
+            const ImDrawVert& vertex = drawList.VtxBuffer[static_cast<int>(cmd.VtxOffset + drawList.IdxBuffer[static_cast<int>(e)])];
+            const bool inside = vertex.pos.x >= min.x && vertex.pos.x <= max.x && vertex.pos.y >= min.y &&
+                                vertex.pos.y <= max.y;
+            if (inside && (vertex.col & ~IM_COL32_A_MASK) == color) {
+                const float alpha = static_cast<float>((vertex.col & IM_COL32_A_MASK) >> IM_COL32_A_SHIFT) / 255.0f;
+                float& into = inLayer ? strongestInLayer : strongest;
+                into = std::max(into, alpha);
+            }
         }
     }
     return strongest;
 }
 
 // The stroke being drawn is at its snippet's foreground opacity, as it is
-// once let go: it was drawn opaque, and faded on the release.
+// once let go: it was drawn opaque, and faded on the release. Both are in
+// the snippet's stroke layer, which carries the opacity.
 TEST_F(HeadlessAppTest, AStrokeBeingDrawnIsAtItsSnippetsOpacity) {
     AppConfig config = DefaultConfig();
     config.drawingDefaults = SnippetDefaults{false, 0.25f, 0.0f};
@@ -420,7 +451,6 @@ TEST_F(HeadlessAppTest, AStrokeBeingDrawnIsAtItsSnippetsOpacity) {
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    const int quarter = static_cast<int>(255.0f * 0.25f);
 
     MoveTo(200.0f, 200.0f);
     StepFrame();
@@ -436,12 +466,12 @@ TEST_F(HeadlessAppTest, AStrokeBeingDrawnIsAtItsSnippetsOpacity) {
     const ImVec2 min(180.0f, 180.0f);
     const ImVec2 max(420.0f, 340.0f);
     ASSERT_TRUE(AppSession().LiveLayer().ActiveStroke().has_value()) << "still being drawn";
-    EXPECT_EQ(StrongestAlphaOnItemsLayer(config.strokeColorRGBA, min, max), quarter);
+    EXPECT_FLOAT_EQ(StrengthOnItemsLayer(config.strokeColorRGBA, min, max), 0.25f);
 
     RawMouse(400.0f, 320.0f, platform::MouseEventKind::Up);
     StepFrames(2);
     ASSERT_EQ(StrokeCountOnCurrentCanvas(), 1u);
-    EXPECT_EQ(StrongestAlphaOnItemsLayer(config.strokeColorRGBA, min, max), quarter) << "the same once let go";
+    EXPECT_FLOAT_EQ(StrengthOnItemsLayer(config.strokeColorRGBA, min, max), 0.25f) << "the same once let go";
 }
 
 // ===== Making a snippet: a press on empty canvas =====
@@ -4801,8 +4831,8 @@ TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn)
 }
 
 // Whatever happens - screenshots and drawings made, copied, sent, deleted,
-// undone and redone, canvases switched, deleted and erased, the stroke
-// renderer switched, the canvas bar's previews shown, the overlay put away,
+// undone and redone, canvases switched, deleted and erased, the canvas
+// bar's previews shown, the overlay put away,
 // the device replaced and uploads failing - no frame draws a texture that
 // is not live on the device there is, none is released twice or updated
 // once gone, and every texture the window holds is one the cache holds.
@@ -4863,7 +4893,7 @@ TEST_F(HeadlessSaveTest, EveryTextureDrawnIsLiveWhateverHappens) {
 
         for (int step = 0; step < kSteps && !HasFailure(); ++step) {
             const std::vector<ItemId> here = itemsHere();
-            switch (pick(18)) {
+            switch (pick(17)) {
                 case 0:
                 case 1:
                 case 2:
@@ -4927,17 +4957,11 @@ TEST_F(HeadlessSaveTest, EveryTextureDrawnIsLiveWhateverHappens) {
                     window.uploadsSucceed = !window.uploadsSucceed;
                     break;
                 case 15:
-                    controller_->GetSettings().Set(setting::kStrokeRenderMode,
-                                                   AppSettings().Stored().strokeRenderMode == StrokeRenderMode::Rasterized
-                                                       ? StrokeRenderMode::Tessellated
-                                                       : StrokeRenderMode::Rasterized);
-                    break;
-                case 16:
                     // Out to the bottom edge, where the canvas bar and its
                     // previews come out, or back up.
                     MoveTo(kDisplayWidth * 0.5f, pick(2) == 0 ? kDisplayHeight - 2.0f : kDisplayHeight * 0.5f);
                     break;
-                case 17:
+                case 16:
                     ShowEditMode();  // put away, frozen screen and all
                     ShowEditMode();  // and up again, frozen afresh
                     break;
@@ -4962,164 +4986,6 @@ TEST_F(HeadlessSaveTest, EveryTextureDrawnIsLiveWhateverHappens) {
         const bool frozen = session.FrozenScreenTexture() != 0;
         EXPECT_EQ(window.liveTextures.size(), frozen ? 1u : 0u);
     }
-}
-
-// ===== Rasterized strokes =====
-//
-// In the rasterized mode a snippet's strokes are drawn from one bitmap of
-// them (see CanvasView::BuildStrokeRaster), and a bitmap that is not what
-// the strokes are shows something else. What a frame drew is read from
-// the fake window's copy of each texture's pixels.
-
-// The texture of the app's own that `layer` drew in the last frame - the
-// strokes' bitmap, where a drawing is all a canvas holds.
-std::optional<uint64_t> TextureDrawnOn(const char* layer) {
-    const ImGuiWindow* window = ImGui::FindWindowByName(layer);
-    if (window == nullptr || !window->Active) {
-        return std::nullopt;
-    }
-    for (const ImDrawCmd& cmd : window->DrawList->CmdBuffer) {
-        // TexRef's own id rather than GetTexID, which asserts on the font
-        // atlas's commands - never uploaded, with no renderer.
-        if (cmd.UserCallback == nullptr && cmd.TexRef._TexData == nullptr && cmd.TexRef._TexID != 0) {
-            return static_cast<uint64_t>(cmd.TexRef._TexID);
-        }
-    }
-    return std::nullopt;
-}
-
-// How opaque `texture`, stretched over `item`, is at the screen point x, y.
-int AlphaAt(const FakeOverlayWindow& window, uint64_t texture, const Item& item, float x, float y) {
-    const auto found = window.texturePixels.find(texture);
-    if (found == window.texturePixels.end()) {
-        ADD_FAILURE() << "texture " << texture << " was never made";
-        return -1;
-    }
-    const FakeOverlayWindow::TexturePixels& pixels = found->second;
-    const auto px = static_cast<size_t>((x - item.rect.x) / item.rect.w * static_cast<float>(pixels.width));
-    const auto py = static_cast<size_t>((y - item.rect.y) / item.rect.h * static_cast<float>(pixels.height));
-    return pixels.rgba[(py * static_cast<size_t>(pixels.width) + px) * 4 + 3];
-}
-
-// View-only draws the strokes' bitmap too, brought up to date first.
-// Leaving edit mode files a stroke still being drawn - after edit mode's
-// last frame - and the view drew the bitmap from before it: the stroke
-// missing until edit mode came back.
-TEST_F(HeadlessAppTest, ViewOnlyDrawsTheStrokeFiledOnTheWayThere) {
-    AppConfig config = DefaultConfig();
-    config.strokeRenderMode = StrokeRenderMode::Rasterized;
-    StartWith(config);
-    host_.overlayWindow.uploadsSucceed = true;
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    Drag(200.0f, 200.0f, 400.0f, 200.0f);
-    StepFrame();
-    // The second stroke, with the button still down as the view comes up.
-    RawMouse(200.0f, 400.0f, platform::MouseEventKind::Down);
-    StepFrame();
-    for (int i = 1; i <= 4; ++i) {
-        RawMouse(200.0f + 50.0f * static_cast<float>(i), 400.0f, platform::MouseEventKind::Move);
-        StepFrame();
-    }
-    ShowViewMode();
-    StepFrames(2);
-
-    const Item& item = Canvases().CurrentOrNull()->items[0];
-    ASSERT_EQ(item.strokes.size(), 2u) << "filed on the way";
-    const std::optional<uint64_t> bitmap = TextureDrawnOn("##spickzettel_view_only");
-    ASSERT_TRUE(bitmap.has_value()) << "no bitmap drawn";
-    EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 200.0f), 0) << "the first stroke";
-    EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 400.0f), 0) << "the second";
-}
-
-// A bitmap made again is never taken for the one before it. A snippet's
-// strokes undone to none lose their bitmap, whose texture is kept a frame
-// longer; drawn on again before that frame is out, the new bitmap counted
-// its revision from the start, came to the old one's, and was drawn with
-// the old texture: the undone stroke on screen and the new one not.
-TEST_F(HeadlessAppTest, ABitmapMadeAgainAfterAnUndoToNothingIsNotTheOldOne) {
-    AppConfig config = DefaultConfig();
-    config.strokeRenderMode = StrokeRenderMode::Rasterized;
-    StartWith(config);
-    host_.overlayWindow.uploadsSucceed = true;
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    Drag(200.0f, 200.0f, 400.0f, 200.0f);
-    StepFrames(2);
-
-    // Undone, and a frame sees it: the bitmap goes.
-    KeyEvent(ImGuiMod_Ctrl, true);
-    KeyEvent(ImGuiKey_Z, true);
-    KeyEvent(ImGuiKey_Z, false);
-    KeyEvent(ImGuiMod_Ctrl, false);
-    StepFrame();
-    ASSERT_TRUE(Canvases().CurrentOrNull()->items[0].strokes.empty());
-    // Another stroke before the next frame, elsewhere.
-    RawMouse(200.0f, 400.0f, platform::MouseEventKind::Down);
-    RawMouse(300.0f, 400.0f, platform::MouseEventKind::Move);
-    RawMouse(400.0f, 400.0f, platform::MouseEventKind::Move);
-    RawMouse(400.0f, 400.0f, platform::MouseEventKind::Up);
-    StepFrames(2);
-
-    const Item& item = Canvases().CurrentOrNull()->items[0];
-    ASSERT_EQ(item.strokes.size(), 1u);
-    const std::optional<uint64_t> bitmap = TextureDrawnOn("##sz_items_layer");
-    ASSERT_TRUE(bitmap.has_value()) << "no bitmap drawn";
-    EXPECT_EQ(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 200.0f), 0) << "the stroke undone";
-    EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 400.0f), 0) << "the new one";
-}
-
-// A deleted snippet holds no bitmap of its strokes. It stays in the
-// canvas's items until the retention purge, for undo and Show deleted,
-// and kept its bitmap there - up to 64 MB each, never drawn - and was
-// drawn into a new one on every return to its canvas. Undone, it is drawn
-// into one again; a minimized snippet keeps its own, which its chip in the
-// dock is drawn from.
-TEST_F(HeadlessAppTest, ADeletedSnippetHoldsNoBitmapOfItsStrokes) {
-    AppConfig config = DefaultConfig();
-    config.strokeRenderMode = StrokeRenderMode::Rasterized;
-    StartWith(config);
-    host_.overlayWindow.uploadsSucceed = true;
-    ShowEditMode();
-    StepFrame();
-    MakeADrawing(100.0f, 100.0f, 700.0f, 500.0f);
-    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
-    Drag(200.0f, 200.0f, 400.0f, 200.0f);
-    StepFrames(2);
-    Session& session = controller_->GetSession();
-    const ItemId drawing = Canvases().CurrentOrNull()->items[0].id;
-    const CanvasId home = Canvases().CurrentCanvasId();
-    const CanvasId elsewhere = session.AddCanvas("Elsewhere");
-    StepFrame();
-    ASSERT_TRUE(App().HasStrokeRaster(drawing));
-
-    session.DeleteItem(drawing);
-    StepFrame();
-    EXPECT_FALSE(App().HasStrokeRaster(drawing)) << "let go of when deleted";
-
-    session.SwitchToCanvas(elsewhere);
-    StepFrame();
-    session.SwitchToCanvas(home);
-    StepFrame();
-    EXPECT_FALSE(App().HasStrokeRaster(drawing)) << "and not made again on coming back";
-
-    PressCtrlKey(ImGuiKey_Z);
-    StepFrame();
-    const Item& item = Canvases().CurrentOrNull()->items[0];
-    ASSERT_EQ(item.deletedAt, 0) << "the delete undone";
-    EXPECT_TRUE(App().HasStrokeRaster(drawing)) << "made again";
-    const std::optional<uint64_t> bitmap = TextureDrawnOn("##sz_items_layer");
-    ASSERT_TRUE(bitmap.has_value()) << "no bitmap drawn";
-    EXPECT_GT(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 200.0f), 0) << "with the stroke on it";
-    EXPECT_EQ(AlphaAt(host_.overlayWindow, *bitmap, item, 300.0f, 400.0f), 0) << "and nothing else";
-
-    session.SetMinimized({drawing}, true);
-    StepFrames(2);
-    EXPECT_TRUE(App().HasStrokeRaster(drawing)) << "kept while minimized, for its chip";
 }
 
 }  // namespace

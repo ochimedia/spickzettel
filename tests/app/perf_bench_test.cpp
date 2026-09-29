@@ -75,33 +75,16 @@ TEST_F(PerfBench, OneFrameAgainstAGeneratedLibrary) {
     if (root == nullptr || *root == '\0') {
         GTEST_SKIP() << "set SZ_PERF_LIBRARY to a library file (see tools/perf_library)";
     }
-    // SZ_PERF_MODE picks the stroke renderer, so the three can be compared
-    // against identical content. Default is what the app ships with.
-    //
     // SZ_PERF_HW_POINTER=1 turns the software pointer off, which matters more
     // than it sounds: the app ships with it *on*, and with it on
     // ApplyPointerShape short-circuits to Default and WantedPointerShape - and
     // the item walk behind it - never runs at all. Measuring that path needs
     // this switch, or the numbers describe a branch that was never taken.
-    const char* modeName = std::getenv("SZ_PERF_MODE");
     const char* hardwarePointer = std::getenv("SZ_PERF_HW_POINTER");
     AppConfig config = DefaultConfig();
     bool restart = false;
     if (hardwarePointer != nullptr && std::string(hardwarePointer) == "1") {
         config.profileable.softwarePointer = false;
-        restart = true;
-    }
-    if (modeName != nullptr) {
-        const std::string mode = modeName;
-        if (mode == "polyline") {
-            config.strokeRenderMode = StrokeRenderMode::Polyline;
-        } else if (mode == "rasterized") {
-            config.strokeRenderMode = StrokeRenderMode::Rasterized;
-        } else if (mode == "tessellated") {
-            config.strokeRenderMode = StrokeRenderMode::Tessellated;
-        } else {
-            FAIL() << "SZ_PERF_MODE must be tessellated, polyline or rasterized";
-        }
         restart = true;
     }
     if (restart) {
@@ -145,10 +128,9 @@ TEST_F(PerfBench, OneFrameAgainstAGeneratedLibrary) {
     StepFrames(30);
     const Timing timing = TimeFrames(240);
 
-    std::printf("%-10s %-11s %-7s items=%-4zu strokes=%-5zu points=%-7zu | frame median=%.3f ms p95=%.3f max=%.3f "
+    std::printf("%-10s %-7s items=%-4zu strokes=%-5zu points=%-7zu | frame median=%.3f ms p95=%.3f max=%.3f "
                 "| verts=%d tris=%d\n",
                 std::filesystem::path(root).filename().string().c_str(),
-                modeName != nullptr ? modeName : "tessellated",
                 (hardwarePointer != nullptr && std::string(hardwarePointer) == "1") ? "hwPtr" : "swPtr", items, strokes, points, timing.medianMs,
                 timing.p95Ms, timing.maxMs, timing.vertices, timing.indices / 3);
 }

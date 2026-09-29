@@ -262,8 +262,8 @@ void CanvasBar::Draw(float displayW, float displayH) {
         }
         const ImVec2 tileMin(x, bar.y + Px(kBarPadding));
         const ImVec2 tileMax(x + tileW, tileMin.y + Px(kBarTileHeight));
-        DrawCanvasPreview(dl, *canvas, tileMin, tileMax, displayW, displayH, Cfg().strokeRenderMode,
-                          Cfg().overviewShowsStrokes, previewTexture, previews.meshes, previews.sampling);
+        DrawCanvasPreview(dl, *canvas, tileMin, tileMax, displayW, displayH, Cfg().overviewShowsStrokes,
+                          previewTexture, previews.meshes, previews.hooks);
 
         char tileId[48];
         std::snprintf(tileId, sizeof(tileId), "##canvasbar_tile_%zu", i);

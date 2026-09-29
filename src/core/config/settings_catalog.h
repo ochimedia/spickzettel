@@ -18,11 +18,6 @@ namespace sz::core {
 // the Profile rows below again, sparse (see ParseConfig).
 namespace setting {
 
-inline constexpr Choice<StrokeRenderMode> kStrokeRenderModes[] = {
-    {StrokeRenderMode::Tessellated, "tessellated"},
-    {StrokeRenderMode::Polyline, "polyline"},
-    {StrokeRenderMode::Rasterized, "rasterized"},
-};
 inline constexpr Choice<platform::ImageFilter> kImageFilters[] = {
     {platform::ImageFilter::Bilinear, "bilinear"},
     {platform::ImageFilter::Nearest, "nearest"},
@@ -55,8 +50,6 @@ inline constexpr GlobalSetting<ColorRule> kStrokeColor{
     {"drawing", "", "strokeColor"}, {}, E::Start, [](AppConfig& c) { return &c.strokeColorRGBA; }};
 inline constexpr GlobalSetting<PositiveFloatRule> kStrokeWidth{
     {"drawing", "", "strokeWidth"}, {kMaxStrokeWidthPx}, E::Start, [](AppConfig& c) { return &c.strokeWidth; }};
-inline constexpr GlobalSetting<ChoiceRule<StrokeRenderMode>> kStrokeRenderMode{
-    {"drawing", "", "renderMode"}, {kStrokeRenderModes}, E::Frame, [](AppConfig& c) { return &c.strokeRenderMode; }};
 inline constexpr GlobalSetting<BoolRule> kRaiseSelected{
     {"drawing", "", "raiseSelected"}, {}, E::Use, [](AppConfig& c) { return &c.raiseSelectedSnippet; }};
 inline constexpr GlobalSetting<ChoiceRule<CreationTrigger>> kScreenshotTrigger{
@@ -208,7 +201,7 @@ inline constexpr GlobalSetting<BoolRule> kShowInputOptionsHud{
 // All of them, in file order.
 inline constexpr auto kAll = std::tuple{
     &kHotkeyEditMode, &kHotkeyViewMode, &kHotkeyQuickCapture, &kHotkeySilentCapture,
-    &kStrokeColor, &kStrokeWidth, &kStrokeRenderMode, &kRaiseSelected, &kScreenshotTrigger, &kDrawingTrigger,
+    &kStrokeColor, &kStrokeWidth, &kRaiseSelected, &kScreenshotTrigger, &kDrawingTrigger,
     &kShowItemBorders, &kShowToastsWhileHidden, &kImageFilter, &kAccentColor, &kUiScale,
     &kBorderFront, &kBorderOther, &kBorderPinned, &kShowCanvasBar,
     &kShowEditModeBorder, &kEditModeBorderColor, &kEditModeBorderOpacity, &kEditModeBorderWidth,

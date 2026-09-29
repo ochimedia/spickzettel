@@ -20,7 +20,6 @@ add_executable(sz_core_tests
     core/image_codec_test.cpp
     core/item_geometry_test.cpp
     core/library_store_test.cpp
-    core/stroke_bitmap_test.cpp
     core/profile_test.cpp
     core/session_test.cpp
     core/settings_catalog_test.cpp
@@ -108,7 +107,7 @@ if(WIN32)
         platform/win32_platform_host_test.cpp
         platform/win32_screen_capture_test.cpp
     )
-    target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 GTest::gtest_main)
+    target_link_libraries(sz_win32_tests PRIVATE sz_platform_win32 sz_ui GTest::gtest_main)
     target_include_directories(sz_win32_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_compile_features(sz_win32_tests PRIVATE cxx_std_20)
     spickzettel_set_warnings(sz_win32_tests)

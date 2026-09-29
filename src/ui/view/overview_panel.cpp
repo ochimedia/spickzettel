@@ -665,8 +665,8 @@ void OverviewPanel::RenderCanvasGrid(float displayW, float displayH, const ViewH
         const ImVec2 thumbMax(thumbMin.x + tileSize.x, thumbMin.y + tileSize.y);
         host_.Mark(Anchor{AnchorId::OverviewCanvasTile, c.id}, thumbMin, thumbMax);
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        DrawCanvasPreview(drawList, c, thumbMin, thumbMax, displayW, displayH, Cfg().strokeRenderMode,
-                           Cfg().overviewShowsStrokes, previewTexture, previews.meshes, previews.sampling);
+        DrawCanvasPreview(drawList, c, thumbMin, thumbMax, displayW, displayH, Cfg().overviewShowsStrokes,
+                          previewTexture, previews.meshes, previews.hooks);
         const bool isActive = c.id == currentCanvasId;
         if (deleted) {
             drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDangerSoft), Px(4.0f));

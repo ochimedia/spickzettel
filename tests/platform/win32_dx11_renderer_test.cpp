@@ -5,11 +5,15 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <vector>
 
 #include <imgui.h>
 
+#include "core/canvas/item.h"
+#include "core/drawing/stroke.h"
 #include "platform/platform_types.h"
+#include "ui/item_painting.h"
 
 namespace sz::platform::win32 {
 namespace {
@@ -129,6 +133,54 @@ protected:
             red.push_back(pixels[static_cast<size_t>(x) * 4]);
         }
         return red;
+    }
+
+    // What `draw` puts in a 64x64 frame cleared to nothing, drawn by the
+    // renderer; the frame's RGBA pixels back.
+    std::vector<uint8_t> Drawn(const std::function<void(ImDrawList*)>& draw) {
+        ID3D11ShaderResourceView* probe = WatchedTexture();
+        if (!probe) {
+            return {};
+        }
+        ComPtr<ID3D11Device> device;
+        probe->GetDevice(&device);
+        renderer_.ReleaseTexture(probe);
+        probe->Release();
+
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = 64;
+        desc.Height = 64;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+        ComPtr<ID3D11Texture2D> target;
+        ComPtr<ID3D11RenderTargetView> targetView;
+        if (FAILED(device->CreateTexture2D(&desc, nullptr, &target)) ||
+            FAILED(device->CreateRenderTargetView(target.Get(), nullptr, &targetView))) {
+            return {};
+        }
+
+        renderer_.NewFrame();
+        draw(ImGui::GetForegroundDrawList());
+        renderer_.RenderTo(targetView.Get());
+        return ReadBack(device.Get(), target.Get(), 0, 64, 64);
+    }
+    // `item` drawn by DrawItemContent, as the canvas draws it, into the whole
+    // of the frame, with `hooks`.
+    std::vector<uint8_t> DrawnItem(const core::Item& item, const ui::PaintHooks& hooks) {
+        return Drawn([&](ImDrawList* drawList) {
+            drawList->PushClipRect(ImVec2(0.0f, 0.0f), ImVec2(64.0f, 64.0f), true);
+            ui::DrawItemContent(drawList, item, ImVec2(0.0f, 0.0f), ImVec2(64.0f, 64.0f), 0, false, {}, hooks);
+            drawList->PopClipRect();
+        });
+    }
+    static int ChannelAt(const std::vector<uint8_t>& pixels, int x, int y, int channel) {
+        return pixels[(static_cast<size_t>(y) * 64 + x) * 4 + channel];
+    }
+    static int AlphaAt(const std::vector<uint8_t>& pixels, int x, int y) {
+        return ChannelAt(pixels, x, y, 3);
     }
 
     static int Spread(const std::vector<int>& values) {
@@ -300,6 +352,130 @@ TEST_F(Win32Dx11RendererTest, TheGenerationMovesWhenTheNewDeviceIsMade) {
     ASSERT_TRUE(renderer_.ReadyToRender()) << "the driver back";
     EXPECT_NE(renderer_.DeviceGeneration(), between) << "what could not be made in between is made again";
     EXPECT_EQ(renderer_.DeviceGeneration(), 1u) << "one replacement";
+}
+
+// What this renderer lends a snippet's painting: all of it, as the window
+// hands it over.
+ui::PaintHooks RendererHooks() {
+    return ui::PaintHooks{ImageFilter::Bilinear, &Win32Dx11Renderer::ApplyImageFilter,
+                          &Win32Dx11Renderer::ApplyStrokeDepth, &Win32Dx11Renderer::ApplyStrokeLayer};
+}
+
+// A translucent stroke along y = 32 that turns and comes back down x = 32,
+// crossing itself at (32, 32). Eight wide, so both bodies cover the pixels
+// around the crossing fully.
+core::Stroke CrossingStroke() {
+    core::Stroke stroke;
+    stroke.points = {{8.0f, 32.0f}, {56.0f, 32.0f}, {56.0f, 8.0f}, {32.0f, 8.0f}, {32.0f, 56.0f}};
+    stroke.colorRGBA = 0xFF000080;  // red, half strength
+    stroke.width = 8.0f;
+    return stroke;
+}
+
+// Why strokes are drawn under the depth test: without it, the crossing
+// takes the color twice and comes out darker than the stroke anywhere else.
+TEST_F(Win32Dx11RendererTest, UntestedAStrokeDarkensWhereItCrossesItself) {
+    const std::vector<uint8_t> pixels =
+        Drawn([](ImDrawList* drawList) { ui::DrawStroke(drawList, CrossingStroke(), 0.0f, 0.0f, 1.0f, 1.0f); });
+    ASSERT_EQ(pixels.size(), 64u * 64u * 4u);
+    EXPECT_NEAR(AlphaAt(pixels, 16, 32), 128, 2) << "once";
+    EXPECT_GT(AlphaAt(pixels, 32, 32), 180) << "twice";
+}
+
+// Under it, every pixel down the second pass through the crossing - the
+// first pass's anti-aliased edges included, at y 27 and 36 - is the
+// stroke's color once. With the edges drawn in the mesh's old order, the
+// first pass's edge took those pixels ahead of the second pass's body and
+// left a fainter line on each side of the crossing.
+TEST_F(Win32Dx11RendererTest, AStrokeTakesItsColorOnceWhereItCrossesItself) {
+    const std::vector<uint8_t> pixels = Drawn([](ImDrawList* drawList) {
+        ui::DrawStroke(drawList, CrossingStroke(), 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, {},
+                       &Win32Dx11Renderer::ApplyStrokeDepth);
+    });
+    ASSERT_EQ(pixels.size(), 64u * 64u * 4u);
+    for (int y = 20; y <= 44; ++y) {
+        EXPECT_NEAR(AlphaAt(pixels, 32, y), 128, 2) << "y " << y;
+    }
+    EXPECT_NEAR(AlphaAt(pixels, 16, 32), 128, 2);
+    // Nowhere twice - the corners, where only the two edges meet, included.
+    for (int y = 0; y < 64; ++y) {
+        for (int x = 0; x < 64; ++x) {
+            EXPECT_LE(AlphaAt(pixels, x, y), 130) << x << ", " << y;
+        }
+    }
+}
+
+// Only a stroke's own fragments are held back: a second stroke over the
+// first is laid over it as ever.
+TEST_F(Win32Dx11RendererTest, AStrokeStillLaysOverTheOneBefore) {
+    core::Stroke across;
+    across.points = {{8.0f, 32.0f}, {56.0f, 32.0f}};
+    across.colorRGBA = 0xFF000080;
+    across.width = 8.0f;
+    core::Stroke down = across;
+    down.points = {{32.0f, 8.0f}, {32.0f, 56.0f}};
+    down.colorRGBA = 0x0000FF80;
+
+    const std::vector<uint8_t> pixels = Drawn([&](ImDrawList* drawList) {
+        for (const core::Stroke& stroke : {across, down}) {
+            ui::DrawStroke(drawList, stroke, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, {}, &Win32Dx11Renderer::ApplyStrokeDepth);
+        }
+    });
+    ASSERT_EQ(pixels.size(), 64u * 64u * 4u);
+    EXPECT_NEAR(AlphaAt(pixels, 16, 32), 128, 2);
+    EXPECT_NEAR(AlphaAt(pixels, 32, 32), 191, 2) << "half over half";
+}
+
+// Two strokes crossing on a 64x64 snippet: red along y = 32, then blue
+// down x = 32. `alpha` is both inks' own.
+core::Item CrossedSnippet(uint32_t alpha, float opacity) {
+    core::Item item;
+    item.id = 1;
+    item.nativeW = 64.0f;
+    item.nativeH = 64.0f;
+    item.foregroundOpacity = opacity;
+    core::Stroke across;
+    across.points = {{8.0f, 32.0f}, {56.0f, 32.0f}};
+    across.colorRGBA = 0xFF000000u | alpha;
+    across.width = 8.0f;
+    core::Stroke down = across;
+    down.points = {{32.0f, 8.0f}, {32.0f, 56.0f}};
+    down.colorRGBA = 0x0000FF00u | alpha;
+    item.strokes = {across, down};
+    return item;
+}
+
+// The snippet's opacity fades the finished drawing: where the opaque blue
+// crosses the opaque red there is only blue, at half strength, as anywhere
+// else on the snippet. Faded stroke by stroke - with no layer to be had -
+// the red shows through the blue and the crossing is stronger than the rest.
+TEST_F(Win32Dx11RendererTest, ASnippetsOpacityFadesTheFinishedDrawingNotEachStroke) {
+    const std::vector<uint8_t> layered = DrawnItem(CrossedSnippet(0xFF, 0.5f), RendererHooks());
+    ASSERT_EQ(layered.size(), 64u * 64u * 4u);
+    EXPECT_NEAR(AlphaAt(layered, 16, 32), 128, 2) << "red alone";
+    EXPECT_NEAR(ChannelAt(layered, 16, 32, 0), 128, 2) << "premultiplied red";
+    EXPECT_NEAR(AlphaAt(layered, 32, 32), 128, 2) << "the crossing, as strong as the rest";
+    EXPECT_NEAR(ChannelAt(layered, 32, 32, 0), 0, 2) << "no red under the blue";
+    EXPECT_NEAR(ChannelAt(layered, 32, 32, 2), 128, 2);
+    EXPECT_EQ(AlphaAt(layered, 2, 2), 0) << "nothing where no stroke is";
+
+    ui::PaintHooks noLayer = RendererHooks();
+    noLayer.strokeLayer = nullptr;
+    const std::vector<uint8_t> perStroke = DrawnItem(CrossedSnippet(0xFF, 0.5f), noLayer);
+    ASSERT_EQ(perStroke.size(), 64u * 64u * 4u);
+    EXPECT_NEAR(AlphaAt(perStroke, 32, 32), 191, 2);
+    EXPECT_NEAR(ChannelAt(perStroke, 32, 32, 0), 64, 2) << "red through the blue";
+}
+
+// Inks of their own strength still blend with each other inside the layer,
+// and the layer is laid down once over that: half over half is 0.75, at
+// half opacity 0.375.
+TEST_F(Win32Dx11RendererTest, TranslucentInksBlendBeforeTheSnippetsOpacity) {
+    const std::vector<uint8_t> pixels = DrawnItem(CrossedSnippet(0x80, 0.5f), RendererHooks());
+    ASSERT_EQ(pixels.size(), 64u * 64u * 4u);
+    EXPECT_NEAR(AlphaAt(pixels, 16, 32), 64, 2);
+    EXPECT_NEAR(AlphaAt(pixels, 32, 32), 96, 2);
+    EXPECT_NEAR(ChannelAt(pixels, 32, 32, 0), 32, 2) << "the red under the blue, faded with it";
 }
 
 }  // namespace

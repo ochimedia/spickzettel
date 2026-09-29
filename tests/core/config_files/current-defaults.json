@@ -9,7 +9,6 @@
   "drawing": {
     "strokeColor": "#FF0000",
     "strokeWidth": 3.0,
-    "renderMode": "tessellated",
     "raiseSelected": true,
     "screenshotTrigger": "plain",
     "drawingTrigger": "ctrl"

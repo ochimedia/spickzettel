@@ -9,7 +9,6 @@
   "drawing": {
     "strokeColor": "#00FF00",
     "strokeWidth": 6.5,
-    "renderMode": "polyline",
     "raiseSelected": false,
     "screenshotTrigger": "alt",
     "drawingTrigger": "off"

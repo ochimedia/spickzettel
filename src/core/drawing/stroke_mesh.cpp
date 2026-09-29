@@ -245,12 +245,20 @@ void RibsToMesh(const std::vector<Rib>& ribs, float fringePx, StrokeMesh& mesh) 
     const auto quad = [&mesh](uint32_t a, uint32_t b, uint32_t c, uint32_t d) {
         mesh.indices.insert(mesh.indices.end(), {a, b, c, a, c, d});
     };
-    for (uint32_t i = 0; i + 1 < static_cast<uint32_t>(ribs.size()); ++i) {
+    // The whole body first, then the fringes: drawn under a depth test that
+    // lets the first fragment on a pixel stay (IOverlayWindow::
+    // StrokeDepthCallback), a fringe drawn first would take a pixel the body
+    // covers fully where the stroke crosses itself, and leave a fainter
+    // line there.
+    const uint32_t steps = static_cast<uint32_t>(ribs.size()) - 1;
+    for (uint32_t i = 0; i < steps; ++i) {
         const uint32_t v = i * 4;
-        const uint32_t n = v + 4;
-        quad(v + 0, v + 1, n + 1, n + 0);  // left fringe
-        quad(v + 1, v + 2, n + 2, n + 1);  // body
-        quad(v + 2, v + 3, n + 3, n + 2);  // right fringe
+        quad(v + 1, v + 2, v + 6, v + 5);  // body
+    }
+    for (uint32_t i = 0; i < steps; ++i) {
+        const uint32_t v = i * 4;
+        quad(v + 0, v + 1, v + 5, v + 4);  // left fringe
+        quad(v + 2, v + 3, v + 7, v + 6);  // right fringe
     }
 }
 

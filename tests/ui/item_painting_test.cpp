@@ -57,7 +57,7 @@ TEST_F(ItemPaintingTest, AStrokePastSixteenBitIndicesDrawsWithAllOfItsVertices) 
     const int firstVertex = drawList->VtxBuffer.Size;
     const int firstIndex = drawList->IdxBuffer.Size;
 
-    DrawStroke(drawList, stroke, core::StrokeRenderMode::Tessellated, 0.0f, 0.0f, 1.0f, 1.0f);
+    DrawStroke(drawList, stroke, 0.0f, 0.0f, 1.0f, 1.0f);
 
     ASSERT_GT(drawList->VtxBuffer.Size - firstVertex, 65536) << "not long enough to be a test of anything";
     const unsigned int offset = drawList->CmdBuffer.back().VtxOffset;
@@ -91,7 +91,7 @@ TEST_F(ItemPaintingTest, AStrokeOnAStretchedSnippetKeepsItsWidthOnceDrawn) {
     ImDrawList* drawList = ImGui::GetBackgroundDrawList();
     const auto heightDrawn = [drawList](const core::Stroke& stroke, float scaleX, float scaleY) {
         const int first = drawList->VtxBuffer.Size;
-        DrawStroke(drawList, stroke, core::StrokeRenderMode::Tessellated, 0.0f, 0.0f, scaleX, scaleY);
+        DrawStroke(drawList, stroke, 0.0f, 0.0f, scaleX, scaleY);
         float top = drawList->VtxBuffer[first].pos.y;
         float bottom = top;
         for (int i = first; i < drawList->VtxBuffer.Size; ++i) {
@@ -124,7 +124,7 @@ TEST_F(ItemPaintingTest, AMinimizedSnippetIsLeftOutOfTheThumbnail) {
     const auto verticesDrawn = [drawList](const core::Canvas& c) {
         const int first = drawList->VtxBuffer.Size;
         DrawCanvasPreview(drawList, c, ImVec2(0.0f, 0.0f), ImVec2(192.0f, 108.0f), 1920.0f, 1080.0f,
-                          core::StrokeRenderMode::Tessellated, /*showStrokes=*/true,
+                          /*showStrokes=*/true,
                           [](const core::Item&) { return std::optional<uint64_t>(0); }, {}, {});
         return drawList->VtxBuffer.Size - first;
     };

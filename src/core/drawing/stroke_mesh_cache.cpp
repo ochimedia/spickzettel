@@ -9,9 +9,8 @@ namespace {
 // A stroke's content in 64 bits, so that "is this still the stroke the mesh
 // was built from" can be answered without keeping a copy of it.
 //
-// A kept copy is the obvious alternative, and is what the rasterized
-// renderer's cache does - but there are two mesh caches (the canvas's and
-// the Overview's previews), and two copies of every stroke on screen is a
+// A kept copy is the obvious alternative - but there are two mesh caches
+// (the canvas's and the Overview's previews), and two copies of every stroke on screen is a
 // lot to hold purely to compare against. Eight bytes answers the same
 // question. The cost of being wrong is bounded and cosmetic - a stroke drawn
 // with the mesh of a different stroke of exactly the same length - and at 64

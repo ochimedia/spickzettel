@@ -39,7 +39,6 @@ a similar-sounding one.
 Opt-in - it skips unless `SZ_PERF_LIBRARY` names a library file:
 
     set SZ_PERF_LIBRARY=%TEMP%\libs\medium.db
-    set SZ_PERF_MODE=tessellated          # or polyline, rasterized
     build\windows-release\tests\sz_core_tests.exe --gtest_filter=PerfBench.*
 
 It runs the identical per-frame path the app runs - `NewFrame`, `OnFrame`,
@@ -49,10 +48,9 @@ It is deterministic and repeatable to a few percent.
 
 What it does **not** measure is what the GPU then does with the draw lists.
 That is deliberate: the CPU side is where the app's own decisions show up.
-One consequence worth knowing - `SZ_PERF_MODE=rasterized` is **not
-meaningful** here. Rasterized needs GPU textures, the headless harness has no
-window, so it falls back to tessellated and reports identical vertex counts.
-Measure that mode with instrument 2.
+One consequence worth knowing - the strokes' depth test and layers are
+callbacks the headless window only names, so what they cost the driver and
+the GPU is not in this number. Measure that with instrument 2.
 
 ## Instrument 2: the real app
 
@@ -61,7 +59,7 @@ library in an isolated `APPDATA`, so it can neither touch nor be perturbed by
 the real one.
 
     .\tools\perf_library\measure.ps1 -Exe <path-to-exe> -LibrarySource %TEMP%\libs\heavy.db `
-        -Mode tessellated -Seconds 5 -Repeat 3 -ShowFpsHud -Screenshot heavy.png
+        -Seconds 5 -Repeat 3 -ShowFpsHud -Screenshot heavy.png
 
 `-ShowFpsHud` turns on the **input-options HUD**, whose first line is the
 frame rate and frame time. That is `showInputOptionsHud`, *not*

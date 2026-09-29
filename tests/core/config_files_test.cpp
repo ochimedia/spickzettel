@@ -105,7 +105,6 @@ AppConfig Everything() {
     c.itemBorderColorFrontRGBA = 0x11223344u;
     c.itemBorderColorOtherRGBA = 0x55667788u;
     c.itemBorderColorPinnedRGBA = 0x99AABBCCu;
-    c.strokeRenderMode = StrokeRenderMode::Polyline;
     c.imageFilter = platform::ImageFilter::Lanczos;
     c.raiseSelectedSnippet = false;
     c.screenshotTrigger = CreationTrigger::Alt;

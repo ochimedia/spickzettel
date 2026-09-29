@@ -701,23 +701,6 @@ void SettingsPage::RenderBarButtonRow(const char* id, const char* label, const G
 }
 
 void SettingsPage::RenderSettingsInteraction() {
-    // How strokes are drawn.
-    SettingsHeading("drawingpenheading", strings::kDrawingPenHeading);
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(strings::kDrawingStrokeRenderingHeading);
-    ImGui::SameLine();
-    HelpMarker("drawingstrokerenderingheading", strings::kDrawingStrokeRenderingHeading,
-               strings::kDrawingStrokeRenderingHelp);
-    ImGui::SameLine();
-    const ChoiceLabel<StrokeRenderMode> modes[] = {
-        {StrokeRenderMode::Tessellated, strings::kDrawingTessellated, "strokemodetess"},
-        {StrokeRenderMode::Polyline, strings::kDrawingPolyline, "strokemodepoly"},
-        {StrokeRenderMode::Rasterized, strings::kDrawingRasterized, "strokemoderaster"},
-    };
-    SettingRadio(settings_, setting::kStrokeRenderMode, modes);
-
-    SettingsGroupBreak();
-
     SettingsHeading("drawingsnippetsheading", strings::kDrawingSnippetsHeading);
     SettingCheckbox(settings_, setting::kRaiseSelected, "drawingraiseselected", strings::kDrawingRaiseSelected,
                     strings::kDrawingRaiseSelectedHelp);

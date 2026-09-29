@@ -20,8 +20,8 @@ namespace {
 // A config file holding exactly one setting. Most of these tests are about
 // one value's own reading rules, and this keeps that the visible part
 // instead of a JSON document per assertion. `value` is JSON, so a string
-// setting is written with its quotes: One("drawing", "renderMode",
-// R"("polyline")").
+// setting is written with its quotes: One("appearance", "imageFilter",
+// R"("lanczos")").
 std::string One(const char* group, const char* key, const std::string& value) {
     return std::string("{\"") + group + "\":{\"" + key + "\":" + value + "}}";
 }
@@ -253,7 +253,6 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.showDebugOverlay = true;
     config.profileable.dontStealFocus = false;
     config.showItemBorders = false;
-    config.strokeRenderMode = StrokeRenderMode::Rasterized;
     config.raiseSelectedSnippet = false;
     config.screenshotTrigger = CreationTrigger::Alt;
     config.drawingTrigger = CreationTrigger::Off;
@@ -615,29 +614,6 @@ TEST(AppConfigTest, SnippetColorsHaveDefaultsThatTellFrontFromBack) {
     EXPECT_GT(config.itemBorderColorFrontRGBA & 0xFFu, config.itemBorderColorOtherRGBA & 0xFFu);
     // A pinned snippet is told apart by hue, since alpha already says depth.
     EXPECT_NE(config.itemBorderColorPinnedRGBA >> 8, config.itemBorderColorFrontRGBA >> 8);
-}
-
-// Tessellated by default: it is the only one of the three that gives up
-// nothing - the polyline is there to compare against, and the rasterized
-// one trades sharpness at size for compositing a stroke exactly once.
-TEST(AppConfigTest, StrokeRenderModeDefaultsToTessellatedAndParsesAllThree) {
-    const auto mode = [](const char* text) {
-        return ParseConfig(One("drawing", "renderMode", std::string("\"") + text + "\"")).strokeRenderMode;
-    };
-    EXPECT_EQ(DefaultConfig().strokeRenderMode, StrokeRenderMode::Tessellated);
-    EXPECT_EQ(mode("polyline"), StrokeRenderMode::Polyline);
-    EXPECT_EQ(mode("rasterized"), StrokeRenderMode::Rasterized);
-    EXPECT_EQ(mode("Tessellated"), StrokeRenderMode::Tessellated);
-    EXPECT_EQ(mode("garbage"), StrokeRenderMode::Tessellated);
-}
-
-TEST(AppConfigTest, StrokeRenderModeRoundTripsThroughText) {
-    for (const StrokeRenderMode mode :
-         {StrokeRenderMode::Tessellated, StrokeRenderMode::Polyline, StrokeRenderMode::Rasterized}) {
-        AppConfig config = DefaultConfig();
-        config.strokeRenderMode = mode;
-        EXPECT_EQ(ParseConfig(SerializeConfig(config)).strokeRenderMode, mode);
-    }
 }
 
 // Bilinear by default: it is what every picture was drawn with before

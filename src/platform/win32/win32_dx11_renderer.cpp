@@ -38,8 +38,8 @@ float4 main(uint id : SV_VertexID) : SV_POSITION {
 // One mip level from the level above it: each texel the average of the
 // four it covers. Averaged premultiplied, which is the whole reason this is
 // not ID3D11DeviceContext::GenerateMips: the pictures are straight alpha,
-// and a stroke raster is mostly (0,0,0,0) around its ink, so a plain
-// average darkens every edge toward black as the picture shrinks.
+// and one with transparent parts is (0,0,0,0) around what it shows, so a
+// plain average darkens every edge toward black as the picture shrinks.
 constexpr const char* kMipPS = R"(
 Texture2D above : register(t0);
 float4 main(float4 pos : SV_POSITION) : SV_Target {
@@ -481,11 +481,10 @@ ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t
     desc.ArraySize = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.SampleDesc.Count = 1;
-    // DEFAULT rather than IMMUTABLE: a stroke raster's texture is written
-    // to again with every finished stroke (see UpdateTextureRegionRGBA),
-    // and IMMUTABLE forbids that outright. A
-    // screenshot never takes that path and pays nothing for the difference
-    // - the GPU-side placement is the same, only the promise is weaker.
+    // DEFAULT rather than IMMUTABLE: a texture can be written to again (see
+    // UpdateTextureRegionRGBA), and IMMUTABLE forbids that outright. One
+    // that never is pays nothing for the difference - the GPU-side
+    // placement is the same, only the promise is weaker.
     desc.Usage = D3D11_USAGE_DEFAULT;
     // A render target as well, because that is how BuildMips writes the
     // levels below the top.

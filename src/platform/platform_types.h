@@ -368,8 +368,8 @@ enum class FramePacing {
     Idle,
 };
 
-// How a snippet's picture - a screenshot, rasterized strokes - is
-// resampled when it is drawn at a size other than its own.
+// How a snippet's picture is resampled when it is drawn at a size other
+// than its own.
 // See IOverlayWindow::ImageFilterCallback.
 enum class ImageFilter {
     // The GPU's own bilinear filter, which is what every picture had before

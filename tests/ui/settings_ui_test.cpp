@@ -328,22 +328,6 @@ TEST_F(UiTest, TheColorTileSwitchesOffLikeEveryOtherButton) {
     EXPECT_EQ(AppSettings().Stored().snippetBar, DefaultSnippetBar()) << "the other row is untouched";
 }
 
-// Stroke rendering is a row of the Pen group now, and still chooses.
-TEST_F(UiTest, StrokeRenderingIsChosenInThePenGroup) {
-    ShowEditMode();
-    StepFrame();
-    ASSERT_EQ(AppSettings().Stored().strokeRenderMode, StrokeRenderMode::Tessellated);
-
-    OpenOverviewUi();
-    RunUi("pick polyline", [](ImGuiTestContext* ctx) {
-        ctx->SetRef("//##overview_panel");
-        ctx->ItemClick("**/###overviewtabsettings");
-        ctx->ItemClick("**/###sectioninteraction");
-        ctx->ItemClick("**/###strokemodepoly");
-    });
-    EXPECT_EQ(AppSettings().Stored().strokeRenderMode, StrokeRenderMode::Polyline);
-}
-
 // A shortcut row takes a mouse button - here the first side button - as
 // readily as a key.
 TEST_F(UiTest, AShortcutRowTakesAMouseButton) {

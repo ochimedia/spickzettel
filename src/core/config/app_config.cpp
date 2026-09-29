@@ -72,7 +72,7 @@ static_assert(FieldCount<ProfileOverrides>() == kProfileRows,
 // them, the snippet defaults hold three each, `profiles` is no row - so
 // this is a tripwire rather than a proof: a field added here fails the
 // build until it has its row, and then this count is raised.
-static_assert(FieldCount<AppConfig>() == 46, "an AppConfig field added: give it a row in settings_catalog.h, "
+static_assert(FieldCount<AppConfig>() == 45, "an AppConfig field added: give it a row in settings_catalog.h, "
                                               "then count it here");
 
 // The version a file says it is. 1 when it says nothing a version can be -
