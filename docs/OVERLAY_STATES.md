@@ -161,8 +161,9 @@ means the request does nothing in that state.
    however long ago that was.
 5. The frozen screen is taken again, as today: `EnsureMode` releases it
    and freezes again on every call (decided, section 12).
-6. Only when "Say so when the overlay is hidden" is on. Otherwise the overlay
-   stays Hidden and the message is dropped, never to be shown later.
+6. Only when "Show a message for a background capture while the overlay
+   is hidden" is on. Otherwise the overlay stays Hidden and the message
+   is dropped, never to be shown later.
 7. The capture gets a canvas of its own, but the pinned view stays on the
    canvas it was showing. The message shows in the pinned view's frames.
 8. The new message replaces the one showing, and the notice lasts until
