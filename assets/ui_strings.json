@@ -139,7 +139,6 @@
   "itemName.screenshotPrefix": "Screenshot ",
   "itemName.regionPrefix": "Region ",
   "itemName.drawingPrefix": "Drawing ",
-  "itemName.untitledCanvas": "Untitled",
 
   "_hotkeyText": "How a key combination is written out wherever one is shown.",
   "hotkey.ctrlPrefix": "Ctrl+",
@@ -625,7 +624,7 @@
   "canvasBar.overviewTip": "Overview - canvases, folders and settings",
   "canvasBar.tileTip": "%s  (%d of %d)",
 
-  "_drawing": "Settings > Drawing.",
+  "_drawing": "Settings > Interaction: the Snippets section at its top.",
   "drawing.snippetsHeading": "Snippets",
 
   "_bars": "Settings > Interaction: the two bars that float over the selection, and the buttons they carry.",

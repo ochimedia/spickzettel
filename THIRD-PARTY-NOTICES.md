@@ -41,6 +41,21 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+Dear ImGui carries parts of others inside it, which the binary holds with
+it, each under the MIT License as above with its own copyright notice:
+
+- stb_truetype, stb_rect_pack and stb_textedit, as imstb_truetype.h,
+  imstb_rectpack.h and imstb_textedit.h, which read fonts, pack their
+  glyphs and edit text. Copyright (c) 2017 Sean Barrett. Also offered
+  under the public domain, as the other of their two licenses.
+  https://github.com/nothings/stb
+- The fonts ProggyClean, Copyright (c) 2004, 2005 Tristan Grimmer, and
+  ProggyForever, Copyright (c) 2026 Disco Hello, Copyright (c) 2019, 2023
+  Tristan Grimmer: Dear ImGui's default fonts, which Spickzettel does not
+  draw with.
+  https://github.com/bluescan/proggyfonts
+  https://github.com/ocornut/proggyforever
+
 
 ## SQLite 3.53.4
 
@@ -87,7 +102,8 @@ SOFTWARE.
 
 ## QOI
 
-The "Quite OK Image" codec, used for the fast snapshot format.
+The "Quite OK Image" codec, the format pictures are kept in inside the
+library.
 https://github.com/phoboslab/qoi
 
 MIT License
