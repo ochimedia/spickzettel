@@ -563,7 +563,8 @@ Everything else stays as it is today.
 As built:
 
 - **`ui/overlay_app.{h,cpp}`:** the frame and its stages, the mode, the
-  actions, and the routing to the owners.
+  actions, and the routing to the owners; `overlay_app_tutorial.cpp`,
+  its part in the tutorial (`docs/TUTORIAL.md`, section 7.3).
 - **`ui/view_action.h`:** the action type (section 6), and `DeleteTarget`.
 - **One pair of files per owner of section 7**, in `ui/view/`:
   `canvas_view`, `canvas_bar`, `popups`, `overview_panel`,

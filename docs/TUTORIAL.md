@@ -720,6 +720,10 @@ like one.
 The tutorial's own progress, and which folder is its own, are
 settings, set through `Settings::Set` (7.6).
 
+`OverlayApp` does these actions in `overlay_app_tutorial.cpp`, which
+holds the rest of its part in the tutorial too: what the start decided
+(7.6), the progress kept, and the counts of 7.1.
+
 ### 7.4 The owner, and where it sits
 
 `ui/view/tutorial_card.{h,cpp}` holds one owner in the sense of

@@ -18,6 +18,7 @@ add_library(sz_ui STATIC
     interaction/machine.cpp
     interaction/recognizer.cpp
     overlay_app.cpp
+    overlay_app_tutorial.cpp
     selection_layout.cpp
     settings_widgets.cpp
     theme.cpp

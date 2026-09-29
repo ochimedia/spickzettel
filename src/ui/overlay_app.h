@@ -513,6 +513,14 @@ public:
     bool IsCapturingShortcut() const { return settingsPage_.IsCapturingShortcut(); }
 
 private:
+    // The tutorial's actions (docs/TUTORIAL.md, section 7.3), as Do does
+    // them - in overlay_app_tutorial.cpp, with the rest of OverlayApp's part
+    // in the tutorial.
+    void DoTutorial(const action::TutorialPress& a);
+    void DoTutorial(const action::StartTutorial& a);
+    void DoTutorial(const action::ResumeTutorial& a);
+    void DoTutorial(const action::OpenTutorialList& a);
+    void DoTutorial(const action::BackToTutorial& a);
     // The tutorial's folder, made and switched to, with a canvas in it - 0
     // when it could not be written. And a snippet to practice on, in the
     // middle of the canvas being looked at, off the history: undo cannot
