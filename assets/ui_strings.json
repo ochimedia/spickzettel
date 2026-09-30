@@ -694,7 +694,7 @@
   "_input": "Settings > Behavior - what the overlay does to the application underneath.",
   "input.underneathHeading": "Application currently underneath",
   "input.underneathHelp": "The application the overlay is currently up over. Every setting in this section is an answer to a question about that application, and this is the identity a profile is matched on - so it is worth being able to see it, including seeing it come up empty.",
-  "input.nothingIdentifiable": "Nothing identifiable - the desktop, or a window that won't say what it is.",
+  "input.nothingIdentifiable": "Nothing identifiable - no window in front, or one that won't say what it is.",
   "input.unreadableExecutable": "(unreadable executable)",
   "input.unreadableExecutableHelp": "Its image path can't be read from here. That means a program belonging to another account, or a game shielded by anti-cheat - not simply one running as administrator, which answers like any other. Match it on its window title instead.",
   "input.windowTitleLine": "- %s",

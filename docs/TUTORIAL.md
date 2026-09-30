@@ -2729,7 +2729,8 @@ Two pieces of work, as in 17.6:
   underneath is explorer.exe, and Make a profile for this makes one for
   it, which File Explorer's windows match too. So the need for a program
   no longer says "such as the desktop". Settings' own line for nothing
-  identifiable still names it, and is left as it is here.
+  identifiable still named it; since 2026-09-30 it says "no window in
+  front" instead.
   `otherProgram`'s "(the desktop will do)" held unless the profile was
   for explorer.exe, where its near miss said to click another - the
   usual case, as it turned out (question 39).
