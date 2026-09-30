@@ -78,6 +78,10 @@ the Overview.
 
 ### 0.2.1
 
+#### Features
+
+- Frame graph for diagnosing stutters (see Settings > Debug > Show frame graph)
+
 #### Changes
 
 - Moved the library to local AppData and optimized its performance. An existing library in roaming AppData is moved automatically.
