@@ -44,6 +44,7 @@ add_executable(sz_core_tests
     ui/tutorial_test.cpp
     ui/ui_strings_file_test.cpp
     ui/chains_test.cpp
+    support/shared_library.cpp
 )
 target_include_directories(sz_core_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 # sz_app, not only sz_core: the headless frame tests and the tray controller
@@ -86,6 +87,7 @@ if(SPICKZETTEL_UI_TESTS)
         ui/settings_ui_test.cpp
         ui/tutorial_ui_test.cpp
         ui/view_layer_ui_test.cpp
+        support/shared_library.cpp
     )
     target_include_directories(sz_ui_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     target_link_libraries(sz_ui_tests PRIVATE sz_app imgui_test_engine GTest::gtest_main)

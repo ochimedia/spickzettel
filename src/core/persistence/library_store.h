@@ -39,6 +39,12 @@ namespace sz::core::persistence {
 // snippet and its picture cannot disagree about where either is, and
 // deleting the one deletes the other (a trigger does it).
 //
+// A commit is written ahead to the file's WAL and made durable later, at a
+// checkpoint (see Checkpoint), rather than flushed to the disk each time:
+// a flush waits for everything the disk has queued, and a commit that
+// waited took a frame or several on a busy disk. The file is held for this
+// store alone while it is open (see docs/ARCHITECTURE.md, "Persistence").
+//
 // No OS dependency; fully exercised by linux-tests.
 class LibraryStore {
 public:
@@ -140,6 +146,30 @@ public:
     // Whether the library holds a picture for `itemId`, without reading it.
     bool HasImage(uint64_t itemId);
 
+    // Makes what was written since the last checkpoint durable: moves it
+    // from the WAL into the file and flushes it to the disk. The one flush
+    // the store makes, so it can stall on a busy disk - for when nobody is
+    // looking, when the overlay goes away (see TrayController::Apply). A
+    // write checkpoints by itself once the WAL holds kCheckpointAtBytes, so
+    // an overlay left up does not grow it without end. Nothing to do when
+    // nothing was written since, or the file is not open. False when the
+    // checkpoint could not be made; what it was to move stays in the WAL,
+    // as safe as before.
+    bool Checkpoint();
+    // What the WAL holds that no checkpoint has moved into the file yet, in
+    // bytes; 0 when nothing, and -1 when a WAL found at the open may hold
+    // something.
+    int64_t UncheckpointedBytes() const;
+    static constexpr int64_t kCheckpointAtBytes = int64_t{64} << 20;
+    void SetCheckpointAtBytesForTesting(int64_t bytes) { checkpointAtBytes_ = bytes; }
+
+    // Whether stores opened from now on hold their file for themselves
+    // (the default) or share it with other connections. Tests share it:
+    // they read a library back, or make its writes fail, through a
+    // connection of their own while the store has it open.
+    static void LockSharedForTesting(bool shared) { lockShared_ = shared; }
+    static bool LocksSharedForTesting() { return lockShared_; }
+
 private:
     // The rows of one Write, inside its transaction. False at the first
     // statement that fails.
@@ -153,6 +183,13 @@ private:
     // Moves the file aside (see SetAsideAs) and opens a new one in its
     // place.
     OpenResult SetAsideAndStartOver();
+    // What every connection is set up with, before it first reads the file.
+    void Configure();
+    // Puts the file in WAL mode, and commits into it unflushed. A file that
+    // cannot be keeps the rollback journal, flushed at every commit.
+    void EnterWal();
+    // SQLite's word after a commit into the WAL: how many frames it holds.
+    static int OnWalCommit(void* self, sqlite3* db, const char* name, int frames);
     void Close();
     std::optional<DecodedImage> LoadPictureColumn(uint64_t itemId, const char* column);
 
@@ -164,6 +201,13 @@ private:
     // made by this Open, or found so by Load. Load is then a first run, and
     // Write writes everything.
     bool unwritten_ = false;
+    // Whether the file is in WAL mode, and what its WAL holds unmoved - see
+    // UncheckpointedBytes.
+    bool wal_ = false;
+    int64_t walFrames_ = 0;
+    int64_t pageSize_ = 4096;
+    int64_t checkpointAtBytes_ = kCheckpointAtBytes;
+    inline static bool lockShared_ = false;
 };
 
 }  // namespace sz::core::persistence

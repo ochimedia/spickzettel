@@ -932,7 +932,7 @@ TEST_F(WrittenSessionTest, ACaptureIsWrittenWithItsPictureAsItIsMade) {
 TEST_F(WrittenSessionTest, ACaptureThatCannotBeWrittenIsNotMade) {
     const size_t before = session_.Manager().CurrentOrNull()->items.size();
     {
-        HeldLibrary held(File(), /*readers=*/false);
+        HeldLibrary held(File(), /*readers=*/true);
         EXPECT_EQ(session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot"), 0u);
     }
     EXPECT_EQ(session_.Manager().CurrentOrNull()->items.size(), before);
@@ -956,7 +956,7 @@ TEST_F(WrittenSessionTest, ACommandOrAnUndoThatCannotBeWrittenIsNotMade) {
     DrawStrokeInto(session_, item);
     ASSERT_EQ(OnDisk().canvases[0].items[0].strokes.size(), 1u);
     {
-        HeldLibrary held(File(), /*readers=*/false);
+        HeldLibrary held(File(), /*readers=*/true);
         DrawStrokeInto(session_, item);
         EXPECT_EQ(ItemById(session_.Manager(), item)->strokes.size(), 1u) << "not made";
         EXPECT_FALSE(session_.Undo().has_value());
@@ -974,7 +974,7 @@ TEST_F(WrittenSessionTest, ACommandOrAnUndoThatCannotBeWrittenIsNotMade) {
 TEST_F(WrittenSessionTest, ACopysPictureIsWrittenWithTheCopy) {
     const ItemId id = session_.CreateItem(true, Rect{0.0f, 0.0f, 2.0f, 1.0f}, "Shot");
     {
-        HeldLibrary held(File(), /*readers=*/false);
+        HeldLibrary held(File(), /*readers=*/true);
         EXPECT_TRUE(session_.Duplicate({id}).items.empty());
     }
     const Session::Placed made = session_.Duplicate({id});
@@ -1146,7 +1146,7 @@ TEST_F(WrittenSessionTest, ADeleteForGoodThatCannotBeWrittenKeepsEverything) {
     session_.SwitchToCanvas(other);
     ASSERT_TRUE(session_.Delete(first));
     {
-        HeldLibrary held(File(), /*readers=*/false);
+        HeldLibrary held(File(), /*readers=*/true);
         EXPECT_FALSE(session_.DeletePermanently(first));
     }
     ASSERT_NE(session_.Manager().FindCanvas(first), nullptr);

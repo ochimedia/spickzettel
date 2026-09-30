@@ -774,14 +774,68 @@ The file's `application_id` ("Sztl") tells a library of ours from any
 other SQLite file, and `user_version` is `LibraryStore::kFormatVersion`.
 It goes up once per release that changes what is written, not once per
 change. `auto_vacuum` is incremental, and every load gives back the
-pages deleted rows left, so the file does not stay the size of the
-largest library it ever held.
+pages deleted rows left - to the file system at the next checkpoint (see
+below) - so the file does not stay the size of the largest library it
+ever held.
 
-The journal is SQLite's default rollback journal with `synchronous=FULL`,
-not WAL. WAL needs shared memory beside the file and does not work on a
-network drive, where a redirected `%APPDATA%` can be; what it buys is
-concurrent readers and cheaper small commits, and this app has one
-reader and writes every couple of seconds at most.
+### Commits wait for nobody: the WAL
+
+The file is in WAL mode with `synchronous=NORMAL`: a commit appends its
+pages to `library.db-wal` and returns, without waiting for the disk. What
+it waits for instead is a checkpoint (`LibraryStore::Checkpoint`), which
+moves the WAL into the file and flushes both - made when the overlay goes
+away (OVERLAY_STATES.md, section 6, step 10), when nothing on screen
+waits for it, and by a write once the WAL holds 64 MB, so that an
+overlay left up does not grow it without end. SQLite's own checkpoint,
+every thousand pages, is off: it would come inside a commit, on the
+render thread. Closing the file checkpoints it too, and takes the WAL
+away.
+
+It was SQLite's default rollback journal with `synchronous=FULL` until
+2026-09-30, when a tester found a hitch "sometimes, after making some
+snippets or drawing", on an almost empty library, with
+`library.db-journal` beside the file for as long as it lasted. Every
+command is written as it is made, on the render thread (see "Every
+command is written as it is made"), and that journal flushed the journal
+and then the file at every commit - and a flush waits for everything the
+disk has queued, not only what this commit wrote. On an idle disk that
+was 9 ms a commit, a frame at 120 Hz; with another program writing, a
+median of 130-170 ms and up to seconds (PERF.md, "Results: the journal,
+on a busy disk"). A commit into the WAL took 0.1 ms on an idle disk and
+on a moderately busy one alike. On a disk written to flat out, one in
+seven still waited - Windows makes a write wait once its cache is full -
+where every one had before; only moving the writes off the render thread
+would remove that, and a write that fails could then no longer take its
+command back as it is made.
+
+What `NORMAL` gives up is durability, not consistency. Every commit is
+in the WAL whole, each of its frames checksummed, and the WAL is flushed
+before a checkpoint writes any of it into the file: after a crash of the
+app, of Windows, or a power cut, the next open finds a whole library,
+reading from the WAL what it holds and dropping a torn tail. A crash of
+the app loses nothing - what it committed is in Windows' cache already.
+A power cut or a crash of Windows may lose what was committed since the
+last checkpoint, which is since the overlay last went away: the library
+opens as it was a moment earlier. That holds as long as the disk does
+what a flush asks, as the rollback journal needed too.
+
+The file is held for the store alone, from the open to the close
+(`locking_mode=EXCLUSIVE`, set before the first read). Two reasons:
+
+- Without it, WAL keeps its index in a `-shm` file that every connection
+  maps as shared memory, which does not work on a network drive, where
+  a redirected folder can put the library. Held, SQLite keeps the index
+  in this process's memory and makes no `-shm` file. Tried over SMB
+  (the loopback share), the held WAL wrote and read back whole, and
+  without the hold a `-shm` file was made.
+- Another copy of the app on another computer, sharing the folder, is
+  refused at its start (**Unreadable**, below) rather than writing the
+  same file one transaction after the other, each over the other's
+  changes. The single-instance mutex covers one computer only.
+
+What it costs: no other program reads the library through SQLite while
+the app runs, and one that copies `library.db` alone meanwhile copies
+the library as of the last checkpoint.
 
 ### Opening
 
@@ -801,9 +855,10 @@ asks before the tray icon, so a refusal is a message box and no start:
   Every row it saved back would lose what the newer build put there, so
   the store reads and writes nothing at all, and the app does not start.
 - **Unreadable** - the file is there and cannot be opened or read:
-  another program holding it, or not ours to read. A start over it would
-  save an empty library where it was, so the app does not start, and
-  says that trying again later may work.
+  another program holding it - another copy of the app, on another
+  computer sharing the folder, among them - or not ours to read. A start
+  over it would save an empty library where it was, so the app does not
+  start, and says that trying again later may work.
 
 A file that is not a library this store can read - not a SQLite
 database, a damaged one, or someone else's - is set aside beside it as
@@ -818,6 +873,8 @@ welcome over an empty library, and every change refused.
 Statements wait 250 ms for a lock another program holds - short,
 because writes run on the render thread, and a command whose write gives
 up is simply not made (see "Every command is written as it is made").
+Since the store holds the file from its open, that is only ever the
+open's wait.
 
 ### A write
 
@@ -940,15 +997,21 @@ the row as stored, in the copy's own write, without decoding it.
 
 ### Testing
 
-`library_store_test.cpp` runs against real files. What would fail a
-write is another program holding the file, done with a second SQLite
-connection (`tests/support/held_library.h`): a write lock stops writes
-and leaves reads, an exclusive one stops both. A write that fails
-partway is a trigger the test adds that aborts on one row, which shows
-the rows before it rolled back with it. The randomized test in
-`history_test.cpp` fails writes the same way, with triggers on every
-table that abort while a flag row exists - instant, where a held lock
-costs the busy timeout each time.
+`library_store_test.cpp` runs against real files. Tests share the file
+(`tests/support/shared_library.cpp` turns the store's hold off for every
+test executable), because they read a library back, and make its writes
+fail, through a second SQLite connection while a store has it open; the
+hold itself has its own test, which turns it back on
+(`TheAppsStoreHoldsItsFileForItself`). What would fail a write is
+another program holding the file, done with that second connection
+(`tests/support/held_library.h`): a write lock stops writes and leaves
+reads, and a hold of the file itself stops both - but only before a
+store has opened it, since a store that shares a WAL reads through its
+`-shm` index past any hold. A write that fails partway is a trigger the
+test adds that aborts on one row, which shows the rows before it rolled
+back with it. The randomized test in `history_test.cpp` fails writes the
+same way, with triggers on every table that abort while a flag row
+exists - instant, where a held lock costs the busy timeout each time.
 
 ## Configuration
 
@@ -1318,7 +1381,7 @@ seconds at least from the frame it is first drawn in, whatever lands
 failure took the line down with it, before anyone could read it.
 Nothing is filed on the history for it, and an undo or redo whose write
 fails puts its step back on its stack as it was. A disk that is full or
-a file another program holds loses the change being made, visibly, and
+a write the disk refuses loses the change being made, visibly, and
 nothing else: a screenshot that cannot be written is not taken, rather
 than kept in memory looking captured. Under the autosave, the same
 failure kept every change since in memory, for an exit to lose.

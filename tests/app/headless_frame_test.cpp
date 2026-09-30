@@ -4623,6 +4623,27 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     EXPECT_EQ(strokeCount(), 1u);
 }
 
+// What is written while the overlay is up waits in the library's WAL, and
+// is made durable - moved into the file, and flushed - when the overlay
+// goes away, with nothing on screen to wait for the disk.
+TEST_F(HeadlessAppTest, GoingAwayCheckpointsTheLibrary) {
+    const std::filesystem::path library = StartWithLibrary();
+    std::filesystem::path wal = library;
+    wal += "-wal";
+    ShowEditMode();
+    StepFrame();
+    PressKey(ImGuiKey_D);
+    Drag(200.0f, 200.0f, 800.0f, 600.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    EXPECT_GT(std::filesystem::file_size(wal), 0u) << "written, into the WAL";
+
+    ShowEditMode();  // and away again
+    StepFrame();
+    ASSERT_FALSE(host_.overlayWindow.visible);
+    EXPECT_EQ(std::filesystem::file_size(wal), 0u);
+    EXPECT_EQ(controller_->GetSession().Store()->UncheckpointedBytes(), 0);
+}
+
 // A change whose write fails is not made, and that is said on screen until
 // a write lands - what is drawn is what the library holds, and the line
 // says why the change is not there - and for long enough to be read,

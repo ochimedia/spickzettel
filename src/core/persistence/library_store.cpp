@@ -27,9 +27,13 @@ using nlohmann::json;
 constexpr int64_t kApplicationId = 0x537A746C;
 
 // How long a statement waits for a lock another program holds on the file
-// before it gives up - a backup tool reading it, say. Short, because writes
-// run on the render thread; a change whose write gives up is not made.
+// before it gives up - another copy of the app holding it, on another
+// computer sharing a network folder, say. Short, because writes run on the
+// render thread; a change whose write gives up is not made.
 constexpr int kBusyTimeoutMs = 250;
+
+// What SQLite puts before each page in the WAL.
+constexpr int64_t kWalFrameHeaderBytes = 24;
 
 // The whole schema. See the class comment for what each table is.
 //
@@ -497,8 +501,7 @@ LibraryStore::OpenResult LibraryStore::TryOpen() {
         Close();
         return OpenResult::Unreadable;
     }
-    sqlite3_extended_result_codes(db_, 1);
-    sqlite3_busy_timeout(db_, kBusyTimeoutMs);
+    Configure();
 
     // Whose file it is, which version, and whether there is anything in it
     // at all - a file that does not exist yet opens as an empty database,
@@ -525,6 +528,7 @@ LibraryStore::OpenResult LibraryStore::TryOpen() {
             Close();
             return OpenResult::Unreadable;
         }
+        EnterWal();
         return OpenResult::Opened;
     }
     if (applicationId != kApplicationId) {
@@ -535,7 +539,73 @@ LibraryStore::OpenResult LibraryStore::TryOpen() {
         return OpenResult::WrittenByANewerVersion;
     }
     Exec(db_, "PRAGMA foreign_keys = ON");
+    EnterWal();
     return OpenResult::Opened;
+}
+
+void LibraryStore::Configure() {
+    sqlite3_extended_result_codes(db_, 1);
+    sqlite3_busy_timeout(db_, kBusyTimeoutMs);
+    // Held for this store alone from the first read to the close: nobody
+    // else reads or writes the file meanwhile, another copy of the app on
+    // another computer sharing the folder included - it is refused at its
+    // start instead of writing over this one's changes. Before the first
+    // read, too, for WAL: then SQLite keeps the WAL's index in this
+    // process's memory instead of in a -shm file shared with others, which
+    // does not work on a network drive.
+    if (!lockShared_) {
+        Exec(db_, "PRAGMA locking_mode = EXCLUSIVE");
+    }
+}
+
+void LibraryStore::EnterWal() {
+    std::string mode;
+    {
+        Statement statement(db_, "PRAGMA journal_mode = WAL");
+        if (statement.Step() == SQLITE_ROW) {
+            mode = statement.Text(0);
+        }
+    }
+    wal_ = mode == "wal";
+    if (!wal_) {
+        return;
+    }
+    // A commit is in the WAL whole, each frame checksummed, and the WAL is
+    // flushed before a checkpoint writes any of it into the file - so the
+    // file is always a whole library. What a commit does not do is wait for
+    // the disk: after a power cut, what was committed since the last
+    // checkpoint may be gone.
+    Exec(db_, "PRAGMA synchronous = NORMAL");
+    ReadInt(db_, "PRAGMA page_size", pageSize_);
+    // Setting a hook of our own also turns off SQLite's checkpoint at every
+    // thousand pages, which would come inside a commit, on the render
+    // thread - see Checkpoint for when this store makes one instead.
+    sqlite3_wal_hook(db_, &LibraryStore::OnWalCommit, this);
+    // A WAL left by a copy that did not close - a crash - is read at the
+    // open and not moved into the file yet.
+    walFrames_ = -1;
+}
+
+int LibraryStore::OnWalCommit(void* self, sqlite3* /*db*/, const char* /*name*/, int frames) {
+    static_cast<LibraryStore*>(self)->walFrames_ = frames;
+    return SQLITE_OK;
+}
+
+bool LibraryStore::Checkpoint() {
+    if (db_ == nullptr || !wal_ || walFrames_ == 0) {
+        return true;
+    }
+    // TRUNCATE rather than the default: the WAL is left empty on disk too,
+    // not the size of everything written since the open.
+    if (sqlite3_wal_checkpoint_v2(db_, nullptr, SQLITE_CHECKPOINT_TRUNCATE, nullptr, nullptr) != SQLITE_OK) {
+        return false;
+    }
+    walFrames_ = 0;
+    return true;
+}
+
+int64_t LibraryStore::UncheckpointedBytes() const {
+    return walFrames_ < 0 ? -1 : walFrames_ * (pageSize_ + kWalFrameHeaderBytes);
 }
 
 bool LibraryStore::CreateSchema() {
@@ -570,24 +640,29 @@ LibraryStore::OpenResult LibraryStore::SetAsideAndStartOver() {
     if (ec) {
         return OpenResult::Unreadable;
     }
-    // A journal left beside it belongs to it, and would be played back into
-    // the new file otherwise.
-    std::filesystem::path journal = file_;
-    journal += "-journal";
-    if (std::filesystem::exists(journal, ec)) {
-        std::filesystem::path asideJournal = aside;
-        asideJournal += "-journal";
-        std::filesystem::rename(journal, asideJournal, ec);
+    // A journal or a WAL left beside it belongs to it, and would be played
+    // back into the new file otherwise.
+    for (const char* suffix : {"-journal", "-wal"}) {
+        std::filesystem::path left = file_;
+        left += suffix;
+        if (std::filesystem::exists(left, ec)) {
+            std::filesystem::path asideLeft = aside;
+            asideLeft += suffix;
+            std::filesystem::rename(left, asideLeft, ec);
+        }
     }
     setAsideAs_ = aside;
     if (sqlite3_open_v2(Utf8(file_).c_str(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr) !=
-            SQLITE_OK ||
-        !CreateSchema()) {
+        SQLITE_OK) {
         Close();
         return OpenResult::Unreadable;
     }
-    sqlite3_extended_result_codes(db_, 1);
-    sqlite3_busy_timeout(db_, kBusyTimeoutMs);
+    Configure();
+    if (!CreateSchema()) {
+        Close();
+        return OpenResult::Unreadable;
+    }
+    EnterWal();
     return OpenResult::Opened;
 }
 
@@ -794,6 +869,12 @@ bool LibraryStore::Write(const LibraryView& view, const LibraryChanges& changes,
     // What this store wrote is a library now, and a Load of it is not a
     // first run.
     unwritten_ = false;
+    // An overlay left up long enough to fill the WAL - a capture is a few
+    // megabytes - is not left to fill it without end. A checkpoint that
+    // fails loses nothing, and is tried again at the next write.
+    if (UncheckpointedBytes() >= checkpointAtBytes_) {
+        Checkpoint();
+    }
     return true;
 }
 

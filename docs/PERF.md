@@ -286,6 +286,98 @@ quiet rather than once per command; its "nothing changed" pass, a few
 milliseconds of serializing and hashing every snippet, is gone. Writing the
 whole library is what a first run does, once.
 
+## Results: the journal, on a busy disk
+
+A tester saw a hitch "sometimes, after making some snippets or drawing", on
+an almost empty library, and `library.db-journal` beside the file while it
+lasted. The floor above - every commit flushing the journal and then the
+file - is what a quiet disk costs; a flush waits for everything the disk
+has queued, so it costs what everyone else is writing too.
+
+`tools/journal_bench`, 2026-09-30, this machine's NVMe drive:
+Python's `sqlite3` (SQLite 3.50) making the app's commit - one snippet row
+of a 560-byte record and a 2 KB stroke blob, upserted in its own
+transaction, one every 50 ms - into a database of its own per setting, the
+settings taking turns in rounds of 20 so that a busy spell of the disk hits
+them alike; 120 commits per setting. *Moderate* is another process writing
+a file at about 50 MB/s, *heavy* one writing flat out. Milliseconds, and
+how many of the 120 commits took longer than a frame at 120 Hz, 30 Hz and
+10 Hz:
+
+| disk | setting | median | p90 | p99 | max | >8.3 | >33 | >100 |
+| ---- | ------- | -----: | --: | --: | --: | ---: | --: | ---: |
+| idle | rollback, `FULL` (was) | 9.32 | 12.0 | 14.0 | 14.3 | 115 | 0 | 0 |
+| idle | WAL, `FULL` | 2.61 | 3.0 | 5.4 | 5.8 | 0 | 0 | 0 |
+| idle | WAL, `FULL`, exclusive | 2.52 | 3.0 | 5.3 | 5.4 | 0 | 0 | 0 |
+| idle | WAL, `NORMAL` | 0.10 | 0.16 | 2.5 | 2.5 | 0 | 0 | 0 |
+| idle | WAL, `NORMAL`, exclusive (now) | 0.08 | 0.13 | 2.5 | 2.7 | 0 | 0 | 0 |
+| moderate | rollback, `FULL` (was) | 9.65 | 16.3 | 117 | 118 | 115 | 9 | 3 |
+| moderate | WAL, `FULL` | 2.61 | 49.7 | 112 | 117 | 15 | 13 | 8 |
+| moderate | WAL, `FULL`, exclusive | 2.66 | 4.0 | 71 | 76 | 5 | 5 | 0 |
+| moderate | WAL, `NORMAL` | 0.10 | 0.16 | 2.5 | 3.0 | 0 | 0 | 0 |
+| moderate | WAL, `NORMAL`, exclusive (now) | 0.08 | 0.14 | 2.5 | 6.1 | 0 | 0 | 0 |
+| heavy | rollback, `FULL` (was) | 160 | 420 | 1686 | 3085 | 120 | 120 | 110 |
+| heavy | WAL, `FULL` | 109 | 176 | 441 | 1203 | 120 | 117 | 82 |
+| heavy | WAL, `FULL`, exclusive | 108 | 178 | 360 | 514 | 120 | 117 | 87 |
+| heavy | WAL, `NORMAL` | 0.20 | 70 | 618 | 1771 | 35 | 19 | 11 |
+| heavy | WAL, `NORMAL`, exclusive (now) | 0.14 | 86 | 681 | 988 | 27 | 16 | 10 |
+
+And the checkpoint that moves the WAL into the file, after each round of 20
+commits - median and max of the 6, in milliseconds:
+
+| setting | idle | moderate | heavy |
+| ------- | ---- | -------- | ----- |
+| WAL, `FULL` | 3.4 / 8.4 | 3.4 / 52 | 112 / 153 |
+| WAL, `FULL`, exclusive | 3.5 / 4.0 | 5.9 / 6.6 | 125 / 273 |
+| WAL, `NORMAL` | 7.3 / 7.8 | 70 / 138 | 1767 / 3746 |
+| WAL, `NORMAL`, exclusive | 8.0 / 17 | 65 / 126 | 1525 / 1900 |
+
+- **A commit costs the flushes it makes.** Rollback with `FULL` flushes
+  twice (the journal, then the file), WAL with `FULL` once, WAL with
+  `NORMAL` not at all - 9, 2.6 and 0.1 ms on an idle disk.
+- **The hold (`locking_mode=EXCLUSIVE`) costs nothing, and buys nothing,
+  in time**: hundredths of a millisecond a commit. The two differ in the
+  tails of the busy runs by which of them a busy spell happened to land
+  on - 120 commits give a noisy p99. It is there for the network drive
+  and the second computer (ARCHITECTURE.md, "Persistence").
+- **On a moderately busy disk only `NORMAL` stays unaffected**, 6 ms at
+  worst; everything that flushes at commit had commits of 70-120 ms. That
+  is the tester's hitch.
+- **On a disk written flat out nothing is safe.** `NORMAL`'s median stays
+  at 0.2 ms, but one commit in seven took longer than 33 ms and the worst
+  up to 1.8 s: once Windows' cache is full, a write waits even unflushed.
+  The rollback journal's median was 160 ms there.
+- **`NORMAL` moves the flush to the checkpoint rather than doing without
+  it**: 8 ms on an idle disk, 65-140 ms on a moderate one, and 1.5-3.7 s
+  on a disk written flat out. Hence when the app makes one: when the
+  overlay goes away, and never inside a commit on its own at every
+  thousand pages - a single capture could be that.
+
+The six checkpoints per setting are few, and the tails of 120 commits vary
+from run to run; the medians and the order of the settings are what to
+read. One machine and one drive: a slower SSD or a hard disk moves every
+number up.
+
+### Writing each command, in the WAL
+
+`PerfBench.WritingACommand` again, release build, same machine, after the
+switch (commits into the WAL, `synchronous=NORMAL`, the file held); the
+median of two runs agreed within a few percent:
+
+| scenario  | file    | a stroke | a canvas switch | the whole library |
+| --------- | ------- | -------- | --------------- | ----------------- |
+| `light`   | 88 KB   | 0.22 ms | 0.07 ms | 48.9 ms |
+| `medium`  | 216 KB  | 0.25 ms | 0.07 ms | 39.8 ms |
+| `heavy`   | 680 KB  | 0.49 ms | 0.09 ms | 42.6 ms |
+| `extreme` | 2600 KB | 3.94 ms | 0.12 ms | 59.7 ms |
+| `gallery` | 1192 KB | 0.29 ms | 0.10 ms | 44.8 ms |
+
+The 8 ms floor is gone; what is left is the snippet's weight - an
+`extreme` snippet's forty strokes of two hundred points serialized and
+written. The whole library is still a first run's once: it is timed from
+the open, which makes the schema in the rollback journal, flushed, before
+the file goes into the WAL.
+
 ## Where the floor is
 
 `empty` costs 0.005 ms per frame headless but 3-5% of a core in the real app.

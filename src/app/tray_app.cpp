@@ -375,6 +375,13 @@ void TrayController::Apply(const OverlayTransition& transition) {
     if (to == OverlayState::Edit && settings_.Live().freezeScreen) {
         session_.FreezeScreen(overlayDisplay_);
     }
+    // 10. Away, what was written while the overlay was up is made durable:
+    // the one flush the library makes, which can take a while on a busy
+    // disk - now, with nothing on screen waiting for it. See
+    // LibraryStore::Checkpoint.
+    if (away && session_.Store() != nullptr) {
+        session_.Store()->Checkpoint();
+    }
     CheckInvariants();
 }
 

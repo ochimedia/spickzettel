@@ -593,29 +593,33 @@ TEST_F(LibraryStoreTest, TheWriteAfterAFailedFirstOneWritesTheWholeLibrary) {
 // over - the app refuses to start rather than begin an empty library there.
 TEST_F(LibraryStoreTest, AFileAnotherProgramHoldsIsUnreadable) {
     ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
-    RawConnection other(file_);
-    ASSERT_TRUE(other.Exec("BEGIN EXCLUSIVE"));
-    LibraryStore store(file_);
-    EXPECT_EQ(store.Open(), LibraryStore::OpenResult::Unreadable);
-    EXPECT_FALSE(store.Load().has_value());
-    EXPECT_FALSE(store.Save(CanvasManagerSnapshot{}));
-    other.Exec("ROLLBACK");
+    {
+        // A WAL file is shut to readers only by a hold of the file itself.
+        RawConnection other(file_);
+        ASSERT_TRUE(other.Exec("PRAGMA locking_mode = EXCLUSIVE; BEGIN EXCLUSIVE"));
+        LibraryStore store(file_);
+        EXPECT_EQ(store.Open(), LibraryStore::OpenResult::Unreadable);
+        EXPECT_FALSE(store.Load().has_value());
+        EXPECT_FALSE(store.Save(CanvasManagerSnapshot{}));
+    }
     EXPECT_TRUE(LibraryStore(file_).Load().has_value());
 }
 
-// Opened, and then held by another program before it could be read: not a
-// first run, which would start an empty library over it, but a file that
-// cannot be read - and nothing is written over it afterwards, even once it
-// could be.
+// Opened, and then not read through: not a first run, which would start an
+// empty library over it, but a file that cannot be read - and nothing is
+// written over it afterwards, even once it could be. A table gone for the
+// moment stands in for the read that fails partway: another program can no
+// longer come between the open and the read, since the store holds the
+// file from its open (see TheAppsStoreHoldsItsFileForItself).
 TEST_F(LibraryStoreTest, ALibraryThatCannotBeReadThroughIsUnreadableRatherThanAFirstRun) {
     ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
     LibraryStore store(file_);
     ASSERT_EQ(store.Open(), LibraryStore::OpenResult::Opened);
     RawConnection other(file_);
-    ASSERT_TRUE(other.Exec("BEGIN EXCLUSIVE"));
+    ASSERT_TRUE(other.Exec("ALTER TABLE items RENAME TO items_away"));
     EXPECT_FALSE(store.Load().has_value());
     EXPECT_EQ(store.Open(), LibraryStore::OpenResult::Unreadable);
-    other.Exec("ROLLBACK");
+    ASSERT_TRUE(other.Exec("ALTER TABLE items_away RENAME TO items"));
     EXPECT_FALSE(store.Save(CanvasManagerSnapshot{}));
     EXPECT_EQ(other.Int("SELECT count(*) FROM items"), 2) << "untouched";
 }
@@ -851,6 +855,133 @@ TEST_F(LibraryStoreTest, ALibraryUnderANameOutsideTheCodePageOpens) {
     ASSERT_TRUE(LibraryStore(file).Save(MakeSampleSnapshot()));
     EXPECT_TRUE(std::filesystem::exists(file));
     EXPECT_TRUE(LibraryStore(file).Load().has_value());
+}
+
+// ================= The WAL, and the hold =================
+
+// The hold a store has in the app, for the tests of it: every other test
+// shares the file (see tests/support/shared_library.cpp).
+class ExclusiveLocking {
+public:
+    ExclusiveLocking() : shared_(LibraryStore::LocksSharedForTesting()) { LibraryStore::LockSharedForTesting(false); }
+    ~ExclusiveLocking() { LibraryStore::LockSharedForTesting(shared_); }
+    ExclusiveLocking(const ExclusiveLocking&) = delete;
+    ExclusiveLocking& operator=(const ExclusiveLocking&) = delete;
+
+private:
+    bool shared_;
+};
+
+std::filesystem::path Beside(const std::filesystem::path& file, const char* suffix) {
+    std::filesystem::path beside = file;
+    beside += suffix;
+    return beside;
+}
+
+// Pixels that do not compress: QOI stores them at about five bytes each.
+std::vector<uint8_t> NoisePixels(int width, int height) {
+    std::vector<uint8_t> pixels(static_cast<size_t>(width) * height * 4);
+    uint32_t state = 12345;
+    for (uint8_t& value : pixels) {
+        state = state * 1664525u + 1013904223u;
+        value = static_cast<uint8_t>(state >> 24);
+    }
+    return pixels;
+}
+
+// A commit goes into the WAL and stays there, however much it holds - SQLite
+// would move it into the file at every thousand pages, inside a commit -
+// until a checkpoint is asked for, which leaves the WAL empty. The file is
+// in WAL mode from then on.
+TEST_F(LibraryStoreTest, WritesStayInTheWalUntilACheckpoint) {
+    {
+        LibraryStore store(file_);
+        ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+        EXPECT_GT(store.UncheckpointedBytes(), 0);
+        const std::vector<uint8_t> pixels = NoisePixels(1000, 1000);
+        ASSERT_TRUE(store.SaveImage(3, pixels.data(), 1000, 1000));
+        EXPECT_GT(store.UncheckpointedBytes(), int64_t{4} << 20) << "past SQLite's thousand pages";
+        EXPECT_GT(std::filesystem::file_size(Beside(file_, "-wal")), uintmax_t{4} << 20);
+
+        ASSERT_TRUE(store.Checkpoint());
+        EXPECT_EQ(store.UncheckpointedBytes(), 0);
+        EXPECT_EQ(std::filesystem::file_size(Beside(file_, "-wal")), 0u);
+        EXPECT_TRUE(store.Checkpoint()) << "nothing to do";
+    }
+    EXPECT_FALSE(std::filesystem::exists(Beside(file_, "-wal"))) << "gone with the close";
+    RawConnection raw(file_);
+    EXPECT_EQ(raw.Int("SELECT count(*) FROM items"), 2);
+    EXPECT_EQ(raw.Int("SELECT count(*) FROM pictures"), 1);
+    EXPECT_EQ(raw.Int("SELECT journal_mode = 'wal' FROM pragma_journal_mode"), 1);
+}
+
+// A WAL that has grown to the limit is checkpointed by the write that
+// took it there, so an overlay left up does not grow it without end.
+TEST_F(LibraryStoreTest, AWriteThatFillsTheWalCheckpointsIt) {
+    LibraryStore store(file_);
+    store.SetCheckpointAtBytesForTesting(64 * 1024);
+    ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+    ASSERT_GT(store.UncheckpointedBytes(), 0) << "below the limit";
+    ASSERT_LT(store.UncheckpointedBytes(), 64 * 1024);
+    CanvasManagerSnapshot bigger = MakeSampleSnapshot();
+    Stroke stroke;
+    for (int i = 0; i < 20000; ++i) {
+        stroke.points.push_back({static_cast<float>(i % 300), static_cast<float>(i % 200)});
+    }
+    bigger.canvases[0].items[0].strokes.push_back(stroke);
+    ASSERT_TRUE(store.Save(bigger));
+    EXPECT_EQ(store.UncheckpointedBytes(), 0);
+    EXPECT_EQ(LibraryStore(file_).Load()->canvases[0].items[0].strokes.size(),
+              bigger.canvases[0].items[0].strokes.size());
+}
+
+// What a copy that never closed - a crash, a power cut after the WAL
+// reached the disk - left in its WAL is read at the next open: every
+// commit whole. Here the files are copied while the store has them open,
+// which is the state such a copy leaves them in.
+TEST_F(LibraryStoreTest, AWalLeftBehindIsReadAtTheOpen) {
+    const std::filesystem::path copy = dir_ / "copy" / "library.db";
+    CanvasManagerSnapshot later = MakeSampleSnapshot();
+    later.canvases[0].name = "Renamed";
+    {
+        LibraryStore store(file_);
+        ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+        ASSERT_TRUE(store.Checkpoint());
+        ASSERT_TRUE(store.Save(later));
+        ASSERT_GT(store.UncheckpointedBytes(), 0);
+        std::filesystem::create_directories(copy.parent_path());
+        std::filesystem::copy_file(file_, copy);
+        std::filesystem::copy_file(Beside(file_, "-wal"), Beside(copy, "-wal"));
+    }
+    LibraryStore store(copy);
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].name, "Renamed");
+    EXPECT_NE(store.UncheckpointedBytes(), 0) << "not moved into the file yet";
+}
+
+// The app's store holds its file for itself from the open to the close:
+// no other connection reads or writes it meanwhile - another copy of the
+// app on another computer sharing the folder is refused at its start - and
+// no -shm file is made for others to share its WAL's index through.
+TEST_F(LibraryStoreTest, TheAppsStoreHoldsItsFileForItself) {
+    ExclusiveLocking exclusive;
+    {
+        LibraryStore store(file_);
+        ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+        EXPECT_FALSE(std::filesystem::exists(Beside(file_, "-shm")));
+        {
+            RawConnection other(file_);
+            EXPECT_EQ(other.Int("SELECT count(*) FROM items"), -1) << "not read";
+            EXPECT_FALSE(other.Exec("DELETE FROM items"));
+        }
+        LibraryStore second(file_);
+        EXPECT_EQ(second.Open(), LibraryStore::OpenResult::Unreadable);
+        EXPECT_TRUE(store.Save(MakeSampleSnapshot())) << "still the first one's";
+    }
+    LibraryStore after(file_);
+    EXPECT_EQ(after.Open(), LibraryStore::OpenResult::Opened) << "let go at the close";
+    EXPECT_TRUE(after.Load().has_value());
 }
 
 }  // namespace
