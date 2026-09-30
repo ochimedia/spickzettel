@@ -2140,8 +2140,6 @@ TEST_F(HeadlessAppTest, ADoubleClickOnASnippetEntersDrawingModeAndAClickElsewher
     EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot));
     EXPECT_EQ(App().ActiveTool(), Tool::Draw);
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot});
-    EXPECT_TRUE(App().SelectionBarButtonCenter(ChromeButton::Pen).has_value()) << "the drawing bar";
-    EXPECT_FALSE(App().SelectionBarButtonCenter(ChromeButton::Close).has_value());
 
     Drag(300.0f, 300.0f, 500.0f, 450.0f);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "a drag on it draws now";
@@ -2153,7 +2151,49 @@ TEST_F(HeadlessAppTest, ADoubleClickOnASnippetEntersDrawingModeAndAClickElsewher
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot}) << "the press was for leaving, nothing more";
-    EXPECT_TRUE(App().SelectionBarButtonCenter(ChromeButton::Close).has_value()) << "the item bar again";
+}
+
+// The bar's drawing tools are the other way in, and out: the pen pressed
+// on a selected snippet takes it into drawing mode, and pressed again, lit,
+// leaves it - as its key does. Another tool pressed while one is in hand
+// is picked instead, and the mode stays.
+TEST_F(HeadlessAppTest, TheBarsToolsEnterDrawingModeAndTheLitOneLeavesIt) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 700.0f, 600.0f);  // a screenshot, selected
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const ItemId shot = Canvases().CurrentOrNull()->items[0].id;
+    ASSERT_EQ(App().Selection(), std::vector<ItemId>{shot});
+    ASSERT_FALSE(App().DrawingItem().has_value());
+
+    const auto clickBar = [this](ChromeButton button) {
+        const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
+        ASSERT_TRUE(center.has_value());
+        RawClick(center->x, center->y);
+        StepFrames(20);  // no double-click of two presses
+    };
+
+    clickBar(ChromeButton::Pen);
+    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot));
+    EXPECT_EQ(App().ActiveTool(), Tool::Draw);
+    Drag(300.0f, 300.0f, 500.0f, 450.0f);
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "a drag on it draws";
+
+    clickBar(ChromeButton::Eraser);
+    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot)) << "still drawing";
+    EXPECT_EQ(App().ActiveTool(), Tool::Erase);
+
+    clickBar(ChromeButton::Eraser);
+    EXPECT_FALSE(App().DrawingItem().has_value()) << "the lit tool, pressed again: out";
+    EXPECT_EQ(App().ActiveTool(), Tool::Select);
+    EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot}) << "and still selected";
+    Drag(300.0f, 300.0f, 320.0f, 310.0f);
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "a drag moves it again";
+    EXPECT_NEAR(Canvases().CurrentOrNull()->items[0].rect.x, 120.0f, 1.0f);
+
+    clickBar(ChromeButton::Text);
+    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot)) << "Text is a way in too";
+    EXPECT_EQ(App().ActiveTool(), Tool::Text);
 }
 
 // The drawing bar's buttons switch the tool and open the color chooser.
@@ -2183,10 +2223,10 @@ TEST_F(HeadlessAppTest, TheDrawingBarSwitchesTheToolAndOpensTheColor) {
     EXPECT_TRUE(App().DrawingItem().has_value());
 }
 
-// The tool already in hand is cycled through its shapes by its own button:
-// pen, line, rectangle; eraser, rectangle eraser. A plain drag then makes
-// that shape. Changing the tool puts the shape back.
-TEST_F(HeadlessAppTest, ClickingTheActiveBarToolAgainCyclesItsShape) {
+// A shape picked from the menu of the pen's or the eraser's button is
+// what a plain drag makes, until another tool is picked, which puts the
+// shape back - and so does the tool put down.
+TEST_F(HeadlessAppTest, AShapeIsTheToolsUntilAnotherToolIsPicked) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 700.0f, 600.0f);
@@ -2197,16 +2237,14 @@ TEST_F(HeadlessAppTest, ClickingTheActiveBarToolAgainCyclesItsShape) {
         const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
         ASSERT_TRUE(center.has_value());
         RawClick(center->x, center->y);
+        StepFrames(20);  // no double-click of two presses
     };
 
-    clickBar(ChromeButton::Pen);
-    EXPECT_EQ(App().PenShape(), DrawShape::Line);
+    controller_->Overlay().Dispatch(Command{CommandId::PickLine});
     Drag(150.0f, 150.0f, 400.0f, 300.0f);
-    clickBar(ChromeButton::Pen);
-    EXPECT_EQ(App().PenShape(), DrawShape::Rectangle);
+    controller_->Overlay().Dispatch(Command{CommandId::PickRectangle});
     Drag(200.0f, 200.0f, 500.0f, 450.0f);
-    clickBar(ChromeButton::Pen);
-    EXPECT_EQ(App().PenShape(), DrawShape::Freehand);
+    controller_->Overlay().Dispatch(Command{CommandId::PickPen});
     Drag(250.0f, 250.0f, 600.0f, 500.0f, 6);
     EXPECT_EQ(App().ActiveTool(), Tool::Draw) << "the pen throughout";
 
@@ -2216,19 +2254,24 @@ TEST_F(HeadlessAppTest, ClickingTheActiveBarToolAgainCyclesItsShape) {
     EXPECT_EQ(item.strokes[1].points.size(), 5u) << "a rectangle's outline, closed";
     EXPECT_GT(item.strokes[2].points.size(), 5u) << "freehand again: the drag's path, not a shape's corners";
 
-    clickBar(ChromeButton::Eraser);
+    controller_->Overlay().Dispatch(Command{CommandId::PickRectangleEraser});
     EXPECT_EQ(App().ActiveTool(), Tool::Erase);
-    EXPECT_EQ(App().EraserShape(), DrawShape::Freehand);
-    clickBar(ChromeButton::Eraser);
-    EXPECT_EQ(App().EraserShape(), DrawShape::Rectangle);
     Drag(120.0f, 120.0f, 650.0f, 580.0f);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u) << "the rectangle took all three";
 
     clickBar(ChromeButton::Pen);
     EXPECT_EQ(App().ActiveTool(), Tool::Draw);
-    EXPECT_EQ(App().PenShape(), DrawShape::Freehand) << "back to plain with the tool change";
+    controller_->Overlay().Dispatch(Command{CommandId::PickLine});
     clickBar(ChromeButton::Eraser);
-    EXPECT_EQ(App().EraserShape(), DrawShape::Freehand) << "and so is the eraser";
+    EXPECT_EQ(App().EraserShape(), DrawShape::Freehand) << "back to plain with the tool change";
+    clickBar(ChromeButton::Pen);
+    EXPECT_EQ(App().PenShape(), DrawShape::Freehand) << "and so is the pen";
+
+    controller_->Overlay().Dispatch(Command{CommandId::PickLine});
+    clickBar(ChromeButton::Pen);
+    ASSERT_FALSE(App().DrawingItem().has_value()) << "put down";
+    clickBar(ChromeButton::Pen);
+    EXPECT_EQ(App().PenShape(), DrawShape::Freehand) << "and picked up again, plain";
 }
 
 // ===== A hold stands in for a double-click, for a finger or a pen =====
@@ -3977,8 +4020,6 @@ TEST_F(OverlappingItemsTest, AltMovesTheSnippetBeingDrawnOn) {
     EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 30.0f) << "not moved again";
 }
 
-// The bar changes with the mode: the item buttons at rest, the drawing
-// buttons in drawing mode - and the handles stay through both.
 // What the bar carries is a setting: a button switched off is not on the
 // bar and takes no press, and the order the setting gives is the order the
 // bar is drawn in.
@@ -4005,9 +4046,8 @@ TEST_F(OverlappingItemsTest, TheBarCarriesWhatTheSettingSays) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
-// Every button switched off is a bar with nothing on it, which is drawn as
-// no bar at all rather than as an empty pill.
-TEST_F(OverlappingItemsTest, ABarWithEveryButtonSwitchedOffIsNotThere) {
+// A group with every button switched off leaves the other group.
+TEST_F(OverlappingItemsTest, AGroupWithEveryButtonSwitchedOffLeavesTheOther) {
     AppConfig config = DefaultConfig();
     for (BarButtonSetting& entry : config.snippetBar) {
         entry.shown = false;
@@ -4021,26 +4061,49 @@ TEST_F(OverlappingItemsTest, ABarWithEveryButtonSwitchedOffIsNotThere) {
     for (const ChromeButton button : kSnippetBarButtons) {
         EXPECT_FALSE(App().SelectionBarButtonCenter(button).has_value());
     }
-    // The drawing bar is its own setting and is untouched.
-    DoubleClick(items.back.x + 60.0f, items.back.y + 100.0f);
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    // The drawing group is its own setting and is untouched.
     EXPECT_TRUE(App().SelectionBarButtonCenter(ChromeButton::Pen).has_value());
 }
 
-TEST_F(OverlappingItemsTest, TheBarShowsTheDrawingButtonsInDrawingMode) {
+// Every button of both switched off is a bar with nothing on it, which is
+// drawn as no bar at all rather than as an empty pill.
+TEST_F(OverlappingItemsTest, ABarWithBothGroupsSwitchedOffIsNotThere) {
+    AppConfig config = DefaultConfig();
+    for (BarButtonList* group : {&config.snippetBar, &config.drawingBar}) {
+        for (BarButtonSetting& entry : *group) {
+            entry.shown = false;
+        }
+    }
+    StartWith(config);
     ShowEditMode();
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
     SelectTheBackItem(items);
-    EXPECT_TRUE(App().SelectionBarButtonCenter(ChromeButton::Close).has_value());
-    EXPECT_FALSE(App().SelectionBarButtonCenter(ChromeButton::Pen).has_value());
+
+    for (const ChromeButton button : {ChromeButton::Pen, ChromeButton::Color, ChromeButton::Pin, ChromeButton::Close}) {
+        EXPECT_FALSE(App().SelectionBarButtonCenter(button).has_value());
+    }
+}
+
+// The bar is the same in either mode: both groups, where they were - and
+// the handles stay through both.
+TEST_F(OverlappingItemsTest, TheBarShowsBothGroupsInEitherMode) {
+    ShowEditMode();
+    StepFrame();
+    const OverlappingItems items = MakeOverlappingItems();
+    SelectTheBackItem(items);
+    const std::optional<ImVec2> pen = App().SelectionBarButtonCenter(ChromeButton::Pen);
+    const std::optional<ImVec2> pin = App().SelectionBarButtonCenter(ChromeButton::Pin);
+    ASSERT_TRUE(App().SelectionBarButtonCenter(ChromeButton::Close).has_value());
+    ASSERT_TRUE(pen.has_value() && pin.has_value());
+    EXPECT_LT(pen->x, pin->x) << "the drawing tools first";
 
     PressKey(ImGuiKey_P);  // Draw, for the selected back item
     ASSERT_EQ(App().ActiveTool(), Tool::Draw);
     ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(backId_));
     EXPECT_EQ(App().Selection().size(), 1u);
-    EXPECT_FALSE(App().SelectionBarButtonCenter(ChromeButton::Close).has_value());
-    EXPECT_TRUE(App().SelectionBarButtonCenter(ChromeButton::Pen).has_value());
+    EXPECT_EQ(App().SelectionBarButtonCenter(ChromeButton::Pen)->x, pen->x) << "the same bar, where it was";
+    EXPECT_EQ(App().SelectionBarButtonCenter(ChromeButton::Pin)->x, pin->x);
     MoveTo(items.back.x, items.back.y);
     StepFrames(2);
     EXPECT_EQ(App().DebugHoveredResizeHandle().substr(0, 2), "nw") << "the handles stay in drawing mode";

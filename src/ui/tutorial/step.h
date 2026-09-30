@@ -110,12 +110,12 @@ enum class Spot {
     SelectionBarClose,
     // The selection bar's Pin, or the subject while no bar is drawn.
     SelectionBarPin,
-    // The drawing bar's buttons, or the subject while no drawing bar is
+    // The selection bar's drawing tools, or the subject while no bar is
     // drawn.
-    DrawingBarPen,
-    DrawingBarEraser,
-    DrawingBarText,
-    DrawingBarColor,
+    SelectionBarPen,
+    SelectionBarEraser,
+    SelectionBarText,
+    SelectionBarColor,
     // The subject's chip in the dock, while it is minimized.
     DockChip,
     // The canvas bar's + and Overview buttons.

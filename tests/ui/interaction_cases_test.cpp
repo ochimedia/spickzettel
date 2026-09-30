@@ -446,16 +446,18 @@ TEST_F(InteractionCasesTest, ThePenAndEraserButtonsOpenTheirShapesOnARightClickO
     EXPECT_EQ(GestureLevel(), "BarPress") << "a hold is a finger on one spot";
     Up(pen->x, pen->y);
     EXPECT_EQ(editor_.LastCommand(), CommandId::PenButton);
-    EXPECT_EQ(editor_.PenShape(), DrawShape::Line) << "a click after all";
+    EXPECT_FALSE(editor_.DrawingItem().has_value()) << "a click after all: the pen in hand, put down";
     Pause();
 
     Click(text->x, text->y, MouseButton::Right);
+    EXPECT_FALSE(editor_.DrawingItem().has_value()) << "the right click did nothing";
     Down(text->x, text->y);
     Tick(kHoldSeconds);
     Up(text->x, text->y);
     Pause();
     EXPECT_EQ(editor_.LastCommand(), CommandId::TextButton) << "no menu: its click, on the release";
-    EXPECT_EQ(editor_.DrawingItem(), drawing) << "and the right click did nothing";
+    EXPECT_EQ(editor_.DrawingItem(), drawing);
+    EXPECT_EQ(editor_.ActiveTool(), Tool::Text);
 }
 
 // A row of the menu puts its tool in hand drawing its shape, whichever

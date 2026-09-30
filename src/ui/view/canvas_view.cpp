@@ -446,13 +446,13 @@ std::optional<AnchorId> AnchorOf(ChromeButton button) {
         case ChromeButton::Pin:
             return AnchorId::SelectionBarPin;
         case ChromeButton::Pen:
-            return AnchorId::DrawingBarPen;
+            return AnchorId::SelectionBarPen;
         case ChromeButton::Eraser:
-            return AnchorId::DrawingBarEraser;
+            return AnchorId::SelectionBarEraser;
         case ChromeButton::Text:
-            return AnchorId::DrawingBarText;
+            return AnchorId::SelectionBarText;
         case ChromeButton::Color:
-            return AnchorId::DrawingBarColor;
+            return AnchorId::SelectionBarColor;
         case ChromeButton::Maximize:
         case ChromeButton::Minimize:
         case ChromeButton::More:
@@ -486,9 +486,15 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
     if (buttons.empty()) {
         return;  // every button switched off: no pill either, not an empty one
     }
-    const BarLayout bar = LayoutBar(*bounds, editor_.DisplayWidth(), editor_.DisplayHeight(), buttons.size());
+    const BarLayout bar = LayoutBar(*bounds, editor_.DisplayWidth(), editor_.DisplayHeight(), buttons);
     drawList->AddRectFilled(Im(bar.min), Im(bar.max), ImGui::GetColorU32(theme::kPanelBg), theme::kRadiusPill);
     drawList->AddRect(Im(bar.min), Im(bar.max), ImGui::GetColorU32(theme::kPanelBorderStrong), theme::kRadiusPill);
+    // Between the drawing tools and what is done to the snippet.
+    if (const std::optional<float> divider = BarDividerX(bar, buttons)) {
+        const float inset = Px(kBarPad) + Px(4.0f);
+        drawList->AddLine(ImVec2(*divider + 0.5f, bar.min.y + inset), ImVec2(*divider + 0.5f, bar.max.y - inset),
+                          ImGui::GetColorU32(theme::kPanelBorderStrong), Px(1.0f));
+    }
 
     for (const ChromeButton button : buttons) {
         const HitRect rect = BarButtonRect(bar, buttons, button);
@@ -496,8 +502,9 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         const BarPress* pressed = editor_.Input().As<BarPress>(Level::Gesture);
         const bool held = pressed != nullptr && pressed->Pressed() == button;
         // Close is the one danger-red button; a pinned selection's Pin
-        // wears the accent, the way a selected tool does - and on the
-        // drawing bar, the tool in hand does. The rest are plain pills.
+        // wears the accent, the way the tool in hand does - which is lit
+        // only in drawing mode, since that is when one is. The rest are
+        // plain pills.
         const bool danger = button == ChromeButton::Close;
         const bool active = (button == ChromeButton::Pin && allPinned) ||
                             (button == ChromeButton::Pen && editor_.ActiveTool() == Tool::Draw) ||
@@ -530,23 +537,20 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         const Icon* icon = nullptr;
         const char* tooltip = nullptr;
         switch (button) {
-            // The pen's and the eraser's icons show the shape they are
-            // cycled to (see DrawingMode::CyclePenShape), so the button
-            // reads as what a drag will make.
+            // The pen's and the eraser's icons show the shape picked from
+            // their menus, so the button reads as what a drag will make.
             case ChromeButton::Pen:
                 icon = editor_.PenShape() == DrawShape::Line        ? &icons::kLine
                        : editor_.PenShape() == DrawShape::Rectangle ? &icons::kRectangle
                                                            : &icons::kPen;
-                tooltip = editor_.ActiveTool() != Tool::Draw                ? strings::kBarPenTip
-                          : editor_.PenShape() == DrawShape::Line          ? strings::kBarLineTip
-                          : editor_.PenShape() == DrawShape::Rectangle     ? strings::kBarRectangleTip
-                                                                  : strings::kBarPenAgainTip;
+                tooltip = editor_.PenShape() == DrawShape::Line        ? strings::kBarLineTip
+                          : editor_.PenShape() == DrawShape::Rectangle ? strings::kBarRectangleTip
+                                                                       : strings::kBarPenTip;
                 break;
             case ChromeButton::Eraser:
                 icon = editor_.EraserShape() == DrawShape::Rectangle ? &icons::kEraserRect : &icons::kEraser;
-                tooltip = editor_.ActiveTool() != Tool::Erase                 ? strings::kBarEraserTip
-                          : editor_.EraserShape() == DrawShape::Rectangle ? strings::kBarEraserRectTip
-                                                                 : strings::kBarEraserAgainTip;
+                tooltip =
+                    editor_.EraserShape() == DrawShape::Rectangle ? strings::kBarEraserRectTip : strings::kBarEraserTip;
                 break;
             case ChromeButton::Text:
                 icon = &icons::kType;
@@ -584,7 +588,9 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         const ImVec2 iconPos((rect.min.x + rect.max.x - iconSize) * 0.5f, (rect.min.y + rect.max.y - iconSize) * 0.5f);
         DrawIcon(drawList, *icon, iconPos, iconSize, ImGui::GetColorU32(active ? theme::AccentInk() : theme::kWhite));
         if (hovered) {
-            ImGui::SetTooltip("%s", tooltip);
+            // A tool in hand says how it is put down again.
+            const bool toolInHand = active && button != ChromeButton::Pin;
+            ImGui::SetTooltip(toolInHand ? "%s\n%s" : "%s", tooltip, strings::kBarStopDrawingTip);
         }
     }
 }

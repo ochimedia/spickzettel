@@ -238,7 +238,7 @@ public:
     bool IsSelected(ItemId id) const { return editor_.IsSelected(id); }
     // The snippet in drawing mode, if one is - see Editor::DrawingItem.
     std::optional<ItemId> DrawingItem() const { return editor_.DrawingItem(); }
-    // What the drawing bar's pen and eraser draw or erase on a plain drag -
+    // What the bar's pen and eraser draw or erase on a plain drag -
     // see Editor::PenShape.
     DrawShape PenShape() const { return editor_.PenShape(); }
     DrawShape EraserShape() const { return editor_.EraserShape(); }

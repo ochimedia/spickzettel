@@ -431,12 +431,13 @@ DrawShape Editor::ShapeForPress() const {
 }
 
 std::vector<ChromeButton> Editor::BarButtons() const {
-    const BarButtonList& configured = DrawingItem().has_value() ? Cfg().drawingBar : Cfg().snippetBar;
     std::vector<ChromeButton> shown;
-    shown.reserve(configured.size());
-    for (const BarButtonSetting& entry : configured) {
-        if (entry.shown) {
-            shown.push_back(entry.button);
+    shown.reserve(Cfg().drawingBar.size() + Cfg().snippetBar.size());
+    for (const BarButtonList* group : {&Cfg().drawingBar, &Cfg().snippetBar}) {
+        for (const BarButtonSetting& entry : *group) {
+            if (entry.shown) {
+                shown.push_back(entry.button);
+            }
         }
     }
     return shown;
@@ -1234,7 +1235,7 @@ PointerTarget Editor::ResolvePointerTarget(float x, float y) const {
     if (SelectionLive() && !selection_.empty()) {
         if (const std::optional<Rect> bounds = SelectionBounds()) {
             const std::vector<ChromeButton> buttons = BarButtons();
-            const BarLayout bar = LayoutBar(*bounds, displayW_, displayH_, buttons.size());
+            const BarLayout bar = LayoutBar(*bounds, displayW_, displayH_, buttons);
             for (const ChromeButton button : buttons) {
                 if (BarButtonRect(bar, buttons, button).Contains(x, y)) {
                     target.kind = PointerTarget::Kind::Button;
@@ -1281,9 +1282,9 @@ std::optional<platform::Vec2> Editor::SelectionBarButtonCenter(ChromeButton butt
     }
     const std::vector<ChromeButton> buttons = BarButtons();
     if (std::find(buttons.begin(), buttons.end(), button) == buttons.end()) {
-        return std::nullopt;  // not on the bar the mode shows
+        return std::nullopt;  // switched off in Settings
     }
-    const HitRect rect = BarButtonRect(LayoutBar(*bounds, displayW_, displayH_, buttons.size()), buttons, button);
+    const HitRect rect = BarButtonRect(LayoutBar(*bounds, displayW_, displayH_, buttons), buttons, button);
     return platform::Vec2{(rect.min.x + rect.max.x) * 0.5f, (rect.min.y + rect.max.y) * 0.5f};
 }
 

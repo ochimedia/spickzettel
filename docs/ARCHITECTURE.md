@@ -2111,18 +2111,30 @@ reaching the Overview, it added a gesture to learn and nothing to reach.
 ### Drawing is a mode, entered on one snippet
 
 At rest a snippet is an object that a click selects and a drag moves.
-Double-clicking it, or holding a press still on it, enters drawing mode:
-a stronger outline, the bar shows Pen, Eraser, Text and the color, the
-pen is in hand, a press on it draws, a right-drag on it erases whatever
-tool is in hand, and a click anywhere else, a right click on the snippet
-or Escape leaves. The Pen and Eraser buttons pressed again cycle their
-tool through its shapes, so a hand with no keyboard can draw a line with
-a plain drag. A right click or a hold on either lists its shapes instead,
-the one in hand marked and the modifier that draws each beside it:
-cycling takes up to two clicks to reach a shape, and test feedback
-asked for picking one directly. The click still cycles, which is the quickest
-way between two shapes used in turn. Holding Alt picks the snippet up
-instead of drawing on it.
+Double-clicking it, holding a press still on it, or pressing a drawing
+tool on its bar enters drawing mode: a stronger outline, the tool lit on
+the bar, the pen in hand (or the tool pressed), a press on it draws, a
+right-drag on it erases whatever tool is in hand, and a click anywhere
+else, a right click on the snippet, Escape or the lit tool pressed again
+leaves. A right click or a hold on the Pen or the Eraser lists its
+shapes, the one in hand marked and the modifier that draws each beside
+it, so a hand with no keyboard can draw a line with a plain drag. Holding
+Alt picks the snippet up instead of drawing on it.
+
+There is one bar, whatever the mode: the drawing tools, a divider, then
+what is done to the snippet (Pin, More, Minimize, Fullscreen, Close).
+There were two, and drawing mode swapped one for the other. That hid the
+way in - a double-click, or a hold, which nothing on the screen shows -
+and moved every button a hand had learned the place of each time the
+mode changed. With both groups always there, a drawing tool is visibly a
+way in, the lit tool is visibly the mode, and Pin or More is one click
+away while drawing. The lit tool pressed again puts it down, as its key
+always did; before, the click cycled the tool's shapes, which the menu
+above now offers directly, so the click was free to mean what a toggle
+means. Drawing mode itself is unchanged: it is still what lets a plain
+press on a snippet mean select-and-move (below), and its keys - Delete,
+the arrows - stay claimed while it is on. See `docs/INTERACTIONS.md`,
+section 6.5.
 
 The mode exists so a plain press on a snippet can mean one thing: with
 drawing the default, every click on a snippet made a mark, and with a
@@ -2260,9 +2272,11 @@ because white is the one color with a meaning there - the no-op tint
 that gives a capture back as it was - and hitting it exactly in a picker
 takes aim.
 
-Which buttons either bar carries is a setting, and anything the file gets
-wrong is made sense of rather than obeyed: a name from the other bar is
-dropped, a duplicate kept once, and a button the file never mentioned is
+Which buttons each of the bar's two groups carries is a setting - two
+lists, `bars.drawing` and `bars.snippet`, kept from when they were two
+bars, which is also why no config version was needed for one - and
+anything the file gets wrong is made sense of rather than obeyed: a name
+from the other group is dropped, a duplicate kept once, and a button the file never mentioned is
 appended shown, since a new button arriving invisible is a feature that
 silently isn't there.
 
@@ -3777,6 +3791,10 @@ Things that were built, used and removed. Each is described where it
 matters above; this is the index, so nobody spends an afternoon proving
 one twice.
 
+- **A drawing bar in place of the selection bar in drawing mode**, and
+  the lit tool's button cycling its shapes. The way in was hidden and
+  the buttons moved with the mode; replaced by one bar with both groups,
+  whose lit tool puts itself down.
 - **A right-click ring menu with favorite tool slots**, and the flat
   tool strip that mirrored it. Seven tools on three slots meant the slot
   wanted was usually not there. Replaced by six tools, a selection bar

@@ -6,7 +6,7 @@ namespace sz::core {
 
 namespace {
 
-// One walk, for both bars: what `all` holds is kept in the order the list
+// One walk, for both groups: what `all` holds is kept in the order the list
 // gives it, and whatever the list didn't mention comes after.
 void Normalize(BarButtonList& list, const ChromeButton* all, size_t count) {
     BarButtonList kept;

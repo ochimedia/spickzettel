@@ -15,17 +15,6 @@ void DrawingMode::SetTool(core::Tool tool) {
     tool_ = tool;
 }
 
-void DrawingMode::CyclePenShape() {
-    penShape_ = penShape_ == core::DrawShape::Freehand ? core::DrawShape::Line
-                : penShape_ == core::DrawShape::Line   ? core::DrawShape::Rectangle
-                                                       : core::DrawShape::Freehand;
-}
-
-void DrawingMode::CycleEraserShape() {
-    eraserShape_ =
-        eraserShape_ == core::DrawShape::Rectangle ? core::DrawShape::Freehand : core::DrawShape::Rectangle;
-}
-
 Answer DrawingMode::Offer(const Event& event, Editor& editor) {
     switch (event.kind) {
         case EventKind::KeyDown: {

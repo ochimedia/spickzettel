@@ -480,8 +480,8 @@ std::unique_ptr<Marking> Marking::ForTool(const Event& press, core::ItemId item,
     // a line with Draw (see DrawShapeFor) - and holds for the whole gesture,
     // so letting go of a key halfway through a drag changes nothing it has
     // done. The one thing that can change mid-drag is which of the two
-    // shapes a shape is. With no modifier held, the shape is whatever the
-    // drawing bar has cycled the tool to.
+    // shapes a shape is. With no modifier held, the shape is whatever was
+    // picked from the tool's menu on the bar.
     const core::DrawShape shape = editor.ShapeForPress();
     Kind kind = Kind::Freehand;
     if (editor.ActiveTool() == core::Tool::Erase) {

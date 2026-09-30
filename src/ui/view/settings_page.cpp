@@ -737,8 +737,9 @@ void SettingsPage::RenderSettingsInteraction() {
     SettingsGroupBreak();
 
     SettingsHeading("barsheading", strings::kBarsHeading, strings::kBarsHelp);
-    RenderBarButtonRow("snippetbar", strings::kBarsSnippetRow, setting::kSnippetBar);
+    // In the order the bar shows them.
     RenderBarButtonRow("drawingbar", strings::kBarsDrawingRow, setting::kDrawingBar);
+    RenderBarButtonRow("snippetbar", strings::kBarsSnippetRow, setting::kSnippetBar);
 
     SettingsGroupBreak();
 
@@ -980,7 +981,7 @@ void SettingsPage::RenderShortcutEditor(ShortcutAction action, const Icon& icon,
     const bool capturing = CapturingShortcut() == action;
 
     ImGui::PushID(static_cast<int>(index));
-    // The icon the same action wears on the drawing bar, so a row is
+    // The icon the same action wears on the selection bar, so a row is
     // recognized rather than read - see kGalleryTools/kCreateActions.
     const ImVec2 iconPos = ImGui::GetCursorScreenPos();
     ImGui::Dummy(ImVec2(Px(18.0f), ImGui::GetFrameHeight()));

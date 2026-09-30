@@ -261,17 +261,18 @@ public:
     // The tool in hand, Select to start with - see the Tool enum. A marking
     // tool is in hand exactly while a snippet is in drawing mode (see
     // DrawingItem), and a creation tool while one is on the Mode level
-    // (see CreationTool); picked from the drawing bar or a key, through
+    // (see CreationTool); picked from the bar or a key, through
     // PickTool.
     Tool ActiveTool() const;
     // The snippet in drawing mode, if one is. Selecting and moving are the
     // hand at rest; drawing on a snippet is a mode entered by
-    // double-clicking or holding on it (or picking a marking tool by key
-    // with it selected, or making a new drawing, which is made to be
-    // drawn in) and left by a left press anywhere else or Escape. In it
-    // the snippet wears a stronger outline, its bar shows the drawing
-    // buttons (see ChromeButton), the pen is in hand (a key can enter with
-    // another marking tool), a left press on the snippet draws with it,
+    // double-clicking or holding on it (or picking a marking tool, on its
+    // bar or by key, with it selected, or making a new drawing, which is
+    // made to be drawn in) and left by a left press anywhere else, Escape,
+    // or the tool in hand picked again. In it the snippet wears a stronger
+    // outline, its bar lights the tool in hand (see ChromeButton), the pen
+    // is in hand (a button or a key can enter with another marking tool),
+    // a left press on the snippet draws with it,
     // and a right-drag on it erases whatever the tool; Alt held moves or
     // resizes it instead. A left press anywhere else, or a right click on
     // the snippet itself, leaves the mode and does nothing more - the press
@@ -279,14 +280,14 @@ public:
     // screen, kept in step with the selection by PruneSelection. The Mode
     // level's - see DrawingMode.
     std::optional<ItemId> DrawingItem() const;
-    // Puts `id` into drawing mode: selected alone, outlined for it, its bar
-    // showing Pen/Eraser/Text and the color, and `tool` (the pen, if none
-    // is given) in hand, so a left press on it draws.
+    // Puts `id` into drawing mode: selected alone, outlined for it, and
+    // `tool` (the pen, if none is given) in hand and lit on its bar, so a
+    // left press on it draws.
     void EnterDrawingMode(ItemId id, std::optional<Tool> tool = std::nullopt);
     // Back to the hand at rest: no snippet in drawing mode, Select in hand.
     // The selection is left as it was.
     void ExitDrawingMode();
-    // What picking a tool from the drawing bar or a key does - the one
+    // What picking a tool from the bar or a key does - the one
     // place a tool is chosen. Select leaves drawing mode and puts a
     // creation tool down; a marking tool switches the tool in drawing
     // mode, or enters it on the snippet selected last, and does nothing
@@ -307,14 +308,14 @@ public:
     DrawShape PenShape() const;
     DrawShape EraserShape() const;
     // The shape a Draw or Erase press would make now: the modifiers' if
-    // one is held (see DrawShapeFor), else the drawing bar's cycled shape
-    // for the tool. What a stroke fixes at its press and the modifier
+    // one is held (see DrawShapeFor), else the shape picked from the tool's
+    // menu on the bar. What a stroke fixes at its press and the modifier
     // badge shows before one, from one rule.
     DrawShape ShapeForPress() const;
-    // The buttons the bar shows: the item buttons, or the drawing buttons
-    // in drawing mode - the settings' own list, minus whatever is switched
-    // off (see AppConfig::snippetBar). Empty is a legal answer and means
-    // no bar is drawn at all.
+    // The buttons the bar shows: the drawing group, then the snippet's,
+    // whatever the mode - the settings' own lists, minus whatever is
+    // switched off (see AppConfig::snippetBar). Empty is a legal answer and
+    // means no bar is drawn at all.
     std::vector<ChromeButton> BarButtons() const;
 
     // What every stroke-based tool draws with: one color and one width,
@@ -491,7 +492,7 @@ public:
     // and the frame that draws it get the same answer for the same pixel.
     PointerTarget ResolvePointerTarget(float x, float y) const;
     // Where the middle of a selection bar button is, or nothing while the
-    // bar is not showing it.
+    // bar is not showing it - nothing is selected, or it is switched off.
     std::optional<platform::Vec2> SelectionBarButtonCenter(ChromeButton button) const;
     // A selection bar button's command, run by the release that completes
     // a press on it: the command it is (see CommandForBarButton), about the

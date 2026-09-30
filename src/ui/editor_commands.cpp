@@ -163,9 +163,9 @@ bool Editor::Available(const Command& command) const {
 }
 
 void Editor::Run(const Command& command, Filing filing) {
-    // The key of the tool already in hand puts it down again - back to
-    // Select, the hand at rest (see the Tool enum), which for a marking
-    // tool means leaving drawing mode.
+    // The key or the bar button of the tool already in hand puts it down
+    // again - back to Select, the hand at rest (see the Tool enum), which
+    // for a marking tool means leaving drawing mode.
     const auto toggleTool = [this](Tool tool) { PickTool(ActiveTool() == tool ? Tool::Select : tool); };
     // A pixel a press, ten with Shift - the way every drawing program
     // nudges.
@@ -295,31 +295,21 @@ void Editor::Run(const Command& command, Filing filing) {
                 views_->OpenItemProperties(command.item, command.at);
             }
             return;
-        // The drawing bar: the tool to draw with, and the color. The tool
-        // already in hand is cycled through its shapes instead - pen, line,
-        // rectangle; eraser, rectangle eraser - so a plain drag makes them,
-        // for a hand with no modifier key to hold (see PenShape).
+        // The bar's drawing tools, as their keys: the tool picked, which
+        // takes the selected snippet into drawing mode, or - lit, in hand
+        // already - put down again, which leaves it. The shapes are the
+        // buttons' menus (PenMenu, EraserMenu).
         case CommandId::PenButton:
-            if (DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
-                drawing != nullptr && drawing->GetTool() == Tool::Draw) {
-                drawing->CyclePenShape();
-            } else {
-                PickTool(Tool::Draw);
-            }
+            toggleTool(Tool::Draw);
             return;
         case CommandId::EraserButton:
-            if (DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
-                drawing != nullptr && drawing->GetTool() == Tool::Erase) {
-                drawing->CycleEraserShape();
-            } else {
-                PickTool(Tool::Erase);
-            }
+            toggleTool(Tool::Erase);
             return;
         case CommandId::TextButton:
-            PickTool(Tool::Text);
+            toggleTool(Tool::Text);
             return;
         // Or the shape picked from the button's menu, whichever tool was in
-        // hand - not cycled to.
+        // hand - and drawing mode entered for it, as the button would.
         case CommandId::PickPen:
             PickShape(Tool::Draw, DrawShape::Freehand);
             return;

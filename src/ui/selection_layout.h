@@ -8,9 +8,11 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 #include "core/canvas/item.h"
+#include "core/config/bar_layout.h"
 #include "core/session/actions.h"
 #include "platform/platform_types.h"
 
@@ -55,14 +57,16 @@ const char* ResizeHandleName(ResizeHandle handle);
 // Which edges a resize handle moves - a corner two, an edge one.
 void ResizeHandleEdges(ResizeHandle handle, bool& left, bool& right, bool& top, bool& bottom);
 
-// The selection bar: [Pin][More][Minimize][Maximize/Restore][Close] - or,
-// in drawing mode, [Pen][Eraser][Text][Color] - buttons of this size, this
-// far apart, on a pill this much bigger than them, floating just above the
+// The selection bar: [Pen][Eraser][Text][Color] | [Pin][More][Minimize]
+// [Maximize/Restore][Close] - buttons of this size, this far apart, the two
+// groups (see IsDrawingBarButton) this far apart with a divider between
+// them, on a pill this much bigger than them, floating just above the
 // selection's bounding box - or below it when there is no room above, or
 // inside its top edge when there is no room either way (a fullscreen
 // snippet). Centered on the box and kept on screen.
 inline constexpr float kBarButtonSize = 28.0f;
 inline constexpr float kBarButtonGap = 2.0f;
+inline constexpr float kBarGroupGap = 11.0f;
 inline constexpr float kBarPad = 6.0f;
 inline constexpr float kBarGapPx = 8.0f;  // between the box and the bar
 inline constexpr float kBarHeight = kBarButtonSize + 2.0f * kBarPad;
@@ -71,8 +75,11 @@ struct BarLayout {
     platform::Vec2 min;
     platform::Vec2 max;
 };
-BarLayout LayoutBar(const core::Rect& bounds, float displayW, float displayH, size_t buttonCount);
+BarLayout LayoutBar(const core::Rect& bounds, float displayW, float displayH,
+                    const std::vector<core::ChromeButton>& buttons);
 HitRect BarButtonRect(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons,
                       core::ChromeButton button);
+// Where the divider between the two groups stands, if both are on the bar.
+std::optional<float> BarDividerX(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons);
 
 }  // namespace sz::ui

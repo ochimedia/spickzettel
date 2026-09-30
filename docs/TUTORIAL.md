@@ -676,8 +676,8 @@ point at, and a board of where each is this frame. There are two kinds:
   through `ViewHost`. That is one line per anchored widget. The board is
   cleared in Prepare, so an anchor not drawn this frame is not on screen.
   The topics mark:
-  - the selection bar's close button and its Pin;
-  - the drawing bar's pen, eraser, Text and color;
+  - the selection bar's close button and its Pin, and its pen, eraser,
+    Text and color;
   - a dock chip, by its snippet;
   - the canvas bar's + and Overview buttons;
   - the Overview's New folder and Show deleted; a folder's row; a
@@ -1215,8 +1215,8 @@ card names the other topics.
 
 | # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when |
 |---|---|---|---|---|---|---|---|
-| 0 | `drawingMode` | do | **waits** | A snippet can be drawn on. Double-click it, or hold the button down on it, to draw on it. | the subject | in the tutorial folder; canvas uncovered; a subject | drawing mode on the subject |
-| 1 | `draw` | do | moves on | as in section 4 | the drawing bar's pen | drawing mode on the subject | one stroke more than when the step began |
+| 0 | `drawingMode` | do | **waits** | A snippet can be drawn on. Double-click it, or hold the button down on it, to draw on it. The pen on its bar does the same once it is selected. | the subject | in the tutorial folder; canvas uncovered; a subject | drawing mode on the subject |
+| 1 | `draw` | do | moves on | as in section 4 | the selection bar's pen | drawing mode on the subject | one stroke more than when the step began |
 | 2 | `stopDrawing` | do | moves on | as in section 4 | - | - | no drawing mode |
 | 3 | `end` | read | Done | That's drawing. The list has more topics. | - | - | Done |
 
@@ -1443,11 +1443,11 @@ not send the user there.
 
 | # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
 |---|---|---|---|---|---|---|---|---|
-| 0 | `pin` | do | **waits** | A pinned snippet stays on screen when you put the overlay away, so it can sit over your game. Select it, and press Pin on the bar above it. | the selection bar's Pin, or the subject while its bar is not shown | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen; no drawing mode, whose bar has no Pin; the subject selected | one of the tutorial's snippets pinned | - |
+| 0 | `pin` | do | **waits** | A pinned snippet stays on screen when you put the overlay away, so it can sit over your game. Select it, and press Pin on the bar above it. | the selection bar's Pin, or the subject while its bar is not shown | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen; the subject selected | one of the tutorial's snippets pinned | - |
 | 1 | `pinnedAway` | do | moves on | Press {editMode} to put the overlay away. The pinned snippet stays over your program, and your clicks go through to it. Press {editMode} again to come back here. With the hotkey unbound, the tray icon, as in Basics' `away`. | - | in the tutorial folder; a subject; the subject here and on screen; the subject pinned | the pinned view has come up since the step began | view mode instead: "That was view mode, which keeps everything on screen - it comes next. Put the overlay away as above, and only the pinned snippet stays." |
 | 2 | `opacity` | do | moves on | Make it see-through, so it hides less of what's underneath: hold Ctrl and turn the wheel. Shift and the wheel fade what's drawn on it instead, and the wheel alone resizes it. More, on its bar, has the same as sliders. | the subject | in the tutorial folder; canvas uncovered; a subject; the subject here and on screen; the subject selected | a change that shows: the subject's picture opacity changed by 0.10 or more (two notches) from the step's start, or the opacity of what is drawn on it, while something is | resized instead: "That changed its size. Hold Ctrl as you turn the wheel." Shift with nothing drawn: "Shift fades what's drawn on it, and nothing is yet. Hold Ctrl instead." |
 | 3 | `viewMode` | do | moves on | View mode keeps everything on this canvas on screen, pinned or not, and your clicks go through to your program. Press {viewMode} to switch to it, and {editMode} to come back here. With {viewMode} unbound: "It has no key yet. Set one in Settings > Hotkeys to use it, and go on with Next." With {editMode} unbound, the tray icon comes back. | - | - | view mode has come up since the step began | put away and back instead, while {viewMode} is bound: "That put the overlay away, and only what's pinned stayed. Press {viewMode} for view mode." |
-| 4 | `unpin` | do | moves on | A pinned snippet stays on screen until you unpin it, even after the tutorial. Press Pin on its bar again. | the selection bar's Pin, or the subject | as `pinnedAway`, and canvas uncovered, no drawing mode and the subject selected | a snippet of the tutorial's seen pinned during the step is not pinned now | - |
+| 4 | `unpin` | do | moves on | A pinned snippet stays on screen until you unpin it, even after the tutorial. Press Pin on its bar again. | the selection bar's Pin, or the subject | as `pinnedAway`, and canvas uncovered and the subject selected | a snippet of the tutorial's seen pinned during the step is not pinned now | - |
 | 5 | `end` | read | Done | That's pinning and view mode. Pin what you need while you play, and make it see-through so it doesn't hide the game. View mode keeps the whole canvas in sight. The bar's Fullscreen fills the screen with a snippet, and its More has the opacity, the background color and the text. | - | - | Done | - |
 
 **The subject.** Steps 0 and 2 take any of the tutorial's snippets
@@ -1611,7 +1611,8 @@ the hand check.
 - **In drawing mode the bar is the drawing bar,** which has no Pin. So
   `pin` and `unpin` need drawing mode off, with the line every step
   has for it. The derail matrix found it: two clicks on the snippet,
-  close together, are a double-click.
+  close together, are a double-click. (Since 2026-09-30 there is one
+  bar, with Pin in drawing mode too, and the need is gone - see 15.8.)
 - **The card covered the selection bar.** It kept clear of the subject
   and the ring only, and `pinnedAway`, which rings nothing, has a hint
   that names the bar's Pin. The card now keeps clear of the bars too
@@ -1636,15 +1637,15 @@ Status: **built** (2026-09-28). Its questions and their answers are in
 ### 15.1 What it teaches, and why
 
 Drawing is built with three steps: drawing mode, a stroke, and stopping
-(13.2). The topic grows into the rest of the drawing bar, which a user
-otherwise finds only by hovering its buttons:
+(13.2). The topic grows into the rest of the bar's drawing tools, which a
+user otherwise finds only by hovering its buttons:
 
 - **The color,** the swatch on the bar, which opens a chooser.
 - **The width,** which is the wheel while drawing. Nothing on screen
   says so: there is no width slider anywhere.
-- **The pen's shapes:** the pen pressed again draws straight lines, and
-  again, rectangles. Its icon shows which. Shift and Ctrl held do the
-  same for one stroke.
+- **The pen's shapes:** the pen's menu, a right click or a hold on it,
+  has straight lines and rectangles. Its icon shows which. Shift and
+  Ctrl held do the same for one stroke.
 - **The eraser,** which cuts what it passes over rather than taking
   whole strokes. It too has a second shape, a rectangle, and the right
   button erases with any tool.
@@ -1671,17 +1672,17 @@ progress is kept, and a run's folder is "Tutorial: Drawing and notes".
 | # | Id | Kind | Next | The card says (the gist) | Points at | Needs (6.4) | Done when | Near misses (6.6) |
 |---|---|---|---|---|---|---|---|---|
 | 0 | `drawingMode` | do | **waits** | as built | the subject | as built | as built | - |
-| 1 | `draw` | do | moves on | Drag across it to draw. | the drawing bar's pen | as built | as built | - |
-| 2 | `color` | do | moves on | Press the color on the bar, and pick another. Click anywhere to close the chooser, then draw with it. | the drawing bar's color | drawing mode on the subject; the pen in hand | a stroke on the subject in a color that differs from the pen's color when the step began, more of them than at the start | the color changed, nothing drawn with it yet: "Give it a try and draw something." |
+| 1 | `draw` | do | moves on | Drag across it to draw. | the selection bar's pen | as built | as built | - |
+| 2 | `color` | do | moves on | Press the color on the bar, and pick another. Click anywhere to close the chooser, then draw with it. | the selection bar's color | drawing mode on the subject; the pen in hand | a stroke on the subject in a color that differs from the pen's color when the step began, more of them than at the start | the color changed, nothing drawn with it yet: "Give it a try and draw something." |
 | 3 | `width` | do | moves on | While you draw on a snippet, the wheel sets the pen's width. Turn it a few notches, then draw. | the subject | as `color` | a stroke on the subject 2 px or more wider or thinner than the pen when the step began, more of them than at the start | the width changed, nothing drawn yet: "Give it a try and draw something." Ctrl or Shift held: "That changed its opacity. Turn the wheel without a key held." |
-| 4 | `line` | do | moves on | Press the pen on the bar again: its icon turns into a line, and a drag draws a straight one. Holding Shift does the same for one stroke. | the drawing bar's pen | as `color` | a straight line on the subject, more than at the start | a freehand stroke instead: "That was the pen. Press it again on the bar for a line." |
-| 5 | `rectangle` | do | moves on | Press the pen once more for rectangles, and drag one. Holding Ctrl does the same for one stroke. A third press brings the pen back. | the drawing bar's pen | as `color` | a rectangle on the subject, more than at the start | a line instead: "That was a line. Press the pen once more for a rectangle." |
-| 6 | `erase` | do | moves on | Press the eraser on the bar, and drag over what you drew. It cuts through strokes. | the drawing bar's eraser | drawing mode on the subject; something drawn on the subject | the strokes on the subject 16 px shorter, or more, than at the start | - |
-| 7 | `eraseRect` | do | moves on | Press the eraser again: it now erases a rectangle. Drag one across what's left. Holding Ctrl does the same for one drag. | the drawing bar's eraser | as `erase` | 16 px of ink or more gone from the subject during the step while the rectangle eraser was in hand | ink gone with the round eraser: "That was the round eraser. Press the eraser on the bar again for the rectangle." |
-| 8 | `eraseRight` | do | moves on | The right button erases with any tool. Press the pen, then hold the right button and drag across what's left. | the drawing bar's pen | as `erase` | 16 px of ink or more gone from the subject during the step while another tool than the eraser was in hand | ink gone with the eraser: "That was the eraser. Press the pen, then drag with the right button." |
-| 9 | `note` | do | moves on | Press Text on the bar, click the snippet, and type a note. How to finish shows as the line under it once typing begins. | the drawing bar's Text | drawing mode on the subject | the subject's note is not empty, differs from the start, and is not being typed | the note being typed: "Press Esc or click outside it when you're done." |
-| 10 | `stopDrawing` | do | moves on | as built | - | - | as built | - |
-| 11 | `end` | read | Done | That's drawing and notes. Double-click any snippet to draw on it. Clear drawing, in its right-click menu, takes every stroke away; More, on its bar, has the note's color and size. | - | - | Done | - |
+| 4 | `line` | do | moves on | Right-click the pen on the bar, or hold the button down on it, and choose Line: its icon turns into a line, and a drag draws a straight one. Holding Shift does the same for one stroke. | the selection bar's pen | as `color` | a straight line on the subject, more than at the start | a freehand stroke instead: "That was the pen. Right-click it on the bar and choose Line." |
+| 5 | `rectangle` | do | moves on | The same menu has Rectangle: choose it, and drag one. Holding Ctrl does the same for one stroke. Pen, in the menu, brings the pen back. | the selection bar's pen | as `color` | a rectangle on the subject, more than at the start | a line instead: "That was a line. Right-click the pen on the bar and choose Rectangle." |
+| 6 | `erase` | do | moves on | Press the eraser on the bar, and drag over what you drew. It cuts through strokes. | the selection bar's eraser | drawing mode on the subject; something drawn on the subject | the strokes on the subject 16 px shorter, or more, than at the start | - |
+| 7 | `eraseRect` | do | moves on | Right-click the eraser, or hold the button down on it, and choose Rectangle eraser. Drag one across what's left. Holding Ctrl does the same for one drag. | the selection bar's eraser | as `erase` | 16 px of ink or more gone from the subject during the step while the rectangle eraser was in hand | ink gone with the round eraser: "That was the round eraser. Right-click it on the bar and choose Rectangle eraser." |
+| 8 | `eraseRight` | do | moves on | The right button erases with any tool. Press the pen, then hold the right button and drag across what's left. | the selection bar's pen | as `erase` | 16 px of ink or more gone from the subject during the step while another tool than the eraser was in hand | ink gone with the eraser: "That was the eraser. Press the pen, then drag with the right button." |
+| 9 | `note` | do | moves on | Press Text on the bar, click the snippet, and type a note. How to finish shows as the line under it once typing begins. | the selection bar's Text | drawing mode on the subject | the subject's note is not empty, differs from the start, and is not being typed | the note being typed: "Press Esc or click outside it when you're done." |
+| 10 | `stopDrawing` | do | moves on | as built, and: The tool lit on the bar, pressed again, does it too. | - | - | as built | - |
+| 11 | `end` | read | Done | That's drawing and notes. Double-click any snippet, or press the pen on its bar, to draw on it. Clear drawing, in its right-click menu, takes every stroke away; More, on its bar, has the note's color and size. | - | - | Done | - |
 
 **Which step waits.** Only `drawingMode`, as built: every later step
 needs drawing mode on the subject, and its line says how to get it back.
@@ -1765,7 +1766,7 @@ user picked it.
     met.
   - "something drawn on the subject": "Nothing is drawn on it to erase.
     Draw something with the pen first." No button.
-- **Three spots, with their anchors:** the drawing bar's color, eraser
+- **Three spots, with their anchors:** the selection bar's color, eraser
   and Text, marked in `canvas_view.cpp` beside the pen (7.2). While the
   bar is not drawn, each falls back to the subject, as Pin does, and so
   does the pen's now. The card keeps clear of all four, as of the other
@@ -1802,8 +1803,8 @@ user picked it.
   shape as the world reads them, the ink shorter after an erase, the
   note after typing, and the popups told apart.
 - **The walk-through,** with hands for the new steps: the bar's color,
-  a click in the chooser and a drag; the wheel and a drag; the pen
-  pressed again and a drag, twice; the eraser and a drag across the
+  a click in the chooser and a drag; the wheel and a drag; a shape
+  picked from the pen's menu and a drag, twice; the eraser and a drag across the
   strokes; the eraser again and a drag; the pen and a right-drag; Text,
   a click, typed keys and Esc.
 - **The derail matrix,** a row per way:
@@ -1874,11 +1875,23 @@ hand check.
   returned early on an empty selection, so Minimize, which clears it,
   left drawing mode on with nothing selected, and the snippet, back from
   the dock, had no bar. The derail matrix found it; fixed in the editor.
-  Minimize is not on the drawing bar, so a user could hardly get there.
+  Minimize was not on the drawing bar then, so a user could hardly get
+  there.
 - **Properties holds the wheel.** With Properties up, the wheel over the
   canvas does nothing, so in `opacity` the sliders stand in for it. The
   card now says nothing while Properties is up, where it asked to close
   it before.
+- **One bar, since 2026-09-30** (`docs/INTERACTIONS.md`, section 6.5).
+  The drawing tools are on the selection bar at rest too, and the lit
+  tool pressed again leaves drawing mode, where it used to cycle the
+  tool's shapes. So `line`, `rectangle` and `eraseRect` teach the shape
+  menu, a right click or a hold on the button, and their near misses
+  say so; `drawingMode`, `stopDrawing` and the end card name the bar as
+  a way in and out. Pinning's `pin` and `unpin` no longer need drawing
+  mode off: Pin is on the bar in it. The walk-through picks a shape from
+  the menu, and lets the card come to rest first, as a hand waits for
+  it: a line just shown under the card can send it sliding across the
+  bar.
 
 ## 16. Capturing
 

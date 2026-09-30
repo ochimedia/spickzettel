@@ -315,7 +315,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialDrawTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialDrawText); },
-        .spot = Spot::DrawingBarPen,
+        .spot = Spot::SelectionBarPen,
         .needs = With({DrawingOnSubject}),
         .subject = SubjectRule::Any,
         .goal =
@@ -332,7 +332,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialColorTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialColorText); },
-        .spot = Spot::DrawingBarColor,
+        .spot = Spot::SelectionBarColor,
         .needs = With({DrawingOnSubject, PenInHand}),
         .subject = SubjectRule::Any,
         .goal = [](const Look& look) { return MoreDrawn(look, &InNewColor); },
@@ -367,7 +367,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialLineTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialLineText); },
-        .spot = Spot::DrawingBarPen,
+        .spot = Spot::SelectionBarPen,
         .needs = With({DrawingOnSubject, PenInHand}),
         .subject = SubjectRule::Any,
         .goal = [](const Look& look) { return MoreDrawn(look, &IsLine); },
@@ -381,7 +381,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialRectangleTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialRectangleText); },
-        .spot = Spot::DrawingBarPen,
+        .spot = Spot::SelectionBarPen,
         .needs = With({DrawingOnSubject, PenInHand}),
         .subject = SubjectRule::Any,
         .goal = [](const Look& look) { return MoreDrawn(look, &IsRectangle); },
@@ -397,7 +397,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialEraseTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialEraseText); },
-        .spot = Spot::DrawingBarEraser,
+        .spot = Spot::SelectionBarEraser,
         .needs = With({DrawingOnSubject, SubjectDrawnOn}),
         .subject = SubjectRule::Any,
         .goal =
@@ -412,7 +412,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialEraseRectTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialEraseRectText); },
-        .spot = Spot::DrawingBarEraser,
+        .spot = Spot::SelectionBarEraser,
         .needs = With({DrawingOnSubject, SubjectDrawnOn}),
         .subject = SubjectRule::Any,
         .goal = [](const Look& look) { return look.SubjectInkGone().rectangleEraser >= kInkGone; },
@@ -427,7 +427,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialEraseRightTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialEraseRightText); },
-        .spot = Spot::DrawingBarPen,
+        .spot = Spot::SelectionBarPen,
         // No need for the pen: the eraser comes in hand from the step
         // before, and what it erases gets the near miss's line, which a
         // need's would hide.
@@ -451,7 +451,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialNoteTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialNoteText); },
-        .spot = Spot::DrawingBarText,
+        .spot = Spot::SelectionBarText,
         .needs = With({DrawingOnSubject}),
         .subject = SubjectRule::Any,
         .goal =
@@ -506,8 +506,8 @@ std::vector<Step> MakePinning() {
         .title = strings::kTutorialPinTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialPinText); },
         .spot = Spot::SelectionBarPin,
-        // In drawing mode the bar over it is the drawing bar, with no Pin.
-        .needs = With({NoDrawingMode, SubjectSelected}),
+        // Drawing mode or not: the bar has Pin in both.
+        .needs = With({SubjectSelected}),
         .subject = SubjectRule::Any,
         // Any of the tutorial's: the bar pins the whole selection.
         .goal = &AnyPinned,
@@ -595,7 +595,7 @@ std::vector<Step> MakePinning() {
         .title = strings::kTutorialUnpinTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialUnpinText); },
         .spot = Spot::SelectionBarPin,
-        .needs = With({SubjectPinned, NoDrawingMode, SubjectSelected}),
+        .needs = With({SubjectPinned, SubjectSelected}),
         .subject = SubjectRule::Pinned,
         // One seen pinned in this step, pinned no more: a step begun with
         // nothing pinned asks for a pin first, and the unpin after it

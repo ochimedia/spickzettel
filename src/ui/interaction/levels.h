@@ -32,17 +32,14 @@ public:
     const char* Name() const override { return "DrawingMode"; }
     core::ItemId Item() const { return item_; }
     core::Tool GetTool() const { return tool_; }
-    // Another marking tool in hand. A shape the drawing bar cycled the pen
-    // or the eraser to is that tool's for as long as it stays in hand.
+    // Another marking tool in hand. A shape picked for the pen or the
+    // eraser is that tool's for as long as it stays in hand.
     void SetTool(core::Tool tool);
-    // What the pen draws and the eraser erases on a plain drag: the drawing
-    // bar's button pressed again cycles the tool through its shapes - pen,
-    // line, rectangle; eraser, rectangle eraser.
+    // What the pen draws and the eraser erases on a plain drag: picked from
+    // the menu of the tool's bar button - pen, line, rectangle; eraser,
+    // rectangle eraser.
     core::DrawShape PenShape() const { return penShape_; }
     core::DrawShape EraserShape() const { return eraserShape_; }
-    void CyclePenShape();
-    void CycleEraserShape();
-    // A shape picked from the button's menu instead.
     void SetPenShape(core::DrawShape shape) { penShape_ = shape; }
     void SetEraserShape(core::DrawShape shape) { eraserShape_ = shape; }
     Answer Offer(const Event& event, Editor& editor) override;

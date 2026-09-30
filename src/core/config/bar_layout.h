@@ -9,10 +9,11 @@
 
 namespace sz::core {
 
-// The two bars that float over the selection - the snippet one, and the
-// drawing one a snippet open for drawing shows instead (see ChromeButton)
-// - as the settings hold them: which buttons each carries, in what order,
-// and which of them are shown at all.
+// The two groups of the bar that floats over the selection - the drawing
+// tools, and what is done to the snippet (see ChromeButton) - as the
+// settings hold them: which buttons each carries, in what order, and which
+// of them are shown at all. The bar shows both, always, the drawing group
+// first (see Editor::BarButtons).
 //
 // A list rather than a set of flags, because the order is half of what is
 // being set: the bar is drawn left to right in exactly this order, and
@@ -30,15 +31,24 @@ struct BarButtonSetting {
 };
 using BarButtonList = std::vector<BarButtonSetting>;
 
-// Every button each bar can carry, in the order it ships in. The two sets
-// are disjoint: a button belongs to one bar, and a list naming a button
-// from the other one is not a layout of this bar (see NormalizeSnippetBar).
+// Every button each group can carry, in the order it ships in. The two
+// sets are disjoint: a button belongs to one group, and a list naming a
+// button from the other one is not a layout of this group (see
+// NormalizeSnippetBar).
 inline constexpr std::array<ChromeButton, 5> kSnippetBarButtons = {
     ChromeButton::Pin, ChromeButton::More, ChromeButton::Minimize, ChromeButton::Maximize, ChromeButton::Close,
 };
 inline constexpr std::array<ChromeButton, 4> kDrawingBarButtons = {
     ChromeButton::Pen, ChromeButton::Eraser, ChromeButton::Text, ChromeButton::Color,
 };
+constexpr bool IsDrawingBarButton(ChromeButton button) {
+    for (const ChromeButton drawing : kDrawingBarButtons) {
+        if (drawing == button) {
+            return true;
+        }
+    }
+    return false;
+}
 
 // The name a button is written as in config.json - the compatibility
 // surface, like ShortcutActionKey's own names, so the enum may be
@@ -46,12 +56,12 @@ inline constexpr std::array<ChromeButton, 4> kDrawingBarButtons = {
 std::string_view BarButtonKey(ChromeButton button);
 std::optional<ChromeButton> BarButtonFromKey(std::string_view key);
 
-// Both bars as they ship: every button, in the order above, all shown.
+// Both groups as they ship: every button, in the order above, all shown.
 BarButtonList DefaultSnippetBar();
 BarButtonList DefaultDrawingBar();
 
-// A list read from the file, made usable: anything that is not this bar's
-// button is dropped, a button named twice is kept once, and a button the
+// A list read from the file, made usable: anything that is not this
+// group's button is dropped, a button named twice is kept once, and a button the
 // file never mentioned - one this version has and the version that wrote
 // the file did not - is appended, shown. Appended and shown rather than
 // hidden, because a button nobody has said anything about is new, and a

@@ -68,9 +68,9 @@ enum class CommandId {
     Minimize,
     Pin,
     Properties,
-    PenButton,     // the pen, or its next shape when it is in hand
-    EraserButton,  // the eraser, or its next shape when it is in hand
-    TextButton,
+    PenButton,     // the pen, or put down when it is in hand
+    EraserButton,  // likewise the eraser
+    TextButton,    // and Text
     ColorButton,
     // The pen or the eraser in hand, drawing that shape - a row of the
     // menu their bar buttons open (PenMenu, EraserMenu).

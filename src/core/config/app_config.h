@@ -195,12 +195,12 @@ struct AppConfig {
     // letting both have one. See Editor::EmptyCanvasCreationKind.
     CreationTrigger screenshotTrigger = CreationTrigger::Plain;
     CreationTrigger drawingTrigger = CreationTrigger::Ctrl;
-    // The two bars that float over the selection: which buttons each one
-    // carries, in what order, and which of them are shown - see
-    // BarButtonList, and Settings > Interaction, which is a row of the
-    // same buttons to drag about and switch off. Global rather than
-    // per-application: which buttons a bar has is about how you work, not
-    // about what the overlay happens to be up over.
+    // The two groups of the bar that floats over the selection: which
+    // buttons each one carries, in what order, and which of them are shown
+    // - see BarButtonList, and Settings > Interaction, which is a row of
+    // the same buttons to drag about and switch off. Global rather than
+    // per-application: which buttons the bar has is about how you work,
+    // not about what the overlay happens to be up over.
     BarButtonList snippetBar = DefaultSnippetBar();
     BarButtonList drawingBar = DefaultDrawingBar();
     // What the canvas overview's thumbnails show. Strokes are nearly free

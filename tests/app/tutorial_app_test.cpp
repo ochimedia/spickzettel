@@ -177,19 +177,30 @@ protected:
         }
     }
     void PressBarPin() { PressBar(ChromeButton::Pin); }
-    // A button of the selection bar, or of the drawing bar in drawing mode.
+    // A button of the selection bar.
     void PressBar(ChromeButton button) {
         const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
         ASSERT_TRUE(center.has_value());
         RawClick(center->x, center->y);
     }
-    // The pen pressed until its icon shows `shape`: pressed again, it
-    // cycles through its shapes.
-    void PressPenFor(DrawShape shape) {
-        for (int i = 0; i < 4 && (App().ActiveTool() != Tool::Draw || App().PenShape() != shape); ++i) {
-            PressBar(ChromeButton::Pen);
-            StepFrames(20);  // no double-click of two presses
-        }
+    // Row `row` of the `rows` in the menu of the pen's or the eraser's
+    // button, opened with a right click on it. The menu is anonymous, so
+    // the row is clicked where it stands: rows of one height, top to bottom.
+    // First the card is let come to rest, as a hand waits for it: a line
+    // just shown under it can send it sliding across the bar.
+    void PickFromShapeMenu(ChromeButton button, int row, int rows) {
+        Settle();
+        const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
+        ASSERT_TRUE(center.has_value());
+        RightClick(center->x, center->y);
+        StepFrames(2);
+        ASSERT_TRUE(App().IsShapeMenuOpen());
+        const ImGuiContext& g = *ImGui::GetCurrentContext();
+        ASSERT_FALSE(g.OpenPopupStack.empty());
+        const ImRect inner = g.OpenPopupStack.back().Window->InnerRect;
+        const float rowH = inner.GetHeight() / static_cast<float>(rows);
+        Click(inner.GetCenter().x, inner.Min.y + rowH * (static_cast<float>(row) + 0.5f));
+        StepFrames(2);
     }
     // A stroke across the subject, `dy` below its middle.
     void DrawAcross(float dy = 0.0f) {
@@ -319,10 +330,10 @@ protected:
             Wheel(1.0f);
             DrawAcross(-30.0f);
         } else if (id == "line") {
-            PressPenFor(DrawShape::Line);
+            PickFromShapeMenu(ChromeButton::Pen, 1, 3);  // Pen, Line, Rectangle
             DrawAcross(50.0f);
         } else if (id == "rectangle") {
-            PressPenFor(DrawShape::Rectangle);
+            PickFromShapeMenu(ChromeButton::Pen, 2, 3);
             const ImVec2 middle = SubjectMiddle();
             Drag(middle.x - 80.0f, middle.y - 60.0f, middle.x - 20.0f, middle.y + 60.0f);
         } else if (id == "erase") {
@@ -330,11 +341,7 @@ protected:
             const ImVec2 middle = SubjectMiddle();
             Drag(middle.x, middle.y - 80.0f, middle.x, middle.y + 80.0f);
         } else if (id == "eraseRect") {
-            for (int i = 0; i < 3 && (App().ActiveTool() != Tool::Erase || App().EraserShape() != DrawShape::Rectangle);
-                 ++i) {
-                PressBar(ChromeButton::Eraser);
-                StepFrames(20);  // no double-click of two presses
-            }
+            PickFromShapeMenu(ChromeButton::Eraser, 1, 2);  // Eraser, Rectangle eraser
             const ImVec2 middle = SubjectMiddle();
             Drag(middle.x + 20.0f, middle.y - 80.0f, middle.x + 50.0f, middle.y + 80.0f);
         } else if (id == "eraseRight") {
@@ -532,7 +539,6 @@ TEST_F(TutorialAppTest, TheSelectionBarsCloseButtonIsMarkedWhereItIsDrawn) {
     ASSERT_TRUE(center.has_value());
     EXPECT_FLOAT_EQ(Center(*close).x, center->x);
     EXPECT_FLOAT_EQ(Center(*close).y, center->y);
-    EXPECT_FALSE(App().AnchorAt(Anchor{AnchorId::DrawingBarPen}).has_value()) << "not the drawing bar";
 }
 
 TEST_F(TutorialAppTest, TheSelectionBarsPinIsMarkedWhereItIsDrawn) {
@@ -613,30 +619,30 @@ TEST_F(TutorialAppTest, AnAnchorNotDrawnThisFrameIsNotOnTheBoard) {
     EXPECT_FALSE(App().AnchorAt(Anchor{AnchorId::SelectionBarClose}).has_value());
 }
 
-TEST_F(TutorialAppTest, TheDrawingBarsPenIsMarkedWhereItIsDrawn) {
+TEST_F(TutorialAppTest, TheSelectionBarsPenIsMarkedWhereItIsDrawn) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
     ASSERT_TRUE(App().DrawingItem().has_value());
     StepFrame();
 
-    const std::optional<AnchorRect> pen = App().AnchorAt(Anchor{AnchorId::DrawingBarPen});
+    const std::optional<AnchorRect> pen = App().AnchorAt(Anchor{AnchorId::SelectionBarPen});
     const std::optional<ImVec2> center = App().SelectionBarButtonCenter(ChromeButton::Pen);
     ASSERT_TRUE(pen.has_value());
     ASSERT_TRUE(center.has_value());
     EXPECT_FLOAT_EQ(Center(*pen).x, center->x);
     EXPECT_FLOAT_EQ(Center(*pen).y, center->y);
-    EXPECT_FALSE(App().AnchorAt(Anchor{AnchorId::SelectionBarClose}).has_value()) << "not the selection bar";
+    EXPECT_TRUE(App().AnchorAt(Anchor{AnchorId::SelectionBarClose}).has_value()) << "one bar, in drawing mode too";
 }
 
-TEST_F(TutorialAppTest, TheDrawingBarsOtherButtonsAreMarkedWhereTheyAreDrawn) {
+TEST_F(TutorialAppTest, TheSelectionBarsOtherDrawingButtonsAreMarkedWhereTheyAreDrawn) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
     StepFrame();
-    for (const auto [id, button] : {std::pair{AnchorId::DrawingBarEraser, ChromeButton::Eraser},
-                                    std::pair{AnchorId::DrawingBarText, ChromeButton::Text},
-                                    std::pair{AnchorId::DrawingBarColor, ChromeButton::Color}}) {
+    for (const auto [id, button] : {std::pair{AnchorId::SelectionBarEraser, ChromeButton::Eraser},
+                                    std::pair{AnchorId::SelectionBarText, ChromeButton::Text},
+                                    std::pair{AnchorId::SelectionBarColor, ChromeButton::Color}}) {
         const std::optional<AnchorRect> anchor = App().AnchorAt(Anchor{id});
         const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
         ASSERT_TRUE(anchor.has_value());
@@ -1348,7 +1354,7 @@ TEST_F(TutorialAppTest, TheSpotlightRingsTheBarsCloseOnTheDeleteStep) {
 TEST_F(TutorialAppTest, TheSpotlightRingsTheDrawingBarsPen) {
     WalkTo("draw", "drawing");
     const std::optional<AnchorRect> spot = App().TutorialSpot();
-    const std::optional<AnchorRect> pen = App().AnchorAt(Anchor{AnchorId::DrawingBarPen});
+    const std::optional<AnchorRect> pen = App().AnchorAt(Anchor{AnchorId::SelectionBarPen});
     ASSERT_TRUE(spot.has_value());
     ASSERT_TRUE(pen.has_value());
     EXPECT_FLOAT_EQ(spot->min.x, pen->min.x);
@@ -2367,7 +2373,7 @@ std::vector<Derail> Matrix() {
         {"pinning", "pin", OtherCanvasHere, Need::SubjectHere},
         {"pinning", "pin", Deleted, Need::ASubject},
         {"pinning", "pin", Minimized, Need::SubjectOnScreen},
-        {"pinning", "pin", EnteredDrawingMode, Need::NoDrawingMode},
+        {"pinning", "pin", EnteredDrawingMode, nothing},
         {"pinning", "pinnedAway", Overview, nothing},
         {"pinning", "pinnedAway", OtherFolder, Need::InTutorialFolder},
         {"pinning", "pinnedAway", OtherCanvasHere, Need::SubjectHere},
@@ -2389,7 +2395,7 @@ std::vector<Derail> Matrix() {
         {"pinning", "unpin", OtherCanvasHere, Need::SubjectHere},
         {"pinning", "unpin", Deleted, Need::ASubject},
         {"pinning", "unpin", Minimized, Need::SubjectOnScreen},
-        {"pinning", "unpin", EnteredDrawingMode, Need::NoDrawingMode},
+        {"pinning", "unpin", EnteredDrawingMode, nothing},
         {"pinning", "opacity", PropertiesUp, nothing},
         {"drawing", "color", ColorChooserUp, nothing},
         {"drawing", "width", OpacityByWheel, nothing},

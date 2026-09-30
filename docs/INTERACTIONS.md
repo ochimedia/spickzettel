@@ -396,13 +396,31 @@ double-click on a snippet - the right click of a finger or a pen. It
 fits the rules as they are, with no change to the structure: the press
 is Bar button held, as before, which now also answers a Tick (the hold)
 and a right release (the menu). Nothing is done at the press, so a click
-still cycles the shape on its release (6.1); a hold ends the press and
+still runs the button's command on its release (6.1); a hold ends the press and
 leaves the rest of it Spent, so its release fires nothing (6.3) - nor
 does the right press Windows injects into a finger held still, which
 comes after the hold has matured. A drag past 6 px is no hold, as on a
 snippet. The menu is a context menu on the Popup level, and each row a
 command (`PickLine`, `PickRectangleEraser`, ...). The other bar buttons
 take a right press for nothing, as before, and a hold on them is a click.
+
+Changed on 2026-09-30, from test feedback: one bar. The selection bar
+shows the drawing tools and the snippet's buttons side by side, whether
+or not a snippet is in drawing mode, where it used to show one set or the
+other. A drawing tool's button runs what the tool's key runs: the tool
+picked - which, with no snippet in drawing mode, enters it on the snippet
+selected last (`Editor::PickTool`) - or, when it is the tool in hand, put
+down again, which leaves drawing mode. Its click used to cycle the tool's
+shapes instead, before the menu above had them; with the menu, the click
+is free to be the tool's own. None of this touches the structure: rule 2
+decides as before, the buttons' commands (`PenButton`, `EraserButton`,
+`TextButton`) are rows of section 7 whose run changed, and drawing mode
+is entered and left by the same `DrawingMode` interaction on the Mode
+level. A snippet button pressed in drawing mode acts as it does at rest;
+Close and Minimize take the snippet off the screen, and drawing mode goes
+with it, as it does for a delete from anywhere (`Editor::PruneSelection`).
+Delete and the arrow keys stay claimed by drawing mode (section 5): a key
+is pressed without looking at the bar, a button is not.
 
 ## 7. Commands and bindings
 

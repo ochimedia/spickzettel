@@ -202,8 +202,9 @@ one row noted.
 | `editModeBorder.width` | `editModeBorderWidthPx` | 10 | ≤0 rejected, else 1..48 held; previewed | Frame |
 | `editModeBorder.onlyWhenEmpty` | `editModeBorderOnlyWhenEmpty` | false | bool | Frame |
 
-**`bars`**: Global. Rule: a list of that bar's buttons with a shown
-flag; normalized to hold each button exactly once. Edited from Settings
+**`bars`**: Global. Rule: a list of that group's buttons with a shown
+flag; normalized to hold each button exactly once. The two are the two
+groups of the one bar over the selection, the drawing tools first. Edited from Settings
 > Interaction. Effect: Frame.
 
 | Key | Field |

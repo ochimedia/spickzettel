@@ -53,14 +53,29 @@ void ResizeHandleEdges(ResizeHandle handle, bool& left, bool& right, bool& top, 
 }
 
 namespace {
-float BarWidth(size_t buttonCount) {
-    const auto n = static_cast<float>(buttonCount);
-    return n * Px(kBarButtonSize) + (n - 1.0f) * Px(kBarButtonGap) + 2.0f * Px(kBarPad);
+// How far from the bar's first button the left edge of `buttons[index]`
+// is: a button and a gap for each before it, and the wider gap where the
+// group changes.
+float BarButtonOffset(const std::vector<core::ChromeButton>& buttons, size_t index) {
+    float offset = 0.0f;
+    for (size_t at = 1; at <= index && at < buttons.size(); ++at) {
+        const bool newGroup = core::IsDrawingBarButton(buttons[at]) != core::IsDrawingBarButton(buttons[at - 1]);
+        offset += Px(kBarButtonSize) + Px(newGroup ? kBarGroupGap : kBarButtonGap);
+    }
+    return offset;
+}
+
+float BarWidth(const std::vector<core::ChromeButton>& buttons) {
+    if (buttons.empty()) {
+        return 2.0f * Px(kBarPad);
+    }
+    return BarButtonOffset(buttons, buttons.size() - 1) + Px(kBarButtonSize) + 2.0f * Px(kBarPad);
 }
 }  // namespace
 
-BarLayout LayoutBar(const core::Rect& bounds, float displayW, float displayH, size_t buttonCount) {
-    const float width = BarWidth(buttonCount);
+BarLayout LayoutBar(const core::Rect& bounds, float displayW, float displayH,
+                    const std::vector<core::ChromeButton>& buttons) {
+    const float width = BarWidth(buttons);
     float x = std::round(bounds.x + bounds.w * 0.5f - width * 0.5f);
     x = std::clamp(x, 0.0f, std::max(0.0f, displayW - width));
     const auto at = [&](float y) {
@@ -79,16 +94,20 @@ BarLayout LayoutBar(const core::Rect& bounds, float displayW, float displayH, si
 
 HitRect BarButtonRect(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons,
                       core::ChromeButton button) {
-    float slot = 0.0f;
-    for (const core::ChromeButton candidate : buttons) {
-        if (candidate == button) {
-            break;
-        }
-        slot += 1.0f;
-    }
-    const float x = bar.min.x + Px(kBarPad) + slot * (Px(kBarButtonSize) + Px(kBarButtonGap));
+    const size_t index = static_cast<size_t>(std::find(buttons.begin(), buttons.end(), button) - buttons.begin());
+    const float x = bar.min.x + Px(kBarPad) + BarButtonOffset(buttons, index);
     const float y = bar.min.y + Px(kBarPad);
     return HitRect{platform::Vec2{x, y}, platform::Vec2{x + Px(kBarButtonSize), y + Px(kBarButtonSize)}};
+}
+
+std::optional<float> BarDividerX(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons) {
+    for (size_t at = 1; at < buttons.size(); ++at) {
+        if (core::IsDrawingBarButton(buttons[at]) != core::IsDrawingBarButton(buttons[at - 1])) {
+            const float right = bar.min.x + Px(kBarPad) + BarButtonOffset(buttons, at);
+            return std::round(right - Px(kBarGroupGap) * 0.5f);
+        }
+    }
+    return std::nullopt;
 }
 
 }  // namespace sz::ui

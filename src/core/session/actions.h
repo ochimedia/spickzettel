@@ -11,7 +11,7 @@
 namespace sz::core {
 
 // What is in the hand - six tools, exactly one at a time, so what a press
-// will do is always the one tool marked on the drawing bar. What a
+// will do is always the one tool lit on the selection bar. What a
 // marking tool does is varied with a modifier held as the press starts,
 // rather than by a tool of its own:
 //
@@ -82,12 +82,13 @@ enum class CreateAction { NewCanvas, NewCanvasWithSelection };
 // over the selected snippets (see CanvasView::PaintSelectionBar). Five of
 // them act on the selection: Close deletes it, Pin pins or unpins it,
 // Minimize sends it to the dock; Maximize and More take the snippet
-// selected last. The other four are the *drawing* bar, which the pill
-// shows instead while a snippet is in drawing mode (see
-// Editor::DrawingItem): the marking tool to draw with, and the
+// selected last. The other four are its *drawing* group, beside them
+// whether or not a snippet is in drawing mode: the marking tool to draw
+// with, which takes the snippet into drawing mode (see
+// Editor::DrawingItem) and, pressed while it is lit, out again; and the
 // color.
 //
-// Which of them each bar carries, in which order, and which are shown at
+// Which of them each group carries, in which order, and which are shown at
 // all is a setting - see core/config/bar_layout.h, which is why this is
 // down here with the other words the settings have to be able to name
 // rather than in the UI header that draws them.
