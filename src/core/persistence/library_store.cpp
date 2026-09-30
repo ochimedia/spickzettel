@@ -378,11 +378,15 @@ void ReadItemRecord(std::string_view text, int64_t now, Item& out, bool& repaire
 // stroke point as JSON is an object of two keys, and an ordinary canvas
 // holds tens of thousands of them. Little-endian throughout:
 //
-//   u8  format (1)
+//   u8  format (2)
 //   u32 stroke count, then per stroke:
-//       u32 colorRGBA, f32 width, u32 point count, then per point: f32 x, f32 y
+//       u32 colorRGBA, f32 width, u8 corners, u32 point count,
+//       then per point: f32 x, f32 y
+//
+// Format 1, up to 0.2.1, had no corners byte: see CornersOfAFormat1Stroke.
 static_assert(std::endian::native == std::endian::little, "the stroke blob is written as the host stores it");
-constexpr uint8_t kStrokeBlobFormat = 1;
+constexpr uint8_t kStrokeBlobFormat = 2;
+constexpr uint8_t kStrokeBlobFormat1 = 1;
 
 template <typename T>
 void Put(std::vector<uint8_t>& out, T value) {
@@ -394,7 +398,7 @@ void Put(std::vector<uint8_t>& out, T value) {
 std::vector<uint8_t> StrokesBlob(const std::vector<Stroke>& strokes) {
     size_t size = 1 + 4;
     for (const Stroke& stroke : strokes) {
-        size += 12 + stroke.points.size() * 8;
+        size += 13 + stroke.points.size() * 8;
     }
     std::vector<uint8_t> out;
     out.reserve(size);
@@ -403,6 +407,7 @@ std::vector<uint8_t> StrokesBlob(const std::vector<Stroke>& strokes) {
     for (const Stroke& stroke : strokes) {
         Put(out, stroke.colorRGBA);
         Put(out, stroke.width);
+        Put(out, static_cast<uint8_t>(stroke.corners));
         Put(out, static_cast<uint32_t>(stroke.points.size()));
         for (const StrokePoint& point : stroke.points) {
             Put(out, point.x);
@@ -431,6 +436,21 @@ private:
     size_t at_ = 0;
 };
 
+// A stroke from before strokes said what their corners are, when every
+// turn below about 120 degrees was mitered: the rectangle tool's is the
+// one whose corners were meant, and it is told by its shape - every
+// segment exactly level or plumb, which a fitted freehand line with a
+// turn in it never is. So is what the eraser left of one. A straight line
+// matches as well, and has no corner to draw either way.
+StrokeCorners CornersOfAFormat1Stroke(const std::vector<StrokePoint>& points) {
+    for (size_t i = 0; i + 1 < points.size(); ++i) {
+        if (points[i].x != points[i + 1].x && points[i].y != points[i + 1].y) {
+            return StrokeCorners::Round;
+        }
+    }
+    return StrokeCorners::Sharp;
+}
+
 // What the blob holds, as far as it can be read: a blob cut short keeps the
 // strokes before the cut, and a value that cannot be used is the default,
 // as in a record.
@@ -439,19 +459,25 @@ std::vector<Stroke> ReadStrokes(const std::vector<uint8_t>& blob, bool& repaired
     BlobReader in(blob);
     uint8_t format = 0;
     uint32_t count = 0;
-    if (!in.Get(format) || format != kStrokeBlobFormat || !in.Get(count)) {
+    if (!in.Get(format) || (format != kStrokeBlobFormat && format != kStrokeBlobFormat1) || !in.Get(count)) {
         repaired = true;
         return strokes;
     }
     for (uint32_t i = 0; i < count; ++i) {
         Stroke stroke;
+        uint8_t corners = 0;
         uint32_t points = 0;
         // A count past what is left cannot be true, and is not reserved for.
-        if (!in.Get(stroke.colorRGBA) || !in.Get(stroke.width) || !in.Get(points) ||
-            in.Left() / 8 < points) {
+        if (!in.Get(stroke.colorRGBA) || !in.Get(stroke.width) ||
+            (format != kStrokeBlobFormat1 && !in.Get(corners)) || !in.Get(points) || in.Left() / 8 < points) {
             repaired = true;
             break;
         }
+        if (corners > static_cast<uint8_t>(StrokeCorners::Sharp)) {
+            corners = 0;
+            repaired = true;
+        }
+        stroke.corners = static_cast<StrokeCorners>(corners);
         if (!std::isfinite(stroke.width) || stroke.width <= 0.0f || stroke.width > kMaxSensibleExtent) {
             stroke.width = 3.0f;
             repaired = true;
@@ -464,6 +490,9 @@ std::vector<Stroke> ReadStrokes(const std::vector<uint8_t>& blob, bool& repaired
                 point = StrokePoint{};
                 repaired = true;
             }
+        }
+        if (format == kStrokeBlobFormat1) {
+            stroke.corners = CornersOfAFormat1Stroke(stroke.points);
         }
         strokes.push_back(std::move(stroke));
     }
@@ -538,6 +567,14 @@ LibraryStore::OpenResult LibraryStore::TryOpen() {
     if (userVersion > kFormatVersion) {
         Close();
         return OpenResult::WrittenByANewerVersion;
+    }
+    // An older version's library is read as it is - every version reads
+    // what the ones before it wrote - and is this version's from here on:
+    // what is written now, an older build would lose.
+    if (userVersion < kFormatVersion &&
+        !Exec(db_, ("PRAGMA user_version = " + std::to_string(kFormatVersion)).c_str())) {
+        Close();
+        return OpenResult::Unreadable;
     }
     Exec(db_, "PRAGMA foreign_keys = ON");
     EnterWal();

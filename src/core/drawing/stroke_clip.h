@@ -22,7 +22,7 @@ namespace sz::core {
 // point inside it, no segment passing through it) - the caller's cue to
 // leave the stroke alone rather than replace it with an identical copy.
 // Otherwise returns the surviving fragments, each keeping stroke's own
-// colorRGBA/width, in original point order; a fragment that would end up
+// colorRGBA/width/corners, in original point order; a fragment that would end up
 // with fewer than 2 points is dropped, so an empty (but present) vector
 // means the whole stroke was erased. Cutting a line down to a single
 // surviving sample leaves nothing rather than a dot: a dot is something

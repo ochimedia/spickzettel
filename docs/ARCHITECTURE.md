@@ -902,6 +902,12 @@ asks before the tray icon, so a refusal is a message box and no start:
 - **Written by a newer version** - `user_version` above this build's.
   Every row it saved back would lose what the newer build put there, so
   the store reads and writes nothing at all, and the app does not start.
+  An older version's library, `user_version` below, is read as it is -
+  every version reads what the ones before it wrote - and its
+  `user_version` raised at once: what this build writes, the older one
+  would lose, so from then on it is refused there. Version 2 is a
+  stroke's corners (see "Tessellation, and its cache"): 0.2.1 would read
+  the new stroke blobs as damaged, and write them back empty.
 - **Unreadable** - the file is there and cannot be opened or read:
   another program holding it - another copy of the app, on another
   computer sharing the folder, among them - or not ours to read. A start

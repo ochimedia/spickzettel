@@ -772,6 +772,7 @@ std::vector<size_t> CanvasManager::EraseRectAt(ItemId id, float minX, float minY
 Stroke CanvasManager::BakeStrokeToNative(const Item& item, const Stroke& screenSpaceStroke) {
     Stroke nativeStroke;
     nativeStroke.colorRGBA = screenSpaceStroke.colorRGBA;
+    nativeStroke.corners = screenSpaceStroke.corners;
     nativeStroke.points.reserve(screenSpaceStroke.points.size());
     float scale = 1.0f;
     for (const StrokePoint& p : screenSpaceStroke.points) {

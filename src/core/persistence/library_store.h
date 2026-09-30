@@ -60,7 +60,9 @@ public:
     // written - a field an older build would drop, a new table - and a
     // version covers everything since the release before it.
     // 1: the first library in a database.
-    static constexpr int kFormatVersion = 1;
+    // 2: a stroke says whether its corners are round (StrokeCorners), in
+    //    stroke blob format 2. 0.2.1 would read those blobs as damaged.
+    static constexpr int kFormatVersion = 2;
 
     // The longest edge a thumbnail is stored at. A canvas tile in the
     // Overview is 200x130 and an item inside one is smaller still; what this

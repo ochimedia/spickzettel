@@ -534,6 +534,7 @@ TEST(SessionTest, AShapeIsBakedAsOneStrokeAndUndoneInOneStep) {
     const Item* baked = ItemById(Model(session), item);
     ASSERT_EQ(baked->strokes.size(), 1u);
     EXPECT_EQ(baked->strokes[0].points.size(), 5u) << "an outline closed back on its corner";
+    EXPECT_EQ(baked->strokes[0].corners, StrokeCorners::Sharp) << "and square at them";
     const CanvasState& live = session.LiveLayer();
     EXPECT_TRUE(live.Strokes().empty());
     EXPECT_FALSE(live.ActiveStroke().has_value());

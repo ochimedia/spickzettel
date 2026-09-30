@@ -4,10 +4,11 @@
 
 namespace sz::core {
 
-void CanvasState::BeginStroke(StrokePoint point, uint32_t colorRGBA, float width) {
+void CanvasState::BeginStroke(StrokePoint point, uint32_t colorRGBA, float width, StrokeCorners corners) {
     Stroke stroke;
     stroke.colorRGBA = colorRGBA;
     stroke.width = width;
+    stroke.corners = corners;
     stroke.points.push_back(point);
     active_ = std::move(stroke);
 }

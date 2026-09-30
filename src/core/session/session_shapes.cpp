@@ -44,7 +44,9 @@ void Session::BeginShape(ItemId itemId, Shape shape, float screenX, float screen
     shape_ = shape;
     shapeStartX_ = shapeLastX_ = screenX;
     shapeStartY_ = shapeLastY_ = screenY;
-    liveLayer_.BeginStroke(StrokePoint{screenX, screenY}, colorRGBA, widthScreenPx);
+    // A rectangle's corners stay square (see StrokeCorners). A line has none,
+    // and may become a rectangle before it is let go (see SetShape).
+    liveLayer_.BeginStroke(StrokePoint{screenX, screenY}, colorRGBA, widthScreenPx, StrokeCorners::Sharp);
 }
 
 void Session::UpdateShape(float screenX, float screenY) {

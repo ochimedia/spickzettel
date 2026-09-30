@@ -14,7 +14,8 @@ namespace sz::core {
 // rendering APIs.
 class CanvasState {
 public:
-    void BeginStroke(StrokePoint point, uint32_t colorRGBA, float width);
+    void BeginStroke(StrokePoint point, uint32_t colorRGBA, float width,
+                     StrokeCorners corners = StrokeCorners::Round);
     void ExtendStroke(StrokePoint point);
     // Replaces the in-progress stroke's points wholesale (color/width from
     // BeginStroke are untouched) - for a tool that recomputes its whole

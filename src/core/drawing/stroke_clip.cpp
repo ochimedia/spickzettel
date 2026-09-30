@@ -59,6 +59,7 @@ std::optional<std::vector<Stroke>> ClipStrokeOutsideRegion(const Stroke& stroke,
             fragment.points = currentRun;
             fragment.colorRGBA = stroke.colorRGBA;
             fragment.width = stroke.width;
+            fragment.corners = stroke.corners;
             fragments.push_back(std::move(fragment));
         }
         currentRun.clear();

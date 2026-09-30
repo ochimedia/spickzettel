@@ -112,6 +112,7 @@ CanvasManagerSnapshot MakeSampleSnapshot() {
     stroke.points = {StrokePoint{1, 2}, StrokePoint{3, 4}, StrokePoint{5, 6}};
     drawing.strokes.push_back(stroke);
     stroke.points = {StrokePoint{-0.0f, 7.25f}};
+    stroke.corners = StrokeCorners::Sharp;  // not the default either
     drawing.strokes.push_back(stroke);
     canvas.items.push_back(drawing);
 
@@ -685,18 +686,20 @@ TEST_F(LibraryStoreTest, ARowThatCannotBeUsedAsItIsIsRepairedAndWrittenBack) {
         ASSERT_TRUE(raw.Exec("UPDATE items SET record = json_set(record, '$.nativeW', 1e6, "
                              "'$.foregroundOpacity', 7, '$.name', 12) WHERE id = 3"));
         // The second stroke cut short partway through its points.
-        std::vector<uint8_t> blob = {1, 2, 0, 0, 0};
+        std::vector<uint8_t> blob = {2, 2, 0, 0, 0};
         const auto put = [&blob](const auto value) {
             const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
             blob.insert(blob.end(), bytes, bytes + sizeof(value));
         };
         put(uint32_t{0xFF0000FF});
         put(std::numeric_limits<float>::infinity());  // a width that cannot be
+        put(uint8_t{7});                              // corners that are not
         put(uint32_t{1});
         put(1.0f);
         put(2.0f);
         put(uint32_t{0x00FF00FF});
         put(3.0f);
+        put(uint8_t{0});
         put(uint32_t{2});
         put(4.0f);
         ASSERT_TRUE(raw.SetBlob("UPDATE items SET strokes = ?1 WHERE id = 3", blob));
@@ -711,12 +714,67 @@ TEST_F(LibraryStoreTest, ARowThatCannotBeUsedAsItIsIsRepairedAndWrittenBack) {
     EXPECT_FLOAT_EQ(item.nativeH, 200.0f) << "the rest of the record is kept";
     ASSERT_EQ(item.strokes.size(), 1u) << "the stroke before the cut";
     EXPECT_FLOAT_EQ(item.strokes[0].width, 3.0f);
+    EXPECT_EQ(item.strokes[0].corners, StrokeCorners::Round);
     EXPECT_EQ(item.strokes[0].points, (std::vector<StrokePoint>{{1.0f, 2.0f}}));
 
     RawConnection raw(file_);
     EXPECT_EQ(raw.Int("SELECT json_extract(record, '$.foregroundOpacity') FROM items WHERE id = 3"), 1)
         << "written back";
-    EXPECT_EQ(raw.Int("SELECT length(strokes) FROM items WHERE id = 3"), 1 + 4 + 12 + 8) << "one stroke, whole";
+    EXPECT_EQ(raw.Int("SELECT length(strokes) FROM items WHERE id = 3"), 1 + 4 + 13 + 8) << "one stroke, whole";
+}
+
+// Strokes as 0.2.1 wrote them, without their corners: a rectangle's, and
+// what the eraser left of one, keep theirs square, as they were drawn then;
+// a freehand line is round.
+TEST_F(LibraryStoreTest, StrokesFromBeforeCornersKeepTheRectanglesSquare) {
+    ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
+    {
+        RawConnection raw(file_);
+        std::vector<uint8_t> blob = {1, 3, 0, 0, 0};
+        const auto put = [&blob](const auto value) {
+            const auto* bytes = reinterpret_cast<const uint8_t*>(&value);
+            blob.insert(blob.end(), bytes, bytes + sizeof(value));
+        };
+        const auto stroke = [&](const std::vector<StrokePoint>& points) {
+            put(uint32_t{0xFF0000FF});
+            put(3.0f);
+            put(static_cast<uint32_t>(points.size()));
+            for (const StrokePoint& point : points) {
+                put(point.x);
+                put(point.y);
+            }
+        };
+        stroke({{10, 10}, {80, 10}, {80, 60}, {10, 60}, {10, 10}});
+        stroke({{80, 30}, {80, 60}, {10, 60}});
+        stroke({{10, 10}, {40, 11}, {45, 30}});
+        ASSERT_TRUE(raw.SetBlob("UPDATE items SET strokes = ?1 WHERE id = 3", blob));
+    }
+    LibraryStore store(file_);
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const std::vector<Stroke>& strokes = loaded->canvases[0].items[0].strokes;
+    ASSERT_EQ(strokes.size(), 3u);
+    EXPECT_EQ(strokes[0].corners, StrokeCorners::Sharp) << "a rectangle";
+    EXPECT_EQ(strokes[1].corners, StrokeCorners::Sharp) << "what the eraser left of one";
+    EXPECT_EQ(strokes[2].corners, StrokeCorners::Round) << "a freehand line";
+    EXPECT_EQ(strokes[2].points.size(), 3u);
+}
+
+// A library an older version wrote is this version's once opened, so the
+// older version, which would drop what this one writes, refuses it.
+TEST_F(LibraryStoreTest, ALibraryAnOlderVersionWroteIsThisVersionsOnceOpened) {
+    ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
+    {
+        RawConnection raw(file_);
+        ASSERT_TRUE(raw.Exec("PRAGMA user_version = 1"));
+    }
+    {
+        LibraryStore store(file_);
+        EXPECT_EQ(store.Open(), LibraryStore::OpenResult::Opened);
+        EXPECT_TRUE(store.Load().has_value());
+    }
+    RawConnection raw(file_);
+    EXPECT_EQ(raw.Int("PRAGMA user_version"), LibraryStore::kFormatVersion);
 }
 
 // A deletion stamp that is no date - before 1970, or past the year 3000 -

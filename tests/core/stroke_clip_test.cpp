@@ -143,13 +143,15 @@ TEST(StrokeClipTest, DuplicateConsecutivePointsDoNotCrashAndAreHandledGracefully
 }
 
 TEST(StrokeClipTest, FragmentsPreserveColorAndWidth) {
-    const Stroke stroke = MakeStroke({StrokePoint{-20, 0}, StrokePoint{20, 0}}, 0x11223344u, 12.5f);
+    Stroke stroke = MakeStroke({StrokePoint{-20, 0}, StrokePoint{20, 0}}, 0x11223344u, 12.5f);
+    stroke.corners = StrokeCorners::Sharp;
     const auto result = ClipStrokeOutsideCircle(stroke, StrokePoint{0, 0}, 5.0f);
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result->size(), 2u);
     for (const Stroke& fragment : *result) {
         EXPECT_EQ(fragment.colorRGBA, 0x11223344u);
         EXPECT_FLOAT_EQ(fragment.width, 12.5f);
+        EXPECT_EQ(fragment.corners, StrokeCorners::Sharp);
     }
 }
 

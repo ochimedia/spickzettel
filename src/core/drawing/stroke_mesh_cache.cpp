@@ -39,6 +39,7 @@ uint64_t Fingerprint(const Stroke& stroke) {
     uint32_t widthBits = 0;
     std::memcpy(&widthBits, &stroke.width, sizeof(widthBits));
     mix(widthBits);
+    mix(static_cast<uint64_t>(stroke.corners));
     for (const StrokePoint& point : stroke.points) {
         uint64_t bits = 0;
         std::memcpy(&bits, &point, sizeof(bits));
