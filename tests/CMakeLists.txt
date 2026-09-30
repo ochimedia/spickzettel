@@ -30,6 +30,7 @@ add_executable(sz_core_tests
     core/stroke_mesh_cache_test.cpp
     core/stroke_smoothing_test.cpp
     core/texture_cache_test.cpp
+    core/timeline_test.cpp
     core/uid_test.cpp
     platform/pen_glyph_test.cpp
     platform/pointer_ballistics_test.cpp

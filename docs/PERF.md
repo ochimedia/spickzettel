@@ -69,7 +69,8 @@ nor be perturbed by the real one.
 `-ShowFpsHud` turns on the **input-options HUD**, whose first line is the
 frame rate and frame time. That is `showInputOptionsHud`, *not*
 `showDebugOverlay` - the latter draws the cyan border and the canvas/mouse
-readout and carries no timing at all. The HUD also claims the number keys
+readout and carries no timing at all. For frame times over time, and what
+made one late, see instrument 4. The HUD also claims the number keys
 while it is up, so don't send digits during a measurement.
 
 **Read the fps line, not the CPU percentage.** Process CPU sampling of a
@@ -107,6 +108,45 @@ CPU has not sent yet.
 `Win32Dx11RendererTest.StrokesSideBySide`, with `SZ_STROKE_COMPARE_OUT`
 naming a `.bmp`, writes a picture of the same snippet drawn both ways -
 what a person looks at to judge the drawing, not a number.
+
+## Instrument 4: the frame graph, in the real app
+
+Settings > Debug > **Show frame graph** (`diagnostics.showFrameGraph`)
+draws the last ten seconds in the top right corner, in edit mode, view
+mode and the pinned view. It is for the question the others cannot
+answer: *what was that stutter?* A hitch seen once, on someone else's
+machine, is gone before any benchmark runs.
+
+- **The frames**, one bar each for the time since the frame before -
+  green within a refresh at 60 Hz or so, amber within two, red past that,
+  cut off at 50 ms with the time written over it - and over it, pale, the
+  time the overlay spent building the frame (`OverlayApp::OnFrame`, the
+  checkpoint at its start included, presenting not). Frames paced idle -
+  view mode, four a second - show only the build, over a gray line along
+  the bottom: the gap is the pacing's. Time hidden is shaded.
+- **The work**, a lane each: library commits, pictures encoded, checkpoints,
+  screen captures, pictures read back, `config.json` written. Each is
+  marked as long as it took, with its time beside it from 2 ms, and a line
+  up through the frames from 1 ms, so the frame it made late is the one
+  under the line.
+- **The header**: the last frame's time, the worst frame and the worst
+  build in the ten seconds, and the WAL's size after the last commit or
+  checkpoint.
+
+All of it runs on the app thread, so work that makes a frame late is in
+that frame's interval: a commit made while input is handled lands before
+the frame is built, a checkpoint at the start of a view-mode frame lands
+in its build. The record is `core::Timeline`, one for the process,
+recording only while the setting is on; turned off, it is let go of. It
+does not change view mode's pace, unlike `showDebugOverlay`, whose
+readout follows the pointer: an idle frame made late shows as such.
+
+First reading, on 2026-09-30, on this machine's idle disk, a scratch
+library: a full-screen screenshot snippet in edit mode was a **106 ms
+frame** - the capture 36 ms, then its commit 59 ms, of which encoding
+the picture was 28 ms. The checkpoint after going to view mode took
+49-89 ms, in the build of view mode's second frame, where it shows
+least (ARCHITECTURE.md, "Commits wait for nobody: the WAL").
 
 ## Results: strokes drawn layered
 

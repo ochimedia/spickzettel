@@ -7,9 +7,11 @@
 
 #include "core/build_info/build_info.h"
 #include "core/config/settings_catalog.h"
+#include "core/diagnostics/timeline.h"
 #include "generated/ui_strings.h"
 #include "platform/platform_types.h"
 #include "ui/theme.h"
+#include "ui/view/frame_graph.h"
 #include "ui/widgets.h"
 
 #include <imgui.h>
@@ -373,6 +375,12 @@ bool ScreenChrome::HandleKey(const Event& event, bool editMode) {
 // cell, plus a jitter within it: pure randomness lands in nearly the same
 // spot often enough to read as the mark being stuck, and picking a new
 // cell by stepping 1..8 cells on cannot repeat by construction.
+void ScreenChrome::DrawFrameGraph(ImDrawList* drawList, float displayW) const {
+    if (Cfg().showFrameGraph && drawList != nullptr) {
+        ui::DrawFrameGraph(drawList, displayW, Timeline::Instance(), Timeline::Now());
+    }
+}
+
 void ScreenChrome::DrawDemoMark(ImDrawList* drawList, float displayW, float displayH) {
     if constexpr (!build::kDemoMode) {
         // Compiled and type-checked in every build; folded away entirely in
@@ -473,7 +481,7 @@ void ScreenChrome::DrawEditModeBorder(ImDrawList* drawList, float displayW, floa
                        Cfg().editModeBorderWidthPx);
 }
 
-// The three things that belong over the canvas rather than in it, each in
+// The things that belong over the canvas rather than in it, each in
 // its own layer so their heights can be stated rather than inherited from
 // where in the frame they happen to be drawn. Called after everything the
 // canvas holds and before the Overview, so the whole group sits between
@@ -487,6 +495,9 @@ void ScreenChrome::DrawEditModeBorder(ImDrawList* drawList, float displayW, floa
 //  - The edit-mode border, which is the "your clicks land here" cue: a
 //    frame drawn under the snippets is a frame a fullscreen snippet hides
 //    completely, which is exactly when the cue matters.
+//  - The frame graph, in the border's layer, over the snippets for the
+//    same reason: a diagnostic a snippet can hide is one that fails when
+//    the screen is full.
 //  - The demo mark, above the border and everything below it, so nothing
 //    but the Overview can cover it.
 //
@@ -498,6 +509,7 @@ void ScreenChrome::Draw(float displayW, float displayH) {
 
     ImDrawList* chrome = BeginScreenLayer("##sz_chrome_layer", displayW, displayH);
     DrawEditModeBorder(chrome, displayW, displayH);
+    DrawFrameGraph(chrome, displayW);
     DrawDemoMark(chrome, displayW, displayH);
     EndScreenLayer();
 }

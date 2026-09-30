@@ -200,6 +200,15 @@ TEST(AppConfigTest, InputOptionsHudDefaultsToOffAndRoundTrips) {
     EXPECT_TRUE(ParseConfig(SerializeConfig(config)).showInputOptionsHud);
 }
 
+TEST(AppConfigTest, FrameGraphDefaultsToOffAndRoundTrips) {
+    EXPECT_FALSE(DefaultConfig().showFrameGraph);
+    EXPECT_TRUE(ParseConfig(One("diagnostics", "showFrameGraph", "true")).showFrameGraph);
+
+    AppConfig config = DefaultConfig();
+    config.showFrameGraph = true;
+    EXPECT_TRUE(ParseConfig(SerializeConfig(config)).showFrameGraph);
+}
+
 TEST(AppConfigTest, ParseEmptyTextYieldsDefaults) { EXPECT_EQ(ParseConfig(""), DefaultConfig()); }
 
 TEST(AppConfigTest, ParseGarbageYieldsDefaults) {

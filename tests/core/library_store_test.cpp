@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 #include <sqlite3.h>
 
+#include "core/diagnostics/timeline.h"
 #include "support/failing_writes.h"
 #include "support/temp_dir.h"
 
@@ -913,6 +914,37 @@ TEST_F(LibraryStoreTest, WritesStayInTheWalUntilACheckpoint) {
     EXPECT_EQ(raw.Int("SELECT count(*) FROM items"), 2);
     EXPECT_EQ(raw.Int("SELECT count(*) FROM pictures"), 1);
     EXPECT_EQ(raw.Int("SELECT journal_mode = 'wal' FROM pragma_journal_mode"), 1);
+}
+
+// The frame graph's marks: a commit with the WAL's size after it, a
+// picture's encoding, a checkpoint with what it moved, and a picture read
+// back with its size in the file.
+TEST_F(LibraryStoreTest, ItsWorkIsMarkedOnTheTimelineWhileItRecords) {
+    Timeline& timeline = Timeline::Instance();
+    timeline.SetRecording(true);
+    {
+        LibraryStore store(file_);
+        ASSERT_TRUE(store.Save(MakeSampleSnapshot()));
+        const int64_t afterCommit = store.UncheckpointedBytes();
+        const std::vector<uint8_t> pixels = NoisePixels(64, 64);
+        ASSERT_TRUE(store.SaveImage(3, pixels.data(), 64, 64));
+        const int64_t beforeCheckpoint = store.UncheckpointedBytes();
+        ASSERT_TRUE(store.Checkpoint());
+        ASSERT_TRUE(store.LoadImage(3).has_value());
+
+        const Timeline::Spans& spans = timeline.RecordedSpans();
+        std::vector<TimelineMark> marks;
+        for (size_t i = 0; i < spans.Size(); ++i) {
+            marks.push_back(spans[i].mark);
+        }
+        ASSERT_EQ(marks, (std::vector<TimelineMark>{TimelineMark::Commit, TimelineMark::Encode,
+                                                    TimelineMark::Checkpoint, TimelineMark::ReadPicture}));
+        EXPECT_EQ(spans[0].bytes, afterCommit);
+        EXPECT_GT(spans[1].bytes, 0);
+        EXPECT_EQ(spans[2].bytes, beforeCheckpoint);
+        EXPECT_GT(spans[3].bytes, 0);
+    }
+    timeline.SetRecording(false);
 }
 
 // A WAL that has grown to the limit is checkpointed by the write that

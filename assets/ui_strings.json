@@ -670,6 +670,8 @@
   "debug.showDebugOverlay": "Show debug overlay",
   "debug.showDebugOverlayHelp": "Border around the screen plus a status line (stroke count, mouse position) - confirms the overlay is receiving input at all.",
   "debug.showInputHud": "Show behavior options HUD",
+  "debug.showFrameGraph": "Show frame graph",
+  "debug.showFrameGraphHelp": "A graph of the last ten seconds, top right: how long each frame took to come, and under it when the library was written or flushed to the disk, a picture encoded or read, the screen captured or the settings saved - for telling what a stutter was.",
   "debug.showInputHudHelp": "Lists every option from the Behavior section with its current state, plus a frame rate, and flips each one with a number key - for finding the combination that works while standing in front of the game rather than in here.\n\nWhile it's up, the number keys 1-6 belong to the overlay and don't reach the game, even with 'Don't forward keystrokes' off - though only while 'Don't steal focus' is on, since otherwise the overlay has the keyboard anyway.",
 
   "_about": "The About tab: what this build is, who owns it, and what else is inside it.",

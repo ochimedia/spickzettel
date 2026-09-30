@@ -16,6 +16,7 @@
 
 #include "core/config/config_migrations.h"
 #include "core/config/settings_catalog.h"
+#include "core/diagnostics/timeline.h"
 #include "core/util/atomic_file.h"
 
 namespace sz::core {
@@ -72,7 +73,7 @@ static_assert(FieldCount<ProfileOverrides>() == kProfileRows,
 // them, the snippet defaults hold three each, `profiles` is no row - so
 // this is a tripwire rather than a proof: a field added here fails the
 // build until it has its row, and then this count is raised.
-static_assert(FieldCount<AppConfig>() == 44, "an AppConfig field added: give it a row in settings_catalog.h, "
+static_assert(FieldCount<AppConfig>() == 45, "an AppConfig field added: give it a row in settings_catalog.h, "
                                               "then count it here");
 
 // The version a file says it is. 1 when it says nothing a version can be -
@@ -753,6 +754,7 @@ bool WriteConfigFile(const std::filesystem::path& path, const AppConfig& config)
     }
     text = std::move(crlf);
 #endif
+    const TimelineScope marked(TimelineMark::ConfigWrite);
     return WriteFileAtomically(path, text);
 }
 

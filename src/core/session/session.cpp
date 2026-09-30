@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "core/canvas/item_geometry.h"
+#include "core/diagnostics/timeline.h"
 
 namespace sz::core {
 
@@ -314,8 +315,12 @@ void Session::FreezeScreen(const platform::DisplayInfo& display) {
     // the capture excludes the overlay's own content (see
     // IOverlayWindow::CaptureRegion), so what comes back is the application
     // underneath and nothing of ours.
-    platform::CaptureResult capture = window_->CaptureRegion(
-        platform::Rect{0.0f, 0.0f, static_cast<float>(display.width), static_cast<float>(display.height)});
+    platform::CaptureResult capture;
+    {
+        const TimelineScope marked(TimelineMark::Capture);
+        capture = window_->CaptureRegion(
+            platform::Rect{0.0f, 0.0f, static_cast<float>(display.width), static_cast<float>(display.height)});
+    }
     // No pixels is the ordinary "couldn't" answer - a backend without
     // capture, or a display the OS won't hand over - and it needs no
     // special case: with nothing frozen the overlay just stays transparent,
@@ -414,10 +419,13 @@ void Session::CaptureShotItem(Item& item) {
     // capture whenever nothing is frozen, which is also what happens if the
     // freeze itself failed.
     std::optional<platform::CaptureResult> cropped = CropFrozenScreen(item.rect);
-    platform::CaptureResult result =
-        cropped.has_value()
-            ? std::move(*cropped)
-            : window_->CaptureRegion(platform::Rect{item.rect.x, item.rect.y, item.rect.w, item.rect.h});
+    platform::CaptureResult result;
+    if (cropped.has_value()) {
+        result = std::move(*cropped);
+    } else {
+        const TimelineScope marked(TimelineMark::Capture);
+        result = window_->CaptureRegion(platform::Rect{item.rect.x, item.rect.y, item.rect.w, item.rect.h});
+    }
     if (result.pixelsRGBA.empty()) {
         return;
     }

@@ -120,6 +120,14 @@ struct AppConfig {
     // to the overlay instead of the game for as long as it's on. That is
     // the whole reason it isn't on all the time.
     bool showInputOptionsHud = false;
+    // Diagnostic aid, off by default: a graph in the top right corner of
+    // the last ten seconds' frames - how long each took to come, and how
+    // long the overlay spent building it - over lanes that mark the work
+    // that can make one late: library commits and checkpoints, pictures
+    // encoded and read, screen captures and config writes. Drawn in every
+    // state the overlay is up in, without changing view mode's pace. See
+    // core::Timeline, and docs/PERF.md, "Instrument 4".
+    bool showFrameGraph = false;
     // true (default): every item on the current canvas draws a subtle
     // border around its bounds at all times in edit mode, not just the one
     // currently hovered/dragged/resized (that one always gets it regardless

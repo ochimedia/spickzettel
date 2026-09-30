@@ -129,7 +129,7 @@ AppConfig EveryRowChanged() {
 
 auto Fields(const AppConfig& c) {
     const auto& [hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
-                 strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showItemBorders,
+                 strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showFrameGraph, showItemBorders,
                  showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
                  itemBorderColorOtherRGBA, itemBorderColorPinnedRGBA, imageFilter,
                  raiseSelectedSnippet, screenshotTrigger, drawingTrigger, snippetBar, drawingBar, overviewShowsStrokes,
@@ -139,8 +139,8 @@ auto Fields(const AppConfig& c) {
                  drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId, overlayDisplayName,
                  tutorialProgress, tutorialCurrent, tutorialFolder] = c;
     return std::tie(hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
-                    strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showItemBorders,
-                    showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
+                    strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showFrameGraph,
+                    showItemBorders, showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
                     itemBorderColorOtherRGBA, itemBorderColorPinnedRGBA, imageFilter,
                     raiseSelectedSnippet, screenshotTrigger, drawingTrigger, snippetBar, drawingBar,
                     overviewShowsStrokes, overviewShowsBitmaps, showCanvasBar, showEditModeBorder,

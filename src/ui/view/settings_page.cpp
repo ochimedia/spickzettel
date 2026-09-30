@@ -966,6 +966,8 @@ void SettingsPage::RenderSettingsDebug() {
                     strings::kDebugShowDebugOverlayHelp);
     SettingCheckbox(settings_, setting::kShowInputOptionsHud, "debugshowinputhud", strings::kDebugShowInputHud,
                     strings::kDebugShowInputHudHelp);
+    SettingCheckbox(settings_, setting::kShowFrameGraph, "debugshowframegraph", strings::kDebugShowFrameGraph,
+                    strings::kDebugShowFrameGraphHelp);
 }
 
 

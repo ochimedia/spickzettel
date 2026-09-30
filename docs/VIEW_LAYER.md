@@ -213,7 +213,7 @@ order, including where that is surprising (section 9, finding 3).
 | 5 | The canvas bar | window `##canvas_bar` | the pointer is at the bottom edge or on the bar, or its menu is up; not under a panel | Canvas bar |
 | 6 | The snippet menu, the canvas tile menu, the empty canvas menu, Properties, the color chooser, the shape menu | popups | the Popup level holds it | Popups |
 | 7 | The input options HUD | layer `##sz_input_hud_layer` | its setting is on | Screen chrome |
-| 8 | The edit-mode border, the demo mark | layer `##sz_chrome_layer` | always, each as its setting says | Screen chrome |
+| 8 | The edit-mode border, the frame graph, the demo mark | layer `##sz_chrome_layer` | always, each as its setting says | Screen chrome |
 | 9 | The Overview: its backdrop, its panel, and ImGui's popups inside it | panel | the Panel level holds the Overview | Overview; Settings page |
 | 10 | The cheat sheet: its backdrop and its panel | panel | the Panel level holds the cheat sheet | Cheat sheet |
 | 10a | The tutorial card | window `##tutorial_card` | a tutorial topic runs, or its list is up | Tutorial card |
@@ -234,7 +234,7 @@ panel.
 
 | # | Surface | Kind | Up while | Owner |
 |---|---|---|---|---|
-| 1 | The current canvas's snippets (in Pinned only the pinned ones; in Notice none), the debug readout, the demo mark | layer `##spickzettel_view_only` | always | Canvas view |
+| 1 | The current canvas's snippets (in Pinned only the pinned ones; in Notice none), the debug readout, the frame graph, the demo mark | layer `##spickzettel_view_only` | always | Canvas view |
 | 2 | The toast, the persistence warning | overlays | as above | Messages |
 
 What closing does is in section 4 for the popups. For the rest:

@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <sqlite3.h>
 
+#include "core/diagnostics/timeline.h"
 #include "core/util/timestamp_name.h"
 
 namespace sz::core::persistence {
@@ -647,6 +648,8 @@ bool LibraryStore::Checkpoint() {
     if (db_ == nullptr || !wal_ || walFrames_ == 0) {
         return true;
     }
+    TimelineScope marked(TimelineMark::Checkpoint);
+    marked.SetBytes(UncheckpointedBytes());
     // TRUNCATE rather than the default: the WAL is left empty on disk too,
     // not the size of everything written since the open.
     if (sqlite3_wal_checkpoint_v2(db_, nullptr, SQLITE_CHECKPOINT_TRUNCATE, nullptr, nullptr) != SQLITE_OK) {
@@ -913,10 +916,14 @@ bool LibraryStore::Write(const LibraryView& view, const LibraryChanges& changes,
     if (!Ready()) {
         return false;
     }
-    WriteTransaction transaction(db_);
-    if (!transaction.Begun() || !WriteRows(view, unwritten_ ? everything : changes, pictures) ||
-        !transaction.Commit()) {
-        return false;
+    {
+        TimelineScope marked(TimelineMark::Commit);
+        WriteTransaction transaction(db_);
+        if (!transaction.Begun() || !WriteRows(view, unwritten_ ? everything : changes, pictures) ||
+            !transaction.Commit()) {
+            return false;
+        }
+        marked.SetBytes(UncheckpointedBytes());
     }
     // What this store wrote is a library now, and a Load of it is not a
     // first run.
@@ -1148,16 +1155,22 @@ bool LibraryStore::SaveImage(uint64_t itemId, const uint8_t* pixelsRGBA, int wid
     if (!Ready() || pixelsRGBA == nullptr || width <= 0 || height <= 0) {
         return false;
     }
-    const std::vector<uint8_t> pixels = EncodeQoi(pixelsRGBA, width, height);
-    if (pixels.empty()) {
-        return false;
+    std::vector<uint8_t> pixels;
+    std::vector<uint8_t> thumbnail;
+    {
+        TimelineScope marked(TimelineMark::Encode);
+        pixels = EncodeQoi(pixelsRGBA, width, height);
+        if (pixels.empty()) {
+            return false;
+        }
+        // Taken from the caller's own pixels rather than through a
+        // DecodedImage, which would mean copying eight megabytes to make
+        // forty kilobytes. A thumbnail that could not be made is left out;
+        // the Overview falls back to the picture itself.
+        const DecodedImage small = DownscaleToFit(pixelsRGBA, width, height, kThumbnailMaxExtent);
+        thumbnail = EncodeQoi(small.pixelsRGBA.data(), small.width, small.height);
+        marked.SetBytes(static_cast<int64_t>(pixels.size() + thumbnail.size()));
     }
-    // Taken from the caller's own pixels rather than through a
-    // DecodedImage, which would mean copying eight megabytes to make forty
-    // kilobytes. A thumbnail that could not be made is left out; the
-    // Overview falls back to the picture itself.
-    const DecodedImage small = DownscaleToFit(pixelsRGBA, width, height, kThumbnailMaxExtent);
-    const std::vector<uint8_t> thumbnail = EncodeQoi(small.pixelsRGBA.data(), small.width, small.height);
     Statement insert(db_, "INSERT OR REPLACE INTO pictures (item_id, width, height, pixels, thumbnail) "
                           "VALUES (?1, ?2, ?3, ?4, ?5)");
     insert.Bind(1, itemId);
@@ -1174,6 +1187,7 @@ std::optional<DecodedImage> LibraryStore::LoadPictureColumn(uint64_t itemId, con
     if (!Ready()) {
         return std::nullopt;
     }
+    TimelineScope marked(TimelineMark::ReadPicture);
     const std::string sql = std::string("SELECT ") + column + " FROM pictures WHERE item_id = ?1";
     Statement select(db_, sql.c_str());
     select.Bind(1, itemId);
@@ -1181,6 +1195,7 @@ std::optional<DecodedImage> LibraryStore::LoadPictureColumn(uint64_t itemId, con
         return std::nullopt;
     }
     const std::vector<uint8_t> bytes = select.Blob(0);
+    marked.SetBytes(static_cast<int64_t>(bytes.size()));
     return DecodeQoi(bytes.data(), bytes.size());
 }
 

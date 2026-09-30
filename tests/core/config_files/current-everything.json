@@ -142,7 +142,8 @@
   },
   "diagnostics": {
     "showDebugOverlay": true,
-    "showInputOptionsHud": true
+    "showInputOptionsHud": true,
+    "showFrameGraph": true
   },
   "profiles": [
     {

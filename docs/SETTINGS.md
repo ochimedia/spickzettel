@@ -286,6 +286,7 @@ Effect: Frame.
 |---|---|---|
 | `showDebugOverlay` | `showDebugOverlay` | false |
 | `showInputOptionsHud` | `showInputOptionsHud` | false |
+| `showFrameGraph` | `showFrameGraph` | false |
 
 **`profiles`**: not a setting but the list of profiles. Each profile has
 a name, match rules, and sparse `behavior` and `shortcuts` objects (the

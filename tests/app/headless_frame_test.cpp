@@ -16,6 +16,7 @@
 #include <string>
 
 #include "core/canvas/item_geometry.h"  // kItemMinWidth/kItemMinHeight, for the group-resize floor
+#include "core/diagnostics/timeline.h"
 #include "core/persistence/library_store.h"
 #include "core/util/uid.h"
 #include "support/failing_writes.h"
@@ -4682,6 +4683,47 @@ TEST_F(HeadlessAppTest, ASilentCaptureWhileHiddenIsCheckpointedAtOnce) {
     ASSERT_FALSE(host_.overlayWindow.visible);
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u) << "captured";
     EXPECT_EQ(store.UncheckpointedBytes(), 0);
+}
+
+// The frame graph's record runs while its setting is on: every frame, the
+// work between them - a snippet's commit, the checkpoint as the overlay
+// goes away - and the first frame back marked as after a break, so the
+// time away is not drawn as a late frame. Turned off, it is let go of.
+TEST_F(HeadlessAppTest, TheFrameGraphRecordsWhileItsSettingIsOn) {
+    AppConfig config = DefaultConfig();
+    config.showFrameGraph = true;
+    StartWithLibrary(std::move(config));
+    const core::Timeline& timeline = core::Timeline::Instance();
+    const auto marked = [&](core::TimelineMark mark) {
+        for (size_t i = 0; i < timeline.RecordedSpans().Size(); ++i) {
+            if (timeline.RecordedSpans()[i].mark == mark) {
+                return true;
+            }
+        }
+        return false;
+    };
+    ShowEditMode();
+    StepFrames(3);
+    ASSERT_GE(timeline.RecordedFrames().Size(), 3u);
+    PressKey(ImGuiKey_D);
+    Drag(200.0f, 200.0f, 800.0f, 600.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    EXPECT_TRUE(marked(core::TimelineMark::Commit));
+    EXPECT_FALSE(marked(core::TimelineMark::Checkpoint)) << "not in edit mode";
+
+    ShowEditMode();  // away
+    EXPECT_TRUE(marked(core::TimelineMark::Checkpoint));
+    ShowEditMode();  // and back
+    StepFrame();
+    const core::Timeline::Frames& frames = timeline.RecordedFrames();
+    EXPECT_TRUE(frames[frames.Size() - 1].afterBreak);
+    EXPECT_FALSE(frames[frames.Size() - 2].afterBreak);
+
+    controller_->GetSettings().Set(setting::kShowFrameGraph, false);
+    StepFrame();
+    EXPECT_FALSE(timeline.Recording());
+    EXPECT_EQ(timeline.RecordedFrames().Size(), 0u);
+    EXPECT_EQ(timeline.RecordedSpans().Size(), 0u);
 }
 
 // A change whose write fails is not made, and that is said on screen until

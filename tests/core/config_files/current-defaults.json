@@ -138,7 +138,8 @@
   },
   "diagnostics": {
     "showDebugOverlay": false,
-    "showInputOptionsHud": false
+    "showInputOptionsHud": false,
+    "showFrameGraph": false
   },
   "profiles": []
 }

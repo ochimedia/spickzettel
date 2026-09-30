@@ -194,6 +194,8 @@ inline constexpr GlobalSetting<BoolRule> kShowDebugOverlay{
     {"diagnostics", "", "showDebugOverlay"}, {}, E::Frame, [](AppConfig& c) { return &c.showDebugOverlay; }};
 inline constexpr GlobalSetting<BoolRule> kShowInputOptionsHud{
     {"diagnostics", "", "showInputOptionsHud"}, {}, E::Frame, [](AppConfig& c) { return &c.showInputOptionsHud; }};
+inline constexpr GlobalSetting<BoolRule> kShowFrameGraph{
+    {"diagnostics", "", "showFrameGraph"}, {}, E::Frame, [](AppConfig& c) { return &c.showFrameGraph; }};
 
 // All of them, in file order.
 inline constexpr auto kAll = std::tuple{
@@ -214,7 +216,7 @@ inline constexpr auto kAll = std::tuple{
     &kCounterRawMouseInput, &kCounterThreshold, &kFreezeScreen,
     &kShortcuts,
     &kTutorialProgress, &kTutorialCurrent, &kTutorialFolder,
-    &kShowDebugOverlay, &kShowInputOptionsHud,
+    &kShowDebugOverlay, &kShowInputOptionsHud, &kShowFrameGraph,
 };
 
 }  // namespace setting

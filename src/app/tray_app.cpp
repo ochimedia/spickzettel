@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "core/config/display_choice.h"
+#include "core/diagnostics/timeline.h"
 #include "core/util/timestamp_name.h"
 
 namespace sz::app {
@@ -408,6 +409,8 @@ void TrayController::Apply(const OverlayTransition& transition) {
     // see OnFrameStart.
     framesSinceTransition_ = 0;
     if (to == OverlayState::Hidden) {
+        // The frame graph's gap, which is not a late frame.
+        core::Timeline::Instance().BreakFrames();
         CheckpointLibrary();
     }
     CheckInvariants();

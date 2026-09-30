@@ -29,6 +29,7 @@ add_library(sz_ui STATIC
     view/canvas_bar.cpp
     view/canvas_view.cpp
     view/cheat_sheet.cpp
+    view/frame_graph.cpp
     view/messages.cpp
     view/overview_panel.cpp
     view/pointer.cpp

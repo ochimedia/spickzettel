@@ -91,6 +91,7 @@ AppConfig Everything() {
     c.strokeWidth = 6.5f;
     c.showDebugOverlay = true;
     c.showInputOptionsHud = true;
+    c.showFrameGraph = true;
     c.profileable.dontStealFocus = false;
     c.profileable.takeFocusOverElevated = false;
     c.profileable.softwarePointer = false;
@@ -173,6 +174,7 @@ TEST(ConfigFilesTest, TheFirstReleasesSettingsAreReadAsItWroteThem) {
     expected.tutorialProgress = defaults.tutorialProgress;
     expected.tutorialCurrent = defaults.tutorialCurrent;
     expected.tutorialFolder = defaults.tutorialFolder;
+    expected.showFrameGraph = defaults.showFrameGraph;
     EXPECT_EQ(ParseConfig(ReadFixture("v0.1.0-everything.json")), expected);
 }
 

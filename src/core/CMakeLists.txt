@@ -12,6 +12,7 @@ add_library(sz_core STATIC
     config/display_choice.cpp
     config/profile.cpp
     config/shortcut_action.cpp
+    diagnostics/timeline.cpp
     drawing/canvas_state.cpp
     drawing/draw_tool.cpp
     drawing/stroke_mesh.cpp

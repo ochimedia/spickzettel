@@ -3,10 +3,10 @@
 // The screen chrome - docs/VIEW_LAYER.md, section 7: what sits over the
 // canvas rather than in it, each in a layer of its own so that its height
 // is stated rather than inherited from where in the frame it is drawn -
-// the input options HUD, and the edit-mode border and the demo mark. None
-// of it takes input. What it keeps of its own is the HUD's applied digits,
-// its restart waiting for a key to come up and the record of its last key,
-// and where the demo mark stands.
+// the input options HUD, the edit-mode border, the frame graph and the
+// demo mark. None of it takes input. What it keeps of its own is the HUD's
+// applied digits, its restart waiting for a key to come up and the record
+// of its last key, and where the demo mark stands.
 
 #include <cstdint>
 
@@ -32,6 +32,10 @@ public:
     // the view-only layer otherwise: it belongs wherever the overlay is
     // visible. It moves itself around the screen on a timer.
     void DrawDemoMark(ImDrawList* drawList, float displayW, float displayH);
+    // A debugging aid, off by default - see AppConfig::showFrameGraph. Into
+    // `drawList`, as the demo mark: the chrome's layer in edit mode, the
+    // view-only layer otherwise.
+    void DrawFrameGraph(ImDrawList* drawList, float displayW) const;
     // Once a frame, after the draw: the window told how many number keys the
     // HUD takes - none but in edit mode - and the overlay restarted once a
     // toggle that needs it has had its key let go of.

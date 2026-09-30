@@ -1,5 +1,6 @@
 #include "ui/overlay_app.h"
 
+#include "core/diagnostics/timeline.h"
 #include "core/util/timestamp_name.h"
 #include "generated/ui_strings.h"
 #include "ui/icons_generated.h"
@@ -238,6 +239,22 @@ void OverlayApp::KeepPen() {
 // ================= Frame =================
 
 void OverlayApp::OnFrame(float /*deltaSeconds*/) {
+    // The frame graph's record of this frame, from before anything of it -
+    // the checkpoint at its start included - to its last draw call, and
+    // the pace it leaves for the next (see core::Timeline).
+    core::Timeline::Instance().SetRecording(Cfg().showFrameGraph);
+    struct FrameRecord {
+        const OverlayApp& app;
+        double start = core::Timeline::Now();
+        explicit FrameRecord(const OverlayApp& overlayApp) : app(overlayApp) {}
+        ~FrameRecord() {
+            core::Timeline::Instance().AddFrame(core::TimelineFrame{
+                start, core::Timeline::Now() - start, app.appliedFramePacing_ == platform::FramePacing::Idle});
+        }
+        FrameRecord(const FrameRecord&) = delete;
+        FrameRecord& operator=(const FrameRecord&) = delete;
+    };
+    const FrameRecord frameRecord(*this);
     if (frameStartCallback_) {
         frameStartCallback_();
     }
@@ -261,6 +278,7 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         // OverlayMode::Notice.
         if (!IsNoticeOnly()) {
             canvasView_.DrawViewOnly(display.x, display.y, IsPinnedOnly(), [&](ImDrawList* layer) {
+                chrome_.DrawFrameGraph(layer, display.x);
                 chrome_.DrawDemoMark(layer, display.x, display.y);
             });
         }
