@@ -81,6 +81,7 @@ the Overview.
 #### Changes
 
 - Moved the library to local AppData and optimized its performance. An existing library in roaming AppData is moved automatically.
+- Opening the app while an instance is already running brings up the running instance.
 
 ### 0.2.0
 

@@ -1454,8 +1454,7 @@ ending the session all settle what the hand is in the middle of first
 **One writer per library.** Two copies of the app would each write the
 library from a stale picture of it.
 The tray claims a per-user named mutex before it does anything else,
-and a second copy exits with the app's one message box instead of
-loading the library. Per user is per profile, which is per library;
+and a second copy exits instead of loading the library. Per user is per profile, which is per library;
 the kernel drops the mutex with the process, so a copy that crashed
 holds nothing. A hotkey collision is not a lock: with a hand-edited
 config the two copies could have different hotkeys and never notice
@@ -1463,6 +1462,21 @@ each other. The mutex is one computer's: another copy of the app on
 another computer, where a shared folder puts the same file in front of
 both, is kept out by the file's hold instead (see "Commits wait for
 nobody: the WAL").
+
+**Starting the app again brings up the copy running.** Someone who
+starts an app that is already running wants that app, not a message
+that it is. The second copy finds the first by its host window, which
+is titled for the instance - the mutex's name, and so the user's: not
+another account's copy in the same session - posts it a message
+registered for the purpose (`PassOpeningToRunningCopy`), and exits. It
+first lets the first copy take the foreground (`AllowSetForegroundWindow`),
+which only a program the user just started may give, and the message is
+let up to an elevated first copy as `TaskbarCreated` is. The running copy
+takes it as the Edit request, but one that never puts the overlay away
+(`TrayController::OnOpenedAgain`, and OVERLAY_STATES.md, section 4). The
+app's message box that another copy may be running is left for when no
+copy answers - another account's, say. Added on 2026-09-30, asked for by
+the user.
 
 The mutex is in the session's namespace (`Local\`) and named for the
 user's SID as well, because the session is not the user: "Run as

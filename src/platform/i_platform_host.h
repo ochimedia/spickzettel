@@ -72,6 +72,17 @@ public:
     // still owed; see TrayController::OnSessionEnding.
     virtual void SetSessionEndCallback(std::function<void()> callback) = 0;
 
+    // Called on the app thread when the app is started again while this
+    // copy runs: the other copy, refused the single instance, handed its
+    // start over (see PassOpeningToRunningCopy). See
+    // TrayController::OnOpenedAgain.
+    virtual void SetOpenedAgainCallback(std::function<void()> callback) = 0;
+    // For a copy that could not take the single instance: hands its start
+    // to the copy that holds it - the same user's - which is asked to come
+    // up, and may take the foreground to do so. False when no running copy
+    // could be reached.
+    virtual bool PassOpeningToRunningCopy() = 0;
+
     // Runs `task` on the app thread after the current frame or message, and
     // before the next frame. For what is asked for from inside a frame but
     // changes what the frame is part of - the overlay's state, the window

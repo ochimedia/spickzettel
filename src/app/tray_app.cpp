@@ -20,6 +20,7 @@ TrayController::TrayController(platform::IPlatformHost& host, AppConfig config)
 
 bool TrayController::Initialize() {
     host_.SetTrayCommandCallback([this](platform::TrayCommand cmd) { OnTrayCommand(cmd); });
+    host_.SetOpenedAgainCallback([this] { OnOpenedAgain(); });
 
     // Also fine to call again later, after the window exists - see
     // IOverlayWindow::SetEditModeNoActivate - but seeding it here, before
@@ -637,6 +638,18 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     // the hotkey it was taken from and whose commit writes the file.
     settings_.Set(row, combo);
     return true;
+}
+
+void TrayController::OnOpenedAgain() {
+    // Up in edit mode, from wherever it is - the edit hotkey's command, and
+    // through the input machine like the tray's - but never put away, which
+    // the command would do from edit mode: someone who starts the app
+    // wants it there. Held, the start is still saying what it found, and
+    // will bring the overlay up or away itself.
+    if (held_ || state_ == OverlayState::Edit) {
+        return;
+    }
+    overlayApp_.Dispatch(Command{CommandId::ToggleEditMode});
 }
 
 void TrayController::OnTrayCommand(platform::TrayCommand command) {

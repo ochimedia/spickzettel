@@ -21,6 +21,7 @@ namespace strings = sz::strings;
 
 namespace {
 constexpr const char* kWindowClassName = "SpickzettelHostWindowClass";
+constexpr const char* kOpenedAgainMessageName = "Spickzettel.OpenedAgain";
 constexpr UINT kTrayIconMessage = WM_APP + 1;
 // A task posted from the app thread - see Post.
 constexpr UINT kPostedTaskMessage = WM_APP + 2;
@@ -87,8 +88,11 @@ bool Win32PlatformHost::Initialize(const std::string& appName) {
     // version of the session-end handling below sat on an HWND_MESSAGE
     // window, where no logoff could ever have reached it. Never shown, and
     // a tool window besides, so that nothing lists it either.
-    hwnd_ = CreateWindowExA(WS_EX_TOOLWINDOW, kWindowClassName, appName_.c_str(), WS_OVERLAPPED, 0, 0, 0, 0,
-                            nullptr, nullptr, instance, this);
+    // Titled for the instance, which is the user's: a copy started again
+    // finds its own user's copy by it, and not another account's in the
+    // same session (see PassOpeningToRunningCopy).
+    hwnd_ = CreateWindowExA(WS_EX_TOOLWINDOW, kWindowClassName, InstanceWindowTitle(appName_).c_str(), WS_OVERLAPPED,
+                            0, 0, 0, 0, nullptr, nullptr, instance, this);
     if (!hwnd_) {
         return false;
     }
@@ -99,6 +103,10 @@ bool Win32PlatformHost::Initialize(const std::string& appName) {
     // to it when asked for.
     taskbarCreatedMessage_ = RegisterWindowMessageA("TaskbarCreated");
     ChangeWindowMessageFilterEx(hwnd_, taskbarCreatedMessage_, MSGFLT_ALLOW, nullptr);
+    // The same for a copy started again, unelevated, when this one is
+    // elevated: the same user, and all it can ask is to come up.
+    openedAgainMessage_ = RegisterWindowMessageA(kOpenedAgainMessageName);
+    ChangeWindowMessageFilterEx(hwnd_, openedAgainMessage_, MSGFLT_ALLOW, nullptr);
 
     overlayWindow_.Initialize(instance);
     // A close asked of the overlay is one asked of the app - see WM_CLOSE.
@@ -131,6 +139,41 @@ std::wstring InstanceMutexName(const std::string& appName) {
     }
     CloseHandle(token);
     return name;
+}
+
+std::string InstanceWindowTitle(const std::string& appName) {
+    // The name is the app's and a SID, both ASCII.
+    const std::wstring name = InstanceMutexName(appName);
+    const std::wstring title = name.substr(name.find(L'\\') + 1);
+    std::string narrow;
+    narrow.reserve(title.size());
+    for (const wchar_t c : title) {
+        narrow.push_back(static_cast<char>(c));
+    }
+    return narrow;
+}
+
+bool Win32PlatformHost::PassOpeningToRunningCopy() {
+    const std::string title = InstanceWindowTitle(appName_);
+    const UINT message = openedAgainMessage_ != 0 ? openedAgainMessage_ : RegisterWindowMessageA(kOpenedAgainMessageName);
+    // Every host window titled for this user's instance but this copy's
+    // own, which Initialize has made already.
+    HWND other = nullptr;
+    while ((other = FindWindowExA(nullptr, other, kWindowClassName, title.c_str())) != nullptr) {
+        if (other == hwnd_) {
+            continue;
+        }
+        // This copy was just started by the user, so the foreground is
+        // its to give: without it, the overlay would come up behind
+        // whatever the user started it from.
+        DWORD process = 0;
+        GetWindowThreadProcessId(other, &process);
+        AllowSetForegroundWindow(process);
+        if (PostMessageA(other, message, 0, 0)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool Win32PlatformHost::AcquireSingleInstance() {
@@ -412,6 +455,10 @@ void Win32PlatformHost::Exit() {
     }
 }
 
+void Win32PlatformHost::SetOpenedAgainCallback(std::function<void()> callback) {
+    openedAgainCallback_ = std::move(callback);
+}
+
 void Win32PlatformHost::SetSessionEndCallback(std::function<void()> callback) {
     sessionEndCallback_ = std::move(callback);
 }
@@ -469,6 +516,13 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
         if (trayIconWanted_) {
             RemoveTrayIcon();
             ShowTrayIcon();
+        }
+        return 0;
+    }
+    // The app started again - see PassOpeningToRunningCopy.
+    if (msg == openedAgainMessage_ && msg != 0) {
+        if (openedAgainCallback_) {
+            openedAgainCallback_();
         }
         return 0;
     }

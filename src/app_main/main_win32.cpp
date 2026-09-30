@@ -83,7 +83,13 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     // already running, which then saves over both - and show the prerelease
     // notice and the set-aside message before giving up. TrayController
     // asks again, and is answered from the mutex already held.
+    // Started again while a copy runs, what is wanted is that copy: it is
+    // asked to come up, and this one goes. The message only when no copy
+    // answers - one running as another account, say.
     if (!host->AcquireSingleInstance()) {
+        if (host->PassOpeningToRunningCopy()) {
+            return 0;
+        }
         MessageBoxA(nullptr, sz::strings::kStartupFailed, "Spickzettel", MB_OK | MB_ICONWARNING);
         return 1;
     }

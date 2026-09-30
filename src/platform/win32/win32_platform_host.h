@@ -36,6 +36,8 @@ public:
     std::filesystem::path GetFormerLibraryPath() const override;
     void SetBackgroundTimer(int intervalMs, std::function<void()> callback) override;
     void SetSessionEndCallback(std::function<void()> callback) override;
+    void SetOpenedAgainCallback(std::function<void()> callback) override;
+    bool PassOpeningToRunningCopy() override;
     void Post(std::function<void()> task) override;
     int RunEventLoop() override;
     void Quit(int exitCode) override;
@@ -67,10 +69,13 @@ private:
     int failTrayIconAdds_ = 0;
     // "TaskbarCreated", as registered - see Initialize.
     UINT taskbarCreatedMessage_ = 0;
+    // What a copy started again posts - see PassOpeningToRunningCopy.
+    UINT openedAgainMessage_ = 0;
     TrayCommandCallback trayCallback_;
     std::unordered_map<int, HotkeyCallback> hotkeyCallbacks_;
     std::function<void()> backgroundTimerCallback_;
     std::function<void()> sessionEndCallback_;
+    std::function<void()> openedAgainCallback_;
     // See Post: waiting for the message each one posted.
     std::deque<std::function<void()>> posted_;
     int nextHotkeyId_ = 1;
@@ -83,6 +88,9 @@ private:
 // The name of the mutex AcquireSingleInstance claims for appName: in this
 // session's namespace, and named for the user this process runs as.
 std::wstring InstanceMutexName(const std::string& appName);
+// The host window's title: the instance's name, without the namespace -
+// what a copy started again looks for (see PassOpeningToRunningCopy).
+std::string InstanceWindowTitle(const std::string& appName);
 
 // The host's one tray icon, as the shell knows it: this id on the host
 // window.

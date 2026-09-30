@@ -115,7 +115,7 @@ These hold after every transition and are checked in debug builds:
 
 | Request | From | Arrives | Notes |
 |---|---|---|---|
-| Edit | edit hotkey; tray "Toggle overlay" | as a message | through the input machine, which settles its scope first (`docs/INTERACTIONS.md`, section 7) |
+| Edit | edit hotkey; tray "Toggle overlay"; the app started again, unless in Edit | as a message | through the input machine, which settles its scope first (`docs/INTERACTIONS.md`, section 7) |
 | View | view hotkey | as a message | the same |
 | Quick capture | its hotkey | as a message | captures, then asks for Edit |
 | Silent capture | its hotkey | as a message | captures; says so |
@@ -129,6 +129,15 @@ These hold after every transition and are checked in debug builds:
 
 Hotkeys the input grab takes from the keyboard are posted to the host
 window by the grab, so they arrive as messages too.
+
+The app started again while a copy runs hands its start to that copy,
+which asks for Edit - but only when it is not in Edit, where the request
+would put the overlay away: someone who starts the app wants it up. So
+it is Edit's row below in every column but the last, and nothing there.
+While the start is held (`TrayController::HoldUntilStart`), still saying
+what it found, it does nothing; the start decides. Added on 2026-09-30,
+with no new request and no new cell (ARCHITECTURE.md, "Starting the app
+again brings up the copy running").
 
 ## 5. The table
 

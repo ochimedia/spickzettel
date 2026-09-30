@@ -114,6 +114,9 @@ public:
 
     // Which of the five the overlay is in - see docs/OVERLAY_STATES.md.
     OverlayState State() const { return state_; }
+    // The app started again while this copy runs: the overlay comes up in
+    // edit mode, and stays if it is there already.
+    void OnOpenedAgain();
 
     const OverlayApp& Overlay() const { return overlayApp_; }
     // Non-const for the tests that have to *arrange* a world before driving

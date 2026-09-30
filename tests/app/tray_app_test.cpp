@@ -127,6 +127,31 @@ int FindHotkeyId(const test::FakePlatformHost& host, const platform::KeyCombo& c
     return 0;
 }
 
+// The app started again brings the overlay up in edit mode - from hidden
+// or from view mode - and leaves it there when it is up in edit mode
+// already, where the edit hotkey would put it away. While the start is
+// held, still saying what it found, it does nothing: the start decides.
+TEST(TrayControllerTest, StartingTheAppAgainBringsTheOverlayUpInEditMode) {
+    test::FakePlatformHost host;
+    const AppConfig config = DefaultConfig();
+    TrayController controller(host, config);
+    ASSERT_TRUE(controller.Initialize());
+    controller.HoldUntilStart();
+    host.TriggerOpenedAgain();
+    EXPECT_EQ(controller.State(), app::OverlayState::Hidden) << "held";
+    controller.Start();
+    ASSERT_EQ(controller.State(), app::OverlayState::Hidden) << "not a first run";
+
+    host.TriggerOpenedAgain();
+    EXPECT_EQ(controller.State(), app::OverlayState::Edit);
+    host.TriggerOpenedAgain();
+    EXPECT_EQ(controller.State(), app::OverlayState::Edit) << "not put away";
+    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyViewMode));
+    ASSERT_EQ(controller.State(), app::OverlayState::View);
+    host.TriggerOpenedAgain();
+    EXPECT_EQ(controller.State(), app::OverlayState::Edit);
+}
+
 // ================= ChangeHotkey (runtime hotkey editing) =================
 
 TEST(TrayControllerTest, ChangeHotkeySwapsTheRegistrationAndTriggersTheNewCombo) {

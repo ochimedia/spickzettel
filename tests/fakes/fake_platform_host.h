@@ -348,6 +348,17 @@ public:
     }
     std::function<void()> sessionEndCallback;
 
+    void SetOpenedAgainCallback(std::function<void()> callback) override { openedAgainCallback = std::move(callback); }
+    // What a copy started again sets off in the one running.
+    void TriggerOpenedAgain() {
+        if (openedAgainCallback) {
+            openedAgainCallback();
+        }
+    }
+    std::function<void()> openedAgainCallback;
+    bool PassOpeningToRunningCopy() override { return runningCopyAnswers; }
+    bool runningCopyAnswers = false;
+
     // Held until a test runs them - the headless app does after every frame
     // (see HeadlessAppTest::StepFrame), as the real loop does before the
     // next one.
@@ -385,6 +396,7 @@ public:
         backgroundTimerCallback = nullptr;
         backgroundTimerIntervalMs = 0;
         sessionEndCallback = nullptr;
+        openedAgainCallback = nullptr;
         posted.clear();
     }
 

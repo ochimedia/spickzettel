@@ -30,7 +30,7 @@ TEST(Win32PlatformHostTest, TheHostWindowIsTopLevelAndAnswersASessionEnd) {
     int sessionEnds = 0;
     host.SetSessionEndCallback([&sessionEnds] { ++sessionEnds; });
 
-    const HWND hwnd = FindWindowA(nullptr, name.c_str());
+    const HWND hwnd = FindWindowA(nullptr, InstanceWindowTitle(name).c_str());
     ASSERT_NE(hwnd, nullptr) << "not a top-level window, so not one a session end reaches";
     EXPECT_FALSE(IsWindowVisible(hwnd)) << "top-level, but never on screen";
 
@@ -57,7 +57,7 @@ TEST(Win32PlatformHostTest, ACloseFromOutsideExitsAsTheTrayMenuDoes) {
     });
     int sessionEnds = 0;
     host.SetSessionEndCallback([&sessionEnds] { ++sessionEnds; });
-    const HWND hwnd = FindWindowA(nullptr, name.c_str());
+    const HWND hwnd = FindWindowA(nullptr, InstanceWindowTitle(name).c_str());
     ASSERT_NE(hwnd, nullptr);
 
     SendMessageA(hwnd, WM_CLOSE, 0, 0);
@@ -119,7 +119,7 @@ TEST(Win32PlatformHostTest, TheTrayIconIsPutBackWhenExplorerRestarts) {
     if (!host.ShowTrayIcon()) {
         GTEST_SKIP() << "no taskbar to put an icon on";
     }
-    const HWND hwnd = FindWindowA(nullptr, name.c_str());
+    const HWND hwnd = FindWindowA(nullptr, InstanceWindowTitle(name).c_str());
     ASSERT_NE(hwnd, nullptr);
     NOTIFYICONDATAA icon{};
     icon.cbSize = sizeof(icon);
@@ -153,7 +153,7 @@ TEST(Win32PlatformHostTest, ATrayIconTheShellRefusedGoesUpLater) {
         GTEST_SKIP() << "no taskbar to put an icon on";
     }
     host.RemoveTrayIcon();
-    const HWND hwnd = FindWindowA(nullptr, name.c_str());
+    const HWND hwnd = FindWindowA(nullptr, InstanceWindowTitle(name).c_str());
     ASSERT_NE(hwnd, nullptr);
     NOTIFYICONDATAA icon{};
     icon.cbSize = sizeof(icon);
@@ -201,7 +201,7 @@ TEST(Win32PlatformHostTest, AHotkeyCallbackCanUnregisterItsOwnHotkey) {
         GTEST_SKIP() << "Ctrl+Alt+Shift+F24 taken by something else";
     }
 
-    SendMessageA(FindWindowA(nullptr, name.c_str()), WM_HOTKEY, static_cast<WPARAM>(id), 0);
+    SendMessageA(FindWindowA(nullptr, InstanceWindowTitle(name).c_str()), WM_HOTKEY, static_cast<WPARAM>(id), 0);
 
     EXPECT_EQ(ranToTheEnd, word);
 }
@@ -220,7 +220,7 @@ TEST(Win32PlatformHostTest, ABackgroundTimerCallbackCanSetTheTimerAgain) {
         ranToTheEnd = word;
     });
 
-    SendMessageA(FindWindowA(nullptr, name.c_str()), WM_TIMER, kBackgroundTimerId, 0);
+    SendMessageA(FindWindowA(nullptr, InstanceWindowTitle(name).c_str()), WM_TIMER, kBackgroundTimerId, 0);
 
     EXPECT_EQ(ranToTheEnd, word);
     host.SetBackgroundTimer(0, nullptr);
@@ -333,7 +333,7 @@ TEST(Win32PlatformHostTest, ACloseSentWhileHiddenEndsTheLoop) {
                 host.Quit(3);
             }
         });
-        const HWND hwnd = FindWindowA(nullptr, name.c_str());
+        const HWND hwnd = FindWindowA(nullptr, InstanceWindowTitle(name).c_str());
         ASSERT_NE(hwnd, nullptr);
         int exitCode = -1;
         const WPARAM wParam = message == WM_ENDSESSION ? TRUE : 0;
@@ -397,6 +397,34 @@ TEST(Win32PlatformHostTest, AnInstanceThisCopyMayNotOpenIsHeldAllTheSame) {
     EXPECT_FALSE(host.AcquireSingleInstance());
     CloseHandle(held);
     EXPECT_TRUE(host.AcquireSingleInstance());
+}
+
+// A copy started again hands its start to the copy running - its own
+// user's, found by the host window titled for the instance - and the
+// running copy hears of it. Two hosts in this process stand in for the two
+// copies. With no copy of that name running, nothing answers.
+TEST(Win32PlatformHostTest, ACopyStartedAgainHandsItsStartToTheOneRunning) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost running;
+    ASSERT_TRUE(running.Initialize(name));
+    int opened = 0;
+    running.SetOpenedAgainCallback([&opened] { ++opened; });
+    Win32PlatformHost again;
+    ASSERT_TRUE(again.Initialize(name));
+    int openedHere = 0;
+    again.SetOpenedAgainCallback([&openedHere] { ++openedHere; });
+
+    EXPECT_TRUE(again.PassOpeningToRunningCopy());
+    MSG msg{};
+    while (PeekMessageA(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        DispatchMessageA(&msg);
+    }
+    EXPECT_EQ(opened, 1);
+    EXPECT_EQ(openedHere, 0) << "not to itself";
+
+    Win32PlatformHost alone;
+    ASSERT_TRUE(alone.Initialize(name + "-alone"));
+    EXPECT_FALSE(alone.PassOpeningToRunningCopy());
 }
 
 }  // namespace
