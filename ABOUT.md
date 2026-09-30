@@ -76,6 +76,12 @@ the Overview.
 
 ## Changelog
 
+### 0.2.1
+
+#### Changes
+
+- Moved the library to local AppData and optimized its performance. An existing library in roaming AppData is moved automatically.
+
 ### 0.2.0
 
 #### Features
