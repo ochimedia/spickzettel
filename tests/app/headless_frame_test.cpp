@@ -4644,6 +4644,46 @@ TEST_F(HeadlessAppTest, GoingAwayCheckpointsTheLibrary) {
     EXPECT_EQ(controller_->GetSession().Store()->UncheckpointedBytes(), 0);
 }
 
+// Edit mode never checkpoints - that would be the hitch the WAL is there
+// to take out of it. Left for view mode, the library is checkpointed at
+// the start of the frame after the first that draws view mode: that one
+// is on screen by then, and a frame made late by a busy disk looks the
+// same as the one before it.
+TEST_F(HeadlessAppTest, LeavingEditModeForViewModeCheckpointsOnceViewModeIsDrawn) {
+    StartWithLibrary();
+    ShowEditMode();
+    StepFrame();
+    PressKey(ImGuiKey_D);
+    Drag(200.0f, 200.0f, 800.0f, 600.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    persistence::LibraryStore& store = *controller_->GetSession().Store();
+    StepFrames(3);
+    EXPECT_GT(store.UncheckpointedBytes(), 0) << "not in edit mode";
+
+    ShowViewMode();
+    ASSERT_EQ(controller_->State(), app::OverlayState::View);
+    EXPECT_GT(store.UncheckpointedBytes(), 0) << "not while edit mode is still on screen";
+    StepFrame();
+    EXPECT_GT(store.UncheckpointedBytes(), 0) << "nor in the frame that first draws view mode";
+    StepFrame();
+    EXPECT_EQ(store.UncheckpointedBytes(), 0);
+}
+
+// A silent capture while the overlay is hidden, with nothing said on
+// screen, changes no state - and is checkpointed at once all the same,
+// with nothing on screen to wait for it.
+TEST_F(HeadlessAppTest, ASilentCaptureWhileHiddenIsCheckpointedAtOnce) {
+    AppConfig config = DefaultConfig();
+    config.showToastsWhileHidden = false;
+    StartWithLibrary(config);
+    ASSERT_FALSE(host_.overlayWindow.visible);
+    persistence::LibraryStore& store = *controller_->GetSession().Store();
+    TriggerHotkey(config_.hotkeySilentCapture);
+    ASSERT_FALSE(host_.overlayWindow.visible);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u) << "captured";
+    EXPECT_EQ(store.UncheckpointedBytes(), 0);
+}
+
 // A change whose write fails is not made, and that is said on screen until
 // a write lands - what is drawn is what the library holds, and the line
 // says why the change is not there - and for long enough to be read,

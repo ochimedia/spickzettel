@@ -238,6 +238,9 @@ void OverlayApp::KeepPen() {
 // ================= Frame =================
 
 void OverlayApp::OnFrame(float /*deltaSeconds*/) {
+    if (frameStartCallback_) {
+        frameStartCallback_();
+    }
     // The mesh caches' frame, closed on every path out of here - including
     // view-only mode's own early return: a cache left thinking its frame is
     // still running never drops what that frame didn't draw.

@@ -144,6 +144,11 @@ public:
     void SetNoticeFinishedCallback(std::function<void()> callback) {
         noticeFinishedCallback_ = std::move(callback);
     }
+    // Called first thing in every frame, before anything of it is built:
+    // the frame before it is on screen by then, so work that makes the
+    // frame late is done there where it shows least. TrayController makes
+    // the library's checkpoint there in view mode (see OnFrameStart).
+    void SetFrameStartCallback(std::function<void()> callback) { frameStartCallback_ = std::move(callback); }
     // Drops the current message without showing it, for the caller that
     // asked for something and then decided nothing may appear on screen
     // (see AppConfig::showToastsWhileHidden). Worth doing rather than
@@ -588,6 +593,8 @@ private:
     std::function<std::vector<platform::DisplayInfo>()> displayListCallback_;
     // See SetNoticeFinishedCallback's own doc comment.
     std::function<void()> noticeFinishedCallback_;
+    // See SetFrameStartCallback.
+    std::function<void()> frameStartCallback_;
     // See SetHotkeyChangeCallback's own doc comment.
     std::function<bool(HotkeySlot, platform::KeyCombo)> hotkeyChangeCallback_;
 

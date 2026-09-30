@@ -349,9 +349,10 @@ commits - median and max of the 6, in milliseconds:
   The rollback journal's median was 160 ms there.
 - **`NORMAL` moves the flush to the checkpoint rather than doing without
   it**: 8 ms on an idle disk, 65-140 ms on a moderate one, and 1.5-3.7 s
-  on a disk written flat out. Hence when the app makes one: when the
-  overlay goes away, and never inside a commit on its own at every
-  thousand pages - a single capture could be that.
+  on a disk written flat out. Hence when the app makes one: out of edit
+  mode, where nothing on screen waits for it (ARCHITECTURE.md, "Commits
+  wait for nobody: the WAL"), and never inside a commit on its own at
+  every thousand pages - a single capture could be that.
 
 The six checkpoints per setting are few, and the tails of 120 commits vary
 from run to run; the medians and the order of the settings are what to

@@ -21,6 +21,7 @@ TrayController::TrayController(platform::IPlatformHost& host, AppConfig config)
 bool TrayController::Initialize() {
     host_.SetTrayCommandCallback([this](platform::TrayCommand cmd) { OnTrayCommand(cmd); });
     host_.SetOpenedAgainCallback([this] { OnOpenedAgain(); });
+    overlayApp_.SetFrameStartCallback([this] { OnFrameStart(); });
 
     // Also fine to call again later, after the window exists - see
     // IOverlayWindow::SetEditModeNoActivate - but seeding it here, before
@@ -253,6 +254,8 @@ void TrayController::SilentCapture() {
         // it queued for whenever the overlay next comes up - see
         // DismissActionToast.
         overlayApp_.DismissActionToast();
+        // And nothing waits for the disk either.
+        CheckpointLibrary();
         return;
     }
     Apply(transition);
@@ -263,6 +266,26 @@ void TrayController::SilentCapture() {
 // docs/OVERLAY_STATES.md. Next is the table; this is the rest.
 
 void TrayController::Request(OverlayRequest request) { Apply(Next(state_, request, Facts())); }
+
+void TrayController::CheckpointLibrary() {
+    if (session_.Store() != nullptr) {
+        session_.Store()->Checkpoint();
+    }
+}
+
+void TrayController::OnFrameStart() {
+    // Not in the frame that first draws the state: the one before it is
+    // still the old state's - edit mode's bars, over a view mode that is
+    // click-through already - and a checkpoint that waits for a busy disk
+    // would leave them up. From the next one on, a late frame is one that
+    // looks the same, since nothing in view mode moves by itself. Whatever
+    // was written in the state since - a silent capture - is made durable
+    // at the frame after it. Nothing to do costs nothing.
+    if ((state_ == OverlayState::View || state_ == OverlayState::Pinned) && framesSinceTransition_ > 0) {
+        CheckpointLibrary();
+    }
+    framesSinceTransition_ = 1;
+}
 
 OverlayFacts TrayController::Facts() const {
     OverlayFacts facts;
@@ -379,12 +402,13 @@ void TrayController::Apply(const OverlayTransition& transition) {
     if (to == OverlayState::Edit && settings_.Live().freezeScreen) {
         session_.FreezeScreen(overlayDisplay_);
     }
-    // 10. Away, what was written while the overlay was up is made durable:
-    // the one flush the library makes, which can take a while on a busy
-    // disk - now, with nothing on screen waiting for it. See
-    // LibraryStore::Checkpoint.
-    if (away && session_.Store() != nullptr) {
-        session_.Store()->Checkpoint();
+    // 10. Hidden, what was written while the overlay was up is made
+    // durable now, with nothing on screen waiting for it. In view mode and
+    // the pinned view, where something is, once the new state is drawn -
+    // see OnFrameStart.
+    framesSinceTransition_ = 0;
+    if (to == OverlayState::Hidden) {
+        CheckpointLibrary();
     }
     CheckInvariants();
 }

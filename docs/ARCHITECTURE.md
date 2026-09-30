@@ -814,13 +814,30 @@ ever held.
 The file is in WAL mode with `synchronous=NORMAL`: a commit appends its
 pages to `library.db-wal` and returns, without waiting for the disk. What
 it waits for instead is a checkpoint (`LibraryStore::Checkpoint`), which
-moves the WAL into the file and flushes both - made when the overlay goes
-away (OVERLAY_STATES.md, section 6, step 10), when nothing on screen
-waits for it, and by a write once the WAL holds 64 MB, so that an
-overlay left up does not grow it without end. SQLite's own checkpoint,
-every thousand pages, is off: it would come inside a commit, on the
-render thread. Closing the file checkpoints it too, and takes the WAL
-away.
+moves the WAL into the file and flushes both. It is made where a flush
+that waits for a busy disk shows least (`TrayController::CheckpointLibrary`):
+
+- **Hidden**, at once: when the overlay goes away, and after a silent
+  capture that leaves it hidden. Nothing is on screen to wait for it
+  (OVERLAY_STATES.md, section 6, step 10).
+- **In view mode and the pinned view**, at the start of a frame, once one
+  frame of the state is on screen: the first would leave edit mode's
+  bars up for as long as the disk took, and after it a late frame looks
+  the same as the one before, since nothing there moves by itself. View
+  mode draws a frame every 250 ms when nothing happens, so leaving edit
+  mode for it is checkpointed a quarter second later, and anything
+  written in it - a silent capture - at the frame after.
+- **Never in edit mode**, where it would be the hitch the WAL takes out -
+  but by a write once the WAL holds 64 MB, so that an overlay left in edit
+  mode does not grow it without end.
+
+A checkpoint with nothing written since does nothing, so this is a
+flush per edit, however often the overlay changes mode. SQLite's own
+checkpoint, every thousand pages, is off: it would come inside a commit,
+on the render thread. Closing the file checkpoints it too, and takes the
+WAL away. Leaving edit mode for view mode was added on 2026-09-30, at the
+user's suggestion: someone who plays for hours with the snippets up in
+view mode had nothing made durable since the edits before it.
 
 It was SQLite's default rollback journal with `synchronous=FULL` until
 2026-09-30, when a tester found a hitch "sometimes, after making some
@@ -846,7 +863,7 @@ app, of Windows, or a power cut, the next open finds a whole library,
 reading from the WAL what it holds and dropping a torn tail. A crash of
 the app loses nothing - what it committed is in Windows' cache already.
 A power cut or a crash of Windows may lose what was committed since the
-last checkpoint, which is since the overlay last went away: the library
+last checkpoint, which is since edit mode was last left: the library
 opens as it was a moment earlier. That holds as long as the disk does
 what a flush asks, as the rollback journal needed too.
 

@@ -255,11 +255,15 @@ the same order unless said otherwise.
 9. **Freeze**, when entering Edit with the setting on. This comes after
    the window is presented, so the capture leaves out the overlay as it
    is going to be.
-10. **Checkpoint the library**, when going Away: what was written while
-    the overlay was up is moved from the WAL into the file and flushed
-    (`LibraryStore::Checkpoint`). Last, after the window is down, since
-    it is the one write that waits for the disk, and can wait seconds on
-    a busy one (ARCHITECTURE.md, "Persistence").
+10. **Checkpoint the library**, when the state is Hidden: what was
+    written while the overlay was up is moved from the WAL into the file
+    and flushed (`LibraryStore::Checkpoint`). Last, after the window is
+    down, since it is the one write that waits for the disk, and can
+    wait seconds on a busy one. View and Pinned are checkpointed too, but
+    not here: at the start of the frame after the first that draws them
+    (`TrayController::OnFrameStart`), so that the old state's last frame
+    is not what stays up while the disk takes its time. Edit never is
+    (ARCHITECTURE.md, "Commits wait for nobody: the WAL").
 
 Step 6 comes before step 7 because "Don't steal focus" decides how the
 window is shown, and because what is underneath has to be asked before

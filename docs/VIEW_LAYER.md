@@ -344,6 +344,12 @@ Every frame of edit mode runs these stages, in order:
 The view-only modes run part of Prepare, the view-only layer, Messages
 and Apply.
 
+Before any stage, every frame tells `TrayController` it is starting
+(`OverlayApp::SetFrameStartCallback`): the frame before it is on screen
+by then, which makes it the moment for work that makes a frame late -
+in view mode and the pinned view, the library's checkpoint (ARCHITECTURE.md,
+"Commits wait for nobody: the WAL"). It changes nothing the frame draws.
+
 Why this order:
 
 - **Prepare comes first, and may change the library.** Nothing has been

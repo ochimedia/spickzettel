@@ -117,6 +117,10 @@ public:
     // The app started again while this copy runs: the overlay comes up in
     // edit mode, and stays if it is there already.
     void OnOpenedAgain();
+    // The start of every frame - see OverlayApp::SetFrameStartCallback.
+    // In view mode and the pinned view, once a frame of the state is on
+    // screen, the library's checkpoint (see CheckpointLibrary).
+    void OnFrameStart();
 
     const OverlayApp& Overlay() const { return overlayApp_; }
     // Non-const for the tests that have to *arrange* a world before driving
@@ -172,6 +176,12 @@ private:
 
     // A request, carried out: Apply(Next(...)) with the facts as they are.
     void Request(OverlayRequest request);
+    // Makes what the library holds in its WAL durable (see
+    // LibraryStore::Checkpoint), at a moment nothing on screen waits for
+    // it: in Apply when the overlay is hidden, and in OnFrameStart in view
+    // mode and the pinned view. Never in edit mode, where it would be a
+    // hitch; nothing to do when nothing was written since.
+    void CheckpointLibrary();
     // What the table needs besides the state and the request.
     OverlayFacts Facts() const;
     // Section 6: one transition, every step in its order. A Stay does
@@ -299,6 +309,9 @@ private:
     bool libraryLoaded_ = false;
     // See HoldUntilStart.
     bool held_ = false;
+    // Frames started since the last transition, counted to one - see
+    // OnFrameStart.
+    int framesSinceTransition_ = 0;
     // Constructed up front (from host.GetLibraryPath(), possibly empty) but
     // only ever used - Load()'d from, attached to overlayApp_ - when that
     // path is non-empty; see Initialize().
