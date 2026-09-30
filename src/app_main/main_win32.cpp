@@ -71,8 +71,8 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
 
     auto host = sz::platform::CreatePlatformHost();
     // First, so that a crash anywhere after it - starting up included -
-    // leaves a dump to be sent in. Beside the library and config.json,
-    // in %APPDATA%\Spickzettel\crashes.
+    // leaves a dump to be sent in. Beside the library, in
+    // %LOCALAPPDATA%\Spickzettel\crashes.
     sz::platform::win32::InstallCrashDumpWriter(host->GetLibraryPath().parent_path() / "crashes",
                                                 sz::core::build::VersionLine());
     if (!host->Initialize("Spickzettel")) {

@@ -1264,6 +1264,24 @@ TEST_F(TrayControllerPersistenceTest, ARestartAfterAFoldersLastCanvasIsDeletedOp
     EXPECT_EQ(controller.GetSession().Manager().CurrentFolderId(), 2u);
 }
 
+// A library where builds up to 0.2.0 kept it is moved to where the
+// library is kept now, and loaded from there.
+TEST_F(TrayControllerPersistenceTest, InitializeMovesTheLibraryFromWhereItWas) {
+    const std::filesystem::path former = dir_ / "roaming" / "library.db";
+    CanvasManagerSnapshot snapshot = CanvasManager().ExportSnapshot();
+    snapshot.canvases[0].name = "Kept";
+    ASSERT_TRUE(persistence::LibraryStore(former).Save(snapshot));
+    test::FakePlatformHost host;
+    host.libraryPath = library_;
+    host.formerLibraryPath = former;
+    TrayController controller(host, DefaultConfig());
+    ASSERT_TRUE(controller.Initialize());
+    EXPECT_EQ(controller.LibraryPath(), library_);
+    EXPECT_FALSE(std::filesystem::exists(former));
+    EXPECT_TRUE(std::filesystem::exists(library_));
+    EXPECT_EQ(test::Model(controller.GetSession()).CurrentOrNull()->name, "Kept");
+}
+
 TEST_F(TrayControllerPersistenceTest, AFirstRunsLibraryAndACaptureAreOnDiskAsTheyAreMade) {
     test::FakePlatformHost host;
     host.libraryPath = library_;

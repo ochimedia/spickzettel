@@ -321,6 +321,9 @@ public:
     // real (typically temporary) file.
     std::filesystem::path GetLibraryPath() const override { return libraryPath; }
     std::filesystem::path libraryPath;
+    // Empty by default: nowhere to move a library from.
+    std::filesystem::path GetFormerLibraryPath() const override { return formerLibraryPath; }
+    std::filesystem::path formerLibraryPath;
 
     // Recorded rather than run: a test fires it with FireBackgroundTimer,
     // standing for the interval having passed. 0 means none is set.

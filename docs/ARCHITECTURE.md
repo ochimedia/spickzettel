@@ -91,7 +91,7 @@ their warnings do not count against the project's own warning level.
 ### Crash dumps and symbols
 
 A crash on someone else's machine leaves a minidump in
-`%APPDATA%\Spickzettel\crashes\`, named after the version line and the
+`%LOCALAPPDATA%\Spickzettel\crashes\`, beside the library, named after the version line and the
 time (`win32_crash_dump.h`, installed first thing in `WinMain`). It
 covers an unhandled SEH exception - an access violation, a stack
 overflow, a C++ exception nothing caught - and `abort()`, which
@@ -715,9 +715,40 @@ not identity, and two may be alike; the id is what tells them apart.
 ## Persistence: the library file
 
 Everything the overlay shows survives a restart, in one SQLite file:
-`%APPDATA%\Spickzettel\library.db`. There is no save action anywhere in
-the UI; the session decides when to write (see "Session"). Loading
+`%LOCALAPPDATA%\Spickzettel\library.db`. There is no save action anywhere
+in the UI; the session decides when to write (see "Session"). Loading
 happens once, at startup.
+
+### Where the file is
+
+The library is kept on this computer, in `%LOCALAPPDATA%`, and the
+settings with the user, in `%APPDATA%` (`config.json`) - since
+2026-09-30; builds up to 0.2.0 kept the library beside the settings.
+
+- **A roaming profile copies `%APPDATA%`** to a server at every sign-out
+  and back at every sign-in, and Microsoft's guidance is to keep what is
+  large out of it. A library of screenshots is large, and a copy of it
+  that roams is also one that two computers can each change and one of
+  them overwrite at sign-out.
+- **Folder Redirection can put `%APPDATA%` on a server share** for good,
+  which is how a library would end up on a network drive at all - where
+  every commit crosses the network, and where SQLite trusts the file
+  system's locks and flushes more than it should. `%LOCALAPPDATA%` cannot
+  be redirected.
+- **The library belongs to this computer anyway**: snippets are placed on
+  its displays. Settings - hotkeys, profiles, the look - are what is
+  worth having on another.
+
+A library where 0.2.0 kept it is moved at the first start that finds
+none in `%LOCALAPPDATA%` (`LibraryStore::MoveHereFrom`, called by
+`TrayController::Initialize` after the instance check, so that no copy of
+the app has it open): opened and closed first, which plays a journal a
+crash left back into it, so that it is one file to move; renamed, or on
+another drive copied and made the library only once the copy is whole.
+One that cannot be moved is opened where it is, and the move is tried
+again at the next start. One in `%LOCALAPPDATA%` already wins, and the
+old one is left alone. The crash dumps went along
+(`%LOCALAPPDATA%\Spickzettel\crashes`); old ones stay where they were.
 
 ### Why a database
 
@@ -1424,11 +1455,14 @@ ending the session all settle what the hand is in the middle of first
 library from a stale picture of it.
 The tray claims a per-user named mutex before it does anything else,
 and a second copy exits with the app's one message box instead of
-loading the library. Per user is per `%APPDATA%`, which is per library;
+loading the library. Per user is per profile, which is per library;
 the kernel drops the mutex with the process, so a copy that crashed
 holds nothing. A hotkey collision is not a lock: with a hand-edited
 config the two copies could have different hotkeys and never notice
-each other.
+each other. The mutex is one computer's: another copy of the app on
+another computer, where a shared folder puts the same file in front of
+both, is kept out by the file's hold instead (see "Commits wait for
+nobody: the WAL").
 
 The mutex is in the session's namespace (`Local\`) and named for the
 user's SID as well, because the session is not the user: "Run as
@@ -2970,7 +3004,7 @@ Every string in the app is UTF-8, but on Windows the narrow side of a
 `std::filesystem::path` is the process's ANSI code page, and MSVC's
 `path::string()` throws on a character that page cannot spell - a user
 name in Japanese on an English Windows puts one in every path under
-`%APPDATA%`. When the library was a directory tree, a canvas directory
+`%APPDATA%` and `%LOCALAPPDATA%`. When the library was a directory tree, a canvas directory
 renamed by hand was enough to crash every load. Rather than convert at
 each place a path becomes a string, every
 executable, the tests included, carries a manifest

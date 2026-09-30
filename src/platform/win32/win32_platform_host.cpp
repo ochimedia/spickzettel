@@ -282,8 +282,10 @@ IOverlayWindow& Win32PlatformHost::GetOverlayWindow() { return overlayWindow_; }
 std::vector<DisplayInfo> Win32PlatformHost::ListDisplays() const { return EnumerateDisplays(); }
 
 namespace {
-// Shared by GetConfigFilePath/GetLibraryPath below.
-std::filesystem::path AppDataBase() {
+// Shared by GetConfigFilePath/GetLibraryPath below: the app's folder in
+// %APPDATA% (`variable` APPDATA), which roams with the user, or in
+// %LOCALAPPDATA%, which stays on this computer.
+std::filesystem::path AppDataBase(const wchar_t* variable) {
     std::filesystem::path base;
     // GetEnvironmentVariableW rather than std::getenv: the wide form is
     // what %APPDATA% actually is, so a user whose profile folder holds a
@@ -295,11 +297,11 @@ std::filesystem::path AppDataBase() {
     // it needs, terminator included, and 0 only when the variable is not
     // set at all.
     std::wstring appData;
-    if (const DWORD needed = GetEnvironmentVariableW(L"APPDATA", nullptr, 0); needed > 0) {
+    if (const DWORD needed = GetEnvironmentVariableW(variable, nullptr, 0); needed > 0) {
         appData.resize(needed);
         // ...and this time it answers with how much it wrote, terminator
         // excluded, which is where the string really ends.
-        appData.resize(GetEnvironmentVariableW(L"APPDATA", appData.data(), needed));
+        appData.resize(GetEnvironmentVariableW(variable, appData.data(), needed));
     }
     if (appData.empty()) {
         base = std::filesystem::current_path();
@@ -312,9 +314,22 @@ std::filesystem::path AppDataBase() {
 }
 }  // namespace
 
-std::filesystem::path Win32PlatformHost::GetConfigFilePath() const { return AppDataBase() / "config.json"; }
+std::filesystem::path Win32PlatformHost::GetConfigFilePath() const {
+    return AppDataBase(L"APPDATA") / "config.json";
+}
 
-std::filesystem::path Win32PlatformHost::GetLibraryPath() const { return AppDataBase() / "library.db"; }
+// Local, not roaming: a roaming profile copies %APPDATA% at every sign-in
+// and sign-out, and Folder Redirection can put it on a server share -
+// neither of which a library of screenshots, placed on this computer's
+// displays, is for. %LOCALAPPDATA% cannot be redirected. See
+// docs/ARCHITECTURE.md, "Persistence".
+std::filesystem::path Win32PlatformHost::GetLibraryPath() const {
+    return AppDataBase(L"LOCALAPPDATA") / "library.db";
+}
+
+std::filesystem::path Win32PlatformHost::GetFormerLibraryPath() const {
+    return AppDataBase(L"APPDATA") / "library.db";
+}
 
 // Until Quit, which may come before the loop starts - a close while a
 // startup message box is up (see main_win32.cpp) - and is kept.

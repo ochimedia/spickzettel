@@ -33,6 +33,7 @@ public:
     std::vector<DisplayInfo> ListDisplays() const override;
     std::filesystem::path GetConfigFilePath() const override;
     std::filesystem::path GetLibraryPath() const override;
+    std::filesystem::path GetFormerLibraryPath() const override;
     void SetBackgroundTimer(int intervalMs, std::function<void()> callback) override;
     void SetSessionEndCallback(std::function<void()> callback) override;
     void Post(std::function<void()> task) override;

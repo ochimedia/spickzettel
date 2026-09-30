@@ -87,6 +87,14 @@ public:
     };
     OpenResult Open();
     const std::filesystem::path& File() const { return file_; }
+    // Before the first Open: the library at `former` - where builds up to
+    // 0.2.0 kept it, in the roaming profile - moved to File(), unless File()
+    // is there already. Whatever a crash left beside it, a journal or a
+    // WAL, is played into it first, so that it is one file to move; moved
+    // to another drive, it is copied and the copy made the library only
+    // once it is whole. A library that cannot be moved is opened where it
+    // is, and File() says so; the move is tried again at the next start.
+    void MoveHereFrom(const std::filesystem::path& former);
     // Where a file that was not a library this store could read - not a
     // SQLite database, a damaged one, or someone else's - was set aside
     // when Open found it, so that a new library could start in its place

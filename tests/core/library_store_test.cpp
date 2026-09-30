@@ -984,5 +984,88 @@ TEST_F(LibraryStoreTest, TheAppsStoreHoldsItsFileForItself) {
     EXPECT_TRUE(after.Load().has_value());
 }
 
+// ================= Moving from where 0.2.0 kept it =================
+
+// A library where builds up to 0.2.0 kept it, in the roaming profile, is
+// moved to where the store's file is now, before the first open.
+TEST_F(LibraryStoreTest, ALibraryWhereItWasIsMovedHere) {
+    const std::filesystem::path former = dir_ / "roaming" / "library.db";
+    const std::filesystem::path here = dir_ / "local" / "library.db";
+    ASSERT_TRUE(LibraryStore(former).Save(MakeSampleSnapshot()));
+    LibraryStore store(here);
+    store.MoveHereFrom(former);
+    EXPECT_EQ(store.File(), here);
+    EXPECT_FALSE(std::filesystem::exists(former));
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].items.size(), 2u);
+}
+
+// A library here already is the one: the one where it was, left by a
+// build from before that ran again, say, is left alone.
+TEST_F(LibraryStoreTest, ALibraryHereIsKeptOverOneWhereItWas) {
+    const std::filesystem::path former = dir_ / "roaming" / "library.db";
+    const std::filesystem::path here = dir_ / "local" / "library.db";
+    ASSERT_TRUE(LibraryStore(former).Save(MakeSampleSnapshot()));
+    ASSERT_TRUE(LibraryStore(here).Save(CanvasManagerSnapshot{}));
+    LibraryStore store(here);
+    store.MoveHereFrom(former);
+    EXPECT_EQ(store.File(), here);
+    EXPECT_TRUE(std::filesystem::exists(former));
+    EXPECT_TRUE(store.Load()->canvases.empty());
+
+    LibraryStore nothingThere(dir_ / "elsewhere" / "library.db");
+    nothingThere.MoveHereFrom(dir_ / "nowhere" / "library.db");
+    EXPECT_EQ(nothingThere.File(), dir_ / "elsewhere" / "library.db");
+}
+
+// A library that cannot be moved is opened where it is - here, the place
+// it would go is under a file, not a directory.
+TEST_F(LibraryStoreTest, ALibraryThatCannotBeMovedIsOpenedWhereItIs) {
+    const std::filesystem::path former = dir_ / "roaming" / "library.db";
+    ASSERT_TRUE(LibraryStore(former).Save(MakeSampleSnapshot()));
+    std::ofstream(dir_ / "local") << "a file";
+    LibraryStore store(dir_ / "local" / "library.db");
+    store.MoveHereFrom(former);
+    EXPECT_EQ(store.File(), former);
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].items.size(), 2u);
+}
+
+// A journal a crash left beside it is played back before the move - here
+// a copy taken in the middle of a transaction, as a crash would leave the
+// files - so that what is moved is the library as its last commit left it,
+// and nothing is left behind.
+TEST_F(LibraryStoreTest, AJournalACrashLeftIsPlayedBackBeforeTheMove) {
+    const std::filesystem::path former = dir_ / "roaming" / "library.db";
+    const std::filesystem::path here = dir_ / "local" / "library.db";
+    ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
+    {
+        RawConnection raw(file_);
+        ASSERT_TRUE(raw.Exec("PRAGMA journal_mode = DELETE"));  // as 0.2.0 kept it
+    }
+    {
+        RawConnection crashing(file_);
+        ASSERT_TRUE(crashing.Exec("PRAGMA cache_size = 1; BEGIN; DELETE FROM items; "
+                                  "INSERT INTO pictures (item_id, width, height, pixels) "
+                                  "VALUES (99, 1, 1, zeroblob(1000000))"));
+        ASSERT_TRUE(std::filesystem::exists(Beside(file_, "-journal")));
+        std::filesystem::create_directories(former.parent_path());
+        std::filesystem::copy_file(file_, former);
+        std::filesystem::copy_file(Beside(file_, "-journal"), Beside(former, "-journal"));
+        crashing.Exec("ROLLBACK");
+    }
+    LibraryStore store(here);
+    store.MoveHereFrom(former);
+    EXPECT_EQ(store.File(), here);
+    EXPECT_FALSE(std::filesystem::exists(Beside(former, "-journal")));
+    EXPECT_FALSE(std::filesystem::exists(Beside(here, "-journal")));
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].items.size(), 2u) << "as last committed";
+    EXPECT_FALSE(store.HasImage(99));
+}
+
 }  // namespace
 }  // namespace sz::core::persistence

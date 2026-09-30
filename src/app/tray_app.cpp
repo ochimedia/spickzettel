@@ -57,6 +57,9 @@ bool TrayController::Initialize() {
     // session without a library store entirely: nothing is written, and
     // everything else works the same.
     if (!host_.GetLibraryPath().empty()) {
+        // A library where builds up to 0.2.0 kept it comes along first -
+        // after the instance check, so that no copy of the app has it open.
+        libraryStore_.MoveHereFrom(host_.GetFormerLibraryPath());
         // Load opens the file first; what either found is Open's to say.
         std::optional<CanvasManagerSnapshot> snapshot = libraryStore_.Load();
         if (const auto opened = libraryStore_.Open(); opened != persistence::LibraryStore::OpenResult::Opened) {

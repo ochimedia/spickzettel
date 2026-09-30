@@ -2,8 +2,8 @@
 #
 # See docs/PERF.md for what the scenarios are and how to read the numbers.
 #
-# Everything runs against an isolated APPDATA under the system temp
-# directory, so a measurement can never touch - or be perturbed by - the real
+# Everything runs against an isolated APPDATA and LOCALAPPDATA under the
+# system temp directory, so a measurement can never touch - or be perturbed by - the real
 # library and config.
 #
 #   .\measure.ps1 -Exe <path> [-Scenario name]
@@ -96,7 +96,11 @@ try {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = (Resolve-Path $Exe).Path
     $psi.UseShellExecute = $false
+    # Both: the config is under APPDATA and the library under LOCALAPPDATA,
+    # and one folder for both means no library to move from the one to the
+    # other (see LibraryStore::MoveHereFrom).
     $psi.EnvironmentVariables["APPDATA"] = $sandbox
+    $psi.EnvironmentVariables["LOCALAPPDATA"] = $sandbox
     $proc = [System.Diagnostics.Process]::Start($psi)
 
     # Getting the overlay up is deliberately careful rather than "sleep, then

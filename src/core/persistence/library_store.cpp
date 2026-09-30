@@ -543,6 +543,58 @@ LibraryStore::OpenResult LibraryStore::TryOpen() {
     return OpenResult::Opened;
 }
 
+void LibraryStore::MoveHereFrom(const std::filesystem::path& former) {
+    std::error_code ec;
+    if (db_ != nullptr || openResult_.has_value() || former.empty() || former == file_ ||
+        std::filesystem::exists(file_, ec) || ec || !std::filesystem::exists(former, ec) || ec) {
+        return;
+    }
+    // An open and a close play back a journal a crash left, or move a WAL
+    // into the file; the first read is what does it.
+    {
+        sqlite3* db = nullptr;
+        if (sqlite3_open_v2(Utf8(former).c_str(), &db, SQLITE_OPEN_READWRITE, nullptr) == SQLITE_OK) {
+            int64_t version = 0;
+            ReadInt(db, "PRAGMA user_version", version);
+        }
+        sqlite3_close_v2(db);
+    }
+    // Still there - the file could not be written, say - they are part of
+    // the library, and it is not moved without them.
+    for (const char* suffix : {"-journal", "-wal"}) {
+        std::filesystem::path left = former;
+        left += suffix;
+        if (std::filesystem::exists(left, ec) || ec) {
+            file_ = former;
+            return;
+        }
+    }
+    std::filesystem::create_directories(file_.parent_path(), ec);
+    if (!ec) {
+        std::filesystem::rename(former, file_, ec);
+        if (!ec) {
+            return;
+        }
+        // Another drive - a roaming profile redirected to a server share:
+        // copied, and made the library only once the copy is whole.
+        std::filesystem::path moving = file_;
+        moving += ".moving";
+        std::filesystem::copy_file(former, moving, std::filesystem::copy_options::overwrite_existing, ec);
+        if (!ec) {
+            std::filesystem::rename(moving, file_, ec);
+        }
+        if (!ec) {
+            // Left where it was if it cannot be removed: the one here is the
+            // library from now on.
+            std::filesystem::remove(former, ec);
+            return;
+        }
+        std::error_code ignored;
+        std::filesystem::remove(moving, ignored);
+    }
+    file_ = former;
+}
+
 void LibraryStore::Configure() {
     sqlite3_extended_result_codes(db_, 1);
     sqlite3_busy_timeout(db_, kBusyTimeoutMs);
