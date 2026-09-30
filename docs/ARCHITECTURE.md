@@ -349,6 +349,13 @@ crossings are where the segment's line meets the band along the pass or
 either end's circle, the least start to the greatest end. Found in
 review on 2026-09-27.
 
+A closed stroke - the rectangle tool's outline, which starts and ends on
+its top-left corner - is cut open where it is erased, not at its seam:
+the run that ends at the seam and the one that begins there are joined
+into one. Left as two, each ended there in a round cap, and of a
+rectangle cut anywhere that one corner went round while the others
+stayed square.
+
 Why not rasterize instead: a bitmap erase gives up resolution
 independence and turns undo into pixel diffs, for a problem that a
 bounded piece of segment geometry solves while keeping every stroke a

@@ -101,6 +101,17 @@ std::optional<std::vector<Stroke>> ClipStrokeOutsideRegion(const Stroke& stroke,
     if (!changed) {
         return std::nullopt;
     }
+    // A closed path - a rectangle's outline, which starts and ends on one
+    // corner - has no ends: the run that ends at its seam and the run that
+    // begins there are one run around it. Left as two, each got a round cap
+    // at the seam, and of a rectangle cut anywhere one corner went round.
+    const bool closed = pts.size() >= 4 && pts.front() == pts.back();
+    if (closed && fragments.size() >= 2 && fragments.front().points.front() == pts.front() &&
+        fragments.back().points.back() == pts.back()) {
+        std::vector<StrokePoint>& around = fragments.back().points;
+        around.insert(around.end(), fragments.front().points.begin() + 1, fragments.front().points.end());
+        fragments.erase(fragments.begin());
+    }
     return fragments;
 }
 

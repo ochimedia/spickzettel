@@ -98,8 +98,7 @@ TEST(StrokeClipTest, MidSegmentDipBothEndpointsOutsideSplitsIntoTwoFragments) {
 
 // A rectangle's polyline (its 5 corner points, straight edges implied)
 // erased squarely in the middle of one edge, nowhere near a vertex, takes a
-// clean circular bite out of that edge, splitting the outline into two open
-// fragments.
+// clean circular bite out of that edge, cutting the outline open there.
 TEST(StrokeClipTest, RectangleEdgeMidSegmentBiteDoesNotRequireTouchingAVertex) {
     const Stroke rectangle = MakeStroke({
         StrokePoint{0, 0},
@@ -112,17 +111,13 @@ TEST(StrokeClipTest, RectangleEdgeMidSegmentBiteDoesNotRequireTouchingAVertex) {
     // corner (nearest corner is 50 units away; radius is only 10).
     const auto result = ClipStrokeOutsideCircle(rectangle, StrokePoint{50, 0}, 10.0f);
     ASSERT_TRUE(result.has_value());
-    ASSERT_EQ(result->size(), 2u);
+    ASSERT_EQ(result->size(), 1u);
 
-    const Stroke& bittenEdgeStart = (*result)[0];
-    ASSERT_EQ(bittenEdgeStart.points.size(), 2u);
-    EXPECT_NEAR(bittenEdgeStart.points[0].x, 0.0f, 1e-3f);
-    EXPECT_NEAR(bittenEdgeStart.points[1].x, 40.0f, 1e-3f);
-
-    // The rest of the rectangle's outline survives as one continuous
-    // fragment, unaffected past the bite.
-    const Stroke& rest = (*result)[1];
-    ASSERT_EQ(rest.points.size(), 5u);
+    // The rest of the outline survives as one continuous fragment, from the
+    // far side of the bite round through every corner, the seam included,
+    // to its near side (see AClosedStrokeIsCutOpenWhereItIsErasedNotAtItsSeam).
+    const Stroke& rest = (*result)[0];
+    ASSERT_EQ(rest.points.size(), 6u);
     EXPECT_NEAR(rest.points[0].x, 60.0f, 1e-3f);
     EXPECT_NEAR(rest.points[1].x, 100.0f, 1e-3f);
     EXPECT_NEAR(rest.points[1].y, 0.0f, 1e-3f);
@@ -130,6 +125,8 @@ TEST(StrokeClipTest, RectangleEdgeMidSegmentBiteDoesNotRequireTouchingAVertex) {
     EXPECT_NEAR(rest.points[2].y, 50.0f, 1e-3f);
     EXPECT_NEAR(rest.points[4].x, 0.0f, 1e-3f);
     EXPECT_NEAR(rest.points[4].y, 0.0f, 1e-3f);
+    EXPECT_NEAR(rest.points[5].x, 40.0f, 1e-3f);
+    EXPECT_NEAR(rest.points[5].y, 0.0f, 1e-3f);
 }
 
 TEST(StrokeClipTest, DuplicateConsecutivePointsDoNotCrashAndAreHandledGracefully) {
@@ -153,6 +150,53 @@ TEST(StrokeClipTest, FragmentsPreserveColorAndWidth) {
         EXPECT_FLOAT_EQ(fragment.width, 12.5f);
         EXPECT_EQ(fragment.corners, StrokeCorners::Sharp);
     }
+}
+
+// A rectangle's outline starts and ends on its top-left corner. Cut on its
+// right side, it is one stroke from the cut round to the cut - not two
+// meeting at that corner, where each would get a round cap.
+TEST(StrokeClipTest, AClosedStrokeIsCutOpenWhereItIsErasedNotAtItsSeam) {
+    Stroke rectangle = MakeStroke({StrokePoint{0, 0}, StrokePoint{100, 0}, StrokePoint{100, 60},
+                                   StrokePoint{0, 60}, StrokePoint{0, 0}});
+    rectangle.corners = StrokeCorners::Sharp;
+    const auto result = ClipStrokeOutsideCircle(rectangle, StrokePoint{100, 30}, 10.0f);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->size(), 1u);
+    const Stroke& around = (*result)[0];
+    EXPECT_EQ(around.corners, StrokeCorners::Sharp);
+    ASSERT_EQ(around.points.size(), 6u);
+    EXPECT_NEAR(around.points[0].x, 100.0f, 1e-4f);
+    EXPECT_NEAR(around.points[0].y, 40.0f, 1e-4f);
+    EXPECT_EQ(around.points[1], (StrokePoint{100, 60}));
+    EXPECT_EQ(around.points[2], (StrokePoint{0, 60}));
+    EXPECT_EQ(around.points[3], (StrokePoint{0, 0})) << "the seam, now a corner like the others";
+    EXPECT_EQ(around.points[4], (StrokePoint{100, 0}));
+    EXPECT_NEAR(around.points[5].x, 100.0f, 1e-4f);
+    EXPECT_NEAR(around.points[5].y, 20.0f, 1e-4f);
+}
+
+// Erased at the seam itself, the outline is open there already.
+TEST(StrokeClipTest, AClosedStrokeErasedAtItsSeamIsOpenThere) {
+    const Stroke rectangle = MakeStroke({StrokePoint{0, 0}, StrokePoint{100, 0}, StrokePoint{100, 60},
+                                         StrokePoint{0, 60}, StrokePoint{0, 0}});
+    const auto result = ClipStrokeOutsideCircle(rectangle, StrokePoint{0, 0}, 10.0f);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->size(), 1u);
+    EXPECT_NEAR(result->front().points.front().x, 10.0f, 1e-4f);
+    EXPECT_NEAR(result->front().points.back().y, 10.0f, 1e-4f);
+}
+
+// Cut in two places, the piece through the seam is still whole, and comes
+// after the other.
+TEST(StrokeClipTest, AClosedStrokeCutTwiceKeepsItsSeamInOnePiece) {
+    const Stroke rectangle = MakeStroke({StrokePoint{0, 0}, StrokePoint{100, 0}, StrokePoint{100, 60},
+                                         StrokePoint{0, 60}, StrokePoint{0, 0}});
+    const auto result = ClipStrokeOutsideRect(rectangle, 40.0f, -10.0f, 60.0f, 70.0f);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->size(), 2u);
+    EXPECT_EQ((*result)[0].points.size(), 4u) << "top right, round the right side, to bottom right";
+    ASSERT_EQ((*result)[1].points.size(), 4u) << "bottom left, round the seam, to top left";
+    EXPECT_EQ((*result)[1].points[2], (StrokePoint{0, 0}));
 }
 
 // ================= ClipStrokeOutsideRect (rectangular eraser) =================

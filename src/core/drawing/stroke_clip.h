@@ -22,9 +22,12 @@ namespace sz::core {
 // point inside it, no segment passing through it) - the caller's cue to
 // leave the stroke alone rather than replace it with an identical copy.
 // Otherwise returns the surviving fragments, each keeping stroke's own
-// colorRGBA/width/corners, in original point order; a fragment that would end up
-// with fewer than 2 points is dropped, so an empty (but present) vector
-// means the whole stroke was erased. Cutting a line down to a single
+// colorRGBA/width/corners, in original point order; a fragment that would
+// end up with fewer than 2 points is dropped, so an empty (but present)
+// vector means the whole stroke was erased. A closed stroke (last point
+// equal to the first - a rectangle's outline) is cut open where it is
+// erased, not at its seam: the fragment through the seam comes last, from
+// where it begins round to where it ends. Cutting a line down to a single
 // surviving sample leaves nothing rather than a dot: a dot is something
 // you place (see CanvasState::EndStroke), not a crumb the eraser leaves
 // behind.
