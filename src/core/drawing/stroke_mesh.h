@@ -39,12 +39,15 @@ struct StrokeMesh {
 // also has no cap but a flat one, and no round join at all.
 //
 // So the geometry is built here instead:
-//   - a miter join while the turn is shallow, which is nearly always after
-//     the input has been fitted (see stroke_smoothing.h) - one shared pair
-//     of vertices per centerline point, so consecutive segments share an
-//     edge rather than overlapping;
-//   - a round join past that limit, an arc on the outside of the turn, which
-//     is what keeps a hairpin the width of the pen instead of a spike;
+//   - a miter join while its corner stays within a quarter of a pixel of
+//     the round pen's outline - a turn of a few degrees, which is most of a
+//     fitted curve (see stroke_smoothing.h) - one shared pair of vertices
+//     per centerline point, so consecutive segments share an edge rather
+//     than overlapping;
+//   - a round join past that, an arc on the outside of the turn, which is
+//     the corner a round pen leaves, and what keeps a hairpin the width of
+//     the pen instead of a spike. A StrokeCorners::Sharp stroke - a
+//     rectangle's - keeps its miter up to a turn of about 120 degrees;
 //   - a round cap at each end, the mark the pen's own shape implies;
 //   - one point becomes a disc, which is the dot.
 //
@@ -55,16 +58,20 @@ struct StrokeMesh {
 // IOverlayWindow::StrokeDepthCallback), and why the mesh comes body first.
 //
 // `halfWidth` is half the pen width. `fringePx` is how wide the
-// anti-aliasing edge should be, in the same space - one pixel, normally.
+// anti-aliasing edge should be, in the same space - one pixel, normally,
+// and the space is taken to be pixels: the quarter-pixel tolerance above
+// is in it.
 // A closed centerline (first point equal to last, as a rectangle tool's is)
 // is recognized and joined at the seam instead of capped.
-StrokeMesh BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx);
+StrokeMesh BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx,
+                           StrokeCorners corners);
 
 // The same, into a mesh the caller already owns. `out` is cleared but keeps
 // whatever capacity it had, so a mesh rebuilt in place - which is what
 // StrokeMeshCache does every time a stroke it holds is edited - reuses its
 // two buffers instead of freeing and reallocating them. The value-returning
 // overload above is this one into a fresh mesh.
-void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx, StrokeMesh& out);
+void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx,
+                     StrokeCorners corners, StrokeMesh& out);
 
 }  // namespace sz::core

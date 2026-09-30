@@ -33,7 +33,7 @@ TEST(StrokeMeshCacheTest, BuildsTheSameMeshBuildStrokeMeshWouldHave) {
     cache.EndFrame();
 
     std::vector<StrokePoint> scaled = stroke.points;  // scale 1, so unchanged
-    const StrokeMesh direct = BuildStrokeMesh(scaled, 1.5f, kStrokeFringePx);
+    const StrokeMesh direct = BuildStrokeMesh(scaled, 1.5f, kStrokeFringePx, StrokeCorners::Round);
 
     ASSERT_EQ(cached.vertices.size(), direct.vertices.size());
     ASSERT_EQ(cached.indices.size(), direct.indices.size());
@@ -91,7 +91,7 @@ TEST(StrokeMeshCacheTest, AStrokeEditedInPlaceIsRebuilt) {
     EXPECT_EQ(cache.RebuiltLastFrame(), 1u);
 
     // ...and the rebuilt mesh is the new shape, not the old one.
-    const StrokeMesh direct = BuildStrokeMesh(stroke.points, 1.5f, kStrokeFringePx);
+    const StrokeMesh direct = BuildStrokeMesh(stroke.points, 1.5f, kStrokeFringePx, StrokeCorners::Round);
     cache.BeginFrame();
     const StrokeMesh& cached = Draw(cache, stroke, 2);
     ASSERT_EQ(cached.vertices.size(), direct.vertices.size());
@@ -119,7 +119,7 @@ TEST(StrokeMeshCacheTest, AStrokeEditedWithoutBumpingTheGenerationIsNotNoticed) 
     EXPECT_EQ(cache.RebuiltLastFrame(), 0u);
 }
 
-TEST(StrokeMeshCacheTest, ColorAndWidthAreBothPartOfTheFingerprint) {
+TEST(StrokeMeshCacheTest, ColorWidthAndCornersArePartOfTheFingerprint) {
     StrokeMeshCache cache;
     cache.BeginFrame();
     Draw(cache, MakeStroke(), 1);
@@ -134,6 +134,13 @@ TEST(StrokeMeshCacheTest, ColorAndWidthAreBothPartOfTheFingerprint) {
     Draw(cache, MakeStroke(0.0f, 0x00FF00FFu, /*width=*/9.0f), 3);
     cache.EndFrame();
     EXPECT_EQ(cache.RebuiltLastFrame(), 1u) << "a stroke of a different width";
+
+    Stroke square = MakeStroke(0.0f, 0x00FF00FFu, /*width=*/9.0f);
+    square.corners = StrokeCorners::Sharp;
+    cache.BeginFrame();
+    Draw(cache, square, 4);
+    cache.EndFrame();
+    EXPECT_EQ(cache.RebuiltLastFrame(), 1u) << "a stroke with other corners";
 }
 
 // Resizing the item changes the geometry - the pen gets wider and the

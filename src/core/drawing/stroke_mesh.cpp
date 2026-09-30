@@ -9,12 +9,23 @@ namespace {
 
 constexpr float kPi = 3.14159265358979323846f;
 
-// How far a miter may stretch, as a multiple of the half width, before the
-// join is drawn round instead. 2 is the turn at which the outer corner has
-// traveled a full pen width past the centerline - about 120 degrees.
-// Anything sharper looks better, and stays the width of the pen, as an arc.
-// (ImGui's own polyline clamps only at 100x the half width.)
+// How far a StrokeCorners::Sharp stroke's miter may stretch, as a multiple
+// of the half width, before the join is drawn round instead. 2 is the turn
+// at which the outer corner has traveled a full pen width past the
+// centerline - about 120 degrees. Anything sharper looks better, and stays
+// the width of the pen, as an arc. (ImGui's own polyline clamps only at
+// 100x the half width.)
 constexpr float kMiterLimit = 2.0f;
+
+// How far a Round stroke's miter corner may reach past the round pen's
+// outline, in pixels, before the join is drawn round. A miter reaches
+// halfWidth / cos(half the turn) out, so a limit in half widths lets a
+// wider pen's corners reach further: under the limit above a 40px pen
+// grew a point 20px long at a turn of 120 degrees, a quick flick. A
+// quarter of a pixel is the width of the fringe's first step, and keeps a
+// miter only where the turn is a few degrees - which a fitted curve's
+// joins mostly are, so a smooth stroke costs next to nothing more.
+constexpr float kRoundCornerTolerancePx = 0.25f;
 
 // How much of a round join or cap one arc segment may span. At a quarter of
 // a radian, a cap on a 40px pen is round to well under half a pixel.
@@ -167,16 +178,21 @@ std::vector<Rib> BuildDiscRibs(const V2& center, float radius) {
 
 // The ribs for one interior point, given the direction of the segments
 // either side of it. A shallow turn takes a miter: one rib, whose two
-// vertices both segments share, so nothing overlaps. A sharp one takes a
+// vertices both segments share, so nothing overlaps. A sharper one takes a
 // round join - an arc on the outside of the turn, pivoting on the inside.
-void AppendJointRibs(const V2& point, const V2& inDir, const V2& outDir, float halfWidth,
+// Which is shallow is up to `corners`.
+void AppendJointRibs(const V2& point, const V2& inDir, const V2& outDir, float halfWidth, StrokeCorners corners,
                      std::vector<Rib>& ribs) {
     const V2 inNormal = LeftNormal(inDir);
     const V2 outNormal = LeftNormal(outDir);
     const V2 mean = Normalized(Add(inNormal, outNormal));
     const bool reversal = (mean.x == 0.0f && mean.y == 0.0f);
 
-    if (!reversal && Dot(mean, inNormal) >= 1.0f / kMiterLimit) {
+    // The miter reaches halfWidth / Dot(mean, inNormal) out.
+    const float leastMiterDot = corners == StrokeCorners::Sharp
+                                    ? 1.0f / kMiterLimit
+                                    : halfWidth / (halfWidth + kRoundCornerTolerancePx);
+    if (!reversal && Dot(mean, inNormal) >= leastMiterDot) {
         const float miter = halfWidth / Dot(mean, inNormal);
         Rib rib;
         rib.left = Add(point, Scale(mean, miter));
@@ -264,13 +280,15 @@ void RibsToMesh(const std::vector<Rib>& ribs, float fringePx, StrokeMesh& mesh) 
 
 }  // namespace
 
-StrokeMesh BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx) {
+StrokeMesh BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx,
+                           StrokeCorners corners) {
     StrokeMesh mesh;
-    BuildStrokeMesh(centerline, halfWidth, fringePx, mesh);
+    BuildStrokeMesh(centerline, halfWidth, fringePx, corners, mesh);
     return mesh;
 }
 
-void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx, StrokeMesh& out) {
+void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth, float fringePx,
+                     StrokeCorners corners, StrokeMesh& out) {
     const std::vector<V2> pts = Deduplicate(centerline);
     const float radius = std::max(halfWidth, 0.01f);
     if (pts.empty()) {
@@ -302,10 +320,10 @@ void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth
     if (closed) {
         // The seam is a join like any other; walking from it and repeating
         // its ribs at the end is what closes the strip on itself.
-        AppendJointRibs(pts[0], dirs[count - 1], dirs[0], radius, ribs);
+        AppendJointRibs(pts[0], dirs[count - 1], dirs[0], radius, corners, ribs);
         const size_t seamRibCount = ribs.size();
         for (size_t i = 1; i < count; ++i) {
-            AppendJointRibs(pts[i], dirs[i - 1], dirs[i], radius, ribs);
+            AppendJointRibs(pts[i], dirs[i - 1], dirs[i], radius, corners, ribs);
         }
         for (size_t i = 0; i < seamRibCount; ++i) {
             ribs.push_back(ribs[i]);
@@ -329,7 +347,7 @@ void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth
     }
 
     for (size_t i = 1; i + 1 < count; ++i) {
-        AppendJointRibs(pts[i], dirs[i - 1], dirs[i], radius, ribs);
+        AppendJointRibs(pts[i], dirs[i - 1], dirs[i], radius, corners, ribs);
     }
 
     // ...and the end cap, which starts from its own flat cross-section.

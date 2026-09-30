@@ -373,14 +373,36 @@ fragment, which looks exactly like not having erased anything.
 ### Tessellation, and its cache
 
 `BuildStrokeMesh` turns a centerline into the shape a round pen leaves:
-a miter join while the turn is shallow, a round join past a limit of 2
-half-widths (about 120 degrees), round caps, a disc for a dot, and a
-seam join instead of caps for a closed path (the rectangle tool's). It
-exists because ImGui's `AddPolyline` offsets each point along the
-average of its adjacent normals and rescales by 1/cos² of half the turn,
-clamped only at 100x the half width, so a near-reversal throws a spike
-most of a hundred widths out of a wide pen; it also has only flat caps
-and no round join.
+a miter join while the turn is a few degrees, a round join past that,
+round caps, a disc for a dot, and a seam join instead of caps for a
+closed path (the rectangle tool's). It exists because ImGui's
+`AddPolyline` offsets each point along the average of its adjacent
+normals and rescales by 1/cos² of half the turn, clamped only at 100x
+the half width, so a near-reversal throws a spike most of a hundred
+widths out of a wide pen; it also has only flat caps and no round join.
+
+A join is mitered only while the miter's corner stays within a quarter
+of a pixel of the round pen's outline. A miter reaches half the width
+over the cosine of half the turn, so a limit in half widths - 2, about
+120 degrees, which is what there was - lets a wide pen's corners reach
+further: a quick flick of a 40px pen grew a point 20px long, measured
+on hand-like strokes through `DrawTool`, and fitting does not prevent
+it, since the curve passes through every control point and a flick is
+a sharp one. A round join is the corner the pen leaves, and nothing
+spoke for the miter any more: its shared vertices draw nothing twice,
+but neither does the round join, pivoting on the inside of the turn,
+and the depth test (see "Drawing strokes") makes overlap harmless
+anyway. A fitted curve's joins are mostly a few degrees, so a smooth
+stroke has as many vertices as before; wavy and zigzag strokes of a
+wide pen have up to a quarter and a half more.
+
+The rectangle tool's corners stay square: a shape tool's stroke says
+`StrokeCorners::Sharp`, and keeps the miter up to 120 degrees. The
+stroke says so because the mesh sees only points, and a rectangle cut
+open by the eraser is not a closed path any more but should keep its
+corners. Strokes saved before there was a choice read as `Sharp` when
+every segment is exactly level or plumb - a rectangle, or what is left
+of one - and `Round` otherwise.
 
 The mesh is one connected strip whose neighboring quads share vertices,
 so no triangle is drawn over another. That is what a *translucent*

@@ -10,6 +10,9 @@ namespace sz::core {
 namespace {
 
 constexpr float kFringe = 1.0f;
+// How far a round pen's corner may reach past its outline - see
+// kRoundCornerTolerancePx - and float noise on top.
+constexpr float kCornerTolerance = 0.25f + 1e-3f;
 
 float DistanceToSegment(float px, float py, const StrokePoint& a, const StrokePoint& b) {
     const float dx = b.x - a.x;
@@ -72,7 +75,7 @@ float SolidArea(const StrokeMesh& mesh) {
 }
 
 TEST(StrokeMeshTest, EmptyInputProducesNoGeometry) {
-    const StrokeMesh mesh = BuildStrokeMesh({}, 5.0f, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh({}, 5.0f, kFringe, StrokeCorners::Round);
     EXPECT_TRUE(mesh.vertices.empty());
     EXPECT_TRUE(mesh.indices.empty());
 }
@@ -81,7 +84,7 @@ TEST(StrokeMeshTest, EmptyInputProducesNoGeometry) {
 // or one fringe further out, and nothing beyond that.
 TEST(StrokeMeshTest, ASinglePointBecomesADisc) {
     const std::vector<StrokePoint> centerline = {StrokePoint{10, 10}};
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, 6.0f, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, 6.0f, kFringe, StrokeCorners::Round);
 
     ASSERT_FALSE(mesh.indices.empty());
     EXPECT_TRUE(AllFinite(mesh));
@@ -95,7 +98,7 @@ TEST(StrokeMeshTest, ASinglePointBecomesADisc) {
 // The spike test. ImGui's own polyline scales the miter by 1/cos^2 of half
 // the turn and clamps only at 100x the half width, so this input throws a
 // vertex hundreds of pixels off the line there. Nothing may sit further out
-// than the miter limit allows, whatever the turn.
+// than the round pen does.
 TEST(StrokeMeshTest, AHairpinDoesNotSpike) {
     const float halfWidth = 10.0f;
     const std::vector<StrokePoint> centerline = {
@@ -103,14 +106,11 @@ TEST(StrokeMeshTest, AHairpinDoesNotSpike) {
         StrokePoint{100, 0},
         StrokePoint{2, 1},  // back almost the way it came: a near-reversal
     };
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe, StrokeCorners::Round);
 
     ASSERT_FALSE(mesh.indices.empty());
     EXPECT_TRUE(AllFinite(mesh));
-    // The miter limit is 2 half-widths; a round join and the fringe account
-    // for the rest. Generous, and still two orders of magnitude tighter than
-    // what a 100x clamp permits.
-    EXPECT_LT(FurthestFromCenterline(mesh, centerline), halfWidth * 2.0f + kFringe + 0.01f);
+    EXPECT_LT(FurthestFromCenterline(mesh, centerline), halfWidth + kCornerTolerance + kFringe);
 }
 
 // An exact 180-degree reversal has no miter direction at all - the two
@@ -122,11 +122,11 @@ TEST(StrokeMeshTest, AnExactReversalIsFiniteAndBounded) {
         StrokePoint{50, 0},
         StrokePoint{0, 0},
     };
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, 8.0f, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, 8.0f, kFringe, StrokeCorners::Round);
 
     ASSERT_FALSE(mesh.indices.empty());
     EXPECT_TRUE(AllFinite(mesh));
-    EXPECT_LT(FurthestFromCenterline(mesh, centerline), 8.0f * 2.0f + kFringe + 0.01f);
+    EXPECT_LT(FurthestFromCenterline(mesh, centerline), 8.0f + kCornerTolerance + kFringe);
 }
 
 // Round caps: the stroke reaches a half width *past* each end point, which a
@@ -134,7 +134,7 @@ TEST(StrokeMeshTest, AnExactReversalIsFiniteAndBounded) {
 TEST(StrokeMeshTest, RoundCapsReachPastBothEnds) {
     const float halfWidth = 7.0f;
     const std::vector<StrokePoint> centerline = {StrokePoint{20, 0}, StrokePoint{80, 0}};
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe, StrokeCorners::Round);
 
     float minX = std::numeric_limits<float>::max();
     float maxX = std::numeric_limits<float>::lowest();
@@ -155,7 +155,7 @@ TEST(StrokeMeshTest, RoundCapsReachPastBothEnds) {
 TEST(StrokeMeshTest, AStraightRunIsExactlyTheRequestedWidth) {
     const float halfWidth = 9.0f;
     const std::vector<StrokePoint> centerline = {StrokePoint{0, 50}, StrokePoint{100, 50}};
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe, StrokeCorners::Round);
 
     // A straight run needs no intermediate cross-sections - the body is one
     // quad from end to end - so the width is measured where those ends are:
@@ -178,7 +178,7 @@ TEST(StrokeMeshTest, AStraightRunIsExactlyTheRequestedWidth) {
 // with the renderer, which picks one of two colors rather than interpolating.
 TEST(StrokeMeshTest, CoverageIsOnlyEverZeroOrOne) {
     const std::vector<StrokePoint> centerline = {StrokePoint{0, 0}, StrokePoint{30, 10}, StrokePoint{60, 0}};
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, 5.0f, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, 5.0f, kFringe, StrokeCorners::Round);
 
     ASSERT_FALSE(mesh.vertices.empty());
     for (const StrokeVertex& v : mesh.vertices) {
@@ -191,7 +191,7 @@ TEST(StrokeMeshTest, CoverageIsOnlyEverZeroOrOne) {
 TEST(StrokeMeshTest, IndicesAreWholeTrianglesInRange) {
     const std::vector<StrokePoint> centerline = {StrokePoint{0, 0}, StrokePoint{20, 20}, StrokePoint{40, 0},
                                                   StrokePoint{60, 30}};
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, 4.0f, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, 4.0f, kFringe, StrokeCorners::Round);
 
     ASSERT_FALSE(mesh.indices.empty());
     EXPECT_EQ(mesh.indices.size() % 3, 0u);
@@ -208,7 +208,7 @@ TEST(StrokeMeshTest, AClosedPathIsJoinedAtTheSeamNotCapped) {
     const std::vector<StrokePoint> rectangle = {
         StrokePoint{0, 0}, StrokePoint{100, 0}, StrokePoint{100, 60}, StrokePoint{0, 60}, StrokePoint{0, 0},
     };
-    const StrokeMesh mesh = BuildStrokeMesh(rectangle, halfWidth, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(rectangle, halfWidth, kFringe, StrokeCorners::Sharp);
 
     ASSERT_FALSE(mesh.indices.empty());
     EXPECT_TRUE(AllFinite(mesh));
@@ -223,13 +223,13 @@ TEST(StrokeMeshTest, AClosedPathIsJoinedAtTheSeamNotCapped) {
     }
 }
 
-// A right-angled corner is well inside the miter limit, so it stays a
+// A rectangle's corner is well inside the miter limit, so it stays a
 // corner: the outer vertex reaches the full diagonal offset rather than
 // being rounded off.
-TEST(StrokeMeshTest, AShallowCornerKeepsItsMiter) {
+TEST(StrokeMeshTest, ARectanglesCornerKeepsItsMiter) {
     const float halfWidth = 6.0f;
     const std::vector<StrokePoint> centerline = {StrokePoint{0, 0}, StrokePoint{50, 0}, StrokePoint{50, 50}};
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe, StrokeCorners::Sharp);
 
     // The outer corner of a 90-degree turn sits at half width * sqrt(2) from
     // the corner point, diagonally out.
@@ -245,6 +245,44 @@ TEST(StrokeMeshTest, AShallowCornerKeepsItsMiter) {
     EXPECT_LT(best, 0.01f);
 }
 
+// The corner a round pen leaves is round, at any turn and any width: no
+// vertex reaches further past the pen's outline than the tolerance. Under
+// the rectangle's miter limit a 40px pen grew a point 20px long at a turn
+// of 120 degrees - the spikes seen on quick flicks of a wide pen.
+TEST(StrokeMeshTest, ARoundPenLeavesNoPointAtAnyTurn) {
+    for (const float halfWidth : {1.0f, 4.0f, 10.0f, 20.0f, 40.0f}) {
+        for (int degrees = 5; degrees < 180; degrees += 5) {
+            const float turn = static_cast<float>(degrees) * 3.14159265f / 180.0f;
+            const std::vector<StrokePoint> centerline = {
+                StrokePoint{0, 0}, StrokePoint{200, 0},
+                StrokePoint{200 + 200 * std::cos(turn), 200 * std::sin(turn)}};
+            const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe, StrokeCorners::Round);
+            ASSERT_TRUE(AllFinite(mesh));
+            float furthestSolid = 0.0f;
+            for (const StrokeVertex& v : mesh.vertices) {
+                if (v.coverage == 1.0f) {
+                    furthestSolid = std::max(furthestSolid, FurthestFromCenterline(StrokeMesh{{v}, {}}, centerline));
+                }
+            }
+            EXPECT_LE(furthestSolid, halfWidth + kCornerTolerance) << halfWidth << " at " << degrees;
+            EXPECT_LE(FurthestFromCenterline(mesh, centerline), halfWidth + kCornerTolerance + kFringe)
+                << halfWidth << " at " << degrees;
+        }
+    }
+}
+
+// A turn of a few degrees - most of a fitted curve's - keeps its miter, one
+// rib like a straight run's, so a smooth stroke costs no more than it did.
+TEST(StrokeMeshTest, ANearlyStraightJoinStaysOneRib) {
+    const float halfWidth = 6.0f;
+    const float turn = 10.0f * 3.14159265f / 180.0f;
+    const std::vector<StrokePoint> straight = {StrokePoint{0, 0}, StrokePoint{50, 0}, StrokePoint{100, 0}};
+    const std::vector<StrokePoint> bent = {StrokePoint{0, 0}, StrokePoint{50, 0},
+                                           StrokePoint{50 + 50 * std::cos(turn), 50 * std::sin(turn)}};
+    EXPECT_EQ(BuildStrokeMesh(bent, halfWidth, kFringe, StrokeCorners::Round).vertices.size(),
+              BuildStrokeMesh(straight, halfWidth, kFringe, StrokeCorners::Round).vertices.size());
+}
+
 // The translucency property, measured rather than eyeballed: the triangles
 // cover the stroke's own area exactly once. A renderer that overlaps its
 // geometry - as offsetting each segment separately does - paints those
@@ -258,7 +296,7 @@ TEST(StrokeMeshTest, TheTrianglesCoverTheStrokeExactlyOnce) {
     const float halfWidth = 8.0f;
     const float length = 120.0f;
     const std::vector<StrokePoint> centerline = {StrokePoint{0, 0}, StrokePoint{length, 0}};
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe, StrokeCorners::Round);
 
     const float capsule = length * 2.0f * halfWidth + 3.14159265f * halfWidth * halfWidth;
     // Within a percent: the caps are arcs of straight segments, so they fall
@@ -282,7 +320,7 @@ TEST(StrokeMeshTest, TurningThePathDoesNotPaintAnythingTwice) {
         const float dy = bent[i + 1].y - bent[i].y;
         pathLength += std::sqrt(dx * dx + dy * dy);
     }
-    const StrokeMesh mesh = BuildStrokeMesh(bent, halfWidth, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(bent, halfWidth, kFringe, StrokeCorners::Round);
 
     const float straightEquivalent = pathLength * 2.0f * halfWidth + 3.14159265f * halfWidth * halfWidth;
     // No more than the straight run's ink (turns pinch the inside, so a
@@ -296,7 +334,7 @@ TEST(StrokeMeshTest, TurningThePathDoesNotPaintAnythingTwice) {
 TEST(StrokeMeshTest, DuplicatePointsDoNotProduceGarbage) {
     const std::vector<StrokePoint> centerline = {StrokePoint{0, 0}, StrokePoint{0, 0}, StrokePoint{30, 0},
                                                   StrokePoint{30, 0}, StrokePoint{60, 0}};
-    const StrokeMesh mesh = BuildStrokeMesh(centerline, 5.0f, kFringe);
+    const StrokeMesh mesh = BuildStrokeMesh(centerline, 5.0f, kFringe, StrokeCorners::Round);
 
     ASSERT_FALSE(mesh.indices.empty());
     EXPECT_TRUE(AllFinite(mesh));

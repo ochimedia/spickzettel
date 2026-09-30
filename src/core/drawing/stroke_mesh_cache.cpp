@@ -89,7 +89,7 @@ const StrokeMesh& StrokeMeshCache::MeshFor(uint64_t itemId, size_t strokeIndex, 
     for (const StrokePoint& point : stroke.points) {
         scaledPoints_.push_back(StrokePoint{point.x * scaleX, point.y * scaleY});
     }
-    BuildStrokeMesh(scaledPoints_, halfWidth, kStrokeFringePx, entry.mesh);
+    BuildStrokeMesh(scaledPoints_, halfWidth, kStrokeFringePx, stroke.corners, entry.mesh);
 
     entry.fingerprint = Fingerprint(stroke);
     entry.checkedGeneration = generation;

@@ -64,7 +64,7 @@ void DrawStroke(ImDrawList* drawList, const Stroke& stroke, float offsetX, float
         for (const StrokePoint& p : stroke.points) {
             scaledPoints.push_back(StrokePoint{p.x * scaleX, p.y * scaleY});
         }
-        BuildStrokeMesh(scaledPoints, halfWidth, kStrokeFringePx, uncached);
+        BuildStrokeMesh(scaledPoints, halfWidth, kStrokeFringePx, stroke.corners, uncached);
         mesh = &uncached;
     }
     if (mesh->indices.empty()) {
