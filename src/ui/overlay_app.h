@@ -77,7 +77,7 @@ enum class OverlayMode {
 // No always-visible chrome at the *canvas* level: snippets are objects
 // with a selection, the way a drawing program's are (see Editor::Selection), and
 // drawing on one is a mode entered by double-clicking or holding on it
-// (see Editor::DrawingItem); everything that acts on a snippet is on the bar that
+// (see Editor::DrawingItems); everything that acts on a snippet is on the bar that
 // floats over the selection (see CanvasView::PaintSelectionBar), and everything else
 // is a key or the Overview. Input arrives two ways accordingly:
 //  - Everything over the canvas - freehand pen/eraser strokes, the "double
@@ -236,8 +236,10 @@ public:
     // Editor::Selection.
     const std::vector<ItemId>& Selection() const { return editor_.Selection(); }
     bool IsSelected(ItemId id) const { return editor_.IsSelected(id); }
-    // The snippet in drawing mode, if one is - see Editor::DrawingItem.
-    std::optional<ItemId> DrawingItem() const { return editor_.DrawingItem(); }
+    // The snippets in drawing mode, none outside it - see
+    // Editor::DrawingItems.
+    std::vector<ItemId> DrawingItems() const { return editor_.DrawingItems(); }
+    bool InDrawingMode() const { return editor_.InDrawingMode(); }
     // What the bar's pen and eraser draw or erase on a plain drag -
     // see Editor::PenShape.
     DrawShape PenShape() const { return editor_.PenShape(); }

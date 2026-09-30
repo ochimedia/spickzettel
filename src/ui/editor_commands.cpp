@@ -151,7 +151,7 @@ bool Editor::Available(const Command& command) const {
         case CommandId::DrawingMode:
             return item != nullptr;
         case CommandId::LeaveDrawingMode:
-            return DrawingItem().has_value();
+            return InDrawingMode();
         case CommandId::ItemMenu:
             return item != nullptr && command.at.has_value();
         case CommandId::EmptyCanvasMenu:

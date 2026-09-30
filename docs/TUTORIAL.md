@@ -628,7 +628,7 @@ answers:
   taken (16.3).
 - **What covers the canvas:** the panel or popup that is up, if any,
   but a snippet's own popups, the color chooser and Properties (15.3).
-- **The hand:** the selection; the snippet in drawing mode; the tool in
+- **The hand:** the selection; the snippets in drawing mode; the tool in
   hand, and the eraser's shape; the pen's color and width; the snippet
   whose note is being typed (15.3).
 - **The canvas:** the current canvas's id, name and folder; the
@@ -1888,10 +1888,13 @@ hand check.
   menu, a right click or a hold on the button, and their near misses
   say so; `drawingMode`, `stopDrawing` and the end card name the bar as
   a way in and out. Pinning's `pin` and `unpin` no longer need drawing
-  mode off: Pin is on the bar in it. The walk-through picks a shape from
-  the menu, and lets the card come to rest first, as a hand waits for
-  it: a line just shown under the card can send it sliding across the
-  bar.
+  mode off: Pin is on the bar in it. Drawing mode can be on several
+  snippets at once, entered from the bar with them selected: "drawing
+  mode on the subject" asks that the subject be among them, and a new
+  subject is picked from among them first, the one selected last first.
+  The walk-through picks a shape from the menu, and lets the card come
+  to rest first, as a hand waits for it: a line just shown under the
+  card can send it sliding across the bar.
 
 ## 16. Capturing
 

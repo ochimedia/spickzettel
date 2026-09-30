@@ -7,8 +7,10 @@
 // view draws; the view opens and closes the real thing, and tells the
 // machine when it has closed by itself (see EditorViews).
 
+#include <algorithm>
 #include <functional>
 #include <variant>
+#include <vector>
 
 #include "core/canvas/item.h"
 #include "core/config/app_config.h"
@@ -19,18 +21,25 @@
 
 namespace sz::ui {
 
-// A snippet in drawing mode (section 5): the tool in hand is a marking tool
-// - the pen, the eraser or Text - and what a press on the snippet does is
+// Snippets in drawing mode (section 5) - one, or every one selected when
+// the mode was entered from the bar: the tool in hand is a marking tool -
+// the pen, the eraser or Text - and what a press on one of them does is
 // the recognizer's to say (see RecognizePress, rules 4, 5 and 12), asking
 // this. Escape leaves it; Delete and the arrows do nothing in it, the
-// snippet being worked in rather than on. Everything else goes on down.
+// snippets being worked in rather than on. Everything else goes on down.
 // Ended, it leaves nothing of a stroke on the live layer.
 class DrawingMode final : public Interaction {
 public:
-    DrawingMode(core::ItemId item, core::Tool tool) : item_(item), tool_(tool) {}
+    DrawingMode(std::vector<core::ItemId> items, core::Tool tool) : items_(std::move(items)), tool_(tool) {}
     Level level() const override { return Level::Mode; }
     const char* Name() const override { return "DrawingMode"; }
-    core::ItemId Item() const { return item_; }
+    const std::vector<core::ItemId>& Items() const { return items_; }
+    bool Holds(core::ItemId item) const;
+    // Keeps only the snippets `keep` says to - see Editor::PruneSelection.
+    template <typename Keep>
+    void KeepOnly(Keep keep) {
+        std::erase_if(items_, [&](core::ItemId item) { return !keep(item); });
+    }
     core::Tool GetTool() const { return tool_; }
     // Another marking tool in hand. A shape picked for the pen or the
     // eraser is that tool's for as long as it stays in hand.
@@ -47,7 +56,7 @@ public:
     void Cancel(Editor& editor) override { Interrupt(editor); }
 
 private:
-    core::ItemId item_;
+    std::vector<core::ItemId> items_;
     core::Tool tool_;
     core::DrawShape penShape_ = core::DrawShape::Freehand;
     core::DrawShape eraserShape_ = core::DrawShape::Freehand;  // Freehand or Rectangle

@@ -7,6 +7,10 @@ namespace sz::ui {
 
 // ================= DrawingMode =================
 
+bool DrawingMode::Holds(core::ItemId item) const {
+    return std::find(items_.begin(), items_.end(), item) != items_.end();
+}
+
 void DrawingMode::SetTool(core::Tool tool) {
     if (tool != tool_) {
         penShape_ = core::DrawShape::Freehand;

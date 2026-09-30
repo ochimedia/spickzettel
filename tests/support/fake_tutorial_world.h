@@ -180,7 +180,9 @@ struct FakeWorld : World {
                                                         : 0;
     }
     Cover CanvasCover() const override { return cover; }
-    std::optional<core::ItemId> DrawingItem() const override { return drawing; }
+    std::vector<core::ItemId> DrawingItems() const override {
+        return drawing ? std::vector<core::ItemId>{*drawing} : std::vector<core::ItemId>{};
+    }
     std::vector<core::ItemId> Selection() const override { return selection; }
     std::optional<core::ItemCreationKind> CreationToolInHand() const override { return tool; }
     core::Tool ToolInHand() const override { return hand; }

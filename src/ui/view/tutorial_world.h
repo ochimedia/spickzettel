@@ -47,7 +47,7 @@ public:
     uint64_t ViewModes() const override { return viewModes_; }
     uint64_t Captures(core::HotkeySlot by) const override { return captures_[static_cast<size_t>(by)]; }
     tutorial::Cover CanvasCover() const override;
-    std::optional<core::ItemId> DrawingItem() const override { return editor_.DrawingItem(); }
+    std::vector<core::ItemId> DrawingItems() const override { return editor_.DrawingItems(); }
     std::vector<core::ItemId> Selection() const override { return editor_.Selection(); }
     std::optional<core::ItemCreationKind> CreationToolInHand() const override;
     core::Tool ToolInHand() const override { return editor_.ActiveTool(); }

@@ -308,7 +308,7 @@ std::vector<Step> MakeDrawing() {
         .spot = Spot::Subject,
         .needs = OnTheCanvas(),
         .subject = SubjectRule::Any,
-        .goal = [](const Look& look) { return look.subject && look.world.DrawingItem() == look.subject; },
+        .goal = [](const Look& look) { return look.subject && look.world.IsDrawingOn(*look.subject); },
     });
     chain.push_back(Step{
         .id = "draw",
@@ -474,7 +474,7 @@ std::vector<Step> MakeDrawing() {
         .kind = StepKind::Do,
         .title = strings::kTutorialStopDrawingTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialStopDrawingText); },
-        .goal = [](const Look& look) { return !look.world.DrawingItem().has_value(); },
+        .goal = [](const Look& look) { return look.world.DrawingItems().empty(); },
     });
     chain.push_back(Step{
         .id = "end",
@@ -701,7 +701,7 @@ std::vector<Step> MakeCapturing() {
             {
                 {[](const Look& look) {
                      return MadeHereThat(look, [&](const SnippetFacts& made) {
-                         return !made.picture && made.fullscreen && look.world.DrawingItem() == made.id;
+                         return !made.picture && made.fullscreen && look.world.IsDrawingOn(made.id);
                      });
                  },
                  strings::kTutorialFullscreenMissDrawingMode},

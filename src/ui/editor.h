@@ -260,38 +260,43 @@ public:
 
     // The tool in hand, Select to start with - see the Tool enum. A marking
     // tool is in hand exactly while a snippet is in drawing mode (see
-    // DrawingItem), and a creation tool while one is on the Mode level
+    // DrawingItems), and a creation tool while one is on the Mode level
     // (see CreationTool); picked from the bar or a key, through
     // PickTool.
     Tool ActiveTool() const;
-    // The snippet in drawing mode, if one is. Selecting and moving are the
-    // hand at rest; drawing on a snippet is a mode entered by
-    // double-clicking or holding on it (or picking a marking tool, on its
-    // bar or by key, with it selected, or making a new drawing, which is
-    // made to be drawn in) and left by a left press anywhere else, Escape,
-    // or the tool in hand picked again. In it the snippet wears a stronger
-    // outline, its bar lights the tool in hand (see ChromeButton), the pen
-    // is in hand (a button or a key can enter with another marking tool),
-    // a left press on the snippet draws with it,
-    // and a right-drag on it erases whatever the tool; Alt held moves or
-    // resizes it instead. A left press anywhere else, or a right click on
-    // the snippet itself, leaves the mode and does nothing more - the press
-    // was for leaving. Only ever a snippet on the current canvas that is on
-    // screen, kept in step with the selection by PruneSelection. The Mode
-    // level's - see DrawingMode.
-    std::optional<ItemId> DrawingItem() const;
+    // The snippets in drawing mode, none outside it. Selecting and moving
+    // are the hand at rest; drawing on a snippet is a mode entered by
+    // double-clicking or holding on it (or picking a marking tool, on the
+    // bar or by key, which enters it on every snippet selected, or making a
+    // new drawing, which is made to be drawn in) and left by a left press
+    // anywhere else, Escape, or the tool in hand picked again. In it each of
+    // them wears a stronger outline, the bar lights the tool in hand (see
+    // ChromeButton), the pen is in hand (a button or a key can enter with
+    // another marking tool), a left press on one of them draws on it,
+    // and a right-drag on one erases whatever the tool; Alt held moves or
+    // resizes them instead. A left press anywhere else, or a right click on
+    // one of them, leaves the mode and does nothing more - the press was for
+    // leaving. Only ever snippets on the current canvas that are on screen
+    // and selected, kept in step with the selection by PruneSelection. The
+    // Mode level's - see DrawingMode.
+    std::vector<ItemId> DrawingItems() const;
+    bool IsDrawingOn(ItemId id) const;
+    bool InDrawingMode() const;
     // Puts `id` into drawing mode: selected alone, outlined for it, and
     // `tool` (the pen, if none is given) in hand and lit on its bar, so a
     // left press on it draws.
     void EnterDrawingMode(ItemId id, std::optional<Tool> tool = std::nullopt);
+    // Likewise every snippet selected, as they are: what a drawing tool
+    // picked on the bar or by key does. Nothing with nothing selected.
+    void EnterDrawingModeOnSelection(std::optional<Tool> tool = std::nullopt);
     // Back to the hand at rest: no snippet in drawing mode, Select in hand.
     // The selection is left as it was.
     void ExitDrawingMode();
     // What picking a tool from the bar or a key does - the one
     // place a tool is chosen. Select leaves drawing mode and puts a
     // creation tool down; a marking tool switches the tool in drawing
-    // mode, or enters it on the snippet selected last, and does nothing
-    // with no snippet to draw on; a creation tool leaves drawing mode and
+    // mode, or enters it on the snippets selected, and does nothing with
+    // no snippet to draw on; a creation tool leaves drawing mode and
     // is picked up.
     void PickTool(Tool tool);
     // The pen or the eraser (`tool`) in hand, as PickTool, drawing `shape`

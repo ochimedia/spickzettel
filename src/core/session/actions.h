@@ -85,7 +85,7 @@ enum class CreateAction { NewCanvas, NewCanvasWithSelection };
 // selected last. The other four are its *drawing* group, beside them
 // whether or not a snippet is in drawing mode: the marking tool to draw
 // with, which takes the snippet into drawing mode (see
-// Editor::DrawingItem) and, pressed while it is lit, out again; and the
+// Editor::DrawingItems) and, pressed while it is lit, out again; and the
 // color.
 //
 // Which of them each group carries, in which order, and which are shown at

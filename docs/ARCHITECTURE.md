@@ -2108,7 +2108,7 @@ A ring menu of favorite tool slots came before (see "Dead ends"): with
 the selection bar carrying every action on a snippet and the canvas bar
 reaching the Overview, it added a gesture to learn and nothing to reach.
 
-### Drawing is a mode, entered on one snippet
+### Drawing is a mode, entered on snippets
 
 At rest a snippet is an object that a click selects and a drag moves.
 Double-clicking it, holding a press still on it, or pressing a drawing
@@ -2116,7 +2116,10 @@ tool on its bar enters drawing mode: a stronger outline, the tool lit on
 the bar, the pen in hand (or the tool pressed), a press on it draws, a
 right-drag on it erases whatever tool is in hand, and a click anywhere
 else, a right click on the snippet, Escape or the lit tool pressed again
-leaves. A right click or a hold on the Pen or the Eraser lists its
+leaves. A tool pressed on the bar over several selected snippets, or
+picked by key, enters the mode on every one of them, and a press on any
+draws on that one: the bar is over the whole selection, so what is
+pressed there is for all of it. A right click or a hold on the Pen or the Eraser lists its
 shapes, the one in hand marked and the modifier that draws each beside
 it, so a hand with no keyboard can draw a line with a plain drag. Holding
 Alt picks the snippet up instead of drawing on it.

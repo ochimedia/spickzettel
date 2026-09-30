@@ -169,9 +169,9 @@ platform::CursorShape Pointer::WantedPointerShape() const {
         // the arrow, as a button does.
         return platform::CursorShape::Arrow;
     }
-    // A marking tool marks only the snippet in drawing mode, and not with
+    // A marking tool marks only the snippets in drawing mode, and not with
     // Alt held, when the press picks the snippet up instead.
-    if (editor_.DrawingItem() != target.item || editor_.PressPicksUp()) {
+    if (!editor_.IsDrawingOn(target.item) || editor_.PressPicksUp()) {
         return platform::CursorShape::Arrow;
     }
     switch (editor_.ActiveTool()) {
@@ -200,16 +200,17 @@ void Pointer::RenderToolModifierBadge() {
     const Marking* stroke = editor_.Input().As<Marking>(Level::Gesture);
     const bool dragging = stroke != nullptr;
     if (!dragging) {
-        // Only where a press would make one: over the snippet in drawing
+        // Only where a press would make one: over a snippet in drawing
         // mode, not a panel, and not with Alt held.
         const PointerTarget target = editor_.ResolvePointerTarget(io.MousePos.x, io.MousePos.y);
-        if (io.WantCaptureMouse || target.kind != PointerTarget::Kind::Body || editor_.DrawingItem() != target.item ||
+        if (io.WantCaptureMouse || target.kind != PointerTarget::Kind::Body || !editor_.IsDrawingOn(target.item) ||
             editor_.PressPicksUp()) {
             return;
         }
     }
     // Mid-drag, what the gesture is making; before one, what a press would
-    // make now - the modifiers held, or the bar's cycled shape.
+    // make now - the modifiers held, or the shape picked from the tool's
+    // menu.
     const Icon* icon = nullptr;
     if (editor_.ActiveTool() == Tool::Draw) {
         const DrawShape shape = dragging ? stroke->Shape() : editor_.ShapeForPress();

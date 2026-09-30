@@ -535,7 +535,7 @@ TEST_F(OverlayStatesTest, TheModeBeforeTheShowingEndsWhereTheShowingBeforeTheMod
     StepFrame();
 
     EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_FALSE(App().IsCheatSheetOpen());
 
     ShowViewMode();  // put away, and up into edit mode: nothing is left to end
@@ -619,7 +619,7 @@ TEST_F(OverlayStatesTest, ThePinnedViewEndsWhatEditModeLeftUp) {
     StepFrame();
 
     EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_FALSE(App().IsCheatSheetOpen());
 }
 

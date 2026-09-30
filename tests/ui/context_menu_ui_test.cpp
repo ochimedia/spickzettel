@@ -122,7 +122,7 @@ TEST_F(ContextMenuUiTest, ThePenAndEraserButtonsOfferTheirShapes) {
     StepFrames(2);
     EXPECT_FALSE(App().IsShapeMenuOpen());
     EXPECT_EQ(App().ActiveTool(), Tool::Erase);
-    EXPECT_TRUE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().InDrawingMode());
 }
 
 // A row that cannot be chosen right now is grayed rather than dropped, so

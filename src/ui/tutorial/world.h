@@ -7,6 +7,7 @@
 // - an id, a rectangle, a count - never a reference into the model.
 // No ImGui.
 
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -128,9 +129,13 @@ public:
     virtual uint64_t Captures(core::HotkeySlot by) const = 0;
     virtual Cover CanvasCover() const = 0;
 
-    // The hand: the snippet in drawing mode, the selection, and the
+    // The hand: the snippets in drawing mode, the selection, and the
     // creation tool in hand (nothing for a marking tool, or none).
-    virtual std::optional<core::ItemId> DrawingItem() const = 0;
+    virtual std::vector<core::ItemId> DrawingItems() const = 0;
+    bool IsDrawingOn(core::ItemId id) const {
+        const std::vector<core::ItemId> drawing = DrawingItems();
+        return std::find(drawing.begin(), drawing.end(), id) != drawing.end();
+    }
     virtual std::vector<core::ItemId> Selection() const = 0;
     virtual std::optional<core::ItemCreationKind> CreationToolInHand() const = 0;
     // The tool in hand, Select for the hand at rest, and the shape the

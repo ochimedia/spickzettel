@@ -195,7 +195,7 @@ TEST_F(HeadlessAppTest, AShortcutKeyPicksItsTool) {
     ASSERT_EQ(App().Selection().size(), 1u);
     PressKey(ImGuiKey_E);
     EXPECT_EQ(App().ActiveTool(), Tool::Erase);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(Canvases().CurrentOrNull()->items[0].id));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{Canvases().CurrentOrNull()->items[0].id});
 }
 
 // A shortcut can be a mouse button: here the pen on the first side button,
@@ -228,10 +228,10 @@ TEST_F(HeadlessAppTest, AMouseButtonRunsTheCommandItIsBoundTo) {
 
     click(3);
     EXPECT_EQ(App().ActiveTool(), Tool::Draw) << "the pen, for the selected snippet";
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
     click(ImGuiMouseButton_Middle);
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
 }
 
 // The side button is on the mouse that is drawing the stroke: pressed
@@ -250,7 +250,7 @@ TEST_F(HeadlessAppTest, AMouseButtonWaitsForTheGestureInFlight) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
 
     MouseButtonEvent(ImGuiMouseButton_Left, true);
     RawMouse(350.0f, 350.0f, platform::MouseEventKind::Down);
@@ -324,7 +324,7 @@ TEST_F(HeadlessAppTest, TheCreationToolsAreOneChoiceWithTheOthers) {
     ASSERT_EQ(App().ActiveTool(), Tool::Draw);
     PressKey(ImGuiKey_S);  // the screenshot tool
     ASSERT_EQ(App().ActiveTool(), Tool::NewScreenshot);
-    EXPECT_FALSE(App().DrawingItem().has_value()) << "a creation tool leaves drawing mode";
+    EXPECT_FALSE(App().InDrawingMode()) << "a creation tool leaves drawing mode";
     PressKey(ImGuiKey_E);  // for the drawing, which is still selected
     EXPECT_EQ(App().ActiveTool(), Tool::Erase);
     EXPECT_FALSE(App().ArmedCreation().has_value()) << "no creation left armed under the eraser";
@@ -347,7 +347,7 @@ TEST_F(HeadlessAppTest, PlacingADrawingHandsOverToDraw) {
     // it, with the pen - so a second drag draws rather than placing
     // another one.
     EXPECT_EQ(App().ActiveTool(), Tool::Draw);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(Canvases().CurrentOrNull()->items[0].id));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{Canvases().CurrentOrNull()->items[0].id});
     EXPECT_FALSE(App().ArmedCreation().has_value());
 }
 
@@ -553,7 +553,7 @@ TEST_F(HeadlessAppTest, ADoubleClickOnEmptyCanvasMakesAFullscreenScreenshot) {
     EXPECT_TRUE(item.isFullscreen);
     EXPECT_TRUE(item.hasBackground);
     EXPECT_FALSE(App().ArmedCreation().has_value()) << "spent on release";
-    EXPECT_FALSE(App().DrawingItem().has_value()) << "a screenshot is not made to be drawn in";
+    EXPECT_FALSE(App().InDrawingMode()) << "a screenshot is not made to be drawn in";
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{item.id}) << "selected as made, so its bar is there";
 }
 
@@ -605,7 +605,7 @@ TEST_F(HeadlessAppTest, ACtrlDoubleClickOnEmptyCanvasMakesAFullscreenDrawing) {
     const Item& item = Canvases().CurrentOrNull()->items[0];
     EXPECT_FALSE(item.hasBackground);
     EXPECT_TRUE(item.isFullscreen);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(item.id)) << "a drawing is made to be drawn in";
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{item.id}) << "a drawing is made to be drawn in";
 }
 
 TEST_F(HeadlessAppTest, ACtrlDragOnEmptyCanvasFramesADrawingToDrawIn) {
@@ -620,7 +620,7 @@ TEST_F(HeadlessAppTest, ACtrlDragOnEmptyCanvasFramesADrawingToDrawIn) {
     EXPECT_NEAR(item.rect.x, 300.0f, 1.0f);
     EXPECT_NEAR(item.rect.w, 300.0f, 1.0f);
     EXPECT_EQ(App().ActiveTool(), Tool::Draw) << "a drawing is made to be drawn in";
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(item.id));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{item.id});
 
     Drag(350.0f, 350.0f, 500.0f, 450.0f);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "a press on it draws";
@@ -656,10 +656,10 @@ TEST_F(HeadlessAppTest, ARightClickOnEmptyCanvasLeavesDrawingModeAndOpensTheMenu
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 600.0f, 500.0f);
     Drag(350.0f, 350.0f, 500.0f, 450.0f);  // something in it, so it stays
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
 
     RightClick(900.0f, 650.0f);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_TRUE(App().IsEmptyCanvasMenuOpen());
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
@@ -702,7 +702,7 @@ TEST_F(HeadlessAppTest, APopupTakesEveryKeyAndEscapeClosesOnlyIt) {
     PressKey(ImGuiKey_Delete);
     PressKey(ImGuiKey_P);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "neither undone nor deleted under the menu";
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_TRUE(App().IsItemContextMenuOpen());
 
     PressKey(ImGuiKey_Escape);
@@ -888,7 +888,7 @@ TEST_F(HeadlessAppTest, AnEmptyDrawingStaysWhenTheHandMovesOn) {
 
     MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "moved on from, and kept";
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
 
     MakeADrawing(600.0f, 300.0f, 900.0f, 500.0f);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "and the next press makes the next one";
@@ -943,7 +943,7 @@ TEST_F(HeadlessAppTest, UndoDeletesAnEmptyDrawingAndRedoBringsItBack) {
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 0u);
     EXPECT_EQ(Canvases().CurrentOrNull()->items.size(), 1u) << "kept, deleted";
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
 
     PressCtrlKey(ImGuiKey_Y);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
@@ -1482,7 +1482,7 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
         // strokes that has now.
         const auto strokeToKeep = [&]() -> std::optional<std::pair<ItemId, size_t>> {
             const std::optional<Stroke>& active = session.LiveLayer().ActiveStroke();
-            if (!active.has_value() || active->points.empty() || !App().DrawingItem().has_value()) {
+            if (!active.has_value() || active->points.empty() || !App().InDrawingMode()) {
                 return std::nullopt;
             }
             float x0 = active->points[0].x;
@@ -1495,7 +1495,7 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                 y0 = std::min(y0, point.y);
                 y1 = std::max(y1, point.y);
             }
-            const Item* item = Canvases().FindItemAnywhere(*App().DrawingItem());
+            const Item* item = Canvases().FindItemAnywhere(App().DrawingItems().front());
             if (item == nullptr || std::max(x1 - x0, y1 - y0) < 30.0f) {
                 return std::nullopt;
             }
@@ -1520,7 +1520,7 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                 // flight for what comes next - into drawing mode first, the
                 // way a hand gets there, if no snippet is in it.
                 const Canvas* canvas = Canvases().CurrentOrNull();
-                if (!App().DrawingItem().has_value() && canvas != nullptr && !canvas->items.empty()) {
+                if (!App().InDrawingMode() && canvas != nullptr && !canvas->items.empty()) {
                     for (const ImGuiKey modifier : modifiers) {
                         KeyEvent(modifier, false);
                     }
@@ -1528,8 +1528,8 @@ TEST_F(HeadlessAppTest, EveryCommandSettlesTheHandWhateverItInterrupts) {
                     const Rect& rect = canvas->items[pick(canvas->items.size())].rect;
                     DoubleClick(rect.x + rect.w * 0.5f, rect.y + rect.h * 0.5f);
                 }
-                if (const Item* item = App().DrawingItem().has_value()
-                                           ? Canvases().FindItemAnywhere(*App().DrawingItem())
+                if (const Item* item = App().InDrawingMode()
+                                           ? Canvases().FindItemAnywhere(App().DrawingItems().front())
                                            : nullptr) {
                     pointer = ImVec2(item->rect.x + item->rect.w * 0.3f, item->rect.y + item->rect.h * 0.3f);
                     MoveTo(pointer.x, pointer.y);
@@ -1850,15 +1850,15 @@ TEST_F(HeadlessAppTest, EscapeAndTheSameKeyAgainPutTheToolDown) {
     ASSERT_EQ(App().ActiveTool(), Tool::Erase);
     PressKey(ImGuiKey_Escape);
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_EQ(App().Selection().size(), 1u) << "still selected";
 
     PressKey(ImGuiKey_E);
     ASSERT_EQ(App().ActiveTool(), Tool::Erase);
-    EXPECT_TRUE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().InDrawingMode());
     PressKey(ImGuiKey_E);
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
 }
 
 TEST_F(HeadlessAppTest, WithSelectInHandADragAnywhereOnASnippetPicksItUp) {
@@ -1894,7 +1894,7 @@ TEST_F(HeadlessAppTest, ARightClickOnASnippetSelectsItAndOpensItsContextMenu) {
     EXPECT_EQ(App().Selection().size(), 1u);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_TRUE(App().IsItemContextMenuOpen());
     EXPECT_EQ(App().ItemContextMenuItem(), App().Selection().front());
 
@@ -1914,7 +1914,7 @@ TEST_F(HeadlessAppTest, ARightDragResizesAndOpensNoContextMenu) {
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
     PressKey(ImGuiKey_Escape);  // out of drawing mode, where right is the eraser
-    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_FALSE(App().InDrawingMode());
     const float before = Canvases().CurrentOrNull()->items[0].rect.w;
 
     Drag(690.0f, 420.0f, 780.0f, 420.0f, 10, platform::MouseButton::Right);
@@ -1949,7 +1949,7 @@ TEST_F(HeadlessAppTest, ARightDragOnTheSnippetBeingDrawnOnErasesAndARightClickLe
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
     const Rect before = Canvases().CurrentOrNull()->items[0].rect;
     Drag(350.0f, 400.0f, 650.0f, 400.0f);  // a stroke across it
     ASSERT_EQ(StrokeCountOnCurrentCanvas(), 1u);
@@ -1960,7 +1960,7 @@ TEST_F(HeadlessAppTest, ARightDragOnTheSnippetBeingDrawnOnErasesAndARightClickLe
     Drag(500.0f, 340.0f, 500.0f, 460.0f, 10, platform::MouseButton::Right);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 2u) << "the eraser cut the stroke";
     EXPECT_FLOAT_EQ(Canvases().CurrentOrNull()->items[0].rect.w, before.w);
-    EXPECT_TRUE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().InDrawingMode());
     EXPECT_EQ(App().ActiveTool(), Tool::Draw) << "the pen is still in hand";
 
     // With Alt, the resize from the nearest edge.
@@ -1974,10 +1974,10 @@ TEST_F(HeadlessAppTest, ARightDragOnTheSnippetBeingDrawnOnErasesAndARightClickLe
     // onto the snippet's own diagonal (see ItemGeometryTest). Sideways
     // motion therefore counts for less than all of itself.
     EXPECT_GT(Canvases().CurrentOrNull()->items[0].rect.w, before.w + 1.0f);
-    EXPECT_TRUE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().InDrawingMode());
 
     RightClick(500.0f, 425.0f);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
     EXPECT_EQ(App().Selection().size(), 1u) << "still selected";
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 2u) << "a click erases nothing";
@@ -2036,7 +2036,7 @@ TEST_F(HeadlessAppTest, EscapeMidStrokeCallsTheStrokeOff) {
     RawMouse(650.0f, 480.0f, platform::MouseEventKind::Up);
     StepFrames(2);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "and the rest of the drag drew nothing";
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(drawing)) << "still drawing";
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{drawing}) << "still drawing";
 
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u) << "the undo takes the stroke before";
@@ -2099,7 +2099,7 @@ TEST_F(HeadlessAppTest, ARectangleEraseEndedFromOutsideErasesNothing) {
     PressKey(ImGuiKey_E);  // the eraser put down: drawing mode ends, and the erase with it
     RawMouse(300.0f, 300.0f, platform::MouseEventKind::Up);
     StepFrames(2);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u);
 }
 
@@ -2111,10 +2111,10 @@ TEST_F(HeadlessAppTest, DrawingModeAlwaysStartsWithThePen) {
     PressKey(ImGuiKey_E);
     ASSERT_EQ(App().ActiveTool(), Tool::Erase);
     PressKey(ImGuiKey_Escape);
-    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_FALSE(App().InDrawingMode());
 
     DoubleClick(500.0f, 425.0f);
-    EXPECT_TRUE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().InDrawingMode());
     EXPECT_EQ(App().ActiveTool(), Tool::Draw);
 }
 
@@ -2129,7 +2129,7 @@ TEST_F(HeadlessAppTest, ADoubleClickOnASnippetEntersDrawingModeAndAClickElsewher
     Drag(100.0f, 100.0f, 700.0f, 600.0f);  // a screenshot
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     const ItemId shot = Canvases().CurrentOrNull()->items[0].id;
-    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_FALSE(App().InDrawingMode());
 
     // A drag on it moves it - not in drawing mode yet.
     Drag(300.0f, 300.0f, 320.0f, 310.0f);
@@ -2137,7 +2137,7 @@ TEST_F(HeadlessAppTest, ADoubleClickOnASnippetEntersDrawingModeAndAClickElsewher
     EXPECT_NEAR(Canvases().CurrentOrNull()->items[0].rect.x, 120.0f, 1.0f);
 
     DoubleClick(400.0f, 400.0f);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{shot});
     EXPECT_EQ(App().ActiveTool(), Tool::Draw);
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot});
 
@@ -2147,7 +2147,7 @@ TEST_F(HeadlessAppTest, ADoubleClickOnASnippetEntersDrawingModeAndAClickElsewher
 
     // Out: a click on empty canvas, which makes nothing and clears nothing.
     RawClick(1100.0f, 100.0f);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot}) << "the press was for leaving, nothing more";
@@ -2164,7 +2164,7 @@ TEST_F(HeadlessAppTest, TheBarsToolsEnterDrawingModeAndTheLitOneLeavesIt) {
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
     const ItemId shot = Canvases().CurrentOrNull()->items[0].id;
     ASSERT_EQ(App().Selection(), std::vector<ItemId>{shot});
-    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_FALSE(App().InDrawingMode());
 
     const auto clickBar = [this](ChromeButton button) {
         const std::optional<ImVec2> center = App().SelectionBarButtonCenter(button);
@@ -2174,17 +2174,17 @@ TEST_F(HeadlessAppTest, TheBarsToolsEnterDrawingModeAndTheLitOneLeavesIt) {
     };
 
     clickBar(ChromeButton::Pen);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{shot});
     EXPECT_EQ(App().ActiveTool(), Tool::Draw);
     Drag(300.0f, 300.0f, 500.0f, 450.0f);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "a drag on it draws";
 
     clickBar(ChromeButton::Eraser);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot)) << "still drawing";
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{shot}) << "still drawing";
     EXPECT_EQ(App().ActiveTool(), Tool::Erase);
 
     clickBar(ChromeButton::Eraser);
-    EXPECT_FALSE(App().DrawingItem().has_value()) << "the lit tool, pressed again: out";
+    EXPECT_FALSE(App().InDrawingMode()) << "the lit tool, pressed again: out";
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot}) << "and still selected";
     Drag(300.0f, 300.0f, 320.0f, 310.0f);
@@ -2192,7 +2192,7 @@ TEST_F(HeadlessAppTest, TheBarsToolsEnterDrawingModeAndTheLitOneLeavesIt) {
     EXPECT_NEAR(Canvases().CurrentOrNull()->items[0].rect.x, 120.0f, 1.0f);
 
     clickBar(ChromeButton::Text);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot)) << "Text is a way in too";
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{shot}) << "Text is a way in too";
     EXPECT_EQ(App().ActiveTool(), Tool::Text);
 }
 
@@ -2207,7 +2207,7 @@ TEST_F(HeadlessAppTest, TheDrawingBarSwitchesTheToolAndOpensTheColor) {
     ASSERT_TRUE(eraser.has_value());
     RawClick(eraser->x, eraser->y);
     EXPECT_EQ(App().ActiveTool(), Tool::Erase);
-    EXPECT_TRUE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().InDrawingMode());
 
     const std::optional<ImVec2> color = App().SelectionBarButtonCenter(ChromeButton::Color);
     ASSERT_TRUE(color.has_value());
@@ -2220,7 +2220,7 @@ TEST_F(HeadlessAppTest, TheDrawingBarSwitchesTheToolAndOpensTheColor) {
     StepFrames(2);
     EXPECT_FALSE(App().IsColorChooserOpen());
     EXPECT_EQ(App().ActiveTool(), Tool::Erase);
-    EXPECT_TRUE(App().DrawingItem().has_value());
+    EXPECT_TRUE(App().InDrawingMode());
 }
 
 // A shape picked from the menu of the pen's or the eraser's button is
@@ -2269,7 +2269,7 @@ TEST_F(HeadlessAppTest, AShapeIsTheToolsUntilAnotherToolIsPicked) {
 
     controller_->Overlay().Dispatch(Command{CommandId::PickLine});
     clickBar(ChromeButton::Pen);
-    ASSERT_FALSE(App().DrawingItem().has_value()) << "put down";
+    ASSERT_FALSE(App().InDrawingMode()) << "put down";
     clickBar(ChromeButton::Pen);
     EXPECT_EQ(App().PenShape(), DrawShape::Freehand) << "and picked up again, plain";
 }
@@ -2285,7 +2285,7 @@ TEST_F(HeadlessAppTest, AHoldOnEmptyCanvasMakesAFullscreenScreenshot) {
     const Item& item = Canvases().CurrentOrNull()->items[0];
     EXPECT_TRUE(item.isFullscreen);
     EXPECT_TRUE(item.hasBackground);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_FALSE(App().ArmedCreation().has_value());
 }
 
@@ -2298,7 +2298,7 @@ TEST_F(HeadlessAppTest, ACtrlHoldOnEmptyCanvasMakesAFullscreenDrawing) {
     const Item& item = Canvases().CurrentOrNull()->items[0];
     EXPECT_TRUE(item.isFullscreen);
     EXPECT_FALSE(item.hasBackground);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(item.id));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{item.id});
 }
 
 TEST_F(HeadlessAppTest, AShortPressOrADragOnEmptyCanvasIsNotAHold) {
@@ -2334,7 +2334,7 @@ TEST_F(HeadlessAppTest, AHoldOnASnippetEntersDrawingModeAndMovesNothing) {
 
     // A short press selects; a drag moves; neither is a hold.
     PressFor(400.0f, 400.0f, 10);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot});
     StepFrames(30);  // long enough that the next press is not a double-click's second
     MoveTo(400.0f, 400.0f);
@@ -2345,11 +2345,11 @@ TEST_F(HeadlessAppTest, AHoldOnASnippetEntersDrawingModeAndMovesNothing) {
     StepFrames(35);
     RawMouse(420.0f, 410.0f, platform::MouseEventKind::Up);
     StepFrames(2);
-    EXPECT_FALSE(App().DrawingItem().has_value()) << "a drag, held at its end, is still a drag";
+    EXPECT_FALSE(App().InDrawingMode()) << "a drag, held at its end, is still a drag";
     EXPECT_NEAR(Canvases().CurrentOrNull()->items[0].rect.x, 120.0f, 1.0f);
 
     Hold(400.0f, 400.0f);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{shot});
     EXPECT_EQ(App().ActiveTool(), Tool::Draw);
     EXPECT_NEAR(Canvases().CurrentOrNull()->items[0].rect.x, 120.0f, 1.0f) << "the release moved nothing";
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u) << "and drew nothing";
@@ -2376,7 +2376,7 @@ TEST_F(HeadlessAppTest, EscapePressedDuringAHoldCallsItOff) {
     ASSERT_EQ(App().Selection(), std::vector<ItemId>{shot});
     PressKey(ImGuiKey_Escape);
     StepFrames(35);
-    EXPECT_FALSE(App().DrawingItem().has_value()) << "Escape, and not drawing mode after it";
+    EXPECT_FALSE(App().InDrawingMode()) << "Escape, and not drawing mode after it";
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{shot}) << "the press, called off; its selecting stays";
     RawMouse(400.0f, 400.0f, platform::MouseEventKind::Up);
     StepFrames(2);
@@ -2395,7 +2395,7 @@ TEST_F(HeadlessAppTest, AToolKeyPressedDuringAHoldKeepsItsTool) {
     StepFrame();
     RawMouse(400.0f, 400.0f, platform::MouseEventKind::Down);
     StepFrame();
-    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_FALSE(App().InDrawingMode());
     PressKey(ImGuiKey_E);
     ASSERT_EQ(App().ActiveTool(), Tool::Erase);
     StepFrames(35);
@@ -2417,13 +2417,13 @@ TEST_F(HeadlessAppTest, AHoldWhileInDrawingModeIsWhatADoubleClickThereWouldBe) {
     const ItemId second = Canvases().CurrentOrNull()->items[1].id;
 
     Hold(200.0f, 200.0f);
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(first));
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{first});
     Hold(750.0f, 500.0f);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(second));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{second});
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{second});
 
     Hold(1100.0f, 100.0f);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u);
     EXPECT_TRUE(Canvases().CurrentOrNull()->items[2].isFullscreen);
     EXPECT_TRUE(Canvases().CurrentOrNull()->items[2].hasBackground);
@@ -2455,10 +2455,10 @@ TEST_F(HeadlessAppTest, TheOtherButtonIsIgnoredWhileOneIsDown) {
     };
 
     heldTouchAt(400.0f, 400.0f);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(shot)) << "the hold's work stands";
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{shot}) << "the hold's work stands";
 
     heldTouchAt(1100.0f, 100.0f);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
     EXPECT_TRUE(Canvases().CurrentOrNull()->items[1].isFullscreen);
 
@@ -2485,13 +2485,13 @@ TEST_F(HeadlessAppTest, EscapeLeavesDrawingModeBeforeClearingTheSelection) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
 
     PressKey(ImGuiKey_Delete);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "not deleted from inside";
 
     PressKey(ImGuiKey_Escape);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_EQ(App().Selection().size(), 1u);
     PressKey(ImGuiKey_Escape);
     EXPECT_TRUE(App().Selection().empty());
@@ -2504,13 +2504,13 @@ TEST_F(HeadlessAppTest, AMinimizeFromDrawingModeEndsIt) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    const std::optional<ItemId> drawing = App().DrawingItem();
-    ASSERT_TRUE(drawing.has_value());
+    ASSERT_TRUE(App().InDrawingMode());
+    const std::optional<ItemId> drawing = App().DrawingItems().front();
 
     ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::Minimize, *drawing}));
     StepFrame();
     EXPECT_TRUE(App().Selection().empty());
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
 }
 
 // A double-click on another snippet moves drawing mode to it.
@@ -2524,9 +2524,9 @@ TEST_F(HeadlessAppTest, ADoubleClickOnAnotherSnippetMovesDrawingModeThere) {
     const ItemId second = Canvases().CurrentOrNull()->items[1].id;
 
     DoubleClick(200.0f, 200.0f);
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(first));
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{first});
     DoubleClick(750.0f, 500.0f);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(second));
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{second});
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{second});
 }
 
@@ -2664,7 +2664,7 @@ TEST_F(HeadlessAppTest, PutAwayKeepsWhatIsOpenAndViewOnlyEndsIt) {
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
     Drag(350.0f, 400.0f, 650.0f, 400.0f);  // something in it, so it stays
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
     ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::CheatSheet}));
     StepFrame();
     ASSERT_EQ(App().InputStack(), "Canvas / DrawingMode / CheatSheet / - / - / -");
@@ -2679,7 +2679,7 @@ TEST_F(HeadlessAppTest, PutAwayKeepsWhatIsOpenAndViewOnlyEndsIt) {
     ShowViewMode();
     StepFrame();
     EXPECT_EQ(App().InputStack(), "Canvas / - / - / - / - / -");
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_FALSE(App().IsCheatSheetOpen());
 }
 
@@ -2964,7 +2964,7 @@ protected:
     void SelectTheBackItem(const OverlappingItems& items) {
         PressKey(ImGuiKey_Escape);
         ASSERT_EQ(App().ActiveTool(), Tool::Select);
-        ASSERT_FALSE(App().DrawingItem().has_value());
+        ASSERT_FALSE(App().InDrawingMode());
         RawClick(items.back.x + 60.0f, items.back.y + 100.0f);
         ASSERT_EQ(App().Selection().size(), 1u);
     }
@@ -2993,7 +2993,7 @@ TEST_F(OverlappingItemsTest, APressBesideABorderDrawsRatherThanResizing) {
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
     ASSERT_EQ(Canvases().CurrentOrNull()->items.size(), 2u);
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(frontId_));
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{frontId_});
     const size_t strokesBefore = StrokeCountOnCurrentCanvas();
 
     // Just outside the back item's east border, and well inside the front
@@ -3032,7 +3032,7 @@ TEST_F(OverlappingItemsTest, ThePointerKeepsItsShapeCrossingAnOccludedBorder) {
     ShowEditMode();
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(frontId_)) << "the pen is for the front item";
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{frontId_}) << "the pen is for the front item";
 
     // Over the front item's body throughout, crossing the back item's east
     // border on the way. One frame per pixel, which is what a moving
@@ -3085,7 +3085,7 @@ TEST_F(OverlappingItemsTest, ThePenComesBackAfterHoveringAResizeHandle) {
     const float bodyY = items.back.y + 100.0f;
     const float bodyX = items.back.x + 60.0f;
     DoubleClick(bodyX, bodyY);
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(backId_));
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{backId_});
     MoveTo(bodyX, bodyY);
     StepFrames(3);
     ASSERT_EQ(host_.overlayWindow.cursorShape, platform::CursorShape::Pen);
@@ -3116,7 +3116,7 @@ TEST_F(OverlappingItemsTest, AStillPointerStopsAskingTheOsForACursor) {
     ShowEditMode();
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(frontId_));
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{frontId_});
 
     MoveTo(items.front.x + 60.0f, items.front.y + 60.0f);
     StepFrames(5);
@@ -3693,7 +3693,7 @@ TEST_F(OverlappingItemsTest, UndoDuringAHeldPressCancelsTheHold) {
     StepFrames(35);  // well past kHoldSeconds, still held
     RawMouse(x, y, platform::MouseEventKind::Up);
     StepFrames(2);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
 }
 
 // Undo with the button still down: what it takes back is the drag so far,
@@ -3986,10 +3986,10 @@ TEST_F(OverlappingItemsTest, EscapeClearsTheSelectionBeforePuttingTheToolDown) {
     SelectTheBackItem(items);
     PressKey(ImGuiKey_E);  // the eraser, for the selected back item
     ASSERT_EQ(App().ActiveTool(), Tool::Erase);
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(backId_));
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{backId_});
 
     PressKey(ImGuiKey_Escape);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     EXPECT_EQ(App().Selection().size(), 1u);
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
 
@@ -4005,7 +4005,7 @@ TEST_F(OverlappingItemsTest, AltMovesTheSnippetBeingDrawnOn) {
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
     DoubleClick(items.back.x + 60.0f, items.back.y + 100.0f);
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(backId_));
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{backId_});
     ASSERT_EQ(App().ActiveTool(), Tool::Draw);
     const float x = items.back.x + 60.0f;
     const float y = items.back.y + 100.0f;
@@ -4013,7 +4013,7 @@ TEST_F(OverlappingItemsTest, AltMovesTheSnippetBeingDrawnOn) {
     DragWith(ImGuiMod_Alt, x, y, x + 30.0f, y + 10.0f);
     EXPECT_FLOAT_EQ(BackItem().rect.x, items.back.x + 30.0f);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u);
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(backId_)) << "still drawing on it";
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{backId_}) << "still drawing on it";
 
     Drag(x + 30.0f, y + 10.0f, x + 80.0f, y + 40.0f);
     EXPECT_GT(StrokeCountOnCurrentCanvas(), 0u);
@@ -4100,7 +4100,7 @@ TEST_F(OverlappingItemsTest, TheBarShowsBothGroupsInEitherMode) {
 
     PressKey(ImGuiKey_P);  // Draw, for the selected back item
     ASSERT_EQ(App().ActiveTool(), Tool::Draw);
-    ASSERT_EQ(App().DrawingItem(), std::optional<ItemId>(backId_));
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{backId_});
     EXPECT_EQ(App().Selection().size(), 1u);
     EXPECT_EQ(App().SelectionBarButtonCenter(ChromeButton::Pen)->x, pen->x) << "the same bar, where it was";
     EXPECT_EQ(App().SelectionBarButtonCenter(ChromeButton::Pin)->x, pin->x);
@@ -4202,8 +4202,8 @@ TEST_F(HeadlessAppTest, TheWheelScalesTheSelectionOutsideDrawingModeAndSizesTheP
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    ASSERT_TRUE(App().DrawingItem().has_value());
-    const ItemId id = *App().DrawingItem();
+    ASSERT_TRUE(App().InDrawingMode());
+    const ItemId id = App().DrawingItems().front();
     const Rect before = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
     const float widthBefore = AppSettings().Stored().strokeWidth;
 
@@ -4214,7 +4214,7 @@ TEST_F(HeadlessAppTest, TheWheelScalesTheSelectionOutsideDrawingModeAndSizesTheP
     EXPECT_FLOAT_EQ(AppSettings().Stored().strokeWidth, widthBefore + 1.0f);
 
     PressKey(ImGuiKey_Escape);  // out of drawing mode, still selected
-    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_FALSE(App().InDrawingMode());
     ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
     Wheel(2.0f);
     const Rect after = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
@@ -4242,7 +4242,7 @@ TEST_F(HeadlessAppTest, CtrlAndShiftWithTheWheelSetTheSelectionsOpacities) {
     const ItemId id = Canvases().CurrentOrNull()->items[0].id;
     RawClick(500.0f, 400.0f);
     ASSERT_EQ(App().Selection(), std::vector<ItemId>{id});
-    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_FALSE(App().InDrawingMode());
     const Rect before = test::Model(controller_->GetSession()).FindItemAnywhere(id)->rect;
 
     const auto wheelWith = [this](ImGuiKey modifier, float notches) {
@@ -4345,7 +4345,7 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
     PressKey(ImGuiKey_Escape);
     EXPECT_FALSE(App().EditingNote().has_value());
     EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "p") << "Escape keeps what was typed";
-    EXPECT_EQ(App().DrawingItem(), std::optional<ItemId>(note)) << "and ends only the typing";
+    EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{note}) << "and ends only the typing";
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "");
 }
@@ -4399,7 +4399,7 @@ TEST_F(HeadlessAppTest, ANoteNothingWasTypedIntoClosesAndTheDrawingStays) {
     RawClick(900.0f, 600.0f);
 
     EXPECT_FALSE(App().EditingNote().has_value());
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u) << "the drawing stays, empty";
     EXPECT_TRUE(Canvases().CurrentOrNull()->items[0].noteText.empty());
 }
@@ -4667,7 +4667,7 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Move);
     StepFrame();
     PressKey(ImGuiKey_P);
-    ASSERT_FALSE(App().DrawingItem().has_value());
+    ASSERT_FALSE(App().InDrawingMode());
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Up);
     MouseButtonEvent(ImGuiMouseButton_Left, false);
     StepFrames(2);
@@ -4923,7 +4923,7 @@ TEST_F(HeadlessAppTest, CtrlHOpensTheCheatSheetAndTheCanvasWaitsUnderIt) {
     ASSERT_TRUE(App().IsCheatSheetOpen());
     PressKey(ImGuiKey_E);  // the eraser, for the selected snippet - were the sheet not up
     EXPECT_EQ(App().ActiveTool(), Tool::Select);
-    EXPECT_FALSE(App().DrawingItem().has_value());
+    EXPECT_FALSE(App().InDrawingMode());
     Drag(700.0f, 200.0f, 900.0f, 400.0f);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "a drag over the sheet's backdrop makes nothing";
 

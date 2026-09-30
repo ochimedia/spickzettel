@@ -248,7 +248,7 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
         if (Manager().IsDeleted(canvas, item)) {
             continue;  // deleted: hidden until it is restored
         }
-        PaintItemBody(drawList, item, editor_.DrawingItem() == item.id, highlightId == item.id, frontmostId == item.id);
+        PaintItemBody(drawList, item, editor_.IsDrawingOn(item.id), highlightId == item.id, frontmostId == item.id);
         if (itemsInteractive && editor_.EditingNote() == item.id) {
             editingItem = &item;
             editingMin = ImVec2(std::round(item.rect.x), std::round(item.rect.y));
@@ -262,7 +262,7 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
         for (const ItemId id : editor_.Selection()) {
             for (const Item& item : canvas.items) {
                 if (item.id == id) {
-                    PaintSelectionOutline(drawList, item, editor_.DrawingItem() == id);
+                    PaintSelectionOutline(drawList, item, editor_.IsDrawingOn(id));
                     break;
                 }
             }

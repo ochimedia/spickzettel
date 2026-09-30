@@ -130,7 +130,7 @@ states where the innermost active one sees an event first.
 | Level (bottom to top) | What lives there | At most |
 |---|---|---|
 | Canvas | the canvas and its selection - always there | 1 |
-| Mode | drawing mode on a snippet; a creation tool in hand | 1 |
+| Mode | drawing mode on snippets; a creation tool in hand | 1 |
 | Panel | the Overview; the cheat sheet | 1 |
 | Popup | a context menu (a snippet's, a canvas tile's, empty canvas's, the pen's or the eraser's shapes); the Properties popover; the color chooser; a delete confirmation | 1 |
 | Text | a note being typed; a name being edited; a key being captured in Settings | 1 |
@@ -367,7 +367,7 @@ drawing mode and the modifiers. Today the same decisions are spread over
 | 1 | left or right, over an ImGui window | - | - | Widget (ImGui's) | - | - |
 | 2 | left, on a bar button; right, on the pen's or the eraser's | - | - | Bar button held | its menu (the pen's, the eraser's) | - |
 | 3 | left, on a selected snippet's handle | - | - | Resize | - | - |
-| 4 | left, on the drawing snippet, drawing mode, no Alt | - | - | Stroke / Shape / Erase / Rectangle erase / Text, by tool and modifiers | - | - |
+| 4 | left, on a snippet in drawing mode, no Alt | - | - | Stroke / Shape / Erase / Rectangle erase / Text, by tool and modifiers | - | - |
 | 5 | left, elsewhere, drawing mode, no Alt | leave drawing mode | - | - | drawing mode there, or fullscreen of the trigger's kind on empty canvas | - |
 | 6 | left, a creation tool in hand | - | fullscreen | Frame | - | - |
 | 7 | left, on a snippet, Shift | add to or take from the selection | - | - | - | - |
@@ -375,7 +375,7 @@ drawing mode and the modifiers. Today the same decisions are spread over
 | 9 | left, on empty canvas, Shift | - | - | Box select | - | - |
 | 10 | left, on empty canvas, a trigger held | clear selection | - | Frame (that kind) | fullscreen (that kind) | fullscreen (that kind) |
 | 11 | left, on empty canvas | clear selection | - | - | - | - |
-| 12 | right, on the drawing snippet, drawing mode, no Alt | - | leave drawing mode | Erase | - | - |
+| 12 | right, on a snippet in drawing mode, no Alt | - | leave drawing mode | Erase | - | - |
 | 13 | right, on a snippet | select (and raise, if set) | context menu | Resize from the nearest edge | - | - |
 | 14 | right, on empty canvas | - | empty canvas menu | - | - | - |
 | 15 | middle, X1, X2, anywhere | - | - | - | - | - |
@@ -421,6 +421,20 @@ Close and Minimize take the snippet off the screen, and drawing mode goes
 with it, as it does for a delete from anywhere (`Editor::PruneSelection`).
 Delete and the arrow keys stay claimed by drawing mode (section 5): a key
 is pressed without looking at the bar, a button is not.
+
+With it, drawing mode is on every snippet selected when a drawing tool
+is picked from the bar or by key, rather than on the one selected last.
+The bar is over the whole selection, so a tool pressed there is for all
+of it, and graying the tools out for a selection of several would refuse
+something with an obvious meaning. Rule 4 is a press on any of them, and
+draws on that one - a stroke belongs to the snippet it began on, as
+always; rule 12 likewise; rule 5's "elsewhere" is outside all of them.
+A double-click or a hold still enters on the one snippet it was made on,
+selecting it alone. The snippets leave the mode as they leave the
+selection, and the mode ends with the last (`Editor::PruneSelection`).
+This, too, is no change to the structure: the Mode level holds one
+interaction, as before, and `DrawingMode` holds a list of snippets where
+it held one - its own state, which the rules read.
 
 ## 7. Commands and bindings
 

@@ -623,7 +623,7 @@ TEST_F(TutorialAppTest, TheSelectionBarsPenIsMarkedWhereItIsDrawn) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(300.0f, 300.0f, 700.0f, 550.0f);
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
     StepFrame();
 
     const std::optional<AnchorRect> pen = App().AnchorAt(Anchor{AnchorId::SelectionBarPen});
@@ -712,7 +712,7 @@ TEST_F(TutorialAppTest, TheColorChooserAndPropertiesCoverNothing) {
     PressKey(ImGuiKey_Escape);
 
     DoubleClick(500.0f, 420.0f);
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
     PressBar(ChromeButton::Color);
     StepFrames(2);
     ASSERT_TRUE(App().IsColorChooserOpen());
@@ -725,7 +725,7 @@ TEST_F(TutorialAppTest, TheWorldSaysWhatIsInTheHand) {
     const tutorial::World& world = App().TutorialWorld();
     const ItemId shot = MakeASnippet(300.0f, 300.0f, 600.0f, 500.0f);
     EXPECT_EQ(world.Selection(), std::vector<ItemId>{shot});
-    EXPECT_FALSE(world.DrawingItem().has_value());
+    EXPECT_TRUE(world.DrawingItems().empty());
     EXPECT_FALSE(world.CreationToolInHand().has_value());
 
     ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::NewScreenshotTool}));
@@ -734,7 +734,7 @@ TEST_F(TutorialAppTest, TheWorldSaysWhatIsInTheHand) {
     EXPECT_FALSE(world.CreationToolInHand().has_value());
 
     DoubleClick(450.0f, 400.0f);
-    EXPECT_EQ(world.DrawingItem(), shot);
+    EXPECT_EQ(world.DrawingItems(), std::vector<ItemId>{shot});
 }
 
 TEST_F(TutorialAppTest, TheWorldReadsTheSnippetsOfAFolderAsFacts) {
@@ -848,7 +848,7 @@ TEST_F(TutorialAppTest, TheWorldReadsTheStrokesAsTheyLookAndTheNote) {
     EXPECT_NEAR(facts.InkPx(), scale * ink, 1.0f);
     const Rect grown = Canvases().FindItemAnywhere(drawing)->rect;
     DoubleClick(grown.x + grown.w * 0.5f, grown.y + grown.h * 0.5f);
-    ASSERT_EQ(App().DrawingItem(), drawing);
+    ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{drawing});
 
     // Erased across: less ink.
     const std::optional<ImVec2> eraser = App().SelectionBarButtonCenter(ChromeButton::Eraser);
@@ -1412,7 +1412,7 @@ TEST_F(TutorialAppTest, AFullScreenSnippetMadeByMistakeIsDeletedAsTheLinesSay) {
         }
         StepFrames(3);
         ASSERT_TRUE(Canvases().CurrentOrNull()->items.back().isFullscreen);
-        if (App().DrawingItem().has_value()) {
+        if (App().InDrawingMode()) {
             // A drawing comes in drawing mode, where Delete does nothing.
             EXPECT_EQ(NeedUp(), tutorial::Need::NoDrawingMode);
             PressKey(ImGuiKey_Escape);
@@ -1437,7 +1437,7 @@ TEST_F(TutorialAppTest, AFullScreenDrawingInTheFullScreenStepGoesAsTheLinesSay) 
     WalkTo("fullscreen", "capturing");
     With(ImGuiMod_Ctrl, [&] { DoubleClick(kEmptySpot.x, kEmptySpot.y); });
     StepFrames(3);
-    ASSERT_TRUE(App().DrawingItem().has_value());
+    ASSERT_TRUE(App().InDrawingMode());
     EXPECT_EQ(HintUp(), std::string(strings::kTutorialFullscreenMissDrawingMode));
     PressKey(ImGuiKey_Escape);
     StepFrames(3);

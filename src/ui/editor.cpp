@@ -180,10 +180,13 @@ void Editor::PruneSelection() {
     };
     selection_.erase(std::remove_if(selection_.begin(), selection_.end(), [&](ItemId id) { return !onScreen(id); }),
                      selection_.end());
-    // Drawing mode is on a selected snippet, so it goes the same way: a
-    // canvas switch, a delete, a minimize.
-    if (const std::optional<ItemId> drawing = DrawingItem(); drawing.has_value() && !IsSelected(*drawing)) {
-        ExitDrawingMode();
+    // Drawing mode is on selected snippets, so they go the same way: a
+    // canvas switch, a delete, a minimize - and the mode with the last.
+    if (DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode)) {
+        drawing->KeepOnly([this](ItemId id) { return IsSelected(id); });
+        if (drawing->Items().empty()) {
+            ExitDrawingMode();
+        }
     }
 }
 
@@ -241,7 +244,7 @@ void Editor::AddTouchedToSelection(const Rect& box) {
 
 bool Editor::SelectionLive() const { return !ArmedCreation().has_value(); }
 
-bool Editor::PressPicksUp() const { return !DrawingItem().has_value() || held_.alt; }
+bool Editor::PressPicksUp() const { return !InDrawingMode() || held_.alt; }
 
 std::optional<ItemCreationKind> Editor::ArmedCreation() const {
     if (const Framing* framing = machine_.As<Framing>(Level::Gesture)) {
@@ -325,12 +328,19 @@ Tool Editor::ActiveTool() const {
     return Tool::Select;
 }
 
-std::optional<ItemId> Editor::DrawingItem() const {
+std::vector<ItemId> Editor::DrawingItems() const {
     if (const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode)) {
-        return drawing->Item();
+        return drawing->Items();
     }
-    return std::nullopt;
+    return {};
 }
+
+bool Editor::IsDrawingOn(ItemId id) const {
+    const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
+    return drawing != nullptr && drawing->Holds(id);
+}
+
+bool Editor::InDrawingMode() const { return machine_.As<DrawingMode>(Level::Mode) != nullptr; }
 
 DrawShape Editor::PenShape() const {
     const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
@@ -365,14 +375,21 @@ void Editor::EnterDrawingMode(ItemId id, std::optional<Tool> tool) {
     // The snippet being drawn on is the selection - alone, and in front
     // while raising is on, as any selected snippet is.
     SelectOnly(id);
-    if (Cfg().raiseSelectedSnippet) {
-        session_.BringItemsToFront({id});
+    EnterDrawingModeOnSelection(tool);
+}
+
+void Editor::EnterDrawingModeOnSelection(std::optional<Tool> tool) {
+    if (selection_.empty()) {
+        return;  // nothing to draw on
     }
-    // The pen, unless a tool was asked for by name (a key): the mode is
-    // entered to draw, and the eraser is a right-drag away in it. Put on the
-    // Mode level, it ends drawing mode on another snippet, or a creation
-    // tool in hand.
-    machine_.Push(std::make_unique<DrawingMode>(id, tool.value_or(Tool::Draw)), Event{});
+    if (Cfg().raiseSelectedSnippet) {
+        session_.BringItemsToFront(selection_);
+    }
+    // The pen, unless a tool was asked for by name (a key, a bar button):
+    // the mode is entered to draw, and the eraser is a right-drag away in
+    // it. Put on the Mode level, it ends drawing mode on other snippets, or
+    // a creation tool in hand.
+    machine_.Push(std::make_unique<DrawingMode>(selection_, tool.value_or(Tool::Draw)), Event{});
 }
 
 void Editor::ExitDrawingMode() {
@@ -407,11 +424,9 @@ void Editor::PickTool(Tool tool) {
                 drawing->SetTool(tool);
                 return;
             }
-            // Not drawing yet: the tool is picked *for* the snippet selected
-            // last, and means nothing without one.
-            if (const std::optional<ItemId> target = PrimarySelection()) {
-                EnterDrawingMode(*target, tool);
-            }
+            // Not drawing yet: the tool is picked *for* the snippets
+            // selected, every one of them, and means nothing without one.
+            EnterDrawingModeOnSelection(tool);
             return;
         case Tool::NewDrawing:
         case Tool::NewScreenshot:
@@ -964,7 +979,7 @@ Editor::WheelKind Editor::KindOfWheel() const {
     if (held_.ctrl) {
         return WheelKind::Nothing;  // both held: neither opacity is meant more than the other
     }
-    return DrawingItem().has_value() ? WheelKind::ToolSize : WheelKind::SelectionSize;
+    return InDrawingMode() ? WheelKind::ToolSize : WheelKind::SelectionSize;
 }
 
 void Editor::Wheel(float notches) {

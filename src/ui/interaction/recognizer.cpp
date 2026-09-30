@@ -65,7 +65,7 @@ bool MakesASnippet(const PointerTarget& target, bool noteOpen, Editor& editor) {
 
 Answer RecognizeLeft(const Event& press, const PointerTarget& target, bool isDouble, bool noteOpen, Editor& editor) {
     const platform::Modifiers& held = editor.Held();
-    const std::optional<core::ItemId> drawing = editor.DrawingItem();
+    const bool drawing = editor.InDrawingMode();
     // 2: a bar button, held until its release.
     if (target.kind == PointerTarget::Kind::Button) {
         return Answer::Start(std::nullopt, std::make_unique<BarPress>(press, target.button));
@@ -74,14 +74,14 @@ Answer RecognizeLeft(const Event& press, const PointerTarget& target, bool isDou
     if (target.kind == PointerTarget::Kind::Handle) {
         return Answer::Start(std::nullopt, Placement::ResizeByHandle(press, target.item, target.handle, editor));
     }
-    if (drawing.has_value() && !held.alt) {
-        // 4: on the snippet being drawn on, the tool in hand - a note
-        // opened for typing with Text, which is no stroke at all.
-        if (target.kind == PointerTarget::Kind::Body && target.item == *drawing) {
+    if (drawing && !held.alt) {
+        // 4: on a snippet being drawn on, the tool in hand, on that one - a
+        // note opened for typing with Text, which is no stroke at all.
+        if (target.kind == PointerTarget::Kind::Body && editor.IsDrawingOn(target.item)) {
             if (editor.ActiveTool() == core::Tool::Text) {
-                return Answer::Start(std::nullopt, std::make_unique<TypingNote>(*drawing));
+                return Answer::Start(std::nullopt, std::make_unique<TypingNote>(target.item));
             }
-            return Answer::Start(std::nullopt, Marking::ForTool(press, *drawing, editor));
+            return Answer::Start(std::nullopt, Marking::ForTool(press, target.item, editor));
         }
         // 5: anywhere else, the press is for leaving - and held still, it is
         // what a double-click here would have been: drawing mode on the
@@ -131,7 +131,7 @@ Answer RecognizeLeft(const Event& press, const PointerTarget& target, bool isDou
         return Answer::Claim();
     }
     // Empty canvas.
-    if (editor.SelectionLive() && !drawing.has_value()) {
+    if (editor.SelectionLive() && !drawing) {
         // 9: with Shift, the start of a box to select by - and the
         // selection is left alone until the box says what it caught.
         if (held.shift) {
@@ -150,7 +150,7 @@ Answer RecognizeLeft(const Event& press, const PointerTarget& target, bool isDou
     }
     // The hand moving on from a snippet it was drawing on (Alt held).
     const std::optional<Command> leave =
-        drawing.has_value() ? std::optional<Command>(Command{CommandId::LeaveDrawingMode}) : std::nullopt;
+        drawing ? std::optional<Command>(Command{CommandId::LeaveDrawingMode}) : std::nullopt;
     if (isDouble) {
         // On the second press, as on a snippet (a change from making it on
         // the release): a second press that then drags is not framing.
@@ -163,7 +163,7 @@ Answer RecognizeLeft(const Event& press, const PointerTarget& target, bool isDou
 }
 
 Answer RecognizeRight(const Event& press, const PointerTarget& target, bool noteOpen, Editor& editor) {
-    const std::optional<core::ItemId> drawing = editor.DrawingItem();
+    const bool drawing = editor.InDrawingMode();
     // 2: the pen's or the eraser's bar button, whose menu opens on the
     // release over it. The other buttons have none, and take the press
     // for nothing, as they always have.
@@ -175,12 +175,12 @@ Answer RecognizeRight(const Event& press, const PointerTarget& target, bool note
     }
     if (target.kind == PointerTarget::Kind::Body) {
         const core::ItemId item = target.item;
-        // 12: on the snippet being drawn on, the right button is the eraser,
+        // 12: on a snippet being drawn on, the right button is the eraser,
         // for quick corrections without changing the tool: a drag erases
         // along its path, and a press that never drags is a right click,
         // which leaves the mode. The erase starts only once it is a drag,
         // so a click takes nothing away.
-        if (drawing == item && !editor.Held().alt) {
+        if (editor.IsDrawingOn(item) && !editor.Held().alt) {
             Pending::Meaning meaning;
             meaning.click = Command{CommandId::LeaveDrawingMode};
             meaning.drag = [item](const Event& from, Editor& /*at*/) { return Marking::RightErase(from, item); };
@@ -189,11 +189,12 @@ Answer RecognizeRight(const Event& press, const PointerTarget& target, bool note
         // 13: selected, and resized from its nearest edge once it is a drag
         // - the one way to resize without aiming for a handle, with any
         // tool in hand. A right press that never drags is a right click:
-        // its context menu, where it landed - or, on the snippet being
-        // drawn on (reached with Alt), leaving drawing mode.
+        // its context menu, where it landed - or, on a snippet being drawn
+        // on (reached with Alt), leaving drawing mode.
+        const bool drawnOn = editor.IsDrawingOn(item);
         TakeHoldOf(item, editor);
         Pending::Meaning meaning;
-        meaning.click = drawing == item ? Command{CommandId::LeaveDrawingMode} : About(CommandId::ItemMenu, item);
+        meaning.click = drawnOn ? Command{CommandId::LeaveDrawingMode} : About(CommandId::ItemMenu, item);
         meaning.drag = [item](const Event& from, Editor& at) {
             return Placement::ResizeFromNearestEdge(from, item, at);
         };
@@ -210,7 +211,7 @@ Answer RecognizeRight(const Event& press, const PointerTarget& target, bool note
     Pending::Meaning meaning;
     meaning.click = Command{CommandId::EmptyCanvasMenu};
     const std::optional<Command> leave =
-        drawing.has_value() ? std::optional<Command>(Command{CommandId::LeaveDrawingMode}) : std::nullopt;
+        drawing ? std::optional<Command>(Command{CommandId::LeaveDrawingMode}) : std::nullopt;
     return Answer::Start(leave, std::make_unique<Pending>(press, meaning));
 }
 

@@ -179,7 +179,7 @@ TEST_F(InteractionCasesTest, AFreehandStrokeIsOneStepAndEscapeLeavesNothingOfIt)
     Up(400.0f, 340.0f);
     EXPECT_EQ(Strokes(drawing), 1u) << "nothing of it";
     EXPECT_TRUE(session_.LiveLayer().Strokes().empty());
-    EXPECT_EQ(editor_.DrawingItem(), drawing) << "Escape went to the stroke, not to drawing mode";
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{drawing}) << "Escape went to the stroke, not to drawing mode";
 }
 
 TEST_F(InteractionCasesTest, AStrokeInterruptedIsKeptAndTheRestOfThePressIsSpent) {
@@ -282,7 +282,7 @@ TEST_F(InteractionCasesTest, TheRightButtonErasesOnTheDrawingAndItsClickLeaves) 
     Pause();
 
     Click(300.0f, 450.0f, MouseButton::Right);
-    EXPECT_FALSE(editor_.DrawingItem().has_value()) << "a right click leaves drawing mode";
+    EXPECT_FALSE(editor_.InDrawingMode()) << "a right click leaves drawing mode";
 }
 
 // ===== The selection's gestures =====
@@ -446,17 +446,17 @@ TEST_F(InteractionCasesTest, ThePenAndEraserButtonsOpenTheirShapesOnARightClickO
     EXPECT_EQ(GestureLevel(), "BarPress") << "a hold is a finger on one spot";
     Up(pen->x, pen->y);
     EXPECT_EQ(editor_.LastCommand(), CommandId::PenButton);
-    EXPECT_FALSE(editor_.DrawingItem().has_value()) << "a click after all: the pen in hand, put down";
+    EXPECT_FALSE(editor_.InDrawingMode()) << "a click after all: the pen in hand, put down";
     Pause();
 
     Click(text->x, text->y, MouseButton::Right);
-    EXPECT_FALSE(editor_.DrawingItem().has_value()) << "the right click did nothing";
+    EXPECT_FALSE(editor_.InDrawingMode()) << "the right click did nothing";
     Down(text->x, text->y);
     Tick(kHoldSeconds);
     Up(text->x, text->y);
     Pause();
     EXPECT_EQ(editor_.LastCommand(), CommandId::TextButton) << "no menu: its click, on the release";
-    EXPECT_EQ(editor_.DrawingItem(), drawing);
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{drawing});
     EXPECT_EQ(editor_.ActiveTool(), Tool::Text);
 }
 
@@ -468,7 +468,7 @@ TEST_F(InteractionCasesTest, AShapePickedFromTheMenuIsTheToolsAtOnce) {
     Click(350.0f, 350.0f);
     Pause();
     ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PickRectangle}));
-    EXPECT_EQ(editor_.DrawingItem(), drawing);
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{drawing});
     EXPECT_EQ(editor_.ActiveTool(), Tool::Draw);
     EXPECT_EQ(editor_.PenShape(), DrawShape::Rectangle);
 
@@ -496,7 +496,7 @@ TEST_F(InteractionCasesTest, ADragOnEmptyCanvasFramesAndAClickMakesNothing) {
     Drag(100.0f, 100.0f, 400.0f, 300.0f);
     held_.ctrl = false;
     ASSERT_EQ(Items().size(), before + 1);
-    EXPECT_EQ(editor_.DrawingItem(), Items().back().id) << "a drawing, made to be drawn in";
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{Items().back().id}) << "a drawing, made to be drawn in";
 }
 
 TEST_F(InteractionCasesTest, AHoldMakesAFullscreenSnippetAndTheRestOfThePressIsSpent) {
@@ -526,7 +526,7 @@ TEST_F(InteractionCasesTest, ADoubleClickActsOnItsSecondPress) {
     Click(150.0f, 150.0f);
     EXPECT_EQ(editor_.Selection(), std::vector<ItemId>{a});
     Down(150.0f, 150.0f);
-    EXPECT_EQ(editor_.DrawingItem(), a);
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{a});
     Up(150.0f, 150.0f);
 }
 
@@ -540,6 +540,78 @@ TEST_F(InteractionCasesTest, ACreationToolPlacesOnceWhereverItLands) {
     EXPECT_NE(Items().back().id, a);
 }
 
+// ===== Drawing on several snippets =====
+
+// A drawing tool pressed on the bar over several selected snippets puts
+// every one of them in drawing mode: a press on any of them draws on that
+// one (rule 4), a right-drag on any erases (rule 12), and a press anywhere
+// else leaves (rule 5), keeping the selection.
+TEST_F(InteractionCasesTest, TheBarsPenOnSeveralSnippetsDrawsOnEachOfThem) {
+    const ItemId a = MakeSnippet(Rect{100, 200, 300, 200});
+    const ItemId b = MakeSnippet(Rect{600, 200, 300, 200});
+    Click(150.0f, 250.0f);
+    held_.shift = true;
+    Click(650.0f, 250.0f);
+    held_.shift = false;
+    Pause();
+    ASSERT_EQ(editor_.Selection().size(), 2u);
+
+    const std::optional<platform::Vec2> pen = editor_.SelectionBarButtonCenter(ChromeButton::Pen);
+    ASSERT_TRUE(pen.has_value());
+    Click(pen->x, pen->y);
+    Pause();
+    EXPECT_TRUE(editor_.IsDrawingOn(a));
+    EXPECT_TRUE(editor_.IsDrawingOn(b));
+    EXPECT_EQ(editor_.Selection().size(), 2u) << "the selection as it was";
+
+    Drag(150.0f, 250.0f, 250.0f, 320.0f);
+    Drag(650.0f, 250.0f, 750.0f, 320.0f);
+    EXPECT_EQ(Strokes(a), 1u);
+    EXPECT_EQ(Strokes(b), 1u) << "each on its own";
+
+    Drag(650.0f, 250.0f, 750.0f, 320.0f, MouseButton::Right);
+    EXPECT_EQ(Strokes(a), 1u);
+    EXPECT_EQ(Strokes(b), 0u) << "the right button erased on the other one";
+    EXPECT_TRUE(editor_.InDrawingMode());
+
+    Click(1100.0f, 650.0f);
+    EXPECT_FALSE(editor_.InDrawingMode()) << "a press outside all of them";
+    EXPECT_EQ(editor_.Selection().size(), 2u) << "and nothing more";
+}
+
+// A snippet that leaves the selection leaves drawing mode, and the mode
+// ends with the last one.
+TEST_F(InteractionCasesTest, DrawingModeOnSeveralSnippetsGoesWithTheSelection) {
+    const ItemId a = MakeSnippet(Rect{100, 200, 300, 200});
+    const ItemId b = MakeSnippet(Rect{600, 200, 300, 200});
+    editor_.SelectOnly(a);
+    editor_.ToggleSelected(b);
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PenButton}));
+    ASSERT_EQ(editor_.DrawingItems().size(), 2u);
+
+    session_.DeleteItem(a);
+    editor_.PruneSelection();
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{b});
+
+    session_.DeleteItem(b);
+    editor_.PruneSelection();
+    EXPECT_FALSE(editor_.InDrawingMode());
+}
+
+// A double-click or a hold on one snippet of several selected enters
+// drawing mode on that one alone, as it always has.
+TEST_F(InteractionCasesTest, AHoldEntersDrawingModeOnOneSnippetOfSeveral) {
+    const ItemId a = MakeSnippet(Rect{100, 200, 300, 200});
+    const ItemId b = MakeSnippet(Rect{600, 200, 300, 200});
+    editor_.SelectOnly(a);
+    editor_.ToggleSelected(b);
+    Down(650.0f, 250.0f);
+    Tick(0.6);
+    Up(650.0f, 250.0f);
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{b});
+    EXPECT_EQ(editor_.Selection(), std::vector<ItemId>{b});
+}
+
 // ===== Escape's stages =====
 
 TEST_F(InteractionCasesTest, EscapePutsTheHandDownOneStageAtATime) {
@@ -550,10 +622,10 @@ TEST_F(InteractionCasesTest, EscapePutsTheHandDownOneStageAtATime) {
     Key('X');  // cut
     held_.ctrl = false;
     Key('P');  // the pen: drawing mode on the selection
-    ASSERT_EQ(editor_.DrawingItem(), a);
+    ASSERT_EQ(editor_.DrawingItems(), std::vector<ItemId>{a});
 
     Escape();
-    EXPECT_FALSE(editor_.DrawingItem().has_value()) << "drawing mode first";
+    EXPECT_FALSE(editor_.InDrawingMode()) << "drawing mode first";
     EXPECT_TRUE(editor_.IsWaitingToBeCut(a));
     Escape();
     EXPECT_FALSE(editor_.IsWaitingToBeCut(a)) << "then the cut";
@@ -588,16 +660,16 @@ TEST_F(InteractionCasesTest, AnotherButtonMidGestureIsIgnored) {
     Move(320.0f, 260.0f);
     Up(320.0f, 260.0f);
     EXPECT_EQ(Strokes(drawing), 1u) << "one stroke, undisturbed";
-    EXPECT_EQ(editor_.DrawingItem(), drawing) << "and the right click did not leave";
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{drawing}) << "and the right click did not leave";
 }
 
 TEST_F(InteractionCasesTest, ATouchHoldsInjectedRightPressLandsOnSpent) {
     const ItemId a = MakeSnippet(Rect{100, 100, 200, 150});
     Down(150.0f, 150.0f);
     Tick(0.6);
-    ASSERT_EQ(editor_.DrawingItem(), a) << "the hold";
+    ASSERT_EQ(editor_.DrawingItems(), std::vector<ItemId>{a}) << "the hold";
     Click(150.0f, 150.0f, MouseButton::Right);
-    EXPECT_EQ(editor_.DrawingItem(), a) << "swallowed, not a right click that leaves";
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{a}) << "swallowed, not a right click that leaves";
     Up(150.0f, 150.0f);
 }
 

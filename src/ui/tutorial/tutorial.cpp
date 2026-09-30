@@ -331,9 +331,13 @@ void Tutorial::ChooseSubject(const World& world, const std::vector<SnippetFacts>
     // The hand first: a snippet being drawn on, then the one selected
     // last - working on "the wrong one" is working on the right one.
     std::optional<core::ItemId> pick;
-    if (fits(world.DrawingItem())) {
-        pick = world.DrawingItem();
-    } else {
+    const std::vector<core::ItemId> drawing = world.DrawingItems();
+    for (auto it = drawing.rbegin(); it != drawing.rend() && !pick; ++it) {
+        if (fits(*it)) {
+            pick = *it;
+        }
+    }
+    if (!pick) {
         const std::vector<core::ItemId> selection = world.Selection();
         for (auto it = selection.rbegin(); it != selection.rend() && !pick; ++it) {
             if (fits(*it)) {
@@ -403,7 +407,7 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const Look& look) co
                 }
                 break;
             case Need::NoDrawingMode:
-                if (world.DrawingItem()) {
+                if (!world.DrawingItems().empty()) {
                     return unmet(need, strings::kTutorialNeedNoDrawingMode);
                 }
                 break;
@@ -457,7 +461,7 @@ std::optional<Hint> Tutorial::UnmetNeed(const World& world, const Look& look) co
                 if (subject == nullptr) {
                     return noSubject;
                 }
-                if (world.DrawingItem() != subject->id) {
+                if (!world.IsDrawingOn(subject->id)) {
                     return unmet(need, strings::kTutorialNeedDrawingOnSubject);
                 }
                 break;

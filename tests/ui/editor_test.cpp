@@ -73,17 +73,17 @@ TEST_F(EditorTest, DeleteTakesShiftButNotCtrlOrAlt) {
 TEST_F(EditorTest, AMarkingToolKeyEntersDrawingModeOnTheSelection) {
     const ItemId a = test::Model(session_).CreateItem(false, Rect{100, 100, 200, 150}, "A");
     EXPECT_TRUE(editor_.Dispatch(Command{CommandId::DrawTool}));
-    EXPECT_FALSE(editor_.DrawingItem().has_value()) << "nothing selected to draw on";
+    EXPECT_FALSE(editor_.InDrawingMode()) << "nothing selected to draw on";
     editor_.SelectOnly(a);
     ASSERT_TRUE(editor_.Dispatch(Command{CommandId::EraseTool}));
-    EXPECT_EQ(editor_.DrawingItem(), a);
+    EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{a});
     EXPECT_EQ(editor_.ActiveTool(), Tool::Erase);
     // Escape is drawing mode's to answer: it leaves it (see DrawingMode).
     Event escape;
     escape.kind = EventKind::KeyDown;
     escape.key = platform::KeyCombo::kEscape;
     editor_.Input().Offer(escape);
-    EXPECT_FALSE(editor_.DrawingItem().has_value());
+    EXPECT_FALSE(editor_.InDrawingMode());
     EXPECT_EQ(editor_.ActiveTool(), Tool::Select);
     EXPECT_EQ(editor_.Selection(), std::vector<ItemId>{a}) << "the selection is the next Escape's";
 }
