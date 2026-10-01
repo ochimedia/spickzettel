@@ -187,9 +187,13 @@ public:
     // moves what is in it into a snippet.
     CanvasState& LiveLayer() { return liveLayer_; }
     const CanvasState& LiveLayer() const { return liveLayer_; }
-    // Moves the stroke just finished on the live layer into `itemId`, in
-    // the item's own native space, and files it.
-    void CommitLiveStroke(ItemId itemId);
+    // Moves the stroke just finished on the live layer into every snippet
+    // of `itemIds` its ink reaches - its centerline within half its width
+    // of the snippet's edge - whole, in each one's own native space, and
+    // files it as one step: the snippets in drawing mode, a mark on any of
+    // them being on all it reaches (docs/INTERACTIONS.md, 6.5).
+    void CommitLiveStroke(const std::vector<ItemId>& itemIds);
+    void CommitLiveStroke(ItemId itemId) { CommitLiveStroke(std::vector<ItemId>{itemId}); }
     // Deletes a snippet on the current canvas, undoably - marked, and the
     // entry is what an undo restores. False if there is no such snippet
     // there, or it is deleted already.
@@ -305,34 +309,44 @@ public:
     // see that its editor was ended from elsewhere.
     std::optional<ItemId> TextEditItem() const { return textEditItemId_; }
 
-    // The eraser, as a gesture: clips the item's strokes under a circle
-    // `widthScreenPx` across, and files the whole gesture as one entry when
-    // it ends.
-    void BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx);
+    // The eraser, as a gesture: clips the strokes of every snippet of
+    // `itemIds` under a circle `widthScreenPx` across, and files the whole
+    // gesture as one entry when it ends.
+    void BeginErase(const std::vector<ItemId>& itemIds, float screenX, float screenY, float widthScreenPx);
+    void BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx) {
+        BeginErase(std::vector<ItemId>{itemId}, screenX, screenY, widthScreenPx);
+    }
     void ExtendErase(float screenX, float screenY, float widthScreenPx);
     void EndErase();
     // The erase undone as if never begun - see CancelPlacement.
     void CancelErase();
     // The rectangular eraser: one whole gesture in one call.
-    void EraseRect(ItemId itemId, float minX, float minY, float maxX, float maxY);
+    void EraseRect(const std::vector<ItemId>& itemIds, float minX, float minY, float maxX, float maxY);
+    void EraseRect(ItemId itemId, float minX, float minY, float maxX, float maxY) {
+        EraseRect(std::vector<ItemId>{itemId}, minX, minY, maxX, maxY);
+    }
 
     // A straight-edged mark: a line, or a rectangle's outline.
     enum class Shape { Line, Rectangle };
     // A shape, as a gesture in screen space from a fixed corner: previewed
     // on the current canvas's live layer while it is dragged - a vector
     // stroke in either mode, cheap to replace wholesale as the shape changes
-    // - and on End baked into the item as a stroke, as one undo entry.
-    // SetShape changes which
-    // shape it is mid-drag; Cancel drops it, leaving nothing.
+    // - and on End baked as a stroke into the snippets of `itemIds` it
+    // reaches, as CommitLiveStroke does, as one undo entry. SetShape
+    // changes which shape it is mid-drag; Cancel drops it, leaving nothing.
+    void BeginShape(const std::vector<ItemId>& itemIds, Shape shape, float screenX, float screenY,
+                    uint32_t colorRGBA, float widthScreenPx);
     void BeginShape(ItemId itemId, Shape shape, float screenX, float screenY, uint32_t colorRGBA,
-                    float widthScreenPx);
+                    float widthScreenPx) {
+        BeginShape(std::vector<ItemId>{itemId}, shape, screenX, screenY, colorRGBA, widthScreenPx);
+    }
     void UpdateShape(float screenX, float screenY);
     void SetShape(Shape shape);
     void EndShape(float screenX, float screenY);
     // Drops the shape in progress without leaving anything - what EndShape
     // does with a drag too short to be meant, and what Escape does to one.
     void CancelShape();
-    bool IsDrawingShape() const { return shapeItemId_.has_value(); }
+    bool IsDrawingShape() const { return !shapeItems_.empty(); }
 
     // ===== Capturing the screen =====
 
@@ -423,18 +437,34 @@ private:
     std::optional<UndoStep> StepHistory(bool undo);
     std::optional<platform::CaptureResult> CropFrozenScreen(const Rect& rect) const;
 
-    // Starts following `itemId`'s strokes through an erase gesture: keeps
-    // the list as it is now, and notes that every stroke is still its own
-    // original - see eraseGestureStartSnapshot_.
-    void SnapshotStrokesForErase(ItemId itemId);
+    // One snippet's strokes, followed through an erase gesture: a copy of
+    // its whole stroke list as the gesture began, and beside it where
+    // every stroke now in the list came from - `origins` is parallel to the
+    // snippet's strokes and holds, for each, the index in `snapshot` of the
+    // original it is or stands for; `replaced` is parallel to `snapshot`
+    // and marks the originals some call has clipped. Together they say, at
+    // the gesture's end, exactly which fragments stand for which original -
+    // however many times a fragment was clipped again by a later call in
+    // the same drag - which is what one entry for the *whole* gesture
+    // needs, and what a before/after diff by value could not say (see
+    // history::StrokesErased).
+    struct EraseTrack {
+        ItemId item = 0;
+        std::vector<Stroke> snapshot;
+        std::vector<size_t> origins;
+        std::vector<bool> replaced;
+    };
+    // Starts following each of `itemIds`' strokes through an erase
+    // gesture, into eraseTracks_: every stroke still its own original.
+    void TrackStrokesForErase(const std::vector<ItemId>& itemIds);
     // Folds one erase call's outcome (see CanvasManager::EraseAt) into what
     // is being followed: each stroke the call clipped is marked replaced,
     // and its fragments are noted as standing for the same original it did.
-    void NoteEraseOutcome(const std::vector<size_t>& outcome);
+    static void NoteEraseOutcome(EraseTrack& track, const std::vector<size_t>& outcome);
     // Files one step for the whole gesture, built from what was followed:
-    // every original marked replaced, with the fragments now standing for
-    // it. No-op if the gesture changed nothing.
-    void RecordEraseGesture(ItemId itemId);
+    // for each snippet, every original marked replaced, with the fragments
+    // now standing for it. No-op if the gesture changed nothing.
+    void RecordEraseGesture();
 
     platform::IOverlayWindow* window_ = nullptr;
     CanvasManager manager_;
@@ -462,22 +492,12 @@ private:
 
     // The undo history, per canvas - see history::History.
     history::History history_;
-    // A copy of the erased item's whole stroke list, taken as an eraser
-    // gesture begins, and beside it where every stroke currently in the
-    // list came from: eraseOrigins_ is parallel to the item's strokes and
-    // holds, for each, the index in the snapshot of the original it is or
-    // stands for; eraseReplaced_ is parallel to the snapshot and marks the
-    // originals some call has clipped. Together they say, at the gesture's
-    // end, exactly which fragments stand for which original - however many
-    // times a fragment was clipped again by a later call in the same drag -
-    // which is what one entry for the *whole* gesture needs, and what a
-    // before/after diff by value could not say (see history::StrokesErased).
-    std::vector<Stroke> eraseGestureStartSnapshot_;
-    std::vector<size_t> eraseOrigins_;
-    std::vector<bool> eraseReplaced_;
-    // The item the circular eraser gesture in progress is erasing, if any,
-    // and the library as it was when the gesture began.
-    std::optional<ItemId> eraseItemId_;
+    // The snippets an erase gesture is erasing, each followed - see
+    // EraseTrack.
+    std::vector<EraseTrack> eraseTracks_;
+    // Whether a circular eraser gesture is in progress, and the library as
+    // it was when it began (eraseCheckpoint_).
+    bool erasing_ = false;
     // Where the eraser last was, on screen - where the next position's
     // pass begins.
     StrokePoint eraseLast_;
@@ -505,7 +525,7 @@ private:
     Checkpoint textEditCheckpoint_;
     // The shape in progress, if any - see BeginShape. Where it began and
     // where the pointer last was, so SetShape can redraw it without a move.
-    std::optional<ItemId> shapeItemId_;
+    std::vector<ItemId> shapeItems_;
     Shape shape_ = Shape::Line;
     float shapeStartX_ = 0.0f;
     float shapeStartY_ = 0.0f;

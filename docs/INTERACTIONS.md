@@ -428,8 +428,9 @@ is picked from the bar or by key, rather than on the one selected last.
 The bar is over the whole selection, so a tool pressed there is for all
 of it, and graying the tools out for a selection of several would refuse
 something with an obvious meaning. Rule 4 is a press on any of them, and
-draws on that one - a stroke belongs to the snippet it began on, as
-always; rule 12 likewise; rule 5's "elsewhere" is outside all of them.
+draws on that one - a stroke belonged to the snippet it began on, as
+always (since, on every one it reaches - see below); rule 12 likewise;
+rule 5's "elsewhere" is outside all of them.
 A double-click or a hold still enters on the one snippet it was made on,
 selecting it alone. The snippets leave the mode as they leave the
 selection, and the mode ends with the last (`Editor::PruneSelection`).
@@ -483,6 +484,31 @@ being drawn on, every press is the tool's; it is resized from outside
 its edge, where the band stays, or with a right-drag (rule 13, with
 Alt). `ResolvePointerTarget` leaves that snippet's band out where the
 press is on the snippet itself; no structure changes.
+
+Changed on 2026-10-01, from test feedback: a mark made in drawing mode
+is on every snippet in drawing mode it reaches, not only the one it
+began on. A stroke drawn on across several of them was shown on each
+while it was drawn - each snippet draws the stroke in progress, clipped
+to itself - and kept by the first alone, so the rest of it vanished on
+release; and the eraser erased on the first alone. Now:
+
+- **A stroke, a line or a rectangle** is kept by every snippet in
+  drawing mode its ink reaches - its centerline within half the pen's
+  width of the snippet's edge - whole, as a stroke that runs off its
+  snippet always was: a snippet draws its strokes clipped to itself, so
+  each shows the part over it, which is what was shown while it was
+  drawn. Where two of them overlap, both keep it, as both showed it. One
+  step on the history for all of them; a snippet moved to another canvas
+  takes its part of the step with it, as for any step about several
+  snippets.
+- **The eraser** - the left button's with the eraser in hand, the
+  rectangle eraser, and the right button's (rule 12) - erases on every
+  snippet in drawing mode, wherever it passes, as one step.
+
+Only snippets in drawing mode: a mark never reaches a snippet that is
+not, whatever it passes over. The rules decide as before - rule 4 or 12
+on the snippet pressed - and the gesture they start reads the snippets
+in drawing mode from `DrawingMode`, as rule 5 does; no structure changes.
 
 ## 7. Commands and bindings
 

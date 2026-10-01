@@ -331,6 +331,9 @@ private:
 
     Event press_;
     core::ItemId item_;
+    // What it marks: every snippet in drawing mode, the one pressed first
+    // (docs/INTERACTIONS.md, 6.5) - read as it begins.
+    std::vector<core::ItemId> items_;
     Kind kind_;
     core::DrawShape shape_ = core::DrawShape::Freehand;  // for a Shape
     // Where its last press or move was - where it ends when it has to be

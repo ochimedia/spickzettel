@@ -505,6 +505,12 @@ core::Rect Marking::EraseBox() const {
 void Marking::Begin(const Event& event, Editor& editor) {
     core::Session& session = editor.GetSession();
     const platform::Vec2 at = press_.position;
+    items_ = {item_};
+    for (const core::ItemId id : editor.DrawingItems()) {
+        if (id != item_) {
+            items_.push_back(id);
+        }
+    }
     switch (kind_) {
         case Kind::Freehand:
             // Accumulated into the live layer (screen space) while it is
@@ -516,14 +522,14 @@ void Marking::Begin(const Event& event, Editor& editor) {
         case Kind::Shape:
             // The whole of a shape is the session's: its preview, and how
             // short a drag is a stray click - see Session::BeginShape.
-            session.BeginShape(item_, SessionShape(shape_), at.x, at.y, editor.DrawColorRGBA(), editor.DrawWidth());
+            session.BeginShape(items_, SessionShape(shape_), at.x, at.y, editor.DrawColorRGBA(), editor.DrawWidth());
             break;
         case Kind::Erase:
             // One gesture in the session: the strokes it clips, snapshotted
             // as it starts and filed as a single undo entry as it ends.
             // From the press, for the right button's, which begins once it
             // is a drag.
-            session.BeginErase(item_, at.x, at.y, editor.EraserWidth());
+            session.BeginErase(items_, at.x, at.y, editor.EraserWidth());
             if (event.kind == EventKind::PointerMove) {
                 session.ExtendErase(event.position.x, event.position.y, editor.EraserWidth());
             }
@@ -567,7 +573,7 @@ Answer Marking::Released(const Event& event, Editor& editor) {
     switch (kind_) {
         case Kind::Freehand:
             editor.Pen().OnMouseEvent(PenEvent(event.position, platform::MouseEventKind::Up), session.LiveLayer());
-            session.CommitLiveStroke(item_);
+            session.CommitLiveStroke(items_);
             break;
         case Kind::Shape:
             session.EndShape(event.position.x, event.position.y);
@@ -582,7 +588,7 @@ Answer Marking::Released(const Event& event, Editor& editor) {
             last_ = event.position;
             if (Distance(press_.position, event.position) >= kRegionMinSize) {
                 const core::Rect box = EraseBox();
-                session.EraseRect(item_, box.x, box.y, box.x + box.w, box.y + box.h);
+                session.EraseRect(items_, box.x, box.y, box.x + box.w, box.y + box.h);
             }
             break;
     }
@@ -599,7 +605,7 @@ void Marking::Interrupt(Editor& editor) {
     switch (kind_) {
         case Kind::Freehand:
             editor.Pen().OnMouseEvent(PenEvent(last_, platform::MouseEventKind::Up), session.LiveLayer());
-            session.CommitLiveStroke(item_);
+            session.CommitLiveStroke(items_);
             break;
         case Kind::Shape:
             session.EndShape(last_.x, last_.y);

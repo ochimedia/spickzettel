@@ -151,7 +151,7 @@ public:
                 break;
             case 5:
                 if (const ItemId item = AnyHere()) {
-                    session_.EraseRect(item, 0.0f, 0.0f, Coord(), Coord());
+                    session_.EraseRect(WithAnother(item), 0.0f, 0.0f, Coord(), Coord());
                 }
                 break;
             case 6:
@@ -293,17 +293,34 @@ private:
         const Rect rect{Coord(), Coord(), 60.0f + Coord() * 0.5f, 60.0f + Coord() * 0.5f};
         session_.CreateItem(false, rect, "Snippet");
     }
+    // `item`, and half the time another snippet here with it - a mark made
+    // in drawing mode on several (docs/INTERACTIONS.md, 6.5).
+    std::vector<ItemId> WithAnother(ItemId item) {
+        std::vector<ItemId> items{item};
+        if (Pick(2) == 0) {
+            if (const ItemId other = AnyHere(); other != 0 && other != item) {
+                items.push_back(other);
+            }
+        }
+        return items;
+    }
     void Stroke() {
         const ItemId item = AnyHere();
         if (item == 0) {
             return;
         }
+        const std::vector<ItemId> items = WithAnother(item);
         const Rect rect = session_.Manager().FindItemAnywhere(item)->rect;
         session_.LiveLayer().BeginStroke(StrokePoint{rect.x + 5.0f, rect.y + 5.0f}, 0xFF0000FFu, 4.0f);
         session_.LiveLayer().ExtendStroke(StrokePoint{rect.x + rect.w * 0.5f, rect.y + rect.h * 0.7f});
         session_.LiveLayer().ExtendStroke(StrokePoint{rect.x + rect.w - 5.0f, rect.y + 5.0f});
+        if (items.size() > 1) {
+            // On into the other one, so that it reaches it.
+            const Rect other = session_.Manager().FindItemAnywhere(items[1])->rect;
+            session_.LiveLayer().ExtendStroke(StrokePoint{other.x + other.w * 0.5f, other.y + other.h * 0.5f});
+        }
         session_.LiveLayer().EndStroke();
-        session_.CommitLiveStroke(item);
+        session_.CommitLiveStroke(items);
     }
     void Erase() {
         const ItemId item = AnyHere();
@@ -313,7 +330,7 @@ private:
         const Rect rect = session_.Manager().FindItemAnywhere(item)->rect;
         const auto at = [&](float fx, float fy) { return std::make_pair(rect.x + rect.w * fx, rect.y + rect.h * fy); };
         const auto [x0, y0] = at(0.5f, 0.1f);
-        session_.BeginErase(item, x0, y0, 30.0f);
+        session_.BeginErase(WithAnother(item), x0, y0, 30.0f);
         for (float t = 0.2f; t < 1.0f; t += 0.2f) {
             const auto [x, y] = at(0.5f, t);
             session_.ExtendErase(x, y, 30.0f);

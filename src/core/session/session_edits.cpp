@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "core/canvas/item_geometry.h"
+#include "core/drawing/stroke_clip.h"
 
 namespace sz::core {
 
@@ -45,7 +46,7 @@ bool Session::EndOpenGesture() {
     EndPlacement();
     EndStyleEdit();
     EndErase();
-    if (shapeItemId_.has_value()) {
+    if (!shapeItems_.empty()) {
         EndShape(shapeLastX_, shapeLastY_);
     }
     return failedWrites_ == failures;
@@ -131,30 +132,49 @@ std::optional<Session::UndoStep> Session::Redo() { return StepHistory(/*undo=*/f
 
 // ================= Strokes =================
 
-void Session::CommitLiveStroke(ItemId itemId) {
+void Session::CommitLiveStroke(const std::vector<ItemId>& itemIds) {
     if (!EndOpenGesture()) {
         liveLayer_.Clear();  // not made, as its write failing would leave it
         return;
     }
-    const Checkpoint before = Before({itemId});
+    const Checkpoint before = Before(itemIds);
     Canvas* canvasPtr = Model().CurrentOrNull();
     if (!canvasPtr || liveLayer_.Strokes().empty()) {
         liveLayer_.Clear();
         return;
     }
     Canvas& canvas = *canvasPtr;
-    const auto itemIt = std::find_if(canvas.items.begin(), canvas.items.end(),
-                                      [&](const Item& i) { return i.id == itemId; });
-    if (itemIt == canvas.items.end()) {
-        liveLayer_.Clear();
+    const Stroke finished = liveLayer_.Strokes().back();
+    liveLayer_.Clear();
+    // Whole, into every snippet its ink reaches: each draws its strokes
+    // clipped to itself, so each shows the part over it - what was shown
+    // while it was drawn, when every snippet in drawing mode drew it. Not
+    // cut into the part over each: one stroke a snippet is one change, the
+    // only kind a step can take back (history::CanApply), and a stroke that
+    // runs off its snippet has always been kept whole. Its centerline
+    // within half its width of the edge, and a pixel for the fringe.
+    const float reach = finished.width * 0.5f + 1.0f;
+    std::vector<Change> changes;
+    for (const ItemId itemId : itemIds) {
+        const auto itemIt = std::find_if(canvas.items.begin(), canvas.items.end(),
+                                          [&](const Item& i) { return i.id == itemId; });
+        if (itemIt == canvas.items.end()) {
+            continue;
+        }
+        const Rect& r = itemIt->rect;
+        if (itemIds.size() > 1 &&
+            !ClipStrokeOutsideRect(finished, r.x - reach, r.y - reach, r.x + r.w + reach, r.y + r.h + reach)) {
+            continue;
+        }
+        itemIt->strokes.push_back(CanvasManager::BakeStrokeToNative(*itemIt, finished));
+        // The value, not only the id: redo pushes it back.
+        changes.push_back(Change{itemId, history::StrokeAdded{itemIt->strokes.back()}});
+    }
+    if (changes.empty()) {
         return;
     }
-    const Stroke finished = liveLayer_.Strokes().back();
-    itemIt->strokes.push_back(CanvasManager::BakeStrokeToNative(*itemIt, finished));
-    liveLayer_.Clear();
     Model().MarkChanged();
-    // The value, not only the id: redo pushes it back.
-    Commit(before, canvas.id, Step{0, What::Stroke, {Change{itemId, history::StrokeAdded{itemIt->strokes.back()}}}});
+    Commit(before, canvas.id, Step{0, What::Stroke, std::move(changes)});
 }
 
 bool Session::ClearDrawing(ItemId itemId) {
@@ -677,32 +697,37 @@ void Session::EndTextEdit(std::optional<std::string> text) {
 
 // ================= Erasing =================
 
-void Session::SnapshotStrokesForErase(ItemId itemId) {
-    eraseGestureStartSnapshot_.clear();
-    eraseOrigins_.clear();
-    eraseReplaced_.clear();
-    if (const Item* item = Model().FindItemAnywhere(itemId)) {
-        eraseGestureStartSnapshot_ = item->strokes;
-        eraseOrigins_.resize(item->strokes.size());
-        std::iota(eraseOrigins_.begin(), eraseOrigins_.end(), size_t{0});
-        eraseReplaced_.assign(item->strokes.size(), false);
+void Session::TrackStrokesForErase(const std::vector<ItemId>& itemIds) {
+    eraseTracks_.clear();
+    for (const ItemId itemId : itemIds) {
+        const Item* item = Model().FindItemAnywhere(itemId);
+        if (item == nullptr) {
+            continue;
+        }
+        EraseTrack track;
+        track.item = itemId;
+        track.snapshot = item->strokes;
+        track.origins.resize(item->strokes.size());
+        std::iota(track.origins.begin(), track.origins.end(), size_t{0});
+        track.replaced.assign(item->strokes.size(), false);
+        eraseTracks_.push_back(std::move(track));
     }
 }
 
-void Session::NoteEraseOutcome(const std::vector<size_t>& outcome) {
-    if (outcome.size() != eraseOrigins_.size()) {
+void Session::NoteEraseOutcome(EraseTrack& track, const std::vector<size_t>& outcome) {
+    if (outcome.size() != track.origins.size()) {
         // Not the list being followed - the item went away mid-gesture, or
         // something other than the eraser changed its strokes. Nothing
         // followed from here on means nothing goes on the history, which is
         // the safe failure.
-        eraseOrigins_.clear();
-        eraseReplaced_.assign(eraseReplaced_.size(), false);
+        track.origins.clear();
+        track.replaced.assign(track.replaced.size(), false);
         return;
     }
     std::vector<size_t> origins;
-    origins.reserve(eraseOrigins_.size());
+    origins.reserve(track.origins.size());
     for (size_t index = 0; index < outcome.size(); ++index) {
-        const size_t origin = eraseOrigins_[index];
+        const size_t origin = track.origins[index];
         if (outcome[index] == CanvasManager::kStrokeUntouched) {
             origins.push_back(origin);
             continue;
@@ -710,123 +735,138 @@ void Session::NoteEraseOutcome(const std::vector<size_t>& outcome) {
         // Clipped: whatever fragments it became stand for the original it
         // stood for - which is how a fragment clipped again later in the
         // drag still traces back to the stroke that came before the drag.
-        eraseReplaced_[origin] = true;
+        track.replaced[origin] = true;
         origins.insert(origins.end(), outcome[index], origin);
     }
-    eraseOrigins_ = std::move(origins);
+    track.origins = std::move(origins);
 }
 
-void Session::BeginErase(ItemId itemId, float screenX, float screenY, float widthScreenPx) {
+void Session::BeginErase(const std::vector<ItemId>& itemIds, float screenX, float screenY, float widthScreenPx) {
     // A gesture still open is over, and filed whole. Without this its
     // strokes' snapshot was taken over by this one's.
     if (!EndOpenGesture()) {
         return;
     }
-    // The item's whole stroke list as the gesture starts, followed through
-    // every call to one step for the whole gesture - see
-    // eraseGestureStartSnapshot_.
-    eraseCheckpoint_ = Before({itemId});
-    SnapshotStrokesForErase(itemId);
-    eraseItemId_ = itemId;
+    // Each snippet's whole stroke list as the gesture starts, followed
+    // through every call to one step for the whole gesture - see
+    // EraseTrack.
+    eraseCheckpoint_ = Before(itemIds);
+    TrackStrokesForErase(itemIds);
+    erasing_ = true;
     eraseLast_ = StrokePoint{screenX, screenY};
-    NoteEraseOutcome(Model().EraseAt(itemId, screenX, screenY, widthScreenPx * 0.5f));
+    for (EraseTrack& track : eraseTracks_) {
+        NoteEraseOutcome(track, Model().EraseAt(track.item, screenX, screenY, widthScreenPx * 0.5f));
+    }
 }
 
 void Session::ExtendErase(float screenX, float screenY, float widthScreenPx) {
-    if (!eraseItemId_.has_value()) {
+    if (!erasing_) {
         return;
     }
     // Along the way from the last position, not only at this one - see
     // ClipStrokeOutsideCapsule.
-    NoteEraseOutcome(
-        Model().EraseAlong(*eraseItemId_, eraseLast_.x, eraseLast_.y, screenX, screenY, widthScreenPx * 0.5f));
+    for (EraseTrack& track : eraseTracks_) {
+        NoteEraseOutcome(track, Model().EraseAlong(track.item, eraseLast_.x, eraseLast_.y, screenX, screenY,
+                                                   widthScreenPx * 0.5f));
+    }
     eraseLast_ = StrokePoint{screenX, screenY};
 }
 
 void Session::EndErase() {
-    if (!eraseItemId_.has_value()) {
+    if (!erasing_) {
         return;
     }
-    const ItemId itemId = *eraseItemId_;
-    eraseItemId_.reset();
+    erasing_ = false;
     // The whole gesture in one step, so it is one undo.
-    RecordEraseGesture(itemId);
-    eraseGestureStartSnapshot_.clear();
+    RecordEraseGesture();
 }
 
 void Session::CancelErase() {
-    if (!eraseItemId_.has_value()) {
+    if (!erasing_) {
         return;
     }
-    eraseItemId_.reset();
-    eraseGestureStartSnapshot_.clear();
+    erasing_ = false;
+    eraseTracks_.clear();
     Model().RollBack(eraseCheckpoint_);
 }
 
-void Session::EraseRect(ItemId itemId, float minX, float minY, float maxX, float maxY) {
+void Session::EraseRect(const std::vector<ItemId>& itemIds, float minX, float minY, float maxX, float maxY) {
     if (!EndOpenGesture()) {
         return;
     }
-    // A whole gesture in one call: nothing changes the item between the
-    // press that started the rectangle and the release that ends it, so the
-    // snapshot taken here is the one the press would have taken.
-    eraseCheckpoint_ = Before({itemId});
-    SnapshotStrokesForErase(itemId);
-    NoteEraseOutcome(Model().EraseRectAt(itemId, minX, minY, maxX, maxY));
-    RecordEraseGesture(itemId);
-    eraseGestureStartSnapshot_.clear();
+    // A whole gesture in one call: nothing changes the snippets between the
+    // press that started the rectangle and the release that ends it, so
+    // the snapshot taken here is the one the press would have taken.
+    eraseCheckpoint_ = Before(itemIds);
+    TrackStrokesForErase(itemIds);
+    for (EraseTrack& track : eraseTracks_) {
+        NoteEraseOutcome(track, Model().EraseRectAt(track.item, minX, minY, maxX, maxY));
+    }
+    RecordEraseGesture();
 }
 
-void Session::RecordEraseGesture(ItemId itemId) {
-    const Item* item = Model().FindItemAnywhere(itemId);
-    if (!item) {
-        return;
-    }
-    // Every original some call in the gesture clipped, with the fragments
-    // now standing for it - which are exactly the current strokes whose
-    // origin it is, in order (see NoteEraseOutcome). Only while the list
-    // is still the one being followed; a mismatch means what happened is
-    // unknown and is left off rather than guessed at.
-    history::StrokesErased erased;
-    erased.strokeCountBefore = eraseGestureStartSnapshot_.size();
-    if (eraseOrigins_.size() == item->strokes.size()) {
-        // One pass over both: origins never decrease along the list, since
-        // erasing keeps the order and each original's fragments stand
-        // together where it stood.
-        size_t current = 0;
-        for (size_t origin = 0; origin < eraseReplaced_.size(); ++origin) {
-            while (current < eraseOrigins_.size() && eraseOrigins_[current] < origin) {
-                ++current;
-            }
-            if (!eraseReplaced_[origin]) {
-                continue;
-            }
-            history::StrokesErased::Replacement replacement;
-            replacement.index = origin;
-            replacement.original = eraseGestureStartSnapshot_[origin];
-            for (; current < eraseOrigins_.size() && eraseOrigins_[current] == origin; ++current) {
-                replacement.fragments.push_back(item->strokes[current]);
-            }
-            erased.replacements.push_back(std::move(replacement));
+void Session::RecordEraseGesture() {
+    std::vector<Change> changes;
+    CanvasId canvas = 0;
+    for (const EraseTrack& track : eraseTracks_) {
+        const Item* item = Model().FindItemAnywhere(track.item);
+        if (!item) {
+            continue;
         }
-    } else if (!eraseGestureStartSnapshot_.empty() && item->strokes != eraseGestureStartSnapshot_) {
-        // Lost track of which fragment is which, and yet the strokes did
-        // change: the whole list as one replacement - the first original
-        // standing for everything there is now, the rest for nothing. Exact
-        // both ways, only coarser; left off, the strokes would have changed
-        // behind the history's back, and every step after it filed against
-        // a list it did not describe.
-        for (size_t index = 0; index < eraseGestureStartSnapshot_.size(); ++index) {
-            erased.replacements.push_back(
-                {index, eraseGestureStartSnapshot_[index], index == 0 ? item->strokes : std::vector<Stroke>{}});
+        // Every original some call in the gesture clipped, with the
+        // fragments now standing for it - which are exactly the current
+        // strokes whose origin it is, in order (see NoteEraseOutcome). Only
+        // while the list is still the one being followed; a mismatch means
+        // what happened is unknown and is left off rather than guessed at.
+        history::StrokesErased erased;
+        erased.strokeCountBefore = track.snapshot.size();
+        if (track.origins.size() == item->strokes.size()) {
+            // One pass over both: origins never decrease along the list,
+            // since erasing keeps the order and each original's fragments
+            // stand together where it stood.
+            size_t current = 0;
+            for (size_t origin = 0; origin < track.replaced.size(); ++origin) {
+                while (current < track.origins.size() && track.origins[current] < origin) {
+                    ++current;
+                }
+                if (!track.replaced[origin]) {
+                    continue;
+                }
+                history::StrokesErased::Replacement replacement;
+                replacement.index = origin;
+                replacement.original = track.snapshot[origin];
+                for (; current < track.origins.size() && track.origins[current] == origin; ++current) {
+                    replacement.fragments.push_back(item->strokes[current]);
+                }
+                erased.replacements.push_back(std::move(replacement));
+            }
+        } else if (!track.snapshot.empty() && item->strokes != track.snapshot) {
+            // Lost track of which fragment is which, and yet the strokes
+            // did change: the whole list as one replacement - the first
+            // original standing for everything there is now, the rest for
+            // nothing. Exact both ways, only coarser; left off, the strokes
+            // would have changed behind the history's back, and every step
+            // after it filed against a list it did not describe.
+            for (size_t index = 0; index < track.snapshot.size(); ++index) {
+                erased.replacements.push_back(
+                    {index, track.snapshot[index], index == 0 ? item->strokes : std::vector<Stroke>{}});
+            }
         }
+        if (erased.replacements.empty()) {
+            continue;
+        }
+        if (canvas == 0) {
+            canvas = Model().CanvasHoldingItem(track.item).value_or(0);
+        }
+        changes.push_back(Change{track.item, std::move(erased)});
     }
-    if (erased.replacements.empty()) {
+    eraseTracks_.clear();
+    if (changes.empty()) {
         Land(eraseCheckpoint_);  // the gesture touched nothing
         return;
     }
-    const CanvasId canvas = Model().CanvasHoldingItem(itemId).value_or(0);
-    Commit(eraseCheckpoint_, canvas, Step{0, What::Erase, {Change{itemId, std::move(erased)}}});
+    // One step for every snippet it erased on, so it is one undo.
+    Commit(eraseCheckpoint_, canvas, Step{0, What::Erase, std::move(changes)});
 }
 
 }  // namespace sz::core

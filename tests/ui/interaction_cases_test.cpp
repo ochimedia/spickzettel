@@ -694,6 +694,112 @@ TEST_F(InteractionCasesTest, DrawingModeOnSeveralSnippetsGoesWithTheSelection) {
     EXPECT_FALSE(editor_.InDrawingMode());
 }
 
+// A mark made across several snippets in drawing mode is on every one it
+// reaches - each was showing it while it was drawn - and is one undo.
+// One it does not reach, and one not in drawing mode, are left alone.
+TEST_F(InteractionCasesTest, AStrokeAcrossSnippetsInDrawingModeIsOnEachItReaches) {
+    const ItemId a = MakeSnippet(Rect{100, 200, 300, 200});
+    const ItemId b = MakeSnippet(Rect{450, 200, 300, 200});
+    const ItemId c = MakeSnippet(Rect{100, 500, 300, 200});
+    const ItemId outside = MakeSnippet(Rect{800, 200, 300, 200});
+    editor_.SelectOnly(a);
+    editor_.ToggleSelected(b);
+    editor_.ToggleSelected(c);
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PenButton}));
+    ASSERT_EQ(editor_.DrawingItems().size(), 3u);
+
+    Drag(200.0f, 300.0f, 1000.0f, 300.0f);
+    EXPECT_EQ(Strokes(a), 1u) << "where it began";
+    EXPECT_EQ(Strokes(b), 1u) << "and on across";
+    EXPECT_EQ(Strokes(c), 0u) << "not reached";
+    EXPECT_EQ(Strokes(outside), 0u) << "not in drawing mode";
+
+    Undo();
+    EXPECT_EQ(Strokes(a), 0u);
+    EXPECT_EQ(Strokes(b), 0u) << "one undo for both";
+
+    // A line, the same; and a rectangle reaching the third.
+    held_.shift = true;
+    Drag(200.0f, 300.0f, 600.0f, 300.0f);
+    held_.shift = false;
+    EXPECT_EQ(Strokes(a), 1u);
+    EXPECT_EQ(Strokes(b), 1u);
+    held_.ctrl = true;
+    Drag(200.0f, 350.0f, 600.0f, 600.0f);
+    held_.ctrl = false;
+    EXPECT_EQ(Strokes(a), 2u);
+    EXPECT_EQ(Strokes(b), 2u);
+    EXPECT_EQ(Strokes(c), 1u);
+}
+
+// A stroke that ends short of the next snippet but whose ink reaches over
+// its edge is on that one too: the ink, not the centerline, is what was
+// shown on it.
+TEST_F(InteractionCasesTest, AStrokeWhoseInkReachesASnippetIsOnIt) {
+    const ItemId a = MakeSnippet(Rect{100, 200, 300, 200});
+    const ItemId b = MakeSnippet(Rect{420, 200, 300, 200});
+    editor_.SelectOnly(a);
+    editor_.ToggleSelected(b);
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PenButton}));
+    const float half = editor_.DrawWidth() * 0.5f;
+
+    Drag(200.0f, 300.0f, 420.0f - half - 2.0f, 300.0f);
+    EXPECT_EQ(Strokes(b), 0u) << "its ink short of the edge";
+    Drag(200.0f, 350.0f, 420.0f - half * 0.5f, 350.0f);
+    EXPECT_EQ(Strokes(b), 1u) << "its ink over the edge";
+}
+
+// The eraser, the rectangle eraser and the right button's erase all erase
+// on every snippet in drawing mode they pass over, as one undo.
+TEST_F(InteractionCasesTest, TheEraserErasesOnEverySnippetInDrawingMode) {
+    const ItemId a = MakeSnippet(Rect{100, 200, 300, 200});
+    const ItemId b = MakeSnippet(Rect{450, 200, 300, 200});
+    editor_.SelectOnly(a);
+    editor_.ToggleSelected(b);
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::PenButton}));
+    Drag(150.0f, 250.0f, 350.0f, 250.0f);
+    Drag(500.0f, 250.0f, 700.0f, 250.0f);
+    Drag(150.0f, 350.0f, 350.0f, 350.0f);
+    Drag(500.0f, 350.0f, 700.0f, 350.0f);
+    ASSERT_EQ(Strokes(a), 2u);
+    ASSERT_EQ(Strokes(b), 2u);
+
+    // Down through the upper stroke of the one, along between the two
+    // rows, and up through the upper stroke of the other.
+    const auto across = [&](MouseButton button) {
+        Down(250.0f, 230.0f, button);
+        Move(250.0f, 300.0f);
+        Move(600.0f, 300.0f);
+        Move(600.0f, 230.0f);
+        Up(600.0f, 230.0f, button);
+        Pause();
+    };
+    // The right button's, across both: each upper stroke cut in two.
+    across(MouseButton::Right);
+    EXPECT_EQ(Strokes(a), 3u);
+    EXPECT_EQ(Strokes(b), 3u);
+    Undo();
+    EXPECT_EQ(Strokes(a), 2u);
+    EXPECT_EQ(Strokes(b), 2u) << "one undo for both";
+
+    // The eraser in hand, the same.
+    ASSERT_TRUE(editor_.Dispatch(Command{CommandId::EraserButton}));
+    across(MouseButton::Left);
+    EXPECT_EQ(Strokes(a), 3u);
+    EXPECT_EQ(Strokes(b), 3u);
+    Undo();
+
+    // The rectangle eraser over the lower strokes of both.
+    held_.ctrl = true;
+    Drag(120.0f, 330.0f, 720.0f, 370.0f);
+    held_.ctrl = false;
+    EXPECT_EQ(Strokes(a), 1u);
+    EXPECT_EQ(Strokes(b), 1u);
+    Undo();
+    EXPECT_EQ(Strokes(a), 2u);
+    EXPECT_EQ(Strokes(b), 2u);
+}
+
 // A double-click or a hold on one snippet of several selected enters
 // drawing mode on that one alone, as it always has.
 TEST_F(InteractionCasesTest, AHoldEntersDrawingModeOnOneSnippetOfSeveral) {

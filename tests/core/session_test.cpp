@@ -1204,6 +1204,44 @@ TEST(SessionTest, ASnippetSentAwayTakesItsHistoryWithIt) {
     EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
 }
 
+// A stroke drawn across two snippets is one step about both; one of them
+// sent away takes its part with it. Undone where it was drawn, the stroke
+// comes off the snippet still there and stays on the one sent. There, the
+// send is undone first, and back home the snippet's part is undone after.
+TEST(SessionTest, AStrokeAcrossTwoSnippetsSplitsWhenOneIsSentAway) {
+    Session session;
+    const CanvasId first = session.Manager().CurrentCanvasId();
+    const ItemId a = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const ItemId b = Model(session).CreateItem(false, Rect{120, 0, 100, 100}, "B");
+    session.LiveLayer().BeginStroke(StrokePoint{50.0f, 50.0f}, 0xFF0000FFu, 3.0f);
+    session.LiveLayer().ExtendStroke(StrokePoint{170.0f, 50.0f});
+    session.LiveLayer().EndStroke();
+    session.CommitLiveStroke({a, b});
+    ASSERT_EQ(ItemById(session.Manager(), a)->strokes.size(), 1u);
+    ASSERT_EQ(ItemById(session.Manager(), b)->strokes.size(), 1u);
+
+    const CanvasId second = session.AddCanvas("Second");
+    ASSERT_EQ(session.SendItemsTo({b}, second, /*copy=*/false).items.size(), 1u);
+    const std::optional<Session::UndoStep> here = session.Undo();
+    ASSERT_TRUE(here.has_value());
+    EXPECT_EQ(here->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(ItemById(session.Manager(), a)->strokes.empty());
+    EXPECT_EQ(ItemById(session.Manager(), b)->strokes.size(), 1u) << "sent away, with its part";
+
+    session.SwitchToCanvas(second);
+    const std::optional<Session::UndoStep> send = session.Undo();
+    ASSERT_TRUE(send.has_value());
+    EXPECT_EQ(send->what, Session::UndoWhat::Move);
+    EXPECT_FALSE(session.CanUndo()) << "its part went home with it";
+
+    session.SwitchToCanvas(first);
+    const std::optional<Session::UndoStep> home = session.Undo();
+    ASSERT_TRUE(home.has_value());
+    EXPECT_EQ(home->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(ItemById(session.Manager(), b)->strokes.empty());
+    EXPECT_FALSE(session.CanUndo());
+}
+
 // A group move whose snippets part ways is split between them: each part
 // is undone where its snippet is, and the part left behind still is.
 TEST(SessionTest, ASnippetSentAwayTakesItsPartOfAGroupMove) {

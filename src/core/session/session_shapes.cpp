@@ -32,15 +32,15 @@ std::vector<StrokePoint> ShapePoints(Session::Shape shape, float startX, float s
 }
 }  // namespace
 
-void Session::BeginShape(ItemId itemId, Shape shape, float screenX, float screenY, uint32_t colorRGBA,
-                         float widthScreenPx) {
+void Session::BeginShape(const std::vector<ItemId>& itemIds, Shape shape, float screenX, float screenY,
+                         uint32_t colorRGBA, float widthScreenPx) {
     if (!EndOpenGesture()) {
         return;
     }
-    if (Model().CurrentOrNull() == nullptr || Model().FindItemAnywhere(itemId) == nullptr) {
+    if (Model().CurrentOrNull() == nullptr || itemIds.empty() || Model().FindItemAnywhere(itemIds.front()) == nullptr) {
         return;
     }
-    shapeItemId_ = itemId;
+    shapeItems_ = itemIds;
     shape_ = shape;
     shapeStartX_ = shapeLastX_ = screenX;
     shapeStartY_ = shapeLastY_ = screenY;
@@ -50,7 +50,7 @@ void Session::BeginShape(ItemId itemId, Shape shape, float screenX, float screen
 }
 
 void Session::UpdateShape(float screenX, float screenY) {
-    if (!shapeItemId_.has_value()) {
+    if (shapeItems_.empty()) {
         return;
     }
     shapeLastX_ = screenX;
@@ -64,7 +64,7 @@ void Session::UpdateShape(float screenX, float screenY) {
 }
 
 void Session::SetShape(Shape shape) {
-    if (!shapeItemId_.has_value() || shape == shape_) {
+    if (shapeItems_.empty() || shape == shape_) {
         return;
     }
     shape_ = shape;
@@ -72,29 +72,29 @@ void Session::SetShape(Shape shape) {
 }
 
 void Session::EndShape(float screenX, float screenY) {
-    if (!shapeItemId_.has_value()) {
+    if (shapeItems_.empty()) {
         return;
     }
-    const ItemId itemId = *shapeItemId_;
-    shapeItemId_.reset();
+    const std::vector<ItemId> itemIds = std::move(shapeItems_);
+    shapeItems_.clear();
     CanvasState& live = liveLayer_;
     const float dx = screenX - shapeStartX_;
     const float dy = screenY - shapeStartY_;
-    if (!live.ActiveStroke().has_value() || Model().FindItemAnywhere(itemId) == nullptr ||
+    if (!live.ActiveStroke().has_value() || Model().FindItemAnywhere(itemIds.front()) == nullptr ||
         std::sqrt(dx * dx + dy * dy) < kMinShapeLengthPx) {
         live.CancelActiveStroke();
         return;
     }
     live.SetActiveStrokePoints(ShapePoints(shape_, shapeStartX_, shapeStartY_, screenX, screenY));
     live.EndStroke();
-    CommitLiveStroke(itemId);
+    CommitLiveStroke(itemIds);
 }
 
 void Session::CancelShape() {
-    if (!shapeItemId_.has_value()) {
+    if (shapeItems_.empty()) {
         return;
     }
-    shapeItemId_.reset();
+    shapeItems_.clear();
     liveLayer_.CancelActiveStroke();
 }
 

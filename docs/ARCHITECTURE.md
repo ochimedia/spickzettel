@@ -2162,9 +2162,14 @@ right-drag on it erases whatever tool is in hand, and a click anywhere
 else, a right click on the snippet, Escape or the lit tool pressed again
 leaves. A tool pressed on the bar over several selected snippets, or
 picked by key, enters the mode on every one of them, and a press on any
-draws on that one: the bar is over the whole selection, so what is
-pressed there is for all of it. Holding Alt picks the snippet up
-instead of drawing on it.
+draws: the bar is over the whole selection, so what is pressed there is
+for all of it. A mark is on every snippet in drawing mode it reaches -
+a stroke, a line or a rectangle kept whole by each its ink reaches, as
+one undo step, and the eraser erasing on all of them - since each draws
+the stroke in progress, and a stroke kept by the first alone vanished
+from the rest as it was let go (`docs/INTERACTIONS.md`, 6.5;
+`Session::CommitLiveStroke`). Holding Alt picks the snippet up instead
+of drawing on it.
 
 A right click or a hold on the Pen or the Eraser lists its shapes, the
 current one marked and the modifier that draws each beside it, so a hand

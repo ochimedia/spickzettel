@@ -14,8 +14,8 @@ struct SessionTestAccess {
     // resize, an erase, a shape or a note being typed - that nothing has
     // ended yet. A style edit is the Properties popover's, not the hand's.
     static bool HandGestureOpen(const Session& session) {
-        return session.placement_.has_value() || session.eraseItemId_.has_value() ||
-               session.shapeItemId_.has_value() || session.textEditItemId_.has_value();
+        return session.placement_.has_value() || session.erasing_ || !session.shapeItems_.empty() ||
+               session.textEditItemId_.has_value();
     }
     // Whether a frozen screen is held - see Session::FreezeScreen. Only
     // ever in edit mode (docs/OVERLAY_STATES.md, section 3).
