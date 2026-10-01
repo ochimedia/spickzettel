@@ -8,6 +8,7 @@
 #include "ui/view/canvas_bar.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 #include <optional>
@@ -61,10 +62,12 @@ bool Near(const std::optional<Rect>& rect, ImVec2 point, float slack) {
 }
 
 // A thumbnail is the screen in small, so it takes the display's shape -
-// held to sensible bounds for very wide or tall ones.
+// held to sensible bounds for very wide or tall ones. A whole number of
+// pixels, so the tiles and their outlines stay on the pixel grid (16:9 of
+// 64 is 113.8).
 float TileWidth(float displayW, float displayH) {
     const float aspect = displayH > 0.0f ? std::clamp(displayW / displayH, 1.0f, 2.4f) : 16.0f / 9.0f;
-    return Px(kBarTileHeight) * aspect;
+    return std::round(Px(kBarTileHeight) * aspect);
 }
 }  // namespace
 
@@ -160,7 +163,7 @@ void CanvasBar::Update(float displayW, float displayH, bool menuUp) {
         const float height = Px(kBarTileHeight) + Px(kBarPadding) * 2.0f;
         const float outY = displayH - Px(kDockMarginPx) - height;
         const float y = displayH + (outY - displayH) * Ease(canvasBarReveal_.amount);
-        canvasBarRect_ = Rect{(displayW - width) * 0.5f, y, width, height};
+        canvasBarRect_ = Rect{std::round((displayW - width) * 0.5f), y, width, height};
         bottomTop = y;
     }
 
@@ -296,9 +299,9 @@ void CanvasBar::Draw(float displayW, float displayH) {
             ImGui::EndDragDropTarget();
         }
         const bool isCurrent = canvas->id == currentId;
-        dl->AddRect(tileMin, tileMax,
-                    ImGui::GetColorU32(isCurrent ? theme::Accent() : hovered ? theme::kGraphite200 : theme::kGraphite500),
-                    Px(3.0f), 0, isCurrent ? Px(2.0f) : 1.0f);
+        AddInnerOutline(dl, tileMin, tileMax,
+                        ImGui::GetColorU32(isCurrent ? theme::Accent() : hovered ? theme::kGraphite200 : theme::kGraphite500),
+                        Px(3.0f), isCurrent ? PxWhole(2.0f) : 1.0f);
         // Not while a tile is being dragged, whose own name follows the
         // pointer instead.
         if (hovered && !dragging) {

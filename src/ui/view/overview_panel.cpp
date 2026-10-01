@@ -671,17 +671,17 @@ void OverviewPanel::RenderCanvasGrid(float displayW, float displayH, const ViewH
         const bool isActive = c.id == currentCanvasId;
         if (deleted) {
             drawList->AddRectFilled(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDangerSoft), Px(4.0f));
-            drawList->AddRect(thumbMin, thumbMax, ImGui::GetColorU32(theme::kDanger), Px(4.0f), ImDrawFlags_None,
-                              PxWhole(2.0f));
+            AddInnerOutline(drawList, thumbMin, thumbMax, ImGui::GetColorU32(theme::kDanger), Px(4.0f),
+                            PxWhole(2.0f));
         } else {
             // The preview's own pictures are drawn at full strength whatever
             // the style's alpha, so a dimmed tile is dimmed by a veil.
             if (dimmed) {
                 drawList->AddRectFilled(thumbMin, thumbMax, IM_COL32(14, 16, 20, 150), Px(4.0f));
             }
-            drawList->AddRect(thumbMin, thumbMax,
-                               ImGui::GetColorU32(isActive ? theme::Accent() : ImVec4(0.275f, 0.298f, 0.345f, 1.0f)),
-                               Px(4.0f), ImDrawFlags_None, isActive ? PxWhole(2.0f) : 1.0f);
+            AddInnerOutline(drawList, thumbMin, thumbMax,
+                            ImGui::GetColorU32(isActive ? theme::Accent() : ImVec4(0.275f, 0.298f, 0.345f, 1.0f)),
+                            Px(4.0f), isActive ? PxWhole(2.0f) : 1.0f);
         }
 
         // A tile is where a snippet being sent somewhere goes, or else the

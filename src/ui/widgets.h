@@ -100,6 +100,13 @@ bool PanelBackdrop(const char* windowId, float displayW, float displayH);
 ImDrawList* BeginScreenLayer(const char* id, float displayW, float displayH);
 void EndScreenLayer();
 
+// An outline `thickness` whole pixels wide, inside [min, max]. AddRect
+// centers its stroke half a pixel in from the rect's edges, which suits a
+// one-pixel line; a wider one would hang out over the edges - cut off
+// where the rect's own clip ends - and blur across a pixel more on either
+// side. Here it is moved in to match its width.
+void AddInnerOutline(ImDrawList* drawList, ImVec2 min, ImVec2 max, ImU32 color, float rounding, float thickness);
+
 // The two directions between ImGui's key enum and platform::KeyCombo,
 // which is what both key editors (the Settings tab's hotkeys, the
 // Shortcuts tab's tool bindings) and the shortcut handler need.
