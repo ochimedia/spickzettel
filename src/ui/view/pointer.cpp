@@ -307,9 +307,8 @@ void Pointer::DrawSoftwareCursor() const {
         drawList->AddConvexPolyFilled(shadow, static_cast<int>(std::size(shadow)), kShadow);
         drawList->AddConvexPolyFilled(body, static_cast<int>(std::size(body)), kFill);
         drawList->AddConvexPolyFilled(nibShape, static_cast<int>(std::size(nibShape)), kFill);
-        drawList->AddPolyline(body, static_cast<int>(std::size(body)), kEdge, ImDrawFlags_Closed, outline);
-        drawList->AddPolyline(nibShape, static_cast<int>(std::size(nibShape)), kEdge, ImDrawFlags_Closed,
-                              outline);
+        drawList->AddPolyline(body, static_cast<int>(std::size(body)), kEdge, outline, ImDrawFlags_Closed);
+        drawList->AddPolyline(nibShape, static_cast<int>(std::size(nibShape)), kEdge, outline, ImDrawFlags_Closed);
         return;
     }
 
@@ -348,7 +347,7 @@ void Pointer::DrawSoftwareCursor() const {
     }
     drawList->AddConvexPolyFilled(shadow, 7, kShadow);
     drawList->AddConvexPolyFilled(arrow, 7, kFill);
-    drawList->AddPolyline(arrow, 7, kEdge, ImDrawFlags_Closed, 1.4f * scale);
+    drawList->AddPolyline(arrow, 7, kEdge, 1.4f * scale, ImDrawFlags_Closed);
 }
 
 // Feedback for the mouse wheel's size change, which otherwise altered the

@@ -175,7 +175,7 @@ void EndScreenLayer() {
 void AddInnerOutline(ImDrawList* drawList, ImVec2 min, ImVec2 max, ImU32 color, float rounding, float thickness) {
     const float inset = (thickness - 1.0f) * 0.5f;
     drawList->AddRect(ImVec2(min.x + inset, min.y + inset), ImVec2(max.x - inset, max.y - inset), color, rounding,
-                      ImDrawFlags_None, thickness);
+                      thickness);
 }
 
 // An icon+text button in the given colors - the .btn equivalent (icon

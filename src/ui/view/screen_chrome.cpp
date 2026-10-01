@@ -477,8 +477,7 @@ void ScreenChrome::DrawEditModeBorder(ImDrawList* drawList, float displayW, floa
     }
     const float half = Cfg().editModeBorderWidthPx * 0.5f;
     drawList->AddRect(ImVec2(half, half), ImVec2(displayW - half, displayH - half),
-                       ToImColor(Cfg().editModeBorderColorRGBA), 0.0f, ImDrawFlags_None,
-                       Cfg().editModeBorderWidthPx);
+                       ToImColor(Cfg().editModeBorderColorRGBA), 0.0f, Cfg().editModeBorderWidthPx);
 }
 
 // The things that belong over the canvas rather than in it, each in

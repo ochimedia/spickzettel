@@ -84,7 +84,7 @@ void DrawIcon(ImDrawList* drawList, const Icon& icon, ImVec2 pos, float size, Im
             case IconOp::EndSubpath:
                 if (pathOpen) {
                     DropRepeatedPathPoints(drawList->_Path);
-                    drawList->PathStroke(color, ImDrawFlags_None, scaledThickness);
+                    drawList->PathStroke(color, scaledThickness);
                     pathOpen = false;
                 }
                 break;

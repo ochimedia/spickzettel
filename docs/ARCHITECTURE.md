@@ -2963,8 +2963,13 @@ Every border is drawn inside the snippet's rect on whole pixels
 - Overlapping widgets resolve first-submitted-wins: `ItemHoverable` sets
   the hovered id once per frame and every later widget over the same
   point returns false.
-- `AddRect`'s order is `(min, max, col, rounding, thickness, flags)`; a
-  flag in the thickness slot compiles and draws garbage.
+- `AddRect`'s order is `(min, max, col, rounding, thickness, flags)`, and
+  `AddPolyline`'s and `PathStroke`'s put thickness before flags too; a
+  flag in the thickness slot compiles and draws garbage. 1.92.8 swapped
+  them and keeps the old order working through obsolete overloads, which
+  a later version drops - so the old order compiles silently and is
+  wrong all the same. `IMGUI_DISABLE_OBSOLETE_FUNCTIONS` would turn it
+  into an error, but the test engine still calls the old order.
 - `AddLine` and `AddRect` move their points half a pixel: `AddLine` to
   the center of the pixel at the coordinates it is given, `AddRect` half
   a pixel in from each edge. That is right for a one-pixel line on whole

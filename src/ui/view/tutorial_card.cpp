@@ -107,7 +107,7 @@ void CheckMark() {
     const ImVec2 points[] = {ImVec2(at.x + size * 0.15f, at.y + size * 0.55f),
                              ImVec2(at.x + size * 0.40f, at.y + size * 0.80f),
                              ImVec2(at.x + size * 0.85f, at.y + size * 0.20f)};
-    drawList->AddPolyline(points, 3, ImGui::GetColorU32(theme::kTutorialHighlight), ImDrawFlags_None, Px(2.0f));
+    drawList->AddPolyline(points, 3, ImGui::GetColorU32(theme::kTutorialHighlight), Px(2.0f));
 }
 
 }  // namespace
@@ -841,7 +841,7 @@ void TutorialCard::DrawList() {
             const bool pressed = ImGui::InvisibleButton(id.c_str(), ImVec2(cellW, rowH));
             if (status == Status::Running) {
                 drawList->AddRect(start, end, ImGui::GetColorU32(theme::kTutorialHighlight), Px(6.0f),
-                                  ImDrawFlags_None, Px(1.5f));
+                                  Px(1.5f));
             }
             if (ImGui::IsItemHovered()) {
                 drawList->AddRectFilled(start, end, ImGui::GetColorU32(theme::kHoverWash), Px(6.0f));
@@ -906,8 +906,8 @@ void TutorialCard::DrawSpotlight() {
     const ImVec2 min(spot->min.x - pad, spot->min.y - pad);
     const ImVec2 max(spot->max.x + pad, spot->max.y + pad);
     ImDrawList* drawList = ImGui::GetForegroundDrawList();
-    drawList->AddRect(min, max, ImGui::GetColorU32(glow), Px(10.0f), ImDrawFlags_None, Px(12.0f));
-    drawList->AddRect(min, max, ImGui::GetColorU32(ring), Px(10.0f), ImDrawFlags_None, Px(5.0f));
+    drawList->AddRect(min, max, ImGui::GetColorU32(glow), Px(10.0f), Px(12.0f));
+    drawList->AddRect(min, max, ImGui::GetColorU32(ring), Px(10.0f), Px(5.0f));
 }
 
 }  // namespace sz::ui
