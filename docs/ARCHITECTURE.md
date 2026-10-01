@@ -659,7 +659,10 @@ A snippet is made at least that size too. A framing drag is kept when
 it reaches 24 px corner to corner (`kRegionMinSize`), however thin,
 where it had to reach 24 px on both sides, and a side under the floor
 grows to it about its middle, so what was framed stays centered and the
-picture is captured at the size it is shown at. Before, a frame between
+picture is captured at the size it is shown at. Grown past the screen's
+edge, it is moved back on: the capture is of the screen, and of a frame
+at the very top 4 px tall it kept the 10 rows on screen and showed them
+16 px tall (found in review on 2026-10-01). Before, a frame between
 24 px and the floor was made at its own size and then shown at the
 floor's by the display sync, which floors every rect every frame - with
 a picture captured smaller than it was shown.

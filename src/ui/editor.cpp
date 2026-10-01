@@ -580,7 +580,9 @@ ItemId Editor::CreateRegionItem(ItemCreationKind kind, Rect rect) {
     // that is meant is kept however thin: a line of text is a fine thing
     // to capture. Under the smallest snippet on a side it grows to it,
     // about its middle, so what was framed stays in the middle of it -
-    // and is captured and stored at the size it is shown at.
+    // and is captured and stored at the size it is shown at, which holds
+    // only while all of it is on the screen: grown about the middle of a
+    // frame at the screen's edge, it is moved back on.
     if (std::hypot(rect.w, rect.h) < kRegionMinSize) {
         return 0;
     }
@@ -591,6 +593,10 @@ ItemId Editor::CreateRegionItem(ItemCreationKind kind, Rect rect) {
     if (rect.h < kItemMinHeight) {
         rect.y -= (kItemMinHeight - rect.h) * 0.5f;
         rect.h = kItemMinHeight;
+    }
+    if (displayW_ > 0.0f && displayH_ > 0.0f) {
+        rect.x = std::clamp(rect.x, 0.0f, std::max(0.0f, displayW_ - rect.w));
+        rect.y = std::clamp(rect.y, 0.0f, std::max(0.0f, displayH_ - rect.h));
     }
     const Canvas* canvas = EnsureCanvasForNewItem();
     if (canvas == nullptr) {

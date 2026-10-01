@@ -515,6 +515,19 @@ TEST_F(InteractionCasesTest, AThinDragMakesASnippetOfTheSmallestHeight) {
     EXPECT_FLOAT_EQ(made.y + made.h * 0.5f, 203.0f) << "grown about its middle";
 }
 
+// Grown about its middle, a thin frame at the screen's edge would reach
+// past it, where there is nothing to capture.
+TEST_F(InteractionCasesTest, AThinDragAtTheScreensEdgeIsGrownOntoTheScreen) {
+    const size_t before = Items().size();
+    held_.ctrl = true;
+    Drag(100.0f, 0.0f, 400.0f, 4.0f);
+    held_.ctrl = false;
+    ASSERT_EQ(Items().size(), before + 1);
+    const Rect made = Items().back().rect;
+    EXPECT_FLOAT_EQ(made.y, 0.0f);
+    EXPECT_FLOAT_EQ(made.h, kItemMinHeight);
+}
+
 // ===== Resizing =====
 
 // A selected snippet's resize band is just outside it, over whatever is
