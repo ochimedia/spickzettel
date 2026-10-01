@@ -87,18 +87,22 @@ private:
     // An item's content, its in-progress stroke (`drawing`: it is the
     // snippet in drawing mode, whose stroke in flight is on the live layer)
     // and its border, into the items layer's draw list - see the definition.
+    // `selected`: the selection's outline is its border, drawn over every
+    // snippet by PaintSelectionOutline, and this one draws none.
     void PaintItemBody(ImDrawList* drawList, const core::Item& item, bool drawing, bool highlighted,
-                       bool isFrontmost);
+                       bool isFrontmost, bool selected);
     // What a selected snippet wears while the selection is live, *drawn*:
-    // an accent outline and, unless it is fullscreen, its eight handles.
+    // its border in the accent and, unless it is fullscreen, its eight
+    // handles.
     // Nothing in it takes input. Which of it is under the pointer is
     // ResolvePointerTarget's answer, what the pointer looks like over it
     // is RenderItems', and a press on any of it is the recognizer's -
     // so nothing over the canvas is hit-tested by ImGui at all - see
     // docs/ARCHITECTURE.md, "Selection", for why that rule is absolute.
-    // `drawing`: the snippet is in drawing mode, and wears the stronger
-    // outline that says so.
-    void PaintSelectionOutline(ImDrawList* drawList, const core::Item& item, bool drawing);
+    // `drawing`: the snippet is in drawing mode, and wears the halo that
+    // says so. `highlighted`: the border is the heavier one, as any
+    // snippet's is under the pointer.
+    void PaintSelectionOutline(ImDrawList* drawList, const core::Item& item, bool drawing, bool highlighted);
     // The selection bar: its buttons on a small pill floating over
     // the selection's bounding box (see LayoutBar in selection_layout.h
     // for where exactly). `hotButton` is the button the

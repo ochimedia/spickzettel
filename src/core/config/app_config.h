@@ -168,7 +168,8 @@ struct AppConfig {
     // non-minimized item in Canvas::items, the one painted over all the
     // others. Depth is shown by color and hover by a thicker border, so
     // the two cues don't compete for one channel. A selected snippet's
-    // outline and handles are drawn in the accent, over these.
+    // border is the accent instead, as heavy as these are (see
+    // CanvasView::PaintSelectionOutline).
     uint32_t itemBorderColorFrontRGBA = 0xF5F7F96E;   // white, ~43%
     uint32_t itemBorderColorOtherRGBA = 0xF5F7F93C;   // white, ~24%
     // A pinned snippet's border (Item::pinned), in place of whichever of the

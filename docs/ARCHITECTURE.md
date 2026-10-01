@@ -2856,6 +2856,41 @@ landing where it was, so it cannot be hidden permanently under a snippet
 that is never moved again. It needs no special handling for capture,
 which leaves the whole overlay out (see "Screen capture").
 
+### A snippet's border: one line, color by state, weight by pointer
+
+Every snippet wears one border, and it says two things, each in a
+channel of its own:
+
+- **Its color says what the snippet is.** In order:
+  - selected, in the accent;
+  - pinned;
+  - in front;
+  - the rest.
+
+  The colors are settings (`appearance.snippetColors`).
+- **Its weight says where the pointer is.** It is heavier on the
+  snippet under the pointer, or the one being dragged, resized or drawn
+  into, whatever its color.
+
+Drawing mode adds a faint halo a few pixels out, rather than a heavier
+line, since weight already means the pointer.
+
+**Changed on 2026-10-01: the selection's outline replaces the border.**
+It used to be drawn over the border. A tester reported the colors
+"mixed" on a selected snippet under the pointer. Hover had thickened the
+border underneath to 3 px, while the selection's outline stayed at 2 px.
+The border's color (white at about 43%) then showed as a band inside the
+accent, and both lines were half a pixel off, so the two blended into a
+pixel of neither color. Now the selected snippet's border is the
+selection's, drawn with the selection over every snippet, and its weight
+follows the same rule as any border's (`BorderThickness`).
+
+What is lost is a pinned snippet's color while it is selected. The bar
+says it instead: its Pin button is lit for a pinned selection.
+
+Every border is drawn inside the snippet's rect on whole pixels
+(`AddInnerOutline`); see the next section.
+
 ### ImGui gotchas worth knowing before touching this code
 
 - `##` hides an id from the display; only `###` detaches it from the
@@ -2889,6 +2924,16 @@ which leaves the whole overlay out (see "Screen capture").
   point returns false.
 - `AddRect`'s order is `(min, max, col, rounding, thickness, flags)`; a
   flag in the thickness slot compiles and draws garbage.
+- `AddLine` and `AddRect` move their points half a pixel: `AddLine` to
+  the center of the pixel at the coordinates it is given, `AddRect` half
+  a pixel in from each edge. That is right for a one-pixel line on whole
+  coordinates and wrong for anything else. A line placed by its own
+  center lands half a pixel off, across two columns; that was the
+  selection bar's divider until 2026-10-01. A wider rect outline hangs
+  out over the rect, blurs over a pixel more on either side, and is cut
+  where a clip ends at the rect; that was the dock's last tile.
+  `AddInnerOutline` draws an outline of any whole width inside its rect,
+  and a line of a stated width is a filled rect.
 - `WindowRounding` feeds a window's *minimum height*; a pill value of
   999 is safe only for frame and grab rounding.
 - A popup's id is scoped to the window current at `OpenPopup`/

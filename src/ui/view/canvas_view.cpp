@@ -7,6 +7,7 @@
 #include <iterator>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ui/icons_generated.h"
@@ -69,6 +70,16 @@ PaintHooks CanvasView::Hooks() const {
 }
 
 namespace {
+
+// An item's rect on whole pixels, where its border is drawn.
+std::pair<ImVec2, ImVec2> WholePixelRect(const Item& item) {
+    return {ImVec2(std::round(item.rect.x), std::round(item.rect.y)),
+            ImVec2(std::round(item.rect.x + item.rect.w), std::round(item.rect.y + item.rect.h))};
+}
+
+// How heavy a snippet's border is - one rule, whatever its color, so the
+// selection's border and the one it replaces always agree.
+float BorderThickness(bool highlighted) { return PxWhole(highlighted ? 3.0f : 2.0f); }
 
 // A border (drawn with real content, so it can't be color-keyed away like
 // the background) plus a status line of live state. Useful for confirming
@@ -248,7 +259,8 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
         if (Manager().IsDeleted(canvas, item)) {
             continue;  // deleted: hidden until it is restored
         }
-        PaintItemBody(drawList, item, editor_.IsDrawingOn(item.id), highlightId == item.id, frontmostId == item.id);
+        PaintItemBody(drawList, item, editor_.IsDrawingOn(item.id), highlightId == item.id, frontmostId == item.id,
+                      editor_.SelectionLive() && editor_.IsSelected(item.id));
         if (itemsInteractive && editor_.EditingNote() == item.id) {
             editingItem = &item;
             editingMin = ImVec2(std::round(item.rect.x), std::round(item.rect.y));
@@ -262,7 +274,7 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
         for (const ItemId id : editor_.Selection()) {
             for (const Item& item : canvas.items) {
                 if (item.id == id) {
-                    PaintSelectionOutline(drawList, item, editor_.IsDrawingOn(id));
+                    PaintSelectionOutline(drawList, item, editor_.IsDrawingOn(id), highlightId == id);
                     break;
                 }
             }
@@ -312,7 +324,7 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
 // An item's content, the stroke being drawn into it, and its border, into
 // `drawList` at the item's own (unrounded) rect.
 void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool drawing,
-                               bool highlighted, bool isFrontmost) {
+                               bool highlighted, bool isFrontmost, bool selected) {
     const ImVec2 pMin(item.rect.x, item.rect.y);
     const ImVec2 pMax(item.rect.x + item.rect.w, item.rect.y + item.rect.h);
     drawList->PushClipRect(pMin, pMax, true);
@@ -377,45 +389,42 @@ void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
     // goes below 2px - on this backend a 1px-thick AddRect rendered nothing
     // at all, while 2px rendered reliably at any alpha.
     //
-    // Inset by half the stroke's own thickness on every side - an AddRect
-    // stroke is centered on the coordinates it's given, so drawing it at
-    // pMin/pMax directly would bleed past them on the outside.
-    //
     // A pinned snippet wears a third color instead, and always has a
     // border (see AppConfig::itemBorderColorPinnedRGBA): pins are acted on
     // only when the overlay is put away, so this is what says in edit mode
     // which snippets will stay behind.
-    if (item.pinned || isFrontmost || Cfg().showItemBorders || highlighted) {
-        const float thickness = PxWhole(highlighted ? 3.0f : 2.0f);
-        const float half = thickness * 0.5f;
-        const ImVec2 borderMin(pMin.x + half, pMin.y + half);
-        const ImVec2 borderMax(pMax.x - half, pMax.y - half);
+    //
+    // A selected one wears the accent, drawn with the selection over every
+    // snippet (PaintSelectionOutline) - and nothing here, so that a
+    // snippet has one border in one color, whatever it is. Drawn under the
+    // selection's as well, a heavier hovered border showed past the edge of
+    // the selection's thinner one, two colors side by side.
+    if (!selected && (item.pinned || isFrontmost || Cfg().showItemBorders || highlighted)) {
         const uint32_t colorRGBA = item.pinned    ? Cfg().itemBorderColorPinnedRGBA
                                    : isFrontmost ? Cfg().itemBorderColorFrontRGBA
                                                  : Cfg().itemBorderColorOtherRGBA;
-        drawList->AddRect(borderMin, borderMax, ToImColor(colorRGBA), 0.0f, thickness, ImDrawFlags_None);
+        const auto [borderMin, borderMax] = WholePixelRect(item);
+        AddInnerOutline(drawList, borderMin, borderMax, ToImColor(colorRGBA), 0.0f, BorderThickness(highlighted));
     }
 }
 
-// What a selected snippet wears, drawn: an accent outline over its own
-// border, and its eight handles - white squares with an accent edge, so
-// they read on a dark screenshot and on a pale note alike. A fullscreen
-// snippet has nowhere to be resized to and gets the outline alone. In
-// drawing mode the outline is heavier and wears a second, fainter line a
-// few pixels out - a halo that says this one is open for drawing, and is
-// what a double-click visibly changes. Nothing here takes input: which of
-// it is under the pointer is ResolvePointerTarget's answer, and a press on
+// What a selected snippet wears, drawn: its border, in the accent - the
+// one it has while selected (see PaintItemBody), as heavy as any
+// snippet's under the pointer - and its eight handles, white squares with
+// an accent edge, so they read on a dark screenshot and on a pale note
+// alike. A fullscreen snippet has nowhere to be resized to and gets the
+// border alone. In drawing mode it wears a second, fainter line a few
+// pixels out - a halo that says this one is open for drawing, and is what
+// a double-click visibly changes. Nothing here takes input: which of it
+// is under the pointer is ResolvePointerTarget's answer, and a press on
 // it is the recognizer's (RecognizePress).
-void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing) {
-    const ImVec2 pMin(std::round(item.rect.x), std::round(item.rect.y));
-    const ImVec2 pMax(std::round(item.rect.x + item.rect.w), std::round(item.rect.y + item.rect.h));
-    const float outline = PxWhole(drawing ? 3.0f : 2.0f);
-    drawList->AddRect(ImVec2(pMin.x + outline * 0.5f, pMin.y + outline * 0.5f),
-                      ImVec2(pMax.x - outline * 0.5f, pMax.y - outline * 0.5f), theme::AccentU32(), 0.0f, outline);
+void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing, bool highlighted) {
+    const auto [pMin, pMax] = WholePixelRect(item);
+    AddInnerOutline(drawList, pMin, pMax, theme::AccentU32(), 0.0f, BorderThickness(highlighted));
     if (drawing) {
         const float haloGap = PxWhole(4.0f);
-        drawList->AddRect(ImVec2(pMin.x - haloGap, pMin.y - haloGap), ImVec2(pMax.x + haloGap, pMax.y + haloGap),
-                          theme::AccentU32(120), 0.0f, PxWhole(2.0f));
+        AddInnerOutline(drawList, ImVec2(pMin.x - haloGap, pMin.y - haloGap),
+                        ImVec2(pMax.x + haloGap, pMax.y + haloGap), theme::AccentU32(120), 0.0f, PxWhole(2.0f));
     }
     if (item.isFullscreen) {
         return;
@@ -423,9 +432,7 @@ void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, b
     for (const HandleSpec& h : HandleSpecs(item.rect)) {
         const HitRect rect = HandleDrawRect(h.center);
         drawList->AddRectFilled(Im(rect.min), Im(rect.max), ImGui::GetColorU32(theme::kWhite));
-        const float edge = PxWhole(2.0f);
-        drawList->AddRect(ImVec2(rect.min.x + edge * 0.5f, rect.min.y + edge * 0.5f),
-                          ImVec2(rect.max.x - edge * 0.5f, rect.max.y - edge * 0.5f), theme::AccentU32(), 0.0f, edge);
+        AddInnerOutline(drawList, Im(rect.min), Im(rect.max), theme::AccentU32(), 0.0f, PxWhole(2.0f));
     }
 }
 

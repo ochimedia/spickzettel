@@ -606,7 +606,7 @@
   "appearance.imageFilterBicubic": "Bicubic",
   "appearance.imageFilterLanczos": "Lanczos",
   "appearance.snippetColorsHeading": "Snippet colors",
-  "appearance.snippetColorsHelp": "Which snippet is on top, in color: the frontmost one is drawn in its own border color, everything behind it in the other.\n\nAlpha is part of each color - a border you can see more of the screen through is how you make the snippets behind recede.\n\nHovering is shown separately, as a thicker border, so it never reads as \"this one is in front\". A selected snippet's outline and handles are drawn in the accent color.\n\nA pinned snippet's border is always drawn, in its own color: those are the snippets that stay on screen when the overlay is put away.",
+  "appearance.snippetColorsHelp": "Which snippet is on top, in color: the frontmost one is drawn in its own border color, everything behind it in the other.\n\nAlpha is part of each color - a border you can see more of the screen through is how you make the snippets behind recede.\n\nHovering is shown separately, as a thicker border, so it never reads as \"this one is in front\". A selected snippet's border is drawn in the accent color instead.\n\nA pinned snippet's border is always drawn, in its own color: those are the snippets that stay on screen when the overlay is put away.",
   "appearance.frontmostBorder": "Frontmost border",
   "appearance.otherBorders": "Other borders",
   "appearance.pinnedBorder": "Pinned border",
