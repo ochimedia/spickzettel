@@ -342,16 +342,6 @@ bool Editor::IsDrawingOn(ItemId id) const {
 
 bool Editor::InDrawingMode() const { return machine_.As<DrawingMode>(Level::Mode) != nullptr; }
 
-DrawShape Editor::PenShape() const {
-    const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
-    return drawing != nullptr ? drawing->PenShape() : DrawShape::Freehand;
-}
-
-DrawShape Editor::EraserShape() const {
-    const DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
-    return drawing != nullptr ? drawing->EraserShape() : DrawShape::Freehand;
-}
-
 void Editor::PutDownCreationTool() {
     if (machine_.As<CreationTool>(Level::Mode) != nullptr) {
         machine_.End(Level::Mode);

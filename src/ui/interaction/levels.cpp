@@ -11,14 +11,6 @@ bool DrawingMode::Holds(core::ItemId item) const {
     return std::find(items_.begin(), items_.end(), item) != items_.end();
 }
 
-void DrawingMode::SetTool(core::Tool tool) {
-    if (tool != tool_) {
-        penShape_ = core::DrawShape::Freehand;
-        eraserShape_ = core::DrawShape::Freehand;
-    }
-    tool_ = tool;
-}
-
 Answer DrawingMode::Offer(const Event& event, Editor& editor) {
     switch (event.kind) {
         case EventKind::KeyDown: {

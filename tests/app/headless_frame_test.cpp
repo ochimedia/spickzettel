@@ -2224,9 +2224,9 @@ TEST_F(HeadlessAppTest, TheDrawingBarSwitchesTheToolAndOpensTheColor) {
 }
 
 // A shape picked from the menu of the pen's or the eraser's button is
-// what a plain drag makes, until another tool is picked, which puts the
-// shape back - and so does the tool put down.
-TEST_F(HeadlessAppTest, AShapeIsTheToolsUntilAnotherToolIsPicked) {
+// what a plain drag makes, until another shape is picked: the other tool
+// in hand keeps it, and so does drawing mode left and entered again.
+TEST_F(HeadlessAppTest, AShapeIsKeptUntilAnotherIsPicked) {
     ShowEditMode();
     StepFrame();
     MakeADrawing(100.0f, 100.0f, 700.0f, 600.0f);
@@ -2259,19 +2259,22 @@ TEST_F(HeadlessAppTest, AShapeIsTheToolsUntilAnotherToolIsPicked) {
     Drag(120.0f, 120.0f, 650.0f, 580.0f);
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u) << "the rectangle took all three";
 
-    clickBar(ChromeButton::Pen);
-    EXPECT_EQ(App().ActiveTool(), Tool::Draw);
     controller_->Overlay().Dispatch(Command{CommandId::PickLine});
     clickBar(ChromeButton::Eraser);
-    EXPECT_EQ(App().EraserShape(), DrawShape::Freehand) << "back to plain with the tool change";
+    EXPECT_EQ(App().ActiveTool(), Tool::Erase);
+    EXPECT_EQ(App().EraserShape(), DrawShape::Rectangle) << "kept through the pen in hand";
     clickBar(ChromeButton::Pen);
-    EXPECT_EQ(App().PenShape(), DrawShape::Freehand) << "and so is the pen";
+    EXPECT_EQ(App().PenShape(), DrawShape::Line) << "and the pen's through the eraser";
+    Drag(150.0f, 150.0f, 400.0f, 300.0f);
+    ASSERT_EQ(StrokeCountOnCurrentCanvas(), 1u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].strokes[0].points.size(), 2u) << "a line";
 
-    controller_->Overlay().Dispatch(Command{CommandId::PickLine});
     clickBar(ChromeButton::Pen);
     ASSERT_FALSE(App().InDrawingMode()) << "put down";
+    EXPECT_EQ(App().PenShape(), DrawShape::Line) << "the button still wears the line";
     clickBar(ChromeButton::Pen);
-    EXPECT_EQ(App().PenShape(), DrawShape::Freehand) << "and picked up again, plain";
+    ASSERT_TRUE(App().InDrawingMode());
+    EXPECT_EQ(App().PenShape(), DrawShape::Line) << "and picked up again, a line";
 }
 
 // ===== A hold stands in for a double-click, for a finger or a pen =====

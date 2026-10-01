@@ -307,11 +307,15 @@ public:
     // in hand after it.
     void PutDownCreationTool();
     // What the pen draws and the eraser erases on a plain drag, with no
-    // modifier held - see DrawingMode::PenShape. So a hand with no keyboard
+    // modifier held: picked from the menu of the tool's bar button - pen,
+    // line, rectangle; eraser, rectangle eraser. So a hand with no keyboard
     // can draw a line with a drag alone; a modifier held still wins for
-    // that stroke. Plain outside drawing mode.
-    DrawShape PenShape() const;
-    DrawShape EraserShape() const;
+    // that stroke. Each is kept until another is picked - through another
+    // tool in hand, and drawing mode left and entered again - for as long
+    // as the app runs: a shape is how the hand is drawing now, which the
+    // next start need not remember, as it does not remember the tool.
+    DrawShape PenShape() const { return penShape_; }
+    DrawShape EraserShape() const { return eraserShape_; }
     // The shape a Draw or Erase press would make now: the modifiers' if
     // one is held (see DrawShapeFor), else the shape picked from the tool's
     // menu on the bar. What a stroke fixes at its press and the modifier
@@ -594,6 +598,8 @@ private:
     uint32_t drawColorRGBA_;
     float drawWidth_;
     float eraserWidth_ = 28.0f;
+    DrawShape penShape_ = DrawShape::Freehand;
+    DrawShape eraserShape_ = DrawShape::Freehand;  // Freehand or Rectangle
 
     std::optional<ItemId> editingNoteItemId_;
     std::string noteEditBuffer_;

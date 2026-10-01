@@ -658,13 +658,14 @@ void Popups::RenderShapeMenu() {
 }
 
 void Popups::BuildShapeMenuRows(Tool tool, std::vector<ContextMenuEntry>& rows) const {
-    const bool inHand = editor_.ActiveTool() == tool;
+    // The tool's shape is marked whether or not it is in hand: it is kept
+    // (see Editor::PenShape), and the button wears its icon either way.
     const DrawShape shape = tool == Tool::Draw ? editor_.PenShape() : editor_.EraserShape();
     const auto add = [&](CommandId id, const char* widgetId, const Icon* icon, const char* label, DrawShape drawn,
                          const char* keys) {
         ContextMenuEntry row = MenuRow(Command{id}, widgetId, icon, label);
         row.shortcut = keys;
-        row.current = inHand && shape == drawn;
+        row.current = shape == drawn;
         rows.push_back(std::move(row));
     };
     if (tool == Tool::Draw) {

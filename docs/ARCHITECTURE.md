@@ -2119,10 +2119,18 @@ else, a right click on the snippet, Escape or the lit tool pressed again
 leaves. A tool pressed on the bar over several selected snippets, or
 picked by key, enters the mode on every one of them, and a press on any
 draws on that one: the bar is over the whole selection, so what is
-pressed there is for all of it. A right click or a hold on the Pen or the Eraser lists its
-shapes, the one in hand marked and the modifier that draws each beside
-it, so a hand with no keyboard can draw a line with a plain drag. Holding
-Alt picks the snippet up instead of drawing on it.
+pressed there is for all of it. Holding Alt picks the snippet up
+instead of drawing on it.
+
+A right click or a hold on the Pen or the Eraser lists its shapes, the
+current one marked and the modifier that draws each beside it, so a hand
+with no keyboard can draw a line with a plain drag. The shape picked is
+kept until another is - through the other tool in hand, and drawing mode
+left and entered again - and the button wears its icon throughout. It
+used to go back to the plain pen and eraser at either, which had a hand
+drawing boxes pick Rectangle again after every correction with the
+eraser. It is kept for the session only, like the tool in hand: it is
+how the hand is drawing now, not a setting.
 
 There is one bar, whatever the mode: the drawing tools, a divider, then
 what is done to the snippet (Pin, More, Minimize, Fullscreen, Close).

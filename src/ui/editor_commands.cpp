@@ -403,14 +403,10 @@ void Editor::Run(const Command& command, Filing filing) {
 
 void Editor::PickShape(Tool tool, DrawShape shape) {
     PickTool(tool);
-    DrawingMode* drawing = machine_.As<DrawingMode>(Level::Mode);
-    if (drawing == nullptr) {
-        return;  // nothing to draw on
-    }
     if (tool == Tool::Draw) {
-        drawing->SetPenShape(shape);
+        penShape_ = shape;
     } else {
-        drawing->SetEraserShape(shape);
+        eraserShape_ = shape;
     }
 }
 

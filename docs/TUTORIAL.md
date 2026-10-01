@@ -1731,11 +1731,14 @@ before it is met.
   25): moved on at the first letter, the next card would talk over the
   typing.
 
-**A shape is the tool's while it is in hand.** Picking another tool
-puts the pen and the eraser back to their first shapes
-(`DrawingMode::SetTool`), so `line` and `rectangle` come together
-before `erase`, and `eraseRect` right after `erase`. The pen steps need
-the pen in hand (15.3). `eraseRight` does not: the eraser comes to it
+**A shape is kept until another is picked** (since 2026-10-01; it was
+the tool's only while in hand). The pen and the eraser keep the shape
+picked from their menus through another tool in hand and drawing mode
+left (`Editor::PenShape`), so the topic leaves the pen drawing
+rectangles, and `rectangle`'s card says how to have the pen back.
+`line` and `rectangle` come together, and `eraseRect` right after
+`erase`, as the shapes of one tool. The pen steps need the pen in hand
+(15.3). `eraseRight` does not: the eraser comes to it
 in hand from `eraseRect`, and a drag with it gets the near miss's line,
 which a need's line would hide.
 

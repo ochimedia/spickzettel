@@ -41,16 +41,9 @@ public:
         std::erase_if(items_, [&](core::ItemId item) { return !keep(item); });
     }
     core::Tool GetTool() const { return tool_; }
-    // Another marking tool in hand. A shape picked for the pen or the
-    // eraser is that tool's for as long as it stays in hand.
-    void SetTool(core::Tool tool);
-    // What the pen draws and the eraser erases on a plain drag: picked from
-    // the menu of the tool's bar button - pen, line, rectangle; eraser,
-    // rectangle eraser.
-    core::DrawShape PenShape() const { return penShape_; }
-    core::DrawShape EraserShape() const { return eraserShape_; }
-    void SetPenShape(core::DrawShape shape) { penShape_ = shape; }
-    void SetEraserShape(core::DrawShape shape) { eraserShape_ = shape; }
+    // Another marking tool in hand. Its shape is the editor's, kept
+    // whatever is in hand (see Editor::PenShape).
+    void SetTool(core::Tool tool) { tool_ = tool; }
     Answer Offer(const Event& event, Editor& editor) override;
     void Interrupt(Editor& editor) override;
     void Cancel(Editor& editor) override { Interrupt(editor); }
@@ -58,8 +51,6 @@ public:
 private:
     std::vector<core::ItemId> items_;
     core::Tool tool_;
-    core::DrawShape penShape_ = core::DrawShape::Freehand;
-    core::DrawShape eraserShape_ = core::DrawShape::Freehand;  // Freehand or Rectangle
 };
 
 // A creation tool in hand: the next left press places a snippet of its
