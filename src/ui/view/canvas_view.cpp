@@ -77,6 +77,13 @@ std::pair<ImVec2, ImVec2> WholePixelRect(const Item& item) {
             ImVec2(std::round(item.rect.x + item.rect.w), std::round(item.rect.y + item.rect.h))};
 }
 
+// The selection's color - its border's, its handles' edges', its halo's -
+// at `alpha` of its own: the accent, or the color set for it.
+ImU32 SelectionColor(const AppConfig& cfg, float alpha = 1.0f) {
+    return cfg.itemBorderSelectedFollowsAccent ? theme::AccentU32(static_cast<uint8_t>(alpha * 255.0f + 0.5f))
+                                               : ToImColor(cfg.itemBorderColorSelectedRGBA, alpha);
+}
+
 // How heavy a snippet's border is - one rule, whatever its color, so the
 // selection's border and the one it replaces always agree.
 float BorderThickness(bool highlighted) { return PxWhole(highlighted ? 3.0f : 2.0f); }
@@ -394,7 +401,7 @@ void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
     // only when the overlay is put away, so this is what says in edit mode
     // which snippets will stay behind.
     //
-    // A selected one wears the accent, drawn with the selection over every
+    // A selected one wears the selection's color, drawn with it over every
     // snippet (PaintSelectionOutline) - and nothing here, so that a
     // snippet has one border in one color, whatever it is. Drawn under the
     // selection's as well, a heavier hovered border showed past the edge of
@@ -408,10 +415,11 @@ void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
     }
 }
 
-// What a selected snippet wears, drawn: its border, in the accent - the
+// What a selected snippet wears, drawn: its border, in the selection's
+// color (the accent, unless one is set for it - SelectionColor) - the
 // one it has while selected (see PaintItemBody), as heavy as any
 // snippet's under the pointer - and its eight handles, white squares with
-// an accent edge, so they read on a dark screenshot and on a pale note
+// an edge in that color, so they read on a dark screenshot and on a pale note
 // alike. A fullscreen snippet has nowhere to be resized to and gets the
 // border alone. In drawing mode it wears a second, fainter line a few
 // pixels out - a halo that says this one is open for drawing, and is what
@@ -420,11 +428,11 @@ void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
 // it is the recognizer's (RecognizePress).
 void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing, bool highlighted) {
     const auto [pMin, pMax] = WholePixelRect(item);
-    AddInnerOutline(drawList, pMin, pMax, theme::AccentU32(), 0.0f, BorderThickness(highlighted));
+    AddInnerOutline(drawList, pMin, pMax, SelectionColor(Cfg()), 0.0f, BorderThickness(highlighted));
     if (drawing) {
         const float haloGap = PxWhole(4.0f);
         AddInnerOutline(drawList, ImVec2(pMin.x - haloGap, pMin.y - haloGap),
-                        ImVec2(pMax.x + haloGap, pMax.y + haloGap), theme::AccentU32(120), 0.0f, PxWhole(2.0f));
+                        ImVec2(pMax.x + haloGap, pMax.y + haloGap), SelectionColor(Cfg(), 120.0f / 255.0f), 0.0f, PxWhole(2.0f));
     }
     if (item.isFullscreen) {
         return;
@@ -432,7 +440,7 @@ void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, b
     for (const HandleSpec& h : HandleSpecs(item.rect)) {
         const HitRect rect = HandleDrawRect(h.center);
         drawList->AddRectFilled(Im(rect.min), Im(rect.max), ImGui::GetColorU32(theme::kWhite));
-        AddInnerOutline(drawList, Im(rect.min), Im(rect.max), theme::AccentU32(), 0.0f, PxWhole(2.0f));
+        AddInnerOutline(drawList, Im(rect.min), Im(rect.max), SelectionColor(Cfg()), 0.0f, PxWhole(2.0f));
     }
 }
 

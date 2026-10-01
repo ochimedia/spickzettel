@@ -168,8 +168,8 @@ struct AppConfig {
     // non-minimized item in Canvas::items, the one painted over all the
     // others. Depth is shown by color and hover by a thicker border, so
     // the two cues don't compete for one channel. A selected snippet's
-    // border is the accent instead, as heavy as these are (see
-    // CanvasView::PaintSelectionOutline).
+    // border is the selection's color instead, as heavy as these are (see
+    // itemBorderColorSelectedRGBA).
     uint32_t itemBorderColorFrontRGBA = 0xF5F7F96E;   // white, ~43%
     uint32_t itemBorderColorOtherRGBA = 0xF5F7F93C;   // white, ~24%
     // A pinned snippet's border (Item::pinned), in place of whichever of the
@@ -177,6 +177,13 @@ struct AppConfig {
     // showItemBorders is on: a pinned snippet stays on screen when the
     // overlay is put away, and which ones will has to be seen at a glance.
     uint32_t itemBorderColorPinnedRGBA = 0xFF6A3D99;  // the accent, ~60%
+    // A selected snippet's border, in place of all of the above, and its
+    // handles' edges and drawing mode's halo with it: the accent while
+    // itemBorderSelectedFollowsAccent is on, else
+    // itemBorderColorSelectedRGBA, alpha and all. Kept while it follows
+    // the accent, so switching it off brings back the color picked before.
+    bool itemBorderSelectedFollowsAccent = true;
+    uint32_t itemBorderColorSelectedRGBA = 0x2C6C7CFFu;  // the default accent
     // How every picture in a snippet - a screenshot, a fill's own pixels -
     // is resampled when shown at a size other than its own. The same kind of choice: nothing stored changes, and switching
     // redraws what is already there. See platform::ImageFilter.

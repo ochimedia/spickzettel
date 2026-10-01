@@ -106,6 +106,8 @@ AppConfig Everything() {
     c.itemBorderColorFrontRGBA = 0x11223344u;
     c.itemBorderColorOtherRGBA = 0x55667788u;
     c.itemBorderColorPinnedRGBA = 0x99AABBCCu;
+    c.itemBorderSelectedFollowsAccent = false;
+    c.itemBorderColorSelectedRGBA = 0xDDEEFF80u;
     c.imageFilter = platform::ImageFilter::Lanczos;
     c.raiseSelectedSnippet = false;
     c.screenshotTrigger = CreationTrigger::Alt;
@@ -175,6 +177,8 @@ TEST(ConfigFilesTest, TheFirstReleasesSettingsAreReadAsItWroteThem) {
     expected.tutorialCurrent = defaults.tutorialCurrent;
     expected.tutorialFolder = defaults.tutorialFolder;
     expected.showFrameGraph = defaults.showFrameGraph;
+    expected.itemBorderSelectedFollowsAccent = defaults.itemBorderSelectedFollowsAccent;
+    expected.itemBorderColorSelectedRGBA = defaults.itemBorderColorSelectedRGBA;
     EXPECT_EQ(ParseConfig(ReadFixture("v0.1.0-everything.json")), expected);
 }
 

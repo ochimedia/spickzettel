@@ -196,6 +196,8 @@ one row noted.
 | `snippetColors.borderFront` | `itemBorderColorFrontRGBA` | `#F5F7F96E` | color; previewed | Frame |
 | `snippetColors.borderOther` | `itemBorderColorOtherRGBA` | `#F5F7F93C` | the same | Frame |
 | `snippetColors.borderPinned` | `itemBorderColorPinnedRGBA` | `#FF6A3D99` | the same | Frame |
+| `snippetColors.borderSelectedFollowsAccent` | `itemBorderSelectedFollowsAccent` | true | bool; on, a selected snippet's border is the accent | Frame |
+| `snippetColors.borderSelected` | `itemBorderColorSelectedRGBA` | `#2C6C7C` | color, used while the above is off; previewed | Frame |
 | `canvasBar.show` | `showCanvasBar` | true | bool | Frame |
 | `editModeBorder.show` | `showEditModeBorder` | true | bool | Frame |
 | `editModeBorder.color` | `editModeBorderColorRGBA` | `#FFFFFF38` | color; its alpha is the border's opacity (version 2; see section 8); previewed | Frame |

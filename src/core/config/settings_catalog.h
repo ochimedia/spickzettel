@@ -79,6 +79,12 @@ inline constexpr GlobalSetting<ColorRule> kBorderOther{
 inline constexpr GlobalSetting<ColorRule> kBorderPinned{
     {"appearance", "snippetColors", "borderPinned"}, {}, E::Frame,
     [](AppConfig& c) { return &c.itemBorderColorPinnedRGBA; }};
+inline constexpr GlobalSetting<BoolRule> kBorderSelectedFollowsAccent{
+    {"appearance", "snippetColors", "borderSelectedFollowsAccent"}, {}, E::Frame,
+    [](AppConfig& c) { return &c.itemBorderSelectedFollowsAccent; }};
+inline constexpr GlobalSetting<ColorRule> kBorderSelected{
+    {"appearance", "snippetColors", "borderSelected"}, {}, E::Frame,
+    [](AppConfig& c) { return &c.itemBorderColorSelectedRGBA; }};
 inline constexpr GlobalSetting<BoolRule> kShowCanvasBar{
     {"appearance", "canvasBar", "show"}, {}, E::Frame, [](AppConfig& c) { return &c.showCanvasBar; }};
 inline constexpr GlobalSetting<BoolRule> kShowEditModeBorder{
@@ -202,7 +208,8 @@ inline constexpr auto kAll = std::tuple{
     &kHotkeyEditMode, &kHotkeyViewMode, &kHotkeyQuickCapture, &kHotkeySilentCapture,
     &kStrokeColor, &kStrokeWidth, &kRaiseSelected, &kScreenshotTrigger, &kDrawingTrigger,
     &kShowItemBorders, &kShowToastsWhileHidden, &kImageFilter, &kAccentColor, &kUiScale,
-    &kBorderFront, &kBorderOther, &kBorderPinned, &kShowCanvasBar,
+    &kBorderFront, &kBorderOther, &kBorderPinned, &kBorderSelectedFollowsAccent, &kBorderSelected,
+    &kShowCanvasBar,
     &kShowEditModeBorder, &kEditModeBorderColor, &kEditModeBorderWidth,
     &kEditModeBorderOnlyWhenEmpty,
     &kSnippetBar, &kDrawingBar,

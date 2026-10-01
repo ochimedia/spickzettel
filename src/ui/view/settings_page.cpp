@@ -515,6 +515,16 @@ void SettingsPage::RenderSettingsAppearance() {
     ImGui::SameLine(colorsX + Px(2.0f * kColorColumnWidth));
     SettingColor(settings_, setting::kBorderPinned, "##snipcolpinnedborder", strings::kAppearancePinnedBorder,
                  SwatchAlpha::Bar);
+    // The selection's, on a row of its own: a color of its own - kept,
+    // grayed, while the accent stands in for it - and the switch that says
+    // which.
+    ImGui::BeginDisabled(Cfg().itemBorderSelectedFollowsAccent);
+    SettingColor(settings_, setting::kBorderSelected, "##snipcolselectedborder", strings::kAppearanceSelectedBorder,
+                 SwatchAlpha::Bar);
+    ImGui::EndDisabled();
+    ImGui::SameLine(colorsX + Px(kColorColumnWidth));
+    SettingCheckbox(settings_, setting::kBorderSelectedFollowsAccent, "appearanceselectedborderaccent",
+                    strings::kAppearanceSelectedBorderFollowsAccent, nullptr);
 
     SettingsGroupBreak();
 

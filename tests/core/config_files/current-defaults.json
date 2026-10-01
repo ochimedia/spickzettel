@@ -22,7 +22,9 @@
     "snippetColors": {
       "borderFront": "#F5F7F96E",
       "borderOther": "#F5F7F93C",
-      "borderPinned": "#FF6A3D99"
+      "borderPinned": "#FF6A3D99",
+      "borderSelectedFollowsAccent": true,
+      "borderSelected": "#2C6C7C"
     },
     "canvasBar": {
       "show": true
