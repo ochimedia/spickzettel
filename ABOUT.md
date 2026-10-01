@@ -122,6 +122,7 @@ If the app crashes, it writes a crash report to
 - Optimized pen and rectangle stroke appearance
 - Optimized appearance of borders in multiple places
 - Lowered minimum size of snippets to 16x16 pixels, with reworked resize borders
+- Stacked the canvas bar's two buttons, giving its tiles more room
 
 ### 0.2.1
 
