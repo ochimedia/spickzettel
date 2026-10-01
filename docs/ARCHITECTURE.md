@@ -404,19 +404,21 @@ anyway. A fitted curve's joins are mostly a few degrees, so a smooth
 stroke has as many vertices as before; wavy and zigzag strokes of a
 wide pen have up to a quarter and a half more.
 
-The round join pivots where the two inner edges cross, so the stroke is
-as wide on the inside of a turn as along it. It pivoted at the half
-width from the point, which was harmless while only hairpins took a
-round join; once every turn past a few degrees did, it pinched every
-corner by as much as the miter would have stuck out - a right angle on
-a 40px pen narrowed to 34px. Found in review on 2026-10-01. A sharp
-turn takes that crossing far up the inside, and past the end of a short
-segment the strip would fold back over itself; so it reaches back no
-more than half the shorter segment either side, leaving the other half
-to the join at its far end, and short of that it is held on the
-bisector, inside the stroke - a pinch on a hairpin, never a fold.
-`StrokeMeshTest` samples the corner for holes and for anything drawn
-twice.
+The round join pivots on the inside of the turn at the pen's half width
+from the point, along the bisector, and not where the two inner edges
+cross - so the inside of a turn is pinched a little: a right angle
+between long segments of a 40px pen narrows to 34px. Pivoting at the
+crossing was tried on 2026-10-01, after a review found the pinch, and
+reverted the same day. The crossing is far up the inside of a sharp
+turn, past the end of a short segment, and the strip folds back over
+itself there; held to half the shorter segment, the pivot sat closer to
+the centerline than the half width between a hand's closely spaced
+points, and the inner edge of a wavy stroke was notched with gaps. And
+it bought nothing a hand draws: the same scripted strokes, a wave, a V
+and a W, came out pixel for pixel the same as with the pinch wherever
+there were no gaps, since a hand's turns are between short segments,
+where the crossing is out of reach anyway. Only a long straight segment
+on either side of a sharp turn shows the pinch.
 
 The rectangle tool's corners stay square: a shape tool's stroke says
 `StrokeCorners::Sharp`, and keeps the miter up to 120 degrees. The

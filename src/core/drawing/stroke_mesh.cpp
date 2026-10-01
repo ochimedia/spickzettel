@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 namespace sz::core {
 
@@ -181,10 +180,9 @@ std::vector<Rib> BuildDiscRibs(const V2& center, float radius) {
 // either side of it. A shallow turn takes a miter: one rib, whose two
 // vertices both segments share, so nothing overlaps. A sharper one takes a
 // round join - an arc on the outside of the turn, pivoting on the inside.
-// Which is shallow is up to `corners`. `innerReach` is how far back along
-// either segment the inside of the turn may reach - see below.
-void AppendJointRibs(const V2& point, const V2& inDir, const V2& outDir, float halfWidth, float innerReach,
-                     StrokeCorners corners, std::vector<Rib>& ribs) {
+// Which is shallow is up to `corners`.
+void AppendJointRibs(const V2& point, const V2& inDir, const V2& outDir, float halfWidth, StrokeCorners corners,
+                     std::vector<Rib>& ribs) {
     const V2 inNormal = LeftNormal(inDir);
     const V2 outNormal = LeftNormal(outDir);
     const V2 mean = Normalized(Add(inNormal, outNormal));
@@ -212,28 +210,14 @@ void AppendJointRibs(const V2& point, const V2& inDir, const V2& outDir, float h
     const float turn = reversal ? kPi : std::atan2(Cross(inDir, outDir), Dot(inDir, outDir));
     const bool arcOnLeft = turn > 0.0f;
     const V2 fromDir = arcOnLeft ? inNormal : Scale(inNormal, -1.0f);
-    // The inside of the turn is where the two inner edges cross, so the
-    // stroke is as wide there as along its segments. That crossing lies
-    // halfWidth * tan(turn / 2) back along each segment, which a sharp turn
-    // takes far up the inside: past the end of a short segment the strip
-    // would fold back over itself. So it reaches back no further than
-    // `innerReach` - half the shorter segment, leaving the other half to
-    // the joint at its far end - and short of that sits on the bisector,
-    // inside the stroke: a pinch rather than a fold. Pinned at the half
-    // width as it once was, every corner a round pen takes was pinched by
-    // as much as a miter would have stuck out (8px at a right angle, on a
-    // 40px pen).
+    // Pinned at the pen's own half width rather than at where the two inner
+    // edges truly cross: on a sharp turn that crossing is far up the inside
+    // and folds the strip back over itself, and held short of it between a
+    // hand's closely spaced points it notched the inner edge (see
+    // ARCHITECTURE.md, "Tessellation, and its cache"). A slightly pinched
+    // inner corner is the lesser artifact.
     const V2 innerDir = reversal ? Scale(fromDir, -1.0f) : (arcOnLeft ? Scale(mean, -1.0f) : mean);
-    V2 innerPoint = point;
-    if (!reversal) {
-        const float cosHalf = Dot(mean, inNormal);
-        const float sinHalf = std::sqrt(std::max(0.0f, 1.0f - cosHalf * cosHalf));
-        float inset = cosHalf > 0.0f ? halfWidth / cosHalf : std::numeric_limits<float>::max();
-        if (sinHalf > 0.0f) {
-            inset = std::min(inset, innerReach / sinHalf);
-        }
-        innerPoint = Add(point, Scale(innerDir, inset));
-    }
+    const V2 innerPoint = reversal ? point : Add(point, Scale(innerDir, halfWidth));
 
     // Square to the incoming segment, with the inner edge already pulled in
     // to the pivot the arc turns around...
@@ -327,17 +311,10 @@ void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth
     // Direction of the segment leaving each point. For an open path the last
     // entry wraps around to the first point and is never read.
     std::vector<V2> dirs;
-    std::vector<float> lengths;
     dirs.reserve(count);
-    lengths.reserve(count);
     for (size_t i = 0; i < count; ++i) {
-        const V2 segment = Sub(pts[(i + 1) % pts.size()], pts[i]);
-        dirs.push_back(Normalized(segment));
-        lengths.push_back(Length(segment));
+        dirs.push_back(Normalized(Sub(pts[(i + 1) % pts.size()], pts[i])));
     }
-    // How far the inside of the turn at point i may reach back along the
-    // segments either side of it: half the shorter one.
-    const auto innerReach = [&](size_t in, size_t out) { return 0.5f * std::min(lengths[in], lengths[out]); };
 
     std::vector<Rib> ribs;
     ribs.reserve(count * 2 + 16);
@@ -345,10 +322,10 @@ void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth
     if (closed) {
         // The seam is a join like any other; walking from it and repeating
         // its ribs at the end is what closes the strip on itself.
-        AppendJointRibs(pts[0], dirs[count - 1], dirs[0], radius, innerReach(count - 1, 0), corners, ribs);
+        AppendJointRibs(pts[0], dirs[count - 1], dirs[0], radius, corners, ribs);
         const size_t seamRibCount = ribs.size();
         for (size_t i = 1; i < count; ++i) {
-            AppendJointRibs(pts[i], dirs[i - 1], dirs[i], radius, innerReach(i - 1, i), corners, ribs);
+            AppendJointRibs(pts[i], dirs[i - 1], dirs[i], radius, corners, ribs);
         }
         for (size_t i = 0; i < seamRibCount; ++i) {
             ribs.push_back(ribs[i]);
@@ -372,7 +349,7 @@ void BuildStrokeMesh(const std::vector<StrokePoint>& centerline, float halfWidth
     }
 
     for (size_t i = 1; i + 1 < count; ++i) {
-        AppendJointRibs(pts[i], dirs[i - 1], dirs[i], radius, innerReach(i - 1, i), corners, ribs);
+        AppendJointRibs(pts[i], dirs[i - 1], dirs[i], radius, corners, ribs);
     }
 
     // ...and the end cap, which starts from its own flat cross-section.
