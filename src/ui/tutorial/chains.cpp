@@ -154,7 +154,7 @@ std::vector<Step> MakeBasics() {
         .kind = StepKind::Do,
         .title = strings::kTutorialResizeTitle,
         .text = [](const World&) { return Fixed(strings::kTutorialResizeText); },
-        .spot = Spot::SubjectHandle,
+        .spot = Spot::SubjectCorner,
         .needs = With({SubjectCanMove, NoDrawingMode, SubjectSelected}),
         .subject = SubjectRule::CanMove,
         .goal =

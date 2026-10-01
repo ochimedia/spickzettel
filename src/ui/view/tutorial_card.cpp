@@ -207,22 +207,17 @@ std::optional<AnchorRect> TutorialCard::SpotRect() const {
             return std::nullopt;
         case tutorial::Spot::Subject:
             return SubjectRect();
-        case tutorial::Spot::SubjectHandle: {
-            // The bottom-right corner's handle, while the handles are drawn;
-            // the snippet itself until then.
+        case tutorial::Spot::SubjectCorner: {
+            // The resize band's lower right corner, while the subject is
+            // selected and so has one; the snippet itself until then.
             const std::optional<AnchorRect> subject = SubjectRect();
             if (!subject.has_value() || !editor_.SelectionLive() || !editor_.IsSelected(*runner_.Subject())) {
                 return subject;
             }
             const core::Rect rect{subject->min.x, subject->min.y, subject->max.x - subject->min.x,
                                   subject->max.y - subject->min.y};
-            for (const HandleSpec& spec : HandleSpecs(rect)) {
-                if (spec.handle == ResizeHandle::SE) {
-                    const HitRect handle = HandleDrawRect(spec.center);
-                    return AnchorRect{ImVec2(handle.min.x, handle.min.y), ImVec2(handle.max.x, handle.max.y)};
-                }
-            }
-            return subject;
+            const HitRect corner = ResizeCornerRect(rect);
+            return AnchorRect{ImVec2(corner.min.x, corner.min.y), ImVec2(corner.max.x, corner.max.y)};
         }
         case tutorial::Spot::SelectionBarClose:
             return anchors_.Find(Anchor{AnchorId::SelectionBarClose});

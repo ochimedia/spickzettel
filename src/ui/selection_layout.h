@@ -1,12 +1,11 @@
 #pragma once
 
-// Where a selected snippet's handles and the selection bar are, in pixels,
-// from the rects alone. What Editor::ResolvePointerTarget reads to say what
-// is under a point, and what OverlayApp paints the outline, the handles and
-// the bar to - one set of rects for both, so that what is hit is what is
-// drawn. No ImGui: the editor asks this between frames.
+// Where a selected snippet's resize band and the selection bar are, in
+// pixels, from the rects alone. What Editor::ResolvePointerTarget reads to
+// say what is under a point, and what OverlayApp paints the bar to - one
+// set of rects for both, so that what is hit is what is drawn. No ImGui:
+// the editor asks this between frames.
 
-#include <array>
 #include <cstddef>
 #include <optional>
 #include <vector>
@@ -18,7 +17,8 @@
 
 namespace sz::ui {
 
-// One of a selected snippet's eight resize handles, by compass point.
+// What a snippet is resized from - a corner, which moves two edges, or an
+// edge - by compass point. Named for the handles it used to be grabbed by.
 enum class ResizeHandle { NW, NE, SE, SW, N, S, E, W };
 
 // Half-open on the far edges, the way ImGui's own ImRect::Contains is, so a
@@ -30,29 +30,25 @@ struct HitRect {
     bool Contains(float x, float y) const { return x >= min.x && y >= min.y && x < max.x && y < max.y; }
 };
 
-// A handle is a small square centered *on* the border - a corner or the
-// middle of an edge - the way a drawing program draws them. It covers a
-// few of the snippet's own pixels, which is fine: handles show only while
-// the selection is live, when nothing can be drawn anyway. Its hit rect
-// reaches a little past what is drawn, so it needn't be hit dead on.
-inline constexpr float kHandleSizePx = 8.0f;
-inline constexpr float kHandleHitSlopPx = 3.0f;
+// A selected snippet is resized from a band around it, the way a window
+// is by its frame, so that all of the snippet itself is for moving it
+// whatever its size - see docs/INTERACTIONS.md, 6.5. The band is this
+// wide outside each edge, and within kResizeCornerPx of a corner, along
+// either edge, it is the corner's - at most a quarter of the side, so a
+// small snippet keeps some of each edge.
+inline constexpr float kResizeBandPx = 8.0f;
+inline constexpr float kResizeCornerPx = 16.0f;
 
-// One of the 8 handles: where its center is, and its compass name as the
-// debug overlay prints it.
-struct HandleSpec {
-    ResizeHandle handle;
-    const char* name;
-    platform::Vec2 center;
-};
-
-// The 8 handles of a rect, corners first, at whole pixels: every one is
-// tested against a whole-pixel pointer position, and a fractional edge
-// left a sub-pixel column that belonged to nothing.
-std::array<HandleSpec, 8> HandleSpecs(const core::Rect& r);
-HitRect HandleDrawRect(platform::Vec2 center);
-HitRect HandleHitRect(platform::Vec2 center);
-// The compass name the debug overlay prints for a handle.
+// Which edge or corner of `rect` the band has at (x, y), or nothing - the
+// snippet itself, or beyond the band. Worked out on the rect's whole
+// pixels, as the pointer is. On a side where the display's edge leaves
+// less than the band outside, the band is inside the snippet's visible
+// edge there instead, so a snippet against the screen's edge can still
+// be resized from that side.
+std::optional<ResizeHandle> ResizeBandAt(const core::Rect& rect, float x, float y, float displayW, float displayH);
+// The band's corner at the lower right, which the tutorial rings.
+HitRect ResizeCornerRect(const core::Rect& rect);
+// The compass name the debug overlay prints for an edge or corner.
 const char* ResizeHandleName(ResizeHandle handle);
 // Which edges a resize handle moves - a corner two, an edge one.
 void ResizeHandleEdges(ResizeHandle handle, bool& left, bool& right, bool& top, bool& bottom);

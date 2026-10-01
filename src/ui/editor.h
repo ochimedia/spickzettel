@@ -40,24 +40,23 @@ using namespace ::sz::core;
 // body beats a backer item's, which is the whole of the occlusion rule.
 struct PointerTarget {
     // The frontmost thing that would take a press at the point: a selection
-    // bar button, one of a selected snippet's handles, or an item's body -
-    // None for open canvas. Handles and buttons exist only while the
-    // selection is live (see Editor::SelectionLive).
-    enum class Kind { None, Body, Handle, Button };
+    // bar button, a selected snippet's resize band (see ResizeBandAt), or
+    // an item's body - None for open canvas. The band and the buttons
+    // exist only while the selection is live (see Editor::SelectionLive).
+    enum class Kind { None, Body, Band, Button };
     Kind kind = Kind::None;
-    ItemId item = 0;                            // whose, for Body and Handle
-    ResizeHandle handle = ResizeHandle::NW;     // which, when kind is Handle
+    ItemId item = 0;                            // whose, for Body and Band
+    ResizeHandle handle = ResizeHandle::NW;     // the edge or corner, when kind is Band
     ChromeButton button = ChromeButton::Close;  // which, when kind is Button
-    // The frontmost item whose content rect holds the point, handles and
-    // bar ignored: which item a stroke started there goes into, and which
-    // the hover highlight follows.
+    // The frontmost item whose content rect holds the point, the band and
+    // the bar ignored: which item a stroke started there goes into.
     std::optional<ItemId> body;
 };
 
-// px, discard smaller region captures/erases/creations as a stray click
-// rather than a deliberate drag - shared between the item-creation
-// gesture (a region-capture drag too small to keep) and the rectangle
-// eraser's own drag threshold.
+// px, discard shorter region captures/erases/creations as a stray click
+// rather than a deliberate drag, measured corner to corner - shared
+// between the item-creation gesture (a region-capture drag too short to
+// keep) and the rectangle eraser's own drag threshold.
 inline constexpr float kRegionMinSize = 24.0f;
 
 // What a notch of the wheel does to the selection - see

@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "core/canvas/item_geometry.h"
 #include "core/config/app_config.h"
 #include "core/session/session.h"
 #include "core/session/settings.h"
@@ -497,6 +498,73 @@ TEST_F(InteractionCasesTest, ADragOnEmptyCanvasFramesAndAClickMakesNothing) {
     held_.ctrl = false;
     ASSERT_EQ(Items().size(), before + 1);
     EXPECT_EQ(editor_.DrawingItems(), std::vector<ItemId>{Items().back().id}) << "a drawing, made to be drawn in";
+}
+
+// A drag that is meant is kept however thin - a line of text is a fine
+// thing to frame - and a side under the smallest snippet grows to it,
+// about the middle of what was framed.
+TEST_F(InteractionCasesTest, AThinDragMakesASnippetOfTheSmallestHeight) {
+    const size_t before = Items().size();
+    held_.ctrl = true;  // a drawing
+    Drag(100.0f, 200.0f, 400.0f, 206.0f);
+    held_.ctrl = false;
+    ASSERT_EQ(Items().size(), before + 1);
+    const Rect made = Items().back().rect;
+    EXPECT_FLOAT_EQ(made.w, 300.0f);
+    EXPECT_FLOAT_EQ(made.h, kItemMinHeight);
+    EXPECT_FLOAT_EQ(made.y + made.h * 0.5f, 203.0f) << "grown about its middle";
+}
+
+// ===== Resizing =====
+
+// A selected snippet's resize band is just outside it, over whatever is
+// behind it: a press there resizes the selected snippet, not the one it
+// is over.
+TEST_F(InteractionCasesTest, TheResizeBandTakesAPressOverTheSnippetBehindIt) {
+    const ItemId a = MakeSnippet(Rect{100, 100, 200, 150});
+    const ItemId b = MakeSnippet(Rect{304, 100, 200, 150});
+    Click(150.0f, 150.0f);
+    Pause();
+    ASSERT_EQ(editor_.Selection(), std::vector<ItemId>{a});
+
+    Drag(306.0f, 175.0f, 346.0f, 175.0f);  // just right of a, on b's left edge
+    EXPECT_NEAR(ItemOf(a).rect.w, 240.0f, 1.0f);
+    EXPECT_EQ(ItemOf(b).rect.x, 304.0f) << "b stays where it is";
+    EXPECT_EQ(editor_.Selection(), std::vector<ItemId>{a});
+}
+
+// ...but never over a selected one, whose body is its own: there, the
+// press moves the selection.
+TEST_F(InteractionCasesTest, TheResizeBandIsNeverOverASelectedSnippet) {
+    const ItemId a = MakeSnippet(Rect{100, 100, 200, 150});
+    const ItemId b = MakeSnippet(Rect{304, 100, 200, 150});
+    Click(150.0f, 150.0f);
+    held_.shift = true;
+    Click(400.0f, 150.0f);
+    held_.shift = false;
+    Pause();
+    ASSERT_EQ(editor_.Selection().size(), 2u);
+
+    Drag(306.0f, 175.0f, 326.0f, 175.0f);  // in a's band, on b
+    EXPECT_EQ(ItemOf(b).rect.x, 324.0f) << "moved";
+    EXPECT_EQ(ItemOf(a).rect.w, 200.0f) << "not resized";
+}
+
+// Against the screen's edge, where there is no room for the band outside
+// a snippet, it is inside the snippet's edge instead.
+TEST_F(InteractionCasesTest, AgainstTheScreensEdgeTheResizeBandIsInside) {
+    const ItemId a = MakeSnippet(Rect{0, 100, 200, 150});
+    Click(100.0f, 150.0f);
+    Pause();
+    const PointerTarget inside = editor_.ResolvePointerTarget(3.0f, 175.0f);
+    EXPECT_EQ(inside.kind, PointerTarget::Kind::Band);
+    EXPECT_EQ(inside.handle, ResizeHandle::W);
+    EXPECT_EQ(editor_.ResolvePointerTarget(197.0f, 175.0f).kind, PointerTarget::Kind::Body)
+        << "only on the side against the screen";
+
+    Drag(3.0f, 175.0f, 23.0f, 175.0f);
+    EXPECT_NEAR(ItemOf(a).rect.x, 20.0f, 1.0f);
+    EXPECT_NEAR(ItemOf(a).rect.w, 180.0f, 1.0f);
 }
 
 TEST_F(InteractionCasesTest, AHoldMakesAFullscreenSnippetAndTheRestOfThePressIsSpent) {

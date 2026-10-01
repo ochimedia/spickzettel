@@ -618,14 +618,36 @@ review on 2026-09-27.
 
 ### The floor is a shape
 
-Items cannot shrink below 90x70. Applied as two independent per-axis
-clamps that floor reshapes anything that is not 9:7: a 16:9 item reaches
-the height floor at 124x70 and then goes on narrowing to 90. Reaching
-one floor has to stop the whole resize, so `MinimumSizeForAspectRatio`
-turns the two numbers into one floor on the item's own ratio, and the
-derived axis is deliberately not re-clamped. The same floor applies in
-the display sync and in fullscreen restore, and a free (Shift) resize,
-which is meant to reshape, keeps the plain per-axis pair.
+Items cannot shrink below 16x16. Applied as two independent per-axis
+clamps that floor reshapes anything that is not square: a 16:9 item
+reaches the height floor at 28x16 and then goes on narrowing to 16.
+Reaching one floor has to stop the whole resize, so
+`MinimumSizeForAspectRatio` turns the two numbers into one floor on the
+item's own ratio, and the derived axis is deliberately not re-clamped.
+The same floor applies in the display sync and in fullscreen restore,
+and a free (Shift) resize, which is meant to reshape, keeps the plain
+per-axis pair.
+
+**Changed on 2026-10-01: 16x16, where it was 90x70.** A tester scaling
+flat snippets down, and to one width, was stopped by the 70 px height.
+Nothing said why the floor was what it was; the bar has floated above
+the snippet for as long as this rebuild has had one. What a floor has to
+protect is what is drawn on and around a snippet. Its handles would
+have met on a small snippet, and covered it, so they went for a resize
+band outside it (`docs/INTERACTIONS.md`, 6.5), which needs no room of
+the snippet's own. What is left is the snippet's border: 16 px is a line
+of small text - a line from a game's chat or status bar - with a
+hovered border (3 px, drawn inside) on either side of it, and still
+something to aim at.
+
+A snippet is made at least that size too. A framing drag is kept when
+it reaches 24 px corner to corner (`kRegionMinSize`), however thin,
+where it had to reach 24 px on both sides, and a side under the floor
+grows to it about its middle, so what was framed stays centered and the
+picture is captured at the size it is shown at. Before, a frame between
+24 px and the floor was made at its own size and then shown at the
+floor's by the display sync, which floors every rect every frame - with
+a picture captured smaller than it was shown.
 
 ### An aspect-locked corner follows the diagonal
 
@@ -652,11 +674,11 @@ other.
 
 ### Keeping the shape is the snippet's own setting
 
-Whether a handle keeps the shape is `Item::keepAspect`, set from the
+Whether a resize keeps the shape is `Item::keepAspect`, set from the
 defaults when the snippet is made and changed in its popover; Shift does
 the other. Not whether the snippet has text, which it once followed:
 text is a caption any snippet can carry, so typing one into a
-screenshot changed what its handles did, with nothing on screen to say
+screenshot changed what resizing it did, with nothing on screen to say
 so. A property says it, and can be set either way on purpose.
 
 ### What a new snippet starts with
@@ -2004,8 +2026,8 @@ and each event) and the time and modifiers of the event being handled,
 and it asks the view, through `EditorViews`, for what only a view can
 do: a message, a panel or a popup opened. The hit test
 (`Editor::ResolvePointerTarget`) is the editor's too, over the same
-rects the view paints the handles and the bar to (`selection_layout.*`),
-so what is hit is what is drawn.
+rects the view paints the bar to, and the resize band is laid out by
+(`selection_layout.*`), so what is hit is what is drawn.
 
 Panels - popovers, the canvas bar, the dock, the note editor, the
 Overview - are ordinary ImGui windows and widgets. Items and the
@@ -2179,7 +2201,8 @@ correction until the chrome was a model fighting its framework.
 
 So there is one resolver, `ResolvePointerTarget`: a walk over the current
 canvas, pure in position and model, returning the frontmost thing that
-would take a press there (a bar button, a handle, an item's body, or
+would take a press there (a bar button, a selected snippet's resize
+band, an item's body, or
 nothing) and the frontmost item whose content holds the point. Furniture
 first, in the order it is painted, then items front to back. Drawing and
 resolving share one definition of the geometry, so what is drawn and
@@ -2637,7 +2660,7 @@ make a drop land one short.
 
 Without a modifier the wheel sets a size, and the mode says which: in
 drawing mode the size of Draw or Erase, and outside it the selection's,
-scaled as a group about its middle the way a corner handle scales it,
+scaled as a group about its middle the way a corner of its band scales it,
 kept between the smallest snippet's floor and the screen. The mode
 decides rather than whether anything is selected, because in drawing
 mode something always is - the snippet under the pen, which a size

@@ -183,15 +183,15 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
     // open, which is exactly when ImGui's own widgets refuse to hover.
     const bool furnitureHot = itemsInteractive && !io.WantCaptureMouse;
     // ...and while a resize is under way, or a press on one of the bar's
-    // buttons, only that handle or button reacts - the rule ImGui applies
-    // to its own widgets while one of them holds ActiveId, so a handle
+    // buttons, only that edge or button reacts - the rule ImGui applies
+    // to its own widgets while one of them holds ActiveId, so an edge
     // dragged across a bar button doesn't light that button up.
     const Placement* held = editor_.Input().As<Placement>(Level::Gesture);
     const BarPress* pressed = editor_.Input().As<BarPress>(Level::Gesture);
     const bool resizing = held != nullptr && held->Resizing();
     const bool blocked = resizing || pressed != nullptr;
-    const bool hotHandle =
-        furnitureHot && target.kind == PointerTarget::Kind::Handle &&
+    const bool hotBand =
+        furnitureHot && target.kind == PointerTarget::Kind::Band &&
         (!blocked || (resizing && held->Item() == target.item && held->Handle() == target.handle));
     std::optional<ChromeButton> hotButton;
     if (furnitureHot && target.kind == PointerTarget::Kind::Button &&
@@ -206,13 +206,13 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
         std::snprintf(handleDebug, sizeof(handleDebug), "%s item=%llu (dragging)", ResizeHandleName(*held->Handle()),
                       static_cast<unsigned long long>(held->Item()));
         debugHoveredResizeHandle_ = handleDebug;
-    } else if (hotHandle) {
+    } else if (hotBand) {
         char handleDebug[64];
         std::snprintf(handleDebug, sizeof(handleDebug), "%s item=%llu", ResizeHandleName(target.handle),
                       static_cast<unsigned long long>(target.item));
         debugHoveredResizeHandle_ = handleDebug;
     }
-    if (hotHandle) {
+    if (hotBand) {
         ImGui::SetMouseCursor(ResizeHandleCursor(target.handle));
     }
 
@@ -231,8 +231,11 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
     } else {
         stickyItemId = propertiesItem;
     }
+    // The band around a selected snippet is that snippet's, and says so
+    // with its heavier border as its body does.
+    const std::optional<ItemId> underPointer = hotBand ? std::optional<ItemId>(target.item) : target.body;
     const std::optional<ItemId> highlightId =
-        stickyItemId.has_value() ? stickyItemId : (itemsInteractive ? target.body : std::nullopt);
+        stickyItemId.has_value() ? stickyItemId : (itemsInteractive ? underPointer : std::nullopt);
 
     // The snippet in front: the last one that is actually on screen, since
     // canvas.items is painted in order and a minimized item is painted
@@ -418,14 +421,13 @@ void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
 // What a selected snippet wears, drawn: its border, in the selection's
 // color (the accent, unless one is set for it - SelectionColor) - the
 // one it has while selected (see PaintItemBody), as heavy as any
-// snippet's under the pointer - and its eight handles, white squares with
-// an edge in that color, so they read on a dark screenshot and on a pale note
-// alike. A fullscreen snippet has nowhere to be resized to and gets the
-// border alone. In drawing mode it wears a second, fainter line a few
-// pixels out - a halo that says this one is open for drawing, and is what
-// a double-click visibly changes. Nothing here takes input: which of it
-// is under the pointer is ResolvePointerTarget's answer, and a press on
-// it is the recognizer's (RecognizePress).
+// snippet's under the pointer, its resize band among it. The band itself
+// is not drawn: the cursor shows it (see docs/INTERACTIONS.md, 6.5). In
+// drawing mode it wears a second, fainter line a few pixels out - a halo
+// that says this one is open for drawing, and is what a double-click
+// visibly changes. Nothing here takes input: which of it is under the
+// pointer is ResolvePointerTarget's answer, and a press on it is the
+// recognizer's (RecognizePress).
 void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, bool drawing, bool highlighted) {
     const auto [pMin, pMax] = WholePixelRect(item);
     AddInnerOutline(drawList, pMin, pMax, SelectionColor(Cfg()), 0.0f, BorderThickness(highlighted));
@@ -433,14 +435,6 @@ void CanvasView::PaintSelectionOutline(ImDrawList* drawList, const Item& item, b
         const float haloGap = PxWhole(4.0f);
         AddInnerOutline(drawList, ImVec2(pMin.x - haloGap, pMin.y - haloGap),
                         ImVec2(pMax.x + haloGap, pMax.y + haloGap), SelectionColor(Cfg(), 120.0f / 255.0f), 0.0f, PxWhole(2.0f));
-    }
-    if (item.isFullscreen) {
-        return;
-    }
-    for (const HandleSpec& h : HandleSpecs(item.rect)) {
-        const HitRect rect = HandleDrawRect(h.center);
-        drawList->AddRectFilled(Im(rect.min), Im(rect.max), ImGui::GetColorU32(theme::kWhite));
-        AddInnerOutline(drawList, Im(rect.min), Im(rect.max), SelectionColor(Cfg()), 0.0f, PxWhole(2.0f));
     }
 }
 

@@ -32,9 +32,9 @@ TEST_F(EditorTest, SelectsWhatIsHitAndDeletesItUndoably) {
     EXPECT_EQ(body.item, a);
 
     editor_.SelectOnly(a);
-    // Selected, it wears handles, and its corner is one.
-    const PointerTarget corner = editor_.ResolvePointerTarget(100.0f, 100.0f);
-    EXPECT_EQ(corner.kind, PointerTarget::Kind::Handle);
+    // Selected, it has a resize band, just outside its corner too.
+    const PointerTarget corner = editor_.ResolvePointerTarget(96.0f, 96.0f);
+    EXPECT_EQ(corner.kind, PointerTarget::Kind::Band);
     EXPECT_EQ(corner.handle, ResizeHandle::NW);
 
     ASSERT_TRUE(editor_.Dispatch(Command{CommandId::DeleteSelection}));

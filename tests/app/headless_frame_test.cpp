@@ -3065,8 +3065,8 @@ TEST_F(OverlappingItemsTest, ThePointerKeepsItsShapeCrossingAnOccludedBorder) {
 // Caught by driving the real app, not by reading the code, so it is pinned
 // here.
 //
-// The snippet in drawing mode keeps its handles, so the pen and a handle's
-// arrow trade places over it without leaving the mode.
+// The snippet in drawing mode keeps its resize band, so the pen and the
+// band's arrow trade places at its edge without leaving the mode.
 //
 // What this covers is a *moving* pointer, which is the case that actually
 // broke. ApplyPointerShape also re-asserts when the pointer is standing still
@@ -3075,7 +3075,7 @@ TEST_F(OverlappingItemsTest, ThePointerKeepsItsShapeCrossingAnOccludedBorder) {
 // deterministic way to stage here, since every way of making ImGui release
 // the cursor in this harness also moves the pointer. That half is argued in
 // ApplyPointerShape's own comment rather than tested.
-TEST_F(OverlappingItemsTest, ThePenComesBackAfterHoveringAResizeHandle) {
+TEST_F(OverlappingItemsTest, ThePenComesBackAfterHoveringTheResizeBand) {
     AppConfig config = DefaultConfig();
     config.profileable.softwarePointer = false;  // see the test above
     StartWith(config);
@@ -3093,19 +3093,20 @@ TEST_F(OverlappingItemsTest, ThePenComesBackAfterHoveringAResizeHandle) {
     StepFrames(3);
     ASSERT_EQ(host_.overlayWindow.cursorShape, platform::CursorShape::Pen);
 
-    // Its west handle - which the front item is nowhere near - asks ImGui
-    // for a sizing cursor, so the app stands back and asks for Default.
-    MoveTo(items.back.x, items.back.y + items.back.h * 0.5f);
+    // Its band outside the west edge - which the front item is nowhere
+    // near - asks ImGui for a sizing cursor, so the app stands back and
+    // asks for Default.
+    MoveTo(items.back.x - 4.0f, items.back.y + items.back.h * 0.5f);
     StepFrames(3);
     ASSERT_EQ(host_.overlayWindow.cursorShape, platform::CursorShape::Default)
-        << "the handle should have handed the cursor to ImGui";
+        << "the band should have handed the cursor to ImGui";
 
     // Back onto the body. Several frames, because the frame that has to be
     // got right is the one *after* ImGui lets go.
     MoveTo(bodyX, bodyY);
     StepFrames(5);
     EXPECT_EQ(host_.overlayWindow.cursorShape, platform::CursorShape::Pen)
-        << "the pen never came back after the handle released the cursor";
+        << "the pen never came back after the band released the cursor";
 }
 
 // The other half of the same change: a pointer that is not moving over a
@@ -3387,37 +3388,38 @@ TEST_F(OverlappingItemsTest, ADragOnAnUnselectedSnippetSelectsAndMovesIt) {
     EXPECT_FLOAT_EQ(FrontItem().rect.x, items.front.x + 30.0f);
 }
 
-// A selected snippet's handles sit on its corners and the middles of its
-// edges, and the debug readout says which one is found.
-TEST_F(OverlappingItemsTest, HandlesSitOnTheCornersAndTheMiddlesOfTheEdges) {
+// A selected snippet's resize band is just outside it: its corners
+// reach a little way along the edges, the rest is the edges', and the
+// snippet itself and what is further out are not in it. The debug readout
+// says which edge is found.
+TEST_F(OverlappingItemsTest, TheResizeBandIsJustOutsideASelectedSnippet) {
     ShowEditMode();
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
     SelectTheBackItem(items);
+    const auto at = [this](float x, float y) {
+        MoveTo(x, y);
+        StepFrames(2);
+        return App().DebugHoveredResizeHandle().substr(0, 2);
+    };
 
-    MoveTo(items.back.x, items.back.y);
-    StepFrames(2);
-    EXPECT_EQ(App().DebugHoveredResizeHandle().substr(0, 2), "nw");
-
-    MoveTo(items.back.x + items.back.w * 0.5f, items.back.y);
-    StepFrames(2);
-    EXPECT_EQ(App().DebugHoveredResizeHandle().substr(0, 2), "n ");
-
-    // Between the two: the border, which is nothing to grab.
-    MoveTo(items.back.x + 40.0f, items.back.y);
-    StepFrames(2);
-    EXPECT_TRUE(App().DebugHoveredResizeHandle().empty());
+    EXPECT_EQ(at(items.back.x - 4.0f, items.back.y - 4.0f), "nw");
+    EXPECT_EQ(at(items.back.x + 10.0f, items.back.y - 4.0f), "nw") << "the corner reaches along the edge";
+    EXPECT_EQ(at(items.back.x + items.back.w * 0.5f, items.back.y - 4.0f), "n ");
+    EXPECT_EQ(at(items.back.x - 4.0f, items.back.y + items.back.h * 0.5f), "w ");
+    EXPECT_EQ(at(items.back.x + 40.0f, items.back.y + 2.0f), "") << "the snippet itself is for moving it";
+    EXPECT_EQ(at(items.back.x + items.back.w * 0.5f, items.back.y - 12.0f), "") << "beyond the band";
 }
 
-TEST_F(OverlappingItemsTest, ASelectedSnippetsHandleResizesIt) {
+TEST_F(OverlappingItemsTest, ASelectedSnippetsResizeBandResizesIt) {
     ShowEditMode();
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
     SelectTheBackItem(items);
 
-    // The west handle, in the middle of the border the front item is
-    // nowhere near, dragged 40px further out.
-    const float x = items.back.x;
+    // The band outside the west edge, by the middle of the border the front
+    // item is nowhere near, dragged 40px further out.
+    const float x = items.back.x - 4.0f;
     const float y = items.back.y + items.back.h * 0.5f;
     Drag(x, y, x - 40.0f, y, /*steps=*/10);
 
@@ -3541,10 +3543,10 @@ TEST_F(OverlappingItemsTest, ASelectedSnippetsHandleIsOnTopOfEveryOtherSnippet) 
     EXPECT_EQ(StrokeCountOnCurrentCanvas(), 0u) << "nothing was drawn into the front item";
 }
 
-// With more than one snippet selected, a handle drags the box around all
+// With more than one snippet selected, the band drags the box around all
 // of them: every snippet is scaled by one factor about the corner the drag
 // leaves fixed, so the group keeps its shape and the spacing inside it.
-TEST_F(OverlappingItemsTest, AHandleResizesTheWholeSelectionAtOnce) {
+TEST_F(OverlappingItemsTest, TheResizeBandResizesTheWholeSelectionAtOnce) {
     ShowEditMode();
     StepFrame();
     const OverlappingItems items = MakeOverlappingItems();
@@ -3555,8 +3557,8 @@ TEST_F(OverlappingItemsTest, AHandleResizesTheWholeSelectionAtOnce) {
     const float boxRight = std::max(items.back.x + items.back.w, items.front.x + items.front.w);
     const float boxBottom = std::max(items.back.y + items.back.h, items.front.y + items.front.h);
 
-    // The back snippet's own north-west handle, out by a tenth of the box.
-    Drag(items.back.x, items.back.y, items.back.x - 70.0f, items.back.y - 50.0f, /*steps=*/10);
+    // The back snippet's own north-west corner, out by a tenth of the box.
+    Drag(items.back.x - 4.0f, items.back.y - 4.0f, items.back.x - 74.0f, items.back.y - 54.0f, /*steps=*/10);
 
     const Rect back = BackItem().rect;
     const Rect front = FrontItem().rect;
@@ -3590,17 +3592,17 @@ TEST_F(OverlappingItemsTest, TheSmallestSnippetStopsTheWholeGroupShrinking) {
     ASSERT_EQ(App().Selection().size(), 2u);
 
     // Far enough in to take the small one well below its floor on its own.
-    Drag(big.x, big.y, big.x + 300.0f, big.y + 200.0f, /*steps=*/10);
+    Drag(big.x - 4.0f, big.y - 4.0f, big.x + 560.0f, big.y + 280.0f, /*steps=*/10);
 
     const Rect smallNow = ItemById(smallId).rect;
     const Rect bigNow = ItemById(bigId).rect;
     EXPECT_GE(smallNow.w, kItemMinWidth - 0.5f);
     EXPECT_GE(smallNow.h, kItemMinHeight - 0.5f);
-    EXPECT_NEAR(smallNow.w, kItemMinWidth, 1.0f) << "it stops exactly at its floor";
+    EXPECT_NEAR(smallNow.h, kItemMinHeight, 1.0f) << "it stops exactly at its floor (wider than square: its height)";
     EXPECT_NEAR(bigNow.w / big.w, smallNow.w / small.w, 0.02f) << "and the big one stops at the same factor";
 
     // And it goes no further: the same drag again changes nothing.
-    Drag(bigNow.x, bigNow.y, bigNow.x + 300.0f, bigNow.y + 200.0f, /*steps=*/10);
+    Drag(bigNow.x - 4.0f, bigNow.y - 4.0f, bigNow.x + 300.0f, bigNow.y + 200.0f, /*steps=*/10);
     EXPECT_NEAR(ItemById(smallId).rect.w, smallNow.w, 1.0f);
     EXPECT_NEAR(ItemById(bigId).rect.w, bigNow.w, 1.0f);
 }
@@ -4089,7 +4091,7 @@ TEST_F(OverlappingItemsTest, ABarWithBothGroupsSwitchedOffIsNotThere) {
 }
 
 // The bar is the same in either mode: both groups, where they were - and
-// the handles stay through both.
+// the resize band stays through both.
 TEST_F(OverlappingItemsTest, TheBarShowsBothGroupsInEitherMode) {
     ShowEditMode();
     StepFrame();
@@ -4107,9 +4109,9 @@ TEST_F(OverlappingItemsTest, TheBarShowsBothGroupsInEitherMode) {
     EXPECT_EQ(App().Selection().size(), 1u);
     EXPECT_EQ(App().SelectionBarButtonCenter(ChromeButton::Pen)->x, pen->x) << "the same bar, where it was";
     EXPECT_EQ(App().SelectionBarButtonCenter(ChromeButton::Pin)->x, pin->x);
-    MoveTo(items.back.x, items.back.y);
+    MoveTo(items.back.x - 4.0f, items.back.y - 4.0f);
     StepFrames(2);
-    EXPECT_EQ(App().DebugHoveredResizeHandle().substr(0, 2), "nw") << "the handles stay in drawing mode";
+    EXPECT_EQ(App().DebugHoveredResizeHandle().substr(0, 2), "nw") << "the band stays in drawing mode";
 
     PressKey(ImGuiKey_Escape);
     PressKey(ImGuiKey_Delete);

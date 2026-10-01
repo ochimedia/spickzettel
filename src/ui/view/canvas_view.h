@@ -2,11 +2,11 @@
 
 // The canvas view - docs/VIEW_LAYER.md, section 7: the canvas layer (the
 // frozen screen, the debug readout), the items layer (every snippet, the
-// selection's outline, handles and bar, a box being dragged), the note
+// selection's border and bar, a box being dragged), the note
 // editor, the dock of minimized snippets, and in the read-only modes the
 // view-only layer. What it keeps of its own is what drawing a canvas is
 // made of: both mesh caches, the previews' reading budgets, and the debug
-// readout of the handle under the pointer.
+// readout of the resize band's edge under the pointer.
 
 #include <cstdint>
 #include <functional>
@@ -46,8 +46,8 @@ public:
     // pictures asked for, which is what keeps them.
     void KeepTextures();
     // Stage 2: the canvas layer, then every item on the current canvas,
-    // back to front, into one layer, the selection's outline, handles and
-    // bar over all of them, and the note editor and the dock above it.
+    // back to front, into one layer, the selection's border and bar over
+    // all of them, and the note editor and the dock above it.
     // `propertiesItem` is the snippet Properties is up for, which keeps its
     // highlight while the pointer is over the popover; `bottomPanelsTop` is
     // what the dock's chips stay above.
@@ -67,7 +67,7 @@ public:
     // while a region is being dragged out - not for a press that has not
     // moved yet, which may still be a click, and would flicker.
     bool ItemsFadedForCreation() const;
-    // Which resize handle (if any) is hovered or dragging - see
+    // Which edge of the resize band (if any) is hovered or dragging - see
     // debugHoveredResizeHandle_ - and let go of, for the read-only modes,
     // which never draw the items that set it.
     const std::string& DebugHoveredResizeHandle() const { return debugHoveredResizeHandle_; }
@@ -92,8 +92,7 @@ private:
     void PaintItemBody(ImDrawList* drawList, const core::Item& item, bool drawing, bool highlighted,
                        bool isFrontmost, bool selected);
     // What a selected snippet wears while the selection is live, *drawn*:
-    // its border in the accent and, unless it is fullscreen, its eight
-    // handles.
+    // its border, in the selection's color.
     // Nothing in it takes input. Which of it is under the pointer is
     // ResolvePointerTarget's answer, what the pointer looks like over it
     // is RenderItems', and a press on any of it is the recognizer's -
@@ -201,17 +200,16 @@ private:
     // an unreasonable number of canvases.
     int picturePreviewLoadBudget_ = 0;
     int picturePreviewThumbnailBudget_ = 0;
-    // Which resize handle (if any) is currently hovered or dragging, as a
+    // Which edge or corner of the resize band (if any) is currently hovered
+    // or dragging, as a
     // short human-readable label ("nw item=3", "e item=5 (dragging)") -
     // empty when none is. Set by RenderItems from the resolver's answer,
-    // cleared at the top of every call so it never shows a stale handle
-    // from a frame where the mouse has moved off every handle since.
+    // cleared at the top of every call so it never shows a stale edge from
+    // a frame where the mouse has moved off the band since.
     // Exists purely for the debug overlay (gated on AppConfig::
     // showDebugOverlay, same as everything else that setting draws) and
-    // the tests - a live readout of exactly what the resize margin thinks
-    // is under the cursor, since a screenshot alone can't distinguish "this
-    // pixel is covered by a handle that just isn't visually distinguishable
-    // from its neighbor" from "this pixel isn't covered by anything."
+    // the tests - a live readout of exactly what the resize band thinks is
+    // under the cursor, since the band is not drawn at all.
     std::string debugHoveredResizeHandle_;
 };
 

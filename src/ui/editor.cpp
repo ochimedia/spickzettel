@@ -576,8 +576,21 @@ ItemId Editor::CreateFullscreenItem(ItemCreationKind kind, float width, float he
 }
 
 ItemId Editor::CreateRegionItem(ItemCreationKind kind, Rect rect) {
-    if (rect.w < kRegionMinSize || rect.h < kRegionMinSize) {
+    // A drag this short is a click that slipped, whatever its shape. One
+    // that is meant is kept however thin: a line of text is a fine thing
+    // to capture. Under the smallest snippet on a side it grows to it,
+    // about its middle, so what was framed stays in the middle of it -
+    // and is captured and stored at the size it is shown at.
+    if (std::hypot(rect.w, rect.h) < kRegionMinSize) {
         return 0;
+    }
+    if (rect.w < kItemMinWidth) {
+        rect.x -= (kItemMinWidth - rect.w) * 0.5f;
+        rect.w = kItemMinWidth;
+    }
+    if (rect.h < kItemMinHeight) {
+        rect.y -= (kItemMinHeight - rect.h) * 0.5f;
+        rect.h = kItemMinHeight;
     }
     const Canvas* canvas = EnsureCanvasForNewItem();
     if (canvas == nullptr) {
@@ -1249,24 +1262,33 @@ PointerTarget Editor::ResolvePointerTarget(float x, float y) const {
                 }
             }
         }
+        // The resize band around a selected snippet: over whatever is behind
+        // it, but never over a selected snippet, whose body is its own -
+        // except the band a snippet has inside its own edge, against the
+        // screen's (see ResizeBandAt).
+        const auto inside = [x, y](const Rect& r) {
+            return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+        };
+        std::vector<const Item*> selected;
         for (auto it = selection_.rbegin(); it != selection_.rend(); ++it) {
-            const Item* item = nullptr;
             for (const Item& candidate : canvas.items) {
-                if (candidate.id == *it) {
-                    item = &candidate;
+                if (candidate.id == *it && !candidate.minimized && !Manager().IsDeleted(canvas, candidate)) {
+                    selected.push_back(&candidate);
                     break;
                 }
             }
-            if (item == nullptr || item->isFullscreen) {
+        }
+        const bool onSelected =
+            std::any_of(selected.begin(), selected.end(), [&](const Item* item) { return inside(item->rect); });
+        for (const Item* item : selected) {
+            if (item->isFullscreen || (onSelected && !inside(item->rect))) {
                 continue;
             }
-            for (const HandleSpec& h : HandleSpecs(item->rect)) {
-                if (HandleHitRect(h.center).Contains(x, y)) {
-                    target.kind = PointerTarget::Kind::Handle;
-                    target.item = item->id;
-                    target.handle = h.handle;
-                    return target;
-                }
+            if (const std::optional<ResizeHandle> edge = ResizeBandAt(item->rect, x, y, displayW_, displayH_)) {
+                target.kind = PointerTarget::Kind::Band;
+                target.item = item->id;
+                target.handle = *edge;
+                return target;
             }
         }
     }

@@ -1465,20 +1465,20 @@ TEST(CanvasManagerTest, SyncLeavesAFullscreenItemsAnchorUntouchedUnderneath) {
 TEST(CanvasManagerTest, SyncFloorsSizeAtTheUsualResizeMinimumsOnADrasticDownscale) {
     CanvasManager manager;
     manager.SyncItemsToDisplaySize(2000.0f, 2000.0f);
-    manager.CreateItem(false, Rect{500, 500, 1000, 800}, "A");
+    manager.CreateItem(false, Rect{500, 500, 200, 160}, "A");
 
-    // Uniform size factor 0.05 would otherwise shrink this to 50x40 - well
-    // under the usual 90x70 resize floor (see item_geometry.h).
+    // Uniform size factor 0.05 would otherwise shrink this to 10x8 - under
+    // the usual 16x16 resize floor (see item_geometry.h).
     manager.SyncItemsToDisplaySize(100.0f, 100.0f);
 
     const Rect& rect = manager.CurrentOrNull()->items.front().rect;
-    // 5:4, floored without being reshaped - not a flat 90x70, which would
-    // be the item silently coming back at 9:7. See MinimumSizeForAspectRatio.
+    // 5:4, floored without being reshaped - not a flat 16x16, which would
+    // be the item silently coming back square. See MinimumSizeForAspectRatio.
     EXPECT_GE(rect.w, kItemMinWidth);
     EXPECT_GE(rect.h, kItemMinHeight);
-    EXPECT_FLOAT_EQ(rect.w / rect.h, 1000.0f / 800.0f);
-    EXPECT_FLOAT_EQ(rect.w, 90.0f);  // 5:4 is narrower than 9:7, so width is the binding floor
-    EXPECT_FLOAT_EQ(rect.h, 72.0f);
+    EXPECT_FLOAT_EQ(rect.w / rect.h, 200.0f / 160.0f);
+    EXPECT_FLOAT_EQ(rect.h, 16.0f);  // 5:4 is wider than square, so height is the binding floor
+    EXPECT_FLOAT_EQ(rect.w, 20.0f);
 }
 
 // The wide case, where independent per-axis floors would distort the most:
@@ -1487,14 +1487,14 @@ TEST(CanvasManagerTest, SyncFloorsSizeAtTheUsualResizeMinimumsOnADrasticDownscal
 TEST(CanvasManagerTest, SyncKeepsAWideItemsAspectRatioWhenTheFloorKicksIn) {
     CanvasManager manager;
     manager.SyncItemsToDisplaySize(3840.0f, 2160.0f);
-    manager.CreateItem(false, Rect{0, 0, 1920.0f, 1080.0f}, "A");
+    manager.CreateItem(false, Rect{0, 0, 384.0f, 216.0f}, "A");
 
     manager.SyncItemsToDisplaySize(120.0f, 120.0f);
 
     const Rect& rect = manager.CurrentOrNull()->items.front().rect;
     EXPECT_NEAR(rect.w / rect.h, 16.0f / 9.0f, 0.001f);
     EXPECT_GE(rect.w, kItemMinWidth);
-    EXPECT_FLOAT_EQ(rect.h, kItemMinHeight);  // wider than 9:7, so height binds
+    EXPECT_FLOAT_EQ(rect.h, kItemMinHeight);  // wider than square, so height binds
 }
 
 TEST(CanvasManagerTest, SyncWithANonPositiveNewSizeIsANoOp) {

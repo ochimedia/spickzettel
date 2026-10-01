@@ -80,7 +80,7 @@ to someone who already knows what they want. Neither leads. A first-time
 user does not know:
 
 - that a click selects a snippet, and a drag moves it;
-- that the handles show only on a selected snippet;
+- that only a selected snippet can be resized, from just outside its edges;
 - that drawing on a snippet is a mode, entered by a double-click or a
   hold;
 - that Delete does nothing in that mode;
@@ -129,7 +129,7 @@ These are sequences, and a sequence is learned by doing it once.
 - **Hint**: a line the card adds under the text. It is either a need not
   met, or a near miss.
 - **Anchor**: a named place on screen that a step may point at, such as
-  a button on the selection bar, the subject, or one of its handles.
+  a button on the selection bar, the subject, or a corner of its resize band.
 - **Spotlight**: the ring drawn around an anchor.
 - **World**: what the tutorial can read of the app (section 7.1).
 
@@ -275,7 +275,7 @@ column, "waits" marks a gated step (section 3).
 | 0 | `welcome` | read | moves on | Spickzettel keeps snippets (screenshots, drawings and notes) over whatever program is underneath, and everything saves itself. This tutorial runs in a folder of its own. | - | - | Next | - |
 | 1 | `screenshot` | do | **waits** | Drag a box over anything on screen to take a screenshot of it. With a trigger key set: "Hold {trigger} and drag". With the trigger off: "Press {newScreenshot}, then drag", or with that key unbound too, the empty canvas's menu. | - | in the tutorial folder; canvas uncovered; no drawing mode; no tool in hand but the screenshot tool | a screenshot snippet made since the step began, on the current canvas, not fullscreen | a fullscreen one: "That took the whole screen - a double-click does that. Press {key:deleteSelection} to delete it, and drag a box instead." (question 31) A drawing: "That made a drawing rather than a screenshot. Drag a box as above instead." |
 | 2 | `move` | do | moves on | Drag it to move it. A press selects it, and a drag takes it along. | the subject | a subject that can move; no drawing mode | the subject moved 16 px or more from where the step found it, its size changed by less than 10%, and not fullscreen | resized instead: "That changed its size. Drag from the middle to move it." |
-| 3 | `resize` | do | moves on | Drag a corner to resize it; Shift switches keeping its shape. A right-drag near an edge does it too. | the subject's lower right handle | a subject that can move; no drawing mode; the subject selected | its width or height changed by 10% or more, and not fullscreen | - |
+| 3 | `resize` | do | moves on | Drag just outside a corner or an edge to resize it - the pointer turns into arrows there. Shift switches keeping its shape. A right-drag on it does it too. | the subject's resize band at its lower right corner (since 2026-10-01; its handle before) | a subject that can move; no drawing mode; the subject selected | its width or height changed by 10% or more, and not fullscreen | - |
 | 4 | `delete` | do | **waits** | Select it and press Delete, or the close button on its bar. | the subject's close button | a subject; no drawing mode | one of the tutorial's snippets, there when the step began, deleted: the subject follows the hand | - |
 | 5 | `undo` | do | moves on | Deleted by mistake? {undo} brings it back. It takes back anything you did, a step at a time. | - | in the tutorial folder; canvas uncovered; the subject's canvas; a deleted subject | the subject back on the canvas, after being deleted in this step (or when it began) | - |
 | 6 | `programs` | read | moves on | Set it up for your programs. Some games break when the overlay takes focus; others need it to. Look through Settings > Behavior, and make a profile for each program that needs its own. | - | - | Next | - |
@@ -686,7 +686,7 @@ point at, and a board of where each is this frame. There are two kinds:
   - Settings' section buttons, Make a profile for this, New profile, a
     profile's trash button, Showing and its entries, the Don't steal
     focus row, and each Behavior row's revert arrow (18.3).
-- **Worked out from the model:** the subject, and its handles, from the
+- **Worked out from the model:** the subject, and its resize corner, from the
   snippet's rectangle and the selection's layout
   (`ui/selection_layout.h`), in the card (`TutorialCard::SpotRect`).
 
@@ -785,7 +785,7 @@ struct Step {
     bool keepsProfiles;                        // profiles made while up are the run's (18.3)
     const char* title;                         // from ui_strings
     const char* (*text)(const World&);         // chosen for the keys and triggers
-    Spot spot;                                 // an anchor, the subject, or a handle of it
+    Spot spot;                                 // an anchor, the subject, or its resize corner
     std::vector<Need> needs;                   // checked in order (6.4)
     SubjectRule subject;                       // none, any, can move, last deleted, pinned (6.5)
     Check goal;                                // bool(const Look&)
@@ -1524,8 +1524,8 @@ subject rule, an anchor.
   need above can say what is wrong with the one there is.
 - **A spot and its anchor, the selection bar's Pin:** marked in
   `canvas_view.cpp` beside the Close button (7.2). While no bar is
-  drawn, the spotlight rings the subject instead, as the handle's spot
-  does before the handles show.
+  drawn, the spotlight rings the subject instead, as the resize
+  corner's spot does before the subject is selected.
 - **The strings:** `tutorial.topics.pinning.*`, each step's title and
   text, their unbound-key texts, the near misses, the new need's line
   and the end card (`tutorial.pinningEnd.*`, as Drawing's

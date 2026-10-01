@@ -105,8 +105,8 @@ enum class SubjectRule {
 enum class Spot {
     None,
     Subject,
-    // The handle at the subject's lower right corner.
-    SubjectHandle,
+    // The subject's resize band at its lower right corner.
+    SubjectCorner,
     SelectionBarClose,
     // The selection bar's Pin, or the subject while no bar is drawn.
     SelectionBarPin,

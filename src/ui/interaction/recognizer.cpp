@@ -70,8 +70,8 @@ Answer RecognizeLeft(const Event& press, const PointerTarget& target, bool isDou
     if (target.kind == PointerTarget::Kind::Button) {
         return Answer::Start(std::nullopt, std::make_unique<BarPress>(press, target.button));
     }
-    // 3: a handle, only ever pressed to drag it.
-    if (target.kind == PointerTarget::Kind::Handle) {
+    // 3: the resize band, only ever pressed to drag it.
+    if (target.kind == PointerTarget::Kind::Band) {
         return Answer::Start(std::nullopt, Placement::ResizeByHandle(press, target.item, target.handle, editor));
     }
     if (drawing && !held.alt) {
@@ -173,21 +173,24 @@ Answer RecognizeRight(const Event& press, const PointerTarget& target, bool note
         }
         return Answer::Start(std::nullopt, std::make_unique<BarPress>(press, target.button));
     }
-    if (target.kind == PointerTarget::Kind::Body) {
+    // A selected snippet's resize band is the snippet's, for this button as
+    // for the left: rule 13 on it, never 12 - there is nothing to erase
+    // outside it.
+    if (target.kind == PointerTarget::Kind::Body || target.kind == PointerTarget::Kind::Band) {
         const core::ItemId item = target.item;
         // 12: on a snippet being drawn on, the right button is the eraser,
         // for quick corrections without changing the tool: a drag erases
         // along its path, and a press that never drags is a right click,
         // which leaves the mode. The erase starts only once it is a drag,
         // so a click takes nothing away.
-        if (editor.IsDrawingOn(item) && !editor.Held().alt) {
+        if (target.kind == PointerTarget::Kind::Body && editor.IsDrawingOn(item) && !editor.Held().alt) {
             Pending::Meaning meaning;
             meaning.click = Command{CommandId::LeaveDrawingMode};
             meaning.drag = [item](const Event& from, Editor& /*at*/) { return Marking::RightErase(from, item); };
             return Answer::Start(std::nullopt, std::make_unique<Pending>(press, meaning));
         }
         // 13: selected, and resized from its nearest edge once it is a drag
-        // - the one way to resize without aiming for a handle, with any
+        // - the one way to resize without aiming for the band, with any
         // tool in hand. A right press that never drags is a right click:
         // its context menu, where it landed - or, on a snippet being drawn
         // on (reached with Alt), leaving drawing mode.

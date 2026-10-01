@@ -5,15 +5,19 @@
 namespace sz::core {
 
 // px, resize floor - an item can never shrink smaller than this on either
-// axis, whether via an interactive resize-handle drag or a
+// axis, whether resized from its band, by the wheel or by a
 // display-resolution sync (see CanvasManager::SyncItemsToDisplaySize).
+// Enough for a line of small text with a hovered border on either side of
+// it; the selection's resize band is outside the snippet, so nothing of
+// the interface needs more - see docs/ARCHITECTURE.md, "The floor is a
+// shape". It was 90x70 until 2026-10-01.
 //
-// Note these two are a *shape* (9:7), not just two numbers, and anywhere
-// the item's aspect ratio is meant to be preserved they have to be
-// applied as one - see MinimumSizeForAspectRatio below for why applying
-// them independently silently reshapes the item.
-constexpr float kItemMinWidth = 90.0f;
-constexpr float kItemMinHeight = 70.0f;
+// Note these two are a *shape* (a square), not just two numbers, and
+// anywhere the item's aspect ratio is meant to be preserved they have to
+// be applied as one - see MinimumSizeForAspectRatio below for why
+// applying them independently silently reshapes the item.
+constexpr float kItemMinWidth = 16.0f;
+constexpr float kItemMinHeight = 16.0f;
 
 struct MinItemSize {
     float w = kItemMinWidth;
@@ -29,9 +33,9 @@ struct MinItemSize {
 // on its own.
 //
 // Applying the two floors independently silently reshapes the item: a
-// 16:9 item reaches the 70px height floor while still 124px wide, height
-// then stops while width goes on shrinking to 90, and it ends up 9:7.
-// Every item, of whatever shape, would eventually become exactly 90x70.
+// 16:9 item reaches the 16px height floor while still 28px wide, height
+// then stops while width goes on shrinking to 16, and it ends up square.
+// Every item, of whatever shape, would eventually become exactly 16x16.
 // Reaching one floor has to stop the whole resize, not just one axis.
 //
 // Falls back to the plain kItemMinWidth x kItemMinHeight for a

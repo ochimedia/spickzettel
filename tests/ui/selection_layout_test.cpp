@@ -49,6 +49,56 @@ TEST_P(SelectionLayoutTest, TheDividerIsCenteredBetweenTheGroups) {
 
 INSTANTIATE_TEST_SUITE_P(Scales, SelectionLayoutTest, ::testing::Values(1.0f, 1.25f, 1.5f, 2.0f));
 
+// The resize band is 8 px outside the snippet; its corners reach 16 px
+// along the edges, and the snippet itself is not in it.
+TEST(ResizeBand, IsOutsideTheSnippetWithCornersReachingAlongTheEdges) {
+    SetUiScale(1.0f);
+    const core::Rect r{100.0f, 100.0f, 200.0f, 100.0f};
+    const auto at = [&](float x, float y) { return ResizeBandAt(r, x, y, 1920.0f, 1080.0f); };
+    EXPECT_EQ(at(96.0f, 96.0f), ResizeHandle::NW);
+    EXPECT_EQ(at(110.0f, 96.0f), ResizeHandle::NW) << "along the top edge, within 16 px";
+    EXPECT_EQ(at(120.0f, 96.0f), ResizeHandle::N);
+    EXPECT_EQ(at(200.0f, 207.0f), ResizeHandle::S);
+    EXPECT_EQ(at(303.0f, 150.0f), ResizeHandle::E);
+    EXPECT_EQ(at(303.0f, 195.0f), ResizeHandle::SE);
+    EXPECT_FALSE(at(150.0f, 150.0f).has_value()) << "the snippet itself";
+    EXPECT_FALSE(at(102.0f, 102.0f).has_value()) << "even just inside its corner";
+    EXPECT_FALSE(at(200.0f, 91.0f).has_value()) << "beyond the band";
+}
+
+// On a small snippet the corners reach a quarter of the side at most, so
+// some of each edge stays the edge's.
+TEST(ResizeBand, OnASmallSnippetEachEdgeKeepsSomeOfItsOwn) {
+    SetUiScale(1.0f);
+    const core::Rect r{100.0f, 100.0f, 16.0f, 16.0f};
+    const auto at = [&](float x, float y) { return ResizeBandAt(r, x, y, 1920.0f, 1080.0f); };
+    EXPECT_EQ(at(101.0f, 96.0f), ResizeHandle::NW);
+    EXPECT_EQ(at(108.0f, 96.0f), ResizeHandle::N);
+    EXPECT_EQ(at(114.0f, 96.0f), ResizeHandle::NE);
+    EXPECT_EQ(at(96.0f, 108.0f), ResizeHandle::W);
+}
+
+// Against the screen's edge the band is inside the snippet on that side,
+// and on that side only - from where the snippet's visible edge is.
+TEST(ResizeBand, AgainstTheScreensEdgeItIsInside) {
+    SetUiScale(1.0f);
+    const core::Rect atLeft{-50.0f, 100.0f, 200.0f, 100.0f};
+    EXPECT_EQ(ResizeBandAt(atLeft, 5.0f, 150.0f, 1920.0f, 1080.0f), ResizeHandle::W);
+    EXPECT_FALSE(ResizeBandAt(atLeft, 10.0f, 150.0f, 1920.0f, 1080.0f).has_value());
+    EXPECT_FALSE(ResizeBandAt(atLeft, 146.0f, 150.0f, 1920.0f, 1080.0f).has_value()) << "the other side is outside";
+    const core::Rect atBottom{100.0f, 980.0f, 200.0f, 100.0f};
+    EXPECT_EQ(ResizeBandAt(atBottom, 200.0f, 1075.0f, 1920.0f, 1080.0f), ResizeHandle::S);
+}
+
+// The band is at the interface's scale.
+TEST(ResizeBand, ScalesWithTheInterface) {
+    SetUiScale(2.0f);
+    const core::Rect r{100.0f, 100.0f, 200.0f, 100.0f};
+    EXPECT_EQ(ResizeBandAt(r, 200.0f, 85.0f, 1920.0f, 1080.0f), ResizeHandle::N);
+    EXPECT_FALSE(ResizeBandAt(r, 200.0f, 83.0f, 1920.0f, 1080.0f).has_value());
+    SetUiScale(1.0f);
+}
+
 // One group alone has no divider.
 TEST(SelectionLayout, OneGroupHasNoDivider) {
     SetUiScale(1.0f);

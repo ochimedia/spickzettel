@@ -366,7 +366,7 @@ drawing mode and the modifiers. Today the same decisions are spread over
 |---|---|---|---|---|---|---|
 | 1 | left or right, over an ImGui window | - | - | Widget (ImGui's) | - | - |
 | 2 | left, on a bar button; right, on the pen's or the eraser's | - | - | Bar button held | its menu (the pen's, the eraser's) | - |
-| 3 | left, on a selected snippet's handle | - | - | Resize | - | - |
+| 3 | left, in a selected snippet's resize band | - | - | Resize | - | - |
 | 4 | left, on a snippet in drawing mode, no Alt | - | - | Stroke / Shape / Erase / Rectangle erase / Text, by tool and modifiers | - | - |
 | 5 | left, elsewhere, drawing mode, no Alt | leave drawing mode | - | - | drawing mode there, or fullscreen of the trigger's kind on empty canvas | - |
 | 6 | left, a creation tool in hand | - | fullscreen | Frame | - | - |
@@ -376,7 +376,7 @@ drawing mode and the modifiers. Today the same decisions are spread over
 | 10 | left, on empty canvas, a trigger held | clear selection | - | Frame (that kind) | fullscreen (that kind) | fullscreen (that kind) |
 | 11 | left, on empty canvas | clear selection | - | - | - | - |
 | 12 | right, on a snippet in drawing mode, no Alt | - | leave drawing mode | Erase | - | - |
-| 13 | right, on a snippet | select (and raise, if set) | context menu | Resize from the nearest edge | - | - |
+| 13 | right, on a snippet or in a selected one's resize band | select (and raise, if set) | context menu | Resize from the nearest edge | - | - |
 | 14 | right, on empty canvas | - | empty canvas menu | - | - | - |
 | 15 | middle, X1, X2, anywhere | - | - | - | - | - |
 
@@ -435,6 +435,43 @@ selection, and the mode ends with the last (`Editor::PruneSelection`).
 This, too, is no change to the structure: the Mode level holds one
 interaction, as before, and `DrawingMode` holds a list of snippets where
 it held one - its own state, which the rules read.
+
+Changed on 2026-10-01, from test feedback: a selected snippet is
+resized from a band around it, as a window is by its frame, where it
+had eight handles. A tester shrinking flat snippets ran into their
+smallest size, 90 by 70; lowered, the handles would have met. The
+handles were squares centered on the border, and responded 3 px past
+what was drawn: on a snippet under 28 px across at 100% (56 px at 200%)
+a corner's and an edge's overlapped, and on a small one they covered
+all of it, leaving nothing to move it by. Hiding them below a size
+would have left the smallest snippets the hardest to use. The band
+leaves the snippet itself to moving, whatever its size:
+
+- **Where.** 8 px outside each edge, at the interface's scale. Within
+  16 px of a corner - along either edge, and at most a quarter of the
+  side - it is the corner's, so a diagonal is not a fine aim. On a side
+  where the screen's edge leaves no room outside, the band is the 8 px
+  inside the snippet's visible edge instead, so a snippet against the
+  edge of the screen can still be resized from there.
+- **Whose.** A selected snippet's, as the handles were, so a press near
+  any other snippet's edge, or on empty canvas beside one, is not taken.
+  Outside the snippet, the band is over whatever is behind it - an
+  unselected snippet, or empty canvas - and takes the press there; it
+  is never over a selected snippet, whose body is its own. The bar,
+  8 px above, is checked first.
+- **What it shows.** The resize cursor, while the pointer is in it, and
+  the snippet's heavier border, as over its body. Nothing is drawn for
+  it at rest: the selected border says the snippet is selected, and
+  drawn handles would point at a corner where the whole edge works.
+
+It is rule 3 as before, with a place where a handle was:
+`ResolvePointerTarget` finds the band (`ResizeBandAt`), and the press
+resizes from the edge or corner it found, which the `Resize` drag has
+always taken. No structure changes. A right-drag on a snippet resizes
+from the nearest edge (rule 13), as before, and so does one in the
+band, which is the snippet's for either button; rule 12, the eraser,
+is for the snippet itself. The smallest snippet is
+now 16 by 16 (`docs/ARCHITECTURE.md`, "The floor is a shape").
 
 ## 7. Commands and bindings
 

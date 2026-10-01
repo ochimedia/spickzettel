@@ -22,10 +22,10 @@ Rect ShrinkFromBottomRight(Rect rect, bool lockAspect, int steps = 60) {
     return rect;
 }
 
-// Two independent per-axis floors (90x70, a fixed 9:7 shape) applied after
-// the aspect-ratio math reshape anything that isn't 9:7: a 16:9 snippet
-// hits the height floor at 124x70 and then squashes the rest of the way to
-// 90x70. The floor has to be one floor on the item's own shape.
+// Two independent per-axis floors (16x16, a fixed square) applied after
+// the aspect-ratio math reshape anything that isn't square: a 16:9 snippet
+// hits the height floor at 28x16 and then squashes the rest of the way to
+// 16x16. The floor has to be one floor on the item's own shape.
 TEST(ItemGeometryTest, AspectLockedShrinkKeepsTheRatioAllTheWayToTheFloor) {
     const Rect wide{100.0f, 100.0f, 1920.0f, 1080.0f};
     const float ratio = wide.w / wide.h;
@@ -37,7 +37,7 @@ TEST(ItemGeometryTest, AspectLockedShrinkKeepsTheRatioAllTheWayToTheFloor) {
     // floors is reached, not past it.
     EXPECT_GE(shrunk.w, kItemMinWidth);
     EXPECT_GE(shrunk.h, kItemMinHeight);
-    EXPECT_FLOAT_EQ(shrunk.h, kItemMinHeight);  // 16:9 is wider than 9:7, so height is the binding floor
+    EXPECT_FLOAT_EQ(shrunk.h, kItemMinHeight);  // 16:9 is wider than square, so height is the binding floor
 }
 
 TEST(ItemGeometryTest, AspectLockedShrinkKeepsTheRatioForATallItemToo) {
@@ -49,12 +49,12 @@ TEST(ItemGeometryTest, AspectLockedShrinkKeepsTheRatioForATallItemToo) {
     EXPECT_NEAR(shrunk.w / shrunk.h, ratio, 0.01f);
     EXPECT_GE(shrunk.w, kItemMinWidth);
     EXPECT_GE(shrunk.h, kItemMinHeight);
-    EXPECT_FLOAT_EQ(shrunk.w, kItemMinWidth);  // taller than 9:7, so width is the binding floor
+    EXPECT_FLOAT_EQ(shrunk.w, kItemMinWidth);  // taller than square, so width is the binding floor
 }
 
 // The escape hatch is meant to reshape, so there the two plain per-axis
 // floors are exactly right - an unlocked drag can still squash anything
-// down to 90x70.
+// down to 16x16.
 TEST(ItemGeometryTest, FreeResizeStillBottomsOutAtThePlainPerAxisFloor) {
     const Rect wide{100.0f, 100.0f, 1920.0f, 1080.0f};
 

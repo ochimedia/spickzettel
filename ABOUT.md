@@ -28,9 +28,9 @@ makes which is up to you, in Settings. Right-click empty canvas for a
 menu with every way to make one, Paste, the cheat sheet, Settings and
 the Overview.
 
-- Click a snippet to select it, drag it to move it, drag a handle to
-  resize it. Shift adds to the selection; Shift-drag on open canvas draws
-  a box to select by.
+- Click a snippet to select it, drag it to move it, drag just outside
+  its edges or corners to resize it. Shift adds to the selection;
+  Shift-drag on open canvas draws a box to select by.
 - Double-click a snippet, or hold a press on it, to draw on it - or
   pick Pen, Eraser or Text on its bar, which draws on every selected
   snippet. Right-click or hold Pen or Eraser to pick a line or a
