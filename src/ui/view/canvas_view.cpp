@@ -490,10 +490,11 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
     drawList->AddRectFilled(Im(bar.min), Im(bar.max), ImGui::GetColorU32(theme::kPanelBg), theme::kRadiusPill);
     drawList->AddRect(Im(bar.min), Im(bar.max), ImGui::GetColorU32(theme::kPanelBorderStrong), theme::kRadiusPill);
     // Between the drawing tools and what is done to the snippet.
-    if (const std::optional<float> divider = BarDividerX(bar, buttons)) {
+    const float dividerWidth = PxWhole(1.0f);
+    if (const std::optional<float> divider = BarDividerX(bar, buttons, dividerWidth)) {
         const float inset = Px(kBarPad) + Px(4.0f);
-        drawList->AddLine(ImVec2(*divider + 0.5f, bar.min.y + inset), ImVec2(*divider + 0.5f, bar.max.y - inset),
-                          ImGui::GetColorU32(theme::kPanelBorderStrong), Px(1.0f));
+        drawList->AddLine(ImVec2(*divider, bar.min.y + inset), ImVec2(*divider, bar.max.y - inset),
+                          ImGui::GetColorU32(theme::kPanelBorderStrong), dividerWidth);
     }
 
     for (const ChromeButton button : buttons) {

@@ -100,11 +100,14 @@ HitRect BarButtonRect(const BarLayout& bar, const std::vector<core::ChromeButton
     return HitRect{platform::Vec2{x, y}, platform::Vec2{x + Px(kBarButtonSize), y + Px(kBarButtonSize)}};
 }
 
-std::optional<float> BarDividerX(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons) {
+std::optional<float> BarDividerX(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons,
+                                 float width) {
     for (size_t at = 1; at < buttons.size(); ++at) {
         if (core::IsDrawingBarButton(buttons[at]) != core::IsDrawingBarButton(buttons[at - 1])) {
-            const float right = bar.min.x + Px(kBarPad) + BarButtonOffset(buttons, at);
-            return std::round(right - Px(kBarGroupGap) * 0.5f);
+            const float before = BarButtonRect(bar, buttons, buttons[at - 1]).max.x;
+            const float after = BarButtonRect(bar, buttons, buttons[at]).min.x;
+            const float middle = (before + after) * 0.5f;
+            return std::round(middle - width * 0.5f) + width * 0.5f;
         }
     }
     return std::nullopt;

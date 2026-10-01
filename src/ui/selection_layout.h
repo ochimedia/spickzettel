@@ -79,7 +79,11 @@ BarLayout LayoutBar(const core::Rect& bounds, float displayW, float displayH,
                     const std::vector<core::ChromeButton>& buttons);
 HitRect BarButtonRect(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons,
                       core::ChromeButton button);
-// Where the divider between the two groups stands, if both are on the bar.
-std::optional<float> BarDividerX(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons);
+// The divider between the two groups, if both are on the bar: a line
+// `width` wide, centered on the middle of the gap between them - with its
+// edges on whole pixels where its width allows, the nearest that is to
+// the middle, so it is drawn sharp. Where its middle is.
+std::optional<float> BarDividerX(const BarLayout& bar, const std::vector<core::ChromeButton>& buttons,
+                                 float width);
 
 }  // namespace sz::ui
