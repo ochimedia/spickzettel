@@ -290,7 +290,8 @@ the Win32 cursor bitmap are built from, so the two pens are the same pen.
 
 ## Drawing model
 
-`Stroke` is a polyline with a color and a width; `CanvasState` - the
+`Stroke` is a polyline with a color, a width and whether its corners
+are square (see "Tessellation, and its cache"); `CanvasState` - the
 session's live layer, where a stroke is drawn before it is committed to
 its snippet - holds a list of finished strokes plus at most one in
 progress. Both are dumb on purpose: they record what they are given, so
@@ -350,7 +351,7 @@ either end's circle, the least start to the greatest end. Found in
 review on 2026-09-27.
 
 A closed stroke - the rectangle tool's outline, which starts and ends on
-its top-left corner - is cut open where it is erased, not at its seam:
+the corner its drag began at - is cut open where it is erased, not at its seam:
 the run that ends at the seam and the one that begins there are joined
 into one. Left as two, each ended there in a round cap, and of a
 rectangle cut anywhere that one corner went round while the others
@@ -402,6 +403,20 @@ and the depth test (see "Drawing strokes") makes overlap harmless
 anyway. A fitted curve's joins are mostly a few degrees, so a smooth
 stroke has as many vertices as before; wavy and zigzag strokes of a
 wide pen have up to a quarter and a half more.
+
+The round join pivots where the two inner edges cross, so the stroke is
+as wide on the inside of a turn as along it. It pivoted at the half
+width from the point, which was harmless while only hairpins took a
+round join; once every turn past a few degrees did, it pinched every
+corner by as much as the miter would have stuck out - a right angle on
+a 40px pen narrowed to 34px. Found in review on 2026-10-01. A sharp
+turn takes that crossing far up the inside, and past the end of a short
+segment the strip would fold back over itself; so it reaches back no
+more than half the shorter segment either side, leaving the other half
+to the join at its far end, and short of that it is held on the
+bisector, inside the stroke - a pinch on a hairpin, never a fold.
+`StrokeMeshTest` samples the corner for holes and for anything drawn
+twice.
 
 The rectangle tool's corners stay square: a shape tool's stroke says
 `StrokeCorners::Sharp`, and keeps the miter up to 120 degrees. The

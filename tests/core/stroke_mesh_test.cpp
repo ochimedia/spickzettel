@@ -74,6 +74,30 @@ float SolidArea(const StrokeMesh& mesh) {
     return total;
 }
 
+// How many fully solid triangles hold the point - 1 where the stroke is
+// drawn once, 0 in a hole, 2 where it is drawn twice. Sampled off the
+// pixel grid, so no sample lands on an edge two triangles share.
+int SolidTrianglesAt(const StrokeMesh& mesh, float x, float y) {
+    int count = 0;
+    for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+        const StrokeVertex& a = mesh.vertices[mesh.indices[i]];
+        const StrokeVertex& b = mesh.vertices[mesh.indices[i + 1]];
+        const StrokeVertex& c = mesh.vertices[mesh.indices[i + 2]];
+        if (a.coverage < 1.0f || b.coverage < 1.0f || c.coverage < 1.0f) {
+            continue;
+        }
+        const float d1 = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+        const float d2 = (c.x - b.x) * (y - b.y) - (c.y - b.y) * (x - b.x);
+        const float d3 = (a.x - c.x) * (y - c.y) - (a.y - c.y) * (x - c.x);
+        const bool negative = d1 < 0.0f || d2 < 0.0f || d3 < 0.0f;
+        const bool positive = d1 > 0.0f || d2 > 0.0f || d3 > 0.0f;
+        if (!(negative && positive)) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 TEST(StrokeMeshTest, EmptyInputProducesNoGeometry) {
     const StrokeMesh mesh = BuildStrokeMesh({}, 5.0f, kFringe, StrokeCorners::Round);
     EXPECT_TRUE(mesh.vertices.empty());
@@ -267,6 +291,39 @@ TEST(StrokeMeshTest, ARoundPenLeavesNoPointAtAnyTurn) {
             EXPECT_LE(furthestSolid, halfWidth + kCornerTolerance) << halfWidth << " at " << degrees;
             EXPECT_LE(FurthestFromCenterline(mesh, centerline), halfWidth + kCornerTolerance + kFringe)
                 << halfWidth << " at " << degrees;
+        }
+    }
+}
+
+// The inside of a turn is as wide as the rest of the stroke: everything the
+// pen covered near the corner is drawn, and drawn once. With the inside
+// pinned at the half width, a right angle on a 40px pen narrowed to 34px.
+// Nothing is drawn twice either, at any turn.
+TEST(StrokeMeshTest, ARoundPensTurnIsFullWidthOnTheInside) {
+    for (const float halfWidth : {4.0f, 20.0f}) {
+        for (int degrees = 5; degrees < 180; degrees += 10) {
+            const float turn = static_cast<float>(degrees) * 3.14159265f / 180.0f;
+            const std::vector<StrokePoint> centerline = {
+                StrokePoint{0, 0}, StrokePoint{200, 0},
+                StrokePoint{200 + 200 * std::cos(turn), 200 * std::sin(turn)}};
+            const StrokeMesh mesh = BuildStrokeMesh(centerline, halfWidth, kFringe, StrokeCorners::Round);
+            int holes = 0;
+            int twice = 0;
+            for (float y = -halfWidth - 2.0f; y < 80.0f; y += 0.73f) {
+                for (float x = 120.0f; x < 240.0f; x += 0.73f) {
+                    const float distance = std::min(DistanceToSegment(x, y, centerline[0], centerline[1]),
+                                                    DistanceToSegment(x, y, centerline[1], centerline[2]));
+                    const int covering = SolidTrianglesAt(mesh, x + 0.011f, y + 0.017f);
+                    holes += (distance < halfWidth - 0.5f && covering == 0) ? 1 : 0;
+                    twice += covering > 1 ? 1 : 0;
+                }
+            }
+            // Up to the turn whose crossing lies half a segment back; past
+            // it the inside is held short, a pinch by design.
+            if (halfWidth * std::tan(turn * 0.5f) <= 100.0f) {
+                EXPECT_EQ(holes, 0) << halfWidth << " at " << degrees;
+            }
+            EXPECT_EQ(twice, 0) << halfWidth << " at " << degrees;
         }
     }
 }
