@@ -31,11 +31,12 @@ the Overview.
 - Click a snippet to select it, drag it to move it, drag a handle to
   resize it. Shift adds to the selection; Shift-drag on open canvas draws
   a box to select by.
-- Double-click a snippet, or hold a press on it, to draw on it. Its bar
-  then shows Pen, Eraser, Text and the color. Click Pen or Eraser again
-  for a line or a rectangle; right-click or hold it to pick one.
-  Right-drag on the snippet erases.
-  Click anywhere else, or press Escape, to stop.
+- Double-click a snippet, or hold a press on it, to draw on it - or
+  pick Pen, Eraser or Text on its bar, which draws on every selected
+  snippet. Right-click or hold Pen or Eraser to pick a line or a
+  rectangle; it stays picked until you pick another. Right-drag on the
+  snippet erases. Click the lit tool again, click anywhere else, or press
+  Escape, to stop.
 - Delete removes the selection; Ctrl+Z brings it back. Ctrl+C, Ctrl+X and
   Ctrl+V copy, cut and paste snippets, between canvases too.
 - Ctrl+Z - undo. Ctrl+Y or Ctrl+Shift+Z - redo.
