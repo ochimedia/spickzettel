@@ -75,6 +75,35 @@ the Overview.
   shrunk to a third; Nearest keeps pixel art blocky.
 
 
+## Questions
+
+### Was this app developed with the help of AI?
+
+Short answer: yes. Long answer: I'm a developer who spends most of my
+day programming and consulting for a living. I'm also a gamer and
+streamer, and the idea for this app came from that hobby. AI models have
+reached a point where they can realize ideas you would otherwise never
+find the time for. Most of the code in this app was written by an AI
+model, and changes were directed and reviewed by me. I deliberately
+chose a programming language and libraries I know well, so I can
+understand and judge what the machine writes. I've invested a lot of
+time and thought (and also quite some money) in iterating on and
+refining the ideas behind it, as well as testing it extensively by hand
+in addition to an automated test suite. I hope that shows, and that you
+find it useful.
+
+The app itself contains no AI, and your screenshots never leave your
+computer.
+
+### Does this app track me, or send telemetry or other data?
+
+No. The app contains no networking code and never connects to the
+internet. Your snippets and screenshots stay in
+%LOCALAPPDATA%\Spickzettel and your settings in %APPDATA%\Spickzettel.
+If the app crashes, it writes a crash report to
+%LOCALAPPDATA%\Spickzettel\crashes, on your computer.
+
+
 ## Changelog
 
 ### 0.2.1
