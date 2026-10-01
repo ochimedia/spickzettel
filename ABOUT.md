@@ -35,8 +35,8 @@ the Overview.
   pick Pen, Eraser or Text on its bar, which draws on every selected
   snippet. Right-click or hold Pen or Eraser to pick a line or a
   rectangle; it stays picked until you pick another. Right-drag on the
-  snippet erases. Click the lit tool again, click anywhere else, or press
-  Escape, to stop.
+  snippet erases. Click the highlighted tool again, click anywhere else,
+  or press Escape, to stop.
 - Delete removes the selection; Ctrl+Z brings it back. Ctrl+C, Ctrl+X and
   Ctrl+V copy, cut and paste snippets, between canvases too.
 - Ctrl+Z - undo. Ctrl+Y or Ctrl+Shift+Z - redo.
@@ -105,6 +105,23 @@ If the app crashes, it writes a crash report to
 
 
 ## Changelog
+
+### 0.2.2
+
+#### Features
+
+- Drawing on several snippets at once: pick a tool on the bar with them selected
+- Optional separate color for the border of a selected snippet (see Settings > Appearance > Snippet colors)
+- Added "Questions" section to About
+
+#### Changes
+
+- Breaking change: a library opened once with 0.2.2 cannot be used with earlier versions
+- Unified the drawing and snippet toolbar
+- The pen's and eraser's shapes stay picked until another is picked; clicking the highlighted tool stops drawing
+- Optimized pen and rectangle stroke appearance
+- Optimized appearance of borders in multiple places
+- Lowered minimum size of snippets to 16x16 pixels, with reworked resize borders
 
 ### 0.2.1
 
