@@ -476,7 +476,7 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     // not in drawing mode unless Alt is held - the four-way arrow says so.
     // Only over a snippet: on empty canvas a press clears the selection.
     // Set before anything is drawn rather than after, so anything more
-    // specific - a handle's own directional cursor, the dock chips' hand -
+    // specific - the resize band's directional cursor, the dock chips' hand -
     // still wins where it applies.
     const ImGuiIO& io = ImGui::GetIO();
     if (editor_.SelectionLive() && editor_.PressPicksUp() && !io.WantCaptureMouse) {

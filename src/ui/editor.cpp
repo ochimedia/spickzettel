@@ -227,7 +227,7 @@ void Editor::AddTouchedToSelection(const Rect& box) {
     }
     // Back to front, so a box over a stack of them leaves the frontmost
     // selected last - which is the one the bar's single-snippet buttons
-    // then act on, and the one whose handles are found first.
+    // then act on, and the one whose band is found first.
     for (const Item& item : canvas->items) {
         if (item.minimized || Manager().IsDeleted(*canvas, item) || IsSelected(item.id)) {
             continue;
@@ -1222,13 +1222,14 @@ void Editor::ShowUndoStep(const std::optional<Session::UndoStep>& step) {
 // One walk over the current canvas, answering what a screen point is on -
 // see PointerTarget for what each answer is for:
 //  - the target: the frontmost thing that would take a press there - a
-//    selection bar button, a selected snippet's handle, or an item's body;
+//    selection bar button, a selected snippet's resize band, or an item's
+//    body;
 //  - `body`: the frontmost item whose content rect holds the point.
 // The selection's furniture is drawn over every snippet, so it is asked
-// first, the bar before the handles and the snippet selected last before
+// first, the bar before the bands and the snippet selected last before
 // the others - the same order it is painted in. It exists only while the
 // selection is live (see SelectionLive), and never on a fullscreen
-// snippet, which has no handles.
+// snippet, which has no band.
 PointerTarget Editor::ResolvePointerTarget(float x, float y) const {
     PointerTarget target;
     const Canvas* canvasPtr = Manager().CurrentOrNull();

@@ -138,8 +138,8 @@ public:
     }
     virtual std::vector<core::ItemId> Selection() const = 0;
     virtual std::optional<core::ItemCreationKind> CreationToolInHand() const = 0;
-    // The tool in hand, Select for the hand at rest, and the shape the
-    // eraser is cycled to while it is in hand.
+    // The tool in hand, Select for the hand at rest, and the shape picked
+    // for the eraser.
     virtual core::Tool ToolInHand() const = 0;
     virtual core::DrawShape EraserShape() const = 0;
     // What the pen draws with: its color, and its width on screen.

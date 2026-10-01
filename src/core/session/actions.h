@@ -24,7 +24,7 @@ namespace sz::core {
 // - Select: the hand at rest, what Escape and the key of the tool already
 //   in hand put it back to. Snippets are objects to it, the way a drawing
 //   program's selector sees them: a click selects one, a drag moves the
-//   selection, and a selected snippet wears handles to resize it by. A
+//   selection, and a selected snippet is resized from a band around it. A
 //   press on empty canvas clears the selection. Holding Alt is this tool
 //   for as long as it is held, whatever is in hand.
 // - NewDrawing, NewScreenshot: the next left press, on a snippet or not,

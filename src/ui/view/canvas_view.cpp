@@ -77,7 +77,7 @@ std::pair<ImVec2, ImVec2> WholePixelRect(const Item& item) {
             ImVec2(std::round(item.rect.x + item.rect.w), std::round(item.rect.y + item.rect.h))};
 }
 
-// The selection's color - its border's, its handles' edges', its halo's -
+// The selection's color - its border's and its halo's -
 // at `alpha` of its own: the accent, or the color set for it.
 ImU32 SelectionColor(const AppConfig& cfg, float alpha = 1.0f) {
     return cfg.itemBorderSelectedFollowsAccent ? theme::AccentU32(static_cast<uint8_t>(alpha * 255.0f + 0.5f))
@@ -278,8 +278,8 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
         }
     }
     // The selection, over every snippet - the primary last, so where two
-    // selected snippets overlap the one selected last has its handles on
-    // top, which is the one the resolver finds first.
+    // selected snippets overlap the one selected last is drawn on top,
+    // as the resolver finds its band first.
     if (editor_.SelectionLive()) {
         for (const ItemId id : editor_.Selection()) {
             for (const Item& item : canvas.items) {

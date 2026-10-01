@@ -8,8 +8,8 @@
 //  #  | Press                                            | At once           | Click       | Drag          | Hold          | Double
 //  1  | any, over an ImGui window                        | -                 | -           | (ImGui's)     | -             | -
 //  2  | left, on a bar button; right, on the pen's or the eraser's | -       | -           | Bar button    | its menu      | -
-//  3  | left, on a selected snippet's handle             | -                 | -           | Resize        | -             | -
-//  4  | left, on the drawing snippet, drawing mode       | -                 | -           | Stroke / Text | -             | -
+//  3  | left, in a selected snippet's resize band        | -                 | -           | Resize        | -             | -
+//  4  | left, on a snippet in drawing mode               | -                 | -           | Stroke / Text | -             | -
 //  5  | left, elsewhere, drawing mode                    | leave drawing mode| -           | -             | drawing mode there, or fullscreen | -
 //  6  | left, a creation tool in hand                    | -                 | fullscreen  | Frame         | -             | -
 //  7  | left, on a snippet, Shift                        | add or take away  | -           | -             | -             | -
@@ -17,8 +17,8 @@
 //  9  | left, on empty canvas, Shift                     | -                 | -           | Box select    | -             | -
 //  10 | left, on empty canvas, a trigger held            | clear selection   | -           | Frame         | fullscreen    | fullscreen
 //  11 | left, on empty canvas                            | clear selection   | -           | -             | -             | -
-//  12 | right, on the drawing snippet, drawing mode      | -                 | leave drawing mode | Erase  | -             | -
-//  13 | right, on a snippet                              | select (and raise)| context menu| Resize from the nearest edge | - | -
+//  12 | right, on a snippet in drawing mode              | -                 | leave drawing mode | Erase  | -             | -
+//  13 | right, on a snippet or in its resize band        | select (and raise)| context menu| Resize from the nearest edge | - | -
 //  14 | right, on empty canvas                           | -                 | empty canvas menu | -       | -             | -
 //  15 | middle, X1, X2                                   | the bindings'     |             |               |               |
 //

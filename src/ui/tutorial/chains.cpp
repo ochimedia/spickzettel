@@ -360,8 +360,8 @@ std::vector<Step> MakeDrawing() {
                  strings::kTutorialWidthMissNothingDrawn},
             },
     });
-    // The pen's shapes, cycled by its button: a shape is the pen's while
-    // it stays in hand, so both come before the eraser.
+    // The pen's shapes, picked from its button's menu: a shape is the
+    // pen's until another is picked, so both come before the eraser.
     chain.push_back(Step{
         .id = "line",
         .kind = StepKind::Do,

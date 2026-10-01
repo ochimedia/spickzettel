@@ -246,7 +246,7 @@ void Placement::Begin(const Event& event, Editor& editor) {
     editor.GetSession().BeginPlacement(ids);
     last_ = event.position;
     if (!fromDrag_) {
-        return;  // a handle, pressed: nothing has moved yet
+        return;  // the band, pressed: nothing has moved yet
     }
     // A fullscreen snippet is taken out of fullscreen the moment it is
     // dragged, as a window manager un-maximizes a window you take hold of
@@ -287,7 +287,7 @@ Answer Placement::ModifiersChanged(const Event& /*event*/, Editor& editor) {
 Answer Placement::Released(const Event& event, Editor& editor) {
     // Where the button came up, first: movement comes once a frame, and a
     // release carries its own position, which the last move may not have
-    // reached - a quick drag, or a handle let go of with no move at all.
+    // reached - a quick drag, or the band let go of with no move at all.
     // An interruption has no position of its own, and ends where it got.
     if (event.position.x != last_.x || event.position.y != last_.y) {
         last_ = event.position;
@@ -334,8 +334,7 @@ void Placement::Apply(platform::Vec2 pointer, Editor& editor) {
 
 // Every selected snippet scaled by one factor about the point the drag
 // leaves fixed - the opposite corner, or the middle of the axis an edge
-// handle does not drive, which is how one snippet's own edge handle grows
-// too.
+// does not drive, which is how one snippet's own edge grows too.
 //
 // Scaled, never stretched, whatever Shift says: a group is snippets of
 // several shapes, and stretching the box around them would reshape every

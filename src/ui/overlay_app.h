@@ -83,13 +83,13 @@ enum class OverlayMode {
 //  - Everything over the canvas - freehand pen/eraser strokes, the "double
 //    click or hold for fullscreen, drag for a region" item-creation
 //    gesture, and the selection's own gestures (a press on a snippet, on a
-//    selected snippet's handle, or on the selection bar - see
+//    selected snippet's resize band, or on the selection bar - see
 //    ui/interaction/recognizer.cpp) - is driven by the window's input
 //    stream (see OnInput: as it arrives, decoupled from render/frame rate),
 //    through the editor's interactions (docs/INTERACTIONS.md). What a press
 //    lands on is ResolvePointerTarget's answer: the app's own walk over
 //    the selection's furniture and then the items, asked of the event's
-//    own position. ImGui never hit-tests an item, a handle or the bar, so
+//    own position. ImGui never hit-tests an item, a band or the bar, so
 //    nothing about them is a frame late (see docs/ARCHITECTURE.md,
 //    "Nothing over the canvas is hit-tested by ImGui").
 //  - Popovers, the canvas bar, the dock and the Overview are ordinary

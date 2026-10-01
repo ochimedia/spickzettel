@@ -206,9 +206,9 @@ confirmation (section 7.4).
 **The spotlight.** A ring around the anchor, in a soft glow:
 
 - It is in the tutorial's own highlight, a bright cyan, and not in the
-  accent. The selection frame is in the accent, and a ring the same color
-  around a selected snippet was hard to see. The accent is also a
-  setting, and can be dark. The card marks out its hint, a warning's
+  accent. The selection frame is in the accent by default, and a ring
+  the same color around a selected snippet was hard to see. The accent
+  is also a setting, and can be dark. The card marks out its hint, a warning's
   title, the check and the progress in the same cyan.
 - It pulses slowly, is drawn above everything but the pointer, and takes
   no input.

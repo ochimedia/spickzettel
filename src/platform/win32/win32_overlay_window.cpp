@@ -1307,7 +1307,7 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
             return TRUE;
         }
         // Default deliberately falls through to ImGui's own handler below,
-        // which installs whatever the frame asked for - a resize handle's
+        // which installs whatever the frame asked for - the resize band's
         // directional arrow, the dock's hand. Answering this message
         // unconditionally is what made those flash and vanish: ImGui set
         // them in NewFrame and the next mouse move took them straight back

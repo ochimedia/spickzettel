@@ -62,8 +62,8 @@ void Pointer::ToolSized(bool pen) {
 
 // Which shape the OS cursor should wear, decided here at the end of the
 // frame rather than at the start - because ImGui only knows what it wants
-// once every widget has run, and this must not overrule it. A resize
-// handle's directional arrow, the dock's hand and the note editor's I-beam
+// once every widget has run, and this must not overrule it. The resize
+// band's directional arrow, the dock's hand and the note editor's I-beam
 // are all ImGui's to install; asking the platform for a crosshair on top of
 // them is what made them flash and vanish.
 //
@@ -146,7 +146,7 @@ void Pointer::ApplyPointerShape() {
 
 platform::CursorShape Pointer::WantedPointerShape() const {
     // Everything below is about what the pointer is *over*. Over the
-    // overview, a popover or the selection's handles and bar, ImGui owns the
+    // overview, a popover or the selection's resize band and bar, ImGui owns the
     // pointer and this must not argue with it - the arrow here is only
     // what's left when ImGui wants nothing more specific, which
     // ApplyPointerShape has already checked before this answer is used at
@@ -163,8 +163,8 @@ platform::CursorShape Pointer::WantedPointerShape() const {
     const ImVec2 mouse = ImGui::GetMousePos();
     const PointerTarget target = editor_.ResolvePointerTarget(mouse.x, mouse.y);
     if (target.kind != PointerTarget::Kind::Body) {
-        // Open canvas, a handle or the bar: nothing here for the tool to
-        // mark. A handle has already asked ImGui for its own shape
+        // Open canvas, the resize band or the bar: nothing here for the tool
+        // to mark. The band has already asked ImGui for its own shape
         // (RenderItems), which ApplyPointerShape lets win; a button gets
         // the arrow, as a button does.
         return platform::CursorShape::Arrow;

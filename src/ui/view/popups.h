@@ -200,8 +200,7 @@ private:
     void RenderColorChooser(float displayW, float displayH);
     // The shapes of the pen or the eraser, each a row that puts that tool
     // in hand drawing it, the one in hand marked, and beside a shape the
-    // modifier that draws it for one drag - what the bar button cycles
-    // through, to pick from at once.
+    // modifier that draws it for one drag. A pick stays until another.
     void RenderShapeMenu();
     void BuildShapeMenuRows(core::Tool tool, std::vector<ContextMenuEntry>& rows) const;
     // Cancel or Delete, for a canvas or a folder, or what is deleted in a

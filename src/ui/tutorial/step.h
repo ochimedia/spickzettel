@@ -48,7 +48,7 @@ enum class Need {
     // The subject is not fullscreen, which has no size of its own to move
     // or resize.
     SubjectCanMove,
-    // The subject is selected, so that its handles show.
+    // The subject is selected, so that it has its bar and its resize band.
     SubjectSelected,
     // The subject is in drawing mode.
     DrawingOnSubject,

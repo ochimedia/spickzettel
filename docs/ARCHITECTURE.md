@@ -2136,11 +2136,13 @@ alpha would not reach it.
 
 Six tools, exactly one in hand at a time, so the one lit on the bar is
 always what a press will do. Select is the hand at rest. Draw, Erase and
-Text are in hand only while a snippet is in *drawing mode* and act on
-that snippet alone; for them a shape is a modifier held as the press
-starts (Shift for a line, Ctrl for a rectangle, Ctrl with the eraser for
-a rectangle eraser), read once on the press so letting go mid-drag
-changes nothing. Drawing and Screenshot place a new snippet with the
+Text are in hand only while snippets are in *drawing mode* - every one
+selected when the tool was picked - and a press acts on the one it lands
+on. Their shapes are picked from the pen's and the eraser's menus and
+stay picked until another is; a modifier held as the press starts
+(Shift for a line, Ctrl for a rectangle, Ctrl with the eraser for a
+rectangle eraser) draws one for that drag only, read once on the press
+so letting go mid-drag changes nothing. Drawing and Screenshot place a new snippet with the
 next press, anywhere, then hand over: a drawing to Draw, a screenshot to
 the tool that was in hand before.
 
@@ -2903,7 +2905,8 @@ Every snippet wears one border, and it says two things, each in a
 channel of its own:
 
 - **Its color says what the snippet is.** In order:
-  - selected, in the accent;
+  - selected, in the accent, or a color of its own
+    (`snippetColors.borderSelected`);
   - pinned;
   - in front;
   - the rest.

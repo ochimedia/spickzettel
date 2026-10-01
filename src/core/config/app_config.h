@@ -177,8 +177,8 @@ struct AppConfig {
     // showItemBorders is on: a pinned snippet stays on screen when the
     // overlay is put away, and which ones will has to be seen at a glance.
     uint32_t itemBorderColorPinnedRGBA = 0xFF6A3D99;  // the accent, ~60%
-    // A selected snippet's border, in place of all of the above, and its
-    // handles' edges and drawing mode's halo with it: the accent while
+    // A selected snippet's border, in place of all of the above, and
+    // drawing mode's halo with it: the accent while
     // itemBorderSelectedFollowsAccent is on, else
     // itemBorderColorSelectedRGBA, alpha and all. Kept while it follows
     // the accent, so switching it off brings back the color picked before.

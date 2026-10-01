@@ -556,7 +556,7 @@ namespace {
 // icon that stands for it there.
 //
 // A fixed icon, unlike the bar's own, where the pen and the eraser show
-// the shape they are cycled to: this row is about which buttons are there,
+// the shape picked for them: this row is about which buttons are there,
 // not about what a drag would make right now. The color button has no
 // icon on either - it is the color itself - and is drawn as a swatch here
 // too.

@@ -193,7 +193,7 @@ bool Win32Dx11Renderer::Initialize(HWND hwnd) {
     // ImGuiConfigFlags_NoMouseCursorChange is deliberately *not* set:
     // leaving it clear lets ImGui_ImplWin32_WndProcHandler's WM_SETCURSOR
     // handling swap the OS cursor per ImGui::GetMouseCursor() every frame
-    // (the resize handles' arrows, the dock's hand). Set, it silently
+    // (the resize band's arrows, the dock's hand). Set, it silently
     // swallows every SetMouseCursor call in the app.
     // Must run before ImGui_ImplWin32_Init/ImGui_ImplDX11_Init below - see
     // LoadSpickzettelFonts's own doc comment for why the ordering matters.
@@ -416,7 +416,7 @@ void Win32Dx11Renderer::NewFrame() {
     // Both paths is the whole point. Answering WM_SETCURSOR was not enough:
     // the backend also installs a cursor once per frame from NewFrame,
     // whenever ImGui's wanted shape changes, and knows nothing about the
-    // grab - so moving onto a resize handle or a text field re-installed a
+    // grab - so moving onto the resize band or a text field re-installed a
     // real cursor behind the drawn one. And WM_SETCURSOR is sent when the
     // cursor moves over the window, which under a mouse grab it has stopped
     // doing, so the message that would have hidden it again barely arrives.

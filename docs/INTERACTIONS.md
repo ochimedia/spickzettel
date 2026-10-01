@@ -329,8 +329,8 @@ move begins only when it is a drag - with the snapshot taken as of the
 press, so nothing about the drag changes - and a hold has nothing to
 drop.
 
-A press whose meaning is not open - a stroke on the snippet in drawing
-mode, a handle - starts its interaction at once, with no Pending.
+A press whose meaning is not open - a stroke on a snippet in drawing
+mode, the resize band - starts its interaction at once, with no Pending.
 
 ### 6.3 Spent: the rest of a press that has had its say
 
@@ -409,7 +409,8 @@ shows the drawing tools and the snippet's buttons side by side, whether
 or not a snippet is in drawing mode, where it used to show one set or the
 other. A drawing tool's button runs what the tool's key runs: the tool
 picked - which, with no snippet in drawing mode, enters it on the snippet
-selected last (`Editor::PickTool`) - or, when it is the tool in hand, put
+selected last (`Editor::PickTool`; since, on every snippet selected - see
+below) - or, when it is the tool in hand, put
 down again, which leaves drawing mode. Its click used to cycle the tool's
 shapes instead, before the menu above had them; with the menu, the click
 is free to be the tool's own. None of this touches the structure: rule 2

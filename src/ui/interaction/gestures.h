@@ -126,7 +126,7 @@ private:
     bool strayed_ = false;
 };
 
-// A snippet moved, or resized by a handle or from its nearest edge. A move
+// A snippet moved, or resized from its band or from its nearest edge. A move
 // carries the whole selection; a resize is one snippet's, or the whole
 // selection's scaled as a group when the snippet is one of several
 // selected. The gesture is a snapshot taken as it begins (every moved
@@ -137,8 +137,8 @@ class Placement final : public Gesture {
 public:
     // A drag from a press on a snippet: the selection, from the press.
     static std::unique_ptr<Placement> Move(const Event& press, core::ItemId item, Editor& editor);
-    // A handle pressed: at once, since a handle is only ever pressed to
-    // drag it.
+    // The resize band pressed: at once, since the band is only ever
+    // pressed to drag it. `handle` is the edge or corner it was pressed at.
     static std::unique_ptr<Placement> ResizeByHandle(const Event& press, core::ItemId item, ResizeHandle handle,
                                                      Editor& editor);
     // A right-drag on a snippet: from whichever edge or corner is nearest

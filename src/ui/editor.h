@@ -35,7 +35,7 @@ using namespace ::sz::core;
 
 // What is under a screen point, as far as the canvas is concerned, decided
 // by one walk (see Editor::ResolvePointerTarget). The selection's own
-// furniture - its bar and its handles - is drawn over every snippet and so
+// furniture - its bar and its resize bands - is over every snippet and so
 // is asked first; then the snippets, front to back, so a fronter item's
 // body beats a backer item's, which is the whole of the occlusion rule.
 struct PointerTarget {
@@ -199,7 +199,7 @@ public:
     // Every snippet the box touches, added to the selection - a snippet is
     // caught by any overlap at all, however slight.
     void AddTouchedToSelection(const Rect& box);
-    // Whether the selection's furniture - the bar, the handles - is on
+    // Whether the selection's furniture - the bar, the resize bands - is on
     // screen and takes presses: no creation tool in hand, and no snippet
     // being framed. Selecting is the hand at rest, so this is almost
     // always true; in drawing mode the bar shows the drawing buttons
@@ -444,8 +444,8 @@ public:
     void NudgeSelection(float dx, float dy, Filing filing);
     // The wheel over a selection outside drawing mode: every selected
     // snippet scaled by kWheelScaleStep per notch, as a group about the
-    // middle of the box around them - the same scaling a corner handle
-    // does, so shapes and spacing are kept, and the smallest snippet's
+    // middle of the box around them - the same scaling a corner of the
+    // band does, so shapes and spacing are kept, and the smallest snippet's
     // floor stops all of them. A fullscreen snippet is left as it is.
     // Always a burst's.
     void ScaleSelectionByWheel(int steps);
