@@ -489,12 +489,16 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
     const BarLayout bar = LayoutBar(*bounds, editor_.DisplayWidth(), editor_.DisplayHeight(), buttons);
     drawList->AddRectFilled(Im(bar.min), Im(bar.max), ImGui::GetColorU32(theme::kPanelBg), theme::kRadiusPill);
     drawList->AddRect(Im(bar.min), Im(bar.max), ImGui::GetColorU32(theme::kPanelBorderStrong), theme::kRadiusPill);
-    // Between the drawing tools and what is done to the snippet.
+    // Between the drawing tools and what is done to the snippet. A filled
+    // rect, not AddLine: AddLine moves its points half a pixel right and
+    // down (to the centers of pixels given by index), which would put the
+    // line off the middle and across two columns.
     const float dividerWidth = PxWhole(1.0f);
     if (const std::optional<float> divider = BarDividerX(bar, buttons, dividerWidth)) {
         const float inset = Px(kBarPad) + Px(4.0f);
-        drawList->AddLine(ImVec2(*divider, bar.min.y + inset), ImVec2(*divider, bar.max.y - inset),
-                          ImGui::GetColorU32(theme::kPanelBorderStrong), dividerWidth);
+        drawList->AddRectFilled(ImVec2(*divider - dividerWidth * 0.5f, bar.min.y + inset),
+                                ImVec2(*divider + dividerWidth * 0.5f, bar.max.y - inset),
+                                ImGui::GetColorU32(theme::kPanelBorderStrong));
     }
 
     for (const ChromeButton button : buttons) {
