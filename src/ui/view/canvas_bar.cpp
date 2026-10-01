@@ -48,6 +48,9 @@ constexpr double kCanvasChangeFlashSeconds = 1.2;
 constexpr float kBarTileHeight = 64.0f;
 constexpr float kBarPadding = 8.0f;
 constexpr float kBarGap = 8.0f;
+// The two buttons at the right end stand one above the other, which fills
+// the tiles' height exactly (28 + 8 + 28 = 64) and gives the tiles the
+// width a second button and its gap took side by side.
 constexpr float kCanvasBarButtonSize = 28.0f;
 // The bar never runs closer than this to the sides of the screen; past
 // that its tiles scroll.
@@ -155,8 +158,9 @@ void CanvasBar::Update(float displayW, float displayH, bool menuUp) {
         const float tiles = count == 0 ? 0.0f
                                        : static_cast<float>(count) * TileWidth(displayW, displayH) +
                                              static_cast<float>(count - 1) * Px(kBarGap);
-        // Two buttons at the right end: a new canvas, and the Overview.
-        const float buttons = Px(kCanvasBarButtonSize) * 2.0f + Px(kBarGap);
+        // Two buttons at the right end, stacked: a new canvas, and the
+        // Overview.
+        const float buttons = Px(kCanvasBarButtonSize);
         const float content = Px(kBarPadding) * 2.0f + tiles + (count > 0 ? Px(kBarGap) : 0.0f) + buttons;
         const float narrowest = Px(kBarPadding) * 4.0f + buttons + TileWidth(displayW, displayH);
         const float width = std::min(content, std::max(narrowest, displayW - Px(kBarSideMarginPx) * 2.0f));
@@ -198,7 +202,7 @@ void CanvasBar::Draw(float displayW, float displayH) {
     // as it does everywhere); a change of canvas brings the current one
     // into view.
     const float regionMinX = bar.x + Px(kBarPadding);
-    const float regionMaxX = bar.x + bar.w - Px(kBarPadding) - (Px(kCanvasBarButtonSize) * 2.0f + Px(kBarGap)) - Px(kBarGap);
+    const float regionMaxX = bar.x + bar.w - Px(kBarPadding) - Px(kCanvasBarButtonSize) - Px(kBarGap);
     const float regionW = std::max(0.0f, regionMaxX - regionMinX);
     const float contentW =
         ids.empty() ? 0.0f : static_cast<float>(ids.size()) * tileW + static_cast<float>(ids.size() - 1) * Px(kBarGap);
@@ -315,8 +319,10 @@ void CanvasBar::Draw(float displayW, float displayH) {
     // command, which makes it beside the current canvas - in the folder
     // the bar is showing, which need not be the one the Overview last
     // browsed.
-    const float buttonY = bar.y + (bar.h - Px(kCanvasBarButtonSize)) * 0.5f;
-    ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap), buttonY));
+    // Level with the tiles' top edge, and the Overview's below with the
+    // tiles' bottom edge.
+    const float buttonX = regionMaxX + Px(kBarGap);
+    ImGui::SetCursorScreenPos(ImVec2(buttonX, bar.y + Px(kBarPadding)));
     if (PillIconButton("##canvasbar_new", icons::kPlus, false)) {
         host_.Act(action::RunCommand{Command{CommandId::NewCanvas}});
     }
@@ -328,7 +334,7 @@ void CanvasBar::Draw(float displayW, float displayH) {
     // is the one panel that is always there (out of the bottom edge), so
     // this is the way to the Overview that needs nothing on screen and
     // nothing switched on.
-    ImGui::SetCursorScreenPos(ImVec2(regionMaxX + Px(kBarGap) + Px(kCanvasBarButtonSize) + Px(kBarGap), buttonY));
+    ImGui::SetCursorScreenPos(ImVec2(buttonX, bar.y + bar.h - Px(kBarPadding) - Px(kCanvasBarButtonSize)));
     if (PillIconButton("##canvasbar_overview", icons::kLayoutGrid, false)) {
         host_.Act(action::RunCommand{Command{CommandId::Overview}});
     }
