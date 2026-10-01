@@ -1265,7 +1265,9 @@ PointerTarget Editor::ResolvePointerTarget(float x, float y) const {
         // The resize band around a selected snippet: over whatever is behind
         // it, but never over a selected snippet, whose body is its own -
         // except the band a snippet has inside its own edge, against the
-        // screen's (see ResizeBandAt).
+        // screen's (see ResizeBandAt), and not that either on a snippet in
+        // drawing mode, where every press on it is the tool's
+        // (docs/INTERACTIONS.md, 6.5).
         const auto inside = [x, y](const Rect& r) {
             return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
         };
@@ -1281,7 +1283,8 @@ PointerTarget Editor::ResolvePointerTarget(float x, float y) const {
         const bool onSelected =
             std::any_of(selected.begin(), selected.end(), [&](const Item* item) { return inside(item->rect); });
         for (const Item* item : selected) {
-            if (item->isFullscreen || (onSelected && !inside(item->rect))) {
+            if (item->isFullscreen || (onSelected && !inside(item->rect)) ||
+                (inside(item->rect) && IsDrawingOn(item->id))) {
                 continue;
             }
             if (const std::optional<ResizeHandle> edge = ResizeBandAt(item->rect, x, y, displayW_, displayH_)) {

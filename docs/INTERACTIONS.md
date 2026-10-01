@@ -366,7 +366,7 @@ drawing mode and the modifiers. Today the same decisions are spread over
 |---|---|---|---|---|---|---|
 | 1 | left or right, over an ImGui window | - | - | Widget (ImGui's) | - | - |
 | 2 | left, on a bar button; right, on the pen's or the eraser's | - | - | Bar button held | its menu (the pen's, the eraser's) | - |
-| 3 | left, in a selected snippet's resize band | - | - | Resize | - | - |
+| 3 | left, in a selected snippet's resize band, never inside one in drawing mode | - | - | Resize | - | - |
 | 4 | left, on a snippet in drawing mode, no Alt | - | - | Stroke / Shape / Erase / Rectangle erase / Text, by tool and modifiers | - | - |
 | 5 | left, elsewhere, drawing mode, no Alt | leave drawing mode | - | - | drawing mode there, or fullscreen of the trigger's kind on empty canvas | - |
 | 6 | left, a creation tool in hand | - | fullscreen | Frame | - | - |
@@ -472,6 +472,16 @@ from the nearest edge (rule 13), as before, and so does one in the
 band, which is the snippet's for either button; rule 12, the eraser,
 is for the snippet itself. The smallest snippet is
 now 16 by 16 (`docs/ARCHITECTURE.md`, "The floor is a shape").
+
+Changed on 2026-10-01, in review: a snippet in drawing mode has no band
+inside its edge. Rule 3 is tried before rule 4, so against the screen's
+edge the band took the 8 px inside the snippet from the pen: a strip
+captured from the top of a game, 16 px tall, drew in its lower half
+only, and showed the resize cursor over the rest. Inside a snippet
+being drawn on, every press is the tool's; it is resized from outside
+its edge, where the band stays, or with a right-drag (rule 13, with
+Alt). `ResolvePointerTarget` leaves that snippet's band out where the
+press is on the snippet itself; no structure changes.
 
 ## 7. Commands and bindings
 

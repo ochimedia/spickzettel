@@ -567,6 +567,21 @@ TEST_F(InteractionCasesTest, AgainstTheScreensEdgeTheResizeBandIsInside) {
     EXPECT_NEAR(ItemOf(a).rect.w, 180.0f, 1.0f);
 }
 
+// Drawing on a strip taken from the screen's edge: the band inside its
+// edge would take half of a short one from the pen.
+TEST_F(InteractionCasesTest, InDrawingModeTheBandInsideTheEdgeIsThePens) {
+    const ItemId a = MakeSnippet(Rect{0, 100, 200, 150});
+    editor_.EnterDrawingMode(a);
+    ASSERT_EQ(editor_.Selection(), std::vector<ItemId>{a});
+    EXPECT_EQ(editor_.ResolvePointerTarget(3.0f, 175.0f).kind, PointerTarget::Kind::Body);
+    EXPECT_EQ(editor_.ResolvePointerTarget(100.0f, 96.0f).kind, PointerTarget::Kind::Band) << "outside, as before";
+
+    Drag(3.0f, 175.0f, 23.0f, 175.0f);
+    EXPECT_EQ(Strokes(a), 1u);
+    EXPECT_EQ(ItemOf(a).rect.x, 0.0f) << "not resized";
+    EXPECT_EQ(ItemOf(a).rect.w, 200.0f);
+}
+
 TEST_F(InteractionCasesTest, AHoldMakesAFullscreenSnippetAndTheRestOfThePressIsSpent) {
     Down(600.0f, 400.0f);
     Tick(0.3);
