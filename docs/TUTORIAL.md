@@ -825,7 +825,9 @@ time edit mode comes up):
 
 - **A first run** starts Basics at its first step. It makes the
   tutorial folder beside the folder and canvas a first run makes. That
-  one stays empty, for the user's own work.
+  one stays empty, for the user's own work. A first run is told by
+  `tutorial.progress` being empty, as below, not by the library being
+  new: see 13.7.
 - **A start after quitting partway** goes on with the topic
   `tutorial.current` names, at the step kept for it. It switches to that
   topic's folder, or makes a new one if the folder is gone. A step id no
@@ -1332,15 +1334,24 @@ The progress is a new kind of row, an object mapping text to text, and
 needs a new rule in `core/config/setting.h`. The tutorial writes it as
 it goes, as it wrote `tutorial.welcome`.
 
-**At a start:**
+**At a start**, decided from these rows alone:
 
-- **A first run** starts Basics (13.4).
 - **`tutorial.current` names a topic whose progress is a step id.** That
   topic goes on at that step the next time edit mode comes up, as a
   resume does now (7.6). A step id no longer in that topic starts the
   topic again.
-- **A library, and `tutorial.progress` empty:** Basics starts (13.4).
+- **`tutorial.progress` empty:** Basics starts (13.4). That is a first
+  run, and an install from before 0.2.0.
 - **Anything else:** nothing starts.
+
+Until 2026-10-02 a new library started Basics whatever these rows said.
+A library is new on a first run, but also when it was deleted, or could
+not be read and was set aside, while the settings stayed - and then the
+person has met the app, and the settings say so. Whether the tutorial
+has been seen is the settings' to say, so they alone decide; a new
+library still opens edit mode at the start, which is about the hotkey
+not being known yet, not about the tutorial. A topic left partway goes
+on in a new folder, since the old one went with the library (7.6).
 
 ### 13.8 How it fits
 

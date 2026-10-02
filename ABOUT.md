@@ -123,6 +123,7 @@ If the app crashes, it writes a crash report to
 - Optimized appearance of borders in multiple places
 - Lowered minimum size of snippets to 16x16 pixels, with reworked resize borders
 - Stacked the canvas bar's two buttons, giving its tiles more room
+- The tutorial no longer starts over when the library is new but the settings say it was done
 
 ### 0.2.1
 

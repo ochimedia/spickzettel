@@ -28,9 +28,10 @@ void OverlayApp::WelcomeAtStart(LibraryAtStart library) {
         case LibraryAtStart::None:
             welcomePending_ = Welcome::Nothing;
             return;
+        // A new library is not a new person: deleted, or set aside, with
+        // the settings kept, it is someone who has met the app, and the
+        // settings say what they have seen (docs/TUTORIAL.md, 13.7).
         case LibraryAtStart::FirstRun:
-            welcomePending_ = Welcome::Start;
-            return;
         case LibraryAtStart::Loaded:
             break;
     }
@@ -41,7 +42,7 @@ void OverlayApp::WelcomeAtStart(LibraryAtStart library) {
         running->second != "skipped") {
         welcomePending_ = Welcome::Resume;  // at a step's id
     } else if (progress.empty()) {
-        welcomePending_ = Welcome::Start;  // never shown: an install from before it
+        welcomePending_ = Welcome::Start;  // never shown: a first run, or an install from before it
     } else {
         welcomePending_ = Welcome::Nothing;
     }

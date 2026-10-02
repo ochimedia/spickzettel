@@ -369,11 +369,10 @@ public:
     // kept at all (a host with nowhere to keep one).
     enum class LibraryAtStart { None, FirstRun, Loaded };
     // What the tutorial does the first time edit mode comes up, decided
-    // from that and the progress kept (docs/TUTORIAL.md, section 13.7): a
-    // first run starts Basics; a library loaded goes back to the topic
-    // that was running, at its step, or starts Basics when no topic has
-    // ever run - an install from before the tutorial, treated as a new
-    // one.
+    // from the progress kept (docs/TUTORIAL.md, section 13.7) wherever
+    // there is a library, new or loaded: back to the topic that was
+    // running, at its step, or Basics when no topic has ever run - a first
+    // run, or an install from before the tutorial, treated as a new one.
     void WelcomeAtStart(LibraryAtStart library);
 
     // Asks the host to hide the overlay and show it again. Installed by

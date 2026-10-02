@@ -2207,6 +2207,33 @@ TEST_F(TutorialAppTest, ALibraryWhoseTutorialIsOverStartsNothing) {
               false);
 }
 
+// A new library is not a new person: deleted, or set aside, with the
+// settings kept, it is someone who has met the app (section 13.7). The
+// overlay still comes up, for the hotkey; Basics did too, until 2026-10-02.
+TEST_F(TutorialAppTest, ANewLibraryWhoseSettingsSayTheTutorialIsOverStartsNothing) {
+    AppConfig config = DefaultConfig();
+    config.tutorialProgress = {{"basics", "finished"}};
+    StartAsFirstRun(config);
+    EXPECT_EQ(controller_->State(), app::OverlayState::Edit) << "a new library comes up in edit mode";
+    StepFrames(2);
+    EXPECT_FALSE(Runner().On());
+}
+
+// ...and a topic left partway goes on where it was, in a folder of its
+// own, since its old one went with the library.
+TEST_F(TutorialAppTest, ANewLibraryGoesOnWithTheTopicLeftPartway) {
+    AppConfig config = DefaultConfig();
+    config.tutorialProgress = {{"basics", "move"}};
+    config.tutorialCurrent = "basics";
+    config.tutorialFolder = 12345;
+    StartAsFirstRun(config);
+    StepFrames(2);
+    ASSERT_TRUE(Runner().On());
+    EXPECT_EQ(StepUp(), "move");
+    EXPECT_NE(Runner().Folder(), 12345u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+}
+
 // ===== The derail matrix (sections 6.1 and 9) =====
 //
 // Each do step, crossed with each way off the path that applies to it: the
