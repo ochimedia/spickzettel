@@ -66,7 +66,7 @@ void ApplyAccentToStyle(ImGuiStyle& style) {
     // - drawn in the ordinary text color, whatever the accent - still reads.
     colors[ImGuiCol_Header] = ImVec4(Accent().x, Accent().y, Accent().z, 0.45f);
     colors[ImGuiCol_HeaderActive] = ImVec4(Accent().x, Accent().y, Accent().z, 0.6f);
-    colors[ImGuiCol_NavHighlight] = Accent();
+    colors[ImGuiCol_NavCursor] = Accent();
 }
 
 // ImGui::GetStyle() dereferences the current context, which the platform

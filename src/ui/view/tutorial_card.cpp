@@ -597,7 +597,8 @@ void TutorialCard::DrawStep() {
     const char* skip = Labeled(strings::kTutorialCardSkip, "tutorial_skip");
     const float skipW = ImGui::CalcTextSize(strings::kTutorialCardSkip).x + ImGui::GetStyle().FramePadding.x * 2.0f;
     ImGui::SameLine();
-    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowContentRegionMax().x - skipW));
+    const float rightX = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x - ImGui::GetWindowPos().x;
+    ImGui::SetCursorPosX(std::max(ImGui::GetCursorPosX(), rightX - skipW));
     if (QuietButton(skip)) {
         host_.Act(action::TutorialPress{TutorialButton::Skip});
     }

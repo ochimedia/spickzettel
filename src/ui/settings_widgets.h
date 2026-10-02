@@ -63,9 +63,8 @@ void SettingPixels(Settings& settings, const GlobalSetting<PositiveBandRule>& ro
 // pushes its label as an ID scope, so words in it would move every id
 // under it whenever they changed.
 enum class SwatchAlpha {
-    None,           // opaque, the alpha byte left 0xFF
-    Bar,            // the alpha is part of the color
-    BarAndPreview,  // the same, shown over a checkerboard
+    None,  // opaque, the alpha byte left 0xFF
+    Bar,   // the alpha is part of the color, shown over a checkerboard
 };
 void SettingColor(Settings& settings, const GlobalSetting<ColorRule>& row, const char* id, const char* caption,
                   SwatchAlpha alpha);

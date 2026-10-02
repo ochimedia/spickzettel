@@ -799,7 +799,7 @@ void SettingsPage::RenderSettingsDefaults() {
     // still 0 by the time a panel can show it.
     SettingPixels(settings_, setting::kNoteTextSize, "defaulttextsize", strings::kDefaultsTextSize);
     SettingColor(settings_, setting::kNoteTextColor, "##defaulttextcolor", strings::kDefaultsTextColor,
-                 SwatchAlpha::BarAndPreview);
+                 SwatchAlpha::Bar);
 }
 
 // Two halves, like Hotkeys. On top what is global - what happens to
@@ -1406,7 +1406,8 @@ bool SettingsPage::RenderProfileRow(size_t index, Profile& profile, bool& remove
     // Right-aligned, so the buttons line up down the list however long
     // the names and summaries are.
     const float buttonWidth = ImGui::GetFrameHeight();
-    ImGui::SameLine(ImGui::GetContentRegionMax().x - buttonWidth);
+    const float rightX = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x - ImGui::GetWindowPos().x;
+    ImGui::SameLine(rightX - buttonWidth);
     char deleteId[32] = {};
     std::snprintf(deleteId, sizeof(deleteId), "##delprofile%zu", index);
     if (DangerIconButton(deleteId, icons::kTrash)) {

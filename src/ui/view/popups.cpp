@@ -239,8 +239,7 @@ void Popups::RenderItemTextStyle(PopoverItem& item) {
     ColorRGBAToFloats(item.style.noteTextColorRGBA, rgba);
     rgba[3] = static_cast<float>(item.style.noteTextColorRGBA & 0xFFu) / 255.0f;
     if (ImGui::ColorEdit4("##notetextcolor", rgba,
-                           ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar |
-                               ImGuiColorEditFlags_AlphaPreview)) {
+                           ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_AlphaBar)) {
         ItemStyle style = item.style;
         style.noteTextColorRGBA =
             FloatsToColorRGBA(rgba, static_cast<uint8_t>(std::clamp(rgba[3], 0.0f, 1.0f) * 255.0f + 0.5f));

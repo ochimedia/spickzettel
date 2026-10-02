@@ -279,11 +279,7 @@ void SettingColor(Settings& settings, const GlobalSetting<ColorRule>& row, const
     } else {
         float rgba[4];
         ColorRGBAToFloats4(value, rgba);
-        ImGuiColorEditFlags flags = ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar;
-        if (alpha == SwatchAlpha::BarAndPreview) {
-            flags |= ImGuiColorEditFlags_AlphaPreview;
-        }
-        edited = ImGui::ColorEdit4(id, rgba, flags);
+        edited = ImGui::ColorEdit4(id, rgba, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
         if (edited) {
             value = FloatsToColorRGBA4(rgba);
         }
