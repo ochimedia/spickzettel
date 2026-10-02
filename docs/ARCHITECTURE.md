@@ -319,7 +319,10 @@ While the pen is down, the stroke also has a provisional *tail* (see
 `CanvasState::SetActiveStrokeTail`): the spans still waiting for their
 next control point, fitted as if the pen were lifted, and on to the
 pointer. Each move replaces it, and lifting the pen drops it for the
-real end, which it draws the same. Without it the ink trailed the
+real end, which it draws the same - a dot included: before the second
+control point the tail does not reach for the pointer, as the release
+does not (found in review on 2026-10-02; it showed a stub of up to 4px
+that the lift took back). Without it the ink trailed the
 pointer by a control point and the smoothing's lag, and caught up only
 when the next control point came - at a turn, after the hand had turned,
 so the stroke went on growing the old way while the pointer went back,

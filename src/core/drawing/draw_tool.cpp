@@ -108,7 +108,10 @@ void DrawTool::UpdateTail(CanvasState& canvas, StrokePoint pen) {
     // that span's tangent needs.
     const size_t from = spansEmitted_ >= 1 ? spansEmitted_ - 1 : 0;
     tailControls_.assign(controls_.begin() + static_cast<std::ptrdiff_t>(from), controls_.end());
-    if (DistanceSquared(pen, controls_.back()) >= kEndPointSnapPx * kEndPointSnapPx) {
+    // Only for something that is already a line, as at the release: before
+    // the second control point a lift leaves the dot, and a tail to the pen
+    // showed a stub that the lift then took back.
+    if (controls_.size() >= 2 && DistanceSquared(pen, controls_.back()) >= kEndPointSnapPx * kEndPointSnapPx) {
         tailControls_.push_back(pen);
     }
     fittedScratch_.clear();

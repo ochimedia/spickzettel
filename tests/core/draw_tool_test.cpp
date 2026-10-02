@@ -218,6 +218,24 @@ TEST(DrawToolTest, LiftingThePenKeepsTheStrokeAsDrawn) {
     }
 }
 
+// A twitch too small to earn a second control point is the dot when the
+// pen is lifted, and is shown as the dot while it is held: the tail reached
+// for the pen there too, a stub the lift took back.
+TEST(DrawToolTest, ATwitchIsShownAsTheDotItIsKeptAs) {
+    CanvasState canvas;
+    DrawTool tool(0xFF0000FF, 3.0f);
+
+    Down(tool, canvas, 0, 0);
+    Move(tool, canvas, 3.5f, 0.0f);
+    ASSERT_TRUE(canvas.ActiveStroke().has_value());
+    const std::vector<StrokePoint> drawn = canvas.ActiveStroke()->points;
+    Up(tool, canvas, 3.5f, 0.0f);
+
+    ASSERT_EQ(canvas.Strokes().size(), 1u);
+    EXPECT_EQ(canvas.Strokes().front().points, drawn);
+    EXPECT_EQ(drawn.size(), 1u);
+}
+
 TEST(DrawToolTest, MoveWithoutDownDoesNotDraw) {
     CanvasState canvas;
     DrawTool tool(0xFF0000FF, 4.0f);
