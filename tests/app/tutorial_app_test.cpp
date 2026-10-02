@@ -53,7 +53,8 @@ protected:
     }
 
     // Edit mode, and a topic at its first step in a folder of its own -
-    // or, for Profiles, in none, over a program it can make a profile for.
+    // or, for Profiles, in none, over a program it can make a profile for;
+    // or, for Basics, none yet, until its welcome is read (section 13.5).
     void StartTheTutorial(std::string_view topic = tutorial::kBasicsTopic) {
         if (topic == "profiles" && !host_.overlayWindow.underlyingApp.Known()) {
             host_.overlayWindow.underlyingApp = kGame;
@@ -63,7 +64,7 @@ protected:
         Overlay().StartTutorial(topic);
         StepFrames(2);
         ASSERT_TRUE(Runner().On());
-        if (tutorial::FindTopic(topic)->folder) {
+        if (tutorial::FindTopic(topic)->folder && Runner().DoStepReached()) {
             ASSERT_EQ(App().TutorialWorld().FolderOf(Canvases().CurrentCanvasId()), Runner().Folder());
         } else {
             ASSERT_EQ(Runner().Folder(), 0u);
@@ -1087,6 +1088,10 @@ TEST_F(TutorialAppTest, AStartMakesAFolderOfItsOwnAndSwitchesToIt) {
 
     ASSERT_TRUE(Runner().On());
     EXPECT_EQ(StepUp(), "welcome");
+    EXPECT_EQ(Canvases().Folders().size(), folders) << "not while the welcome is read (section 13.5)";
+    EXPECT_EQ(Canvases().CurrentCanvasId(), before);
+    Press(TutorialButton::Next);
+    StepFrame();
     ASSERT_EQ(Canvases().Folders().size(), folders + 1);
     const Folder& made = Canvases().Folders().back();
     EXPECT_EQ(made.id, Runner().Folder());
@@ -1832,11 +1837,13 @@ TEST_F(TutorialAppTest, TheProgressIsKeptInTheSettingsAsItGoes) {
     StartTheTutorial();
     EXPECT_EQ(Kept(), "welcome");
     EXPECT_EQ(current(), "basics");
-    EXPECT_EQ(AppSettings().Stored().tutorialFolder, Runner().Folder());
-    EXPECT_NE(Runner().Folder(), 0u);
+    EXPECT_EQ(Runner().Folder(), 0u) << "none while the welcome is read (section 13.5)";
 
     Press(TutorialButton::Next);
     EXPECT_EQ(Kept(), "screenshot");
+    StepFrame();
+    EXPECT_NE(Runner().Folder(), 0u);
+    EXPECT_EQ(AppSettings().Stored().tutorialFolder, Runner().Folder());
     DoStep("screenshot");
     Settle();
     EXPECT_EQ(Kept(), "move") << "a step moved on by itself is kept too";
@@ -1912,9 +1919,12 @@ TEST_F(TutorialAppTest, MoreTopicsEndsTheTopicAsDoneDoesAndOpensTheList) {
     ASSERT_NE(card, nullptr);
     EXPECT_FALSE(card->Active) << "nothing to go back to";
 
-    // Not ticked: asked, as at Done, with the list open behind.
+    // Not ticked: asked, as at Done, with the list open behind - once
+    // there is a folder, past the welcome.
     Overlay().StartTutorial();
     StepFrames(2);
+    Press(TutorialButton::Next);
+    StepFrame();
     const FolderId second = Runner().Folder();
     Press(TutorialButton::Skip);
     Press(TutorialButton::MoreTopics);
@@ -1986,7 +1996,7 @@ TEST_F(TutorialAppTest, TheListForgetsWhereTheCardWasDragged) {
 // ===== The folder (sections 6.4, 7.6 and 9) =====
 
 TEST_F(TutorialAppTest, ACaptureHotkeyDuringTheTutorialLandsInItsFolder) {
-    StartTheTutorial();
+    WalkTo("screenshot");
     const CanvasId before = Canvases().CurrentCanvasId();
     TriggerHotkey(config_.hotkeyQuickCapture);
     StepFrames(2);
@@ -2019,6 +2029,9 @@ TEST_F(TutorialAppTest, StartingAgainMakesANewFolderAndLeavesTheOldOne) {
     Overlay().StartTutorial();
     StepFrames(2);
     EXPECT_EQ(StepUp(), "welcome");
+    Press(TutorialButton::Next);
+    StepFrame();
+    EXPECT_NE(Runner().Folder(), 0u);
     EXPECT_NE(Runner().Folder(), old);
     ASSERT_NE(Canvases().FindFolder(old), nullptr);
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(old)));
@@ -2077,6 +2090,8 @@ TEST_F(TutorialAppTest, TheSkipCardEndsWithTheFolderTrashedOrKept) {
 
     Overlay().StartTutorial();
     StepFrames(2);
+    Press(TutorialButton::Next);
+    StepFrame();
     const FolderId second = Runner().Folder();
     Press(TutorialButton::Skip);
     Press(TutorialButton::Done);
@@ -2102,13 +2117,55 @@ TEST_F(TutorialAppTest, AFirstRunPlacesNoNotesAndStartsTheChain) {
     ASSERT_TRUE(Runner().On());
     EXPECT_EQ(StepUp(), "welcome");
     // The folder a first run makes, left empty for the user's own work,
-    // and the tutorial's beside it.
+    // and the tutorial's beside it once the welcome is read (section 13.5).
+    EXPECT_EQ(Canvases().Folders().size(), 1u) << "none yet for the tutorial";
+    Press(TutorialButton::Next);
+    StepFrame();
+    EXPECT_EQ(StepUp(), "screenshot");
     ASSERT_EQ(Canvases().Folders().size(), 2u);
     EXPECT_EQ(Canvases().Folders().back().id, Runner().Folder());
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
     for (const Canvas& canvas : Canvases().Canvases()) {
         EXPECT_TRUE(canvas.items.empty()) << "no notes";
     }
+}
+
+// Skipped on the welcome, a topic has made no folder, and its Done ends
+// it with nothing to put away: no confirmation, and no checkbox (section
+// 13.5). A returning user who skips at once had to put one away too.
+TEST_F(TutorialAppTest, ASkipOnTheWelcomeLeavesNoFolderToPutAway) {
+    StartAsFirstRun();
+    StepFrames(2);
+    ASSERT_EQ(StepUp(), "welcome");
+    EXPECT_EQ(Runner().Folder(), 0u);
+    Press(TutorialButton::Skip);
+    StepFrame();
+    EXPECT_EQ(Runner().Folder(), 0u) << "the skip card is no do step";
+    EXPECT_EQ(App().TutorialSkipWarnings().size(), 2u) << "the warnings, all the same";
+    EXPECT_TRUE(Runner().MadeFolders().empty()) << "nothing for the checkbox to keep";
+    Press(TutorialButton::Done);
+    StepFrame();
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos) << "nothing asked";
+    EXPECT_EQ(Canvases().Folders().size(), 1u);
+}
+
+// Back from that skip card and on: the folder comes with the first do
+// step, there from its first frame.
+TEST_F(TutorialAppTest, TheFolderComesWithTheFirstDoStep) {
+    StartAsFirstRun();
+    StepFrames(2);
+    Press(TutorialButton::Skip);
+    Press(TutorialButton::Back);
+    StepFrame();
+    ASSERT_EQ(StepUp(), "welcome");
+    EXPECT_EQ(Canvases().Folders().size(), 1u);
+    Press(TutorialButton::Next);
+    StepFrame();
+    ASSERT_EQ(StepUp(), "screenshot");
+    EXPECT_NE(Runner().Folder(), 0u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
+    EXPECT_FALSE(Runner().CurrentHint().has_value()) << "in its folder, with nothing to say";
 }
 
 TEST_F(TutorialAppTest, AStartAfterQuittingPartwayComesBackToTheStepItWasOn) {
@@ -2194,6 +2251,9 @@ TEST_F(TutorialAppTest, AnInstallFromBeforeStartsBasicsLikeAFirstRun) {
     ASSERT_TRUE(Runner().On());
     EXPECT_EQ(Overlay().TutorialTopic().id, "basics");
     EXPECT_EQ(StepUp(), "welcome");
+    Press(TutorialButton::Next);
+    StepFrame();
+    EXPECT_NE(Runner().Folder(), 0u);
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 

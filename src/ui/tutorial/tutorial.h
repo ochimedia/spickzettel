@@ -57,13 +57,14 @@ public:
     explicit Tutorial(const std::vector<Step>& chain) : chain_(&chain) {}
 
     // At the first step, in `folder` - a folder the view has just made
-    // for it (section 6.5).
+    // for it (section 6.5), or none while none is due (see
+    // DoStepReached).
     void Start(core::FolderId folder);
     // At the step `id` names - the first, when none does - as a start
     // after quitting partway does (section 7.6).
     void Resume(std::string_view id, core::FolderId folder);
-    // The tutorial's folder was made again (Go back to the tutorial, with
-    // the old one gone).
+    // The tutorial's folder was made: again (Go back to the tutorial,
+    // with the old one gone), or once it was due.
     void MoveTo(core::FolderId folder) { folder_ = folder; }
 
     // Once a frame of edit mode: the step's start record, the subject,
@@ -109,6 +110,10 @@ public:
     // earlier one (goals are latched).
     bool GoalMet() const { return done_.size() > index_ && done_[index_]; }
     bool NextEnabled() const;
+    // Whether a do step has come up in this run - the step up, or skipped
+    // from, or one before it. A run's folder is made then and not before
+    // (section 13.5): a topic read and skipped leaves none to put away.
+    bool DoStepReached() const;
     const std::optional<Hint>& CurrentHint() const { return hint_; }
     std::optional<core::ItemId> Subject() const { return lookSubject_; }
     // What the spotlight rings now: the step's spot, or the subject's

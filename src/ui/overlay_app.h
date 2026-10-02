@@ -533,6 +533,9 @@ private:
     // `folder`'s first canvas not deleted, switched to - or, with none,
     // `topic`'s folder made again. The folder the tutorial goes on in.
     FolderId GoToTutorialFolder(const tutorial::Topic& topic, FolderId folder);
+    // The running topic's folder, once its first do step has come up and
+    // while it has none: `kept`, or a new one (docs/TUTORIAL.md, 13.5).
+    void GiveTutorialItsFolder(FolderId kept);
     void PlacePracticeSnippet();
     // The step the running topic is on, or how it ended, which topic is
     // running and its folder, set in the settings as they change

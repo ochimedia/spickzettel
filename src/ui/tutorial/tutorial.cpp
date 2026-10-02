@@ -137,6 +137,18 @@ bool Tutorial::NextEnabled() const {
     return state_ == State::OnStep && (!CurrentStep().gated || GoalMet());
 }
 
+bool Tutorial::DoStepReached() const {
+    if (!On()) {
+        return false;
+    }
+    for (size_t i = 0; i <= index_ && i < chain_->size(); ++i) {
+        if ((*chain_)[i].kind == StepKind::Do) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void Tutorial::Next() {
     if (!NextEnabled()) {
         return;

@@ -506,7 +506,9 @@ void OverlayApp::Prepare(float displayW, float displayH) {
     }
 
     // The tutorial's step brought up to date with what the input above
-    // did - its own state, and nothing else.
+    // did - its own state, and nothing else - in its folder, where the
+    // step up is the first that needs one.
+    GiveTutorialItsFolder(0);
     tutorialCard_.Update(ImGui::GetTime());
 }
 

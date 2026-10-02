@@ -88,12 +88,10 @@ void OverlayApp::DoTutorial(const action::StartTutorial& a) {
         KeepTutorialProgress();
     }
     // A topic with nothing on a canvas has no folder, and leaves the
-    // canvas up as it is (section 18.3).
-    if (!topic->folder) {
-        tutorialCard_.Start(*topic, 0);
-    } else if (const FolderId folder = MakeTutorialFolder(*topic); folder != 0) {
-        tutorialCard_.Start(*topic, folder);
-    }
+    // canvas up as it is (section 18.3); the others make theirs when
+    // their first do step comes up, which for all but Basics is now.
+    tutorialCard_.Start(*topic, 0);
+    GiveTutorialItsFolder(0);
 }
 
 void OverlayApp::DoTutorial(const action::ResumeTutorial&) {
@@ -104,12 +102,22 @@ void OverlayApp::DoTutorial(const action::ResumeTutorial&) {
     if (topic == nullptr || at == progress.end()) {
         return;
     }
-    if (!topic->folder) {
-        tutorialCard_.Resume(*topic, at->second, 0);
+    tutorialCard_.Resume(*topic, at->second, 0);
+    GiveTutorialItsFolder(settings_.Get(setting::kTutorialFolder));
+}
+
+// The running topic's folder, once it is due and while it has none: the
+// one `kept` names, where it is still there, or a new one (section 13.5).
+// Called as a topic starts or resumes, and each frame before the runner
+// looks at the app, so that the folder is there for the do step that
+// needs it from its first frame.
+void OverlayApp::GiveTutorialItsFolder(FolderId kept) {
+    const tutorial::Tutorial& runner = tutorialCard_.Runner();
+    if (!tutorialCard_.CurrentTopic().folder || runner.Folder() != 0 || !runner.DoStepReached()) {
         return;
     }
-    if (const FolderId folder = GoToTutorialFolder(*topic, settings_.Get(setting::kTutorialFolder)); folder != 0) {
-        tutorialCard_.Resume(*topic, at->second, folder);
+    if (const FolderId folder = GoToTutorialFolder(tutorialCard_.CurrentTopic(), kept); folder != 0) {
+        tutorialCard_.MoveTo(folder);
     }
 }
 

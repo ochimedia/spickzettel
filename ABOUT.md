@@ -124,6 +124,7 @@ If the app crashes, it writes a crash report to
 - Lowered minimum size of snippets to 16x16 pixels, with reworked resize borders
 - Stacked the canvas bar's two buttons, giving its tiles more room
 - The tutorial no longer starts over when the library is new but the settings say it was done
+- The tutorial makes its folder only once its first task comes up, so skipping it at the welcome leaves nothing to delete
 
 ### 0.2.1
 

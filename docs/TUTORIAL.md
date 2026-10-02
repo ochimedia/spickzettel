@@ -247,7 +247,8 @@ out, so the tutorial still never traps the user.
   That is why no confirmation box is needed.
 - Its Done ends the topic and puts its folder in the trash, unless
   "Keep the tutorial folder", a checkbox above the buttons, is ticked
-  (question 9, section 20).
+  (question 9, section 20). Skipped before the folder was made (13.5),
+  there is nothing to put away: no checkbox, and no confirmation.
 - Its "More topics" ends the topic as Done does and opens the list, and
   it says the tutorial is also in Settings > Interaction. The end card
   has the same checkbox and buttons: Back, Done and More topics, in one
@@ -823,21 +824,23 @@ cost of a change to the store. It is not needed for this.
 `TrayController` what its start found of the library; done the first
 time edit mode comes up):
 
-- **A first run** starts Basics at its first step. It makes the
-  tutorial folder beside the folder and canvas a first run makes. That
-  one stays empty, for the user's own work. A first run is told by
+- **A first run** starts Basics at its first step. Once the welcome
+  card is read, it makes the tutorial folder beside the folder and canvas
+  a first run makes (13.5). That one stays empty, for the user's own
+  work. A first run is told by
   `tutorial.progress` being empty, as below, not by the library being
   new: see 13.7.
 - **A start after quitting partway** goes on with the topic
   `tutorial.current` names, at the step kept for it. It switches to that
-  topic's folder, or makes a new one if the folder is gone. A step id no
-  longer in the chain starts the topic again.
+  topic's folder, or makes a new one if the folder is gone - once the
+  folder is due (13.5). A step id no longer in the chain starts the
+  topic again.
 - **An install from before 0.2.0** (a library, and nothing in
   `tutorial.progress`) starts Basics, as a first run does (question 11).
   Phase 3 built an offer card for it (question 5), which phase 4 took
   out.
 - **A row of the list** starts its topic at its first step, in a new
-  folder, whatever its status (question 12). A topic running is let go
+  folder once one is due (13.5), whatever its status (question 12). A topic running is let go
   of first, keeping its folder (question 13).
 
 **Open the tutorial** is a button in Settings > Interaction (question
@@ -1293,6 +1296,17 @@ Opening the list keeps nothing.
 - **Each run of a topic has a folder of its own**, named for the topic:
   "Tutorial: Drawing" (question 14). A refresher starts in a new
   folder, a clean place to practice.
+- **The folder is made when the first do step comes up**, not when the
+  topic starts. Every topic but Basics opens with a do step, so for them
+  that is the start. Basics opens with its welcome, a read step, and
+  makes its folder when Next leaves it. Someone who skips on the welcome
+  card leaves no folder behind, so the skip card's Done just ends the
+  topic, with no checkbox and no confirmation for a folder never used.
+  Decided on 2026-10-02: until then the folder was made with the topic,
+  and a returning user who skipped at once had to put it away too. A
+  list shown first on a first run, with Close as the way past it, was
+  weighed and not taken: closing it would have skipped the two
+  warnings, which the skip card still shows (13.6).
 - **At the end,** Done and More topics put the folder in the trash,
   unless the card's "Keep the tutorial folder" is ticked (question 9,
   section 20).

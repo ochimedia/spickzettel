@@ -132,8 +132,11 @@ TEST_F(TutorialUiTest, PutOneHereMakesASnippetToPracticeOn) {
 
 // The skip card's Done, with Keep ticked, keeps the folder; without, it
 // asks first and then puts the folder in the trash (question 9).
+// Past the welcome each time, where Basics makes its folder (docs/TUTORIAL.md,
+// section 13.5): skipped before, there is none to keep or trash.
 TEST_F(TutorialUiTest, TheSkipCardsDoneTrashesTheFolderAndKeepKeepsIt) {
     StartTheTutorial();
+    ClickOnCard("**/###tutorial_next");
     const FolderId kept = Runner().Folder();
     ClickOnCard("**/###tutorial_skip");
     ClickOnCard("**/###tutorial_keep");
@@ -143,6 +146,7 @@ TEST_F(TutorialUiTest, TheSkipCardsDoneTrashesTheFolderAndKeepKeepsIt) {
 
     Overlay().StartTutorial();
     StepFrames(2);
+    ClickOnCard("**/###tutorial_next");
     const FolderId trashed = Runner().Folder();
     ClickOnCard("**/###tutorial_skip");
     RunUi("done, and confirm", [this, trashed](ImGuiTestContext* ctx) {
@@ -319,6 +323,7 @@ TEST_F(TutorialUiTest, TheListShowsTheTopicsInTwoColumnsWhereThereIsRoom) {
 // its folder kept, and a row of the list starts another topic.
 TEST_F(TutorialUiTest, MoreTopicsEndsTheTopicAndARowStartsAnother) {
     StartTheTutorial();
+    ClickOnCard("**/###tutorial_next");  // a folder to keep
     const FolderId kept = Runner().Folder();
     ClickOnCard("**/###tutorial_skip");
     ClickOnCard("**/###tutorial_keep");
