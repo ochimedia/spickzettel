@@ -1799,10 +1799,16 @@ rules that keep it so are applied eagerly, the moment they become true:
 - *An undo or redo that changes a snippet drops its changes from the redo
   stacks of every other canvas*, which were for a state it has just left.
 - *A snippet deleted for good takes every change about it with it; a
-  canvas deleted for good takes its stacks, and every move from or to it
-  anywhere.* A paste whose source canvas is gone for good is no longer
-  undoable, and the snippet is its new canvas's for good; everything else
-  about it still is.
+  canvas deleted for good takes its stacks, every move from or to it
+  anywhere, and every move its snippets made before one of those.* A
+  paste whose source canvas is gone for good is no longer undoable, and
+  the snippet is its new canvas's for good; the moves before it go with
+  it, since each is from a place no undo can take the snippet back to
+  now, and everything else about it is still undoable. The earlier moves
+  were kept until 2026-10-02: a snippet sent from A to B, on to C and to
+  D, with C deleted for good, was asked to go back from B to A while it
+  was on D. Running the random sessions below past their usual seeds
+  found it.
 
 With those, the one thing a step checks is that it is being applied to
 the state it was made against, and it asks that of every change before

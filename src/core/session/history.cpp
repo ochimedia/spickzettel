@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <map>
 #include <utility>
 
 namespace sz::core::history {
@@ -326,11 +327,40 @@ void History::ForgetCanvas(CanvasId canvas) {
         const Moved* moved = std::get_if<Moved>(&change.kind);
         return moved != nullptr && (moved->from == canvas || moved->to == canvas);
     };
-    for (auto& [id, stacks] : stacks_) {
-        for (std::deque<Step>* stack : {&stacks.undo, &stacks.redo}) {
-            for (Step& step : *stack) {
-                std::erase_if(step.changes, touches);
+    // And every move a snippet made before one of those, on the undo
+    // stacks: each is from where it was before a move no undo can take
+    // back any more, so none can be undone either. Left, the snippet's
+    // next undo after its other changes was a move from a canvas it was
+    // not on - refused, and dropped with an assert. A snippet sent from A
+    // to B, on to C and then to D, with C then deleted for good, kept its
+    // move from A to B; undone on D, it asked for the snippet on B. Found
+    // on 2026-10-02 by running HistoryTest's random sessions past their
+    // usual hundred and twenty seeds. Its other changes stay: they apply
+    // to the snippet wherever it is.
+    std::map<ItemId, uint64_t> lostUpTo;
+    for (const auto& [id, stacks] : stacks_) {
+        for (const Step& step : stacks.undo) {
+            for (const Change& change : step.changes) {
+                if (touches(change)) {
+                    uint64_t& seq = lostUpTo[change.item];
+                    seq = std::max(seq, step.seq);
+                }
             }
+        }
+    }
+    const auto movedBefore = [&lostUpTo](const Step& step, const Change& change) {
+        const auto lost = lostUpTo.find(change.item);
+        return lost != lostUpTo.end() && step.seq <= lost->second && std::holds_alternative<Moved>(change.kind);
+    };
+    for (auto& [id, stacks] : stacks_) {
+        for (Step& step : stacks.undo) {
+            std::erase_if(step.changes,
+                          [&](const Change& change) { return touches(change) || movedBefore(step, change); });
+        }
+        for (Step& step : stacks.redo) {
+            std::erase_if(step.changes, touches);
+        }
+        for (std::deque<Step>* stack : {&stacks.undo, &stacks.redo}) {
             std::erase_if(*stack, [](const Step& step) { return step.changes.empty(); });
         }
     }

@@ -193,8 +193,9 @@ public:
     void Migrate(ItemId item, CanvasId canvas);
     // `item` is gone for good: every change about it goes.
     void ForgetItem(ItemId item);
-    // `canvas` is gone for good: its stacks go, and every move from or to
-    // it. What was on it is forgotten item by item.
+    // `canvas` is gone for good: its stacks go, every move from or to it,
+    // and every move a snippet made before one of those. What was on it is
+    // forgotten item by item.
     void ForgetCanvas(CanvasId canvas);
 
     // Every step on `canvas`'s stacks, bottom first - for the tests.

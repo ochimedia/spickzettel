@@ -1204,6 +1204,34 @@ TEST(SessionTest, ASnippetSentAwayTakesItsHistoryWithIt) {
     EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
 }
 
+// A snippet sent from A to B, on to C and then to D, with C then deleted
+// for good: the moves from and to C cannot be undone, and neither can the
+// one from A to B before them - undone on D, it asked for the snippet on
+// B. Everything else about it still undoes, and it stays on D.
+TEST(SessionTest, ACanvasDeletedForGoodTakesTheMovesBeforeItsOwn) {
+    Session session;
+    const ItemId item = Model(session).CreateItem(false, Rect{0, 0, 100, 100}, "A");
+    const CanvasId b = session.AddCanvas("B");
+    const CanvasId c = session.AddCanvas("C");
+    const CanvasId d = session.AddCanvas("D");
+    ASSERT_EQ(session.SendItemsTo({item}, b, /*copy=*/false).items.size(), 1u);
+    session.SwitchToCanvas(b);
+    DrawStrokeInto(session, item);
+    ASSERT_EQ(session.SendItemsTo({item}, c, /*copy=*/false).items.size(), 1u);
+    session.SwitchToCanvas(c);
+    ASSERT_EQ(session.SendItemsTo({item}, d, /*copy=*/false).items.size(), 1u);
+    session.SwitchToCanvas(d);
+    ASSERT_TRUE(session.Delete(c));
+    ASSERT_TRUE(session.DeletePermanently(c));
+
+    const std::optional<Session::UndoStep> stroke = session.Undo();
+    ASSERT_TRUE(stroke.has_value()) << "every step left applies";
+    EXPECT_EQ(stroke->what, Session::UndoWhat::Stroke);
+    EXPECT_TRUE(ItemById(session.Manager(), item)->strokes.empty());
+    EXPECT_FALSE(session.CanUndo()) << "no move left to undo";
+    EXPECT_EQ(session.Manager().CanvasHoldingItem(item), std::optional<CanvasId>(d));
+}
+
 // A stroke drawn across two snippets is one step about both; one of them
 // sent away takes its part with it. Undone where it was drawn, the stroke
 // comes off the snippet still there and stays on the one sent. There, the
