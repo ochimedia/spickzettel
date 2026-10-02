@@ -315,6 +315,17 @@ survives, and snaps a real line's end to the release point so it does not
 fall short of the mark. A press and release without travel stays a single
 point: that is the dot.
 
+While the pen is down, the stroke also has a provisional *tail* (see
+`CanvasState::SetActiveStrokeTail`): the spans still waiting for their
+next control point, fitted as if the pen were lifted, and on to the
+pointer. Each move replaces it, and lifting the pen drops it for the
+real end, which it draws the same. Without it the ink trailed the
+pointer by a control point and the smoothing's lag, and caught up only
+when the next control point came - at a turn, after the hand had turned,
+so the stroke went on growing the old way while the pointer went back,
+and felt like the pen overshooting. Measured on 2026-10-02: a V held at
+its bottom was 5px short, and 3px of that was drawn after turning back.
+
 **Curve fitting, in `stroke_smoothing.h`.** The surviving control points
 are the curve's frame, not the curve. `AppendFittedSpan` fits a
 *centripetal* Catmull-Rom through them and samples it adaptively: a

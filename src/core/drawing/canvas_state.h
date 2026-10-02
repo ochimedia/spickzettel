@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <vector>
 
@@ -17,6 +18,12 @@ public:
     void BeginStroke(StrokePoint point, uint32_t colorRGBA, float width,
                      StrokeCorners corners = StrokeCorners::Round);
     void ExtendStroke(StrokePoint point);
+    // A provisional end for the in-progress stroke: drawn after its points,
+    // and dropped by the next ExtendStroke, SetActiveStrokeTail or
+    // EndStroke, so it is never part of what is committed. For a tool whose
+    // points come in later than the pointer moves - see DrawTool. No-op if
+    // there's no active stroke.
+    void SetActiveStrokeTail(const std::vector<StrokePoint>& tail);
     // Replaces the in-progress stroke's points wholesale (color/width from
     // BeginStroke are untouched) - for a tool that recomputes its whole
     // shape from scratch every mouse-move (a rectangle/line's live preview,
@@ -37,6 +44,8 @@ public:
 private:
     std::vector<Stroke> strokes_;
     std::optional<Stroke> active_;
+    // How many of active_'s points are its own; the rest are the tail.
+    size_t activeOwnPoints_ = 0;
 };
 
 }  // namespace sz::core

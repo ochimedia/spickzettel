@@ -53,35 +53,67 @@ float DistanceSquared(const StrokePoint& a, const StrokePoint& b) {
     return dx * dx + dy * dy;
 }
 
+// Appends the fitted curve for the spans of `controls` after the first
+// `fitted`, and returns how many spans that now makes. Fitting the span from
+// c[i-1] to c[i] needs the point either side of it for its tangents, so a
+// span waits until the *next* control point exists - one control point of
+// lag, a couple of pixels, which is why `final` exists: at the end of the
+// stroke there is no next point, and the last span is fitted against a
+// repeat of its own endpoint instead.
+size_t FitSpans(const std::vector<StrokePoint>& controls, size_t fitted, bool final,
+                std::vector<StrokePoint>& out) {
+    while (fitted + 1 < controls.size()) {
+        const size_t i = fitted + 1;
+        const bool hasFollowing = (i + 1) < controls.size();
+        if (!hasFollowing && !final) {
+            break;
+        }
+        const StrokePoint& p1 = controls[i - 1];
+        const StrokePoint& p2 = controls[i];
+        const StrokePoint& p0 = (i >= 2) ? controls[i - 2] : p1;
+        const StrokePoint& p3 = hasFollowing ? controls[i + 1] : p2;
+        AppendFittedSpan(p0, p1, p2, p3, kCurveFlatnessPx, out);
+        ++fitted;
+    }
+    return fitted;
+}
+
 }  // namespace
 
 DrawTool::DrawTool(uint32_t colorRGBA, float width) : colorRGBA_(colorRGBA), width_(width) {}
 
 // Hands CanvasState the fitted curve for every span whose window of control
-// points is complete. Fitting the span from c[i-1] to c[i] needs the point
-// either side of it for its tangents, so a span waits until the *next*
-// control point exists - one control point of lag, a couple of pixels, which
-// is why `final` exists: at the end of the stroke there is no next point, and
-// the last span is fitted against a repeat of its own endpoint instead.
+// points is complete - see FitSpans.
 void DrawTool::EmitReadySpans(CanvasState& canvas, bool final) {
-    while (spansEmitted_ + 1 < controls_.size()) {
-        const size_t i = spansEmitted_ + 1;
-        const bool hasFollowing = (i + 1) < controls_.size();
-        if (!hasFollowing && !final) {
-            return;
-        }
-        const StrokePoint& p1 = controls_[i - 1];
-        const StrokePoint& p2 = controls_[i];
-        const StrokePoint& p0 = (i >= 2) ? controls_[i - 2] : p1;
-        const StrokePoint& p3 = hasFollowing ? controls_[i + 1] : p2;
-
-        fittedScratch_.clear();
-        AppendFittedSpan(p0, p1, p2, p3, kCurveFlatnessPx, fittedScratch_);
-        for (const StrokePoint& point : fittedScratch_) {
-            canvas.ExtendStroke(point);
-        }
-        ++spansEmitted_;
+    fittedScratch_.clear();
+    spansEmitted_ = FitSpans(controls_, spansEmitted_, final, fittedScratch_);
+    for (const StrokePoint& point : fittedScratch_) {
+        canvas.ExtendStroke(point);
     }
+}
+
+// What the stroke would end with if the pen were lifted at `pen` now: the
+// spans still waiting for their next control point, fitted as at the end,
+// and on to the pen itself, as a release there would. Drawn after the
+// stroke until the next move replaces it.
+//
+// Without it the ink trailed the pointer by a control point and the
+// smoothing's lag, a few pixels, and caught up only once the next control
+// point arrived. At a turn that is after the hand has turned: the stroke
+// went on growing the old way while the pointer went the new one, which
+// read as the pen overshooting what was meant. Measured on 2026-10-02 at a
+// held V: 5px short while held, 3px of it drawn after turning back.
+void DrawTool::UpdateTail(CanvasState& canvas, StrokePoint pen) {
+    // From the control point before the first waiting span's start, which
+    // that span's tangent needs.
+    const size_t from = spansEmitted_ >= 1 ? spansEmitted_ - 1 : 0;
+    tailControls_.assign(controls_.begin() + static_cast<std::ptrdiff_t>(from), controls_.end());
+    if (DistanceSquared(pen, controls_.back()) >= kEndPointSnapPx * kEndPointSnapPx) {
+        tailControls_.push_back(pen);
+    }
+    fittedScratch_.clear();
+    FitSpans(tailControls_, spansEmitted_ - from, /*final=*/true, fittedScratch_);
+    canvas.SetActiveStrokeTail(fittedScratch_);
 }
 
 void DrawTool::OnMouseEvent(const platform::MouseEvent& event, CanvasState& canvas) {
@@ -113,6 +145,7 @@ void DrawTool::OnMouseEvent(const platform::MouseEvent& event, CanvasState& canv
                     controls_.push_back(smoothed_);
                     EmitReadySpans(canvas, /*final=*/false);
                 }
+                UpdateTail(canvas, point);
             }
             break;
         case platform::MouseEventKind::Up:

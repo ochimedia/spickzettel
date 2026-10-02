@@ -30,9 +30,11 @@ public:
     void SetWidth(float width) { width_ = width; }
 
 private:
-    // See its own comment in the .cpp: hands the canvas the fitted curve for
-    // every span whose window of control points is complete.
+    // See their own comments in the .cpp: hands the canvas the fitted curve
+    // for every span whose window of control points is complete, and the
+    // provisional rest of the way to the pen.
     void EmitReadySpans(CanvasState& canvas, bool final);
+    void UpdateTail(CanvasState& canvas, StrokePoint pen);
 
     uint32_t colorRGBA_;
     float width_;
@@ -47,6 +49,7 @@ private:
     size_t spansEmitted_ = 0;
     // Reused across spans so a stroke doesn't allocate per mouse-move.
     std::vector<StrokePoint> fittedScratch_;
+    std::vector<StrokePoint> tailControls_;
 };
 
 }  // namespace sz::core

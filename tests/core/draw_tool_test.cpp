@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -147,6 +148,74 @@ TEST(DrawToolTest, ALineEndsAtTheReleasePoint) {
     const StrokePoint& last = canvas.Strokes().front().points.back();
     EXPECT_FLOAT_EQ(last.x, 100.0f);
     EXPECT_FLOAT_EQ(last.y, 0.0f);
+}
+
+// The ink reaches the pointer while the pen is still down. It trailed by
+// a control point and the smoothing's lag, and caught up only on the next
+// control point - at a turn, after the hand had turned, which drew on the
+// old way while the pointer went back.
+TEST(DrawToolTest, AHeldStrokeReachesThePointer) {
+    CanvasState canvas;
+    DrawTool tool(0xFF0000FF, 30.0f);
+
+    Down(tool, canvas, 0, 0);
+    for (int i = 1; i <= 100; ++i) {
+        Move(tool, canvas, static_cast<float>(i), 0.0f);
+    }
+
+    ASSERT_TRUE(canvas.ActiveStroke().has_value());
+    const StrokePoint& end = canvas.ActiveStroke()->points.back();
+    EXPECT_FLOAT_EQ(end.x, 100.0f);
+    EXPECT_FLOAT_EQ(end.y, 0.0f);
+}
+
+// Turning back draws nothing further the old way: the ink got as far as
+// the pointer did, and no further, before the turn rather than after it.
+TEST(DrawToolTest, TurningBackDrawsNothingFurtherTheOldWay) {
+    CanvasState canvas;
+    DrawTool tool(0xFF0000FF, 30.0f);
+
+    Down(tool, canvas, 0, 0);
+    for (int i = 1; i <= 100; ++i) {
+        Move(tool, canvas, static_cast<float>(i) * 0.3f, static_cast<float>(i));
+    }
+    const auto lowest = [&canvas] {
+        float y = 0.0f;
+        for (const StrokePoint& point : canvas.ActiveStroke()->points) {
+            y = std::max(y, point.y);
+        }
+        return y;
+    };
+    const float held = lowest();
+    EXPECT_FLOAT_EQ(held, 100.0f);
+    for (int i = 1; i <= 40; ++i) {
+        Move(tool, canvas, 30.0f + static_cast<float>(i) * 0.3f, 100.0f - static_cast<float>(i));
+        EXPECT_LE(lowest(), held) << "step " << i;
+    }
+}
+
+// The tail is what lifting the pen would draw, so lifting it where the
+// last move was keeps the stroke exactly as it was on screen.
+TEST(DrawToolTest, LiftingThePenKeepsTheStrokeAsDrawn) {
+    CanvasState canvas;
+    DrawTool tool(0xFF0000FF, 30.0f);
+
+    Down(tool, canvas, 0, 0);
+    for (int i = 1; i <= 60; ++i) {
+        const float t = static_cast<float>(i);
+        Move(tool, canvas, t * 1.5f, 40.0f * std::sin(t * 0.1f));
+    }
+    ASSERT_TRUE(canvas.ActiveStroke().has_value());
+    const std::vector<StrokePoint> drawn = canvas.ActiveStroke()->points;
+    Up(tool, canvas, 90.0f, 40.0f * std::sin(6.0f));
+
+    ASSERT_EQ(canvas.Strokes().size(), 1u);
+    const std::vector<StrokePoint>& kept = canvas.Strokes().front().points;
+    ASSERT_EQ(kept.size(), drawn.size());
+    for (size_t i = 0; i < kept.size(); ++i) {
+        EXPECT_FLOAT_EQ(kept[i].x, drawn[i].x) << "point " << i;
+        EXPECT_FLOAT_EQ(kept[i].y, drawn[i].y) << "point " << i;
+    }
 }
 
 TEST(DrawToolTest, MoveWithoutDownDoesNotDraw) {

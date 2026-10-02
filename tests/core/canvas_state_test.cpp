@@ -27,6 +27,31 @@ TEST(CanvasStateTest, BeginExtendEndProducesCompletedStroke) {
     EXPECT_FLOAT_EQ(stroke.width, 5.0f);
 }
 
+// A tail is drawn after the stroke's own points, replaced by the next
+// one or by a real point, and never committed.
+TEST(CanvasStateTest, AStrokesTailIsShownButNotKept) {
+    CanvasState canvas;
+    canvas.BeginStroke(StrokePoint{0.0f, 0.0f}, 0xFF0000FF, 5.0f);
+    canvas.ExtendStroke(StrokePoint{1.0f, 0.0f});
+    canvas.SetActiveStrokeTail({StrokePoint{2.0f, 0.0f}, StrokePoint{3.0f, 0.0f}});
+    ASSERT_EQ(canvas.ActiveStroke()->points.size(), 4u);
+    EXPECT_FLOAT_EQ(canvas.ActiveStroke()->points.back().x, 3.0f);
+
+    canvas.SetActiveStrokeTail({StrokePoint{5.0f, 0.0f}});
+    ASSERT_EQ(canvas.ActiveStroke()->points.size(), 3u) << "the old tail replaced";
+    EXPECT_FLOAT_EQ(canvas.ActiveStroke()->points.back().x, 5.0f);
+
+    canvas.ExtendStroke(StrokePoint{2.0f, 0.0f});
+    ASSERT_EQ(canvas.ActiveStroke()->points.size(), 3u) << "a real point drops the tail";
+    EXPECT_FLOAT_EQ(canvas.ActiveStroke()->points.back().x, 2.0f);
+
+    canvas.SetActiveStrokeTail({StrokePoint{9.0f, 0.0f}});
+    canvas.EndStroke();
+    ASSERT_EQ(canvas.Strokes().size(), 1u);
+    ASSERT_EQ(canvas.Strokes().front().points.size(), 3u);
+    EXPECT_FLOAT_EQ(canvas.Strokes().front().points.back().x, 2.0f);
+}
+
 // A tap is a dot, not nothing.
 TEST(CanvasStateTest, SinglePointStrokeIsKeptOnEndAsADot) {
     CanvasState canvas;
