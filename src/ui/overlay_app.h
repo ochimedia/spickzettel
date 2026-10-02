@@ -535,6 +535,7 @@ private:
     FolderId GoToTutorialFolder(const tutorial::Topic& topic, FolderId folder);
     // The running topic's folder, once its first do step has come up and
     // while it has none: `kept`, or a new one (docs/TUTORIAL.md, 13.5).
+    // `kept`, where it is still there, before that step too.
     void GiveTutorialItsFolder(FolderId kept);
     void PlacePracticeSnippet();
     // The step the running topic is on, or how it ended, which topic is

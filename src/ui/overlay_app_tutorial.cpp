@@ -4,6 +4,7 @@
 // start decided, the tutorial's actions as Apply does them, and what it
 // counts for the world.
 
+#include <algorithm>
 #include <cstdio>
 #include <map>
 #include <string>
@@ -111,9 +112,21 @@ void OverlayApp::DoTutorial(const action::ResumeTutorial&) {
 // Called as a topic starts or resumes, and each frame before the runner
 // looks at the app, so that the folder is there for the do step that
 // needs it from its first frame.
+//
+// A folder kept and still there is the run's before any do step, too: it
+// was made in a run that then went Back to a read step, and left there,
+// the next do step made a second one beside it. Found in review on
+// 2026-10-02.
 void OverlayApp::GiveTutorialItsFolder(FolderId kept) {
     const tutorial::Tutorial& runner = tutorialCard_.Runner();
-    if (!tutorialCard_.CurrentTopic().folder || runner.Folder() != 0 || !runner.DoStepReached()) {
+    if (!tutorialCard_.CurrentTopic().folder || runner.Folder() != 0 || !runner.On()) {
+        return;
+    }
+    const auto& canvases = Manager().Canvases();
+    const bool keptIsThere = kept != 0 && std::any_of(canvases.begin(), canvases.end(), [&](const Canvas& canvas) {
+        return canvas.folderId == kept && !Manager().IsDeleted(canvas);
+    });
+    if (!runner.DoStepReached() && !keptIsThere) {
         return;
     }
     if (const FolderId folder = GoToTutorialFolder(tutorialCard_.CurrentTopic(), kept); folder != 0) {

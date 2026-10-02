@@ -2186,6 +2186,33 @@ TEST_F(TutorialAppTest, AStartAfterQuittingPartwayComesBackToTheStepItWasOn) {
     EXPECT_EQ(Canvases().Folders().size(), 2u) << "no folder made";
 }
 
+// Back from the first do step to the welcome, and quit there: the folder
+// that step made is the run's still, and the next start goes on in it
+// rather than making a second one when the do step comes up again.
+TEST_F(TutorialAppTest, AStartAfterGoingBackToTheWelcomeKeepsTheFolder) {
+    StartWithLibrary();
+    WalkTo("screenshot");
+    const FolderId folder = Runner().Folder();
+    ASSERT_NE(folder, 0u);
+    Press(TutorialButton::Back);
+    StepFrame();
+    ASSERT_EQ(StepUp(), "welcome");
+    const size_t folders = Canvases().Folders().size();
+
+    StartWith(AppSettings().Stored());
+    ShowEditMode();
+    StepFrames(2);
+    ASSERT_TRUE(Runner().On());
+    ASSERT_EQ(StepUp(), "welcome");
+    EXPECT_EQ(Runner().Folder(), folder);
+    Press(TutorialButton::Next);
+    StepFrame();
+    EXPECT_EQ(StepUp(), "screenshot");
+    EXPECT_EQ(Runner().Folder(), folder);
+    EXPECT_EQ(AppSettings().Stored().tutorialFolder, folder);
+    EXPECT_EQ(Canvases().Folders().size(), folders) << "no folder made";
+}
+
 TEST_F(TutorialAppTest, AResumeWithItsFolderGoneMakesANewOne) {
     StartWithLibrary();
     WalkTo("move");

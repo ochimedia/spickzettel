@@ -1307,6 +1307,10 @@ Opening the list keeps nothing.
   list shown first on a first run, with Close as the way past it, was
   weighed and not taken: closing it would have skipped the two
   warnings, which the skip card still shows (13.6).
+  A folder once made stays the run's when Back goes to a read step
+  before it, and a start after quitting there takes it up again at
+  once, where it is still there: waiting for the do step made a second
+  folder beside it (found in review on 2026-10-02).
 - **At the end,** Done and More topics put the folder in the trash,
   unless the card's "Keep the tutorial folder" is ticked (question 9,
   section 20).
