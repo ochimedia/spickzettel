@@ -112,16 +112,16 @@ If the app crashes, it writes a crash report to
 
 - Drawing on several snippets at once: pick a tool on the bar with them selected
 - Optional separate color for the border of a selected snippet (see Settings > Appearance > Snippet colors)
-- Added "Questions" section to About
+- A Questions section in About
 
 #### Changes
 
 - Breaking change: a library opened once with 0.2.2 cannot be used with earlier versions
-- Unified the drawing and snippet toolbar
+- Unified the drawing and snippet bars into one selection bar
 - The pen's and eraser's shapes stay picked until another is picked; clicking the highlighted tool stops drawing
 - Optimized pen and rectangle stroke appearance
 - Optimized appearance of borders in multiple places
-- Lowered minimum size of snippets to 16x16 pixels, with reworked resize borders
+- Lowered minimum size of snippets to 16x16 pixels, with a resize band around a selected snippet
 - Stacked the canvas bar's two buttons, giving its tiles more room
 - The tutorial no longer starts over when the library is new but the settings say it was done
 - The tutorial makes its folder only once its first task comes up, so skipping it at the welcome leaves nothing to delete
@@ -134,8 +134,8 @@ If the app crashes, it writes a crash report to
 
 #### Changes
 
-- Moved the library to local AppData and optimized its performance. An existing library in roaming AppData is moved automatically.
-- Opening the app while an instance is already running brings up the running instance.
+- Moved the library to local AppData and optimized its performance; an existing library in roaming AppData is moved automatically
+- Opening the app while an instance is already running brings up the running instance
 
 ### 0.2.0
 
