@@ -2982,10 +2982,13 @@ Every border is drawn inside the snippet's rect on whole pixels
 - `AddRect`'s order is `(min, max, col, rounding, thickness, flags)`, and
   `AddPolyline`'s and `PathStroke`'s put thickness before flags too; a
   flag in the thickness slot compiles and draws garbage. 1.92.8 swapped
-  them and keeps the old order working through obsolete overloads, which
-  a later version drops - so the old order compiles silently and is
-  wrong all the same. `IMGUI_DISABLE_OBSOLETE_FUNCTIONS` would turn it
-  into an error, but the test engine still calls the old order.
+  them and kept the old order working through obsolete overloads, so
+  the old order compiled silently. Since 2026-10-02 the build defines
+  `IMGUI_DISABLE_OBSOLETE_FUNCTIONS`, which deletes those overloads, so
+  the old order no longer compiles; that took the test engine at the
+  ImGui version it runs against, which picks the order by that version,
+  and four obsolete names out of the app. An ImGui bump that obsoletes
+  more breaks the build rather than going on with the old meaning.
 - `AddLine` and `AddRect` move their points half a pixel: `AddLine` to
   the center of the pixel at the coordinates it is given, `AddRect` half
   a pixel in from each edge. That is right for a one-pixel line on whole

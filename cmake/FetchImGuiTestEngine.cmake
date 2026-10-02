@@ -46,6 +46,7 @@ target_compile_definitions(imgui_test_engine PUBLIC IMGUI_ENABLE_TEST_ENGINE
                             # The index type ImGui is built with - see
                             # FetchImGui.cmake.
                             "${IMGUI_DRAW_INDEX_DEFINITION}"
+                            "${IMGUI_NO_OBSOLETE_DEFINITION}"
                             IMGUI_TEST_ENGINE_ENABLE_STD_FUNCTION=1
                             # The engine runs a test body on its own
                             # coroutine so it can yield a frame mid-test;

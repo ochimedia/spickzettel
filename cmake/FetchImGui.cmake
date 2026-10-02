@@ -25,5 +25,11 @@ target_compile_features(imgui_core PUBLIC cxx_std_17)
 # has to agree on the type.
 set(IMGUI_DRAW_INDEX_DEFINITION "ImDrawIdx=unsigned int" CACHE INTERNAL "")
 target_compile_definitions(imgui_core PUBLIC "${IMGUI_DRAW_INDEX_DEFINITION}")
+# Without ImGui's obsolete names, so that a call written against one does
+# not compile - see docs/ARCHITECTURE.md, the gotcha on AddRect. Everywhere
+# imgui.h is included, the test engine too, for the same reason as the
+# index type: some of what it leaves out is in ImGui's own structs.
+set(IMGUI_NO_OBSOLETE_DEFINITION "IMGUI_DISABLE_OBSOLETE_FUNCTIONS" CACHE INTERNAL "")
+target_compile_definitions(imgui_core PUBLIC "${IMGUI_NO_OBSOLETE_DEFINITION}")
 
 set(IMGUI_BACKENDS_DIR ${imgui_SOURCE_DIR}/backends CACHE INTERNAL "")
