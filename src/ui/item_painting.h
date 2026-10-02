@@ -103,7 +103,8 @@ void DrawCanvasPreview(ImDrawList* drawList, const core::Canvas& canvas, ImVec2 
                        core::StrokeMeshSlot meshCache, PaintHooks hooks);
 // One item as a preview draws it into `pMin..pMax`: its picture with the
 // texture `previewTexture` has for it, then its strokes scaled from the
-// item's native size to the box. What DrawCanvasPreview draws per item.
+// item's native size to the box, all cut to the box. What DrawCanvasPreview
+// draws per item.
 void DrawItemPreview(ImDrawList* drawList, const core::Item& item, ImVec2 pMin, ImVec2 pMax, bool showStrokes,
                      const PreviewTextureFn& previewTexture, core::StrokeMeshSlot meshCache, PaintHooks hooks);
 

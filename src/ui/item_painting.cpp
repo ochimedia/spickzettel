@@ -274,6 +274,11 @@ void DrawCanvasPreview(ImDrawList* drawList, const Canvas& canvas, ImVec2 thumbM
 
 void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2 pMax, bool showStrokes,
                      const PreviewTextureFn& previewTexture, StrokeMeshSlot meshCache, PaintHooks hooks) {
+    // Cut to the box, the way CanvasView::PaintItemBody cuts the snippet on
+    // the canvas: a stroke past the snippet's edge is not on it there, and
+    // was on the tile's canvas around it here.
+    drawList->PushClipRect(pMin, pMax, true);
+
     // The picture with whichever texture it can have here: the real one for
     // the current canvas (already loaded), a thumbnail-sized copy for the
     // rest if previews are on, and none at all otherwise - in which case
@@ -298,13 +303,12 @@ void DrawItemPreview(ImDrawList* drawList, const Item& item, ImVec2 pMin, ImVec2
     if (!drewAnything) {
         drawList->AddRect(pMin, pMax, IM_COL32(90, 96, 110, 180));
     }
-    if (!showStrokes) {
-        return;
+    if (showStrokes) {
+        // Native -> preview is one scale factor per axis: the box over the
+        // item's native size, the same as on the canvas.
+        DrawStrokeLayer(drawList, item, pMin, pMax, meshCache, hooks, {});
     }
-
-    // Native -> preview is one scale factor per axis: the box over the
-    // item's native size, the same as on the canvas.
-    DrawStrokeLayer(drawList, item, pMin, pMax, meshCache, hooks, {});
+    drawList->PopClipRect();
 }
 
 }  // namespace sz::ui

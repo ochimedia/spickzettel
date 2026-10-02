@@ -135,5 +135,53 @@ TEST_F(ItemPaintingTest, AMinimizedSnippetIsLeftOutOfTheThumbnail) {
     EXPECT_EQ(verticesDrawn(canvas), background);
 }
 
+// A stroke past a snippet's edge is cut off at it in the thumbnail, as on
+// the canvas. It was drawn out onto the canvas around the snippet.
+TEST_F(ItemPaintingTest, AStrokePastASnippetsEdgeIsCutOffInTheThumbnail) {
+    core::Canvas canvas;
+    core::Item item;
+    item.rect = core::Rect{100.0f, 100.0f, 400.0f, 300.0f};
+    item.nativeW = 400.0f;
+    item.nativeH = 300.0f;
+    core::Stroke stroke;
+    stroke.colorRGBA = 0xFF0000FFu;
+    stroke.width = 10.0f;
+    stroke.points = {core::StrokePoint{-100.0f, -100.0f}, core::StrokePoint{500.0f, 400.0f}};
+    item.strokes.push_back(stroke);
+    canvas.items.push_back(item);
+    ImDrawList* drawList = ImGui::GetBackgroundDrawList();
+    const auto draw = [drawList, &canvas](bool showStrokes) {
+        DrawCanvasPreview(drawList, canvas, ImVec2(0.0f, 0.0f), ImVec2(192.0f, 108.0f), 1920.0f, 1080.0f,
+                          showStrokes, [](const core::Item&) { return std::optional<uint64_t>(0); }, {}, {});
+    };
+    // The stroke is what a preview with strokes draws past one without.
+    const int firstVertex = drawList->VtxBuffer.Size;
+    draw(false);
+    const int withoutStrokes = drawList->VtxBuffer.Size - firstVertex;
+    const int first = drawList->VtxBuffer.Size;
+    const int firstIndex = drawList->IdxBuffer.Size;
+    draw(true);
+    const int strokeFrom = first + withoutStrokes;
+    ASSERT_GT(drawList->VtxBuffer.Size, strokeFrom) << "no stroke drawn";
+
+    // The snippet's box in the thumbnail: a tenth of its rect.
+    const ImVec4 box(10.0f, 10.0f, 50.0f, 40.0f);
+    int checked = 0;
+    for (const ImDrawCmd& cmd : drawList->CmdBuffer) {
+        for (unsigned int i = cmd.IdxOffset; i < cmd.IdxOffset + cmd.ElemCount; ++i) {
+            const int vertex = static_cast<int>(cmd.VtxOffset + drawList->IdxBuffer[static_cast<int>(i)]);
+            if (static_cast<int>(i) < firstIndex || vertex < strokeFrom) {
+                continue;
+            }
+            ++checked;
+            EXPECT_GE(cmd.ClipRect.x, box.x);
+            EXPECT_GE(cmd.ClipRect.y, box.y);
+            EXPECT_LE(cmd.ClipRect.z, box.z);
+            EXPECT_LE(cmd.ClipRect.w, box.w);
+        }
+    }
+    EXPECT_GT(checked, 0) << "the stroke is in no draw command";
+}
+
 }  // namespace
 }  // namespace sz::ui
