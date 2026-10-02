@@ -318,5 +318,24 @@ TEST(TutorialExpandTest, LeavesWhatItDoesNotKnowAndDropsAnUnboundKey) {
     EXPECT_EQ(Expand("[{key:undo}] {nope} {key:noSuchCommand} {", world), "[] {nope} {key:noSuchCommand} {");
 }
 
+// What the card draws in the spotlight's color: a {ui:} name, a key and a
+// trigger, each a run of its own; the canvas's name and the text around
+// them plain, joined.
+TEST(TutorialExpandTest, MarksTheNamesKeysAndTriggersInRuns) {
+    FakeWorld world;
+    world.screenshotTrigger = core::CreationTrigger::Alt;
+    const std::vector<TextSpan> spans =
+        ExpandSpans("Press {ui:More topics} or {key:undo} on \"{canvas}\", {trigger:screenshot}.", world, 12);
+    ASSERT_EQ(spans.size(), 7u);
+    const std::vector<std::pair<std::string, bool>> expected = {
+        {"Press ", false},  {"More topics", true}, {" or ", false}, {"Ctrl+Z", true},
+        {" on \"Canvas 12\", ", false}, {"Alt", true}, {".", false}};
+    for (size_t i = 0; i < spans.size(); ++i) {
+        EXPECT_EQ(spans[i].text, expected[i].first) << i;
+        EXPECT_EQ(spans[i].marked, expected[i].second) << i;
+    }
+    EXPECT_EQ(Expand("Press {ui:More topics}.", world), "Press More topics.");
+}
+
 }  // namespace
 }  // namespace sz::ui::tutorial

@@ -143,6 +143,18 @@ at 100%. It holds:
   - Keys are named as they are bound now: "Press Ctrl+Z".
   - A step whose key is unbound says what to do instead, the way the
     welcome note has a second text for a cheat sheet with no key.
+  - What a text names to press, tick or pick - a key, a button, a menu
+    row, a tab, "Settings > Interaction" - is drawn in the spotlight's
+    color, which rings that same thing; in a hint, which is in that
+    color already, in white (since 2026-10-02). A key comes from
+    `{key:}` and `{trigger:}`; a name is written `{ui:More topics}` in
+    the string (`tutorial::ExpandSpans`). Quotes around names were the
+    other way, and the one that works in a tooltip too, which cannot
+    color part of a line - Settings' help keeps them. On the card they
+    made a busier text, and left keys unmarked. ImGui wraps text of
+    one color only, so the card lays out the words itself
+    (`WrappedSpans`), as `TextUnformatted` would; a test keeps `{ui:}`
+    out of every string the card does not fill in this way.
   - Every text is in `assets/ui_strings.json`, under `tutorial.*`.
 - the hint line, when one applies, and its button if it has one ("Put
   one here");

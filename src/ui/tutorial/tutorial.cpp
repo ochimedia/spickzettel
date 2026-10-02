@@ -717,7 +717,8 @@ void Tutorial::Update(const World& world, double now) {
     }
 }
 
-std::string Expand(std::string_view text, const World& world, core::CanvasId canvas, std::string_view profile) {
+std::vector<TextSpan> ExpandSpans(std::string_view text, const World& world, core::CanvasId canvas,
+                                  std::string_view profile) {
     auto trigger = [](core::CreationTrigger held) -> std::string {
         switch (held) {
             case core::CreationTrigger::Ctrl:
@@ -730,29 +731,47 @@ std::string Expand(std::string_view text, const World& world, core::CanvasId can
         }
         return {};
     };
-    std::string out;
+    std::vector<TextSpan> out;
+    // Plain text joins the run before it when that is plain too.
+    auto add = [&out](std::string_view piece, bool marked) {
+        if (piece.empty()) {
+            return;
+        }
+        if (!marked && !out.empty() && !out.back().marked) {
+            out.back().text.append(piece);
+        } else {
+            out.push_back(TextSpan{std::string(piece), marked});
+        }
+    };
     size_t at = 0;
     while (at < text.size()) {
         const size_t open = text.find('{', at);
         const size_t close = open == std::string_view::npos ? open : text.find('}', open);
         if (close == std::string_view::npos) {
-            out.append(text.substr(at));
+            add(text.substr(at), false);
             break;
         }
-        out.append(text.substr(at, open - at));
+        add(text.substr(at, open - at), false);
         const std::string_view name = text.substr(open + 1, close - open - 1);
         std::optional<std::string> value;
+        bool marked = false;
         if (name.starts_with("key:")) {
             const std::string_view command = name.substr(4);
             for (const CommandInfo& info : kCommands) {
                 if (info.name == command) {
                     value = world.KeyLabel(info.id).value_or(std::string{});
+                    marked = true;
                 }
             }
         } else if (name == "trigger:screenshot") {
             value = trigger(world.ScreenshotTrigger());
+            marked = true;
         } else if (name == "trigger:drawing") {
             value = trigger(world.DrawingTrigger());
+            marked = true;
+        } else if (name.starts_with("ui:")) {
+            value = std::string(name.substr(3));
+            marked = true;
         } else if (name == "canvas") {
             value = world.CanvasName(canvas);
         } else if (name == "profile") {
@@ -771,8 +790,20 @@ std::string Expand(std::string_view text, const World& world, core::CanvasId can
         } else if (name == "showing") {
             value = world.SettingsShowing().value_or(strings::kProfilesDefaults);
         }
-        out.append(value ? *value : std::string(text.substr(open, close - open + 1)));
+        if (value.has_value()) {
+            add(*value, marked);
+        } else {
+            add(text.substr(open, close - open + 1), false);
+        }
         at = close + 1;
+    }
+    return out;
+}
+
+std::string Expand(std::string_view text, const World& world, core::CanvasId canvas, std::string_view profile) {
+    std::string out;
+    for (const TextSpan& span : ExpandSpans(text, world, canvas, profile)) {
+        out.append(span.text);
     }
     return out;
 }

@@ -33,5 +33,25 @@ TEST(UiStringsFileTest, TheCatalogIsStrictJson) {
     EXPECT_NE(std::string(strings::kAppearanceImageFilterHelp).find("\n\n"), std::string::npos);
 }
 
+// A {ui:name} is drawn marked by the tutorial card, which fills a card's
+// texts in (tutorial::ExpandSpans). Anywhere else it would show as typed:
+// a tooltip, a label, a title, the list, or the tutorial's Settings row.
+TEST(UiStringsFileTest, AMarkedNameIsOnlyInTheTutorialCardsTexts) {
+    std::ifstream in(SPICKZETTEL_UI_STRINGS_JSON, std::ios::binary);
+    ASSERT_TRUE(in.is_open());
+    std::ostringstream text;
+    text << in.rdbuf();
+    const nlohmann::json doc = nlohmann::json::parse(text.str());
+    for (const auto& [key, value] : doc.items()) {
+        if (!value.is_string() || value.get<std::string>().find("{ui:") == std::string::npos) {
+            continue;
+        }
+        const bool cardText = key.starts_with("tutorial.") && !key.ends_with(".title") &&
+                              !key.starts_with("tutorial.card.") && !key.starts_with("tutorial.list.") &&
+                              !key.starts_with("tutorial.topics.") && !key.starts_with("tutorial.settings.");
+        EXPECT_TRUE(cardText) << key;
+    }
+}
+
 }  // namespace
 }  // namespace sz::ui

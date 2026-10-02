@@ -180,17 +180,31 @@ private:
     std::optional<core::ProfileId> profile_;
 };
 
-// `text` with its placeholders filled in from `world`:
+// A run of a card's text, and whether it names something to press, tick
+// or pick - a key, a button, a menu row - which the card draws in a color
+// of its own.
+struct TextSpan {
+    std::string text;
+    bool marked = false;
+};
+
+// `text` with its placeholders filled in from `world`, in runs:
 //  - {key:<command>}, the key bound to the command of that name in
 //    kCommands - "undo", "toggleEditMode" - or nothing when unbound;
+//    marked;
 //  - {trigger:screenshot} and {trigger:drawing}, the trigger's key - Ctrl,
-//    Alt - or nothing when it is plain or off;
+//    Alt - or nothing when it is plain or off; marked;
+//  - {ui:<name>}, the name as it is - a button, a row, a key by its name
+//    ("More topics", "Esc"); marked;
 //  - {canvas}, the name of `canvas`;
 //  - {profile}, `profile`, the tutorial's profile, and {program}, what
 //    that is matched on;
 //  - {underneath}, the program the overlay is up over; {running}, the
 //    profile that runs; and {showing}, whose values Settings shows.
 // Anything else in braces is left as it is.
+std::vector<TextSpan> ExpandSpans(std::string_view text, const World& world, core::CanvasId canvas = 0,
+                                  std::string_view profile = {});
+// The same, its runs joined into one text.
 std::string Expand(std::string_view text, const World& world, core::CanvasId canvas = 0,
                    std::string_view profile = {});
 

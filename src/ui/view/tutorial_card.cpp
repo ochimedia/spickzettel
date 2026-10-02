@@ -98,6 +98,79 @@ void Wrapped(const ImVec4& color, const std::string& text) {
     ImGui::PopStyleColor();
 }
 
+// The same for a card's text in runs (tutorial::ExpandSpans): what it names
+// to press, tick or pick in `markColor` - the spotlight's color, which
+// rings that same thing - and the rest in `color`. ImGui wraps only text of
+// one color, so this lays the words out itself, as TextUnformatted
+// would: broken at spaces, at the edge of the card, and at each line
+// break, a word that spans two runs ("Next." of a name and a period) kept
+// whole.
+void WrappedSpans(const ImVec4& color, const ImVec4& markColor, const std::vector<tutorial::TextSpan>& spans) {
+    struct Word {
+        std::vector<tutorial::TextSpan> runs;
+        int breaksBefore = 0;
+        bool spaceBefore = false;
+    };
+    std::vector<Word> words;
+    int breaks = 0;
+    bool space = false;
+    bool inWord = false;
+    for (const tutorial::TextSpan& span : spans) {
+        for (const char c : span.text) {
+            if (c == '\n' || c == ' ') {
+                breaks += c == '\n' ? 1 : 0;
+                space = space || c == ' ';
+                inWord = false;
+                continue;
+            }
+            if (!inWord) {
+                words.push_back(Word{{}, breaks, space});
+                breaks = 0;
+                space = false;
+                inWord = true;
+            }
+            std::vector<tutorial::TextSpan>& runs = words.back().runs;
+            if (runs.empty() || runs.back().marked != span.marked) {
+                runs.push_back(tutorial::TextSpan{{}, span.marked});
+            }
+            runs.back().text += c;
+        }
+    }
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    const float right = origin.x + ImGui::GetContentRegionAvail().x;
+    const float lineHeight = ImGui::GetTextLineHeight();
+    const float spaceWidth = ImGui::CalcTextSize(" ").x;
+    const ImU32 plain = ImGui::GetColorU32(color);
+    const ImU32 marked = ImGui::GetColorU32(markColor);
+    float x = origin.x;
+    float y = origin.y;
+    float widest = 0.0f;
+    for (const Word& word : words) {
+        if (word.breaksBefore > 0) {
+            x = origin.x;
+            y += lineHeight * static_cast<float>(word.breaksBefore);
+        }
+        float width = 0.0f;
+        for (const tutorial::TextSpan& run : word.runs) {
+            width += ImGui::CalcTextSize(run.text.c_str()).x;
+        }
+        float at = x > origin.x && word.spaceBefore ? x + spaceWidth : x;
+        if (x > origin.x && at + width > right) {
+            at = origin.x;
+            y += lineHeight;
+        }
+        for (const tutorial::TextSpan& run : word.runs) {
+            drawList->AddText(ImVec2(at, y), run.marked ? marked : plain, run.text.c_str());
+            at += ImGui::CalcTextSize(run.text.c_str()).x;
+        }
+        x = at;
+        widest = std::max(widest, x - origin.x);
+    }
+    ImGui::Dummy(ImVec2(widest, y + lineHeight - origin.y));
+}
+
 // A check mark the height of a line, at the cursor, in the accent.
 void CheckMark() {
     const float size = ImGui::GetTextLineHeight();
@@ -560,7 +633,8 @@ void TutorialCard::DrawStep() {
         ImGui::SameLine();
         CheckMark();
     }
-    Wrapped(theme::kGraphite100, tutorial::Expand(step.text(world_), world_, 0, ProfileName()));
+    WrappedSpans(theme::kGraphite100, theme::kTutorialHighlight,
+                 tutorial::ExpandSpans(step.text(world_), world_, 0, ProfileName()));
     if (const std::optional<tutorial::Hint>& hint = runner_.CurrentHint()) {
         ImGui::Spacing();
         DrawHint(*hint);
@@ -618,7 +692,9 @@ std::optional<ViewAction> TutorialCard::HintAction() const {
 }
 
 void TutorialCard::DrawHint(const tutorial::Hint& hint) {
-    Wrapped(theme::kTutorialHighlight, tutorial::Expand(hint.text, world_, hint.canvas, ProfileName()));
+    // The hint is in the spotlight's color already: what it names, in white.
+    WrappedSpans(theme::kTutorialHighlight, theme::kWhite,
+                 tutorial::ExpandSpans(hint.text, world_, hint.canvas, ProfileName()));
     const char* label = nullptr;
     switch (hint.button) {
         case tutorial::HintButton::None:
@@ -649,11 +725,13 @@ void TutorialCard::DrawSkipped() {
         for (const tutorial::Step* warning : warnings) {
             ImGui::Spacing();
             Wrapped(theme::kTutorialHighlight, warning->title);
-            Wrapped(theme::kGraphite100, tutorial::Expand(warning->text(world_), world_));
+            WrappedSpans(theme::kGraphite100, theme::kTutorialHighlight,
+                         tutorial::ExpandSpans(warning->text(world_), world_));
         }
     }
     ImGui::Spacing();
-    Wrapped(theme::kGraphite300, strings::kTutorialSkippedAgain);
+    WrappedSpans(theme::kGraphite300, theme::kTutorialHighlight,
+                 tutorial::ExpandSpans(strings::kTutorialSkippedAgain, world_));
     EndButtons();
 }
 
