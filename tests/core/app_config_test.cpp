@@ -443,7 +443,7 @@ TEST(AppConfigTest, ABarReadFromTheFileEndsUpHoldingEachOfItsButtonsOnce) {
     EXPECT_EQ(config.drawingBar, DefaultDrawingBar()) << "the bar the file said nothing about is untouched";
 }
 
-// The drawing bar's color button is stored as "color", in the spelling
+// The bar's color button, of its drawing group, is stored as "color", in the spelling
 // the rest of the file uses.
 TEST(AppConfigTest, TheColorButtonIsStoredAsColor) {
     AppConfig config = DefaultConfig();

@@ -393,7 +393,7 @@ TEST_F(HeadlessAppTest, DraggingOverAnItemDrawsAStroke) {
 // How strongly the last frame laid `colorRGBA`'s color down on the items
 // layer inside `min..max`, whatever its alpha: the most opaque of those
 // vertices, times the opacity of the stroke layer they were drawn into, if
-// they were. 0 for none. Inside, because the drawing bar's swatch is the
+// they were. 0 for none. Inside, because the selection bar's swatch is the
 // pen's color too.
 float StrengthOnItemsLayer(uint32_t colorRGBA, ImVec2 min, ImVec2 max) {
     const ImGuiWindow* layer = ImGui::FindWindowByName("##sz_items_layer");
@@ -2196,7 +2196,7 @@ TEST_F(HeadlessAppTest, TheBarsToolsEnterDrawingModeAndTheLitOneLeavesIt) {
     EXPECT_EQ(App().ActiveTool(), Tool::Text);
 }
 
-// The drawing bar's buttons switch the tool and open the color chooser.
+// The bar's drawing buttons switch the tool and open the color chooser.
 TEST_F(HeadlessAppTest, TheDrawingBarSwitchesTheToolAndOpensTheColor) {
     ShowEditMode();
     StepFrame();
@@ -2989,8 +2989,8 @@ protected:
 // item's body, and draws into it. An invisible handle margin around every
 // snippet, hit-tested by ImGui a frame late, would start a resize of the
 // back item here even where the front item covers it.
-// Handles exist only on a selected snippet, and nothing over the
-// canvas asks ImGui who is under the pointer.
+// A resize band exists only around a selected snippet, and nothing over
+// the canvas asks ImGui who is under the pointer.
 TEST_F(OverlappingItemsTest, APressBesideABorderDrawsRatherThanResizing) {
     ShowEditMode();
     StepFrame();
@@ -3521,8 +3521,8 @@ TEST_F(HeadlessAppTest, ARightClickOnAFullscreenSnippetLeavesItFullscreen) {
     EXPECT_FALSE(Canvases().CurrentOrNull()->items[0].isFullscreen);
 }
 
-// The selection's handles are drawn over every snippet, and are grabbable
-// there too: the back item's south-east corner lies under the front item's
+// The selection's resize band is over every snippet that is not selected:
+// the back item's south-east corner lies under the front item's
 // body, and still resizes the back item rather than drawing into the front.
 TEST_F(OverlappingItemsTest, ASelectedSnippetsHandleIsOnTopOfEveryOtherSnippet) {
     ShowEditMode();

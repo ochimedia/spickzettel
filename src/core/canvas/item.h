@@ -49,7 +49,7 @@ struct Item {
     // other). A property of its own, set from the defaults when the item
     // is made and changed in its popover: it used to follow from whether
     // the item had text, so that typing a caption into a screenshot
-    // quietly changed what its handles did.
+    // quietly changed what resizing it did.
     bool keepAspect = true;
     bool isFullscreen = false;
     // Whether entering fullscreen stretched `rect` to exactly fill the

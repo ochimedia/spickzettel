@@ -207,7 +207,7 @@ order, including where that is surprising (section 9, finding 3).
 | # | Surface | Kind | Up while | Owner (section 7) |
 |---|---|---|---|---|
 | 1 | The canvas: the frozen screen, the debug readout | layer `##spickzettel_canvas` | always | Canvas view |
-| 2 | The items: every snippet; the selection's outline, handles and bar; a box being dragged | layer `##sz_items_layer` | a canvas is current | Canvas view |
+| 2 | The items: every snippet; the selection's border and bar; a box being dragged | layer `##sz_items_layer` | a canvas is current | Canvas view |
 | 3 | The note editor | window `##noteedit<id>` | a note is being typed | Canvas view |
 | 4 | The dock | window `##dock` | a snippet on the canvas is minimized | Canvas view |
 | 5 | The canvas bar | window `##canvas_bar` | the pointer is at the bottom edge or on the bar, or its menu is up; not under a panel | Canvas bar |

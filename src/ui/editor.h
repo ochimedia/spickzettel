@@ -202,9 +202,9 @@ public:
     // Whether the selection's furniture - the bar, the resize bands - is on
     // screen and takes presses: no creation tool in hand, and no snippet
     // being framed. Selecting is the hand at rest, so this is almost
-    // always true; in drawing mode the bar shows the drawing buttons
-    // instead, and a press on the snippet's body draws rather than moves
-    // (see PressPicksUp).
+    // always true; in drawing mode the bar is there as at rest, the tool
+    // in hand lit on it, and a press on the snippet's body draws rather
+    // than moves (see PressPicksUp).
     bool SelectionLive() const;
     // Whether a left press on a snippet's body picks it up - selects and
     // moves it - rather than drawing on it: not in drawing mode, or Alt

@@ -8,8 +8,8 @@
 // which step is up, and what it has seen - and whether the card has been
 // dragged somewhere. It reads the app through the world - but for where
 // things are on screen, which the world leaves out (docs/TUTORIAL.md,
-// section 7.1): the anchor board, and the subject and its handles as the
-// session and the editor have them this frame - and asks for everything
+// section 7.1): the anchor board, and the subject and its resize corner as
+// the session and the editor have them this frame - and asks for everything
 // else as an action.
 
 #include <optional>

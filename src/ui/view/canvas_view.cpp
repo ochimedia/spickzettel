@@ -103,11 +103,10 @@ void DrawDebugOverlay(ImDrawList* drawList, const ImGuiIO& io, const CanvasManag
                    canvases.CurrentOrNull() ? canvases.CurrentOrNull()->items.size() : size_t{0},
                    io.MousePos.x, io.MousePos.y);
     drawList->AddText(Px(16.0f, 16.0f), IM_COL32(0, 255, 255, 255), debugLine);
-    // A live readout of exactly which resize handle (if any) the mouse is
-    // over right now - see debugHoveredResizeHandle_'s own doc comment for
-    // why this exists: a screenshot alone can't tell "covered by a handle
-    // that's visually identical to its neighbor" apart from "not covered
-    // by anything," this can.
+    // A live readout of exactly which edge or corner of the resize band
+    // (if any) the mouse is over right now - see debugHoveredResizeHandle_'s
+    // own doc comment for why this exists: the band is not drawn, so a
+    // screenshot alone can't tell where it is.
     char handleLine[96];
     std::snprintf(handleLine, sizeof(handleLine), "resize handle: %s",
                    hoveredResizeHandle.empty() ? "none" : hoveredResizeHandle.c_str());
@@ -168,7 +167,7 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
 
     // What the pointer is over, decided once, before anything is drawn -
     // see ResolvePointerTarget for the walk and the answers it gives. The
-    // handles and the bar are drawn from this, and take their presses from
+    // resize band and the bar are shown from this, and take their presses from
     // the same walk asked of the raw event's own position
     // (RecognizePress), so what lights up and what a click lands on are
     // one answer - this frame's - with no window hit-test of ImGui's in
@@ -251,7 +250,7 @@ void CanvasView::RenderItems(float displayW, float displayH, std::optional<ItemI
 
     // One layer for every item, painted back to front in canvas.items
     // order, so z-order is draw order by construction, and the selection's
-    // outline, handles and bar over all of them. Nothing in an item is
+    // border and bar over all of them. Nothing in an item is
     // hit-tested by ImGui, so an item needs only a draw list and a place in
     // the stack, and one layer
     // gives every item both at once - the same BeginScreenLayer the canvas
@@ -372,7 +371,7 @@ void CanvasView::PaintItemBody(ImDrawList* drawList, const Item& item, bool draw
 
     // Border marking the item's bounds - drawn on the items layer with the
     // rest of the item, not the foreground list, where it would paint over
-    // the Overview, popovers and another item's handles and leave no way to
+    // the Overview, popovers and the selection's bar and leave no way to
     // tell what is in front of what. On the layer it is painted in canvas.items order
     // with everything else of the item, so a later item covers it, and
     // every window that can sit above an item (popovers, the canvas bar,
