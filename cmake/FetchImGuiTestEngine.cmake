@@ -11,10 +11,11 @@ include(FetchContent)
 
 FetchContent_Declare(
     imgui_test_engine
-    # v1.92.1. The archive leaves out the test suite's ImPlot submodule,
+    # v1.92.9, the ImGui version FetchImGui.cmake pins; bump the two
+    # together. The archive leaves out the test suite's ImPlot submodule,
     # which a clone fetched along with it: nothing here builds the suite.
-    URL https://github.com/ocornut/imgui_test_engine/archive/b6638c5d088febaa050a2745d7b838e637fa7381.tar.gz
-    URL_HASH SHA256=8538d2bed19c27e5e2e539a0dc4acdba9c5a483de88abd0ba1b54df3c1907ad7
+    URL https://github.com/ocornut/imgui_test_engine/archive/508a8fc8dacac2f346d353fed31b9bc90ed29adc.tar.gz
+    URL_HASH SHA256=670eb10a369bdf2646711c216ff44bcf32c43e3a57f97eb1d0b5613185d78c52
 )
 FetchContent_MakeAvailable(imgui_test_engine)
 
