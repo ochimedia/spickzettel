@@ -73,7 +73,7 @@ static_assert(FieldCount<ProfileOverrides>() == kProfileRows,
 // them, the snippet defaults hold three each, `profiles` is no row - so
 // this is a tripwire rather than a proof: a field added here fails the
 // build until it has its row, and then this count is raised.
-static_assert(FieldCount<AppConfig>() == 47, "an AppConfig field added: give it a row in settings_catalog.h, "
+static_assert(FieldCount<AppConfig>() == 45, "an AppConfig field added: give it a row in settings_catalog.h, "
                                               "then count it here");
 
 // The version a file says it is. 1 when it says nothing a version can be -
@@ -323,20 +323,6 @@ std::optional<std::map<std::string, std::string>> Parse(const TextMapRule&, cons
     return map;
 }
 
-// Digits only, and all of them: anything else is no id this wrote.
-std::optional<uint64_t> Parse(const IdRule&, const json& j) {
-    if (!j.is_string()) {
-        return std::nullopt;
-    }
-    const std::string text = j.get<std::string>();
-    uint64_t value = 0;
-    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value);
-    if (text.empty() || error != std::errc{} || end != text.data() + text.size()) {
-        return std::nullopt;
-    }
-    return value;
-}
-
 // A bar's buttons, as the file gives them: an array of names, or of
 // objects naming a button and saying whether it is shown. The bare name is
 // there for a file edited by hand, where ["pin", "close"] is the obvious
@@ -392,7 +378,6 @@ json Write(const ShortcutRule&, const platform::KeyCombo& value) {
     return value.key == 0 ? json(nullptr) : json(FormatHotkey(value));
 }
 json Write(const TextRule&, const std::string& value) { return value; }
-json Write(const IdRule&, uint64_t value) { return std::to_string(value); }
 json Write(const TextMapRule&, const std::map<std::string, std::string>& map) {
     json out = json::object();
     for (const auto& [key, value] : map) {

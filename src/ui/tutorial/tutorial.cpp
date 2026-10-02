@@ -90,9 +90,9 @@ const ProfileFacts* Look::ProfileAtStart() const {
     return nullptr;
 }
 
-void Tutorial::Start(core::FolderId folder) { Resume({}, folder); }
+void Tutorial::Start(core::FolderId folder) { StartAt({}, folder); }
 
-void Tutorial::Resume(std::string_view id, core::FolderId folder) {
+void Tutorial::StartAt(std::string_view id, core::FolderId folder) {
     size_t at = 0;
     for (size_t i = 0; i < chain_->size(); ++i) {
         if ((*chain_)[i].id == id) {
@@ -229,7 +229,7 @@ std::vector<const Step*> Tutorial::WarningsNotReached() const {
 std::string Tutorial::Progress() const {
     switch (state_) {
         case State::OnStep:
-            return std::string(CurrentStep().id);
+            return "started";
         case State::Skipped:
             return "skipped";
         case State::Off:

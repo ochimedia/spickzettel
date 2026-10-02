@@ -73,7 +73,7 @@ TEST_F(TutorialTest, StartsAtTheFirstStepInItsFolder) {
     EXPECT_EQ(tutorial_.GetState(), Tutorial::State::OnStep);
     EXPECT_EQ(tutorial_.Folder(), FakeWorld::kTutorialFolder);
     EXPECT_EQ(Id(), "read");
-    EXPECT_EQ(tutorial_.Progress(), "read");
+    EXPECT_EQ(tutorial_.Progress(), "started");
 }
 
 TEST_F(TutorialTest, NextAndBackWalkTheChain) {
@@ -81,7 +81,7 @@ TEST_F(TutorialTest, NextAndBackWalkTheChain) {
     EXPECT_EQ(Id(), "read");
     tutorial_.Next();
     EXPECT_EQ(Id(), "gated");
-    EXPECT_EQ(tutorial_.Progress(), "gated");
+    EXPECT_EQ(tutorial_.Progress(), "started") << "no step id";
     tutorial_.Back();
     EXPECT_EQ(Id(), "read");
 }
@@ -118,7 +118,7 @@ TEST_F(TutorialTest, AGoalMetStaysMetSoBackNeverLocksNext) {
 }
 
 TEST_F(TutorialTest, AStepNothingDependsOnMovesOnWithNextUndone) {
-    tutorial_.Resume("free", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("free", FakeWorld::kTutorialFolder);
     Frame(0.0);
     EXPECT_FALSE(tutorial_.GoalMet());
     EXPECT_TRUE(tutorial_.NextEnabled());
@@ -178,7 +178,7 @@ TEST_F(TutorialTest, WhatWasThereWhenTheStepBeganDoesNotMeetItsGoal) {
 }
 
 TEST_F(TutorialTest, MetOnThisVisitAStepMovesOnWhateverItsNeedsSay) {
-    tutorial_.Resume("free", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("free", FakeWorld::kTutorialFolder);
     world_.Make(1);
     Frame(0.0);
     world_.Draw(1);
@@ -212,13 +212,13 @@ TEST_F(TutorialTest, TheSkipCardRepeatsTheWarningsNotReached) {
     ASSERT_EQ(tutorial_.WarningsNotReached().size(), 1u);
     EXPECT_EQ(tutorial_.WarningsNotReached()[0]->id, "warn");
 
-    tutorial_.Resume("last", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("last", FakeWorld::kTutorialFolder);
     tutorial_.Skip();
     EXPECT_TRUE(tutorial_.WarningsNotReached().empty());
 }
 
 TEST_F(TutorialTest, NextOnTheLastStepFinishes) {
-    tutorial_.Resume("last", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("last", FakeWorld::kTutorialFolder);
     tutorial_.Next();
     EXPECT_EQ(tutorial_.GetState(), Tutorial::State::Off);
     EXPECT_EQ(tutorial_.GetOutcome(), Tutorial::Outcome::Finished);
@@ -227,8 +227,8 @@ TEST_F(TutorialTest, NextOnTheLastStepFinishes) {
     EXPECT_FALSE(tutorial_.On());
 }
 
-TEST_F(TutorialTest, ResumeFindsTheStepByIdAndAnUnknownIdStartsAgain) {
-    tutorial_.Resume("warn", FakeWorld::kOtherFolder);
+TEST_F(TutorialTest, StartAtFindsTheStepByIdAndAnUnknownIdStartsAtTheFirst) {
+    tutorial_.StartAt("warn", FakeWorld::kOtherFolder);
     EXPECT_EQ(Id(), "warn");
     EXPECT_EQ(tutorial_.Folder(), FakeWorld::kOtherFolder);
     tutorial_.Back();
@@ -236,14 +236,14 @@ TEST_F(TutorialTest, ResumeFindsTheStepByIdAndAnUnknownIdStartsAgain) {
     EXPECT_EQ(Id(), "gated");
     EXPECT_TRUE(tutorial_.NextEnabled());  // passed before, so done
 
-    tutorial_.Resume("gone", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("gone", FakeWorld::kTutorialFolder);
     EXPECT_EQ(Id(), "read");
 }
 
 TEST_F(TutorialTest, TheSubjectIsTheNewestUnlessTheHandPicksAnother) {
     world_.Make(1);
     world_.Make(2);
-    tutorial_.Resume("free", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("free", FakeWorld::kTutorialFolder);
     Frame(0.0);
     EXPECT_EQ(tutorial_.Subject(), 2u);
 
@@ -267,7 +267,7 @@ TEST_F(TutorialTest, OnlyTheTutorialFoldersSnippetsAreSubjects) {
     world_.Make(9);
     world_.current = FakeWorld::kCanvas;
     world_.selection = {9};
-    tutorial_.Resume("free", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("free", FakeWorld::kTutorialFolder);
     Frame(0.0);
     EXPECT_FALSE(tutorial_.Subject().has_value());
     ASSERT_TRUE(tutorial_.CurrentHint().has_value());
@@ -279,7 +279,7 @@ TEST_F(TutorialTest, ASubjectOnAnotherCanvasOffersTheWayBackThere) {
     world_.current = FakeWorld::kSecondCanvas;
     world_.Make(1);
     world_.current = FakeWorld::kCanvas;
-    tutorial_.Resume("free", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("free", FakeWorld::kTutorialFolder);
     Frame(0.0);
     ASSERT_TRUE(tutorial_.CurrentHint().has_value());
     EXPECT_EQ(tutorial_.CurrentHint()->need, Need::SubjectHere);
@@ -295,7 +295,7 @@ TEST_F(TutorialTest, ASubjectOnAnotherCanvasOffersTheWayBackThere) {
 
 TEST_F(TutorialTest, AMinimizedSubjectMovesTheSpotlightToTheDock) {
     world_.Make(1);
-    tutorial_.Resume("free", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("free", FakeWorld::kTutorialFolder);
     Frame(0.0);
     EXPECT_EQ(tutorial_.CurrentSpot(), Spot::Subject);
     world_.At(1).minimized = true;

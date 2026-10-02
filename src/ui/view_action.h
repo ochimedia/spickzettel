@@ -137,9 +137,6 @@ struct TutorialPress {
 struct StartTutorial {
     std::string topic{tutorial::kBasicsTopic};
 };
-// A start after quitting partway: the topic kept as running, at the step
-// kept, in the folder kept - or a new one when that is gone (section 13.7).
-struct ResumeTutorial {};
 // Open the tutorial: its list of topics (section 13.4), with the Overview,
 // which Settings is in, closed for it.
 struct OpenTutorialList {};
@@ -155,7 +152,7 @@ using ViewAction =
                  action::ReorderFolder, action::ReorderCanvas, action::MoveCanvasToFolder, action::RenameFolder,
                  action::RenameCanvas, action::NewFolder, action::NewCanvas, action::SendPicked, action::Restore,
                  action::Delete, action::RestoreMinimized, action::ClosePanel, action::FinishNoteEdit,
-                 action::TutorialPress, action::StartTutorial, action::ResumeTutorial, action::OpenTutorialList,
+                 action::TutorialPress, action::StartTutorial, action::OpenTutorialList,
                  action::BackToTutorial,
                  action::PracticeSnippet>;
 

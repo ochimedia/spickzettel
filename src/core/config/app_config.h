@@ -308,17 +308,11 @@ struct AppConfig {
     std::string overlayDisplayName;
 
     // How far the tutorial got with each topic (docs/TUTORIAL.md, section
-    // 13.7), by the topic's id: the id of the step it was on, "finished" or
-    // "skipped" - and no entry for a topic never started. Written by the
-    // tutorial as it goes.
+    // 13.7), by the topic's id: "started", "finished" or "skipped" - and no
+    // entry for a topic never started. Any other text - a step's id, which
+    // builds before 0.2.3 kept - reads as started. Written by the tutorial
+    // as it goes.
     std::map<std::string, std::string> tutorialProgress;
-    // The topic running, which a start goes on with at its step; empty for
-    // none.
-    std::string tutorialCurrent;
-    // The library id of the running topic's folder, 0 for none. The library
-    // may no longer hold it - set aside, or the folder deleted - and a
-    // resume then makes a new one.
-    uint64_t tutorialFolder = 0;
 
     bool operator==(const AppConfig&) const = default;
 };

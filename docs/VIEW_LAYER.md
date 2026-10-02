@@ -410,7 +410,7 @@ in-place changes of section 1 go through it too.
 | Close the Overview or the cheat sheet | the backdrop; the picker's Cancel, a tile clicked | the machine |
 | Finish a note edit | the note editor let go of | the editor |
 | The tutorial card's buttons: Next, Back, Skip, Done, Keep, More topics, the list's Close | the tutorial card | the card's runner; Done and More topics also delete what the topic made unless Keep is ticked: its folders, asked first, and its profiles |
-| Start a tutorial topic; resume one; open the list | a row of the list; the start (Prepare); the Settings button | `OverlayApp`: the Overview closed, the running topic let go of, the topic's folder made, then the card |
+| Start a tutorial topic; open the list | a row of the list; the start (Prepare); the Settings button | `OverlayApp`: the Overview closed, the running topic let go of, the topic's folder made, then the card |
 | Go back to the tutorial; put a practice snippet here | a hint's button on the card | the editor's switch, or the topic's folder made again; the session, off the history |
 
 An action is a value: an id, an index, a name. It never holds a

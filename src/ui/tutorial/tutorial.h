@@ -60,9 +60,9 @@ public:
     // for it (section 6.5), or none while none is due (see
     // DoStepReached).
     void Start(core::FolderId folder);
-    // At the step `id` names - the first, when none does - as a start
-    // after quitting partway does (section 7.6).
-    void Resume(std::string_view id, core::FolderId folder);
+    // At the step `id` names - the first, when none does - with the steps
+    // before it passed: Start, and the tests' way to a step.
+    void StartAt(std::string_view id, core::FolderId folder);
     // The tutorial's folder was made: again (Go back to the tutorial,
     // with the old one gone), or once it was due.
     void MoveTo(core::FolderId folder) { folder_ = folder; }
@@ -83,8 +83,7 @@ public:
     void Done();
     // Let go of for another topic (section 13.3): finished from the last
     // step, skipped from the skip card, and otherwise left where it was,
-    // Off with nothing to say, so that the progress kept stays at its
-    // step.
+    // Off with nothing to say, so that the progress kept stays "started".
     void Leave();
 
     State GetState() const { return state_; }
@@ -123,7 +122,7 @@ public:
     // skip.
     std::vector<const Step*> WarningsNotReached() const;
 
-    // What the settings file keeps (section 7.6): the step's id while one
+    // What the settings file keeps (section 13.7): "started" while a step
     // is up, "skipped" from the skip card on, "finished" once done - and
     // empty for a tutorial never started.
     std::string Progress() const;

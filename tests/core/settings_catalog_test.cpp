@@ -44,7 +44,6 @@ platform::KeyCombo Other(const ShortcutRule&, const platform::KeyCombo& value) {
     return value != other ? other : platform::KeyCombo{};
 }
 std::string Other(const TextRule&, const std::string& value) { return value + "x"; }
-uint64_t Other(const IdRule&, uint64_t value) { return value + 0x1234567890ABCDEFull; }
 std::map<std::string, std::string> Other(const TextMapRule&, std::map<std::string, std::string> value) {
     value["x"] += "x";
     return value;
@@ -138,7 +137,7 @@ auto Fields(const AppConfig& c) {
                  editModeBorderWidthPx, editModeBorderOnlyWhenEmpty, purgeDeleted,
                  purgeDeletedAfterDays, confirmDelete, confirmDeleteForGood, screenshotDefaults, drawingDefaults,
                  drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId, overlayDisplayName,
-                 tutorialProgress, tutorialCurrent, tutorialFolder] = c;
+                 tutorialProgress] = c;
     return std::tie(hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
                     strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showFrameGraph,
                     showItemBorders, showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
@@ -149,7 +148,7 @@ auto Fields(const AppConfig& c) {
                     editModeBorderColorRGBA, editModeBorderWidthPx, editModeBorderOnlyWhenEmpty,
                     purgeDeleted, purgeDeletedAfterDays, confirmDelete, confirmDeleteForGood, screenshotDefaults,
                     drawingDefaults, drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId,
-                    overlayDisplayName, tutorialProgress, tutorialCurrent, tutorialFolder);
+                    overlayDisplayName, tutorialProgress);
 }
 
 auto Fields(const ProfileableSettings& s) {

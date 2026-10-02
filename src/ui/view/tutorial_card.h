@@ -35,14 +35,9 @@ public:
 
     // `topic` at its first step, in `folder`, just made for it.
     void Start(const tutorial::Topic& topic, core::FolderId folder);
-    // `topic` at the step `id` names, in `folder` - after quitting partway.
-    void Resume(const tutorial::Topic& topic, std::string_view id, core::FolderId folder);
     // The running topic let go of for another (section 13.3) - see
     // Tutorial::Leave.
     void Leave() { runner_.Leave(); }
-    // Whether a topic has run since the app started: until one has, the
-    // topic kept as running is a resume's to go on with.
-    bool HasRun() const { return hasRun_; }
     // The list of topics (section 13.3), up until one is chosen or it is
     // left.
     void OpenList() {
@@ -162,7 +157,6 @@ private:
     std::optional<ImVec2> drawnAt_;
     ImVec2 slideFrom_;
     float slideAge_ = 0.0f;
-    bool hasRun_ = false;
     bool listing_ = false;
     bool keep_ = false;
 };

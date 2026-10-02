@@ -507,15 +507,12 @@ void OverlayApp::Prepare(float displayW, float displayH) {
         case Welcome::Start:
             Act(action::StartTutorial{});
             break;
-        case Welcome::Resume:
-            Act(action::ResumeTutorial{});
-            break;
     }
 
     // The tutorial's step brought up to date with what the input above
     // did - its own state, and nothing else - in its folder, where the
     // step up is the first that needs one.
-    GiveTutorialItsFolder(0);
+    GiveTutorialItsFolder();
     tutorialCard_.Update(ImGui::GetTime());
 }
 
@@ -674,7 +671,6 @@ void OverlayApp::Do(const ViewAction& action) {
                    [&](const action::FinishNoteEdit& a) { editor_.EndEditingNote(a.text); },
                    [&](const action::TutorialPress& a) { DoTutorial(a); },
                    [&](const action::StartTutorial& a) { DoTutorial(a); },
-                   [&](const action::ResumeTutorial& a) { DoTutorial(a); },
                    [&](const action::OpenTutorialList& a) { DoTutorial(a); },
                    [&](const action::BackToTutorial& a) { DoTutorial(a); },
                    [&](const action::PracticeSnippet&) { PlacePracticeSnippet(); },

@@ -278,9 +278,11 @@ Edited from Settings > Hotkeys, lower box. Effect: Use.
 
 | Key | Field | Default | Rule |
 |---|---|---|---|
-| `progress` | `tutorialProgress` | `{}` | an object of texts by topic id: a step id, `"finished"` or `"skipped"`; an entry not a string reads as not there |
-| `current` | `tutorialCurrent` | empty (none) | text: the topic running |
-| `folder` | `tutorialFolder` | `"0"` (none) | a library id, as a string of digits: a double holds no 64-bit id; anything else reads as nothing said |
+| `progress` | `tutorialProgress` | `{}` | an object of texts by topic id: `"started"`, `"finished"` or `"skipped"`, any other text read as started (builds before 0.2.3 kept a step id); an entry not a string reads as not there |
+
+`current` and `folder`, which builds before 0.2.3 wrote here for a
+topic to go on after a restart, are no longer read (`docs/TUTORIAL.md`,
+section 7.6).
 
 **`diagnostics`**: Global. Rule: bool. Edited from Settings > Debug.
 Effect: Frame.

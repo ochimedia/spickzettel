@@ -115,13 +115,6 @@ struct TextRule {
     using Value = std::string;
 };
 
-// A library id, 0 for none. Written as a string of digits: a JSON reader
-// other than this one holds a number as a double, and a random 64-bit id
-// loses its last digits there.
-struct IdRule {
-    using Value = uint64_t;
-};
-
 // Texts by key, such as a topic's progress by its id: an object of
 // strings in the file. An entry whose value is not a string reads as not
 // there.
@@ -182,7 +175,6 @@ inline std::optional<platform::KeyCombo> Hold(const ShortcutRule&, platform::Key
     return value.IsValid() || value.IsMouseButton() ? std::optional(value) : std::nullopt;
 }
 inline std::optional<std::string> Hold(const TextRule&, std::string value) { return value; }
-inline std::optional<uint64_t> Hold(const IdRule&, uint64_t value) { return value; }
 inline std::optional<std::map<std::string, std::string>> Hold(const TextMapRule&,
                                                               std::map<std::string, std::string> value) {
     return value;

@@ -134,9 +134,7 @@
     "cheatSheet": "Ctrl+H"
   },
   "tutorial": {
-    "progress": {},
-    "current": "",
-    "folder": "0"
+    "progress": {}
   },
   "diagnostics": {
     "showDebugOverlay": false,

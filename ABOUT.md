@@ -119,6 +119,7 @@ If the app crashes, it writes a crash report to
 - The tutorial's rectangle eraser step accepts a Ctrl-drag with the round eraser, as its text says
 - The Folders and canvases tutorial keeps the Overview open on the way back to its folder, and opens a canvas at the end instead
 - The Capturing tutorial covers both capture hotkeys in one step
+- A tutorial topic quit partway no longer goes on after a restart; Basics starts over from its welcome until it is finished or skipped
 
 ### 0.2.2
 

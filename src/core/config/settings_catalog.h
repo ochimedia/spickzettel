@@ -190,10 +190,6 @@ inline constexpr ShortcutSettings kShortcuts{"shortcuts", {}, E::Use};
 // ----- tutorial: kept by the tutorial as it goes (docs/TUTORIAL.md, 13.7) -----
 inline constexpr GlobalSetting<TextMapRule> kTutorialProgress{
     {"tutorial", "", "progress"}, {}, E::Use, [](AppConfig& c) { return &c.tutorialProgress; }};
-inline constexpr GlobalSetting<TextRule> kTutorialCurrent{
-    {"tutorial", "", "current"}, {}, E::Use, [](AppConfig& c) { return &c.tutorialCurrent; }};
-inline constexpr GlobalSetting<IdRule> kTutorialFolder{
-    {"tutorial", "", "folder"}, {}, E::Use, [](AppConfig& c) { return &c.tutorialFolder; }};
 
 // ----- diagnostics -----
 inline constexpr GlobalSetting<BoolRule> kShowDebugOverlay{
@@ -222,7 +218,7 @@ inline constexpr auto kAll = std::tuple{
     &kDontStealFocus, &kTakeFocusOverElevated, &kSoftwarePointer, &kRawMouseInput, &kDontForwardKeystrokes,
     &kCounterRawMouseInput, &kCounterThreshold, &kFreezeScreen,
     &kShortcuts,
-    &kTutorialProgress, &kTutorialCurrent, &kTutorialFolder,
+    &kTutorialProgress,
     &kShowDebugOverlay, &kShowInputOptionsHud, &kShowFrameGraph,
 };
 

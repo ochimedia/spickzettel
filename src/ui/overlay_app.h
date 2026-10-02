@@ -370,9 +370,9 @@ public:
     enum class LibraryAtStart { None, FirstRun, Loaded };
     // What the tutorial does the first time edit mode comes up, decided
     // from the progress kept (docs/TUTORIAL.md, section 13.7) wherever
-    // there is a library, new or loaded: back to the topic that was
-    // running, at its step, or Basics when no topic has ever run - a first
-    // run, or an install from before the tutorial, treated as a new one.
+    // there is a library, new or loaded: Basics, from its welcome, until it
+    // has been finished or skipped, and otherwise nothing. Nothing goes on
+    // after a restart: a topic quit partway is over.
     void WelcomeAtStart(LibraryAtStart library);
 
     // Asks the host to hide the overlay and show it again. Installed by
@@ -522,7 +522,6 @@ private:
     // in the tutorial.
     void DoTutorial(const action::TutorialPress& a);
     void DoTutorial(const action::StartTutorial& a);
-    void DoTutorial(const action::ResumeTutorial& a);
     void DoTutorial(const action::OpenTutorialList& a);
     void DoTutorial(const action::BackToTutorial& a);
     // The tutorial's folder, made and switched to, with a canvas in it - 0
@@ -534,14 +533,12 @@ private:
     // `topic`'s folder made again. The folder the tutorial goes on in.
     FolderId GoToTutorialFolder(const tutorial::Topic& topic, FolderId folder);
     // The running topic's folder, once its first do step has come up and
-    // while it has none: `kept`, or a new one (docs/TUTORIAL.md, 13.5).
-    // `kept`, where it is still there, before that step too.
-    void GiveTutorialItsFolder(FolderId kept);
+    // while it has none: a new one (docs/TUTORIAL.md, 13.5).
+    void GiveTutorialItsFolder();
     void PlacePracticeSnippet();
-    // The step the running topic is on, or how it ended, which topic is
-    // running and its folder, set in the settings as they change
-    // (docs/TUTORIAL.md, section 13.7) - so a start after quitting partway
-    // comes back to it.
+    // Whether the running topic is started, skipped or finished, set in
+    // the settings as it changes (docs/TUTORIAL.md, section 13.7) - for
+    // the list of topics, and for Basics at the next start.
     void KeepTutorialProgress();
 
     // What the popover's Delete does, and what a delete Settings > Behavior
@@ -616,7 +613,7 @@ private:
 
     // What WelcomeAtStart decided, done on the first frame of edit mode and
     // then let go of, so it is done once.
-    enum class Welcome { Nothing, Start, Resume };
+    enum class Welcome { Nothing, Start };
     Welcome welcomePending_ = Welcome::Nothing;
 
     // What the tutorial reads of the app, and the showings it counts.

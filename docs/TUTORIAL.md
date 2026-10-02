@@ -706,8 +706,7 @@ like every other:
 | Go back to the tutorial | the need "In the tutorial folder" (6.4) | `action::BackToTutorial`: the folder's first canvas not deleted, switched to, or the folder made again |
 | Make the tutorial folder | a start (7.6); Go back to the tutorial when the folder is gone | `Session::AddFolder` and a canvas in it, switched to, as the Overview's New folder does |
 | Practice snippet | Put one here (6.4): a snippet of the drawing kind, with a backing, centered across and a little below the middle | `action::PracticeSnippet`: `Session::CreateItem(prototype, /*undoable=*/false)` |
-| Start a topic | a first run, an install from before, a row of the list (7.6) | the Overview closed, the running topic let go of, the tutorial folder, then a runner for the topic's chain |
-| Resume a topic | a start after quitting partway (7.6) | its folder, or a new one; then a runner at its step |
+| Start a topic | Basics at a start until finished or skipped; a row of the list (7.6) | the Overview closed, the running topic let go of, the tutorial folder, then a runner for the topic's chain |
 | Open the list | the Settings button (7.6); More topics | the Overview closed; the card's own state |
 | End with what the topic made | Done or More topics on the end card or the skip card (question 9, section 20) | kept with Keep ticked; else the run's folders under one delete confirmation (`AskToDelete`, `DeleteTarget::alsoFolders`), which puts them in the trash, and the run's profiles deleted (`SettingsPage::RemoveProfiles`) |
 
@@ -800,45 +799,43 @@ new kind. A function is as readable in the table, and each is tested
 against the fake world. Needs are a closed list, because they are shared
 across steps and each carries a text and a button.
 
-### 7.6 Start, resume and start again
+### 7.6 Start and start again
 
-**The settings.** Three catalog rows (`docs/SETTINGS.md`, section 3):
+**The setting.** One catalog row (`docs/SETTINGS.md`, section 3):
 
 | Key | Field | Default | Rule | Edited from | Effect |
 |---|---|---|---|---|---|
-| `tutorial.progress` | `tutorialProgress` | `{}` | each topic's id, mapped to a step id, `"finished"` or `"skipped"`; no entry for a topic never started | the tutorial | Use |
-| `tutorial.current` | `tutorialCurrent` | `""` | the topic running, or empty | the tutorial | Use |
-| `tutorial.folder` | `tutorialFolder` | `"0"` | the running topic's folder id, as digits; 0 for none | the tutorial | Use |
+| `tutorial.progress` | `tutorialProgress` | `{}` | each topic's id, mapped to `"started"`, `"finished"` or `"skipped"`; no entry for a topic never started; any other text reads as started | the tutorial | Use |
 
-All three are Global, and in no profile. Adding keys needs no version
-bump (section 8 there). Phase 3 built a single `tutorial.welcome` row,
-which phase 4 replaced before any release had it.
+Global, and in no profile. Phase 3 built a single `tutorial.welcome`
+row, which phase 4 replaced before any release had it.
 
-The folder's id is a library id kept in the settings file. The two
-files can disagree: the library may be set aside, or the folder deleted.
-Either way the id finds no live folder, and a resume makes a new one. A
-row in the library's `meta` table would keep the two together, at the
-cost of a change to the store. It is not needed for this.
+**Nothing goes on after a restart** (since 2026-10-02). Until then the
+progress kept each topic's step, and two more rows, `tutorial.current`
+and `tutorial.folder`, named the topic running and its folder, so that a
+start after quitting partway went on at that step, in that folder. The
+topics are short, and that took a startup path of its own, a library id
+kept in the settings file - which the library could disagree with - and
+the care of a run that went Back to a read step before the restart. So
+it went: a topic quit partway is over, its folder (and the Profiles
+topic's profile) left as Keep leaves them, and the list shows it as
+started. Builds before 0.2.3 kept step ids, which read as started; the
+two rows are ignored, as any key no longer known (`docs/SETTINGS.md`,
+section 8).
 
 **When a topic starts** (`OverlayApp::WelcomeAtStart`, told by
 `TrayController` what its start found of the library; done the first
 time edit mode comes up):
 
-- **A first run** starts Basics at its first step. Once the welcome
-  card is read, it makes the tutorial folder beside the folder and canvas
-  a first run makes (13.5). That one stays empty, for the user's own
-  work. A first run is told by
-  `tutorial.progress` being empty, as below, not by the library being
-  new: see 13.7.
-- **A start after quitting partway** goes on with the topic
-  `tutorial.current` names, at the step kept for it. It switches to that
-  topic's folder, or makes a new one if the folder is gone - once the
-  folder is due (13.5). A step id no longer in the chain starts the
-  topic again.
-- **An install from before 0.2.0** (a library, and nothing in
-  `tutorial.progress`) starts Basics, as a first run does (question 11).
-  Phase 3 built an offer card for it (question 5), which phase 4 took
-  out.
+- **Basics, until it has been finished or skipped,** starts at its
+  welcome: a first run, an install from before 0.2.0 (question 11), and
+  a Basics quit partway, which starts over. Once the welcome card is
+  read, it makes the tutorial folder (13.5) - on a first run beside the
+  folder and canvas a first run makes, which stays empty for the user's
+  own work. This is told by `tutorial.progress`, not by the library being
+  new: see 13.7. Phase 3 built an offer card for an install from before
+  (question 5), which phase 4 took out.
+- **Any other topic** starts only from the list.
 - **A row of the list** starts its topic at its first step, in a new
   folder once one is due (13.5), whatever its status (question 12). A topic running is let go
   of first, keeping its folder (question 13).
@@ -1340,26 +1337,27 @@ left out.
 ### 13.7 What is kept
 
 `tutorial.welcome` is replaced. No release has shipped with it, so no
-migration and no version bump are needed. The rows are:
+migration and no version bump are needed. The row is:
 
 | Key | Field | Default | Rule |
 |---|---|---|---|
-| `tutorial.progress` | `tutorialProgress` | `{}` | each topic's id, mapped to a step id, `"finished"` or `"skipped"`; a topic never started has no entry |
-| `tutorial.current` | `tutorialCurrent` | `""` | the topic running, or empty |
-| `tutorial.folder` | `tutorialFolder` | `"0"` | as in section 7.6: the running topic's folder |
+| `tutorial.progress` | `tutorialProgress` | `{}` | each topic's id, mapped to `"started"`, `"finished"` or `"skipped"`; a topic never started has no entry; any other text reads as started |
 
 The progress is a new kind of row, an object mapping text to text, and
 needs a new rule in `core/config/setting.h`. The tutorial writes it as
-it goes, as it wrote `tutorial.welcome`.
+it goes, as it wrote `tutorial.welcome`. The list shows a topic as new,
+started or done from it.
 
-**At a start**, decided from these rows alone:
+Until 2026-10-02 the progress kept the step a topic was on, and
+`tutorial.current` and `tutorial.folder` the topic running and its
+folder, for a start after quitting partway to go on with; that is gone
+(7.6).
 
-- **`tutorial.current` names a topic whose progress is a step id.** That
-  topic goes on at that step the next time edit mode comes up, as a
-  resume does now (7.6). A step id no longer in that topic starts the
-  topic again.
-- **`tutorial.progress` empty:** Basics starts (13.4). That is a first
-  run, and an install from before 0.2.0.
+**At a start**, decided from this row alone:
+
+- **Basics neither finished nor skipped:** Basics starts at its
+  welcome (13.4). That is a first run, an install from before 0.2.0, and
+  a Basics quit partway.
 - **Anything else:** nothing starts.
 
 Until 2026-10-02 a new library started Basics whatever these rows said.
@@ -1368,8 +1366,7 @@ not be read and was set aside, while the settings stayed - and then the
 person has met the app, and the settings say so. Whether the tutorial
 has been seen is the settings' to say, so they alone decide; a new
 library still opens edit mode at the start, which is about the hotkey
-not being known yet, not about the tutorial. A topic left partway goes
-on in a new folder, since the old one went with the library (7.6).
+not being known yet, not about the tutorial.
 
 ### 13.8 How it fits
 

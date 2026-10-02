@@ -4,7 +4,6 @@
 // start decided, the tutorial's actions as Apply does them, and what it
 // counts for the world.
 
-#include <algorithm>
 #include <cstdio>
 #include <map>
 #include <string>
@@ -36,17 +35,14 @@ void OverlayApp::WelcomeAtStart(LibraryAtStart library) {
         case LibraryAtStart::Loaded:
             break;
     }
+    // Basics from its welcome until it has been finished or skipped: a
+    // first run, an install from before the tutorial, and a run quit
+    // partway, which starts over - nothing goes on after a restart
+    // (docs/TUTORIAL.md, 13.7).
     const std::map<std::string, std::string>& progress = settings_.Get(setting::kTutorialProgress);
-    const std::string& current = settings_.Get(setting::kTutorialCurrent);
-    if (const auto running = progress.find(current);
-        running != progress.end() && tutorial::FindTopic(current) != nullptr && running->second != "finished" &&
-        running->second != "skipped") {
-        welcomePending_ = Welcome::Resume;  // at a step's id
-    } else if (progress.empty()) {
-        welcomePending_ = Welcome::Start;  // never shown: a first run, or an install from before it
-    } else {
-        welcomePending_ = Welcome::Nothing;
-    }
+    const auto basics = progress.find(std::string(tutorial::kBasicsTopic));
+    const bool seen = basics != progress.end() && (basics->second == "finished" || basics->second == "skipped");
+    welcomePending_ = seen ? Welcome::Nothing : Welcome::Start;
 }
 
 void OverlayApp::DoTutorial(const action::TutorialPress& a) {
@@ -92,44 +88,20 @@ void OverlayApp::DoTutorial(const action::StartTutorial& a) {
     // canvas up as it is (section 18.3); the others make theirs when
     // their first do step comes up, which for all but Basics is now.
     tutorialCard_.Start(*topic, 0);
-    GiveTutorialItsFolder(0);
+    GiveTutorialItsFolder();
 }
 
-void OverlayApp::DoTutorial(const action::ResumeTutorial&) {
-    const std::string& current = settings_.Get(setting::kTutorialCurrent);
-    const tutorial::Topic* topic = tutorial::FindTopic(current);
-    const auto& progress = settings_.Get(setting::kTutorialProgress);
-    const auto at = progress.find(current);
-    if (topic == nullptr || at == progress.end()) {
-        return;
-    }
-    tutorialCard_.Resume(*topic, at->second, 0);
-    GiveTutorialItsFolder(settings_.Get(setting::kTutorialFolder));
-}
-
-// The running topic's folder, once it is due and while it has none: the
-// one `kept` names, where it is still there, or a new one (section 13.5).
-// Called as a topic starts or resumes, and each frame before the runner
-// looks at the app, so that the folder is there for the do step that
-// needs it from its first frame.
-//
-// A folder kept and still there is the run's before any do step, too: it
-// was made in a run that then went Back to a read step, and left there,
-// the next do step made a second one beside it. Found in review on
-// 2026-10-02.
-void OverlayApp::GiveTutorialItsFolder(FolderId kept) {
+// The running topic's folder, once its first do step has come up and
+// while it has none: a new one (section 13.5). Called as a topic starts,
+// and each frame before the runner looks at the app, so that the folder is
+// there for the do step that needs it from its first frame. A run that
+// goes Back to a read step keeps the folder it has.
+void OverlayApp::GiveTutorialItsFolder() {
     const tutorial::Tutorial& runner = tutorialCard_.Runner();
-    if (!tutorialCard_.CurrentTopic().folder || runner.Folder() != 0 || !runner.On()) {
+    if (!tutorialCard_.CurrentTopic().folder || runner.Folder() != 0 || !runner.On() || !runner.DoStepReached()) {
         return;
     }
-    const auto& canvases = Manager().Canvases();
-    const bool keptIsThere = kept != 0 && std::any_of(canvases.begin(), canvases.end(), [&](const Canvas& canvas) {
-        return canvas.folderId == kept && !Manager().IsDeleted(canvas);
-    });
-    if (!runner.DoStepReached() && !keptIsThere) {
-        return;
-    }
-    if (const FolderId folder = GoToTutorialFolder(tutorialCard_.CurrentTopic(), kept); folder != 0) {
+    if (const FolderId folder = MakeTutorialFolder(tutorialCard_.CurrentTopic()); folder != 0) {
         tutorialCard_.MoveTo(folder);
     }
 }
@@ -179,27 +151,15 @@ FolderId OverlayApp::GoToTutorialFolder(const tutorial::Topic& topic, FolderId f
 void OverlayApp::KeepTutorialProgress() {
     // Where the runner is once it has moved on for the frame - by itself in
     // Prepare, or at a button just done. Only a change is set: a Set is a
-    // commit, which the tray writes to the file. Until a topic has run,
-    // nothing is: the topic kept as running is a resume's, still to come.
-    if (!tutorialCard_.HasRun()) {
-        return;
-    }
+    // commit, which the tray writes to the file. Nothing to say before a
+    // topic has run, nor for one let go of partway: it stays "started".
     const tutorial::Tutorial& runner = tutorialCard_.Runner();
-    const std::string topic(tutorialCard_.CurrentTopic().id);
-    // Nothing to say for a topic let go of partway: its step stays kept.
     if (std::string progress = runner.Progress(); !progress.empty()) {
         std::map<std::string, std::string> kept = settings_.Get(setting::kTutorialProgress);
-        if (std::string& entry = kept[topic]; entry != progress) {
+        if (std::string& entry = kept[std::string(tutorialCard_.CurrentTopic().id)]; entry != progress) {
             entry = std::move(progress);
             settings_.Set(setting::kTutorialProgress, std::move(kept));
         }
-    }
-    if (std::string current = runner.On() ? topic : std::string();
-        current != settings_.Get(setting::kTutorialCurrent)) {
-        settings_.Set(setting::kTutorialCurrent, std::move(current));
-    }
-    if (runner.On() && runner.Folder() != settings_.Get(setting::kTutorialFolder)) {
-        settings_.Set(setting::kTutorialFolder, runner.Folder());
     }
 }
 

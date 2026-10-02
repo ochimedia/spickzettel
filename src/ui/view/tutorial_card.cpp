@@ -123,16 +123,11 @@ TutorialCard::TutorialCard(const core::Session& session, const Editor& editor, c
       runner_(topic_->chain()) {}
 
 void TutorialCard::Start(const tutorial::Topic& topic, core::FolderId folder) {
-    Resume(topic, {}, folder);
-}
-
-void TutorialCard::Resume(const tutorial::Topic& topic, std::string_view id, core::FolderId folder) {
     topic_ = &topic;
     runner_ = tutorial::Tutorial(topic.chain());
-    runner_.Resume(id, folder);
+    runner_.Start(folder);
     PlaceAnew();
     keep_ = false;
-    hasRun_ = true;
     listing_ = false;
 }
 

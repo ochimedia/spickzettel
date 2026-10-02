@@ -1678,7 +1678,6 @@ TEST_F(TutorialAppTest, ProfilesMakesNoFolderAndLeavesTheCanvasUp) {
     EXPECT_EQ(Runner().Folder(), 0u);
     EXPECT_EQ(Canvases().Folders().size(), folders);
     EXPECT_EQ(Canvases().CurrentCanvasId(), before);
-    EXPECT_EQ(AppSettings().Stored().tutorialFolder, 0u);
 }
 
 // Done deletes the profile made in the run, and only that one, without
@@ -1830,31 +1829,23 @@ TEST_F(TutorialAppTest, AProgramWithAProfileAlreadyGetsASecondOneForPractice) {
 // ===== Progress, kept (section 13.7) =====
 
 TEST_F(TutorialAppTest, TheProgressIsKeptInTheSettingsAsItGoes) {
-    const auto current = [this] { return AppSettings().Stored().tutorialCurrent; };
     EXPECT_EQ(Kept(), "") << "never shown";
-    EXPECT_EQ(current(), "");
     StartTheTutorial();
-    EXPECT_EQ(Kept(), "welcome");
-    EXPECT_EQ(current(), "basics");
+    EXPECT_EQ(Kept(), "started");
     EXPECT_EQ(Runner().Folder(), 0u) << "none while the welcome is read (section 13.5)";
 
     Press(TutorialButton::Next);
-    EXPECT_EQ(Kept(), "screenshot");
     StepFrame();
     EXPECT_NE(Runner().Folder(), 0u);
-    EXPECT_EQ(AppSettings().Stored().tutorialFolder, Runner().Folder());
-    DoStep("screenshot");
-    Settle();
-    EXPECT_EQ(Kept(), "move") << "a step moved on by itself is kept too";
+    EXPECT_EQ(Kept(), "started") << "no step is kept";
 
     Press(TutorialButton::Skip);
     EXPECT_EQ(Kept(), "skipped");
     Press(TutorialButton::Back);
-    EXPECT_EQ(Kept(), "move");
+    EXPECT_EQ(Kept(), "started");
     Press(TutorialButton::Skip);
     Press(TutorialButton::Done);
     EXPECT_EQ(Kept(), "skipped");
-    EXPECT_EQ(current(), "") << "none running";
     EXPECT_EQ(Kept("drawing"), "") << "only the topic that ran";
 }
 
@@ -1876,9 +1867,8 @@ TEST_F(TutorialAppTest, AnotherTopicStartedLeavesTheRunningOnesStepAndFolder) {
     EXPECT_NE(Runner().Folder(), basics);
     EXPECT_EQ(Canvases().FindFolder(Runner().Folder())->name, "Tutorial: Drawing and notes");
     EXPECT_FALSE(Canvases().IsDeleted(*Canvases().FindFolder(basics))) << "kept";
-    EXPECT_EQ(Kept(), "move") << "left partway";
-    EXPECT_EQ(Kept("drawing"), "drawingMode");
-    EXPECT_EQ(AppSettings().Stored().tutorialCurrent, "drawing");
+    EXPECT_EQ(Kept(), "started") << "left partway";
+    EXPECT_EQ(Kept("drawing"), "started");
     EXPECT_EQ(App().InputStack().find("ConfirmDelete"), std::string::npos) << "nothing asked";
 }
 
@@ -1892,7 +1882,7 @@ TEST_F(TutorialAppTest, AnotherTopicStartedFromAnEndCardOrASkipCardCountsItsEnd)
     Overlay().StartTutorial(tutorial::kBasicsTopic);
     StepFrames(2);
     EXPECT_EQ(Kept("drawing"), "skipped");
-    EXPECT_EQ(Kept(), "welcome") << "started again, from its first step";
+    EXPECT_EQ(Kept(), "started") << "started again";
 }
 
 // ===== The list (section 13.3) =====
@@ -2017,7 +2007,6 @@ TEST_F(TutorialAppTest, WithItsFolderDeletedGoBackToTheTutorialMakesANewOne) {
     ASSERT_NE(Canvases().FindFolder(made), nullptr);
     EXPECT_EQ(Canvases().FindFolder(made)->name, "Tutorial: Basics");
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, made);
-    EXPECT_EQ(AppSettings().Stored().tutorialFolder, made) << "kept for a resume";
     EXPECT_EQ(StepUp(), "move");
     EXPECT_EQ(NeedUp(), tutorial::Need::ASubject) << "nothing in it yet: " << HintUp();
 }
@@ -2167,99 +2156,68 @@ TEST_F(TutorialAppTest, TheFolderComesWithTheFirstDoStep) {
     EXPECT_FALSE(Runner().CurrentHint().has_value()) << "in its folder, with nothing to say";
 }
 
-TEST_F(TutorialAppTest, AStartAfterQuittingPartwayComesBackToTheStepItWasOn) {
-    StartWithLibrary();
+// Quit partway, Basics starts over from its welcome at the next start:
+// nothing goes on after a restart. The run's folder stays, as Keep leaves
+// it, and the new run makes its own with its first do step.
+TEST_F(TutorialAppTest, BasicsQuitPartwayStartsOverAtTheNextStart) {
+    AppConfig config = DefaultConfig();
+    config.tutorialProgress = {{"basics", "started"}};
+    StartWithLibrary(config);
     WalkTo("move");
     const FolderId folder = Runner().Folder();
-    const ItemId subject = *Runner().Subject();
+    const size_t folders = Canvases().Folders().size();
+    ASSERT_EQ(Kept(), "started");
 
     StartWith(AppSettings().Stored());  // the library file is kept
     EXPECT_FALSE(Runner().On()) << "not before edit mode comes up";
     ShowEditMode();
     StepFrames(2);
     ASSERT_TRUE(Runner().On());
-    EXPECT_EQ(StepUp(), "move");
-    EXPECT_EQ(Runner().Folder(), folder);
-    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, folder);
-    EXPECT_EQ(Runner().Subject(), subject) << "its snippet, from the last run";
-    EXPECT_EQ(Canvases().Folders().size(), 2u) << "no folder made";
-}
-
-// Back from the first do step to the welcome, and quit there: the folder
-// that step made is the run's still, and the next start goes on in it
-// rather than making a second one when the do step comes up again.
-TEST_F(TutorialAppTest, AStartAfterGoingBackToTheWelcomeKeepsTheFolder) {
-    StartWithLibrary();
-    WalkTo("screenshot");
-    const FolderId folder = Runner().Folder();
-    ASSERT_NE(folder, 0u);
-    Press(TutorialButton::Back);
-    StepFrame();
-    ASSERT_EQ(StepUp(), "welcome");
-    const size_t folders = Canvases().Folders().size();
-
-    StartWith(AppSettings().Stored());
-    ShowEditMode();
-    StepFrames(2);
-    ASSERT_TRUE(Runner().On());
-    ASSERT_EQ(StepUp(), "welcome");
-    EXPECT_EQ(Runner().Folder(), folder);
+    EXPECT_EQ(StepUp(), "welcome");
+    EXPECT_EQ(Runner().Folder(), 0u);
+    EXPECT_NE(Canvases().FindFolder(folder), nullptr) << "the last run's folder, left as it was";
+    EXPECT_EQ(Canvases().Folders().size(), folders);
     Press(TutorialButton::Next);
     StepFrame();
-    EXPECT_EQ(StepUp(), "screenshot");
-    EXPECT_EQ(Runner().Folder(), folder);
-    EXPECT_EQ(AppSettings().Stored().tutorialFolder, folder);
-    EXPECT_EQ(Canvases().Folders().size(), folders) << "no folder made";
+    EXPECT_NE(Runner().Folder(), folder) << "a folder of its own";
 }
 
-TEST_F(TutorialAppTest, AResumeWithItsFolderGoneMakesANewOne) {
-    StartWithLibrary();
-    WalkTo("move");
-    const FolderId old = Runner().Folder();
-    ASSERT_TRUE(controller_->GetSession().Delete(old));
-    StepFrame();
+// Any other topic quit partway is over: it shows as started in the list,
+// and nothing starts.
+TEST_F(TutorialAppTest, AnotherTopicQuitPartwayIsOverAtTheNextStart) {
+    StartWithLibrary();  // Basics finished
+    WalkTo("draw", "drawing");
+    ASSERT_EQ(Kept("drawing"), "started");
 
     StartWith(AppSettings().Stored());
     ShowEditMode();
     StepFrames(2);
-    ASSERT_TRUE(Runner().On());
-    EXPECT_EQ(StepUp(), "move");
-    EXPECT_NE(Runner().Folder(), old);
-    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
-    EXPECT_EQ(AppSettings().Stored().tutorialFolder, Runner().Folder());
+    EXPECT_FALSE(Runner().On());
+    EXPECT_EQ(Kept("drawing"), "started");
 }
 
-TEST_F(TutorialAppTest, AStepIdNoLongerInTheChainStartsItAgain) {
+TEST_F(TutorialAppTest, BasicsSkippedStartsNothing) {
     AppConfig config = DefaultConfig();
-    config.tutorialProgress = {{"basics", "aStepSinceRemoved"}};
-    config.tutorialCurrent = "basics";
+    config.tutorialProgress = {{"basics", "skipped"}};
+    StartWithLibrary(config);
+    ShowEditMode();
+    StepFrames(2);
+    EXPECT_FALSE(Runner().On());
+}
+
+// What builds before 0.2.3 kept: a step's id for each topic left partway,
+// and the topic running. A step id reads as started, so Basics starts over;
+// another topic's does not start.
+TEST_F(TutorialAppTest, AStepIdKeptByAnOlderBuildReadsAsStarted) {
+    AppConfig config = DefaultConfig();
+    config.tutorialProgress = {{"basics", "move"}};
     StartWithLibrary(config);
     ShowEditMode();
     StepFrames(2);
     ASSERT_TRUE(Runner().On());
     EXPECT_EQ(StepUp(), "welcome");
-}
 
-TEST_F(TutorialAppTest, TheTopicRunningWhenTheAppQuitIsTheOneResumed) {
-    StartWithLibrary();
-    WalkTo("draw", "drawing");
-    const FolderId folder = Runner().Folder();
-
-    StartWith(AppSettings().Stored());
-    ShowEditMode();
-    StepFrames(2);
-    ASSERT_TRUE(Runner().On());
-    EXPECT_EQ(Overlay().TutorialTopic().id, "drawing");
-    EXPECT_EQ(StepUp(), "draw");
-    EXPECT_EQ(Runner().Folder(), folder);
-}
-
-// A topic whose step is kept, but not as running, is not resumed: only
-// the list starts it again, from its first step (question 12).
-TEST_F(TutorialAppTest, ATopicLeftPartwayForAnotherIsNotResumed) {
-    AppConfig config = DefaultConfig();
-    config.tutorialProgress = {{"basics", "move"}};
-    config.tutorialCurrent = "";
+    config.tutorialProgress = {{"basics", "finished"}, {"drawing", "draw"}};
     StartWithLibrary(config);
     ShowEditMode();
     StepFrames(2);
@@ -2303,21 +2261,6 @@ TEST_F(TutorialAppTest, ANewLibraryWhoseSettingsSayTheTutorialIsOverStartsNothin
     EXPECT_EQ(controller_->State(), app::OverlayState::Edit) << "a new library comes up in edit mode";
     StepFrames(2);
     EXPECT_FALSE(Runner().On());
-}
-
-// ...and a topic left partway goes on where it was, in a folder of its
-// own, since its old one went with the library.
-TEST_F(TutorialAppTest, ANewLibraryGoesOnWithTheTopicLeftPartway) {
-    AppConfig config = DefaultConfig();
-    config.tutorialProgress = {{"basics", "move"}};
-    config.tutorialCurrent = "basics";
-    config.tutorialFolder = 12345;
-    StartAsFirstRun(config);
-    StepFrames(2);
-    ASSERT_TRUE(Runner().On());
-    EXPECT_EQ(StepUp(), "move");
-    EXPECT_NE(Runner().Folder(), 12345u);
-    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 
 // ===== The derail matrix (sections 6.1 and 9) =====

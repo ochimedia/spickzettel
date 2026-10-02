@@ -37,7 +37,7 @@ protected:
     }
     // At step `id`, begun.
     void At(std::string_view id) {
-        tutorial_.Resume(id, FakeWorld::kTutorialFolder);
+        tutorial_.StartAt(id, FakeWorld::kTutorialFolder);
         Frame();
         ASSERT_EQ(Id(), id);
     }
@@ -152,7 +152,7 @@ protected:
         world_.overviewShowsCanvases = true;
     }
     // A folder made at `newFolder`, and the steps after it walked to `id`
-    // with Next: the folder stays the tutorial's, which a Resume would
+    // with Next: the folder stays the tutorial's, which a StartAt would
     // forget.
     void MadeAFolderThenAt(std::string_view id) {
         At("newFolder");
@@ -181,7 +181,7 @@ protected:
     std::string Expanded(const char* text) { return Expand(text, world_, 0, TutorialsProfile().value_or("")); }
     // "Game" made for game.exe at `makeProfile`, and the steps after it
     // walked to `id` - `change` by unticking a row, the rest with Next:
-    // the profile stays the tutorial's, which a Resume would forget.
+    // the profile stays the tutorial's, which a StartAt would forget.
     void MadeAProfileThenAt(std::string_view id) {
         At("makeProfile");
         world_.OpenSettings(SettingsSection::Profiles);
@@ -659,7 +659,7 @@ TEST_F(FoldersChainTest, OnlyTheFoldersMadeAtNewFolderAreTheTutorials) {
     EXPECT_EQ(NeedShown(), Need::InTutorialFolder) << "made at another step";
     EXPECT_EQ(tutorial_.Folders(), (std::vector<core::FolderId>{FakeWorld::kTutorialFolder, kMadeFolder}));
 
-    tutorial_.Resume("moveCanvas", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("moveCanvas", FakeWorld::kTutorialFolder);
     EXPECT_EQ(tutorial_.Folders(), std::vector<core::FolderId>{FakeWorld::kTutorialFolder})
         << "not kept across a start";
 }
@@ -920,11 +920,11 @@ TEST_F(DrawingChainTest, LeftForAnotherTopicItSaysOnlyHowItEnded) {
     EXPECT_FALSE(tutorial_.On());
     EXPECT_EQ(tutorial_.Progress(), "");
 
-    tutorial_.Resume("end", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("end", FakeWorld::kTutorialFolder);
     tutorial_.Leave();
     EXPECT_EQ(tutorial_.Progress(), "finished");
 
-    tutorial_.Resume("draw", FakeWorld::kTutorialFolder);
+    tutorial_.StartAt("draw", FakeWorld::kTutorialFolder);
     tutorial_.Skip();
     tutorial_.Leave();
     EXPECT_EQ(tutorial_.Progress(), "skipped");

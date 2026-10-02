@@ -490,31 +490,17 @@ TEST(AppConfigTest, TheChosenDisplayRoundTripsAndIsThePrimaryUntilChosen) {
     EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
 }
 
-// A library id takes all 64 bits, which a double does not hold: written as
-// digits, and read back only as digits.
-TEST(AppConfigTest, TheTutorialsFolderIsKeptAsDigitsToTheLastBit) {
-    AppConfig config = DefaultConfig();
-    ASSERT_EQ(config.tutorialFolder, 0u);
-    config.tutorialFolder = 18446744073709551557ull;
-    const std::string text = SerializeConfig(config);
-    EXPECT_NE(text.find("\"18446744073709551557\""), std::string::npos);
-    EXPECT_EQ(ParseConfig(text), config);
-
-    for (const char* said : {"42", R"("")", R"("12x")", R"("-3")", R"("99999999999999999999")"}) {
-        EXPECT_EQ(ParseConfig(One("tutorial", "folder", said)).tutorialFolder, 0u) << said;
-    }
-    EXPECT_EQ(ParseConfig(One("tutorial", "folder", R"("42")")).tutorialFolder, 42u);
-}
-
 // Each topic's progress, by its id: an object of strings, where anything
 // not a string is not there.
 TEST(AppConfigTest, TheTutorialsProgressRoundTripsPerTopic) {
     AppConfig config = DefaultConfig();
     ASSERT_TRUE(config.tutorialProgress.empty());
-    ASSERT_TRUE(config.tutorialCurrent.empty());
-    config.tutorialProgress = {{"basics", "finished"}, {"drawing", "draw"}};
-    config.tutorialCurrent = "drawing";
+    config.tutorialProgress = {{"basics", "finished"}, {"drawing", "started"}};
     EXPECT_EQ(ParseConfig(SerializeConfig(config)), config);
+    // What builds before 0.2.3 kept to go on after a restart, which no
+    // build does now: read as nothing said.
+    EXPECT_EQ(ParseConfig(One("tutorial", "current", R"("drawing")")), DefaultConfig());
+    EXPECT_EQ(ParseConfig(One("tutorial", "folder", R"("42")")), DefaultConfig());
 
     const AppConfig read = ParseConfig(One("tutorial", "progress", R"({"basics": "move", "drawing": 3})"));
     EXPECT_EQ(read.tutorialProgress, (std::map<std::string, std::string>{{"basics", "move"}}));
