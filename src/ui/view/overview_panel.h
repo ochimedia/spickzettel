@@ -109,11 +109,11 @@ public:
     // while picking where a snippet goes, which is a place among the live
     // ones.
     bool ShowingDeleted() const { return showDeleted_ && !pickerItemId_.has_value(); }
-
-private:
     // The folder the sidebar marks as open and the grid shows: the one
     // being browsed, or a deleted one picked with Show deleted on.
     core::FolderId OverviewFolderId() const;
+
+private:
     // The sidebar's width: wider with Show deleted on, where a row can
     // carry two buttons rather than one.
     float OverviewSidebarWidth() const;

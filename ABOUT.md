@@ -116,6 +116,9 @@ If the app crashes, it writes a crash report to
 #### Changes
 
 - With Show deleted on, deleted folders are told apart from folders with deleted canvases by color - red and yellow - with a legend for the two
+- The tutorial's rectangle eraser step accepts a Ctrl-drag with the round eraser, as its text says
+- The Folders and canvases tutorial keeps the Overview open on the way back to its folder, and opens a canvas at the end instead
+- The Capturing tutorial covers both capture hotkeys in one step
 
 ### 0.2.2
 

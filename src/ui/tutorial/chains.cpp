@@ -719,9 +719,10 @@ std::vector<Step> MakeCapturing() {
                  strings::kTutorialFullscreenMissDrawing},
             },
     });
-    // The two hotkeys. Each capture is on a canvas of its own, and the
-    // result alone cannot tell them apart, so the goals count each
-    // hotkey's captures (section 16.2), wherever it was pressed.
+    // The capture hotkeys, in one step: the quick capture, and the silent
+    // one as a word beside it while it has a key. Either one's capture
+    // does it, wherever it was pressed (section 16.2) - the step is about
+    // capturing from a program, and the line offers both.
     chain.push_back(Step{
         .id = "quickCapture",
         .kind = StepKind::Do,
@@ -731,48 +732,20 @@ std::vector<Step> MakeCapturing() {
                 if (!world.KeyLabel(CommandId::QuickCapture)) {
                     return Fixed(strings::kTutorialQuickCaptureTextNoKey);
                 }
-                return Fixed(world.KeyLabel(CommandId::ToggleEditMode) ? strings::kTutorialQuickCaptureText
-                                                                        : strings::kTutorialQuickCaptureTextTray);
+                const bool silent = world.KeyLabel(CommandId::SilentCapture).has_value();
+                if (world.KeyLabel(CommandId::ToggleEditMode)) {
+                    return Fixed(silent ? strings::kTutorialQuickCaptureText
+                                        : strings::kTutorialQuickCaptureTextNoSilent);
+                }
+                return Fixed(silent ? strings::kTutorialQuickCaptureTextTray
+                                    : strings::kTutorialQuickCaptureTextTrayNoSilent);
             },
         // The capture lands in the current folder.
         .needs = {InTutorialFolder},
         .goal =
             [](const Look& look) {
-                return look.world.Captures(core::HotkeySlot::QuickCapture) > look.start.quickCaptures;
-            },
-        .nearMisses =
-            {
-                {[](const Look& look) {
-                     return look.world.Captures(core::HotkeySlot::SilentCapture) > look.start.silentCaptures &&
-                            look.world.KeyLabel(CommandId::QuickCapture).has_value();
-                 },
-                 strings::kTutorialQuickCaptureMissSilent},
-            },
-    });
-    chain.push_back(Step{
-        .id = "silentCapture",
-        .kind = StepKind::Do,
-        .title = strings::kTutorialSilentCaptureTitle,
-        .text =
-            [](const World& world) {
-                if (!world.KeyLabel(CommandId::SilentCapture)) {
-                    return Fixed(strings::kTutorialSilentCaptureTextNoKey);
-                }
-                return Fixed(world.KeyLabel(CommandId::ToggleEditMode) ? strings::kTutorialSilentCaptureText
-                                                                        : strings::kTutorialSilentCaptureTextTray);
-            },
-        .needs = {InTutorialFolder},
-        .goal =
-            [](const Look& look) {
-                return look.world.Captures(core::HotkeySlot::SilentCapture) > look.start.silentCaptures;
-            },
-        .nearMisses =
-            {
-                {[](const Look& look) {
-                     return look.world.Captures(core::HotkeySlot::QuickCapture) > look.start.quickCaptures &&
-                            look.world.KeyLabel(CommandId::SilentCapture).has_value();
-                 },
-                 strings::kTutorialSilentCaptureMissQuick},
+                return look.world.Captures(core::HotkeySlot::QuickCapture) > look.start.quickCaptures ||
+                       look.world.Captures(core::HotkeySlot::SilentCapture) > look.start.silentCaptures;
             },
     });
     chain.push_back(Step{
@@ -943,7 +916,9 @@ std::vector<Step> MakeFolders() {
             },
     });
     // The one step that asks for the tutorial's own folder, not any of
-    // its folders: the way back from the new one.
+    // its folders: the way back from the new one. Its canvases shown is
+    // enough - a tile picked would close the Overview the next steps use,
+    // so that is the topic's last step instead (openCanvas).
     chain.push_back(Step{
         .id = "switchFolder",
         .kind = StepKind::Do,
@@ -951,11 +926,7 @@ std::vector<Step> MakeFolders() {
         .text = [](const World&) { return Fixed(strings::kTutorialSwitchFolderText); },
         .spot = Spot::TutorialFolder,
         .needs = {OverviewUp, CanvasesTab},
-        .goal =
-            [](const Look& look) {
-                const core::CanvasId here = look.world.CurrentCanvas();
-                return here != look.start.canvas && look.world.FolderOf(here) == look.folder;
-            },
+        .goal = [](const Look& look) { return look.world.OverviewFolder() == look.folder; },
     });
     chain.push_back(Step{
         .id = "moveCanvas",
@@ -1021,6 +992,22 @@ std::vector<Step> MakeFolders() {
                     const FolderFacts* folder = look.FolderNow(id);
                     return (canvas != nullptr && !canvas->deleted) || (folder != nullptr && !folder->deleted);
                 });
+            },
+    });
+    // Last, since a tile closes the Overview: on a canvas of the
+    // tutorial's, with nothing over it. A close by Escape or the backdrop
+    // on one counts as well - the tile's job is done either way - and the
+    // goal comes before the needs, so the Overview gone needs nothing.
+    chain.push_back(Step{
+        .id = "openCanvas",
+        .kind = StepKind::Do,
+        .title = strings::kTutorialOpenCanvasTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialOpenCanvasText); },
+        .needs = {OverviewUp, CanvasesTab},
+        .goal =
+            [](const Look& look) {
+                return look.world.CanvasCover() == Cover::None &&
+                       look.Tutorials(look.world.FolderOf(look.world.CurrentCanvas()));
             },
     });
     chain.push_back(Step{

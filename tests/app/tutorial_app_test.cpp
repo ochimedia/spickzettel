@@ -406,13 +406,6 @@ protected:
             StepFrame();
             TriggerHotkey(config_.hotkeyQuickCapture);  // and back with it
             StepFrame();
-        } else if (id == "silentCapture") {
-            ShowEditMode();  // away
-            StepFrame();
-            TriggerHotkey(config_.hotkeySilentCapture);
-            StepFrame();
-            ShowEditMode();  // and back to see it
-            StepFrame();
         } else if (id == "newCanvas") {
             PressOnCanvasBar(AnchorId::CanvasBarNew);
         } else if (id == "moveSnippet") {
@@ -441,12 +434,6 @@ protected:
             TypeAName("Games");
         } else if (id == "switchFolder") {
             ClickAnchor(Anchor{AnchorId::OverviewFolderRow, Runner().Folder()});
-            for (const CanvasId canvas : LiveCanvasesIn(Runner().Folder())) {
-                if (canvas != Canvases().CurrentCanvasId()) {
-                    ClickAnchor(Anchor{AnchorId::OverviewCanvasTile, canvas});
-                    break;
-                }
-            }
         } else if (id == "moveCanvas") {
             if (!App().IsOverviewOpen()) {
                 PressOnCanvasBar(AnchorId::CanvasBarOverview);
@@ -486,6 +473,11 @@ protected:
             const std::optional<AnchorRect> restore = App().TutorialSpot();
             ASSERT_TRUE(restore.has_value());
             Click(Center(*restore).x, Center(*restore).y);
+        } else if (id == "openCanvas") {
+            ClickAnchor(Anchor{AnchorId::OverviewFolderRow, Runner().Folder()});
+            const std::vector<CanvasId> canvases = LiveCanvasesIn(Runner().Folder());
+            ASSERT_FALSE(canvases.empty());
+            ClickAnchor(Anchor{AnchorId::OverviewCanvasTile, canvases.front()});
         } else if (id == "openProfiles") {
             // "Right-click an empty spot, choose Settings": the menu's item
             // has no handle here, as for the Overview's.
@@ -856,10 +848,13 @@ TEST_F(TutorialAppTest, TheWorldReadsTheStrokesAsTheyLookAndTheNote) {
     ASSERT_TRUE(eraser.has_value());
     RawClick(eraser->x, eraser->y);
     EXPECT_EQ(world.ToolInHand(), Tool::Erase);
-    EXPECT_EQ(world.EraserShape(), DrawShape::Freehand);
     const Rect r = Canvases().FindItemAnywhere(drawing)->rect;
     Drag(r.x + r.w * 0.5f, r.y + 10.0f, r.x + r.w * 0.5f, r.y + r.h - 10.0f);
     EXPECT_LT(factsOf().InkPx(), facts.InkPx() - 16.0f);
+    EXPECT_EQ(world.ErasedWith(), DrawShape::Freehand);
+    // Ctrl held, the same eraser erases a rectangle, and says so.
+    DragWith(ImGuiMod_Ctrl, r.x + 10.0f, r.y + 10.0f, r.x + 40.0f, r.y + r.h - 10.0f);
+    EXPECT_EQ(world.ErasedWith(), DrawShape::Rectangle);
 
     // A note: being typed, and then on the snippet.
     const std::optional<ImVec2> text = App().SelectionBarButtonCenter(ChromeButton::Text);
@@ -1242,6 +1237,18 @@ TEST_F(TutorialAppTest, TheOpacityStepCountsOnlyAChangeThatShows) {
     EXPECT_EQ(StepUp(), "viewMode");
 }
 
+// The rectangle eraser's step, done the other way its line gives: Ctrl
+// held with the round eraser still picked. It counted as round, since the
+// tally asked the shape picked rather than the one the drag erased with.
+TEST_F(TutorialAppTest, TheRectangleEraserStepCountsACtrlDragWithTheRoundEraser) {
+    WalkTo("eraseRect", "drawing");
+    ASSERT_EQ(App().EraserShape(), DrawShape::Freehand);
+    const ImVec2 middle = SubjectMiddle();
+    DragWith(ImGuiMod_Ctrl, middle.x + 20.0f, middle.y - 80.0f, middle.x + 50.0f, middle.y + 80.0f);
+    Settle();
+    EXPECT_EQ(StepUp(), "eraseRight") << HintUp();
+}
+
 TEST_F(TutorialAppTest, TheSpotlightRingsTheSubjectAndTheCardStaysClearOfIt) {
     WalkTo("move");
     const std::optional<AnchorRect> spot = App().TutorialSpot();
@@ -1454,33 +1461,25 @@ TEST_F(TutorialAppTest, AFullScreenDrawingInTheFullScreenStepGoesAsTheLinesSay) 
     EXPECT_EQ(StepUp(), "quickCapture") << HintUp();
 }
 
-// The quick capture pressed in the silent capture's step, and the other
-// way round: each says which it was, and the right one then does it.
-TEST_F(TutorialAppTest, TheCaptureStepsTellTheTwoHotkeysApart) {
+// The silent capture its line offers beside the quick one does the step
+// too: away, pressed, and the check once the overlay is back.
+TEST_F(TutorialAppTest, TheSilentCaptureDoesTheCaptureStepToo) {
     WalkTo("quickCapture", "capturing");
+    ShowEditMode();  // away
+    StepFrame();
     TriggerHotkey(config_.hotkeySilentCapture);
-    StepFrames(3);
-    EXPECT_EQ(StepUp(), "quickCapture");
-    EXPECT_EQ(HintUp(), std::string(strings::kTutorialQuickCaptureMissSilent));
-    DoStep("quickCapture");
-    ASSERT_EQ(StepUp(), "silentCapture");
-
-    TriggerHotkey(config_.hotkeyQuickCapture);
-    StepFrames(3);
-    EXPECT_EQ(StepUp(), "silentCapture");
-    EXPECT_EQ(HintUp(), std::string(strings::kTutorialSilentCaptureMissQuick));
-    DoStep("silentCapture");
+    StepFrame();
+    ShowEditMode();  // and back to see it
+    Settle();
     EXPECT_EQ(StepUp(), "end");
+    EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 
-// Pressed with the overlay up, a capture hotkey does its step too: the
+// Pressed with the overlay up, a capture hotkey does the step too: the
 // goal reads the capture, not where it was pressed (question 28).
 TEST_F(TutorialAppTest, ACaptureHotkeyPressedWithTheOverlayUpDoesItsStep) {
     WalkTo("quickCapture", "capturing");
     TriggerHotkey(config_.hotkeyQuickCapture);
-    Settle();
-    ASSERT_EQ(StepUp(), "silentCapture");
-    TriggerHotkey(config_.hotkeySilentCapture);
     Settle();
     EXPECT_EQ(StepUp(), "end");
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
@@ -2354,8 +2353,6 @@ enum class Way {
     TypingLeftOpen,
     FramedAScreenshot,
     DrawingToolPicked,
-    SilentCaptured,
-    QuickCaptured,
     CopyPasted,
     OverviewClosed,
     SettingsTab,
@@ -2397,8 +2394,6 @@ const char* WayName(Way way) {
         case Way::TypingLeftOpen: return "TypingLeftOpen";
         case Way::FramedAScreenshot: return "FramedAScreenshot";
         case Way::DrawingToolPicked: return "DrawingToolPicked";
-        case Way::SilentCaptured: return "SilentCaptured";
-        case Way::QuickCaptured: return "QuickCaptured";
         case Way::CopyPasted: return "CopyPasted";
         case Way::OverviewClosed: return "OverviewClosed";
         case Way::SettingsTab: return "SettingsTab";
@@ -2532,10 +2527,6 @@ std::vector<Derail> Matrix() {
         {"capturing", "quickCapture", OtherFolder, Need::InTutorialFolder},
         {"capturing", "quickCapture", Overview, nothing},
         {"capturing", "quickCapture", HiddenAndShown, nothing},
-        {"capturing", "quickCapture", SilentCaptured, nothing},
-        {"capturing", "silentCapture", OtherFolder, Need::InTutorialFolder},
-        {"capturing", "silentCapture", Overview, nothing},
-        {"capturing", "silentCapture", QuickCaptured, nothing},
         {"folders", "newCanvas", OtherFolder, Need::InTutorialFolder},
         {"folders", "newCanvas", HiddenAndShown, nothing},
         {"folders", "moveSnippet", Overview, Need::CanvasUncovered},
@@ -2547,6 +2538,11 @@ std::vector<Derail> Matrix() {
         {"folders", "overview", HiddenAndShown, nothing},
         {"folders", "newFolder", NewCanvasMade, nothing},
         {"folders", "restore", ShowDeletedOff, Need::DeletedShown},
+        // The Overview closed over a canvas of the tutorial's is the step
+        // done (chains_test), so no OverviewClosed row.
+        {"folders", "openCanvas", HiddenAndShown, nothing},
+        {"folders", "openCanvas", SettingsTab, Need::CanvasesTab},
+        {"folders", "openCanvas", OtherFolderBrowsed, nothing},
     };
     cases.insert(cases.end(), more.begin(), more.end());
     // Drawing's steps after the stroke: each needs drawing mode on its
@@ -2711,12 +2707,6 @@ protected:
             case Way::DrawingToolPicked:
                 ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::NewDrawingTool}));
                 break;
-            case Way::SilentCaptured:
-                TriggerHotkey(config_.hotkeySilentCapture);
-                break;
-            case Way::QuickCaptured:
-                TriggerHotkey(config_.hotkeyQuickCapture);
-                break;
             case Way::CopyPasted:
                 SelectTheSubject();
                 PressCtrlKey(ImGuiKey_C);
@@ -2877,9 +2867,9 @@ TEST_P(TutorialDerailTest, TheCardSaysALineAndFollowingItGetsTheStepDone) {
         StepFrames(3);
         ASSERT_TRUE(Runner().Subject().has_value());
     }
-    // A step that begins with the Overview closed - the tile the step
-    // before pressed closes it: first open, as its line says. Or with
-    // Showing on the defaults, which the overlay came up over.
+    // A step that begins with the Overview closed: first open, as its
+    // line says. Or with Showing on the defaults, which the overlay came
+    // up over.
     if (NeedUp() == tutorial::Need::OverviewUp) {
         ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::Overview}));
         StepFrames(3);

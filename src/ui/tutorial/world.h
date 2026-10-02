@@ -138,10 +138,11 @@ public:
     }
     virtual std::vector<core::ItemId> Selection() const = 0;
     virtual std::optional<core::ItemCreationKind> CreationToolInHand() const = 0;
-    // The tool in hand, Select for the hand at rest, and the shape picked
-    // for the eraser.
+    // The tool in hand, Select for the hand at rest, and the shape the
+    // last erase was made with - what the drag did, Ctrl held or the shape
+    // picked for the eraser (see Editor::ErasedWith).
     virtual core::Tool ToolInHand() const = 0;
-    virtual core::DrawShape EraserShape() const = 0;
+    virtual core::DrawShape ErasedWith() const = 0;
     // What the pen draws with: its color, and its width on screen.
     virtual uint32_t PenColor() const = 0;
     virtual float PenWidth() const = 0;
@@ -169,6 +170,10 @@ public:
     virtual bool OverviewShowsCanvases() const = 0;
     virtual bool OverviewShowsDeleted() const = 0;
     virtual bool CanvasBarOn() const = 0;
+    // The folder whose canvases the Overview's grid shows, while it shows
+    // them - the one browsed, or a deleted one looked into - and 0 when it
+    // does not.
+    virtual core::FolderId OverviewFolder() const = 0;
 
     // The program the overlay is up over: its file, else its window's
     // title - empty when it is known by neither. The profiles, in their

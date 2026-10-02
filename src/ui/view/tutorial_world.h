@@ -51,7 +51,7 @@ public:
     std::vector<core::ItemId> Selection() const override { return editor_.Selection(); }
     std::optional<core::ItemCreationKind> CreationToolInHand() const override;
     core::Tool ToolInHand() const override { return editor_.ActiveTool(); }
-    core::DrawShape EraserShape() const override { return editor_.EraserShape(); }
+    core::DrawShape ErasedWith() const override { return editor_.ErasedWith(); }
     uint32_t PenColor() const override { return editor_.DrawColorRGBA(); }
     float PenWidth() const override { return editor_.DrawWidth(); }
     std::optional<core::ItemId> NoteBeingTyped() const override { return editor_.EditingNote(); }
@@ -64,6 +64,9 @@ public:
     bool OverviewShowsCanvases() const override { return overview_.ShowsCanvases(); }
     bool OverviewShowsDeleted() const override { return overview_.IsOpen() && overview_.ShowingDeleted(); }
     bool CanvasBarOn() const override { return settings_.Stored().showCanvasBar; }
+    core::FolderId OverviewFolder() const override {
+        return overview_.ShowsCanvases() ? overview_.OverviewFolderId() : 0;
+    }
     std::string Underneath() const override;
     std::vector<tutorial::ProfileFacts> Profiles() const override;
     bool OverviewShowsSettings() const override { return overview_.OnSettingsTab(); }

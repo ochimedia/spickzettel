@@ -1725,11 +1725,15 @@ same result by two other ways, so their goals ask what was in hand when
 the ink went. The runner keeps it as it keeps the snippets deleted
 during the step: each frame, ink gone from the subject since the last
 frame is added to the step's tally for the hand in that frame, the
-rectangle eraser, the round one or another tool. The hand is state the
-world reads, not a gesture: a rectangle erased is committed on the
-release, while the rectangle eraser is still in hand, and a right-drag
-erases while the pen stays in hand. What undo takes back with the pen
-in hand counts for `eraseRight` too (question 26).
+rectangle eraser, the round one or another tool. The tool is state the
+world reads: a right-drag erases while the pen stays in hand. Which of
+the eraser's two shapes erased is the last erase's own
+(`Editor::ErasedWith`), noted as the gesture begins and kept after it:
+a rectangle erased is committed on the release, and a Ctrl-drag with
+the round eraser picked erases a rectangle, which `eraseRect`'s line
+offers. It read the shape picked on the bar at first, and the Ctrl-drag
+counted as round (found by hand on 2026-10-02). What undo takes back
+with the pen in hand counts for `eraseRight` too (question 26).
 
 **"More of them than at the start."** A goal about a stroke counts the
 subject's strokes that meet the condition, now and at the step's start,
@@ -1781,9 +1785,9 @@ user picked it.
   - per snippet: its strokes, each with its color, its width on screen
     and whether it is a line or a rectangle, in place of their count;
     their total length on screen; and its note's text;
-  - the pen's color and width, the tool in hand and the eraser's shape
-    (`Editor::DrawColorRGBA`, `DrawWidth`, `ActiveTool`,
-    `EraserShape`);
+  - the pen's color and width, the tool in hand and the shape the last
+    erase was made with (`Editor::DrawColorRGBA`, `DrawWidth`,
+    `ActiveTool`, `ErasedWith`);
   - the snippet whose note is being typed, if one is
     (`Editor::EditingNote`).
 - **The start record** keeps the pen's color and width, as it keeps the
@@ -1981,9 +1985,8 @@ canvas.
 |---|---|---|---|---|---|---|---|---|
 | 0 | `newDrawing` | do | moves on | A drawing is a blank snippet to draw or write on. Hold {trigger:drawing} and drag a box on an empty spot to make one. | - | in the tutorial folder; canvas uncovered; no drawing mode | a drawing made here since the step began, not full screen | a screenshot instead: "That made a screenshot rather than a drawing. Make one as above." A full-screen drawing: "That took the whole screen - a double-click does that. Press {key:deleteSelection} to delete it, and drag a box instead." |
 | 1 | `fullscreen` | do | moves on | Double-click an empty spot, or hold the button down on it, to take a screenshot of the whole screen. | - | in the tutorial folder; canvas uncovered; no creation tool but the screenshot tool | a screenshot made here since the step began, full screen | a drawing of the whole screen, in drawing mode: "That made a drawing of the whole screen. Press Esc to stop drawing on it." Then, out of it: "... Press {key:deleteSelection} to delete it, and take a screenshot as above." A box instead: "That took a part of the screen. Double-click instead of dragging." A drawing: "That made a drawing rather than a screenshot. Take one as above." |
-| 2 | `quickCapture` | do | moves on | The capture hotkeys work while the overlay is away, so you can grab your game without opening the overlay first. Press {key:toggleEditMode} to put the overlay away, then press {key:quickCapture}. It takes a screenshot of the whole screen and brings the overlay back with it, on a new canvas of its own. | - | in the tutorial folder | the quick capture has taken a screenshot since the step began | the silent capture instead, while {key:quickCapture} is bound: "That was the background capture, which comes next. Press {key:quickCapture} for this one." |
-| 3 | `silentCapture` | do | moves on | {key:silentCapture} captures the same way, but the overlay stays away, so your game keeps the focus. Put the overlay away, press {key:silentCapture}, then press {key:toggleEditMode} to come back and see the capture. | - | in the tutorial folder | the silent capture has taken a screenshot since the step began | the quick capture instead, while {key:silentCapture} is bound: "That was the quick capture, which brings the overlay up. Put it away, and press {key:silentCapture} instead." |
-| 4 | `end` | read | Done | That's capturing. Each capture is on a canvas of its own, so they're easy to tell apart: the Overview, in the right-click menu, shows them side by side. A right-click on an empty spot also lists every way to make a snippet, with the keys beside them. | - | - | Done | - |
+| 2 | `quickCapture` | do | moves on | The capture hotkeys work while the overlay is away, so you can grab your game without opening the overlay first. Press {key:toggleEditMode} to put the overlay away, then press {key:quickCapture}. It takes a screenshot of the whole screen and brings the overlay back with it, on a new canvas of its own. Or press {key:silentCapture} instead: it captures the same way, but the overlay stays away, so your game keeps the focus. The capture is there the next time you bring the overlay up. | - | in the tutorial folder | either capture hotkey has taken a screenshot since the step began | - |
+| 3 | `end` | read | Done | That's capturing. Each capture is on a canvas of its own, so they're easy to tell apart: the Overview, in the right-click menu, shows them side by side. A right-click on an empty spot also lists every way to make a snippet, with the keys beside them. | - | - | Done | - |
 
 **No step waits.** Nothing later needs what a step makes: the hotkeys
 make their own canvas, and a step can always be left with Next.
@@ -1998,23 +2001,27 @@ make their own canvas, and a step can always be left with Next.
   {trigger:screenshot} and double-click an empty spot"; with it off,
   "Press {key:newScreenshotTool}, then click anywhere", or "Right-click
   an empty spot and choose Fullscreen screenshot".
-- `quickCapture` and `silentCapture`, by the hotkeys: with the edit
-  hotkey unbound, the tray icon puts the overlay away and brings it
-  back, as in Basics' `away`. With the capture's own hotkey unbound:
-  what it does, then "It has no working key yet. Set one in Settings >
-  Hotkeys to use it, and go on with Next", as Pinning's `viewMode`.
+- `quickCapture`, by the hotkeys: with the edit hotkey unbound, the tray
+  icon puts the overlay away, as in Basics' `away`. With the silent
+  capture unbound, its paragraph is left out. With the quick capture
+  unbound: what it does, then "It has no working key yet. Set one in
+  Settings > Hotkeys to use it, and go on with Next", as Pinning's
+  `viewMode`.
 
 **The hotkeys count wherever they are pressed** (question 28). Pressed
 with the overlay up, a capture leaves the overlay out and is the same
 screenshot of what is underneath; the text asks for the overlay away,
-since that is the point, but the goal reads the capture (6.3). The
-silent capture's check shows once the overlay is back, as the away
-steps' do.
+since that is the point, but the goal reads the capture (6.3). A silent
+capture's check shows once the overlay is back, as the away steps' do.
 
-**The near misses between the two hotkeys** are the one place where the
-result alone cannot tell them apart: both make a new canvas with a
-screenshot on it. What differs is whether the overlay came up, so the
-world counts each hotkey's captures (16.3).
+**One step for both hotkeys** (since 2026-10-02). The silent capture
+had a step of its own, `silentCapture`, after `quickCapture`, and each
+step had a near miss for the other hotkey. Tried by hand, the second
+step taught nothing the first had not: pressed with the overlay up -
+which counted - it is one more capture, and away it differs only in
+the overlay staying away. So it is a paragraph of `quickCapture`'s
+text, and either hotkey's capture does the step; the world still
+counts each hotkey's captures (16.3).
 
 ### 16.3 What it needs that is new
 
@@ -2059,22 +2066,19 @@ world counts each hotkey's captures (16.3).
   not be written; `KeyLabel` empty for a hotkey that did not register.
 - **The walk-through,** with hands: a drag with the drawing trigger; a
   double-click on an empty spot; the edit hotkey, then the quick
-  capture; the edit hotkey, the silent capture, and the edit hotkey
-  again.
+  capture.
 - **The derail matrix,** a row per way:
   - `newDrawing`: a screenshot framed instead (the near miss); another
     folder; the Overview or the cheat sheet up; put away and back;
   - `fullscreen`: the same, and the drawing tool in hand (the need);
-  - `quickCapture`: the silent capture (the near miss); another folder
-    (the need and its button); the Overview up; put away and back;
-  - `silentCapture`: the quick capture (the near miss); another folder;
-    the Overview up.
+  - `quickCapture`: another folder (the need and its button); the
+    Overview up; put away and back.
 
   Beside the matrix, in `tutorial_app_test`: a snippet made full screen
   by mistake in Basics' `screenshot` and in `newDrawing`, and a drawing
   of the whole screen in `fullscreen`, each taken away as the lines say
-  and the step then done; each hotkey pressed in the other's step; both
-  pressed with the overlay up. The texts for unbound keys are in
+  and the step then done; the silent capture doing the capture step;
+  the quick capture pressed with the overlay up. The texts for unbound keys are in
   `chains_test`.
 - **By hand:** every card with real input, and both hotkeys over
   another program.
@@ -2192,12 +2196,13 @@ the rest of the grid dimmed.
 | 2 | `overview` | do | moves on | The Overview has all your folders and canvases. Open it with the grid button at the right end of the canvas bar. | the bar's Overview button | in the tutorial folder | the Overview up | - |
 | 3 | `newFolder` | do | **waits** | Folders keep canvases apart - one for each game, say. Press New folder, at the bottom left. It comes with a canvas, and takes you there. | New folder | in the tutorial folder; the Overview up; its Canvases tab | a folder that was not there when the step began | New canvas pressed instead: "That made a canvas. New folder is the button to its left." |
 | 4 | `rename` | do | moves on | It's named for the time it was made. Double-click the name, type a better one, and press Enter. A canvas is renamed the same way, by the name under its tile. | the new folder's row | the Overview up; its Canvases tab | a folder or canvas of the tutorial's has another name than when the step began | - |
-| 5 | `switchFolder` | do | moves on | A folder's row shows its canvases, and a tile takes you there. Click the tutorial's folder in the list, then one of its canvases. | the tutorial folder's row | the Overview up; its Canvases tab | the current canvas is another than when the step began, in the tutorial's own folder | - |
+| 5 | `switchFolder` | do | moves on | A folder's row shows its canvases. Click the tutorial's folder in the list to see its canvases again. | the tutorial folder's row | the Overview up; its Canvases tab | the Overview's grid shows the tutorial's own folder | - |
 | 6 | `moveCanvas` | do | moves on | To move a canvas to another folder, drag its tile onto the folder in the list. Drag one of these onto your folder. | the new folder's row | in the tutorial folder; the Overview up; its Canvases tab | a canvas of the tutorial's is in another folder than when the step began | - |
 | 7 | `deleteCanvas` | do | moves on | The trash button under a tile deletes that canvas, with its snippets. Delete the one your snippet is on. | that tile's trash button | the Overview up; its Canvases tab | a canvas or folder of the tutorial's deleted since the step began | - |
 | 8 | `showDeleted` | do | moves on | Nothing deleted is gone yet. Tick Show deleted, at the top right: what's in the trash shows in red, where it was. | Show deleted | the Overview up; its Canvases tab | Show deleted on | - |
 | 9 | `restore` | do | moves on | Press Restore, the arrow under its tile: the canvas comes back, with its snippet. | that Restore | the Overview up; its Canvases tab; Show deleted on; something in the trash | a canvas or folder of the tutorial's that was in the trash during the step is back | - |
-| 10 | `end` | read | Done | That's folders and canvases. A snippet's right-click menu has two more ways to move it: Move to canvas, which picks one in the Overview, and Move to new canvas. A right-click on a tile of the canvas bar deletes that canvas. | - | - | Done | - |
+| 10 | `openCanvas` | do | moves on | A tile takes you to its canvas and closes the Overview. Click a canvas of the tutorial's to go there. | - | the Overview up; its Canvases tab | the Overview closed, on a canvas of the tutorial's | - |
+| 11 | `end` | read | Done | That's folders and canvases. A snippet's right-click menu has two more ways to move it: Move to canvas, which picks one in the Overview, and Move to new canvas. A right-click on a tile of the canvas bar deletes that canvas. | - | - | Done | - |
 
 **"The tutorial's"** means the run's folders (17.3): the tutorial's own
 folder and the one made in `newFolder`. "In the tutorial folder" is met
@@ -2226,8 +2231,14 @@ now, as in 6.3, and none looks at what was pressed:
   is a copy, and gets the near miss.
 - **A name:** any folder or canvas of the tutorial's, renamed to
   something else. The same name typed again is no change.
-- **A switch:** a canvas of the tutorial's own folder other than the one
-  the step began on. From the new folder, any of its tiles does it.
+- **The way back:** the tutorial's own folder shown in the Overview
+  (`World::OverviewFolder`), with no canvas picked. It asked for a tile
+  of it at first, which closed the Overview, and `moveCanvas` began by
+  asking to open it again; picking a canvas is the topic's last step,
+  `openCanvas`, instead (changed on 2026-10-02, after a hands-on try).
+- **A canvas opened:** the Overview closed over a canvas of the
+  tutorial's. Its tile does it; so does Escape or the backdrop over one,
+  which lands in the same place.
 - **Deleted and restored:** any canvas or folder of the tutorial's,
   including the tutorial's own folder. Deleted, that one takes the
   current canvas with it, to another folder
@@ -2277,7 +2288,8 @@ is in the trash. Delete a canvas first, or go on with Next."
     of a folder, with its name and whether it is deleted, deleted ones
     included (`FolderFacts`, `CanvasFacts`);
   - the Overview: whether it is up, which tab it is on, whether Show
-    deleted is on;
+    deleted is on, and which folder its grid shows (`OverviewFolder`,
+    since 2026-10-02, for `switchFolder`);
   - whether the canvas bar is on.
 - **The start record** keeps the current canvas, and the folders and the
   run's canvases as they were. The runner keeps what of the run's was
@@ -2430,10 +2442,10 @@ Two pieces of work:
   (`docs/OVERLAY_STATES.md`); only view mode and the pinned view end
   the panels. The matrix rows for it say nothing, and 16.8's bullet,
   which said otherwise, is corrected.
-- **`moveCanvas` begins with the Overview closed:** the tile that
-  `switchFolder` presses closes it. The step's need says how to open it
-  again, as 17.2 meant, and the matrix follows that line before it
-  takes its way.
+- **`moveCanvas` began with the Overview closed:** the tile that
+  `switchFolder` pressed closed it. The step's need said how to open it
+  again. Since 2026-10-02 `switchFolder` only shows the folder and the
+  tile is `openCanvas`'s, last (17.2).
 - **`Anchor::item` became `Anchor::of`,** the id of the snippet, folder
   or canvas the anchor is for.
 - **The spotlight's rule is one function,** `TutorialCard::SpotlightRect`,

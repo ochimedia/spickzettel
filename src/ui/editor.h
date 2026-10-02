@@ -320,6 +320,12 @@ public:
     // menu on the bar. What a stroke fixes at its press and the modifier
     // badge shows before one, from one rule.
     DrawShape ShapeForPress() const;
+    // The shape the last erase was made with - the gesture's own, so a
+    // Ctrl-drag with the round eraser picked is Rectangle, and a drag with
+    // the right button is Freehand. Kept after the gesture ends, since the
+    // rectangle eraser erases on its release. Freehand before any erase.
+    DrawShape ErasedWith() const { return erasedWith_; }
+    void NoteErasing(DrawShape shape) { erasedWith_ = shape; }
     // The buttons the bar shows: the drawing group, then the snippet's,
     // whatever the mode - the settings' own lists, minus whatever is
     // switched off (see AppConfig::snippetBar). Empty is a legal answer and
@@ -599,6 +605,7 @@ private:
     float eraserWidth_ = 28.0f;
     DrawShape penShape_ = DrawShape::Freehand;
     DrawShape eraserShape_ = DrawShape::Freehand;  // Freehand or Rectangle
+    DrawShape erasedWith_ = DrawShape::Freehand;   // see ErasedWith
 
     std::optional<ItemId> editingNoteItemId_;
     std::string noteEditBuffer_;

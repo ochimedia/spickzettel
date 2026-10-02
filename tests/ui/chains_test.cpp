@@ -290,14 +290,14 @@ TEST_F(DrawingChainTest, CanBeWalkedTheWayAUserWould) {
     Settle();
 
     ASSERT_EQ(Id(), "eraseRect");
-    world_.eraserShape = core::DrawShape::Rectangle;
+    world_.erasedWith = core::DrawShape::Rectangle;
     Frame();
     world_.At(5).strokes[1].lengthPx -= 30.0f;
     Settle();
 
     ASSERT_EQ(Id(), "eraseRight");
     world_.hand = core::Tool::Draw;
-    world_.eraserShape = core::DrawShape::Freehand;
+    world_.erasedWith = core::DrawShape::Freehand;
     world_.At(5).strokes[2].lengthPx -= 30.0f;
     Settle();
 
@@ -372,11 +372,6 @@ TEST_F(CapturingChainTest, CanBeWalkedTheWayAUserWould) {
     world_.current = FakeWorld::kSecondCanvas;
     world_.Make(3);
     world_.quickCaptures += 1;
-    world_.showings += 1;
-    Settle();
-
-    ASSERT_EQ(Id(), "silentCapture");
-    world_.silentCaptures += 1;
     world_.showings += 1;
     Settle();
 
@@ -472,32 +467,23 @@ TEST_F(CapturingChainTest, OnlyWhatIsMadeDuringTheStepCounts) {
     EXPECT_STREQ(HintText(), "");
 }
 
-// Each hotkey step counts its own hotkey's captures, and says when the
-// other one was pressed - while its own has a key to name.
-TEST_F(CapturingChainTest, TheCaptureStepsCountTheirOwnHotkey) {
+// The capture step counts either hotkey's captures since it began - the
+// quick one it is about, or the silent one its line offers beside it.
+TEST_F(CapturingChainTest, TheCaptureStepCountsEitherHotkey) {
     world_.quickCaptures = 3;
     world_.silentCaptures = 2;
     At("quickCapture");
-    world_.silentCaptures += 1;
     Frame();
-    EXPECT_FALSE(tutorial_.GoalMet());
-    EXPECT_STREQ(HintText(), strings::kTutorialQuickCaptureMissSilent);
+    EXPECT_FALSE(tutorial_.GoalMet()) << "captures from before the step";
     world_.quickCaptures += 1;
     Frame();
     EXPECT_TRUE(tutorial_.GoalMet());
-    Settle();
 
-    ASSERT_EQ(Id(), "silentCapture");
-    world_.quickCaptures += 1;
-    Frame();
-    EXPECT_FALSE(tutorial_.GoalMet());
-    EXPECT_STREQ(HintText(), strings::kTutorialSilentCaptureMissQuick);
-    world_.keys.erase(CommandId::SilentCapture);
-    Frame();
-    EXPECT_STREQ(HintText(), "") << "no key to name";
+    At("quickCapture");
     world_.silentCaptures += 1;
     Frame();
     EXPECT_TRUE(tutorial_.GoalMet());
+    EXPECT_STREQ(HintText(), "");
 }
 
 TEST_F(CapturingChainTest, TheCaptureStepsNeedTheTutorialsFolder) {
@@ -526,15 +512,16 @@ TEST_F(CapturingChainTest, TheTextsFollowTheTriggersAndTheKeys) {
     world_.keys.erase(CommandId::NewScreenshotTool);
     EXPECT_STREQ(TextOf("fullscreen"), strings::kTutorialFullscreenTextMenu);
 
+    // The silent capture's word only while it has a key to name.
     EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureText);
-    EXPECT_STREQ(TextOf("silentCapture"), strings::kTutorialSilentCaptureText);
     world_.keys.erase(CommandId::ToggleEditMode);
     EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureTextTray);
-    EXPECT_STREQ(TextOf("silentCapture"), strings::kTutorialSilentCaptureTextTray);
-    world_.keys.erase(CommandId::QuickCapture);
     world_.keys.erase(CommandId::SilentCapture);
+    EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureTextTrayNoSilent);
+    world_.keys[CommandId::ToggleEditMode] = "Ctrl+Alt+S";
+    EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureTextNoSilent);
+    world_.keys.erase(CommandId::QuickCapture);
     EXPECT_STREQ(TextOf("quickCapture"), strings::kTutorialQuickCaptureTextNoKey);
-    EXPECT_STREQ(TextOf("silentCapture"), strings::kTutorialSilentCaptureTextNoKey);
 }
 
 TEST_F(FoldersChainTest, CanBeWalkedTheWayAUserWould) {
@@ -572,13 +559,11 @@ TEST_F(FoldersChainTest, CanBeWalkedTheWayAUserWould) {
     Settle();
 
     ASSERT_EQ(Id(), "switchFolder");
-    world_.current = FakeWorld::kSecondCanvas;  // a tile, which closes the Overview
-    world_.cover = Cover::None;
+    world_.overviewFolder = FakeWorld::kTutorialFolder;  // its row
     Settle();
 
     ASSERT_EQ(Id(), "moveCanvas");
-    EXPECT_EQ(NeedShown(), Need::OverviewUp);
-    OverviewUp();
+    EXPECT_FALSE(NeedShown().has_value()) << "the Overview still up";
     world_.Canvas(13).folder = kMadeFolder;
     Settle();
 
@@ -593,6 +578,11 @@ TEST_F(FoldersChainTest, CanBeWalkedTheWayAUserWould) {
     ASSERT_EQ(Id(), "restore");
     EXPECT_FALSE(NeedShown().has_value());
     world_.Canvas(FakeWorld::kCanvas).deleted = false;
+    Settle();
+
+    ASSERT_EQ(Id(), "openCanvas");
+    world_.current = FakeWorld::kCanvas;  // a tile, which closes the Overview
+    world_.cover = Cover::None;
     Settle();
 
     ASSERT_EQ(Id(), "end");
@@ -693,15 +683,38 @@ TEST_F(FoldersChainTest, ARenameCountsForAFolderOrACanvasOfTheTutorials) {
     EXPECT_TRUE(tutorial_.GoalMet());
 }
 
-// Back from the new folder: a switch to another canvas, in the tutorial's
-// own folder.
+// Back from the new folder: the tutorial's own folder shown in the
+// Overview, with no canvas picked - the next steps need the Overview up.
 TEST_F(FoldersChainTest, TheWayBackIsToTheTutorialsOwnFolder) {
     MadeAFolderThenAt("switchFolder");
-    world_.canvases.push_back(CanvasFacts{32, kMadeFolder, "Another"});
-    world_.current = 32;
+    ASSERT_EQ(world_.overviewFolder, kMadeFolder);
     Frame();
     EXPECT_FALSE(tutorial_.GoalMet()) << "still in the new folder";
-    world_.current = FakeWorld::kCanvas;
+    world_.overviewFolder = FakeWorld::kOtherFolder;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "not the tutorial's";
+    world_.overviewFolder = FakeWorld::kTutorialFolder;
+    Frame();
+    EXPECT_TRUE(tutorial_.GoalMet());
+    EXPECT_EQ(world_.current, kMadeCanvas) << "no canvas picked for it";
+}
+
+// The last step: on a canvas of the tutorial's with the Overview closed -
+// by its tile, or put away over one. Another folder's tile does not count.
+TEST_F(FoldersChainTest, OpenACanvasIsOneOfTheTutorialsWithTheOverviewClosed) {
+    OverviewUp();
+    At("openCanvas");
+    EXPECT_FALSE(NeedShown().has_value());
+    world_.current = FakeWorld::kOtherCanvas;
+    world_.cover = Cover::None;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "not the tutorial's";
+    EXPECT_EQ(NeedShown(), Need::OverviewUp);
+    OverviewUp();
+    world_.current = FakeWorld::kSecondCanvas;
+    Frame();
+    EXPECT_FALSE(tutorial_.GoalMet()) << "the Overview still up";
+    world_.cover = Cover::None;
     Frame();
     EXPECT_TRUE(tutorial_.GoalMet());
 }
@@ -1137,15 +1150,15 @@ TEST_F(DrawingChainTest, TheErasingStepsNeedSomethingDrawn) {
     }
 }
 
-// What was in hand as the ink went: the round eraser first, and the
-// rectangle picked after it, is no rectangle erased.
+// What the ink went with: the round eraser first, and a rectangle erased
+// after it, counts only what the rectangle took.
 TEST_F(DrawingChainTest, TheRectangleEraserCountsOnlyWhatItErased) {
     DrawingAt("eraseRect");
     world_.hand = core::Tool::Erase;
     world_.At(1).strokes[0].lengthPx -= 40.0f;
     Frame();
     EXPECT_STREQ(HintText(), strings::kTutorialEraseRectMissRound);
-    world_.eraserShape = core::DrawShape::Rectangle;
+    world_.erasedWith = core::DrawShape::Rectangle;
     Frame();
     EXPECT_FALSE(tutorial_.GoalMet());
     world_.At(1).strokes[0].lengthPx -= 20.0f;
@@ -1156,7 +1169,7 @@ TEST_F(DrawingChainTest, TheRectangleEraserCountsOnlyWhatItErased) {
 TEST_F(DrawingChainTest, TheRightButtonCountsWhatWentWithoutTheEraserInHand) {
     DrawingAt("eraseRight");
     world_.hand = core::Tool::Erase;
-    world_.eraserShape = core::DrawShape::Rectangle;
+    world_.erasedWith = core::DrawShape::Rectangle;
     Frame();
     EXPECT_FALSE(tutorial_.CurrentHint().has_value()) << "the eraser in hand is where the step begins";
     world_.At(1).strokes[0].lengthPx -= 40.0f;
@@ -1492,7 +1505,7 @@ TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
         strings::kTutorialNewDrawingTextMenu,   strings::kTutorialFullscreenText,
         strings::kTutorialFullscreenTextTool,   strings::kTutorialFullscreenTextMenu,
         strings::kTutorialQuickCaptureTextTray, strings::kTutorialQuickCaptureTextNoKey,
-        strings::kTutorialSilentCaptureTextTray, strings::kTutorialSilentCaptureTextNoKey,
+        strings::kTutorialQuickCaptureTextNoSilent, strings::kTutorialQuickCaptureTextTrayNoSilent,
         strings::kTutorialNeedOverviewUp,       strings::kTutorialNeedCanvasesTab,
         strings::kTutorialNeedDeletedShown,     strings::kTutorialNeedSomethingInTrash,
         strings::kTutorialNewCanvasTextKey,     strings::kTutorialNewCanvasTextOverview,

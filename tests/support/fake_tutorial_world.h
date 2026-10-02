@@ -36,7 +36,7 @@ struct FakeWorld : World {
     std::vector<core::ItemId> selection;
     std::optional<core::ItemCreationKind> tool;
     core::Tool hand = core::Tool::Select;
-    core::DrawShape eraserShape = core::DrawShape::Freehand;
+    core::DrawShape erasedWith = core::DrawShape::Freehand;
     uint32_t penColor = 0xFF0000FFu;
     float penWidth = 3.0f;
     std::optional<core::ItemId> typing;
@@ -47,6 +47,8 @@ struct FakeWorld : World {
                                       {kOtherCanvas, kOtherFolder, "Mine"}};
     bool overviewShowsCanvases = true;
     bool overviewShowsDeleted = false;
+    // The folder whose canvases the Overview's grid shows, while it does.
+    core::FolderId overviewFolder = kTutorialFolder;
     bool canvasBarOn = true;
     // The program underneath, the profiles, and the Settings tab - on it
     // while the Overview is up and overviewShowsSettings is set.
@@ -115,6 +117,7 @@ struct FakeWorld : World {
         folders.push_back(FolderFacts{folder, "2026-09-28 12:00:00"});
         canvases.push_back(CanvasFacts{canvas, folder, "2026-09-28 12:00:00"});
         current = canvas;
+        overviewFolder = folder;  // browsed, as New folder leaves it
     }
     // The Overview up on its Settings tab, at `at`.
     void OpenSettings(SettingsSection at) {
@@ -186,7 +189,7 @@ struct FakeWorld : World {
     std::vector<core::ItemId> Selection() const override { return selection; }
     std::optional<core::ItemCreationKind> CreationToolInHand() const override { return tool; }
     core::Tool ToolInHand() const override { return hand; }
-    core::DrawShape EraserShape() const override { return eraserShape; }
+    core::DrawShape ErasedWith() const override { return erasedWith; }
     uint32_t PenColor() const override { return penColor; }
     float PenWidth() const override { return penWidth; }
     std::optional<core::ItemId> NoteBeingTyped() const override { return typing; }
@@ -221,6 +224,7 @@ struct FakeWorld : World {
     }
     bool OverviewShowsCanvases() const override { return cover == Cover::Overview && overviewShowsCanvases; }
     bool OverviewShowsDeleted() const override { return cover == Cover::Overview && overviewShowsDeleted; }
+    core::FolderId OverviewFolder() const override { return OverviewShowsCanvases() ? overviewFolder : 0; }
     bool CanvasBarOn() const override { return canvasBarOn; }
     std::string Underneath() const override { return underneath; }
     std::vector<ProfileFacts> Profiles() const override { return profiles; }

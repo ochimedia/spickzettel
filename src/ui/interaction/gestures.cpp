@@ -533,11 +533,13 @@ void Marking::Begin(const Event& event, Editor& editor) {
             if (event.kind == EventKind::PointerMove) {
                 session.ExtendErase(event.position.x, event.position.y, editor.EraserWidth());
             }
+            editor.NoteErasing(core::DrawShape::Freehand);
             break;
         case Kind::EraseRect:
             // Dragged out from a fixed corner with nothing erased while it
             // is - the rect is only a preview - then erased once, on
             // release, as one undoable step.
+            editor.NoteErasing(core::DrawShape::Rectangle);
             break;
     }
     last_ = event.position;

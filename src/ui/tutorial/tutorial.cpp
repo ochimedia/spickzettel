@@ -281,7 +281,7 @@ void Tutorial::TallyInk(const World& world, const std::vector<SnippetFacts>& sni
             const float less = last->second - ink;
             if (tool != core::Tool::Erase) {
                 gone.otherTool += less;
-            } else if (world.EraserShape() == core::DrawShape::Rectangle) {
+            } else if (world.ErasedWith() == core::DrawShape::Rectangle) {
                 gone.rectangleEraser += less;
             } else {
                 gone.eraser += less;
