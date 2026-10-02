@@ -156,6 +156,31 @@ TEST(SessionTest, ErasingWhatWasDeletedBeforeACutoffLeavesTheRest) {
     EXPECT_EQ(session.EraseDeletedBefore(200), 0u) << "nothing left that old";
 }
 
+// Empty trash: everything deleted goes for good, however and whenever it
+// was deleted, and nothing live is touched.
+TEST(SessionTest, EmptyingTheTrashErasesEverythingDeletedAndNothingElse) {
+    Session session;
+    CanvasManager& manager = Model(session);
+    const FolderId home = manager.CurrentFolderId();
+    const CanvasId live = manager.CurrentCanvasId();
+    const CanvasId deletedCanvas = manager.AddCanvas("Deleted canvas");
+    const FolderId deletedFolder = manager.AddFolder("Deleted folder");
+    manager.SwitchToFolder(deletedFolder);
+    const CanvasId inDeletedFolder = manager.AddCanvas("In deleted folder");
+    manager.SwitchToCanvas(live);
+    EXPECT_EQ(session.EmptyTrash(), 0u) << "nothing in it yet";
+    ASSERT_TRUE(session.Delete(deletedCanvas));
+    ASSERT_TRUE(session.Delete(deletedFolder));
+
+    EXPECT_EQ(session.EmptyTrash(), 2u) << "the canvas, and the folder with what is in it";
+    EXPECT_EQ(manager.FindCanvas(deletedCanvas), nullptr);
+    EXPECT_EQ(manager.FindFolder(deletedFolder), nullptr);
+    EXPECT_EQ(manager.FindCanvas(inDeletedFolder), nullptr);
+    EXPECT_NE(manager.FindCanvas(live), nullptr);
+    EXPECT_NE(manager.FindFolder(home), nullptr);
+    EXPECT_EQ(manager.DeletedFolderAndCanvasCount(), 0u);
+}
+
 TEST(SessionTest, ErasingAFoldersDeletedCanvasesLeavesTheFolderAndTheRest) {
     Session session;
     const FolderId folder = Model(session).CurrentFolderId();

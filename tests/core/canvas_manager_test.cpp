@@ -1648,6 +1648,7 @@ TEST(CanvasManagerTest, MarkedBeforeListsWhatWasDeletedLongEnoughAgo) {
         << "the folder is not due yet; a canvas marked in it before it went is";
     EXPECT_EQ(manager.MarkedBefore(100), (std::vector<uint64_t>{folder, early, atCutoff}))
         << "what is in the folder goes with it";
+    EXPECT_EQ(manager.Marked(), (std::vector<uint64_t>{folder, early, atCutoff})) << "the whole trash, no cutoff";
     (void)wentWithIt;
 }
 

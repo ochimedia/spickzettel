@@ -335,6 +335,40 @@ TEST_F(ShowDeletedUiTest, AFoldersDeletePermanentlyErasesOnlyItsDeletedCanvases)
     EXPECT_NE(Canvases().FindCanvas(made.second), nullptr);
 }
 
+// Empty trash, over the sidebar with Show deleted on, asks first - even
+// with the confirmations switched off in Settings, since it is everything
+// at once - and Cancel leaves the trash as it was. Its own Empty trash
+// then erases all of it, and leaves the live canvas be.
+TEST_F(ShowDeletedUiTest, EmptyTrashAsksAndThenErasesEverythingDeleted) {
+    controller_->GetSettings().Set(setting::kConfirmDeleteForGood, false);
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    const TwoCanvasFolder made = MakeTwoCanvasFolder();
+    ASSERT_TRUE(controller_->GetSession().Delete(made.first));
+    const TwoCanvasFolder other = MakeTwoCanvasFolder();
+    ASSERT_TRUE(controller_->GetSession().Delete(other.folder));
+
+    RunUi("show deleted, empty the trash, cancel", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###showdeleted");
+        ctx->ItemClick("**/##emptytrash");
+        ctx->ItemClick("//$FOCUSED/###Cancel");
+    });
+    EXPECT_EQ(Canvases().DeletedFolderAndCanvasCount(), 2u) << "asked, and nothing done on Cancel";
+
+    RunUi("empty the trash", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/##emptytrash");
+        ctx->ItemClick("//$FOCUSED/##confirmdelete");
+    });
+    EXPECT_EQ(Canvases().DeletedFolderAndCanvasCount(), 0u);
+    EXPECT_EQ(Canvases().FindCanvas(made.first), nullptr);
+    EXPECT_EQ(Canvases().FindFolder(other.folder), nullptr);
+    EXPECT_EQ(Canvases().FindCanvas(other.first), nullptr);
+    EXPECT_NE(Canvases().FindCanvas(made.second), nullptr);
+}
+
 // A stamp the C runtime has no date for - before 1970, or past the year
 // 3000 - is told as unknown. It was formatted as a zeroed date, which
 // strftime refuses, and the invalid-parameter handler ended the app on

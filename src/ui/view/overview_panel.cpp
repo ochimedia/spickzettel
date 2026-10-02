@@ -34,10 +34,11 @@ using namespace ::sz::core;
 // sidebar and deleted canvases in the grid, where they were, marked out in
 // red with Restore and Delete permanently on each - so where a restore puts
 // a thing back is where it is seen - and everything else dimmed. A folder
-// is marked out when it is deleted or holds a deleted canvas, and its two
-// buttons act on what is deleted in it (see CanvasManager::Restore and
-// Session::DeleteMarkedCanvasesPermanently). Snippets are not shown: a
-// deleted snippet comes back by undo or not at all.
+// is marked out when it is deleted (red) or holds a deleted canvas
+// (yellow), and its two buttons act on what is deleted in it (see
+// CanvasManager::Restore and Session::DeleteMarkedCanvasesPermanently).
+// The tab row says which color is which, beside Empty trash. Snippets are
+// not shown: a deleted snippet comes back by undo or not at all.
 
 namespace {
 
@@ -355,12 +356,27 @@ void OverviewPanel::RenderOverviewHeader() {
                                 ImGui::GetStyle().ItemSpacing.x + checkboxWidth +
                                 ImGui::CalcTextSize(strings::kOverviewPreviewsBitmap).x;
     ImGui::SameLine();
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
-                          std::max(0.0f, ImGui::GetContentRegionAvail().x - controlsWidth));
+    // With Show deleted on, its legend and Empty trash come before it, so
+    // that the checkbox stays where it was when it is ticked. The legend
+    // is left out where the row has no room for it.
+    const float room = ImGui::GetContentRegionAvail().x - controlsWidth;
+    float deletedControlsWidth = 0.0f;
+    bool withLegend = false;
+    if (ShowingDeleted()) {
+        deletedControlsWidth = IconTextButtonWidth(strings::kOverviewEmptyTrash) + gapBeforePreviews;
+        const float legendWidth = DeletedLegendWidth() + gapBeforePreviews;
+        withLegend = room >= deletedControlsWidth + legendWidth;
+        deletedControlsWidth += withLegend ? legendWidth : 0.0f;
+    }
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + std::max(0.0f, room - deletedControlsWidth));
     // Vertically centered against the tab buttons, which are taller
     // than a checkbox's own frame.
     const float rowCenterOffset = (ImGui::GetItemRectSize().y - ImGui::GetFrameHeight()) * 0.5f;
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(0.0f, rowCenterOffset));
+    if (ShowingDeleted()) {
+        RenderDeletedControls(withLegend, gapBeforePreviews);
+        ImGui::SameLine(0.0f, gapBeforePreviews);
+    }
     if (ImGui::Checkbox(Labeled(deletedLabel, "showdeleted"), &showDeleted_)) {
         SettleDeletedFolderShown();
     }
@@ -389,6 +405,59 @@ void OverviewPanel::RenderOverviewHeader() {
     }
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("%s", strings::kOverviewPreviewsBitmapHelp);
+    }
+}
+
+namespace {
+
+// Between a legend chip's edge and its words, and between the two chips.
+constexpr float kLegendChipPad = 8.0f;
+constexpr float kLegendChipGap = 6.0f;
+
+float LegendChipWidth(const char* label) { return ImGui::CalcTextSize(label).x + Px(kLegendChipPad) * 2.0f; }
+
+// A marked folder's row in small: its fill and its ink, and no frame or
+// box - a square swatch beside the words read as a checkbox, on a row
+// whose other entries are checkboxes.
+void LegendChip(const char* label, const ImVec4& fill, const ImVec4& ink) {
+    const ImVec2 min = ImGui::GetCursorScreenPos();
+    const ImVec2 max(min.x + LegendChipWidth(label), min.y + ImGui::GetFrameHeight());
+    ImGui::Dummy(ImVec2(max.x - min.x, max.y - min.y));
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(min, max, ImGui::GetColorU32(fill), Px(theme::kRadiusSm));
+    drawList->AddText(ImVec2(min.x + Px(kLegendChipPad), min.y + (max.y - min.y - ImGui::GetTextLineHeight()) * 0.5f),
+                      ImGui::GetColorU32(ink), label);
+}
+
+}  // namespace
+
+float OverviewPanel::DeletedLegendWidth() const {
+    return ImGui::CalcTextSize(strings::kOverviewLegendLabel).x + ImGui::GetStyle().ItemSpacing.x +
+           LegendChipWidth(strings::kOverviewLegendDeletedFolder) + Px(kLegendChipGap) +
+           LegendChipWidth(strings::kOverviewLegendHoldsDeleted);
+}
+
+void OverviewPanel::RenderDeletedControls(bool withLegend, float gap) {
+    if (withLegend) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextColored(theme::kGraphite300, "%s", strings::kOverviewLegendLabel);
+        ImGui::SameLine();
+        LegendChip(strings::kOverviewLegendDeletedFolder, theme::kDangerSoft, theme::kDeletedInk);
+        ImGui::SameLine(0.0f, Px(kLegendChipGap));
+        LegendChip(strings::kOverviewLegendHoldsDeleted, theme::kCautionSoft, theme::kCautionInk);
+        ImGui::SameLine(0.0f, gap);
+    }
+    // Up here rather than among the rows' Restore and Delete permanently,
+    // and always asked before it is done (see OverlayApp::AskToDelete).
+    // Off with nothing in the trash.
+    ImGui::BeginDisabled(Manager().DeletedFolderAndCanvasCount() == 0);
+    const bool emptyPressed = DangerButton("##emptytrash", icons::kTrash, strings::kOverviewEmptyTrash);
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+        ImGui::SetTooltip("%s", strings::kOverviewEmptyTrashHelp);
+    }
+    if (emptyPressed) {
+        host_.AskToDelete(DeleteTarget{DeleteTarget::Kind::Trash});
     }
 }
 
@@ -421,9 +490,12 @@ void OverviewPanel::RenderFolderSidebar() {
         }
         // With Show deleted on, a folder that is deleted or holds a deleted
         // canvas is marked out, with the two buttons that act on what is
-        // deleted in it, and every other folder is dimmed.
+        // deleted in it, and every other folder is dimmed. Red for a folder
+        // deleted whole, yellow for one that only holds what is - see
+        // RenderDeletedLegend.
         const bool marked = showingDeleted && Manager().HoldsDeleted(f);
         const bool dimmed = showingDeleted && !marked;
+        const ImVec4& markColor = deleted ? theme::kDanger : theme::kCaution;
         const bool isCurrentFolder = f.id == currentFolderId;
         const bool isRenamingThis = renamingFolderId_ == f.id;
         ImGui::PushID(static_cast<int>(f.id));
@@ -442,11 +514,12 @@ void OverviewPanel::RenderFolderSidebar() {
         ImDrawList* sidebarDrawList = ImGui::GetWindowDrawList();
         // Through GetColorU32, which a dimmed row's alpha applies to.
         if (isCurrentFolder) {
-            const ImVec4 fill = marked ? ImVec4(theme::kDanger.x, theme::kDanger.y, theme::kDanger.z, 0.32f)
+            const ImVec4 fill = marked ? ImVec4(markColor.x, markColor.y, markColor.z, 0.32f)
                                        : ImVec4(theme::Accent().x, theme::Accent().y, theme::Accent().z, 0.2f);
             sidebarDrawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(fill), Px(theme::kRadiusSm));
         } else if (marked) {
-            sidebarDrawList->AddRectFilled(rowMin, rowMax, ImGui::GetColorU32(theme::kDangerSoft),
+            sidebarDrawList->AddRectFilled(rowMin, rowMax,
+                                           ImGui::GetColorU32(deleted ? theme::kDangerSoft : theme::kCautionSoft),
                                            Px(theme::kRadiusSm));
         }
 
@@ -528,7 +601,7 @@ void OverviewPanel::RenderFolderSidebar() {
                 host_.Window()->ReleaseTextInput();
             }
         } else {
-            const ImVec4& ink = marked && !isCurrentFolder ? theme::kDeletedInk
+            const ImVec4& ink = marked && !isCurrentFolder ? (deleted ? theme::kDeletedInk : theme::kCautionInk)
                                 : isCurrentFolder         ? theme::kWhite
                                                           : theme::kGraphite200;
             const ImVec2 textPos(rowMin.x + Px(10.0f),

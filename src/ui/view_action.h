@@ -27,14 +27,16 @@
 
 namespace sz::ui {
 
-// What a delete is of: a canvas or a folder, or what is deleted in a
-// folder. `name` is taken when it is asked, for the confirmation's own
-// "Delete <name>?", so it need not be looked up again.
+// What a delete is of: a canvas or a folder, what is deleted in a folder,
+// or everything deleted. `name` is taken when it is asked, for the
+// confirmation's own "Delete <name>?", so it need not be looked up again.
 struct DeleteTarget {
     // DeletedCanvasesIn is a folder that is not deleted itself, and what
     // goes for good is the canvases in it that are - see
-    // Session::DeleteMarkedCanvasesPermanently. Always for good.
-    enum class Kind { Canvas, Folder, DeletedCanvasesIn };
+    // Session::DeleteMarkedCanvasesPermanently. Trash is every folder and
+    // canvas that is deleted, with no id or name - see Session::EmptyTrash.
+    // Both always for good.
+    enum class Kind { Canvas, Folder, DeletedCanvasesIn, Trash };
     Kind kind = Kind::Canvas;
     uint64_t id = 0;  // CanvasId or FolderId depending on kind
     std::string name;

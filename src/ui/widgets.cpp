@@ -181,14 +181,23 @@ void AddInnerOutline(ImDrawList* drawList, ImVec2 min, ImVec2 max, ImU32 color, 
 // An icon+text button in the given colors - the .btn equivalent (icon
 // and text sizes/gap match .btn svg / .btn's own gap). The two colorings
 // below are the only ones in use.
+namespace {
+constexpr float kIconTextIconSize = 15.0f;
+constexpr float kIconTextGap = 7.0f;
+}  // namespace
+
+float IconTextButtonWidth(const char* text) {
+    return ImGui::GetStyle().FramePadding.x * 2.0f + Px(kIconTextIconSize) + Px(kIconTextGap) +
+           ImGui::CalcTextSize(text).x;
+}
+
 bool IconTextButton(const char* strId, const Icon& icon, const char* text, const ImVec4& fill,
                     const ImVec4& hover, const ImVec4& ink) {
-    constexpr float kIconSize = 15.0f;
-    constexpr float kGap = 7.0f;
+    constexpr float kIconSize = kIconTextIconSize;
+    constexpr float kGap = kIconTextGap;
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 textSize = ImGui::CalcTextSize(text);
-    const ImVec2 size(style.FramePadding.x * 2.0f + Px(kIconSize) + Px(kGap) + textSize.x,
-                       style.FramePadding.y * 2.0f + std::max(Px(kIconSize), textSize.y));
+    const ImVec2 size(IconTextButtonWidth(text), style.FramePadding.y * 2.0f + std::max(Px(kIconSize), textSize.y));
     ImGui::PushStyleColor(ImGuiCol_Button, fill);
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, hover);
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, hover);

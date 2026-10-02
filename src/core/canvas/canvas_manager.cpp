@@ -1199,7 +1199,14 @@ std::vector<ItemId> CanvasManager::MarkedSnippets() const {
 }
 
 std::vector<uint64_t> CanvasManager::MarkedBefore(int64_t cutoff) const {
-    const auto due = [cutoff](int64_t stamp) { return stamp != 0 && stamp < cutoff; };
+    return MarkedWhere([cutoff](int64_t stamp) { return stamp != 0 && stamp < cutoff; });
+}
+
+std::vector<uint64_t> CanvasManager::Marked() const {
+    return MarkedWhere([](int64_t stamp) { return stamp != 0; });
+}
+
+std::vector<uint64_t> CanvasManager::MarkedWhere(const std::function<bool(int64_t)>& due) const {
     std::vector<uint64_t> ids;
     for (const Folder& folder : folders_) {
         if (due(folder.deletedAt)) {

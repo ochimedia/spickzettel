@@ -2876,6 +2876,25 @@ folder too only if the folder is what was deleted. Putting the buttons
 on the thing, where it would come back to, says where a restore lands
 without a line of text to explain it.
 
+The folder's color tells the two cases apart: red for a folder deleted
+whole, yellow for a live one holding a deleted canvas. One red for both
+read as "this folder is in the trash" for a folder that is in use and
+only has something deleted in it. A legend on the tab row, before the
+checkbox, says which color is which, so neither has to be learned from
+a tooltip. It shows each as a small copy of a marked row - the fill and
+the ink, nothing else: a square swatch beside the words read as one
+more checkbox on a row of them. It and Empty trash go before the
+checkbox rather than after it, so the checkbox does not move when it is
+ticked; on a row too narrow for both, the legend is left out.
+
+Empty trash: every folder and canvas with a mark
+of its own goes for good (`Session::EmptyTrash`, through
+`CanvasManager::Marked`, the retention period's list with no cutoff).
+It is always confirmed, whatever Settings > Behavior says about deleting
+permanently: that setting is about one thing at a time, pressed on the
+thing, and this is everything at once from a button away from all of
+it. The confirmation gives the same count as the Show deleted checkbox.
+
 A deleted folder is looked into rather than browsed: the browsed folder
 is where a new canvas lands, and the manager never lets that be a
 deleted one, so the UI keeps the deleted folder it is showing

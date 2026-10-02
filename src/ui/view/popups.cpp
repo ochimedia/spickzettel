@@ -759,15 +759,25 @@ void Popups::RenderConfirmDeletePopover() {
     const DeleteTarget target = *popup_->deleteTarget;
     const bool isFolder = target.kind == DeleteTarget::Kind::Folder;
     const bool deletedIn = target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
+    const bool trash = target.kind == DeleteTarget::Kind::Trash;
     const char* word = isFolder ? strings::kDeleteConfirmFolderWord : strings::kDeleteConfirmCanvasWord;
     // A delete marks the thing, which can be restored, and says so; a delete
     // of something deleted already is for good, and says that.
-    const bool forGood = target.forGood || deletedIn;
+    const bool forGood = target.forGood || deletedIn || trash;
     // Several folders at once - the tutorial's, at its Done - are named
     // each, and spoken of as several.
     const bool several = isFolder && !target.alsoFolders.empty();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Px(220.0f));
-    if (deletedIn) {
+    if (trash) {
+        // Counted as Show deleted counts it, so the two numbers agree.
+        ImGui::TextUnformatted(strings::kDeleteConfirmPromptTrash);
+        const size_t count = Manager().DeletedFolderAndCanvasCount();
+        if (count == 1) {
+            ImGui::TextColored(theme::kDanger, "%s", strings::kDeleteConfirmTrashContentsOne);
+        } else {
+            ImGui::TextColored(theme::kDanger, strings::kDeleteConfirmTrashContentsMany, count);
+        }
+    } else if (deletedIn) {
         ImGui::Text(strings::kDeleteConfirmPromptDeletedIn, target.name.c_str());
     } else if (several) {
         std::vector<std::string> names{target.name};
@@ -808,8 +818,11 @@ void Popups::RenderConfirmDeletePopover() {
 
     const bool cancelPressed = ImGui::Button(Labeled(strings::kDeleteConfirmCancel, strings::kMoveCopyCancel));
     ImGui::SameLine();
-    const bool deletePressed = DangerButton("##confirmdelete", icons::kTrash,
-                                            forGood ? strings::kDeleteConfirmDeleteForGood : strings::kDeleteConfirmDelete);
+    const bool deletePressed =
+        DangerButton("##confirmdelete", icons::kTrash,
+                     trash     ? strings::kDeleteConfirmEmptyTrash
+                     : forGood ? strings::kDeleteConfirmDeleteForGood
+                               : strings::kDeleteConfirmDelete);
     // CloseCurrentPopup must be called while this popup is still current -
     // i.e. before EndPopup, not after (it operates on the popup ID stack,
     // which EndPopup pops). The delete itself is an action, done once the

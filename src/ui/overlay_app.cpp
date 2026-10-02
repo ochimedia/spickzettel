@@ -170,9 +170,12 @@ std::optional<ImVec2> OverlayApp::SelectionBarButtonCenter(ChromeButton button) 
 
 void OverlayApp::AskToDelete(DeleteTarget target) {
     // Not asked at all where Settings > Behavior says not to: deleted after
-    // the draw, as the confirmation's own Delete would be.
-    const bool forGood = target.forGood || target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
-    if (!(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
+    // the draw, as the confirmation's own Delete would be. Emptying the
+    // trash is always asked: it is everything deleted at once, from one
+    // button that sits where Restore and Delete permanently are pressed.
+    const bool trash = target.kind == DeleteTarget::Kind::Trash;
+    const bool forGood = target.forGood || target.kind == DeleteTarget::Kind::DeletedCanvasesIn || trash;
+    if (!trash && !(forGood ? Cfg().confirmDeleteForGood : Cfg().confirmDelete)) {
         Act(action::Delete{std::move(target)});
         return;
     }
@@ -187,7 +190,11 @@ void OverlayApp::PerformDelete(const DeleteTarget& target) {
     const bool deletedIn = target.kind == DeleteTarget::Kind::DeletedCanvasesIn;
     // Its textures go as it leaves the screen, either way (see
     // TextureCache), and its history only with the thing itself, for good.
-    if (forGood) {
+    if (target.kind == DeleteTarget::Kind::Trash) {
+        if (session_.EmptyTrash() != 0) {
+            messages_.Say(strings::kToastTrashEmptied);
+        }
+    } else if (forGood) {
         if (deletedIn ? session_.DeleteMarkedCanvasesPermanently(target.id) : session_.DeletePermanently(target.id)) {
             messages_.Say(strings::kToastDeletedForGood);
         }

@@ -146,6 +146,10 @@ public:
     // those are - and returns how many went. The retention period
     // (AppConfig::purgeDeleted), run once the library is opened.
     size_t EraseDeletedBefore(int64_t cutoff);
+    // Deletes for good every folder and canvas that is deleted - see
+    // CanvasManager::Marked - and returns how many went: the Overview's
+    // Empty trash.
+    size_t EmptyTrash();
 
     // ===== Undo =====
 

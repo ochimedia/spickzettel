@@ -65,7 +65,8 @@ the Overview.
   the overlay is not "discarding" anything.
 - Deleting a folder or canvas hides it where it is. "Show deleted", in
   the Overview, shows it there again in red, to restore or delete for
-  good. After 14 days it is deleted permanently the next time the app
+  good - a folder that only holds deleted canvases in yellow - and
+  "Empty trash" deletes all of it for good at once. After 14 days it is deleted permanently the next time the app
   starts; Settings > Behavior changes the period or turns it off. A
   deleted snippet comes back with undo, until the app restarts.
 - Screenshots are captured with the overlay hidden, so nothing the
@@ -105,6 +106,16 @@ If the app crashes, it writes a crash report to
 
 
 ## Changelog
+
+### 0.2.3
+
+#### Features
+
+- A button for emptying the trash, with Show deleted on in the Overview
+
+#### Changes
+
+- With Show deleted on, deleted folders are told apart from folders with deleted canvases by color - red and yellow - with a legend for the two
 
 ### 0.2.2
 

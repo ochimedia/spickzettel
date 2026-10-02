@@ -80,6 +80,13 @@ private:
     const core::AppConfig& Cfg() const { return settings_.Stored(); }
 
     void RenderOverviewHeader();
+    // On the tab row, before Show deleted while it is on: which color is
+    // which - red for a folder deleted whole, yellow for one holding a
+    // deleted canvas - unless `withLegend` is false for want of room, then
+    // Empty trash. `gap` is what goes between the two.
+    void RenderDeletedControls(bool withLegend, float gap);
+    // How wide the legend is.
+    float DeletedLegendWidth() const;
     // The sidebar and the grid, which ask for what they are clicked for as
     // actions (see ViewHost::Act).
     void RenderFolderSidebar();
@@ -142,8 +149,9 @@ private:
     bool aboutShowsNotices_ = false;
     // Whether the Canvases tab shows what is deleted alongside what is not:
     // deleted folders in the sidebar and deleted canvases in the grid,
-    // marked out in red with Restore and Delete permanently on each, and
-    // everything else dimmed. Not persisted, and off whenever the Overview
+    // marked out in red with Restore and Delete permanently on each - a
+    // folder holding a deleted canvas in yellow - and everything else
+    // dimmed. Not persisted, and off whenever the Overview
     // opens. See ShowingDeleted.
     bool showDeleted_ = false;
     // A deleted folder picked in the sidebar while Show deleted is on, whose

@@ -70,6 +70,12 @@ inline constexpr ImVec4 kDangerSoft(0.898f, 0.282f, 0.302f, 0.16f);
 // canvas's name with Show deleted on. kDanger itself is a fill, and as
 // small text on graphite it reads darker than it is.
 inline constexpr ImVec4 kDeletedInk(0.965f, 0.525f, 0.537f, 1.00f);
+// Yellow, the same three ways: a folder that is not deleted itself but
+// holds a deleted canvas, with Show deleted on - partly in the trash, so
+// not the red of what is in it whole.
+inline constexpr ImVec4 kCaution(0.961f, 0.773f, 0.259f, 1.00f);  // #f5c542
+inline constexpr ImVec4 kCautionSoft(0.961f, 0.773f, 0.259f, 0.16f);
+inline constexpr ImVec4 kCautionInk(0.980f, 0.851f, 0.502f, 1.00f);
 
 // Safe for FrameRounding/GrabRounding/ScrollbarRounding: ImDrawList's own
 // AddRectFilled/AddRect clamp rounding to half the shape's own size before

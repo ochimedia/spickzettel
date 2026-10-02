@@ -538,8 +538,13 @@ public:
     // before its folder went can be, and going first leaves the folder as
     // it would be had it been deleted for good by hand.
     std::vector<uint64_t> MarkedBefore(int64_t cutoff) const;
+    // The same with no cutoff: every folder and canvas carrying a mark of
+    // its own, less the canvases in a listed folder - the whole trash.
+    std::vector<uint64_t> Marked() const;
 
 private:
+    // MarkedBefore and Marked, for the stamps `due` takes.
+    std::vector<uint64_t> MarkedWhere(const std::function<bool(int64_t)>& due) const;
     // Where the mark of the folder, canvas or snippet `id` names is kept.
     int64_t* DeletedStampOf(uint64_t id);
     // Moves the current canvas and the browsed folder off anything deleted:

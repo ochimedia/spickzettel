@@ -304,6 +304,14 @@ bool Session::DeleteMarkedCanvasesPermanently(FolderId folderId) {
 
 size_t Session::EraseDeletedBefore(int64_t cutoff) { return EraseForGood(Model().MarkedBefore(cutoff)); }
 
+size_t Session::EmptyTrash() {
+    if (!EndOpenGesture()) {
+        return 0;
+    }
+    const std::vector<uint64_t> marked = Model().Marked();
+    return marked.empty() ? 0 : EraseForGood(marked);
+}
+
 // ================= Capturing the screen =================
 
 void Session::FreezeScreen(const platform::DisplayInfo& display) {

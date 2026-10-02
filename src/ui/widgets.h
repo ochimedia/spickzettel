@@ -62,6 +62,9 @@ bool DangerIconButton(const char* strId, const Icon& icon);
 // An icon+text button in the given colors - the .btn equivalent.
 bool IconTextButton(const char* strId, const Icon& icon, const char* text, const ImVec4& fill, const ImVec4& hover,
                     const ImVec4& ink);
+// How wide IconTextButton draws one labeled `text` - for lining it up
+// against the right edge before it is drawn.
+float IconTextButtonWidth(const char* text);
 // An icon+text button in the accent color - a panel's primary action (New
 // folder, New canvas).
 bool PrimaryButton(const char* strId, const Icon& icon, const char* text);
