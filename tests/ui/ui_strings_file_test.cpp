@@ -30,7 +30,7 @@ TEST(UiStringsFileTest, TheCatalogIsStrictJson) {
         EXPECT_TRUE(value.is_string()) << key;
     }
     // And an escaped break still arrives in the app as a break.
-    EXPECT_NE(std::string(strings::kBarsHelp).find("\n\n"), std::string::npos);
+    EXPECT_NE(std::string(strings::kAppearanceImageFilterHelp).find("\n\n"), std::string::npos);
 }
 
 }  // namespace
