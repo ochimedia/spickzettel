@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 #include <sqlite3.h>
 
+#include "core/canvas/item_geometry.h"
 #include "core/diagnostics/timeline.h"
 #include "support/failing_writes.h"
 #include "support/temp_dir.h"
@@ -721,6 +722,48 @@ TEST_F(LibraryStoreTest, ARowThatCannotBeUsedAsItIsIsRepairedAndWrittenBack) {
     EXPECT_EQ(raw.Int("SELECT json_extract(record, '$.foregroundOpacity') FROM items WHERE id = 3"), 1)
         << "written back";
     EXPECT_EQ(raw.Int("SELECT length(strokes) FROM items WHERE id = 3"), 1 + 4 + 13 + 8) << "one stroke, whole";
+}
+
+// A rectangle is held to where a screen could be, not just to finite
+// numbers, and a snippet without a size gets the smallest one there is.
+// A rectangle that is not one is repaired as well.
+TEST_F(LibraryStoreTest, ARectangleOutOfAnyScreensRangeIsHeldToIt) {
+    ASSERT_TRUE(LibraryStore(file_).Save(MakeSampleSnapshot()));
+    {
+        RawConnection raw(file_);
+        ASSERT_TRUE(raw.Exec("UPDATE items SET record = json_set(record, '$.rect.x', -1e30, '$.rect.y', 1e30, "
+                             "'$.rect.w', -50, '$.rect.h', 65536, '$.anchorRect', 'not a rectangle') "
+                             "WHERE id = 3"));
+    }
+    LibraryStore store(file_);
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    const Item& item = loaded->canvases[0].items[0];
+    EXPECT_FLOAT_EQ(item.rect.x, -65536.0f);
+    EXPECT_FLOAT_EQ(item.rect.y, 65536.0f);
+    EXPECT_FLOAT_EQ(item.rect.w, kItemMinWidth) << "below zero is no size; the smallest a snippet can have";
+    EXPECT_FLOAT_EQ(item.rect.h, 65536.0f) << "at the top of the range, kept";
+    EXPECT_EQ(item.anchorRect, Rect{}) << "not anchored";
+
+    RawConnection raw(file_);
+    EXPECT_EQ(raw.Int("SELECT json_extract(record, '$.rect.w') FROM items WHERE id = 3"),
+              static_cast<int>(kItemMinWidth))
+        << "written back";
+    EXPECT_EQ(raw.Int("SELECT json_type(record, '$.anchorRect') = 'object' FROM items WHERE id = 3"), 1);
+}
+
+// One partly off the screen at the smallest size, unanchored, is an
+// ordinary one: read back as written.
+TEST_F(LibraryStoreTest, AnOrdinaryRectangleIsReadBackAsWritten) {
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    Item& item = snapshot.canvases[0].items[0];
+    item.rect = Rect{-20.0f, 1500.5f, 16.0f, 900.0f};
+    item.anchorRect = Rect{};
+    ASSERT_TRUE(LibraryStore(file_).Save(snapshot));
+    LibraryStore store(file_);
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].items[0].rect, (Rect{-20.0f, 1500.5f, 16.0f, 900.0f}));
 }
 
 // Strokes as 0.2.1 wrote them, without their corners: a rectangle's, and

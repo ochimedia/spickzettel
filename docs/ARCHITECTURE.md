@@ -1068,7 +1068,12 @@ now reads. A float
 that is not finite reads as its default - JSON has no infinity, but
 1e100 becomes one the moment it is read as a float, and one infinite
 coordinate poisons every bounding box it meets - and one with a range
-is held inside it. A value of the wrong type is its default. A stroke
+is held inside it. A snippet's rectangles have one too, the range a
+screen could have (`ReadRect`): finite is not enough, since 1e30 places
+a snippet nowhere. A snippet whose size is not above zero gets the
+smallest a snippet can have, as it could not be seen or picked; an
+anchor of no size is kept, since that means not yet anchored. A value of the
+wrong type is its default. A stroke
 blob cut short keeps the strokes before the cut. A current canvas or
 folder naming nothing - no row, or an id the library does not hold -
 opens on the first one that exists and is not deleted.

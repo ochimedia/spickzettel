@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <sqlite3.h>
 
+#include "core/canvas/item_geometry.h"
 #include "core/diagnostics/timeline.h"
 #include "core/util/timestamp_name.h"
 
@@ -270,15 +271,22 @@ int64_t DeletionStamp(int64_t stored, int64_t now, bool& repaired) {
 
 json RectJson(const Rect& r) { return json{{"x", r.x}, {"y", r.y}, {"w", r.w}, {"h", r.h}}; }
 
+// Held to the range a screen could have, as the native and anchor sizes
+// beside it are: finite is not enough, since 1e30 is finite and places a
+// snippet nowhere, and a size below zero is no size.
 void ReadRect(const json& j, const char* key, Rect& out, bool& repaired) {
     const auto it = j.find(key);
-    if (it == j.end() || !it->is_object()) {
+    if (it == j.end()) {
         return;
     }
-    out.x = FiniteOr(*it, "x", 0.0f, repaired);
-    out.y = FiniteOr(*it, "y", 0.0f, repaired);
-    out.w = FiniteOr(*it, "w", 0.0f, repaired);
-    out.h = FiniteOr(*it, "h", 0.0f, repaired);
+    if (!it->is_object()) {
+        repaired = true;
+        return;
+    }
+    out.x = ClampedOr(*it, "x", 0.0f, -kMaxSensibleExtent, kMaxSensibleExtent, repaired);
+    out.y = ClampedOr(*it, "y", 0.0f, -kMaxSensibleExtent, kMaxSensibleExtent, repaired);
+    out.w = ClampedOr(*it, "w", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
+    out.h = ClampedOr(*it, "h", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
 }
 
 std::string ItemRecord(const Item& item) {
@@ -344,6 +352,13 @@ void ReadItemRecord(std::string_view text, int64_t now, Item& out, bool& repaire
     out.deletedAt = DeletionStamp(Value(j, "deletedAt", int64_t{0}, repaired), now, repaired);
     out.hasBackground = Value(j, "hasBackground", false, repaired);
     ReadRect(j, "rect", out.rect, repaired);
+    // A snippet with no size is one that cannot be seen or picked; it gets
+    // the smallest one a snippet can have. Not the anchor's: a zero anchor
+    // is "not yet anchored".
+    if (out.rect.w <= 0.0f || out.rect.h <= 0.0f) {
+        out.rect = GrowRectToMinimumSize(out.rect);
+        repaired = true;
+    }
     out.nativeW = ClampedOr(j, "nativeW", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
     out.nativeH = ClampedOr(j, "nativeH", 0.0f, 0.0f, kMaxSensibleExtent, repaired);
     out.foregroundOpacity = ClampedOr(j, "foregroundOpacity", 1.0f, 0.0f, 1.0f, repaired);
