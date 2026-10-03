@@ -267,6 +267,15 @@ struct AppConfig {
     // Settings > Behavior.
     bool purgeDeleted = false;
     int purgeDeletedAfterDays = 14;
+    // Whether a start that finds the library larger than
+    // librarySizeReminderMb says so, the next time the overlay is up in
+    // edit mode, and where the trash is emptied and retention switched on:
+    // with retention off by default, nothing else keeps the trash from
+    // growing. Once per start, so a long session is not reminded again. On
+    // by default, at 2000 MB - in Explorer's megabytes, 1024 * 1024 bytes.
+    // Chosen in Settings > Behavior, under retention.
+    bool librarySizeReminder = true;
+    int librarySizeReminderMb = 2000;
     // Whether deleting a folder or canvas asks first: one that can still be
     // restored (confirmDelete), and one already deleted, which is for good
     // (confirmDeleteForGood). Both on by default. Off, the delete happens
@@ -344,6 +353,10 @@ inline constexpr int kUiScalePercentMax = 300;
 // most ten years, past which the setting is "never" by another name.
 inline constexpr int kPurgeDeletedAfterDaysMin = 1;
 inline constexpr int kPurgeDeletedAfterDaysMax = 3650;
+
+// The band librarySizeReminderMb is held to: a megabyte to a terabyte.
+inline constexpr int kLibrarySizeReminderMbMin = 1;
+inline constexpr int kLibrarySizeReminderMbMax = 1000000;
 
 // Returns hardcoded defaults, matching the values a freshly-written config
 // file would contain.

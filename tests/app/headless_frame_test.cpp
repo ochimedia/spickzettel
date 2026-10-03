@@ -4578,6 +4578,70 @@ TEST_F(HeadlessAppTest, SwitchingToViewOnlyCommitsTheNoteBeingTyped) {
         << "the keyboard is given back";
 }
 
+// A library past the size set is said at startup, in a box that waits for
+// edit mode - view-only cannot be answered - and comes up once that run.
+TEST_F(HeadlessAppTest, ALibraryPastTheSizeSetIsRemindedOfOnceInEditMode) {
+    const std::filesystem::path dir = sz::test::TempDir() / "spickzettel_headless_size_reminder";
+    std::filesystem::remove_all(dir);
+    CanvasManagerSnapshot snapshot;
+    Folder folder;
+    folder.id = 1;
+    folder.name = "F";
+    snapshot.folders.push_back(folder);
+    Canvas canvas;
+    canvas.id = 2;
+    canvas.name = "C";
+    canvas.folderId = 1;
+    Item shot;
+    shot.id = 4;
+    shot.hasBackground = true;
+    shot.rect = Rect{10, 10, 100, 100};
+    shot.nativeW = 700;
+    shot.nativeH = 700;
+    canvas.items.push_back(shot);
+    snapshot.canvases.push_back(canvas);
+    snapshot.currentFolderId = 1;
+    snapshot.currentCanvasId = 2;
+    {
+        // Noise, which QOI cannot make much smaller: past a megabyte.
+        constexpr int kSide = 700;
+        std::vector<uint8_t> noise(static_cast<size_t>(kSide) * kSide * 4);
+        uint32_t state = 7;
+        for (uint8_t& byte : noise) {
+            state = state * 1664525u + 1013904223u;
+            byte = static_cast<uint8_t>(state >> 24);
+        }
+        persistence::LibraryStore store(dir / "library.db");
+        ASSERT_TRUE(store.SaveImage(4, noise.data(), kSide, kSide));
+        ASSERT_TRUE(store.Save(snapshot));
+    }
+    host_.libraryPath = dir / "library.db";
+
+    AppConfig config = DefaultConfig();
+    config.librarySizeReminderMb = 1;
+    StartWith(config);
+    ShowViewMode();
+    StepFrame();
+    EXPECT_FALSE(App().IsLibraryReminderOpen()) << "not in view-only";
+    ShowEditMode();
+    StepFrame();
+    StepFrame();
+    ASSERT_TRUE(App().IsLibraryReminderOpen());
+
+    PressKey(ImGuiKey_Escape);
+    StepFrame();
+    EXPECT_FALSE(App().IsLibraryReminderOpen());
+    ShowEditMode();  // hidden
+    StepFrame();
+    ShowEditMode();
+    StepFrame();
+    StepFrame();
+    EXPECT_FALSE(App().IsLibraryReminderOpen()) << "once a run";
+
+    Shutdown();
+    std::filesystem::remove_all(dir);
+}
+
 // The retention period runs at startup, while nobody is looking; what it
 // deleted for good is said the next time the overlay comes up.
 TEST_F(HeadlessAppTest, WhatTheRetentionPeriodDeletedIsSaidOnTheNextShow) {

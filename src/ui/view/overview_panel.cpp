@@ -220,6 +220,11 @@ void OverviewPanel::OpenSettings() {
     SwitchOverviewTab(OverviewTab::Settings);
 }
 
+void OverviewPanel::OpenTrash() {
+    Open();
+    showDeleted_ = true;
+}
+
 // Opened as Open opens it, on the Canvases tab with nothing deleted shown -
 // see "The Overview" in docs/ARCHITECTURE.md.
 void OverviewPanel::OpenPicker(ItemId itemId, bool isCopy) {

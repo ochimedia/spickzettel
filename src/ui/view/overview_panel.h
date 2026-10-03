@@ -34,6 +34,9 @@ public:
     void Open();
     // Up, on the Settings tab.
     void OpenSettings();
+    // Up, on the Canvases tab with Show deleted on: the trash, and its
+    // Empty trash button.
+    void OpenTrash();
     // Up as the picker: a tile picked is where `item` goes, moved or copied.
     void OpenPicker(core::ItemId item, bool isCopy);
     // Put away: the picker, a name being edited or a key being captured -

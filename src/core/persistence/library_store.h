@@ -170,6 +170,12 @@ public:
     // bytes; 0 when nothing, and -1 when a WAL found at the open may hold
     // something.
     int64_t UncheckpointedBytes() const;
+    // What the library holds, in bytes: its pages less the free ones the
+    // deletes since the last Load left, which is what the file comes down
+    // to at the next Load (see incremental_vacuum there). 0 with no library
+    // open, or when it cannot be asked. What the size reminder goes by -
+    // see AppConfig::librarySizeReminder.
+    int64_t HeldBytes() const;
     static constexpr int64_t kCheckpointAtBytes = int64_t{64} << 20;
     void SetCheckpointAtBytesForTesting(int64_t bytes) { checkpointAtBytes_ = bytes; }
 

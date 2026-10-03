@@ -297,6 +297,12 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         Apply();
         return;
     }
+    // The library size reminder, kept from the start for the first frame
+    // in edit mode - see RemindOfLibrarySize.
+    if (libraryReminder_.has_value()) {
+        popups_.OpenLibraryReminder(*libraryReminder_);
+        libraryReminder_.reset();
+    }
     DrawCanvas(display.x, display.y);
     // 3. Open: what was asked for that only a frame can do - see Popups::Effect -
     // just before the popups it opens are drawn.
@@ -376,6 +382,7 @@ void OverlayApp::StackSurfaces() {
     Front("##cheat_sheet_panel");
     Front("##tutorial_card");
     Front(AppPopupWindow(PopupKind::ConfirmDelete));
+    Front(AppPopupWindow(PopupKind::LibraryReminder));
 }
 
 void OverlayApp::Prepare(float displayW, float displayH) {
@@ -542,6 +549,7 @@ void OverlayApp::DrawPanels(float displayW, float displayH) {
     // delete confirmation, which must stay reachable.
     tutorialCard_.Draw(displayW, displayH);
     popups_.DrawConfirmDelete();
+    popups_.DrawLibraryReminder();
 }
 
 void OverlayApp::DrawMessages() {
@@ -678,6 +686,11 @@ void OverlayApp::Do(const ViewAction& action) {
                    [&](const action::OpenTutorialList& a) { DoTutorial(a); },
                    [&](const action::BackToTutorial& a) { DoTutorial(a); },
                    [&](const action::PracticeSnippet&) { PlacePracticeSnippet(); },
+                   [&](const action::ShowTrash&) { overview_.OpenTrash(); },
+                   [&](const action::ShowTrashSettings&) {
+                       overview_.OpenSettings();
+                       settingsPage_.ShowSection(SettingsPage::SettingsSection::Behavior);
+                   },
                },
                action);
 }

@@ -102,8 +102,10 @@
   "deleted": {
     "confirmDelete": false,
     "confirmDeleteForGood": false,
-    "deleteForGoodAutomatically": false,
-    "afterDays": 21
+    "deleteForGoodAutomatically": true,
+    "afterDays": 21,
+    "remindWhenLibraryLarger": false,
+    "libraryLargerThanMb": 500
   },
   "display": {
     "id": "\\\\?\\DISPLAY#TEST#1",

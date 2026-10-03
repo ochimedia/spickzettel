@@ -297,12 +297,8 @@ void SettingsPage::Draw() {
         const bool pressed = SettingsSectionButton(row.id, row.label, settingsSection_ == row.section);
         host_.Mark(Anchor{AnchorId::SettingsSection, static_cast<uint64_t>(row.section)}, ImGui::GetItemRectMin(),
                    ImGui::GetItemRectMax());
-        if (pressed && settingsSection_ != row.section) {
-            // A row waiting for its key goes out of sight with its section,
-            // and stops waiting: left to wait, the next key - Escape to
-            // close the Overview - went to a row no one could see.
-            DisarmCapture();
-            settingsSection_ = row.section;
+        if (pressed) {
+            ShowSection(row.section);
         }
     }
     ImGui::EndChild();
@@ -812,6 +808,17 @@ void SettingsPage::RenderSettingsDefaults() {
 // deleted folders and canvases. Below the profile picker the rows a profile
 // may state for itself, each written into whichever of the defaults or a
 // profile the picker shows (editProfile_).
+void SettingsPage::ShowSection(SettingsSection section) {
+    if (settingsSection_ == section) {
+        return;
+    }
+    // A row waiting for its key goes out of sight with its section, and
+    // stops waiting: left to wait, the next key - Escape to close the
+    // Overview - went to a row no one could see.
+    DisarmCapture();
+    settingsSection_ = section;
+}
+
 void SettingsPage::RenderSettingsBehavior() {
     SettingsScopeBox globalBox;
     BeginSettingsScope(globalBox, SettingsScope::Global);
@@ -831,6 +838,17 @@ void SettingsPage::RenderSettingsBehavior() {
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(strings::kSettingsPurgeDeletedDays);
+    ImGui::EndDisabled();
+    // The reminder, laid out as retention is: the size kept while it is off.
+    SettingCheckbox(settings_, setting::kLibrarySizeReminder, "librarysizereminder",
+                    strings::kSettingsLibrarySizeReminder, nullptr);
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!Cfg().librarySizeReminder);
+    ImGui::SetNextItemWidth(Px(130.0f));
+    SettingNumber(settings_, setting::kLibrarySizeReminderMb, "##librarysizereminderMb", 100, 1000);
+    ImGui::SameLine();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(strings::kSettingsLibrarySizeReminderUnit);
     ImGui::EndDisabled();
     EndSettingsScope(globalBox);
 

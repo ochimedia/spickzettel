@@ -67,6 +67,7 @@ currently bound.
 - A button for emptying the trash, with Show deleted on in the Overview
 - Paste puts snippets at the pointer, or where the context menu was opened; Paste in place (Ctrl+Shift+V) puts them where they were. Both are in a snippet's context menu too
 - Select all (Ctrl+A) selects every snippet on the canvas
+- A reminder when the library grows past a size you choose (2000 MB by default), pointing to the trash and to Settings > Behavior
 
 #### Changes
 

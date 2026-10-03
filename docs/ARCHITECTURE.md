@@ -790,6 +790,19 @@ far shorter than the one meant. A file written before keeps what it
 says: every file lists every setting, so one written while retention
 was on by default goes on purging, as its owner was shown.
 
+With nothing emptying it by default, the trash only grows, so a start
+measures the library once retention has had its turn and, past a size
+(`AppConfig::librarySizeReminder`, on, at 2000 MB), keeps a reminder for
+the first frame in edit mode: a box like the delete confirmation that
+says how big the library is, with buttons to the trash (the Overview
+with Show deleted on, where Empty trash is) and to Settings > Behavior.
+View-only cannot answer a box, so it waits for edit mode, and it comes
+up once a run, so that a long session is not reminded again. The size
+is what the library holds - its pages less the free ones
+(`LibraryStore::HeldBytes`) - rather than the file's, which keeps the
+pages of what was just deleted until the next start gives them back: a
+trash emptied is no longer counted.
+
 A trash folder and then a trash library came before (see "Dead ends"):
 a delete that moves things somewhere else has to move them back whole,
 and a stamp in the record moves nothing.

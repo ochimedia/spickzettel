@@ -45,7 +45,16 @@ void Popups::DrawOverCanvas(float displayW, float displayH) {
     RenderShapeMenu();
 }
 
+void Popups::OpenLibraryReminder(int64_t bytes) {
+    PopupRecord popup;
+    popup.kind = PopupKind::LibraryReminder;
+    popup.bytes = bytes;
+    Open(std::move(popup));
+}
+
 void Popups::DrawConfirmDelete() { RenderConfirmDeletePopover(); }
+
+void Popups::DrawLibraryReminder() { RenderLibraryReminderPopover(); }
 
 namespace {
 // A round color swatch button - the .swatch equivalent (a plain colored
@@ -433,6 +442,8 @@ const char* PopupId(PopupKind kind) {
             return kShapeMenuId;
         case PopupKind::ConfirmDelete:
             return kConfirmDeletePopupId;
+        case PopupKind::LibraryReminder:
+            return kLibraryReminderPopupId;
     }
     return "";
 }
@@ -468,6 +479,7 @@ void Popups::Closed(PopupKind kind) {
         case PopupKind::EmptyCanvasMenu:
         case PopupKind::ShapeMenu:
         case PopupKind::ConfirmDelete:
+        case PopupKind::LibraryReminder:
             break;  // what it was about goes with the record
     }
     popup_.reset();
@@ -538,6 +550,7 @@ void Popups::ApplyEffects() {
                     case PopupKind::ItemProperties:
                     case PopupKind::ColorChooser:
                     case PopupKind::ConfirmDelete:
+                    case PopupKind::LibraryReminder:
                         ImGui::OpenPopup(PopupId(effect.popup));
                         break;
                 }
@@ -854,6 +867,56 @@ void Popups::RenderConfirmDeletePopover() {
 
     if (deletePressed) {
         host_.Act(action::Delete{target});
+    }
+}
+
+// Where the library stands and what makes it smaller, at the middle of the
+// screen as the delete confirmation is: the trash, which only ever grows
+// with retention off, and the setting that empties it - each a button that
+// goes there.
+void Popups::RenderLibraryReminderPopover() {
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    const bool open = ImGui::BeginPopup(kLibraryReminderPopupId);
+    Drawn(PopupKind::LibraryReminder, open);
+    if (!open) {
+        return;
+    }
+    if (!Up(PopupKind::LibraryReminder)) {
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
+    // In Explorer's units, as the setting is: megabytes up to a gigabyte,
+    // then gigabytes with a decimal.
+    const double megabytes = static_cast<double>(popup_->bytes) / (1024.0 * 1024.0);
+    char size[32];
+    if (megabytes < 1024.0) {
+        std::snprintf(size, sizeof(size), "%.0f MB", megabytes);
+    } else {
+        std::snprintf(size, sizeof(size), "%.1f GB", megabytes / 1024.0);
+    }
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Px(320.0f));
+    ImGui::Text(strings::kLibraryReminderText, size);
+    ImGui::Spacing();
+    ImGui::TextColored(theme::kGraphite200, "%s", strings::kLibraryReminderHint);
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+
+    const bool trashPressed = ImGui::Button(Labeled(strings::kLibraryReminderShowTrash, "reminder_trash"));
+    ImGui::SameLine();
+    const bool settingsPressed = ImGui::Button(Labeled(strings::kLibraryReminderSettings, "reminder_settings"));
+    ImGui::SameLine();
+    const bool okPressed = ImGui::Button(Labeled(strings::kLibraryReminderOk, "reminder_ok"));
+    if (trashPressed || settingsPressed || okPressed) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+
+    if (trashPressed) {
+        host_.Act(action::ShowTrash{});
+    } else if (settingsPressed) {
+        host_.Act(action::ShowTrashSettings{});
     }
 }
 

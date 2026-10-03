@@ -70,6 +70,8 @@ public:
     // per-application profile may override - see Draw.
     enum class SettingsSection { Appearance, Interaction, Behavior, Defaults, Hotkeys, Profiles, Debug };
     SettingsSection Section() const { return settingsSection_; }
+    // `section` shown, as its row pressed shows it.
+    void ShowSection(SettingsSection section);
     // Whose values the Behavior and Hotkeys sections show: nothing for the
     // defaults, else an index into Settings::Profiles. See editProfile_.
     std::optional<size_t> Showing() const { return editProfile_; }

@@ -102,7 +102,9 @@
     "confirmDelete": true,
     "confirmDeleteForGood": true,
     "deleteForGoodAutomatically": false,
-    "afterDays": 14
+    "afterDays": 14,
+    "remindWhenLibraryLarger": true,
+    "libraryLargerThanMb": 2000
   },
   "display": {
     "id": "",

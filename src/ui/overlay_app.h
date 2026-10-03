@@ -160,6 +160,12 @@ public:
     // canvases for good: said the next time the overlay comes up, rather
     // than while nobody is looking at it - see OnOverlayShown.
     void SayDeletedForGoodAtStart(size_t count, int days) { messages_.SayDeletedForGoodAtStart(count, days); }
+    // At startup, when the library holds `bytes`, past the size Settings
+    // reminds at (see AppConfig::librarySizeReminder): a box that says so
+    // the next time the overlay is up in edit mode, where it can be
+    // answered, and not again this run.
+    void RemindOfLibrarySize(int64_t bytes) { libraryReminder_ = bytes; }
+    bool IsLibraryReminderOpen() const { return popups_.Up(PopupKind::LibraryReminder); }
     // What that message currently says, empty for none - the readable half
     // of the pair above, and how a test asks whether something was said at
     // all rather than looking at pixels.
@@ -210,6 +216,9 @@ public:
     bool IsCheatSheetOpen() const { return PanelUp(PanelKind::CheatSheet); }
     // Whether the Overview is up on its Settings tab.
     bool IsOverviewOnSettings() const { return overview_.OnSettingsTab(); }
+    // Whether it shows what is deleted, and which section Settings shows.
+    bool IsOverviewShowingDeleted() const { return overview_.ShowingDeleted(); }
+    SettingsPage::SettingsSection SettingsSectionShown() const { return settingsPage_.Section(); }
     // Whether the color chooser is up - see Popups.
     bool IsColorChooserOpen() const { return popups_.Up(PopupKind::ColorChooser); }
     // Whether the snippet context menu is up, and over which snippet.
@@ -626,6 +635,8 @@ private:
     OverviewPanel overview_{session_, settings_, editor_, *this};
     CheatSheet cheatSheet_{settings_, editor_, *this};
     Popups popups_{session_, settings_, editor_, *this};
+    // See RemindOfLibrarySize: what it holds, until the box is opened.
+    std::optional<int64_t> libraryReminder_;
     CanvasBar canvasBar_{session_, settings_, editor_, *this};
     ScreenChrome chrome_{session_, settings_, *this};
     Messages messages_{session_};

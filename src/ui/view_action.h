@@ -145,6 +145,12 @@ struct BackToTutorial {};
 // Put one here: a snippet to practice on, on the canvas being looked at.
 struct PracticeSnippet {};
 
+// The library size reminder's buttons: the Overview with Show deleted on,
+// where Empty trash is; and Settings > Behavior, where retention and the
+// reminder are.
+struct ShowTrash {};
+struct ShowTrashSettings {};
+
 }  // namespace action
 
 using ViewAction =
@@ -154,6 +160,6 @@ using ViewAction =
                  action::Delete, action::RestoreMinimized, action::ClosePanel, action::FinishNoteEdit,
                  action::TutorialPress, action::StartTutorial, action::OpenTutorialList,
                  action::BackToTutorial,
-                 action::PracticeSnippet>;
+                 action::PracticeSnippet, action::ShowTrash, action::ShowTrashSettings>;
 
 }  // namespace sz::ui

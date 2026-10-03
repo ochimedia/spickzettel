@@ -2,12 +2,14 @@
 
 // The app's own popups - docs/VIEW_LAYER.md, sections 4 and 7: the snippet
 // menu, the canvas tile menu, empty canvas's menu, Properties, the color
-// chooser, the pen's or the eraser's shapes and the delete confirmation. The machine's Popup level says
+// chooser, the pen's or the eraser's shapes, the delete confirmation and
+// the library size reminder. The machine's Popup level says
 // which is up, one at a time, and opening one ends the one that was there;
 // this keeps one record of it, set when it is asked for and let go of when
 // its closing is done, and the queue of what only a frame can do to ImGui's
 // popups.
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
@@ -32,6 +34,7 @@ inline constexpr const char* kShapeMenuId = "##shape_menu";
 inline constexpr const char* kItemPropertiesPopupId = "##item_properties_popover";
 inline constexpr const char* kColorChooserPopupId = "##color_chooser";
 inline constexpr const char* kConfirmDeletePopupId = "##confirm_delete_popover";
+inline constexpr const char* kLibraryReminderPopupId = "##library_reminder_popover";
 // A popup's ImGui id, as its draw begins it.
 const char* PopupId(PopupKind kind);
 
@@ -66,6 +69,9 @@ public:
     void OpenShapeMenu(core::Tool tool, ImVec2 at);
     // The delete confirmation, for `target`.
     void OpenConfirmDelete(DeleteTarget target);
+    // The reminder that the library holds `bytes`, past the size Settings
+    // reminds at (see AppConfig::librarySizeReminder).
+    void OpenLibraryReminder(int64_t bytes);
 
     // ===== The machine's side (see Popup) =====
 
@@ -111,8 +117,10 @@ public:
     void ForgetEffects() { effects_.clear(); }
     // Stage 4: the five popups over the canvas.
     void DrawOverCanvas(float displayW, float displayH);
-    // Stage 6: the delete confirmation, over the panels.
+    // Stage 6: the delete confirmation and the library size reminder, over
+    // the panels.
     void DrawConfirmDelete();
+    void DrawLibraryReminder();
 
 private:
     const core::CanvasManager& Manager() const { return session_.Manager(); }
@@ -129,6 +137,7 @@ private:
         core::CanvasId canvas = 0;
         std::optional<DeleteTarget> deleteTarget;
         core::Tool tool = core::Tool::Draw;  // the shape menu's
+        int64_t bytes = 0;                   // the library reminder's
         ImVec2 at{0.0f, 0.0f};
         bool drawn = false;
     };
@@ -207,6 +216,7 @@ private:
     // folder. A snippet asks nothing: its delete is undoable instead (see
     // Session::DeleteItem), and a canvas takes every snippet on it along.
     void RenderConfirmDeletePopover();
+    void RenderLibraryReminderPopover();
 
     // Something only a frame can do to ImGui's popups, asked for from
     // wherever - between frames included - and done in the next frame's

@@ -659,6 +659,29 @@ TEST_F(UiTest, AboutOpensTheCheatSheet) {
     EXPECT_TRUE(App().IsCheatSheetOpen());
 }
 
+// The library size reminder's buttons go where the library is made
+// smaller: the trash, with Show deleted on, and Settings > Behavior.
+TEST_F(UiTest, TheLibraryReminderGoesToTheTrashOrToItsSettings) {
+    ShowEditMode();
+    StepFrame();
+    controller_->Overlay().RemindOfLibrarySize(int64_t{3} * 1024 * 1024 * 1024);
+    StepFrames(2);
+    ASSERT_TRUE(App().IsLibraryReminderOpen());
+    RunUi("show the trash", [](ImGuiTestContext* ctx) { ctx->ItemClick("//$FOCUSED/###reminder_trash"); });
+    StepFrames(2);
+    EXPECT_FALSE(App().IsLibraryReminderOpen());
+    EXPECT_TRUE(App().IsOverviewOpen());
+    EXPECT_TRUE(App().IsOverviewShowingDeleted());
+
+    controller_->Overlay().RemindOfLibrarySize(int64_t{3} * 1024 * 1024 * 1024);
+    StepFrames(2);
+    ASSERT_TRUE(App().IsLibraryReminderOpen());
+    RunUi("open its settings", [](ImGuiTestContext* ctx) { ctx->ItemClick("//$FOCUSED/###reminder_settings"); });
+    StepFrames(2);
+    EXPECT_TRUE(App().IsOverviewOnSettings());
+    EXPECT_EQ(App().SettingsSectionShown(), SettingsPage::SettingsSection::Behavior);
+}
+
 // The explanations moved out of the panel and behind a "?" per row, which
 // only works if the "?" is reachable and its popover lands in front - the
 // same stacking the dropdown above depends on, and the same failure if it

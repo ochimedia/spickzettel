@@ -123,8 +123,10 @@ AppConfig Everything() {
     c.editModeBorderWidthPx = 16.0f;
     c.editModeBorderOnlyWhenEmpty = true;
     c.profileable.freezeScreen = true;
-    c.purgeDeleted = false;
+    c.purgeDeleted = true;
     c.purgeDeletedAfterDays = 21;
+    c.librarySizeReminder = false;
+    c.librarySizeReminderMb = 500;
     c.confirmDelete = false;
     c.confirmDeleteForGood = false;
     c.screenshotDefaults = SnippetDefaults{false, 0.5f, 0.75f};
@@ -194,6 +196,11 @@ TEST(ConfigFilesTest, TheFirstReleasesSettingsAreReadAsItWroteThem) {
     expected.showFrameGraph = defaults.showFrameGraph;
     expected.itemBorderSelectedFollowsAccent = defaults.itemBorderSelectedFollowsAccent;
     expected.itemBorderColorSelectedRGBA = defaults.itemBorderColorSelectedRGBA;
+    expected.librarySizeReminder = defaults.librarySizeReminder;
+    expected.librarySizeReminderMb = defaults.librarySizeReminderMb;
+    // Everything() has retention on now that the default is off; 0.1.0's
+    // file has it off, as everything but the default then.
+    expected.purgeDeleted = false;
     EXPECT_EQ(ParseConfig(ReadFixture("v0.1.0-everything.json")), expected);
 }
 

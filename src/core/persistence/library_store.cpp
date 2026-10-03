@@ -715,6 +715,21 @@ int64_t LibraryStore::UncheckpointedBytes() const {
     return walFrames_ < 0 ? -1 : walFrames_ * (pageSize_ + kWalFrameHeaderBytes);
 }
 
+int64_t LibraryStore::HeldBytes() const {
+    if (db_ == nullptr) {
+        return 0;
+    }
+    int64_t pages = 0;
+    int64_t freePages = 0;
+    int64_t pageSize = 0;
+    if (ReadInt(db_, "PRAGMA page_count", pages) != SQLITE_OK ||
+        ReadInt(db_, "PRAGMA freelist_count", freePages) != SQLITE_OK ||
+        ReadInt(db_, "PRAGMA page_size", pageSize) != SQLITE_OK) {
+        return 0;
+    }
+    return std::max<int64_t>(pages - freePages, 0) * pageSize;
+}
+
 bool LibraryStore::CreateSchema() {
     // Before the first table, or it has no effect: deleted rows give their
     // pages back to the file at the next Load's incremental_vacuum rather

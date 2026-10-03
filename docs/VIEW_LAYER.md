@@ -217,7 +217,7 @@ order, including where that is surprising (section 9, finding 3).
 | 9 | The Overview: its backdrop, its panel, and ImGui's popups inside it | panel | the Panel level holds the Overview | Overview; Settings page |
 | 10 | The cheat sheet: its backdrop and its panel | panel | the Panel level holds the cheat sheet | Cheat sheet |
 | 10a | The tutorial card | window `##tutorial_card` | a tutorial topic runs, or its list is up | Tutorial card |
-| 11 | The delete confirmation | popup | the Popup level holds it | Popups |
+| 11 | The delete confirmation, the library size reminder | popup | the Popup level holds it | Popups |
 | 12 | The drag previews (a region, the rectangle eraser), the size preview, the modifier badge | overlays | their gesture or preview is on; not under a panel | Pointer |
 | 13 | The toast, the persistence warning | overlays | a message is up; a write has failed | Messages |
 | 13a | The tutorial's spotlight | overlay | the step points at something on screen, and its goal is not met | Tutorial card |
@@ -335,7 +335,7 @@ Every frame of edit mode runs these stages, in order:
 | 3. Open | the effect queue: popups opened and closed, ImGui's active widget let go | ImGui's popups and focus | `ApplyEffects` |
 | 4. Popups | surface 6 | as stage 2 | the five popups' `Render...` functions |
 | 5. Over the canvas | surfaces 7, 8 and 12 | nothing | the drag previews, `RenderBrushSizePreview`, `RenderToolModifierBadge`, `RenderScreenChrome` |
-| 6. Panels | surfaces 9 to 11 | as stage 2 | `RenderOverview`, `RenderCheatSheet`, `RenderConfirmDeletePopover` |
+| 6. Panels | surfaces 9 to 11 | as stage 2 | `RenderOverview`, `RenderCheatSheet`, `RenderConfirmDeletePopover`, `RenderLibraryReminderPopover` |
 | 7. Messages | surfaces 13 and 13a | nothing | `RenderActionToast`, `RenderPersistenceWarning` |
 | 8. Stack | the pass of C1 | the windows' order | the 19 calls, spread over stages 2 to 6 |
 | 9. Pointer | the pointer's shape; surface 14 | the window's cursor | `ApplyPointerShape`, `DrawSoftwareCursor` |

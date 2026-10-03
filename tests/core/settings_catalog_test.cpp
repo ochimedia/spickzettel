@@ -135,7 +135,7 @@ auto Fields(const AppConfig& c) {
                  raiseSelectedSnippet, screenshotTrigger, drawingTrigger, snippetBar, drawingBar, overviewShowsStrokes,
                  overviewShowsBitmaps, showCanvasBar, showEditModeBorder, editModeBorderColorRGBA,
                  editModeBorderWidthPx, editModeBorderOnlyWhenEmpty, purgeDeleted,
-                 purgeDeletedAfterDays, confirmDelete, confirmDeleteForGood, screenshotDefaults, drawingDefaults,
+                 purgeDeletedAfterDays, librarySizeReminder, librarySizeReminderMb, confirmDelete, confirmDeleteForGood, screenshotDefaults, drawingDefaults,
                  drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId, overlayDisplayName,
                  tutorialProgress] = c;
     return std::tie(hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
@@ -146,7 +146,7 @@ auto Fields(const AppConfig& c) {
                     raiseSelectedSnippet, screenshotTrigger, drawingTrigger, snippetBar, drawingBar,
                     overviewShowsStrokes, overviewShowsBitmaps, showCanvasBar, showEditModeBorder,
                     editModeBorderColorRGBA, editModeBorderWidthPx, editModeBorderOnlyWhenEmpty,
-                    purgeDeleted, purgeDeletedAfterDays, confirmDelete, confirmDeleteForGood, screenshotDefaults,
+                    purgeDeleted, purgeDeletedAfterDays, librarySizeReminder, librarySizeReminderMb, confirmDelete, confirmDeleteForGood, screenshotDefaults,
                     drawingDefaults, drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId,
                     overlayDisplayName, tutorialProgress);
 }

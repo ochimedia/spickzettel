@@ -103,8 +103,9 @@ enum class PopupKind {
     ColorChooser,
     ShapeMenu,
     ConfirmDelete,
+    LibraryReminder,
 };
-inline constexpr size_t kPopupKindCount = 7;
+inline constexpr size_t kPopupKindCount = 8;
 const char* PopupName(PopupKind kind);
 
 // A popup up over the canvas (section 5): the pointer is its - a press

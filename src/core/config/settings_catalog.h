@@ -150,6 +150,11 @@ inline constexpr GlobalSetting<BoolRule> kPurgeDeleted{
 inline constexpr GlobalSetting<IntRule> kPurgeDeletedAfterDays{
     {"deleted", "", "afterDays"}, {kPurgeDeletedAfterDaysMin, kPurgeDeletedAfterDaysMax}, E::Start,
     [](AppConfig& c) { return &c.purgeDeletedAfterDays; }};
+inline constexpr GlobalSetting<BoolRule> kLibrarySizeReminder{
+    {"deleted", "", "remindWhenLibraryLarger"}, {}, E::Start, [](AppConfig& c) { return &c.librarySizeReminder; }};
+inline constexpr GlobalSetting<IntRule> kLibrarySizeReminderMb{
+    {"deleted", "", "libraryLargerThanMb"}, {kLibrarySizeReminderMbMin, kLibrarySizeReminderMbMax}, E::Start,
+    [](AppConfig& c) { return &c.librarySizeReminderMb; }};
 
 // ----- display -----
 inline constexpr GlobalSetting<TextRule> kDisplayId{
@@ -214,6 +219,7 @@ inline constexpr auto kAll = std::tuple{
     &kDrawingKeepAspect, &kDrawingForegroundOpacity, &kDrawingBackgroundOpacity, &kDrawingBackgroundColor,
     &kNoteTextColor, &kNoteTextSize,
     &kConfirmDelete, &kConfirmDeleteForGood, &kPurgeDeleted, &kPurgeDeletedAfterDays,
+    &kLibrarySizeReminder, &kLibrarySizeReminderMb,
     &kDisplayId, &kDisplayName,
     &kDontStealFocus, &kTakeFocusOverElevated, &kSoftwarePointer, &kRawMouseInput, &kDontForwardKeystrokes,
     &kCounterRawMouseInput, &kCounterThreshold, &kFreezeScreen,

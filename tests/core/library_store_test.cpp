@@ -371,6 +371,33 @@ TEST_F(LibraryStoreTest, WhatTheLibraryNoLongerHoldsIsGoneWithItsPicture) {
     EXPECT_EQ(raw.Int("SELECT count(*) FROM pictures"), 0);
 }
 
+// What the library holds grows with a picture, and is back down as soon as
+// the picture is gone - before the next Load gives the file its pages back.
+TEST_F(LibraryStoreTest, WhatTheLibraryHoldsCountsPicturesUntilTheyAreGone) {
+    CanvasManagerSnapshot snapshot = MakeSampleSnapshot();
+    LibraryStore store(file_);
+    ASSERT_TRUE(store.Save(snapshot));
+    const int64_t empty = store.HeldBytes();
+    EXPECT_GT(empty, 0);
+
+    // Noise, which QOI cannot make much smaller than its pixels.
+    constexpr int kSide = 512;
+    std::vector<uint8_t> noise(static_cast<size_t>(kSide) * kSide * 4);
+    uint32_t state = 12345;
+    for (uint8_t& byte : noise) {
+        state = state * 1664525u + 1013904223u;
+        byte = static_cast<uint8_t>(state >> 24);
+    }
+    ASSERT_TRUE(store.SaveImage(4, noise.data(), kSide, kSide));
+    ASSERT_TRUE(store.Save(snapshot));
+    const int64_t withPicture = store.HeldBytes();
+    EXPECT_GT(withPicture, empty + int64_t{kSide} * kSide * 3);
+
+    snapshot.canvases[0].items.pop_back();  // the shot
+    ASSERT_TRUE(store.Save(snapshot));
+    EXPECT_LT(store.HeldBytes(), withPicture - int64_t{kSide} * kSide * 3);
+}
+
 // A folder that goes takes its canvases and their snippets with it, and
 // the snippets their pictures, by the schema's own cascade - whatever
 // wrote the delete.

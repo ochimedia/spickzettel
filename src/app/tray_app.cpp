@@ -82,6 +82,15 @@ bool TrayController::Initialize() {
                                                                   settings_.Stored().purgeDeletedAfterDays * day);
                 overlayApp_.SayDeletedForGoodAtStart(erased, settings_.Stored().purgeDeletedAfterDays);
             }
+            // How much the library holds, once retention has had its turn:
+            // past the size set, said once this start (see
+            // AppConfig::librarySizeReminder).
+            if (settings_.Stored().librarySizeReminder) {
+                const int64_t held = libraryStore_.HeldBytes();
+                if (held > int64_t{settings_.Stored().librarySizeReminderMb} * 1024 * 1024) {
+                    overlayApp_.RemindOfLibrarySize(held);
+                }
+            }
         } else {
             // Nothing to load: a genuinely first run. Distinct from a
             // library someone deliberately emptied, which loads fine as an

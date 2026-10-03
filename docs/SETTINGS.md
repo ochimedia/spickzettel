@@ -64,6 +64,8 @@ what settings are called:
 | `behavior.freezeScreen` | `freezeScreenInEditMode` | `ProfileableSettings::freezeScreen` |
 | `behavior.softwarePointer` | `editModeInput.useSoftwarePointer` | `ProfileableSettings::softwarePointer` |
 | `deleted.deleteForGoodAutomatically` | `purgeDeleted` | |
+| `deleted.remindWhenLibraryLarger` | `librarySizeReminder` | |
+| `deleted.libraryLargerThanMb` | `librarySizeReminderMb` | |
 | `drawing.raiseSelected` | `raiseSelectedSnippet` | |
 | `overview.showStrokes` | `overviewShowsStrokes` | |
 
@@ -245,6 +247,8 @@ checkboxes. Effect: Frame.
 | `confirmDeleteForGood` | `confirmDeleteForGood` | true | bool | Use |
 | `deleteForGoodAutomatically` | `purgeDeleted` | false | bool | Start |
 | `afterDays` | `purgeDeletedAfterDays` | 14 | 1..3650 held | Start |
+| `remindWhenLibraryLarger` | `librarySizeReminder` | true | bool | Start |
+| `libraryLargerThanMb` | `librarySizeReminderMb` | 2000 | 1..1000000 held | Start |
 
 **`display`**: Global. Rule: text. Edited from Settings > Appearance.
 Effect: Display.

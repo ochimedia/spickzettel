@@ -565,6 +565,13 @@
   "deleteConfirm.deleteForGood": "Delete permanently",
   "deleteConfirm.emptyTrash": "Empty trash",
 
+  "_libraryReminder": "The box shown when the library has grown past the size set in Settings > Behavior, once per start. %s in text is the size, as \"2.3 GB\".",
+  "libraryReminder.text": "Your library has grown to %s.",
+  "libraryReminder.hint": "Deleted folders and canvases stay in the trash until it is emptied: turn on \"Show deleted\" in the Overview and press \"Empty trash\". In Settings > Behavior they can be deleted from the trash automatically after a number of days, and this reminder can be changed or turned off.",
+  "libraryReminder.showTrash": "Show the trash",
+  "libraryReminder.settings": "Open Settings",
+  "libraryReminder.ok": "OK",
+
   "_settingsTabs": "The list down the left of the Settings tab.",
   "settings.scopeGlobal": "Global",
   "settings.scopeGlobalNote": "For every program",
@@ -678,7 +685,9 @@
   "settings.confirmDeleteForGoodHelp": "Asks before a folder or canvas that is already in the trash is deleted permanently when you use \"Show deleted\" in the Overview. That cannot be undone.",
   "settings.purgeDeleted": "Delete from the trash after",
   "settings.purgeDeletedDays": "days",
-  "settings.purgeDeletedHelp": "Choose whether you wish to get a confirmation dialog before moving folders and canvases to the trash and/or deleting them for good.\n\nDelete from the trash after: when switched on, anything that has been in the trash longer than this is deleted permanently the next time Spickzettel starts. It is off by default, and the trash keeps everything until you empty it: turn on \"Show deleted\" in the Overview and press \"Empty trash\".\n\nDeleted individual snippets are not kept in the trash and don't survive a restart of the app. You can use undo to quickly fix small accidents.",
+  "settings.librarySizeReminder": "Remind me when the library is larger than",
+  "settings.librarySizeReminderUnit": "MB",
+  "settings.purgeDeletedHelp": "Choose whether you wish to get a confirmation dialog before moving folders and canvases to the trash and/or deleting them for good.\n\nDelete from the trash after: when switched on, anything that has been in the trash longer than this is deleted permanently the next time Spickzettel starts. It is off by default, and the trash keeps everything until you empty it: turn on \"Show deleted\" in the Overview and press \"Empty trash\".\n\nDeleted individual snippets are not kept in the trash and don't survive a restart of the app. You can use undo to quickly fix small accidents.\n\nRemind me when the library is larger than: checked when Spickzettel starts. A library over this size shows a reminder the next time the overlay is up, with the ways to make it smaller.",
 
   "_debugTab": "Settings > Debug.",
   "debug.heading": "What to draw on top",
