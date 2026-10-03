@@ -41,7 +41,12 @@ std::vector<uint8_t> Stripes(int width, int height) {
     return pixels;
 }
 
-// `subresource` of `resource`, copied out through a staging texture.
+// The top-left `width` x `height` of `subresource` of `resource`, copied
+// out through a staging texture of that size. The region is named: a copy
+// with none takes the whole subresource, which must then fit the staging
+// texture. A GPU's driver let a 64x64 frame into a 64x1 one; WARP, which
+// a CI runner without a GPU draws with, does not, and the row came back
+// empty.
 std::vector<uint8_t> ReadBack(ID3D11Device* device, ID3D11Resource* resource, UINT subresource, UINT width,
                               UINT height) {
     ComPtr<ID3D11DeviceContext> context;
@@ -59,7 +64,8 @@ std::vector<uint8_t> ReadBack(ID3D11Device* device, ID3D11Resource* resource, UI
     if (FAILED(device->CreateTexture2D(&desc, nullptr, &staging))) {
         return {};
     }
-    context->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, resource, subresource, nullptr);
+    const D3D11_BOX region{0, 0, 0, width, height, 1};
+    context->CopySubresourceRegion(staging.Get(), 0, 0, 0, 0, resource, subresource, &region);
     D3D11_MAPPED_SUBRESOURCE mapped{};
     if (FAILED(context->Map(staging.Get(), 0, D3D11_MAP_READ, 0, &mapped))) {
         return {};
