@@ -36,11 +36,11 @@ TEST(CheatSheetTest, ShowsTheKeysAsShipped) {
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetShowHide), "Ctrl+Alt+S");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetSilentCapture), "Ctrl+Alt+X");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetSelf), "Ctrl+H");
-    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetPen), "P");
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetPen), "W");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetCopy), "Ctrl+C");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetScreenshotArea), "Drag");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetDrawingArea), "Ctrl+Drag");
-    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetText), "") << "Text ships unbound, so has no row";
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetText), "A");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetUndo), "Ctrl+Z, Ctrl+Y");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetEsc), "Esc");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetDelete), "Delete, Backspace");

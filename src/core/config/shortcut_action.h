@@ -64,16 +64,16 @@ constexpr size_t ShortcutActionIndex(ShortcutAction action) { return static_cast
 std::string_view ShortcutActionKey(ShortcutAction action);
 std::optional<ShortcutAction> ShortcutActionFromKey(std::string_view key);
 
-// What ships bound: the four marks-on-screen actions that get reached for
-// constantly, on the letters that name them, and the clipboard's three on
-// Ctrl+C/X/V, which every application on the machine has already taught
-// the hand - with Paste in place on Ctrl+Shift+V, where the programs that
-// have it put it, and Select all on Ctrl+A. Duplicate and "new canvas
-// with the selection" ship on Ctrl+D and Ctrl+Shift+N for the same reason
-// - both are chords rather than letters, so neither can fire from
-// ordinary typing. Everything else starts unset rather than being given a
-// letter nobody asked for - a shortcut that fires a tool you didn't want
-// is worse than no shortcut.
+// What ships bound: the tools on the letters around W, A, S and D, where
+// the left hand already rests over a game - Q the plain pointer, W the
+// pen, E the eraser, A text, S a screenshot, D a drawing - so that every
+// tool is reached without looking. The clipboard's three on Ctrl+C/X/V,
+// which every application on the machine has already taught the hand,
+// with Paste in place on Ctrl+Shift+V, where the programs that have it
+// put it, and Select all on Ctrl+A. New canvas is Ctrl+N, as "new" is
+// everywhere; Duplicate and "new canvas with the selection" ship on
+// Ctrl+D and Ctrl+Shift+N - chords rather than letters, so neither fires
+// from ordinary typing. The cheat sheet is Ctrl+H, "help".
 ShortcutBindings DefaultShortcuts();
 
 }  // namespace sz::core

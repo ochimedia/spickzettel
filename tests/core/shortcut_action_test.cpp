@@ -26,12 +26,15 @@ const platform::KeyCombo& BindingFor(const ShortcutBindings& bindings, ShortcutA
     return bindings[ShortcutActionIndex(action)];
 }
 
-TEST(ShortcutActionTest, DefaultsBindTheFourReachedForMost) {
+// The tools under the left hand, around W, A, S and D.
+TEST(ShortcutActionTest, TheToolsShipAroundWASD) {
     const ShortcutBindings bindings = DefaultShortcuts();
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Select), Plain('Q'));
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Draw), Plain('W'));
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Erase), Plain('E'));
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Text), Plain('A'));
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewScreenshot), Plain('S'));
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewDrawing), Plain('D'));
-    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Erase), Plain('E'));
-    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Draw), Plain('P'));
 }
 
 // The clipboard's three on the chords every application on the machine
@@ -43,18 +46,16 @@ TEST(ShortcutActionTest, TheClipboardShipsOnTheUsualChords) {
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::Paste), WithCtrl('V'));
 }
 
-// Duplicate on the chord it has everywhere else, and the canvas that
-// takes the selection with it on the "new" chord with Shift - both chords
-// rather than letters, so neither can fire from ordinary typing. Ctrl+D
-// sits beside a plain D for a new drawing, which the exact-modifier match
-// in Editor::CommandForKey keeps apart.
-TEST(ShortcutActionTest, DuplicateAndTheCanvasThatTakesTheSelectionShipBound) {
+// Duplicate on the chord it has everywhere else, a new canvas on "new",
+// and the canvas that takes the selection with it on "new" with Shift.
+// Ctrl+D sits beside a plain D for a new drawing, which the
+// exact-modifier match in Editor::CommandForKey keeps apart.
+TEST(ShortcutActionTest, DuplicateAndTheNewCanvasesShipOnChords) {
     const ShortcutBindings bindings = DefaultShortcuts();
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::Duplicate), WithCtrl('D'));
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewCanvas), WithCtrl('N'));
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewCanvasWithSelection), WithCtrlShift('N'));
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewDrawing), Plain('D'));
-    EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewCanvas), platform::KeyCombo{})
-        << "the plain new canvas keeps no key of its own";
 }
 
 // Ctrl+H, "help" - the key the welcome note names.
@@ -75,18 +76,16 @@ TEST(ShortcutActionTest, PasteInPlaceShipsOnCtrlShiftV) {
     EXPECT_EQ(ShortcutActionKey(ShortcutAction::PasteInPlace), "pasteInPlace");
 }
 
-TEST(ShortcutActionTest, EverythingElseStartsUnbound) {
+// Every action ships with a key, and no two with the same one: whichever
+// came first in the command table would take it from the other.
+TEST(ShortcutActionTest, EveryActionShipsBoundAndNoTwoAlike) {
     const ShortcutBindings bindings = DefaultShortcuts();
-    for (const ShortcutAction action : kAllShortcutActions) {
-        const bool bound = action == ShortcutAction::NewScreenshot || action == ShortcutAction::NewDrawing ||
-                           action == ShortcutAction::Erase || action == ShortcutAction::Draw ||
-                           action == ShortcutAction::SelectAll || action == ShortcutAction::Copy ||
-                           action == ShortcutAction::Cut || action == ShortcutAction::Paste ||
-                           action == ShortcutAction::PasteInPlace || action == ShortcutAction::Duplicate ||
-                           action == ShortcutAction::NewCanvasWithSelection ||
-                           action == ShortcutAction::CheatSheet;
-        EXPECT_EQ(BindingFor(bindings, action).key != 0, bound)
-            << "action " << ShortcutActionKey(action);
+    for (size_t i = 0; i < kShortcutActionCount; ++i) {
+        EXPECT_TRUE(bindings[i].IsValid()) << "action " << ShortcutActionKey(kAllShortcutActions[i]);
+        for (size_t j = 0; j < i; ++j) {
+            EXPECT_NE(bindings[i], bindings[j]) << ShortcutActionKey(kAllShortcutActions[i]) << " and "
+                                                << ShortcutActionKey(kAllShortcutActions[j]);
+        }
     }
 }
 
@@ -148,7 +147,7 @@ TEST(ShortcutActionTest, ConfigWithNoShortcutsObjectKeepsTheDefaults) {
     const AppConfig partial = ParseConfig(R"({"shortcuts": {"text": "T"}})");
     EXPECT_EQ(partial.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)], Plain('T'));
     // Untouched by a file that only mentioned one of them.
-    EXPECT_EQ(partial.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)], Plain('P'));
+    EXPECT_EQ(partial.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)], Plain('W'));
 }
 
 TEST(ShortcutActionTest, ExplicitNullIsUnbound) {

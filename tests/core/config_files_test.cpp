@@ -151,19 +151,36 @@ TEST(ConfigFilesTest, EverySettingChangedIsWrittenAsItAlwaysHasBeen) {
     EXPECT_FALSE(TryParseConfig(ReadFixture("current-everything.json"))->changed);
 }
 
+// The keys a file names are its keys, even the defaults of then: a file
+// lists every shortcut it was written with, so the tools moved around
+// W, A, S and D in 0.2.3 reach a new file, or a key set by hand, and not
+// one that kept what shipped before (docs/ARCHITECTURE.md, "Tool
+// shortcuts").
+void WithTheShortcutsOf010(AppConfig& config) {
+    ShortcutBindings& shortcuts = config.profileable.shortcuts;
+    shortcuts[ShortcutActionIndex(ShortcutAction::Draw)] = platform::KeyCombo{false, false, false, 'P'};
+    shortcuts[ShortcutActionIndex(ShortcutAction::Text)] = platform::KeyCombo{};
+    shortcuts[ShortcutActionIndex(ShortcutAction::Select)] = platform::KeyCombo{};
+    shortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)] = platform::KeyCombo{};
+}
+
 TEST(ConfigFilesTest, TheFileTheFirstReleaseWroteReadsAsTheDefaults) {
     // It says drawing.paintPixels and diagnostics.showLibraryTreeHud, which
     // are gone, and nothing about the settings added since.
-    EXPECT_EQ(ParseConfig(ReadFixture("v0.1.0-defaults.json")), DefaultConfig());
+    AppConfig expected = DefaultConfig();
+    WithTheShortcutsOf010(expected);
+    EXPECT_EQ(ParseConfig(ReadFixture("v0.1.0-defaults.json")), expected);
 }
 
 TEST(ConfigFilesTest, TheFirstReleasesSettingsAreReadAsItWroteThem) {
     // The same values as Everything(), as far as v0.1.0 had the settings.
     AppConfig expected = Everything();
     const AppConfig defaults = DefaultConfig();
-    // No mouse button could be a shortcut yet.
-    expected.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
-        defaults.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)];
+    // No mouse button could be a shortcut yet, and the tools were where
+    // 0.1.0 put them.
+    expected.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)] = platform::KeyCombo{};
+    expected.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Select)] = platform::KeyCombo{};
+    expected.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewCanvas)] = platform::KeyCombo{};
     // Added since.
     expected.uiScalePercent = defaults.uiScalePercent;
     expected.screenshotDefaults = defaults.screenshotDefaults;

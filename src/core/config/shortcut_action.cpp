@@ -57,10 +57,14 @@ ShortcutBindings DefaultShortcuts() {
         bindings[ShortcutActionIndex(action)] = platform::KeyCombo{/*ctrl=*/true, /*alt=*/false,
                                                                    /*shift=*/false, /*key=*/key};
     };
+    // The tools under the left hand, around W, A, S and D.
+    bind(ShortcutAction::Select, 'Q');
+    bind(ShortcutAction::Draw, 'W');
+    bind(ShortcutAction::Erase, 'E');
+    bind(ShortcutAction::Text, 'A');
     bind(ShortcutAction::NewScreenshot, 'S');
     bind(ShortcutAction::NewDrawing, 'D');
-    bind(ShortcutAction::Erase, 'E');
-    bind(ShortcutAction::Draw, 'P');
+    bindWithCtrl(ShortcutAction::NewCanvas, 'N');
     bindWithCtrl(ShortcutAction::SelectAll, 'A');
     bindWithCtrl(ShortcutAction::Copy, 'C');
     bindWithCtrl(ShortcutAction::Cut, 'X');
@@ -69,9 +73,9 @@ ShortcutBindings DefaultShortcuts() {
     bindWithCtrl(ShortcutAction::CheatSheet, 'H');
     bindings[ShortcutActionIndex(ShortcutAction::PasteInPlace)] =
         platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/'V'};
-    // Ctrl+Shift+N rather than Ctrl+N: the plain chord is "new" in every
-    // browser and editor there is, and this one takes the selection with
-    // it, which is the heavier of the two things to do by accident.
+    // Ctrl+N with Shift: the plain chord is the plain new canvas, and this
+    // one takes the selection with it, which is the heavier of the two
+    // things to do by accident.
     bindings[ShortcutActionIndex(ShortcutAction::NewCanvasWithSelection)] =
         platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/'N'};
     return bindings;

@@ -1302,16 +1302,28 @@ possible later restriction rather than a rule today.
 ### Tool shortcuts
 
 Every drawing tool, creation tool and clipboard action can carry a key,
-pressed while the overlay is up in edit mode. Four ship bound (`S`
-screenshot, `D` drawing, `E` eraser, `P` pen) plus the clipboard's usual
-`Ctrl+C/X/V`, `Ctrl+Shift+V` to paste in place, `Ctrl+A` to select all,
-`Ctrl+D` to duplicate the selection, `Ctrl+Shift+N` for a new canvas
-the selection comes along to and `Ctrl+H` for the cheat sheet; the rest
-start unset, because a shortcut that fires a tool you did not want is
-worse than no shortcut. The chords are safe to ship where a letter
-would not be, since a chord cannot fire from ordinary typing - `Ctrl+D`
-sits beside the plain `D` that makes a drawing, and the exact-modifier
-match keeps them apart.
+pressed while the overlay is up in edit mode. Every one ships bound
+(`DefaultShortcuts`). The tools sit on the letters around W, A, S and D,
+where the left hand already rests over a game: `Q` the plain pointer,
+`W` pen, `E` eraser, `A` text, `S` screenshot, `D` drawing. The
+clipboard has its usual `Ctrl+C/X/V`, with `Ctrl+Shift+V` to paste in
+place, `Ctrl+A` to select all and `Ctrl+D` to duplicate; `Ctrl+N` makes
+a new canvas, `Ctrl+Shift+N` one the selection comes along to, and
+`Ctrl+H` opens the cheat sheet. A chord cannot fire from ordinary
+typing - `Ctrl+D` sits beside the plain `D` that makes a drawing, and the
+exact-modifier match keeps them apart - and a bare letter types into a
+note while one is being typed, as every key does (`TypingNote`).
+
+Until 0.2.3 only four letters shipped (`S`, `D`, `E` and `P` for the
+pen) and Text, Select and New canvas started unset, on the grounds that
+a shortcut firing a tool you did not want is worse than none. Used over
+games, the tools wanted to be together under one hand more than they
+wanted to be safe from a stray key, and in edit mode no key is anything
+else's. A settings file lists every shortcut it was written with, so the
+new defaults reach a new file only; an older one keeps its keys, and is
+not migrated, since a key still at the old default cannot be told from
+one chosen to be there (user decision, 2026-10-03). Set by hand in
+Settings > Hotkeys, or left out of the file, a key takes the new default.
 
 A shortcut can be a mouse button instead of a key: the middle one or a
 side one, with modifiers or without, pressed at the row in Settings like

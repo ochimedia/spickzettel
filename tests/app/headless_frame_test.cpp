@@ -700,7 +700,7 @@ TEST_F(HeadlessAppTest, APopupTakesEveryKeyAndEscapeClosesOnlyIt) {
 
     PressCtrlKey(ImGuiKey_Z);
     PressKey(ImGuiKey_Delete);
-    PressKey(ImGuiKey_P);
+    PressKey(ImGuiKey_W);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "neither undone nor deleted under the menu";
     EXPECT_FALSE(App().InDrawingMode());
     EXPECT_TRUE(App().IsItemContextMenuOpen());
@@ -4221,7 +4221,7 @@ TEST_F(OverlappingItemsTest, TheBarShowsBothGroupsInEitherMode) {
     ASSERT_TRUE(pen.has_value() && pin.has_value());
     EXPECT_LT(pen->x, pin->x) << "the drawing tools first";
 
-    PressKey(ImGuiKey_P);  // Draw, for the selected back item
+    PressKey(ImGuiKey_W);  // Draw, for the selected back item
     ASSERT_EQ(App().ActiveTool(), Tool::Draw);
     ASSERT_EQ(App().DrawingItems(), std::vector<ItemId>{backId_});
     EXPECT_EQ(App().Selection().size(), 1u);
@@ -4459,8 +4459,8 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
     ASSERT_EQ(App().EditingNote(), std::optional<ItemId>(note));
     EXPECT_EQ(App().InputStack(), "Canvas / DrawingMode / - / - / TypingNote / -");
 
-    ImGui::GetIO().AddInputCharacter('p');
-    PressKey(ImGuiKey_P);
+    ImGui::GetIO().AddInputCharacter('w');
+    PressKey(ImGuiKey_W);
     EXPECT_EQ(App().ActiveTool(), Tool::Text) << "no tool picked under the field";
     PressKey(ImGuiKey_Delete);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "and no snippet deleted either";
@@ -4469,7 +4469,7 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
 
     PressKey(ImGuiKey_Escape);
     EXPECT_FALSE(App().EditingNote().has_value());
-    EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "p") << "Escape keeps what was typed";
+    EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "w") << "Escape keeps what was typed";
     EXPECT_EQ(App().DrawingItems(), std::vector<ItemId>{note}) << "and ends only the typing";
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "");
@@ -4791,7 +4791,7 @@ TEST_F(HeadlessSaveTest, LeavingDrawingModeMidStrokeKeepsAndSavesTheStroke) {
     StepFrame();
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Move);
     StepFrame();
-    PressKey(ImGuiKey_P);
+    PressKey(ImGuiKey_W);
     ASSERT_FALSE(App().InDrawingMode());
     RawMouse(500.0f, 500.0f, platform::MouseEventKind::Up);
     MouseButtonEvent(ImGuiMouseButton_Left, false);

@@ -119,6 +119,7 @@ If the app crashes, it writes a crash report to
 
 #### Changes
 
+- Every tool has a key out of the box, together around W, A, S and D: Q select, W pen, E eraser, A text, S screenshot, D drawing - and Ctrl+N makes a new canvas. A settings file from an earlier version keeps the keys it has; set them in Settings > Hotkeys
 - With Show deleted on, deleted folders are told apart from folders with deleted canvases by color - red and yellow - with a legend for the two
 - The tutorial's rectangle eraser step accepts a Ctrl-drag with the round eraser, as its text says
 - The Folders and canvases tutorial keeps the Overview open on the way back to its folder, and opens a canvas at the end instead

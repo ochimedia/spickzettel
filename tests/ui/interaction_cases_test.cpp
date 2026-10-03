@@ -823,7 +823,7 @@ TEST_F(InteractionCasesTest, EscapePutsTheHandDownOneStageAtATime) {
     held_.ctrl = true;
     Key('X');  // cut
     held_.ctrl = false;
-    Key('P');  // the pen: drawing mode on the selection
+    Key('W');  // the pen: drawing mode on the selection
     ASSERT_EQ(editor_.DrawingItems(), std::vector<ItemId>{a});
 
     Escape();

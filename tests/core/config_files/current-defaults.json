@@ -119,13 +119,13 @@
     "freezeScreen": false
   },
   "shortcuts": {
-    "pen": "P",
+    "pen": "W",
     "eraser": "E",
-    "text": null,
-    "select": null,
+    "text": "A",
+    "select": "Q",
     "newScreenshot": "S",
     "newDrawing": "D",
-    "newCanvas": null,
+    "newCanvas": "Ctrl+N",
     "newCanvasWithSelection": "Ctrl+Shift+N",
     "selectAll": "Ctrl+A",
     "copy": "Ctrl+C",
