@@ -24,6 +24,9 @@ Originally built for keeping notes over a game without alt-tabbing away from it.
 - Some games watch for tools that draw over them or read their input,
   and may treat this one as a cheat. If a game might object, quit
   Spickzettel before you start it.
+- The overlay may not work correctly with games running in exclusive
+  fullscreen mode. In such cases, check if the game has support for a
+  borderless window mode.
 
 
 ## Questions
@@ -76,6 +79,7 @@ currently bound.
 - With Show deleted on, deleted folders are told apart from folders with deleted canvases by color - red and yellow - with a legend for the two
 - Snippets are no longer named ("Region 1", "Drawing 2"): the names could not be changed and said nothing, and the dock and Move to another canvas no longer show them
 - Refined the tutorial's rectangle eraser step, the Folders and canvases tutorial, and the Capturing tutorial
+- A third note under Important notes, and in the tutorial: the overlay may not work over games in exclusive fullscreen
 - Refined various help and tutorial texts
 - A tutorial topic quit partway no longer goes on after a restart; Basics starts over from its welcome until it is finished or skipped
 

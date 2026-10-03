@@ -251,9 +251,9 @@ out, so the tutorial still never traps the user.
 
 **Skip.** It goes to a last card, "Tutorial skipped":
 
-- The card shows the two warnings (Basics' steps 6 and 7, section 4) in
+- The card shows the three warnings (Basics' steps 6 to 8, section 4) in
   short form. In Basics it leaves out those the user has already passed
-  in this run; from any other topic it shows both, until Basics has been
+  in this run; from any other topic it shows all three, until Basics has been
   finished once (13.6). Someone who skips at once still sees them.
 - It offers Back, to the step skipped from, so a misclick costs nothing.
   That is why no confirmation box is needed.
@@ -293,8 +293,9 @@ column, "waits" marks a gated step (section 3).
 | 5 | `undo` | do | moves on | Deleted by mistake? {undo} brings it back. It takes back anything you did, a step at a time. | - | in the tutorial folder; canvas uncovered; the subject's canvas; a deleted subject | the subject back on the canvas, after being deleted in this step (or when it began) | - |
 | 6 | `programs` | read | moves on | Set it up for your programs. Some games break when the overlay takes focus; others need it to. Look through Settings > Behavior, and make a profile for each program that needs its own. | - | - | Next | - |
 | 7 | `antiCheat` | read | moves on | Careful with anti-cheat. Some games watch for tools that draw over them or read their input. If a game might object, quit Spickzettel before you start it. | - | - | Next | - |
-| 8 | `away` | do | moves on | Press {editMode} to put the overlay away and go back to your program. Press it again to come back here. With the hotkey unbound, the tray icon instead. | - | - | the overlay has come back since the step began | - |
-| 9 | `end` | read | Done | That's the basics. {cheatSheet} shows every key and gesture, and a right-click on anything shows what it can do. More topics has the others. | - | - | Done | - |
+| 8 | `exclusiveFullscreen` | read | moves on | Exclusive fullscreen. The overlay may not work correctly with games running in exclusive fullscreen mode. In such cases, check if the game has support for a borderless window mode. | - | - | Next | - |
+| 9 | `away` | do | moves on | Press {editMode} to put the overlay away and go back to your program. Press it again to come back here. With the hotkey unbound, the tray icon instead. | - | - | the overlay has come back since the step began | - |
+| 10 | `end` | read | Done | That's the basics. {cheatSheet} shows every key and gesture, and a right-click on anything shows what it can do. More topics has the others. | - | - | Done | - |
 
 The needs of `move`, `resize` and `delete` come after those every step
 about a snippet on the canvas has first: the tutorial folder, the canvas
@@ -350,10 +351,12 @@ review:
 
 - **Undo** is the other half of delete. A first delete is less
   frightening when the next card takes it back.
-- **The two warnings** were first-run notes. They are read steps now
-  (question 4). They come before the step that sends the user back to
-  their program, because that is when they matter: the anti-cheat
-  warning is about starting a game.
+- **The warnings** - the first two were first-run notes - are read
+  steps now (question 4). They come before the step that sends the user
+  back to their program, because that is when they matter: the
+  anti-cheat warning is about starting a game, and the third, added on
+  2026-10-03, about how it runs: exclusive fullscreen, where the overlay
+  may not work.
 - **Away** is the one thing a first-time user must know to get back to
   their program (question 8).
 
@@ -857,7 +860,7 @@ time edit mode comes up):
 
 **The first-run notes are gone** (question 4). A first run places no
 notes. The welcome note's content is on Basics' first and last cards,
-and the two warnings are Basics' steps 6 and 7, and on the skip card
+and the warnings are Basics' steps 6 to 8, and on the skip card
 (section 3).
 
 ### 7.7 What does not change
@@ -954,7 +957,7 @@ gesture.
   Settings button, open it; More topics ends the topic as Done does,
   and Close goes back to a topic still running (section 20); a row
   starts its topic at its first step; each topic's status; Drawing's
-  skip card shows the two warnings until Basics is finished.
+  skip card shows the warnings until Basics is finished.
 - **The stack.** The table in `tests/support/view_stack.h` gains the
   card's row.
 - **By hand.** A scratch instance with its own APPDATA, and a screenshot
@@ -1099,7 +1102,7 @@ Asked with the topics (section 13), after phase 3 was built:
       a restart (13.7);
     - one folder per run of a topic, named for it, with the folders
       made during a run counted as its space (13.5);
-    - the two warnings stay in Basics, and the skip card of any topic
+    - the warnings stay in Basics, and the skip card of any topic
       shows them until Basics is finished (13.6);
     - the derail matrix, the walk-through and the chain's shape test
       run per topic (13.9).
@@ -1178,7 +1181,7 @@ The new parts are:
 
 | Id | Title | What it covers | Status |
 |---|---|---|---|
-| `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the two warnings; putting the overlay away and back | built: section 4's steps, but three |
+| `basics` | Basics | a screenshot; moving and resizing it; deleting it and undoing that; the three warnings; putting the overlay away and back | built: section 4's steps, but three |
 | `pinning` | Pinning and view mode | pinning a snippet, and the pinned view; making it see-through with the wheel or Properties; view mode; unpinning | built: section 14 |
 | `drawing` | Drawing and notes | drawing mode, a stroke, stopping; the color; the width; a line and a rectangle; the eraser, its rectangle and the right button; a note | built: section 15 |
 | `capturing` | Capturing | a blank drawing; a full-screen screenshot; the quick and silent capture hotkeys, which work while the overlay is away | built: section 16 |
@@ -1220,7 +1223,7 @@ spotlight shown in it, and anchors marked by its owner (13.8).
 
 **Basics** is section 4's chain without steps 4 to 6 (`drawingMode`,
 `draw`, `stopDrawing`), in the same order: `welcome`, `screenshot`,
-`move`, `resize`, `delete`, `undo`, `programs`, `antiCheat`, `away`,
+`move`, `resize`, `delete`, `undo`, `programs`, `antiCheat`, `exclusiveFullscreen`, `away`,
 `end`. Nothing in it depends on the steps that leave. `delete` needs
 drawing mode off, and already has its line for when it is on. The end
 card names the other topics.
@@ -1340,7 +1343,7 @@ Opening the list keeps nothing.
 
 ### 13.6 The warnings on the skip card
 
-The two warnings are steps of Basics. The skip card of **any** topic
+The three warnings are steps of Basics. The skip card of **any** topic
 shows them until Basics has been finished once, so a user who skips
 straight to Drawing on the first day still sees them. Within Basics,
 the rule of section 3 stays: warnings already passed in this run are
@@ -1426,7 +1429,7 @@ And for the list:
   first step, in a new folder;
 - choosing another topic while one runs keeps the old one's folder and
   progress;
-- Drawing's skip card shows the two warnings until Basics has been
+- Drawing's skip card shows the warnings until Basics has been
   finished;
 - the progress is kept per topic, and the running topic resumes.
 

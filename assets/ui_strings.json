@@ -224,6 +224,8 @@
   "tutorial.programs.text": "Different applications and games behave differently with an overlay on top. Look through {ui:Settings > Behavior}, and make a profile for each program that needs different settings.",
   "tutorial.antiCheat.title": "Careful with anti-cheat",
   "tutorial.antiCheat.text": "Some games watch for tools that draw over them or read their input. If a game might object, quit Spickzettel before you start it.",
+  "tutorial.exclusiveFullscreen.title": "Exclusive fullscreen",
+  "tutorial.exclusiveFullscreen.text": "The overlay may not work correctly with games running in exclusive fullscreen mode. In such cases, check if the game has support for a borderless window mode.",
   "tutorial.away.title": "Back to your program",
   "tutorial.away.text": "Press {key:toggleEditMode} to hide the overlay and go back to your program. Press it again to come back here.",
   "tutorial.away.textTray": "Click the Spickzettel icon in the notification area to hide the overlay and go back to your program. Click it again to come back here.",

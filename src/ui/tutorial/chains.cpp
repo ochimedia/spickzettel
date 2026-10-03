@@ -218,6 +218,12 @@ std::vector<Step> MakeBasics() {
         .text = [](const World&) { return Fixed(strings::kTutorialAntiCheatText); },
     });
     chain.push_back(Step{
+        .id = "exclusiveFullscreen",
+        .warning = true,
+        .title = strings::kTutorialExclusiveFullscreenTitle,
+        .text = [](const World&) { return Fixed(strings::kTutorialExclusiveFullscreenText); },
+    });
+    chain.push_back(Step{
         .id = "away",
         .kind = StepKind::Do,
         .title = strings::kTutorialAwayTitle,

@@ -237,6 +237,9 @@ TEST_F(BasicsChainTest, CanBeWalkedTheWayAUserWould) {
     ASSERT_EQ(Id(), "antiCheat");
     tutorial_.Next();
     Frame();
+    ASSERT_EQ(Id(), "exclusiveFullscreen");
+    tutorial_.Next();
+    Frame();
 
     ASSERT_EQ(Id(), "away");
     world_.showings += 1;

@@ -295,7 +295,7 @@ protected:
     // What a hand does for each step of every topic, as the step's text
     // says it: real gestures, keys and hotkeys.
     void DoStep(const std::string& id) {
-        if (id == "welcome" || id == "programs" || id == "antiCheat") {
+        if (id == "welcome" || id == "programs" || id == "antiCheat" || id == "exclusiveFullscreen") {
             Press(TutorialButton::Next);
         } else if (id == "screenshot") {
             Drag(300.0f, 360.0f, 600.0f, 560.0f);
@@ -1376,8 +1376,8 @@ TEST_F(TutorialAppTest, SkipShowsTheWarningsNotReachedAndDoneLetsGo) {
     WalkTo("move");
     Press(TutorialButton::Skip);
     EXPECT_EQ(Runner().GetState(), tutorial::Tutorial::State::Skipped);
-    EXPECT_EQ(Runner().WarningsNotReached().size(), 2u);
-    EXPECT_EQ(App().TutorialSkipWarnings().size(), 2u);
+    EXPECT_EQ(Runner().WarningsNotReached().size(), 3u);
+    EXPECT_EQ(App().TutorialSkipWarnings().size(), 3u);
     const ImGuiWindow* card = ImGui::FindWindowByName("##tutorial_card");
     ASSERT_NE(card, nullptr);
     EXPECT_TRUE(card->Active) << "the skip card";
@@ -1391,15 +1391,16 @@ TEST_F(TutorialAppTest, SkipShowsTheWarningsNotReachedAndDoneLetsGo) {
     EXPECT_FALSE(card->Active);
 }
 
-// Basics' two warnings, on the skip card of any topic, until Basics has
+// Basics' three warnings, on the skip card of any topic, until Basics has
 // been finished once (section 13.6).
 TEST_F(TutorialAppTest, AnyTopicsSkipCardShowsTheWarningsUntilBasicsIsFinished) {
     StartTheTutorial("drawing");
     Press(TutorialButton::Skip);
     const std::vector<const tutorial::Step*> warnings = App().TutorialSkipWarnings();
-    ASSERT_EQ(warnings.size(), 2u);
+    ASSERT_EQ(warnings.size(), 3u);
     EXPECT_EQ(warnings[0]->id, "programs");
     EXPECT_EQ(warnings[1]->id, "antiCheat");
+    EXPECT_EQ(warnings[2]->id, "exclusiveFullscreen");
     DoneKeeping();
 
     AppConfig config = DefaultConfig();
@@ -2129,7 +2130,7 @@ TEST_F(TutorialAppTest, ASkipOnTheWelcomeLeavesNoFolderToPutAway) {
     Press(TutorialButton::Skip);
     StepFrame();
     EXPECT_EQ(Runner().Folder(), 0u) << "the skip card is no do step";
-    EXPECT_EQ(App().TutorialSkipWarnings().size(), 2u) << "the warnings, all the same";
+    EXPECT_EQ(App().TutorialSkipWarnings().size(), 3u) << "the warnings, all the same";
     EXPECT_TRUE(Runner().MadeFolders().empty()) << "nothing for the checkbox to keep";
     Press(TutorialButton::Done);
     StepFrame();
