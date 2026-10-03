@@ -7,11 +7,11 @@ Originally built for keeping notes over a game without alt-tabbing away from it.
 ## Getting around
 
 - The cheat sheet lists every key and gesture, as they are bound right
-  now. Open it with the button below, its key, or its row in the menu
-  you get by right-clicking empty canvas.
-- The tutorial walks through the app topic by topic. Its list of topics
-  is under Settings > Interaction > Open the tutorial, for whenever you
-  want a refresher.
+  now. Open it with the button below, its shortcut, or the context menu
+  on empty canvas.
+- The tutorial walks through the app topic by topic. You can open it
+  from Settings > Interaction > Open the tutorial, or the button below,
+  whenever you want a refresher.
 
 <!-- about:open-buttons -->
 
@@ -57,24 +57,23 @@ If the app crashes, it writes a crash report to
 
 ## Changelog
 
-Keys named here are the defaults; the cheat sheet shows them as they are
-bound.
+Keys named below are the defaults; the cheat sheet shows them as they are
+currently bound.
 
 ### 0.2.3
 
 #### Features
 
 - A button for emptying the trash, with Show deleted on in the Overview
-- Paste puts snippets at the pointer, or where the menu was opened; Paste in place (Ctrl+Shift+V) puts them where they were. Both are in a snippet's right-click menu too
+- Paste puts snippets at the pointer, or where the context menu was opened; Paste in place (Ctrl+Shift+V) puts them where they were. Both are in a snippet's context menu too
 - Select all (Ctrl+A) selects every snippet on the canvas
 
 #### Changes
 
-- Every tool has a key out of the box, together around W, A, S and D: Q select, W pen, E eraser, A text, S screenshot, D drawing - and Ctrl+N makes a new canvas. A settings file from an earlier version keeps the keys it has; set them in Settings > Hotkeys
+- Every tool has a key out of the box, in the area around WASD: Q select, W pen, E eraser, A text, S screenshot, D drawing - and Ctrl+N makes a new canvas. A settings file from an earlier version keeps the keys it has; set them in Settings > Hotkeys
 - With Show deleted on, deleted folders are told apart from folders with deleted canvases by color - red and yellow - with a legend for the two
-- The tutorial's rectangle eraser step accepts a Ctrl-drag with the round eraser, as its text says
-- The Folders and canvases tutorial keeps the Overview open on the way back to its folder, and opens a canvas at the end instead
-- The Capturing tutorial covers both capture hotkeys in one step
+- Refined the tutorial's rectangle eraser step, the Folders and canvases tutorial, and the Capturing tutorial
+- Refined various help and tutorial texts
 - A tutorial topic quit partway no longer goes on after a restart; Basics starts over from its welcome until it is finished or skipped
 
 ### 0.2.2
@@ -118,7 +117,7 @@ bound.
 - Semi-transparent pen colors
 - Mouse buttons as shortcuts (middle and side buttons)
 - Per-snippet aspect ratio setting
-- Pen and eraser shapes to pick from: right-click or hold the button
+- Pen and eraser shapes to pick from: the button's context menu, or hold it
 
 #### Changes
 
