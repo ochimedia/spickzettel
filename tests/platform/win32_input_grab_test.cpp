@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cwchar>
 #include <functional>
 #include <thread>
 #include <vector>
@@ -24,9 +25,12 @@
 namespace sz::platform::win32 {
 namespace {
 
-// How many threads this process has - the hook thread is one of them
-// while the grab is active, and none of them once it is not.
-DWORD ProcessThreadCount() {
+// How many of this process's threads are the grab's hook thread: one while
+// the grab is active, none once it is not. Counted by name rather than
+// all threads at once: Windows starts threads of its own in a process -
+// a thread pool's workers - and on a CI runner one stayed past the wait,
+// failing a count of every thread with no hook thread left.
+DWORD HookThreadCount() {
     const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
     if (snapshot == INVALID_HANDLE_VALUE) {
         ADD_FAILURE() << "cannot enumerate the process's threads";
@@ -37,9 +41,21 @@ DWORD ProcessThreadCount() {
     DWORD count = 0;
     if (Thread32First(snapshot, &entry)) {
         do {
-            if (entry.th32OwnerProcessID == GetCurrentProcessId()) {
-                ++count;
+            if (entry.th32OwnerProcessID != GetCurrentProcessId()) {
+                continue;
             }
+            const HANDLE thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, entry.th32ThreadID);
+            if (thread == nullptr) {
+                continue;  // gone since the snapshot
+            }
+            PWSTR name = nullptr;
+            if (SUCCEEDED(GetThreadDescription(thread, &name))) {
+                if (std::wcscmp(name, Win32InputGrab::kHookThreadName) == 0) {
+                    ++count;
+                }
+                LocalFree(name);
+            }
+            CloseHandle(thread);
         } while (Thread32Next(snapshot, &entry));
     }
     CloseHandle(snapshot);
@@ -134,21 +150,19 @@ TEST(Win32InputGrabTest, RapidStartAndStopLeavesNoHookBehind) {
     grab.SetOptions(options);
     grab.SetGameKeepsFocus(true);
 
-    const DWORD threadsBefore = ProcessThreadCount();
     for (int i = 0; i < 20; ++i) {
         grab.SetActive(true);
         grab.SetActive(false);
     }
     EXPECT_TRUE(Eventually([] { return !QueryRawMouse().present; }, std::chrono::milliseconds(1500)))
         << "a sink registered by a thread that outlived its stop";
-    EXPECT_TRUE(Eventually([threadsBefore] { return ProcessThreadCount() == threadsBefore; },
-                           std::chrono::milliseconds(1500)))
-        << "a stop left its hook thread running: " << ProcessThreadCount() << " threads, " << threadsBefore
-        << " before";
+    EXPECT_TRUE(Eventually([] { return HookThreadCount() == 0; }, std::chrono::milliseconds(1500)))
+        << "a stop left its hook thread running: " << HookThreadCount() << " still there";
 
     // ...and a start after all that still works.
     grab.SetActive(true);
     EXPECT_TRUE(Eventually([] { return QueryRawMouse().targetIsAWindow; }, std::chrono::milliseconds(1500)));
+    EXPECT_EQ(HookThreadCount(), 1u) << "the count above finds the hook thread by its name";
     grab.SetActive(false);
     grab.Shutdown();
     DestroyWindow(overlay);

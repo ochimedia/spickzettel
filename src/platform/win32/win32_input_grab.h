@@ -32,6 +32,10 @@ class Win32InputGrab {
 public:
     static Win32InputGrab& Instance();
 
+    // The hook thread's name, as a debugger, a crash dump and the tests see
+    // it: they count it among the process's threads by this.
+    static constexpr const wchar_t* kHookThreadName = L"Spickzettel input grab";
+
     // The window synthesized mouse input is posted to - the overlay
     // itself. Everything below no-ops until this is set.
     void SetOverlayWindow(HWND hwnd);

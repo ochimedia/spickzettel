@@ -463,6 +463,7 @@ void Win32InputGrab::CloseHookThreadHandles() {
 
 DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
     auto& grab = *static_cast<Win32InputGrab*>(self);
+    SetThreadDescription(GetCurrentThread(), kHookThreadName);
     // The message queue exists from this call on - and StartHookThread is
     // waiting to hear so before it lets anyone post here.
     MSG msg;
