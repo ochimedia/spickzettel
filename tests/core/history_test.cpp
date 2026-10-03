@@ -182,7 +182,12 @@ public:
                 break;
             case 12:
             case 13:
-                session_.Paste(SomeAnywhere(), /*cut=*/Pick(3) != 0);
+                // At a point half the time, which moves what a cut takes
+                // along with it in the same change.
+                session_.Paste(SomeAnywhere(), /*cut=*/Pick(3) != 0,
+                               Pick(2) == 0 ? std::optional<platform::Vec2>(platform::Vec2{
+                                                  static_cast<float>(Pick(1200)), static_cast<float>(Pick(800))})
+                                            : std::nullopt);
                 break;
             case 14:
                 session_.Duplicate(SomeHere());
@@ -686,7 +691,12 @@ public:
                 break;
             case 8:
             case 9:
-                session_.Paste(SomeAnywhere(), /*cut=*/Pick(3) != 0);
+                // At a point half the time, which moves what a cut takes
+                // along with it in the same change.
+                session_.Paste(SomeAnywhere(), /*cut=*/Pick(3) != 0,
+                               Pick(2) == 0 ? std::optional<platform::Vec2>(platform::Vec2{
+                                                  static_cast<float>(Pick(1200)), static_cast<float>(Pick(800))})
+                                            : std::nullopt);
                 break;
             case 10:
                 session_.Duplicate(SomeHere());

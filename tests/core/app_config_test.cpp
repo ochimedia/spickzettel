@@ -367,6 +367,30 @@ TEST(AppConfigTest, AShortcutMayBeAMouseButtonAndAHotkeyMayNot) {
               DefaultConfig().hotkeyEditMode);
 }
 
+// A file from before an action existed says nothing of it, and the action
+// has its default - unless the file gave that combination to another one,
+// which keeps it: Ctrl+Shift+V put on Duplicate by hand before there was a
+// Paste in place.
+TEST(AppConfigTest, ANewActionDoesNotTakeACombinationTheFileGaveAway) {
+    const auto pasteInPlace = [](const AppConfig& config) {
+        return config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::PasteInPlace)];
+    };
+    EXPECT_EQ(pasteInPlace(ParseConfig(One("shortcuts", "duplicate", R"("Ctrl+D")"))),
+              (platform::KeyCombo{true, false, true, 'V'}))
+        << "nothing in the way: the default";
+
+    const AppConfig taken = ParseConfig(One("shortcuts", "duplicate", R"("Ctrl+Shift+V")"));
+    EXPECT_EQ(taken.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Duplicate)],
+              (platform::KeyCombo{true, false, true, 'V'}));
+    EXPECT_FALSE(pasteInPlace(taken).IsValid());
+
+    // Said, it is what was said, even the same combination: that is the
+    // file's own clash, as a Settings edit would not have left it.
+    const AppConfig both =
+        ParseConfig(R"({"shortcuts": {"duplicate": "Ctrl+Shift+V", "pasteInPlace": "Ctrl+Shift+V"}})");
+    EXPECT_EQ(pasteInPlace(both), (platform::KeyCombo{true, false, true, 'V'}));
+}
+
 TEST(AppConfigTest, ParsesFunctionKeyHotkeyWithModifiers) {
     const AppConfig config = ParseConfig(One("hotkeys", "editMode", R"("Ctrl+Shift+F24")"));
     EXPECT_TRUE(config.hotkeyEditMode.ctrl);

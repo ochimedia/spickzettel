@@ -782,6 +782,24 @@ const CanvasFacts* CanvasAtStart(const Look& look, core::CanvasId id) {
     return nullptr;
 }
 
+// Whether `copy` could be a copy of `first`: the same kind, at the same
+// size, with the same on it. Where either is says nothing, since a paste
+// puts a copy at the pointer.
+bool Twins(const SnippetFacts& first, const SnippetFacts& copy) {
+    if (first.picture != copy.picture || first.rect.w != copy.rect.w || first.rect.h != copy.rect.h ||
+        first.note != copy.note || first.strokes.size() != copy.strokes.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < first.strokes.size(); ++i) {
+        const StrokeFacts& a = first.strokes[i];
+        const StrokeFacts& b = copy.strokes[i];
+        if (a.colorRGBA != b.colorRGBA || a.widthPx != b.widthPx || a.lengthPx != b.lengthPx || a.shape != b.shape) {
+            return false;
+        }
+    }
+    return true;
+}
+
 std::vector<Step> MakeFolders() {
     using enum Need;
     std::vector<Step> chain;
@@ -836,8 +854,9 @@ std::vector<Step> MakeFolders() {
                     return !now.deleted && then != nullptr && then->canvas != now.canvas;
                 });
             },
-        // A copy pasted onto another canvas keeps its place exactly: made
-        // during the step, a twin of one of the tutorial's elsewhere.
+        // A copy pasted onto another canvas: made during the step, a twin
+        // of one of the tutorial's elsewhere - what is on it, at its size.
+        // Not where it is: Paste puts it at the pointer.
         .nearMisses =
             {
                 {[](const Look& look) {
@@ -845,9 +864,7 @@ std::vector<Step> MakeFolders() {
                          return !copy.deleted && !look.start.present.contains(copy.id) &&
                                 std::any_of(look.snippets.begin(), look.snippets.end(), [&](const SnippetFacts& first) {
                                     return !first.deleted && first.id != copy.id && first.canvas != copy.canvas &&
-                                           first.picture == copy.picture && first.rect.x == copy.rect.x &&
-                                           first.rect.y == copy.rect.y && first.rect.w == copy.rect.w &&
-                                           first.rect.h == copy.rect.h;
+                                           Twins(first, copy);
                                 });
                      });
                  },

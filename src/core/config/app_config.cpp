@@ -441,17 +441,36 @@ void WriteValue(json& root, const SettingPath& path, const Rule& rule, const typ
 }
 
 // One row, from the file into the config and back. The shortcuts are
-// thirteen settings keyed by action in their group.
+// fourteen settings keyed by action in their group.
 template <typename Row>
 void ReadRow(const json& doc, const Row& row, AppConfig& config) {
     if (auto value = ReadValue(row.rule, Find(doc, row.path))) {
         ValueIn(row, config) = std::move(*value);
     }
 }
+// An action the file says nothing of - one added since it was written, as
+// Paste in place was in 0.2.3 - has its default, unless the file gives
+// that combination to another action: it was chosen for that one, and the
+// new action starts unbound rather than take it. Taken, the key would go
+// to whichever of the two comes first (see Editor::CommandForKey).
 void ReadRow(const json& doc, const ShortcutSettings& row, AppConfig& config) {
+    ShortcutBindings& shortcuts = config.profileable.shortcuts;
+    std::array<bool, kShortcutActionCount> said{};
     for (const ShortcutAction action : kAllShortcutActions) {
         if (auto value = ReadValue(row.rule, Find(doc, {row.group, "", ShortcutActionKey(action)}))) {
-            config.profileable.shortcuts[ShortcutActionIndex(action)] = *value;
+            shortcuts[ShortcutActionIndex(action)] = *value;
+            said[ShortcutActionIndex(action)] = true;
+        }
+    }
+    for (size_t unsaid = 0; unsaid < kShortcutActionCount; ++unsaid) {
+        if (said[unsaid] || !shortcuts[unsaid].IsValid()) {
+            continue;
+        }
+        for (size_t other = 0; other < kShortcutActionCount; ++other) {
+            if (said[other] && shortcuts[other] == shortcuts[unsaid]) {
+                shortcuts[unsaid] = platform::KeyCombo{};
+                break;
+            }
         }
     }
 }

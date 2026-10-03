@@ -250,6 +250,18 @@ void Popups::RenderItemTextStyle(PopoverItem& item) {
 
 // ================= The context menu =================
 
+namespace {
+// A row's command as it is run: Paste at the point the menu was opened at,
+// which is where the right click was - not wherever the pointer has gone
+// to choose the row.
+Command MenuCommand(Command command, ImVec2 openedAt) {
+    if (command.id == CommandId::Paste) {
+        command.at = platform::Vec2{openedAt.x, openedAt.y};
+    }
+    return command;
+}
+}  // namespace
+
 void Popups::OpenItemMenu(ItemId itemId, ImVec2 at) {
     PopupRecord popup;
     popup.kind = PopupKind::ItemMenu;
@@ -264,6 +276,7 @@ void Popups::RenderItemContextMenu() {
     // reorder it, either of which moves every Item in it.
     const bool up = Up(PopupKind::ItemMenu);
     const ItemId itemId = up ? popup_->item : 0;
+    const ImVec2 openedAt = up ? popup_->at : ImVec2(0.0f, 0.0f);
     const Item* item = nullptr;
     if (up) {
         if (const Canvas* canvas = Manager().CurrentOrNull()) {
@@ -293,7 +306,7 @@ void Popups::RenderItemContextMenu() {
         if (id == CommandId::ToggleFullscreen && ImGui::GetIO().KeyShift) {
             id = CommandId::ToggleFullscreenStretched;
         }
-        host_.Act(action::RunCommand{Command{id, itemId}});
+        host_.Act(action::RunCommand{MenuCommand(Command{id, itemId}, openedAt)});
     }
 }
 
@@ -316,11 +329,15 @@ void Popups::BuildItemContextMenuRows(const Item& item, std::vector<ContextMenuE
     // (see RecognizePress), so the two agree whenever only it is
     // selected, and where they differ the shortcut shown beside the row is
     // the honest answer: Ctrl+D does the whole selection, so the row that
-    // names Ctrl+D has to as well - and does, being the same command. Paste
-    // is empty canvas's (see BuildEmptyCanvasMenuRows): what it does has
-    // nothing to do with the snippet it would be opened over.
+    // names Ctrl+D has to as well - and does, being the same command. The
+    // two pastes are here as on empty canvas, Paste at the point the menu
+    // was opened at: over a snippet is as good a place to put something as
+    // beside it, and a hand that has a snippet under it should not have to
+    // find a gap first.
     add(CommandId::Copy, "##menu_copy", icons::kCopy, strings::kMenuCopy, /*separatorAbove=*/true);
     add(CommandId::Cut, "##menu_cut", icons::kScissors, strings::kMenuCut);
+    add(CommandId::Paste, "##menu_paste", icons::kClipboard, strings::kMenuPaste);
+    add(CommandId::PasteInPlace, "##menu_paste_in_place", icons::kClipboard, strings::kMenuPasteInPlace);
     add(CommandId::Duplicate, "##menu_duplicate", icons::kCopy, strings::kMenuDuplicate);
     // Grayed when nothing *overlapping* this snippet is in that direction,
     // rather than at the ends of the stack - see
@@ -346,6 +363,7 @@ void Popups::OpenEmptyCanvasMenu(ImVec2 at) {
 
 void Popups::RenderEmptyCanvasMenu() {
     const bool up = Up(PopupKind::EmptyCanvasMenu);
+    const ImVec2 openedAt = up ? popup_->at : ImVec2(0.0f, 0.0f);
     const ContextMenu::Drawn drawn =
         emptyCanvasMenu_.Render(up ? popup_->at : ImVec2(0.0f, 0.0f), [&](std::vector<ContextMenuEntry>& rows) {
             if (up) {
@@ -354,7 +372,7 @@ void Popups::RenderEmptyCanvasMenu() {
         });
     Drawn(PopupKind::EmptyCanvasMenu, drawn.up);
     if (drawn.chosen.has_value()) {
-        host_.Act(action::RunCommand{Command{static_cast<CommandId>(*drawn.chosen)}});
+        host_.Act(action::RunCommand{MenuCommand(Command{static_cast<CommandId>(*drawn.chosen)}, openedAt)});
     }
 }
 
@@ -376,6 +394,7 @@ void Popups::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) const
         strings::kMenuFullscreenDrawing);
 
     add(CommandId::Paste, "##emptymenu_paste", &icons::kClipboard, strings::kMenuPaste, /*separatorAbove=*/true);
+    add(CommandId::PasteInPlace, "##emptymenu_paste_in_place", &icons::kClipboard, strings::kMenuPasteInPlace);
 
     // The Overview last, where the row used most is found without reading.
     add(CommandId::CheatSheet, "##emptymenu_cheat_sheet", &icons::kKeyboard, strings::kMenuCheatSheet,

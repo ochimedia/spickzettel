@@ -1090,21 +1090,21 @@ bool Editor::IsWaitingToBeCut(ItemId id) const {
 // left says so instead of pasting an empty selection. That check is the
 // whole reason the clipboard holds ids.
 //
-// A copy lands on top of its source when the source is on this canvas, so
-// there it is offset the way the Properties popover's own Copy is - far
-// enough to see that there are now two. Pasted onto another canvas it
-// keeps its place exactly, which is where the eye expects it. A cut pasted
-// back onto its own canvas is the snippet itself, and there is nothing to
-// tell apart: it stays exactly where it was.
+// Paste puts it at `at`, the pointer or where a menu was opened: the
+// middle of what is pasted there, moved as one so that where the snippets
+// stand to each other is kept, and onto the screen as a whole - a cut one
+// already on this canvas too, which makes cut and paste a move. Paste in
+// place puts it where it was: a copy of a snippet on this canvas exactly
+// on top of it, which Duplicate is for when it should be beside it.
 //
 // One undo takes the whole paste back: the copies go, and what a cut
-// moved here goes back where it came from - see Session::Paste.
-void Editor::PasteFromClipboard() {
+// moved goes back where it came from - see Session::Paste.
+void Editor::PasteFromClipboard(std::optional<platform::Vec2> at) {
     if (clipboard_.empty() || Manager().CurrentOrNull() == nullptr) {
         return;
     }
     const bool cut = clipboardIsCut_;
-    const Session::Placed pasted = session_.Paste(clipboard_, cut);
+    const Session::Placed pasted = session_.Paste(clipboard_, cut, at);
     if (pasted.items.empty()) {
         // Nothing left to paste - or a paste whose write failed, which the
         // line along the bottom says more of (see PersistenceWarning).

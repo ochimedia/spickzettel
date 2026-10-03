@@ -2234,10 +2234,12 @@ now, as in 6.3, and none looks at what was pressed:
   `Session::SendItemsTo`), so the goal asks whether a snippet the step
   has seen is now on another canvas. Move to canvas and Move to new
   canvas count.
-- **A copy:** a copy pasted onto another canvas keeps its place exactly
-  (`Editor::PasteFromClipboard`). So a snippet made during the step, of
-  the kind and in the place of one of the tutorial's on another canvas,
-  is a copy, and gets the near miss.
+- **A copy:** a snippet made during the step that is a twin of one of
+  the tutorial's on another canvas - the same kind, the same size, the
+  same strokes and note (`Twins`) - is a copy, and gets the near miss.
+  Not where it is: Paste puts a copy at the pointer
+  (`Editor::PasteFromClipboard`). Until 0.2.3 a copy pasted onto another
+  canvas kept its place exactly, and the place was what told it.
 - **A name:** any folder or canvas of the tutorial's, renamed to
   something else. The same name typed again is no change.
 - **The way back:** the tutorial's own folder shown in the Overview

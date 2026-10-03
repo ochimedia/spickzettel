@@ -48,6 +48,7 @@ enum class CommandId {
     Copy,
     Cut,
     Paste,
+    PasteInPlace,
     Duplicate,
     CheatSheet,
     // Global hotkeys, which are the tray's to run (see
@@ -212,6 +213,7 @@ inline constexpr std::array kCommands = [] {
         Chosen(CommandId::Copy, "copy", ShortcutAction::Copy),
         Chosen(CommandId::Cut, "cut", ShortcutAction::Cut),
         Chosen(CommandId::Paste, "paste", ShortcutAction::Paste),
+        Chosen(CommandId::PasteInPlace, "pasteInPlace", ShortcutAction::PasteInPlace),
         Chosen(CommandId::Duplicate, "duplicate", ShortcutAction::Duplicate),
         Chosen(CommandId::CheatSheet, "cheatSheet", ShortcutAction::CheatSheet),
         Hotkey(CommandId::ToggleEditMode, "toggleEditMode", HotkeySlot::EditMode),

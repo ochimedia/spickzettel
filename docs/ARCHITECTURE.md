@@ -640,8 +640,8 @@ alone cannot tell). Exiting fullscreen recomputes the restore rect from
 the untouched anchor against the *current* viewport, so a display change
 while fullscreen lands it in the right place.
 
-A copy of a fullscreen snippet, duplicated or pasted beside its source,
-is fullscreen too, and what is offset is its anchor - the place it goes
+A copy of a fullscreen snippet, duplicated beside its source, is
+fullscreen too, and what is offset is its anchor - the place it goes
 back to - not its rect (`Session::OffsetCopy`). Offset like any other
 copy, the fullscreen rect was committed as its anchor, so taken out of
 fullscreen it stayed the size of the screen, and was saved so. Found in
@@ -1304,13 +1304,13 @@ possible later restriction rather than a rule today.
 Every drawing tool, creation tool and clipboard action can carry a key,
 pressed while the overlay is up in edit mode. Four ship bound (`S`
 screenshot, `D` drawing, `E` eraser, `P` pen) plus the clipboard's usual
-`Ctrl+C/X/V`, `Ctrl+D` to duplicate the selection, `Ctrl+Shift+N` for
-a new canvas the selection comes along to and `Ctrl+H` for the cheat
-sheet; the rest start unset, because
-a shortcut that fires a tool you did not want is worse than no shortcut.
-The two chords are safe to ship where a letter would not be, since a
-chord cannot fire from ordinary typing - `Ctrl+D` sits beside the plain
-`D` that makes a drawing, and the exact-modifier match keeps them apart.
+`Ctrl+C/X/V`, `Ctrl+Shift+V` to paste in place, `Ctrl+D` to duplicate
+the selection, `Ctrl+Shift+N` for a new canvas the selection comes along
+to and `Ctrl+H` for the cheat sheet; the rest start unset, because a
+shortcut that fires a tool you did not want is worse than no shortcut. The chords are safe to ship where a letter
+would not be, since a chord cannot fire from ordinary typing - `Ctrl+D`
+sits beside the plain `D` that makes a drawing, and the exact-modifier
+match keeps them apart.
 
 A shortcut can be a mouse button instead of a key: the middle one or a
 side one, with modifiers or without, pressed at the row in Settings like
@@ -1325,7 +1325,30 @@ gesture is in flight does it wait, as the wheel does (see "The hand").
 
 Duplicate is Copy and Paste in one step and deliberately does not go
 through the clipboard: duplicating something is not a reason to lose what
-was copied earlier. `Ctrl+Shift+N` moves the selected snippets to the
+was copied earlier. It is also the one that puts a copy beside its
+source.
+
+Paste puts what it pastes at a point: the pointer for its key, where the
+right click was for a menu's row (`Command::at`), not where the pointer
+went to choose the row. The middle of what is pasted goes there, and
+the snippets are moved as one, so where they stand to each other is
+kept, then onto the screen as a whole - against its edge, or with the
+top left corner on it for a group bigger than the screen
+(`Session::PlaceAround`). A fullscreen snippet keeps its place, the
+screen. A key has no position of its own, so the editor is told where
+the pointer is at every event, as ImGui last saw it, the overlay's own
+pointer while input is grabbed. Paste in place puts everything where it
+was: a copy exactly on its source when that is on the canvas, which is
+what the name says and what the programs that have it do. A cut pasted
+at the pointer onto its own canvas is a move there, undone as one; onto
+another canvas, the move between canvases and the new place are one
+change (`history::Moved::placement`), since a step holds one change per
+snippet.
+
+Until 0.2.3 there was one Paste, and it offset every copy 24 px when any
+of them had its source on the canvas - so a copy from another canvas was
+moved too, which the code's own comment said it would not be. Found in
+review on 2026-10-02; the two pastes left no case for the offset. `Ctrl+Shift+N` moves the selected snippets to the
 canvas it makes, which otherwise costs a new canvas, a switch back, a
 cut, a switch forward and a paste; it is a separate action from the plain
 new canvas rather than one that reads the selection, so the canvas bar's
@@ -1338,6 +1361,11 @@ about them can fail the way registering a global hotkey can, which is
 also why a bare letter is allowed here and questionable there.
 
 `ShortcutAction` is the flat list the config layer persists, by name.
+An action added since a file was written - Paste in place, in 0.2.3 -
+has its default, unless the file gives that combination to another
+action, which keeps it; the new one starts unbound. Taken, the key went
+to whichever of the two comes first in the command table, which could
+be the new one.
 Config sits below the app and cannot see what a key does; the command
 table ties each action to its command (see "Commands" under the overlay
 UI), and a test checks that every action names exactly one.
@@ -2136,8 +2164,8 @@ outside the snippet must not make another.
 
 The right button once made drawings the same way. It opens a menu on
 empty canvas now - every way to make either kind (the "New" rows pick
-up the creation tool, the fullscreen ones make it at once), Paste, the
-Overview and Settings - so that a kind set to no press at all, or
+up the creation tool, the fullscreen ones make it at once), Paste and
+Paste in place, the Overview and Settings - so that a kind set to no press at all, or
 forgotten, is one click away, and the canvas has the menu a right click
 everywhere else has taught. It opens on release, like a snippet's; a
 right drag there does nothing, and a canvas switch or a capture during
@@ -2334,8 +2362,11 @@ whose action has no binding shows nothing rather than the key editor's
 "(none)". Four rows act on the selection and not only the snippet -
 Copy, Cut, Duplicate and Move to new canvas - because the shortcut
 printed beside each is the selection's, and a row that names Ctrl+D has
-to do what Ctrl+D does. Paste is not among them: it has nothing to do
-with the snippet the menu is over, and is on empty canvas's menu. A row that cannot be chosen right now is grayed rather than
+to do what Ctrl+D does. Paste and Paste in place are there too, as on
+empty canvas's menu: they once were not, having nothing to do with the
+snippet, but Paste puts things where the right click was, and over a
+snippet is as good a place for them as beside it - a hand should not
+have to find a gap first. A row that cannot be chosen right now is grayed rather than
 dropped, so the menu is the same shape over every snippet and a hand can
 learn where a row is. While it is up ImGui claims the mouse, so the press
 that dismisses it does nothing else - which is what a context menu does

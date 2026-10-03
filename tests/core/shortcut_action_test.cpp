@@ -63,13 +63,20 @@ TEST(ShortcutActionTest, TheCheatSheetShipsOnCtrlH) {
     EXPECT_EQ(ShortcutActionKey(ShortcutAction::CheatSheet), "cheatSheet");
 }
 
+// Where the programs that have it put it, beside Paste's Ctrl+V.
+TEST(ShortcutActionTest, PasteInPlaceShipsOnCtrlShiftV) {
+    EXPECT_EQ(BindingFor(DefaultShortcuts(), ShortcutAction::PasteInPlace), WithCtrlShift('V'));
+    EXPECT_EQ(ShortcutActionKey(ShortcutAction::PasteInPlace), "pasteInPlace");
+}
+
 TEST(ShortcutActionTest, EverythingElseStartsUnbound) {
     const ShortcutBindings bindings = DefaultShortcuts();
     for (const ShortcutAction action : kAllShortcutActions) {
         const bool bound = action == ShortcutAction::NewScreenshot || action == ShortcutAction::NewDrawing ||
                            action == ShortcutAction::Erase || action == ShortcutAction::Draw ||
                            action == ShortcutAction::Copy || action == ShortcutAction::Cut ||
-                           action == ShortcutAction::Paste || action == ShortcutAction::Duplicate ||
+                           action == ShortcutAction::Paste || action == ShortcutAction::PasteInPlace ||
+                           action == ShortcutAction::Duplicate ||
                            action == ShortcutAction::NewCanvasWithSelection ||
                            action == ShortcutAction::CheatSheet;
         EXPECT_EQ(BindingFor(bindings, action).key != 0, bound)

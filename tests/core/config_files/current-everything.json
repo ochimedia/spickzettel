@@ -131,6 +131,7 @@
     "copy": "Ctrl+C",
     "cut": "Ctrl+X",
     "paste": "Ctrl+V",
+    "pasteInPlace": "Ctrl+Shift+V",
     "duplicate": "Ctrl+D",
     "cheatSheet": "F1"
   },

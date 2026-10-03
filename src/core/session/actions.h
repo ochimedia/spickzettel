@@ -96,15 +96,15 @@ enum class ChromeButton { Close, Maximize, Minimize, More, Pin, Pen, Eraser, Tex
 
 // What the clipboard does with the selected snippets. Copy and Cut put
 // the selection on it; Paste puts what is on it onto the canvas being
-// looked at. The clipboard holds ids rather than snippets, so a Cut takes
-// nothing away until the Paste that moves it - see
-// Editor::PasteFromClipboard.
+// looked at, at the pointer, and Paste in place where it was. The
+// clipboard holds ids rather than snippets, so a Cut takes nothing away
+// until the Paste that moves it - see Editor::PasteFromClipboard.
 //
 // Duplicate is the copy and the paste in one step, and is here because
 // that is where a hand goes looking for it. It deliberately leaves the
 // clipboard itself untouched: duplicating something is not a reason to
 // lose what was copied ten minutes ago.
-enum class ClipboardAction { Copy, Cut, Paste, Duplicate };
+enum class ClipboardAction { Copy, Cut, Paste, PasteInPlace, Duplicate };
 
 // Identifies one of the global hotkeys - kept distinct from any index into
 // AppConfig itself, so that nothing naming one depends on how the config

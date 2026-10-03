@@ -37,16 +37,17 @@ enum class ShortcutAction {
     Copy,
     Cut,
     Paste,
+    PasteInPlace,
     Duplicate,
     CheatSheet,
 };
 
-inline constexpr std::array<ShortcutAction, 13> kAllShortcutActions = {
+inline constexpr std::array<ShortcutAction, 14> kAllShortcutActions = {
     ShortcutAction::Draw,      ShortcutAction::Erase,    ShortcutAction::Text,
     ShortcutAction::Select,    ShortcutAction::NewScreenshot, ShortcutAction::NewDrawing,
     ShortcutAction::NewCanvas, ShortcutAction::NewCanvasWithSelection, ShortcutAction::Copy,
-    ShortcutAction::Cut,       ShortcutAction::Paste,    ShortcutAction::Duplicate,
-    ShortcutAction::CheatSheet,
+    ShortcutAction::Cut,       ShortcutAction::Paste,    ShortcutAction::PasteInPlace,
+    ShortcutAction::Duplicate, ShortcutAction::CheatSheet,
 };
 inline constexpr size_t kShortcutActionCount = kAllShortcutActions.size();
 
@@ -65,9 +66,10 @@ std::optional<ShortcutAction> ShortcutActionFromKey(std::string_view key);
 // What ships bound: the four marks-on-screen actions that get reached for
 // constantly, on the letters that name them, and the clipboard's three on
 // Ctrl+C/X/V, which every application on the machine has already taught
-// the hand. Duplicate and "new canvas with the selection" ship on Ctrl+D
-// and Ctrl+Shift+N for the same reason - both are chords rather than
-// letters, so neither can fire from ordinary typing. Everything else
+// the hand - with Paste in place on Ctrl+Shift+V, where the programs that
+// have it put it. Duplicate and "new canvas with the selection" ship on
+// Ctrl+D and Ctrl+Shift+N for the same reason - both are chords rather
+// than letters, so neither can fire from ordinary typing. Everything else
 // starts unset rather than being given a letter nobody asked for - a
 // shortcut that fires a tool you didn't want is worse than no shortcut.
 ShortcutBindings DefaultShortcuts();

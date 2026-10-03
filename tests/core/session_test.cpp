@@ -705,12 +705,13 @@ TEST(SessionTest, SeveralSnippetsCutFromOneStackGoBackInItsOrder) {
     }
 }
 
-// A copy of a fullscreen snippet, duplicated or pasted beside its source,
-// is fullscreen as its source is, and what is offset is the place it goes
-// back to: taken out of fullscreen, it is its source's size, a little down
-// and to the right of it. Offset as a snippet on the canvas is, the
-// fullscreen rect became the place it went back to.
-TEST(SessionTest, ACopyOfAFullscreenSnippetGoesBackToItsSourcesSizeBesideIt) {
+// A copy of a fullscreen snippet, duplicated or pasted, is fullscreen as
+// its source is, and taken out of fullscreen it is its source's size:
+// duplicated, a little down and to the right of it, since what is offset
+// is the place it goes back to - offset as a snippet on the canvas is, the
+// fullscreen rect became the place it went back to. Pasted in place, it
+// goes back to where its source does.
+TEST(SessionTest, ACopyOfAFullscreenSnippetGoesBackToItsSourcesSize) {
     for (const bool stretch : {false, true}) {
         for (const bool duplicate : {false, true}) {
             SCOPED_TRACE(std::string(duplicate ? "duplicate" : "paste") + (stretch ? ", stretched" : ", fitted"));
@@ -729,10 +730,11 @@ TEST(SessionTest, ACopyOfAFullscreenSnippetGoesBackToItsSourcesSizeBesideIt) {
             EXPECT_TRUE(made->isFullscreen);
             EXPECT_EQ(made->rect, Model(session).FindItemAnywhere(source)->rect) << "fullscreen, as its source";
 
+            const Rect back = duplicate ? Rect{124, 124, 400, 200} : Rect{100, 100, 400, 200};
             session.ToggleFullscreen(copy, stretch);
-            EXPECT_EQ(Model(session).FindItemAnywhere(copy)->rect, (Rect{124, 124, 400, 200}));
+            EXPECT_EQ(Model(session).FindItemAnywhere(copy)->rect, back);
             session.SyncItemsToDisplaySize(1920.0f, 1080.0f);
-            EXPECT_EQ(Model(session).FindItemAnywhere(copy)->rect, (Rect{124, 124, 400, 200})) << "and anchored there";
+            EXPECT_EQ(Model(session).FindItemAnywhere(copy)->rect, back) << "and anchored there";
         }
     }
 }

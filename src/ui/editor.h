@@ -155,6 +155,10 @@ public:
     }
     float DisplayWidth() const { return displayW_; }
     float DisplayHeight() const { return displayH_; }
+    // Where the pointer is, as the last frame saw it, told at every event:
+    // what a key's Paste puts things at, a key having no place of its own.
+    // Nothing while it is not known.
+    void SetPointer(std::optional<platform::Vec2> at) { pointer_ = at; }
     // The time of the event being handled, on the input stream's clock -
     // what a burst of wheel notches or arrow presses is told apart by.
     void SetNow(double seconds) { now_ = seconds; }
@@ -482,9 +486,10 @@ public:
     //
     // Copy and Cut put the selection on the clipboard - as ids, so nothing
     // is taken away or duplicated until a paste. Paste puts what is on it
-    // onto the canvas being looked at, skipping whatever has gone since.
+    // onto the canvas being looked at, skipping whatever has gone since:
+    // around `at`, or, without, where it was.
     void CopySelectionToClipboard(bool cut);
-    void PasteFromClipboard();
+    void PasteFromClipboard(std::optional<platform::Vec2> at);
     // The two of those in one step, without going through the clipboard.
     void DuplicateSelection();
     // Whether this snippet is waiting for the paste that will move it,
@@ -579,6 +584,7 @@ private:
 
     float displayW_ = 0.0f;
     float displayH_ = 0.0f;
+    std::optional<platform::Vec2> pointer_;
     double now_ = 0.0;
     platform::Modifiers held_;
 

@@ -534,7 +534,7 @@ std::optional<Change> Session::MoveItemTo(ItemId itemId, CanvasId target) {
     return Change{itemId, history::Moved{*from, index, target}};
 }
 
-Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
+Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut, std::optional<platform::Vec2> at) {
     if (!EndOpenGesture()) {
         return {};
     }
@@ -543,20 +543,31 @@ Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
         return placed;
     }
     const CanvasId here = Model().CurrentCanvasId();
-    const Checkpoint before = Before({});
+    // At the pointer, a cut snippet already here changes where it is, which
+    // the checkpoint finds only among the snippets it was given.
+    const Checkpoint before = Before(cut && at.has_value() ? ids : std::vector<ItemId>{});
     Step step{0, What::Paste, {}};
-    bool fromThisCanvas = false;
     for (const ItemId id : ids) {
         const std::optional<CanvasId> from = Model().CanvasHoldingItem(id);
         if (!from.has_value() || Model().IsItemDeleted(id)) {
             continue;  // deleted, or deleted for good, since it was copied
         }
         if (cut && *from == here) {
-            placed.items.push_back(id);  // already here: nothing moves, nothing to undo
+            // Already here: in place nothing moves, and at the pointer it
+            // is moved on this canvas.
+            if (at.has_value()) {
+                step.changes.push_back(
+                    Change{id, history::PlacementChanged{history::Placement::Of(*Model().FindItemAnywhere(id))}});
+            }
+            placed.items.push_back(id);
             continue;
         }
         if (cut) {
             if (std::optional<Change> moved = MoveItemTo(id, here)) {
+                if (at.has_value()) {
+                    std::get<history::Moved>(moved->kind).placement =
+                        history::Placement::Of(*Model().FindItemAnywhere(id));
+                }
                 step.changes.push_back(std::move(*moved));
                 placed.items.push_back(id);
             }
@@ -567,22 +578,74 @@ Session::Placed Session::Paste(const std::vector<ItemId>& ids, bool cut) {
             continue;
         }
         placed.pictureLost = !ClonePicturesForCopy(id, copy) || placed.pictureLost;
-        fromThisCanvas = fromThisCanvas || *from == here;
         step.changes.push_back(Change{copy, history::DeletionChanged{DeletionStampNow()}});
         placed.items.push_back(copy);
     }
-    // A copy lands on top of its source when the source is on this canvas,
-    // so there it is offset; from another canvas it keeps its place
-    // exactly, which is where the eye expects it.
-    if (fromThisCanvas) {
-        for (const ItemId id : placed.items) {
-            OffsetCopy(id);
+    if (at.has_value()) {
+        PlaceAround(placed.items, *at);
+        // A cut snippet that is where it was has no place to undo.
+        std::erase_if(step.changes, [this](const Change& change) {
+            const auto* placement = std::get_if<history::PlacementChanged>(&change.kind);
+            return placement != nullptr &&
+                   placement->placement == history::Placement::Of(*Model().FindItemAnywhere(change.item));
+        });
+        for (Change& change : step.changes) {
+            auto* moved = std::get_if<history::Moved>(&change.kind);
+            if (moved != nullptr &&
+                moved->placement == history::Placement::Of(*Model().FindItemAnywhere(change.item))) {
+                moved->placement.reset();
+            }
         }
     }
     if (!Commit(before, here, std::move(step))) {
         return Placed{};
     }
     return placed;
+}
+
+// The middle of what the snippets cover, put at `at`, the group moved as
+// one so that where they stand to each other is kept. Then onto the
+// screen, as a whole again: one that would not fit on it keeps its top
+// left corner there. A fullscreen snippet keeps its place, which is the
+// screen, and has no say in where the others go.
+void Session::PlaceAround(const std::vector<ItemId>& ids, platform::Vec2 at) {
+    std::vector<Item*> placing;
+    float left = 0.0f;
+    float top = 0.0f;
+    float right = 0.0f;
+    float bottom = 0.0f;
+    for (const ItemId id : ids) {
+        Item* item = Model().FindItemAnywhere(id);
+        if (item == nullptr || item->isFullscreen) {
+            continue;
+        }
+        const Rect& r = item->rect;
+        left = placing.empty() ? r.x : std::min(left, r.x);
+        top = placing.empty() ? r.y : std::min(top, r.y);
+        right = placing.empty() ? r.x + r.w : std::max(right, r.x + r.w);
+        bottom = placing.empty() ? r.y + r.h : std::max(bottom, r.y + r.h);
+        placing.push_back(item);
+    }
+    if (placing.empty()) {
+        return;
+    }
+    // Where the group's low edge goes on one axis: its middle on `point`,
+    // then held on a screen `extent` long - at its start when it is longer.
+    const auto edge = [](float low, float high, float point, float extent) {
+        const float length = high - low;
+        const float centered = point - length * 0.5f;
+        if (extent <= 0.0f) {
+            return centered;
+        }
+        return length >= extent ? 0.0f : std::clamp(centered, 0.0f, extent - length);
+    };
+    const float dx = edge(left, right, at.x, Model().DisplayWidth()) - left;
+    const float dy = edge(top, bottom, at.y, Model().DisplayHeight()) - top;
+    for (Item* item : placing) {
+        item->rect.x += dx;
+        item->rect.y += dy;
+        Model().CommitItemLayout(item->id);
+    }
 }
 
 Session::Placed Session::Duplicate(const std::vector<ItemId>& ids) {

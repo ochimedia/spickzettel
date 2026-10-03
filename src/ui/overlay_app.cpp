@@ -156,7 +156,11 @@ void OverlayApp::OnInput(const platform::InputEvent& event) {
     // The display as the last frame saw it, which is what the event's
     // position is in.
     if (ImGui::GetCurrentContext() != nullptr) {
-        editor_.SetDisplaySize(ImGui::GetIO().DisplaySize.x, ImGui::GetIO().DisplaySize.y);
+        const ImGuiIO& io = ImGui::GetIO();
+        editor_.SetDisplaySize(io.DisplaySize.x, io.DisplaySize.y);
+        editor_.SetPointer(ImGui::IsMousePosValid(&io.MousePos)
+                               ? std::optional<platform::Vec2>(platform::Vec2{io.MousePos.x, io.MousePos.y})
+                               : std::nullopt);
     }
     editor_.Input().Offer(Event::FromInput(event));
 }

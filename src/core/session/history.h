@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <variant>
@@ -100,11 +101,16 @@ struct DeletionChanged {
 // it comes back to where it stood on `to`. Each index is taken as the
 // snippet leaves, so that however the stacks have been reordered since,
 // an undo and a redo put it back exactly where the other found it.
+//
+// A move that also put the snippet somewhere else on the screen - a cut
+// pasted at the pointer - carries that too, as PlacementChanged does: a
+// step holds one change per snippet, and the two are one thing done.
 struct Moved {
     CanvasId from = 0;
     size_t fromIndex = 0;
     CanvasId to = 0;
     size_t toIndex = static_cast<size_t>(-1);
+    std::optional<Placement> placement;
 };
 
 using ChangeKind = std::variant<StrokeAdded, StrokesErased, TextChanged, PlacementChanged, StyleChanged,

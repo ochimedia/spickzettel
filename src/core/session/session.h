@@ -282,13 +282,14 @@ public:
     };
     // The clipboard's paste onto the current canvas: copies of `ids`, or,
     // for a cut, the snippets themselves, moved here on top. One deleted
-    // since it was copied is passed over; a cut one already here stays
-    // where it is. A copy of a snippet on this canvas is offset from it,
-    // so that the two can be told apart; one from elsewhere keeps its
-    // place. One entry for the whole paste: undone, the copies are marked
-    // deleted, and what was moved goes back where it stood on the canvas
+    // since it was copied is passed over. With `at`, what is placed is
+    // put around it as a group (see PlaceAround), a cut one already here
+    // too; without, everything keeps its place - a copy of a snippet on
+    // this canvas exactly on top of it, and a cut one already here where
+    // it is. One entry for the whole paste: undone, the copies are marked
+    // deleted, and what was moved goes back where it stood, on the canvas
     // it came from.
-    Placed Paste(const std::vector<ItemId>& ids, bool cut);
+    Placed Paste(const std::vector<ItemId>& ids, bool cut, std::optional<platform::Vec2> at = std::nullopt);
     // A copy of each of `ids` on the current canvas, offset from it - Copy
     // and Paste in one step, one entry.
     Placed Duplicate(const std::vector<ItemId>& ids);
@@ -437,6 +438,9 @@ private:
     // Moves a copy just made off its source, far enough to see that there
     // are two, and re-anchors it there.
     void OffsetCopy(ItemId copyId);
+    // Moves `ids` as one so that the middle of what they cover is at `at`,
+    // held on the screen, and re-anchors each there.
+    void PlaceAround(const std::vector<ItemId>& ids, platform::Vec2 at);
     // Applies the step on top of one of the current canvas's stacks.
     std::optional<UndoStep> StepHistory(bool undo);
     std::optional<platform::CaptureResult> CropFrozenScreen(const Rect& rect) const;

@@ -268,9 +268,12 @@ from the input options HUD, where the six booleans are a key each.
 | `counterThreshold` | `profileable.counterThreshold` | 100 | 10..5000 held | Window |
 | `freezeScreen` | `profileable.freezeScreen` | false | bool | Freeze; two answers (section 7) |
 
-**`shortcuts`**: Profile, one setting per `ShortcutAction` (13). Rule: a
+**`shortcuts`**: Profile, one setting per `ShortcutAction` (14). Rule: a
 key, or Mouse3-5, with modifiers, or `null` for unbound. Invariant: one
-combination, one action within a target. Default: `DefaultShortcuts()`.
+combination, one action within a target. Default: `DefaultShortcuts()`;
+an action the file does not name, one added since (`pasteInPlace` in
+0.2.3), has it only if the file gives that combination to no other
+action, and is unbound otherwise.
 Edited from Settings > Hotkeys, lower box. Effect: Use.
 
 **`tutorial`**: Global. Edited from the tutorial as it goes
@@ -373,7 +376,7 @@ These are today's except where marked:
 |---|---|---|
 | Creation triggers differ, unless off | both back to the defaults | the other takes the edited one's old trigger |
 | Summon hotkeys differ, unless unbound | a later one is unbound (moved from `Initialize`) | the one that had the combination is unbound; the OS registration is tried first (section 6) |
-| One shortcut, one action, per target | none | the others in the target are unbound |
+| One shortcut, one action, per target | none for what the file names; an action it does not name is unbound rather than take a combination the file gives another | the others in the target are unbound |
 | A profile's binding wins over an inherited same key | applied when resolving, not stored | the same |
 | Profile names are not empty | "Profile" | a cleared field keeps the old name |
 | Profile names are unique | numbered ("Game 2") | new profiles numbered; **Change (C3)**: a rename to a name another profile has is refused. The profile keeps its old name for as long as the typed one is taken, as with a cleared field, and a line under the field says the name is taken |

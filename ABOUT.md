@@ -38,7 +38,8 @@ the Overview.
   snippet erases. Click the highlighted tool again, click anywhere else,
   or press Escape, to stop.
 - Delete removes the selection; Ctrl+Z brings it back. Ctrl+C, Ctrl+X and
-  Ctrl+V copy, cut and paste snippets, between canvases too.
+  Ctrl+V copy, cut and paste snippets, between canvases too: Ctrl+V puts
+  them at the pointer, Ctrl+Shift+V where they were.
 - Ctrl+Z - undo. Ctrl+Y or Ctrl+Shift+Z - redo.
 - Mouse wheel - the selected snippets' size; while drawing, the pen or
   eraser size. Ctrl+wheel - background opacity, Shift+wheel - foreground
@@ -112,6 +113,7 @@ If the app crashes, it writes a crash report to
 #### Features
 
 - A button for emptying the trash, with Show deleted on in the Overview
+- Paste puts snippets at the pointer, or where the menu was opened; Paste in place (Ctrl+Shift+V) puts them where they were. Both are in a snippet's right-click menu too
 
 #### Changes
 

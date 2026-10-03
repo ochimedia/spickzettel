@@ -963,10 +963,10 @@ TEST_F(HeadlessAppTest, UndoDeletesAScreenshotAndRedoBringsItBack) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
-// ===== The clipboard: Ctrl+C, Ctrl+X, Ctrl+V =====
+// ===== The clipboard: Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Shift+V =====
 
-// A copy leaves the snippet where it is and pastes a second one beside
-// it, selected, so it can be moved straight away.
+// A copy leaves the snippet where it is and pastes a second one at the
+// pointer, its middle there, selected, so it can be moved straight away.
 TEST_F(HeadlessAppTest, CopyAndPasteLeaveTwoSnippetsWhereThereWasOne) {
     ShowEditMode();
     StepFrame();
@@ -977,6 +977,8 @@ TEST_F(HeadlessAppTest, CopyAndPasteLeaveTwoSnippetsWhereThereWasOne) {
     ASSERT_EQ(App().Selection(), std::vector<ItemId>{original});
 
     PressCtrlKey(ImGuiKey_C);
+    MoveTo(700.0f, 500.0f);
+    StepFrame();
     PressCtrlKey(ImGuiKey_V);
 
     ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
@@ -987,8 +989,8 @@ TEST_F(HeadlessAppTest, CopyAndPasteLeaveTwoSnippetsWhereThereWasOne) {
                               ? &Canvases().CurrentOrNull()->items.back()
                               : nullptr;
     ASSERT_NE(pasted, nullptr) << "and it is in front";
-    EXPECT_GT(pasted->rect.x, where.x) << "offset off its source, or it would be invisible under it";
-    EXPECT_GT(pasted->rect.y, where.y);
+    EXPECT_EQ(pasted->rect, (Rect{700.0f - where.w * 0.5f, 500.0f - where.h * 0.5f, where.w, where.h}));
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].rect, where) << "the source where it was";
 
     // The clipboard still holds it: a copy can be pasted as often as
     // wanted.
@@ -997,7 +999,7 @@ TEST_F(HeadlessAppTest, CopyAndPasteLeaveTwoSnippetsWhereThereWasOne) {
 }
 
 // Several selected snippets are copied as one: they land together, each
-// offset by the same step, so the shape of the group survives.
+// moved by the same step, so the shape of the group survives.
 TEST_F(HeadlessAppTest, CopyingASelectionPastesAllOfItKeepingItsLayout) {
     ShowEditMode();
     StepFrame();
@@ -1066,9 +1068,9 @@ TEST_F(HeadlessAppTest, ACutSnippetStaysUntilItIsPastedSomewhereElse) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
-// A cut pasted back onto its own canvas is the snippet itself, put back
-// where it was: nothing moved, so nothing is offset the way a copy is.
-TEST_F(HeadlessAppTest, ACutPastedOntoItsOwnCanvasStaysWhereItWas) {
+// A cut pasted in place onto its own canvas is the snippet itself, put
+// back where it was: nothing moves.
+TEST_F(HeadlessAppTest, ACutPastedInPlaceOntoItsOwnCanvasStaysWhereItWas) {
     ShowEditMode();
     StepFrame();
     Drag(100.0f, 100.0f, 400.0f, 300.0f);
@@ -1077,12 +1079,86 @@ TEST_F(HeadlessAppTest, ACutPastedOntoItsOwnCanvasStaysWhereItWas) {
     const Rect before = Canvases().CurrentOrNull()->items[0].rect;
 
     PressCtrlKey(ImGuiKey_X);
-    PressCtrlKey(ImGuiKey_V);
+    MoveTo(900.0f, 500.0f);
+    StepFrame();
+    PressCtrlShiftKey(ImGuiKey_V);
 
     ASSERT_EQ(Canvases().CurrentOrNull()->items.size(), 1u);
     EXPECT_EQ(Canvases().CurrentOrNull()->items[0].id, cut);
-    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].rect, before) << "not offset: nothing is on top of anything";
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].rect, before) << "not at the pointer";
     EXPECT_EQ(App().Selection(), std::vector<ItemId>{cut});
+}
+
+// Pasted at the pointer instead, the cut snippet goes there - cut and
+// paste on one canvas is a move - and one undo puts it back.
+TEST_F(HeadlessAppTest, ACutPastedAtThePointerOnItsOwnCanvasMovesThere) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    const ItemId cut = Canvases().CurrentOrNull()->items[0].id;
+    const Rect before = Canvases().CurrentOrNull()->items[0].rect;
+
+    PressCtrlKey(ImGuiKey_X);
+    MoveTo(900.0f, 500.0f);
+    StepFrame();
+    PressCtrlKey(ImGuiKey_V);
+    const Rect moved{900.0f - before.w * 0.5f, 500.0f - before.h * 0.5f, before.w, before.h};
+    ASSERT_EQ(Canvases().CurrentOrNull()->items.size(), 1u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].id, cut);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].rect, moved);
+
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].rect, before);
+    PressCtrlKey(ImGuiKey_Y);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[0].rect, moved);
+}
+
+// Paste in place puts a copy exactly on its source: what the name says.
+// Duplicate is the one that puts it beside it.
+TEST_F(HeadlessAppTest, ACopyPastedInPlaceIsOnItsSource) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    const Rect where = Canvases().CurrentOrNull()->items[0].rect;
+
+    PressCtrlKey(ImGuiKey_C);
+    MoveTo(900.0f, 500.0f);
+    StepFrame();
+    PressCtrlShiftKey(ImGuiKey_V);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items[1].rect, where);
+    EXPECT_EQ(App().Selection(), std::vector<ItemId>{Canvases().CurrentOrNull()->items[1].id});
+}
+
+// A group pasted at a pointer near the corner is moved onto the screen as
+// a whole: all of it is on screen, and the snippets stand to each other
+// as they did.
+TEST_F(HeadlessAppTest, AGroupPastedNearTheCornerIsKeptOnTheScreenWhole) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    Drag(600.0f, 400.0f, 800.0f, 560.0f);
+    const Rect firstRect = Canvases().CurrentOrNull()->items[0].rect;
+    const Rect secondRect = Canvases().CurrentOrNull()->items[1].rect;
+    KeyEvent(ImGuiMod_Shift, true);
+    StepFrame();
+    RawClick(firstRect.x + 40.0f, firstRect.y + 40.0f);
+    KeyEvent(ImGuiMod_Shift, false);
+    StepFrame();
+    ASSERT_EQ(App().Selection().size(), 2u);
+
+    PressCtrlKey(ImGuiKey_C);
+    MoveTo(kDisplayWidth - 5.0f, kDisplayHeight - 5.0f);
+    StepFrame();
+    PressCtrlKey(ImGuiKey_V);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 4u);
+    const std::vector<Item>& items = Canvases().CurrentOrNull()->items;
+    const Rect& copyOfFirst = items[2].rect.w == firstRect.w ? items[2].rect : items[3].rect;
+    const Rect& copyOfSecond = items[2].rect.w == firstRect.w ? items[3].rect : items[2].rect;
+    EXPECT_FLOAT_EQ(copyOfSecond.x - copyOfFirst.x, secondRect.x - firstRect.x);
+    EXPECT_FLOAT_EQ(copyOfSecond.y - copyOfFirst.y, secondRect.y - firstRect.y);
+    EXPECT_FLOAT_EQ(copyOfSecond.x + copyOfSecond.w, kDisplayWidth) << "against the right edge";
+    EXPECT_FLOAT_EQ(copyOfSecond.y + copyOfSecond.h, kDisplayHeight) << "and the bottom";
 }
 
 // Undo right after a paste takes the paste back - and only that. It used
@@ -1129,15 +1205,23 @@ TEST_F(HeadlessAppTest, UndoSendsACutsPasteBackWhereItCameFrom) {
     PressCtrlKey(ImGuiKey_X);
     const CanvasId second = manager.AddCanvas("Second");
     manager.SwitchToCanvas(second);
+    const Rect before = manager.FindItemAnywhere(cut)->rect;
+    MoveTo(900.0f, 500.0f);
     StepFrame();
     PressCtrlKey(ImGuiKey_V);
     ASSERT_EQ(manager.CanvasHoldingItem(cut), std::optional<CanvasId>(second));
+    const Rect moved = manager.FindItemAnywhere(cut)->rect;
+    ASSERT_NE(moved, before) << "at the pointer";
 
+    // Back where it was on that canvas too: the move and the place are
+    // one change, taken back together.
     PressCtrlKey(ImGuiKey_Z);
     EXPECT_EQ(manager.CanvasHoldingItem(cut), std::optional<CanvasId>(first));
+    EXPECT_EQ(manager.FindItemAnywhere(cut)->rect, before);
     EXPECT_TRUE(App().Selection().empty()) << "nothing selected that is not here";
     PressCtrlKey(ImGuiKey_Y);
     EXPECT_EQ(manager.CanvasHoldingItem(cut), std::optional<CanvasId>(second));
+    EXPECT_EQ(manager.FindItemAnywhere(cut)->rect, moved);
 }
 
 // The clipboard holds ids, so a paste asks for the snippets as they are

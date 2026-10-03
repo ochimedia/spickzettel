@@ -124,6 +124,7 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
     shortcut(clipboard, CommandId::Copy, strings::kCheatSheetCopy);
     shortcut(clipboard, CommandId::Cut, strings::kCheatSheetCut);
     shortcut(clipboard, CommandId::Paste, strings::kCheatSheetPaste);
+    shortcut(clipboard, CommandId::PasteInPlace, strings::kCheatSheetPasteInPlace);
     shortcut(clipboard, CommandId::Duplicate, strings::kCheatSheetDuplicate);
     shortcut(clipboard, CommandId::NewCanvasWithSelection, strings::kCheatSheetToNewCanvas);
     clipboard.push_back({everyKey(CommandId::DeleteSelection), strings::kCheatSheetDelete});

@@ -188,6 +188,14 @@ void Apply(CanvasManager& manager, Change& change, bool undo) {
                            c.fromIndex = IndexOn(manager, c.from, change.item);
                            manager.MoveItem(change.item, c.to, c.toIndex);
                        }
+                       if (c.placement.has_value()) {
+                           // Found again: the move took it out of one
+                           // canvas's list and into another's.
+                           Item* moved = manager.FindItemAnywhere(change.item);
+                           const Placement now = Placement::Of(*moved);
+                           c.placement->ApplyTo(*moved);
+                           c.placement = now;
+                       }
                    },
                },
                change.kind);

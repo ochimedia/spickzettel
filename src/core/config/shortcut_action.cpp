@@ -26,6 +26,8 @@ std::string_view ShortcutActionKey(ShortcutAction action) {
             return "cut";
         case ShortcutAction::Paste:
             return "paste";
+        case ShortcutAction::PasteInPlace:
+            return "pasteInPlace";
         case ShortcutAction::Duplicate:
             return "duplicate";
         case ShortcutAction::CheatSheet:
@@ -62,6 +64,8 @@ ShortcutBindings DefaultShortcuts() {
     bindWithCtrl(ShortcutAction::Paste, 'V');
     bindWithCtrl(ShortcutAction::Duplicate, 'D');
     bindWithCtrl(ShortcutAction::CheatSheet, 'H');
+    bindings[ShortcutActionIndex(ShortcutAction::PasteInPlace)] =
+        platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/'V'};
     // Ctrl+Shift+N rather than Ctrl+N: the plain chord is "new" in every
     // browser and editor there is, and this one takes the selection with
     // it, which is the heavier of the two things to do by accident.

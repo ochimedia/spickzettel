@@ -123,6 +123,7 @@ bool Editor::Available(const Command& command) const {
         case CommandId::ColorButton:
             return !selection_.empty() && command.at.has_value();
         case CommandId::Paste:
+        case CommandId::PasteInPlace:
             return !clipboard_.empty() && Manager().CurrentOrNull() != nullptr;
         case CommandId::ToggleFullscreen:
         case CommandId::ToggleFullscreenStretched:
@@ -226,7 +227,13 @@ void Editor::Run(const Command& command, Filing filing) {
             CopySelectionToClipboard(/*cut=*/true);
             return;
         case CommandId::Paste:
-            PasteFromClipboard();
+            // A menu's row at the point the menu was opened at, a key at
+            // the pointer - and where it was, while the pointer is not
+            // known.
+            PasteFromClipboard(command.at.has_value() ? command.at : pointer_);
+            return;
+        case CommandId::PasteInPlace:
+            PasteFromClipboard(std::nullopt);
             return;
         case CommandId::Duplicate:
             DuplicateSelection();

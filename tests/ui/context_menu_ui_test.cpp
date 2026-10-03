@@ -102,6 +102,42 @@ TEST_F(ContextMenuUiTest, DuplicateFromTheMenuMakesACopy) {
     EXPECT_FALSE(App().IsItemContextMenuOpen()) << "choosing a row closes the menu";
 }
 
+// Paste from a menu puts what is pasted where the right click was - its
+// middle there - and not where the pointer went to choose the row. On
+// empty canvas and over a snippet alike; Paste in place, where it was.
+TEST_F(ContextMenuUiTest, PasteFromAMenuPutsItWhereTheMenuWasOpened) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 300.0f, 250.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    const Rect where = Canvases().CurrentOrNull()->items[0].rect;
+    PressCtrlKey(ImGuiKey_C);
+    const auto at = [&where](float x, float y) {
+        return Rect{x - where.w * 0.5f, y - where.h * 0.5f, where.w, where.h};
+    };
+
+    RightClick(900.0f, 500.0f);
+    ASSERT_TRUE(App().IsEmptyCanvasMenuOpen());
+    ClickRow("##emptymenu_paste");
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items.back().rect, at(900.0f, 500.0f));
+
+    // Over the copy just pasted: that snippet's menu has the rows too.
+    PressKey(ImGuiKey_Escape);
+    RightClick(880.0f, 520.0f);
+    ASSERT_TRUE(App().IsItemContextMenuOpen());
+    ClickRow("##menu_paste");
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items.back().rect, at(880.0f, 520.0f));
+
+    PressKey(ImGuiKey_Escape);
+    RightClick(600.0f, 200.0f);
+    ASSERT_TRUE(App().IsEmptyCanvasMenuOpen());
+    ClickRow("##emptymenu_paste_in_place");
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 4u);
+    EXPECT_EQ(Canvases().CurrentOrNull()->items.back().rect, where);
+}
+
 // The row that only had a shortcut until now (Ctrl+Shift+N): the snippet
 // goes to a brand new canvas, and the app is left looking at it.
 TEST_F(ContextMenuUiTest, MoveToNewCanvasFromTheMenuTakesTheSnippetThere) {
