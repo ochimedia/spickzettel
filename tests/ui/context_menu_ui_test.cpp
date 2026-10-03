@@ -331,6 +331,31 @@ TEST_F(CanvasBarMenuUiTest, ARightClickOnATileOpensItsMenuAndDoesNotSwitch) {
     EXPECT_EQ(Canvases().CurrentCanvasId(), before) << "the right click switched canvas";
 }
 
+// As every context menu, on the release: not while the button is down,
+// and not for a press that went down on another tile.
+TEST_F(CanvasBarMenuUiTest, ATilesMenuOpensOnTheReleaseOverTheTilePressed) {
+    MakeASecondCanvas();
+
+    RunUi("press and release on a tile", [this](ImGuiTestContext* ctx) {
+        RevealTheBar(ctx);
+        ctx->SetRef("//##canvas_bar");
+        ctx->MouseMove("##canvasbar_tile_1");
+        ctx->MouseDown(ImGuiMouseButton_Right);
+        ctx->Yield(2);
+        ctx->MouseMove("##canvasbar_tile_0");
+        ctx->MouseUp(ImGuiMouseButton_Right);
+        ctx->Yield(2);
+        IM_CHECK(!App().IsCanvasContextMenuOpen());
+
+        ctx->MouseDown(ImGuiMouseButton_Right);
+        ctx->Yield(2);
+        IM_CHECK(!App().IsCanvasContextMenuOpen());
+        ctx->MouseUp(ImGuiMouseButton_Right);
+        ctx->Yield(2);
+        IM_CHECK(App().IsCanvasContextMenuOpen());
+    });
+}
+
 // Delete asks first, through the same confirmation the Overview's own
 // delete button uses - a canvas takes every snippet on it along, and
 // unlike a snippet there is no undo entry to take it back with.

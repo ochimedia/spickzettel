@@ -90,6 +90,9 @@ private:
     // Set when the overlay comes up, for the bar to come out for a moment on
     // the first frame after.
     bool edgePanelsFlashPending_ = false;
+    // The tile the right button went down on, until it comes up: its menu
+    // opens on the release, over the same tile.
+    std::optional<core::CanvasId> rightPressedTile_;
 };
 
 }  // namespace sz::ui

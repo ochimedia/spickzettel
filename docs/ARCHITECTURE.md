@@ -2772,7 +2772,9 @@ on it (`Editor::WidgetPressedAt`).
 
 A tile's own context menu is a right click on it, which does not also
 switch to that canvas: a menu is opened to act on something, not to go
-to it. The bar is held out for as long as the menu is up, since the
+to it. It opens on the release, over the tile the press went down on,
+as every other context menu does; until 2026-10-03 it opened on the
+press, the one menu that did. The bar is held out for as long as the menu is up, since the
 pointer has left the bar for the menu and a menu hanging over a panel
 that slid away would be a puzzle. Delete goes through the same
 confirmation the Overview's delete button asks for - a canvas takes

@@ -282,8 +282,12 @@ void CanvasBar::Draw(float displayW, float displayH) {
         // The tile's InvisibleButton answers the left button alone, so the
         // right one is read off the hover - and deliberately does not also
         // switch to the canvas: a menu is opened to act on something, not
-        // to go to it.
+        // to go to it. On the release, as every context menu opens, and
+        // only over the tile the press went down on.
         if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+            rightPressedTile_ = canvas->id;
+        }
+        if (hovered && ImGui::IsMouseReleased(ImGuiMouseButton_Right) && rightPressedTile_ == canvas->id) {
             rightClicked = canvas->id;
         }
         if (ImGui::BeginDragDropSource()) {
@@ -347,6 +351,9 @@ void CanvasBar::Draw(float displayW, float displayH) {
     ImGui::PopStyleColor(2);
     ImGui::PopStyleVar(2);
 
+    if (!ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+        rightPressedTile_.reset();
+    }
     if (rightClicked.has_value()) {
         host_.OpenCanvasMenu(*rightClicked, io.MousePos);
     }
