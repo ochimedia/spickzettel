@@ -127,6 +127,7 @@
     "newDrawing": "D",
     "newCanvas": null,
     "newCanvasWithSelection": "Ctrl+Shift+N",
+    "selectAll": "Ctrl+A",
     "copy": "Ctrl+C",
     "cut": "Ctrl+X",
     "paste": "Ctrl+V",

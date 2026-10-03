@@ -165,6 +165,25 @@ void Editor::ToggleSelected(ItemId id) {
 
 void Editor::ClearSelection() { selection_.clear(); }
 
+void Editor::SelectAll() {
+    if (InDrawingMode()) {
+        ExitDrawingMode();
+    }
+    selection_ = SelectableOnCanvas();
+}
+
+std::vector<ItemId> Editor::SelectableOnCanvas() const {
+    std::vector<ItemId> ids;
+    if (const Canvas* canvas = Manager().CurrentOrNull()) {
+        for (const Item& item : canvas->items) {
+            if (!Manager().IsDeleted(*canvas, item) && !item.minimized) {
+                ids.push_back(item.id);
+            }
+        }
+    }
+    return ids;
+}
+
 void Editor::PruneSelection() {
     const Canvas* canvas = Manager().CurrentOrNull();
     const auto onScreen = [&](ItemId id) {

@@ -49,7 +49,7 @@ struct ClipboardActionInfo {
 };
 extern const GalleryTool kGalleryTools[6];
 extern const CreateActionInfo kCreateActions[2];
-extern const ClipboardActionInfo kClipboardActions[5];
+extern const ClipboardActionInfo kClipboardActions[6];
 
 // The key a Settings row binds, for a tool, a create action and a
 // clipboard action - the rows are listed by those, and bind the

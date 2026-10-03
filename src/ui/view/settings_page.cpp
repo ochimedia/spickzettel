@@ -40,7 +40,8 @@ const CreateActionInfo kCreateActions[2] = {
      strings::kCreateNewCanvasWithSelection},
 };
 
-const ClipboardActionInfo kClipboardActions[5] = {
+const ClipboardActionInfo kClipboardActions[6] = {
+    {ClipboardAction::SelectAll, &icons::kSelect, strings::kClipboardSelectAll},
     {ClipboardAction::Copy, &icons::kCopy, strings::kClipboardCopy},
     {ClipboardAction::Cut, &icons::kScissors, strings::kClipboardCut},
     {ClipboardAction::Paste, &icons::kClipboard, strings::kClipboardPaste},
@@ -78,6 +79,8 @@ ShortcutAction ShortcutForCreateAction(CreateAction action) {
 
 ShortcutAction ShortcutForClipboardAction(ClipboardAction action) {
     switch (action) {
+        case ClipboardAction::SelectAll:
+            return ShortcutAction::SelectAll;
         case ClipboardAction::Copy:
             return ShortcutAction::Copy;
         case ClipboardAction::Cut:

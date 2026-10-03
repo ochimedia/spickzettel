@@ -963,7 +963,41 @@ TEST_F(HeadlessAppTest, UndoDeletesAScreenshotAndRedoBringsItBack) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
-// ===== The clipboard: Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Shift+V =====
+// ===== The clipboard: Ctrl+A, Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Shift+V =====
+
+// Ctrl+A selects every snippet on the canvas that can be selected: not
+// one deleted, which is still on the canvas, for undo to bring back.
+TEST_F(HeadlessAppTest, CtrlASelectsEverySnippetOnTheCanvas) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 300.0f, 250.0f);
+    Drag(400.0f, 100.0f, 600.0f, 250.0f);
+    Drag(100.0f, 400.0f, 300.0f, 550.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 3u);
+    const std::vector<Item>& items = Canvases().CurrentOrNull()->items;
+    const std::vector<ItemId> kept{items[0].id, items[1].id};
+    PressKey(ImGuiKey_Delete);  // the last one made, selected as it was
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    ASSERT_TRUE(App().Selection().empty());
+
+    PressCtrlKey(ImGuiKey_A);
+    EXPECT_EQ(App().Selection(), kept);
+}
+
+// In drawing mode the selection is the snippet being drawn on, so Ctrl+A
+// leaves the mode first, and then selects everything.
+TEST_F(HeadlessAppTest, CtrlAInDrawingModeLeavesItAndSelectsEverything) {
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 300.0f, 250.0f);
+    MakeADrawing(400.0f, 300.0f, 800.0f, 600.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    ASSERT_TRUE(App().InDrawingMode());
+
+    PressCtrlKey(ImGuiKey_A);
+    EXPECT_FALSE(App().InDrawingMode());
+    EXPECT_EQ(App().Selection().size(), 2u);
+}
 
 // A copy leaves the snippet where it is and pastes a second one at the
 // pointer, its middle there, selected, so it can be moved straight away.
@@ -4430,6 +4464,8 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
     EXPECT_EQ(App().ActiveTool(), Tool::Text) << "no tool picked under the field";
     PressKey(ImGuiKey_Delete);
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "and no snippet deleted either";
+    PressCtrlKey(ImGuiKey_A);
+    EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(note)) << "Ctrl+A selects the text, not the snippets";
 
     PressKey(ImGuiKey_Escape);
     EXPECT_FALSE(App().EditingNote().has_value());

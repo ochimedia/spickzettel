@@ -27,6 +27,7 @@
   "create.newCanvasWithSelection": "New canvas with the selection",
 
   "_clipboard": "What the clipboard does with the selected snippets - the four rows in the Shortcuts list, on Ctrl+C/X/V and Ctrl+D by default.",
+  "clipboard.selectAll": "Select all",
   "clipboard.copy": "Copy",
   "clipboard.cut": "Cut",
   "clipboard.paste": "Paste",
@@ -67,6 +68,7 @@
   "menu.fullscreenDrawing": "Fullscreen drawing",
   "menu.paste": "Paste",
   "menu.pasteInPlace": "Paste in place",
+  "menu.selectAll": "Select all",
   "menu.overview": "Overview",
   "menu.settings": "Settings",
   "menu.cheatSheet": "Cheat sheet",
@@ -460,6 +462,7 @@
   "cheatSheet.alt": "Move, resize the snippet",
   "cheatSheet.stopKeys": "Click elsewhere, Esc",
   "cheatSheet.stop": "Stop drawing",
+  "cheatSheet.selectAll": "Select all on the canvas",
   "cheatSheet.copy": "Copy",
   "cheatSheet.cut": "Cut: paste moves it",
   "cheatSheet.paste": "Paste at the pointer",

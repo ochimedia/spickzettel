@@ -63,6 +63,12 @@ TEST(ShortcutActionTest, TheCheatSheetShipsOnCtrlH) {
     EXPECT_EQ(ShortcutActionKey(ShortcutAction::CheatSheet), "cheatSheet");
 }
 
+// Where every program has it.
+TEST(ShortcutActionTest, SelectAllShipsOnCtrlA) {
+    EXPECT_EQ(BindingFor(DefaultShortcuts(), ShortcutAction::SelectAll), WithCtrl('A'));
+    EXPECT_EQ(ShortcutActionKey(ShortcutAction::SelectAll), "selectAll");
+}
+
 // Where the programs that have it put it, beside Paste's Ctrl+V.
 TEST(ShortcutActionTest, PasteInPlaceShipsOnCtrlShiftV) {
     EXPECT_EQ(BindingFor(DefaultShortcuts(), ShortcutAction::PasteInPlace), WithCtrlShift('V'));
@@ -74,9 +80,9 @@ TEST(ShortcutActionTest, EverythingElseStartsUnbound) {
     for (const ShortcutAction action : kAllShortcutActions) {
         const bool bound = action == ShortcutAction::NewScreenshot || action == ShortcutAction::NewDrawing ||
                            action == ShortcutAction::Erase || action == ShortcutAction::Draw ||
-                           action == ShortcutAction::Copy || action == ShortcutAction::Cut ||
-                           action == ShortcutAction::Paste || action == ShortcutAction::PasteInPlace ||
-                           action == ShortcutAction::Duplicate ||
+                           action == ShortcutAction::SelectAll || action == ShortcutAction::Copy ||
+                           action == ShortcutAction::Cut || action == ShortcutAction::Paste ||
+                           action == ShortcutAction::PasteInPlace || action == ShortcutAction::Duplicate ||
                            action == ShortcutAction::NewCanvasWithSelection ||
                            action == ShortcutAction::CheatSheet;
         EXPECT_EQ(BindingFor(bindings, action).key != 0, bound)

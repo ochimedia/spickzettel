@@ -1304,10 +1304,11 @@ possible later restriction rather than a rule today.
 Every drawing tool, creation tool and clipboard action can carry a key,
 pressed while the overlay is up in edit mode. Four ship bound (`S`
 screenshot, `D` drawing, `E` eraser, `P` pen) plus the clipboard's usual
-`Ctrl+C/X/V`, `Ctrl+Shift+V` to paste in place, `Ctrl+D` to duplicate
-the selection, `Ctrl+Shift+N` for a new canvas the selection comes along
-to and `Ctrl+H` for the cheat sheet; the rest start unset, because a
-shortcut that fires a tool you did not want is worse than no shortcut. The chords are safe to ship where a letter
+`Ctrl+C/X/V`, `Ctrl+Shift+V` to paste in place, `Ctrl+A` to select all,
+`Ctrl+D` to duplicate the selection, `Ctrl+Shift+N` for a new canvas
+the selection comes along to and `Ctrl+H` for the cheat sheet; the rest
+start unset, because a shortcut that fires a tool you did not want is
+worse than no shortcut. The chords are safe to ship where a letter
 would not be, since a chord cannot fire from ordinary typing - `Ctrl+D`
 sits beside the plain `D` that makes a drawing, and the exact-modifier
 match keeps them apart.
@@ -1345,6 +1346,11 @@ another canvas, the move between canvases and the new place are one
 change (`history::Moved::placement`), since a step holds one change per
 snippet.
 
+Select all (Ctrl+A) takes every snippet on the canvas that can be
+selected, not one deleted or minimized, and leaves drawing mode first,
+since there the selection is the snippet being drawn on. While a note is
+typed it is the field's, as every key is.
+
 Until 0.2.3 there was one Paste, and it offset every copy 24 px when any
 of them had its source on the canvas - so a copy from another canvas was
 moved too, which the code's own comment said it would not be. Found in
@@ -1361,11 +1367,11 @@ about them can fail the way registering a global hotkey can, which is
 also why a bare letter is allowed here and questionable there.
 
 `ShortcutAction` is the flat list the config layer persists, by name.
-An action added since a file was written - Paste in place, in 0.2.3 -
-has its default, unless the file gives that combination to another
-action, which keeps it; the new one starts unbound. Taken, the key went
-to whichever of the two comes first in the command table, which could
-be the new one.
+An action added since a file was written - Paste in place and Select
+all, in 0.2.3 - has its default, unless the file gives that combination
+to another action, which keeps it; the new one starts unbound. Taken,
+the key went to whichever of the two comes first in the command table,
+which could be the new one.
 Config sits below the app and cannot see what a key does; the command
 table ties each action to its command (see "Commands" under the overlay
 UI), and a test checks that every action names exactly one.
@@ -2164,10 +2170,10 @@ outside the snippet must not make another.
 
 The right button once made drawings the same way. It opens a menu on
 empty canvas now - every way to make either kind (the "New" rows pick
-up the creation tool, the fullscreen ones make it at once), Paste and
-Paste in place, the Overview and Settings - so that a kind set to no press at all, or
-forgotten, is one click away, and the canvas has the menu a right click
-everywhere else has taught. It opens on release, like a snippet's; a
+up the creation tool, the fullscreen ones make it at once), Paste,
+Paste in place and Select all, the Overview and Settings - so that a
+kind set to no press at all, or forgotten, is one click away, and the
+canvas has the menu a right click everywhere else has taught. It opens on release, like a snippet's; a
 right drag there does nothing, and a canvas switch or a capture during
 the press drops it rather than releasing it into a menu over a canvas
 nobody clicked on.

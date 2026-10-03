@@ -20,6 +20,8 @@ std::string_view ShortcutActionKey(ShortcutAction action) {
             return "newCanvas";
         case ShortcutAction::NewCanvasWithSelection:
             return "newCanvasWithSelection";
+        case ShortcutAction::SelectAll:
+            return "selectAll";
         case ShortcutAction::Copy:
             return "copy";
         case ShortcutAction::Cut:
@@ -59,6 +61,7 @@ ShortcutBindings DefaultShortcuts() {
     bind(ShortcutAction::NewDrawing, 'D');
     bind(ShortcutAction::Erase, 'E');
     bind(ShortcutAction::Draw, 'P');
+    bindWithCtrl(ShortcutAction::SelectAll, 'A');
     bindWithCtrl(ShortcutAction::Copy, 'C');
     bindWithCtrl(ShortcutAction::Cut, 'X');
     bindWithCtrl(ShortcutAction::Paste, 'V');

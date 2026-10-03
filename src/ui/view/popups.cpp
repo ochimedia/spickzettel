@@ -395,6 +395,7 @@ void Popups::BuildEmptyCanvasMenuRows(std::vector<ContextMenuEntry>& rows) const
 
     add(CommandId::Paste, "##emptymenu_paste", &icons::kClipboard, strings::kMenuPaste, /*separatorAbove=*/true);
     add(CommandId::PasteInPlace, "##emptymenu_paste_in_place", &icons::kClipboard, strings::kMenuPasteInPlace);
+    add(CommandId::SelectAll, "##emptymenu_select_all", &icons::kSelect, strings::kMenuSelectAll);
 
     // The Overview last, where the row used most is found without reading.
     add(CommandId::CheatSheet, "##emptymenu_cheat_sheet", &icons::kKeyboard, strings::kMenuCheatSheet,

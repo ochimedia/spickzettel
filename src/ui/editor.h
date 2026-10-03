@@ -191,6 +191,11 @@ public:
     void SelectOnly(ItemId id);
     void ToggleSelected(ItemId id);
     void ClearSelection();
+    // Every snippet on the current canvas that can be selected - not one
+    // deleted or minimized - in the order they are stacked; out of drawing
+    // mode first, where the selection is the snippet being drawn on.
+    void SelectAll();
+    std::vector<ItemId> SelectableOnCanvas() const;
     // Drops whatever is no longer on the current canvas, or is deleted or
     // minimized there - run at the top of every frame and around every key,
     // so nothing acts on a snippet that has gone.

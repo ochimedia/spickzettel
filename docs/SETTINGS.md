@@ -268,12 +268,12 @@ from the input options HUD, where the six booleans are a key each.
 | `counterThreshold` | `profileable.counterThreshold` | 100 | 10..5000 held | Window |
 | `freezeScreen` | `profileable.freezeScreen` | false | bool | Freeze; two answers (section 7) |
 
-**`shortcuts`**: Profile, one setting per `ShortcutAction` (14). Rule: a
+**`shortcuts`**: Profile, one setting per `ShortcutAction` (15). Rule: a
 key, or Mouse3-5, with modifiers, or `null` for unbound. Invariant: one
 combination, one action within a target. Default: `DefaultShortcuts()`;
-an action the file does not name, one added since (`pasteInPlace` in
-0.2.3), has it only if the file gives that combination to no other
-action, and is unbound otherwise.
+an action the file does not name, one added since (`pasteInPlace` and
+`selectAll` in 0.2.3), has it only if the file gives that combination
+to no other action, and is unbound otherwise.
 Edited from Settings > Hotkeys, lower box. Effect: Use.
 
 **`tutorial`**: Global. Edited from the tutorial as it goes

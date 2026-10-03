@@ -101,10 +101,12 @@ enum class ChromeButton { Close, Maximize, Minimize, More, Pin, Pen, Eraser, Tex
 // until the Paste that moves it - see Editor::PasteFromClipboard.
 //
 // Duplicate is the copy and the paste in one step, and is here because
-// that is where a hand goes looking for it. It deliberately leaves the
+// that is where a hand goes looking for it. Select all is no clipboard's
+// either, and is here for the same reason: it is where every program's
+// Edit menu has it, beside Copy. It deliberately leaves the
 // clipboard itself untouched: duplicating something is not a reason to
 // lose what was copied ten minutes ago.
-enum class ClipboardAction { Copy, Cut, Paste, PasteInPlace, Duplicate };
+enum class ClipboardAction { SelectAll, Copy, Cut, Paste, PasteInPlace, Duplicate };
 
 // Identifies one of the global hotkeys - kept distinct from any index into
 // AppConfig itself, so that nothing naming one depends on how the config

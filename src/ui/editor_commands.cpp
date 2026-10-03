@@ -125,6 +125,8 @@ bool Editor::Available(const Command& command) const {
         case CommandId::Paste:
         case CommandId::PasteInPlace:
             return !clipboard_.empty() && Manager().CurrentOrNull() != nullptr;
+        case CommandId::SelectAll:
+            return !SelectableOnCanvas().empty();
         case CommandId::ToggleFullscreen:
         case CommandId::ToggleFullscreenStretched:
         case CommandId::ResetSize:
@@ -219,6 +221,9 @@ void Editor::Run(const Command& command, Filing filing) {
             return;
         case CommandId::NewCanvasWithSelection:
             MoveSelectionToNewCanvas();
+            return;
+        case CommandId::SelectAll:
+            SelectAll();
             return;
         case CommandId::Copy:
             CopySelectionToClipboard(/*cut=*/false);

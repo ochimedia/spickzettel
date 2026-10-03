@@ -121,6 +121,7 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
     drawing.push_back({strings::kCheatSheetStopKeys, strings::kCheatSheetStop});
 
     std::vector<CheatSheetRow>& clipboard = section(strings::kCheatSheetClipboard);
+    shortcut(clipboard, CommandId::SelectAll, strings::kCheatSheetSelectAll);
     shortcut(clipboard, CommandId::Copy, strings::kCheatSheetCopy);
     shortcut(clipboard, CommandId::Cut, strings::kCheatSheetCut);
     shortcut(clipboard, CommandId::Paste, strings::kCheatSheetPaste);
