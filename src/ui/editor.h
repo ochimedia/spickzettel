@@ -67,14 +67,6 @@ inline constexpr float kWheelOpacityStep = 0.05f;
 // step before it ends, filed as one - see ui/interaction/bursts.h.
 inline constexpr double kBurstSeconds = 1.0;
 
-// Smallest positive integer N such that `prefix + std::to_string(N)` isn't
-// already exactly one of `existingNames` - see the definition for why this
-// beats a plain "count existing + 1". What an *item* is named after:
-// "Drawing 3", "Note 2", "Screenshot 5" - a kind and a number, which is as
-// much as an item's name is ever asked to carry (a tooltip in the dock, a
-// line in a toast).
-int NextAvailableNumber(const std::string& prefix, const std::vector<std::string>& existingNames);
-
 // The modifiers `held`, as what they would trigger on empty canvas (see
 // AppConfig::screenshotTrigger): none, Ctrl alone or Alt alone - nothing
 // for Shift, whose press there is the box that selects, or for two held
@@ -399,7 +391,7 @@ public:
     std::optional<ItemCreationKind> EmptyCanvasCreationKind() const;
     // A new snippet of `kind` as Settings > Defaults says it starts, at
     // `rect` - what the session makes it from (see Session::CreateItem).
-    Item PrototypeForKind(ItemCreationKind kind, Rect rect, std::string name) const;
+    Item PrototypeForKind(ItemCreationKind kind, Rect rect) const;
     // A snippet of `kind` covering the display - or `width` by `height`,
     // for a capture made while hidden, with no frame to have told the
     // display - or framed at `rect` if that is big enough to be meant;

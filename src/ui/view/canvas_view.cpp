@@ -789,8 +789,7 @@ void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTo
             host_.Act(action::RestoreMinimized{item->id});
         }
         if (ImGui::IsItemHovered()) {
-            const std::string label = item->name.empty() ? strings::kMoveCopyItemWord : item->name;
-            ImGui::SetTooltip("Restore \"%s\"", label.c_str());
+            ImGui::SetTooltip("%s", strings::kDockRestoreTip);
         }
     }
     ImGui::End();

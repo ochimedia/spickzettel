@@ -146,10 +146,6 @@
   "undo.move": "move to another canvas",
   "undo.copyTo": "copy to another canvas",
 
-  "_itemNames": "The prefixes new snippets are named with, before their number.",
-  "itemName.screenshotPrefix": "Screenshot ",
-  "itemName.regionPrefix": "Region ",
-  "itemName.drawingPrefix": "Drawing ",
 
   "_hotkeyText": "How a key combination is written out wherever one is shown.",
   "hotkey.ctrlPrefix": "Ctrl+",
@@ -536,11 +532,9 @@
   "overview.libraryEmpty": "No canvases anywhere yet - \"New canvas\" makes one.",
 
   "_moveCopy": "The picker an item's \"Move to another canvas\" opens, and the button that confirms it.",
-  "moveCopy.prompt": "%s \"%s\" to...",
-  "moveCopy.copy": "Copy",
-  "moveCopy.move": "Move",
+  "moveCopy.copy": "Copy the snippet to...",
+  "moveCopy.move": "Move the snippet to...",
   "moveCopy.cancel": "Cancel",
-  "moveCopy.itemWord": "item",
 
   "_deleteConfirm": "The confirmation before a canvas or folder is deleted, and before anything already deleted is deleted for good.",
   "deleteConfirm.prompt": "Delete %s \"%s\"?",
@@ -646,6 +640,8 @@
   "canvasBar.newCanvasTip": "New canvas in this folder",
   "canvasBar.overviewTip": "Overview - canvases, folders and settings",
   "canvasBar.tileTip": "%s  (%d of %d)",
+  "_dock": "The dock along the bottom, where minimized snippets wait.",
+  "dock.restoreTip": "Restore this snippet",
 
   "_drawing": "Settings > Interaction: the Snippets section at its top.",
   "drawing.snippetsHeading": "Snippets",

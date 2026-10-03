@@ -20,65 +20,12 @@ namespace sz::ui {
 
 // ================= Helpers =================
 
-// Smallest positive integer N such that `prefix + std::to_string(N)` isn't
-// already exactly one of `existingNames`. Unlike "count existing + 1" this
-// can't collide with a sibling that is still around: deleting the *middle*
-// one of "Drawing 1/2/3" and adding a new one would otherwise produce a
-// second "Drawing 3". Fills the lowest *unused*
-// number rather than always climbing past the highest one ever used, so
-// deleting the last of a numbered run and adding a new one reuses that
-// just-freed number - matches what "Canvas 1/2/3", delete 3, add new ->
-// "Canvas 3" again (not "Canvas 4") intuitively suggests. `prefix`
-// includes its own trailing separator (e.g. "Canvas ") so a name has to
-// match it exactly, digits only, to count - "My Canvas 1" or "Canvas 1a"
-// don't.
-int NextAvailableNumber(const std::string& prefix, const std::vector<std::string>& existingNames) {
-    std::vector<int> used;
-    for (const std::string& name : existingNames) {
-        if (name.size() <= prefix.size() || name.compare(0, prefix.size(), prefix) != 0) {
-            continue;
-        }
-        const std::string suffix = name.substr(prefix.size());
-        const bool allDigits =
-            !suffix.empty() && std::all_of(suffix.begin(), suffix.end(), [](char c) { return c >= '0' && c <= '9'; });
-        if (allDigits) {
-            used.push_back(std::atoi(suffix.c_str()));
-        }
-    }
-    std::sort(used.begin(), used.end());
-    int n = 1;
-    for (int u : used) {
-        if (u == n) {
-            ++n;
-        } else if (u > n) {
-            break;
-        }
-    }
-    return n;
-}
-
 std::optional<CreationTrigger> CreationTriggerFor(const platform::Modifiers& held) {
     if (held.shift || held.super || (held.ctrl && held.alt)) {
         return std::nullopt;
     }
     return held.ctrl ? CreationTrigger::Ctrl : held.alt ? CreationTrigger::Alt : CreationTrigger::Plain;
 }
-
-namespace {
-
-std::string ItemNameForKind(ItemCreationKind kind, const Canvas& canvas, bool fullscreen) {
-    const bool wantsBackground = kind == ItemCreationKind::Screenshot;
-    const char* base = wantsBackground ? (fullscreen ? strings::kItemNameScreenshotPrefix : strings::kItemNameRegionPrefix) : strings::kItemNameDrawingPrefix;
-    std::vector<std::string> existingNames;
-    for (const Item& item : canvas.items) {
-        if (item.hasBackground == wantsBackground) {
-            existingNames.push_back(item.name);
-        }
-    }
-    return base + std::to_string(NextAvailableNumber(base, existingNames));
-}
-
-}  // namespace
 
 namespace {
 // What the editor asks of a view, with none there.
@@ -577,12 +524,10 @@ const Canvas* Editor::EnsureCanvasForNewItem() {
 ItemId Editor::CreateFullscreenItem(ItemCreationKind kind) { return CreateFullscreenItem(kind, displayW_, displayH_); }
 
 ItemId Editor::CreateFullscreenItem(ItemCreationKind kind, float width, float height) {
-    const Canvas* canvas = EnsureCanvasForNewItem();
-    if (canvas == nullptr) {
+    if (EnsureCanvasForNewItem() == nullptr) {
         return 0;
     }
-    Item prototype =
-        PrototypeForKind(kind, Rect{0.0f, 0.0f, width, height}, ItemNameForKind(kind, *canvas, /*fullscreen=*/true));
+    Item prototype = PrototypeForKind(kind, Rect{0.0f, 0.0f, width, height});
     prototype.isFullscreen = true;
     // Through the session, so that making it is on the history - see
     // Session::CreateItem.
@@ -617,12 +562,10 @@ ItemId Editor::CreateRegionItem(ItemCreationKind kind, Rect rect) {
         rect.x = std::clamp(rect.x, 0.0f, std::max(0.0f, displayW_ - rect.w));
         rect.y = std::clamp(rect.y, 0.0f, std::max(0.0f, displayH_ - rect.h));
     }
-    const Canvas* canvas = EnsureCanvasForNewItem();
-    if (canvas == nullptr) {
+    if (EnsureCanvasForNewItem() == nullptr) {
         return 0;
     }
-    const ItemId id =
-        session_.CreateItem(PrototypeForKind(kind, rect, ItemNameForKind(kind, *canvas, /*fullscreen=*/false)));
+    const ItemId id = session_.CreateItem(PrototypeForKind(kind, rect));
     if (id == 0) {
         return 0;
     }
@@ -630,13 +573,12 @@ ItemId Editor::CreateRegionItem(ItemCreationKind kind, Rect rect) {
     return id;
 }
 
-Item Editor::PrototypeForKind(ItemCreationKind kind, Rect rect, std::string name) const {
+Item Editor::PrototypeForKind(ItemCreationKind kind, Rect rect) const {
     // Settings > Defaults.
     const SnippetDefaults& defaults =
         kind == ItemCreationKind::Screenshot ? Cfg().screenshotDefaults : Cfg().drawingDefaults;
     Item item;
     item.hasBackground = kind == ItemCreationKind::Screenshot;
-    item.name = std::move(name);
     item.rect = rect;
     item.keepAspect = defaults.keepAspect;
     item.foregroundOpacity = defaults.foregroundOpacity;

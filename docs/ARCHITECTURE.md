@@ -818,9 +818,11 @@ keep that door open.
 
 A folder or canvas nobody has named is called for the moment it was
 made, "2026-09-07 22:36:14": a counted "Folder 2, Folder 5" says nothing
-about which is which a week later. Items keep numbered names
-("Screenshot 3"), which is all an item name is asked to carry. Names are
-not identity, and two may be alike; the id is what tells them apart.
+about which is which a week later. Snippets are not named: the numbered
+names they had ("Region 3") could not be changed and told nobody
+anything, so nothing shows them any more and a new snippet has none.
+`Item::name` stays in the record for what libraries already hold. Names
+are not identity, and two may be alike; the id is what tells them apart.
 
 ## Persistence: the library file
 

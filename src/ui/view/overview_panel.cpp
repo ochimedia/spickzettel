@@ -309,10 +309,7 @@ void OverviewPanel::RenderOverviewHeader() {
     // since it's where a new canvas or folder comes from.
     const Canvas* currentCanvas = Manager().CurrentOrNull();
     if (pickerItemId_.has_value() && currentCanvas) {
-        const auto it = std::find_if(currentCanvas->items.begin(), currentCanvas->items.end(),
-                                      [&](const Item& i) { return i.id == *pickerItemId_; });
-        const std::string itemName = it != currentCanvas->items.end() ? it->name : strings::kMoveCopyItemWord;
-        ImGui::TextColored(theme::Accent(), strings::kMoveCopyPrompt, pickerIsCopy_ ? strings::kMoveCopyCopy : strings::kMoveCopyMove, itemName.c_str());
+        ImGui::TextColored(theme::Accent(), "%s", pickerIsCopy_ ? strings::kMoveCopyCopy : strings::kMoveCopyMove);
         ImGui::SameLine();
         if (ImGui::SmallButton(Labeled(strings::kMoveCopyCancel, "pickercancel"))) {
             host_.Act(action::ClosePanel{PanelKind::Overview});

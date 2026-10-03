@@ -32,6 +32,8 @@ struct Rect {
 // the item is resized - see CanvasManager::BakeStrokeToNative.
 struct Item {
     ItemId id = 0;
+    // Empty for every snippet made now, and shown nowhere: what libraries
+    // from before kept, when snippets were numbered ("Region 3").
     std::string name;
     // See Folder::createdAt/deletedAt.
     int64_t createdAt = 0;

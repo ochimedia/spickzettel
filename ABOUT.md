@@ -74,6 +74,7 @@ currently bound.
 - Every tool has a key out of the box, in the area around WASD: Q select, W pen, E eraser, A text, S screenshot, D drawing - and Ctrl+N makes a new canvas. A settings file from an earlier version keeps the keys it has; set them in Settings > Hotkeys
 - Folders and canvases in the trash are no longer deleted permanently after 14 days by default; switch it on in Settings > Behavior. A settings file from an earlier version keeps what it says
 - With Show deleted on, deleted folders are told apart from folders with deleted canvases by color - red and yellow - with a legend for the two
+- Snippets are no longer named ("Region 1", "Drawing 2"): the names could not be changed and said nothing, and the dock and Move to another canvas no longer show them
 - Refined the tutorial's rectangle eraser step, the Folders and canvases tutorial, and the Capturing tutorial
 - Refined various help and tutorial texts
 - A tutorial topic quit partway no longer goes on after a restart; Basics starts over from its welcome until it is finished or skipped
