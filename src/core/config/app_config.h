@@ -255,13 +255,17 @@ struct AppConfig {
     // Whether a deleted folder or canvas is deleted for good once it has
     // been deleted for longer than purgeDeletedAfterDays - checked when the
     // library is opened, which is at startup (see Session::
-    // EraseDeletedBefore for what counts, and how long, for what). On by
-    // default, after two weeks, so a library does not keep everything ever
-    // deleted; the number of days is kept while it is off so switching it
-    // on again is one click. Deleted snippets are not a question here: they are
+    // EraseDeletedBefore for what counts, and how long, for what). Off by
+    // default: every way a start can fall back to the defaults - no file, a
+    // file set aside, a key that cannot be read - then keeps what is
+    // deleted rather than erasing what a user who switched retention off
+    // meant to keep, and the trash is emptied by hand meanwhile. The number
+    // of days is kept while it is off so switching it on is one click, and
+    // retention on with no period that can be read is read as off (see
+    // TryParseConfig). Deleted snippets are not a question here: they are
     // erased on every open (see Session::ImportLibrary). Chosen in
     // Settings > Behavior.
-    bool purgeDeleted = true;
+    bool purgeDeleted = false;
     int purgeDeletedAfterDays = 14;
     // Whether deleting a folder or canvas asks first: one that can still be
     // restored (confirmDelete), and one already deleted, which is for good
@@ -407,8 +411,9 @@ struct LoadedConfig {
 // way instead, to config-unreadable-<stamp>.json beside it, and one that
 // cannot be read at all is left alone; either way the app starts on the
 // defaults, and the caller says so. See main_win32.cpp. A file set aside is
-// replaced at once by the defaults with retention off (purgeDeleted), so
-// that no later start erases what the unread file may have kept.
+// replaced at once by the defaults with retention off (purgeDeleted, off by
+// default too), so that no later start erases what the unread file may
+// have kept.
 //
 // A file a newer build wrote is read, as well as this build can, and left
 // as it is: written over, it would lose whatever the newer build stored

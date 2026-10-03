@@ -736,8 +736,10 @@ TEST_F(TrayControllerPersistenceTest, StandInSettingsEraseNothingAndLeaveTheFile
     test::FakePlatformHost host;
     host.libraryPath = library_;
     host.configFilePath = dir_ / "config.json";
+    // On, as it stays whatever the defaults say: what holds it off is the
+    // stand-in, not the default.
     AppConfig config = DefaultConfig();
-    ASSERT_TRUE(config.purgeDeleted);
+    config.purgeDeleted = true;
     TrayController controller(host, config);
     controller.StartOnStandInSettings(ConfigSource::SetAside, /*keepFile=*/true);
     ASSERT_TRUE(controller.Initialize());

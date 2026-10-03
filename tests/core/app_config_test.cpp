@@ -754,10 +754,11 @@ TEST(AppConfigTest, OverviewPreviewTogglesRoundTrip) {
     EXPECT_FALSE(ParseConfig(One("overview", "showBitmaps", "false")).overviewShowsBitmaps);
 }
 
-// On by default, after two weeks. The days are held to a day at least and ten years at
-// most, rounded if fractional, and ignored if not a number at all.
-TEST(AppConfigTest, PurgingDeletedThingsDefaultsToTwoWeeksAndParsesItsDays) {
-    EXPECT_TRUE(DefaultConfig().purgeDeleted);
+// Off by default, with two weeks ready for when it is switched on. The days are held to a
+// day at least and ten years at most, rounded if fractional, and ignored if not a number
+// at all.
+TEST(AppConfigTest, PurgingDeletedThingsIsOffByDefaultAndParsesItsDays) {
+    EXPECT_FALSE(DefaultConfig().purgeDeleted);
     EXPECT_EQ(DefaultConfig().purgeDeletedAfterDays, 14);
     EXPECT_FALSE(ParseConfig(One("deleted", "deleteForGoodAutomatically", "false")).purgeDeleted);
     EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "7")).purgeDeletedAfterDays, 7);
@@ -766,6 +767,36 @@ TEST(AppConfigTest, PurgingDeletedThingsDefaultsToTwoWeeksAndParsesItsDays) {
     EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "1e9")).purgeDeletedAfterDays, kPurgeDeletedAfterDaysMax);
     EXPECT_EQ(ParseConfig(One("deleted", "afterDays", "2.6")).purgeDeletedAfterDays, 3);
     EXPECT_EQ(ParseConfig(One("deleted", "afterDays", R"("7")")).purgeDeletedAfterDays, 14);
+}
+
+// Retention switched on only with a period that can be read: a broken or missing one is
+// not replaced by the default, which could delete far sooner than the one meant, but
+// switches it off, and the file is written back to say so.
+TEST(AppConfigTest, RetentionWithNoPeriodToReadIsOff) {
+    // This build's version, so that nothing but the repair counts as a change.
+    const auto read = [](const std::string& deleted) {
+        return TryParseConfig(R"({"version": )" + std::to_string(kConfigVersion) + R"(, "deleted": )" + deleted + "}");
+    };
+    const std::optional<ParsedConfig> stated = read(R"({"deleteForGoodAutomatically": true, "afterDays": 365})");
+    ASSERT_TRUE(stated.has_value());
+    EXPECT_TRUE(stated->config.purgeDeleted);
+    EXPECT_EQ(stated->config.purgeDeletedAfterDays, 365);
+    EXPECT_FALSE(stated->changed);
+
+    for (const std::string deleted : {R"({"deleteForGoodAutomatically": true, "afterDays": "365"})",
+                                      R"({"deleteForGoodAutomatically": true, "afterDays": null})",
+                                      R"({"deleteForGoodAutomatically": true})"}) {
+        const std::optional<ParsedConfig> parsed = read(deleted);
+        ASSERT_TRUE(parsed.has_value());
+        EXPECT_FALSE(parsed->config.purgeDeleted) << deleted;
+        EXPECT_TRUE(parsed->changed) << deleted;
+    }
+
+    // Off, it needs no period.
+    const std::optional<ParsedConfig> off = read(R"({"deleteForGoodAutomatically": false, "afterDays": "x"})");
+    ASSERT_TRUE(off.has_value());
+    EXPECT_FALSE(off->config.purgeDeleted);
+    EXPECT_FALSE(off->changed);
 }
 
 // Deleting a folder or canvas asks first, both kinds, until told not to.

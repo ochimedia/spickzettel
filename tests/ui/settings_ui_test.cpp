@@ -398,7 +398,7 @@ TEST_F(UiTest, AWaitingRowStopsWaitingWhenItsSectionOrTabIsLeft) {
 // switch is off, and once it is on they step a day at a time - both saved
 // as settings are.
 TEST_F(UiTest, TheRetentionPeriodIsSwitchedOnAndItsDaysSet) {
-    controller_->GetSettings().Set(setting::kPurgeDeleted, false);  // on by default
+    controller_->GetSettings().Set(setting::kPurgeDeleted, false);  // off by default, said anyway
     ShowEditMode();
     StepFrame();
     const int days = AppSettings().Stored().purgeDeletedAfterDays;

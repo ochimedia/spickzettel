@@ -4604,7 +4604,9 @@ TEST_F(HeadlessAppTest, WhatTheRetentionPeriodDeletedIsSaidOnTheNextShow) {
     ASSERT_TRUE(persistence::LibraryStore(dir / "library.db").Save(snapshot));
     host_.libraryPath = dir / "library.db";
 
-    StartWith(DefaultConfig());
+    AppConfig config = DefaultConfig();
+    config.purgeDeleted = true;
+    StartWith(config);
     EXPECT_EQ(Canvases().FindCanvas(3), nullptr);
     ShowEditMode();
     StepFrame();

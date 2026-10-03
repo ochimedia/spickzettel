@@ -169,6 +169,8 @@ TEST(ConfigFilesTest, TheFileTheFirstReleaseWroteReadsAsTheDefaults) {
     // are gone, and nothing about the settings added since.
     AppConfig expected = DefaultConfig();
     WithTheShortcutsOf010(expected);
+    // Retention was on by default then, and the file says so.
+    expected.purgeDeleted = true;
     EXPECT_EQ(ParseConfig(ReadFixture("v0.1.0-defaults.json")), expected);
 }
 

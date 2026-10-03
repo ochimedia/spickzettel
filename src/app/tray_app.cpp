@@ -108,8 +108,8 @@ bool TrayController::Initialize() {
     // file set aside, written where the file was - by the loader already,
     // unless that write failed - or a file reading repaired (see
     // WriteConfigAtStart). Owed and tried again like any settings write.
-    // Not writing the stand-in cost the retention setting: the next start
-    // found no file, made the defaults, and had retention back on.
+    // While retention was on by default, not writing the stand-in turned it
+    // back on: the next start found no file and made the defaults.
     if ((skipRetentionThisStart_ && !configFileKept_) || writeConfigAtStart_) {
         PersistConfig();
     }

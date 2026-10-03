@@ -764,7 +764,7 @@ in marked. That includes one deleted before its canvas: restoring the
 canvas would not bring it back either.
 
 Folders and canvases can be given a retention period
-(`AppConfig::purgeDeleted`, on by default, and `purgeDeletedAfterDays`, 14):
+(`AppConfig::purgeDeleted`, off by default, and `purgeDeletedAfterDays`, 14):
 once the library is opened, `Session::EraseDeletedBefore` deletes for good
 whatever carries a mark older than the period, by the same erase and for
 the same reason. Only its own mark counts. A canvas that went with its
@@ -772,11 +772,23 @@ folder has none and goes when the folder does; one marked on its own
 before the folder went can go first, which leaves the folder as a
 Delete permanently by hand would. It runs at startup only: an instance
 left running for days keeps what is due until it is next started, which
-costs nothing but the wait. Being on by default, it says what it does: the
+costs nothing but the wait. Switched on, it says what it does: the
 delete confirmation says for how many days a thing can be restored, a
 deleted folder or canvas says from which day it goes, and what a start
 deleted for good is counted in a message the next time the overlay comes
 up, since the start itself happens while nobody is looking.
+
+It was on by default until 0.2.3, and reviews kept finding one more way
+a start could fall back to the defaults - no file, a file set aside, a
+stand-in that could not be written, a key that could not be read - and
+with it erase what someone who had switched retention off meant to
+keep. Off by default, every one of those keeps things instead, and what
+is deleted can only be lost by a choice: Empty trash, or retention
+switched on. A file that has it on with no period that can be read is
+read with it off and written back so, since the default period could be
+far shorter than the one meant. A file written before keeps what it
+says: every file lists every setting, so one written while retention
+was on by default goes on purging, as its owner was shown.
 
 A trash folder and then a trash library came before (see "Dead ends"):
 a delete that moves things somewhere else has to move them back whole,
@@ -1233,11 +1245,12 @@ profile. `LoadOrCreateConfig` renames it to
 where it is and not written over for that run. Either way the app starts
 on the defaults, says so in a message box, and skips the retention
 period, since whether it was on is what could not be read. Skipping one
-start is not enough - the next finds no file, or the defaults, and both
-turn a 14-day retention back on over a library whose owner may have
-switched it off - so the stand-in written in its place has retention off
-until it is switched on again, even when the file could not be moved
-aside. The tray writes the stand-in again as it starts, in case that
+start was not enough while retention was on by default - the next found
+no file, or the defaults, and both turned a 14-day retention back on
+over a library whose owner may have switched it off - so the stand-in
+written in its place has retention off until it is switched on again,
+even when the file could not be moved aside. The defaults have it off
+now too (see "Deletion is a mark"), and the stand-in still says so itself. The tray writes the stand-in again as it starts, in case that
 write failed, and a write that fails is owed and retried from the
 background timer, like any settings write. The file is written through
 temp-then-rename, since truncating it in place leaves a window in which

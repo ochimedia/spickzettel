@@ -639,6 +639,16 @@ std::optional<ParsedConfig> TryParseConfig(std::string_view text) {
         }
     }
 
+    // Retention on, with no period the file states that can be read: off,
+    // and the file made to say so. The default period in its place could
+    // be far shorter than the one a hand edit broke, and what it deletes
+    // does not come back.
+    const auto& days = setting::kPurgeDeletedAfterDays;
+    if (config.purgeDeleted && !ReadValue(days.rule, Find(doc, days.path))) {
+        config.purgeDeleted = false;
+        parsed.changed = true;
+    }
+
     parsed.changed = RepairOnLoad(config) || parsed.changed;
     return parsed;
 }
@@ -716,7 +726,8 @@ LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_v
     // Not settings - not JSON, or too big to be - and set aside rather than
     // written over, so that whatever the user had in it can still be found.
     // Retention off in the stand-in, whether or not the file can be moved:
-    // whether it was on is what could not be read.
+    // whether it was on is what could not be read. The defaults have it off
+    // too; said here as well, so that this holds whatever they say.
     loaded.source = ConfigSource::SetAside;
     loaded.config.purgeDeleted = false;
     std::filesystem::path aside = path;
@@ -724,10 +735,9 @@ LoadedConfig LoadOrCreateConfig(const std::filesystem::path& path, std::string_v
     std::filesystem::rename(path, aside, ec);
     if (!ec) {
         loaded.setAsideAs = aside;
-        // The stand-in goes where the file was at once: a missing file or
-        // the defaults at the next start would turn retention back on. A
-        // write that fails here is the tray's to retry - see
-        // TrayController::StartOnStandInSettings.
+        // The stand-in goes where the file was at once, as the settings
+        // this start runs on. A write that fails here is the tray's to
+        // retry - see TrayController::StartOnStandInSettings.
         WriteConfigFile(path, loaded.config);
     }
     return loaded;

@@ -101,7 +101,7 @@
   "deleted": {
     "confirmDelete": true,
     "confirmDeleteForGood": true,
-    "deleteForGoodAutomatically": true,
+    "deleteForGoodAutomatically": false,
     "afterDays": 14
   },
   "display": {

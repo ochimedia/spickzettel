@@ -243,7 +243,7 @@ checkboxes. Effect: Frame.
 |---|---|---|---|---|
 | `confirmDelete` | `confirmDelete` | true | bool | Use |
 | `confirmDeleteForGood` | `confirmDeleteForGood` | true | bool | Use |
-| `deleteForGoodAutomatically` | `purgeDeleted` | true | bool | Start |
+| `deleteForGoodAutomatically` | `purgeDeleted` | false | bool | Start |
 | `afterDays` | `purgeDeletedAfterDays` | 14 | 1..3650 held | Start |
 
 **`display`**: Global. Rule: text. Edited from Settings > Appearance.
@@ -379,6 +379,7 @@ These are today's except where marked:
 | One shortcut, one action, per target | none for what the file names; an action it does not name is unbound rather than take a combination the file gives another | the others in the target are unbound |
 | A profile's binding wins over an inherited same key | applied when resolving, not stored | the same |
 | Profile names are not empty | "Profile" | a cleared field keeps the old name |
+| Retention runs only with a period read from the file | retention off, when `afterDays` is missing or not a number (the default period could delete far sooner than the one meant) | none: the panel's field always holds a period |
 | Profile names are unique | numbered ("Game 2") | new profiles numbered; **Change (C3)**: a rename to a name another profile has is refused. The profile keeps its old name for as long as the typed one is taken, as with a cleared field, and a line under the field says the name is taken |
 
 **Change (C4)**: load repairs are written back at start. Today only the
@@ -509,8 +510,8 @@ answers and does not settle them (question 4 here).
   is the same arrangement as a file that cannot be read
   (`StartOnStandInSettings(keepFile)`), and it skips the retention
   period for that start as that does. A newer build may have moved the
-  retention keys, and read as defaults they would turn a 14-day purge
-  back on. Settings changes still work for the session and are not
+  retention keys, and while retention was on by default, read as
+  defaults they would have turned a 14-day purge back on. Settings changes still work for the session and are not
   saved, and Settings says so above every section - as it does for a
   file that cannot be read, or cannot be moved aside.
 
