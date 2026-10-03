@@ -76,6 +76,32 @@ build left behind - a stale object, a cached option, an exe in `dist/`
 from before a rename - can end up in what is handed out. It finds
 Visual Studio itself with `vswhere`, so it runs from a double-click.
 
+### Continuous integration
+
+`.github/workflows/build.yml` builds and tests `windows-msvc-debug` and
+`windows-msvc-release` on GitHub's hosted Windows runner for every push
+and pull request, and keeps `Spickzettel.exe` and its PDB as an artifact
+of the run. Added on 2026-10-04, so that a build can come from a clean
+checkout of one commit, on a machine that has never seen the working
+tree, and be traced back to that commit. The local build stays the
+same; the workflow is the same presets, run somewhere else.
+
+- **The toolchain is loaded as `scripts/clean_build.cmd` loads it**:
+  `vswhere` finds Visual Studio, `vcvars64.bat` sets it up, and its
+  environment is handed to the later steps through `GITHUB_ENV`. That
+  puts Visual Studio's own CMake and Ninja first on the path, as on a
+  developer's machine, rather than whichever versions the runner image
+  installs separately, and needs no third-party action: the only actions
+  used are GitHub's own `checkout` and `upload-artifact`.
+- **The checkout is the whole history** (`fetch-depth: 0`). The version
+  stamp is `git describe --tags`, which a shallow clone cannot answer;
+  the About tab of a CI build would show a bare hash.
+- **The prerelease and demo presets are not built.** They differ from
+  release by one compile definition each, and build no tests.
+- **A newer push to the same branch cancels the run still going**, whose
+  result no longer matters. Windows runners count double against a
+  private repository's minutes.
+
 The C++ runtime is linked statically (`CMAKE_MSVC_RUNTIME_LIBRARY`), so
 the exe needs nothing beyond what Windows itself ships: no Visual C++
 Redistributable to install, and no risk of loading an older copy of
