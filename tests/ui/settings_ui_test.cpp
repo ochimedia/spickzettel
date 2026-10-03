@@ -4,6 +4,7 @@
 // the app, clicking at coordinates worked out from a screenshot, and looking
 // at another screenshot.
 #include <algorithm>
+#include <cstring>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -638,6 +639,24 @@ TEST_F(UiTest, TheThirdPartyLicensesAreReachableFromAbout) {
         EXPECT_NE(notices.find(component), std::string_view::npos)
             << component << " is compiled in but is not in THIRD-PARTY-NOTICES.md";
     }
+}
+
+// About's Getting around points at the cheat sheet, with a button to it:
+// the Overview closes and the cheat sheet comes up in its place.
+TEST_F(UiTest, AboutOpensTheCheatSheet) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("cheat sheet from About", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtababout");
+        // Its key on it, as bound.
+        IM_CHECK(std::strstr(ctx->ItemInfo("**/###about_cheat_sheet").DebugLabel, "(Ctrl+H)") != nullptr);
+        ctx->ItemClick("**/###about_cheat_sheet");
+    });
+    StepFrames(2);
+    EXPECT_FALSE(App().IsOverviewOpen());
+    EXPECT_TRUE(App().IsCheatSheetOpen());
 }
 
 // The explanations moved out of the panel and behind a "?" per row, which

@@ -696,6 +696,8 @@
   "about.builtWith": "Built with",
   "about.thirdPartyLicenses": "Third-party licenses",
   "about.backToAbout": "Back to About",
+  "about.openCheatSheet": "Open the cheat sheet",
+  "about.openCheatSheetKey": "Open the cheat sheet (%s)",
   "_aboutComponents": "The Built with list. Names as their own projects spell them, so they can be looked up.",
   "about.componentImgui": "Dear ImGui 1.92.9",
   "about.componentJson": "nlohmann/json 3.11.3",

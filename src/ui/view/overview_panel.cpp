@@ -5,10 +5,12 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <functional>
 #include <iterator>
 #include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/build_info/build_info.h"
@@ -16,6 +18,7 @@
 #include "core/util/timestamp_name.h"
 #include "generated/ui_strings.h"
 #include "ui/icons_generated.h"
+#include "ui/interaction/command.h"
 #include "ui/interaction/levels.h"
 #include "ui/item_painting.h"
 #include "ui/theme.h"
@@ -980,7 +983,9 @@ const BuiltWithRow kBuiltWith[] = {
 
 // ABOUT.md and THIRD-PARTY-NOTICES.md, rendered with just enough Markdown
 // awareness to look like prose rather than like a file someone forgot to
-// format: headings and bullets, nothing else. A real Markdown renderer
+// format: headings and bullets, nothing else - and an HTML comment on a
+// line of its own, which Markdown never shows, handed to `placeholder` to
+// draw something there that text cannot be, a button. A real Markdown renderer
 // would be a project of its own (ImGui has none built in), and the
 // alternative - dumping the raw text with its '#' and '-' prefixes intact -
 // looks like a bug. Whoever edits either file gets a live preview by
@@ -995,7 +1000,8 @@ const BuiltWithRow kBuiltWith[] = {
 // joined back into one string and handed to ImGui to wrap, which is also
 // what makes a bullet's second line line up under its first: it's one
 // wrapped item rather than two unrelated ones.
-void RenderMarkdownSubset(std::string_view document) {
+void RenderMarkdownSubset(std::string_view document,
+                          const std::function<void(std::string_view)>& placeholder = {}) {
     constexpr float kBulletIndent = 16.0f;
     std::string paragraph;
     bool paragraphIsBullet = false;
@@ -1037,6 +1043,20 @@ void RenderMarkdownSubset(std::string_view document) {
             // thing that ends one here.
             flush();
             ImGui::Spacing();
+            continue;
+        }
+        if (trimmed.starts_with("<!--") && trimmed.ends_with("-->")) {
+            flush();
+            std::string_view name = trimmed.substr(4, trimmed.size() - 7);
+            while (!name.empty() && name.front() == ' ') {
+                name.remove_prefix(1);
+            }
+            while (!name.empty() && name.back() == ' ') {
+                name.remove_suffix(1);
+            }
+            if (placeholder) {
+                placeholder(name);
+            }
             continue;
         }
         size_t hashes = 0;
@@ -1131,7 +1151,33 @@ void OverviewPanel::RenderOverviewAboutPanel() {
     ImGui::Separator();
     ImGui::Spacing();
 
-    RenderMarkdownSubset(build::AboutText());
+    // Getting around points at the cheat sheet and the tutorial, and puts
+    // a way to each right there: the Overview closes for either, as it
+    // does for Settings' own Open the tutorial. The cheat sheet's key is
+    // on its button, as it is bound - the text cannot say it, and a key
+    // the text named could be one rebound or unbound since.
+    RenderMarkdownSubset(build::AboutText(), [this](std::string_view placeholder) {
+        if (placeholder != "about:open-buttons") {
+            return;
+        }
+        const std::vector<platform::KeyCombo> keys =
+            KeysFor(CommandId::CheatSheet, settings_.Stored(), settings_.Live().shortcuts);
+        char label[128];
+        if (keys.empty()) {
+            std::snprintf(label, sizeof(label), "%s", strings::kAboutOpenCheatSheet);
+        } else {
+            std::snprintf(label, sizeof(label), strings::kAboutOpenCheatSheetKey,
+                          FormatKeyComboLabel(keys.front()).c_str());
+        }
+        if (ImGui::Button(Labeled(label, "about_cheat_sheet"))) {
+            host_.Act(action::ClosePanel{PanelKind::Overview});
+            host_.Act(action::RunCommand{Command{CommandId::CheatSheet}});
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(Labeled(strings::kTutorialSettingsOpen, "about_tutorial"))) {
+            host_.Act(action::OpenTutorialList{});
+        }
+    });
 
     // What is inside this binary that somebody else wrote. The list is
     // short enough to read at a glance and is the part most people want;

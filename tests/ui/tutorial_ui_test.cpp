@@ -264,6 +264,22 @@ TEST_F(TutorialUiTest, OpenTheTutorialInSettingsShowsTheTopicsToPickFrom) {
     EXPECT_EQ(Canvases().CurrentOrNull()->folderId, Runner().Folder());
 }
 
+// And from About's Getting around, the same way.
+TEST_F(TutorialUiTest, AboutOpensTheTutorialsTopics) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("open the tutorial from About", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtababout");
+        ctx->ItemClick("**/###about_tutorial");
+    });
+    StepFrames(2);
+    EXPECT_FALSE(App().IsOverviewOpen());
+    EXPECT_TRUE(App().TutorialListed());
+    EXPECT_FALSE(Runner().On());
+}
+
 TEST_F(TutorialUiTest, TheListClosesWithNothingStarted) {
     ShowEditMode();
     StepFrame();
