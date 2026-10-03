@@ -65,6 +65,34 @@ TEST_F(ContextMenuUiTest, AMenuThatFitsNeitherWayRoundStaysOnTheScreen) {
     EXPECT_LE(menu->Pos.x + menu->Size.x, display.x);
 }
 
+// A menu opened just too low for it to fit below is turned up, and its
+// last row is on the screen: measured as it is laid out, spacing between
+// the rows and all. Measured without the spacing, it was a row or two
+// shorter than it is, fitted below where it did not, and ran off the
+// bottom. How tall it is, it is asked first, opened at the top.
+TEST_F(ContextMenuUiTest, AMenuJustTooTallForTheRoomBelowIsTurnedUp) {
+    MakeASnippet();
+    const auto menuWindow = []() -> const ImGuiWindow* {
+        const ImGuiContext& g = *ImGui::GetCurrentContext();
+        return g.OpenPopupStack.empty() ? nullptr : g.OpenPopupStack.back().Window;
+    };
+    RightClick(640.0f, 40.0f);
+    StepFrame();
+    ASSERT_NE(menuWindow(), nullptr);
+    const float height = menuWindow()->Size.y;
+    PressKey(ImGuiKey_Escape);
+    StepFrame();
+    ASSERT_FALSE(App().IsItemContextMenuOpen());
+
+    const ImVec2 display = ImGui::GetIO().DisplaySize;
+    RightClick(640.0f, display.y - height + 10.0f);
+    StepFrame();
+    const ImGuiWindow* menu = menuWindow();
+    ASSERT_NE(menu, nullptr);
+    EXPECT_GE(menu->Pos.y, 0.0f);
+    EXPECT_LE(menu->Pos.y + menu->Size.y, display.y);
+}
+
 TEST_F(ContextMenuUiTest, DuplicateFromTheMenuMakesACopy) {
     MakeASnippet();
     OpenTheMenu();

@@ -63,8 +63,14 @@ Metrics Measure(const std::vector<ContextMenuEntry>& entries) {
     // a menu whose actions all lack shortcuts is as narrow as its labels.
     metrics.innerWidth = Px(kRowPadX) * 2.0f + metrics.iconColumn + labelColumn +
                           (metrics.shortcutColumn > 0.0f ? Px(kShortcutGap) + metrics.shortcutColumn : 0.0f);
+    // And the style's spacing between one item and the next, a divider
+    // being one: the rows are laid out with it, and a menu measured without
+    // it ran a row or two off the bottom of the screen where it should have
+    // turned up.
+    const size_t items = entries.size() + separators;
     metrics.height = Px(kMenuPad) * 2.0f + static_cast<float>(entries.size()) * metrics.rowHeight +
-                      static_cast<float>(separators) * (Px(kSeparatorPadY) * 2.0f + 1.0f);
+                      static_cast<float>(separators) * (Px(kSeparatorPadY) * 2.0f + 1.0f) +
+                      static_cast<float>(items > 0 ? items - 1 : 0) * ImGui::GetStyle().ItemSpacing.y;
     return metrics;
 }
 
@@ -107,9 +113,8 @@ ContextMenu::Drawn ContextMenu::Render(ImVec2 anchor, const Builder& build) {
     ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, display.y));
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(Px(kMenuPad), Px(kMenuPad)));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
     const bool open = ImGui::BeginPopup(popupId_);
-    ImGui::PopStyleVar(2);
+    ImGui::PopStyleVar();
     if (!open) {
         return Drawn{};
     }
