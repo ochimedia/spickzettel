@@ -36,6 +36,25 @@ function(spickzettel_generate_ui_strings INPUT_JSON OUTPUT_HEADER NAMESPACE)
         message(FATAL_ERROR "spickzettel: ${INPUT_JSON} is not a JSON object: ${_err}")
     endif()
 
+    # A key written twice is no error to string(JSON): its parser keeps
+    # the last value and drops the other without a word, so the text a
+    # key was added with never shows, and the key it collided with may be
+    # the one that changes. Found on 2026-10-03, when a new tutorial
+    # step's strings took the keys of an existing one. Read off the text,
+    # as the parsed object no longer has the twin: one key a line, as the
+    # file is laid out.
+    file(STRINGS "${INPUT_JSON}" _keyLines REGEX "^[ \t]*\"[^\"]+\"[ \t]*:")
+    set(_written "")
+    foreach(_line IN LISTS _keyLines)
+        if(NOT _line MATCHES "^[ \t]*\"([^\"]+)\"[ \t]*:")
+            continue()
+        endif()
+        if(CMAKE_MATCH_1 IN_LIST _written)
+            message(FATAL_ERROR "spickzettel: ui string key '${CMAKE_MATCH_1}' is written twice in ${INPUT_JSON}")
+        endif()
+        list(APPEND _written "${CMAKE_MATCH_1}")
+    endforeach()
+
     set(_body "")
     set(_seen "")
     math(EXPR _last "${_count} - 1")
