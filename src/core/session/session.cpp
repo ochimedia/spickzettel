@@ -10,6 +10,7 @@
 
 #include "core/canvas/item_geometry.h"
 #include "core/diagnostics/timeline.h"
+#include "core/persistence/image_codec.h"
 
 namespace sz::core {
 
@@ -434,7 +435,10 @@ void Session::CaptureShotItem(Item& item) {
         const TimelineScope marked(TimelineMark::Capture);
         result = window_->CaptureRegion(platform::Rect{item.rect.x, item.rect.y, item.rect.w, item.rect.h});
     }
-    if (result.pixelsRGBA.empty()) {
+    // Past what a picture may be, it is no capture: kept, it would show
+    // until the next start and then never again, since the library would
+    // not read it back - the placeholder from the start is the honest one.
+    if (result.pixelsRGBA.empty() || !persistence::WithinImageBudget(result.width, result.height)) {
         return;
     }
     // Its texture from the pixels at hand, rather than read back from the

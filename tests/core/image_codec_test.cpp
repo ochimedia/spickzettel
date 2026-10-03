@@ -75,6 +75,50 @@ TEST(ImageCodecTest, DecodeRefusesAHeaderClaimingMoreThanTheBudget) {
     EXPECT_FALSE(DecodeQoi(huge.data(), huge.size()).has_value());
 }
 
+TEST(ImageCodecTest, TheBudgetEndsAtTheLongestSideAndThePixelCount) {
+    EXPECT_TRUE(WithinImageBudget(kMaxImageExtent, 1));
+    EXPECT_TRUE(WithinImageBudget(kMaxImageExtent, kMaxImagePixels / kMaxImageExtent));
+    EXPECT_FALSE(WithinImageBudget(kMaxImageExtent, kMaxImagePixels / kMaxImageExtent + 1));
+    EXPECT_FALSE(WithinImageBudget(kMaxImageExtent + 1, 1));
+    EXPECT_FALSE(WithinImageBudget(1, kMaxImageExtent + 1));
+    EXPECT_FALSE(WithinImageBudget(0, 1));
+    EXPECT_FALSE(WithinImageBudget(1, -1));
+}
+
+// What the encoder writes, the decoder reads: an image at the edge of the
+// budget goes both ways, and one past it is not written at all - rather
+// than written and then never read again.
+TEST(ImageCodecTest, AnImageIsWrittenOnlyIfItIsReadBack) {
+    std::vector<uint8_t> row(static_cast<size_t>(kMaxImageExtent + 1) * 4, 200);
+    const std::vector<uint8_t> atTheEdge = EncodeQoi(row.data(), kMaxImageExtent, 1);
+    ASSERT_FALSE(atTheEdge.empty());
+    const std::optional<DecodedImage> decoded = DecodeQoi(atTheEdge.data(), atTheEdge.size());
+    ASSERT_TRUE(decoded.has_value());
+    EXPECT_EQ(decoded->width, kMaxImageExtent);
+
+    EXPECT_TRUE(EncodeQoi(row.data(), kMaxImageExtent + 1, 1).empty());
+}
+
+// The file-size limit is the encoder's own worst case - every pixel a full
+// five-byte RGBA chunk - taken to the most pixels the budget allows, so a
+// picture within the budget is never refused for the size it came out at.
+TEST(ImageCodecTest, TheFileLimitIsTheEncodersWorstCaseForTheBudget) {
+    constexpr int kPixels = 64;
+    std::vector<uint8_t> pixels;
+    for (int i = 0; i < kPixels; ++i) {
+        // No two alike and the alpha always changing: no run, no index
+        // hit, no difference chunk - each one written in full. Not from
+        // zero: the index starts out all zeros, which a first pixel of
+        // zeros would be found in.
+        const auto v = static_cast<uint8_t>(i + 1);
+        pixels.insert(pixels.end(), {v, static_cast<uint8_t>(v * 7), static_cast<uint8_t>(v * 13), v});
+    }
+    const std::vector<uint8_t> encoded = EncodeQoi(pixels.data(), kPixels, 1);
+    const size_t framing = 14 + 8;  // header and end marker
+    ASSERT_EQ(encoded.size(), kPixels * 5 + framing);
+    EXPECT_EQ(kMaxImageFileBytes, kMaxImagePixels * 5 + framing);
+}
+
 // ===== DownscaleToFit =====
 
 DecodedImage SolidImage(int width, int height, uint8_t value) {

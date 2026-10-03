@@ -16,19 +16,16 @@ namespace sz::core::persistence {
 
 namespace {
 
-// Whether a picture of this size is one this app will decode - see
-// kMaxImageExtent. Checked against the header, before the decoder is
-// given a chance to allocate for it.
-bool WithinPixelBudget(uint64_t width, uint64_t height) {
-    return width >= 1 && height >= 1 && width <= static_cast<uint64_t>(kMaxImageExtent) &&
-           height <= static_cast<uint64_t>(kMaxImageExtent) && width * height <= kMaxImagePixels;
-}
-
 uint32_t ReadBigEndian32(const uint8_t* bytes) {
     return (uint32_t{bytes[0]} << 24) | (uint32_t{bytes[1]} << 16) | (uint32_t{bytes[2]} << 8) | uint32_t{bytes[3]};
 }
 
 }  // namespace
+
+bool WithinImageBudget(int64_t width, int64_t height) {
+    return width >= 1 && height >= 1 && width <= kMaxImageExtent && height <= kMaxImageExtent &&
+           static_cast<uint64_t>(width) * static_cast<uint64_t>(height) <= kMaxImagePixels;
+}
 
 DecodedImage DownscaleToFit(const uint8_t* pixelsRGBA, int width, int height, int maxExtent) {
     DecodedImage out;
@@ -95,7 +92,7 @@ DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent) {
 }
 
 std::vector<uint8_t> EncodeQoi(const uint8_t* pixelsRGBA, int width, int height) {
-    if (!pixelsRGBA || width <= 0 || height <= 0) {
+    if (!pixelsRGBA || !WithinImageBudget(width, height)) {
         return {};
     }
     const qoi_desc desc{static_cast<unsigned int>(width), static_cast<unsigned int>(height),
@@ -118,7 +115,7 @@ std::optional<DecodedImage> DecodeQoi(const uint8_t* bytes, size_t size) {
     // those two numbers before it has looked at a single pixel.
     if (bytes == nullptr || size < QOI_HEADER_SIZE || size > kMaxImageFileBytes ||
         std::memcmp(bytes, "qoif", 4) != 0 ||
-        !WithinPixelBudget(ReadBigEndian32(bytes + 4), ReadBigEndian32(bytes + 8))) {
+        !WithinImageBudget(ReadBigEndian32(bytes + 4), ReadBigEndian32(bytes + 8))) {
         return std::nullopt;
     }
     qoi_desc desc{};

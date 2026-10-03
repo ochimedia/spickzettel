@@ -865,6 +865,36 @@ TEST(SessionTest, ACaptureWhoseUploadFailedKeepsItsPixels) {
     session.SetLibraryStore(nullptr);
 }
 
+// A capture past what a picture may be is no picture: the snippet is made
+// with its placeholder, rather than shown until the next start and then
+// never again because the library would not read it back.
+TEST(SessionTest, ACapturePastThePictureBudgetLeavesThePlaceholder) {
+    const std::filesystem::path dir =
+        sz::test::TempDir() / "spickzettel_session_test_capture_too_big";
+    std::filesystem::remove_all(dir);
+    const RemovedAtEnd cleanup(dir);
+    persistence::LibraryStore store(dir / "library.db");
+    test::FakeOverlayWindow window;
+    window.uploadsSucceed = true;
+    window.captureReturnsWidth = persistence::kMaxImageExtent + 1;
+    window.captureReturnsHeight = 1;
+    window.captureReturnsPixelsRGBA.assign(static_cast<size_t>(window.captureReturnsWidth) * 4, 128);
+    Session session;
+    session.AttachWindow(&window);
+    session.SetLibraryStore(&store);
+    ASSERT_TRUE(session.WriteWholeLibrary());
+
+    const ItemId id = session.CreateItem(true, Rect{0.0f, 0.0f, 100.0f, 1.0f}, "Shot");
+    ASSERT_NE(id, 0u) << "the snippet is made all the same";
+    const Item* shot = Model(session).FindItemAnywhere(id);
+    ASSERT_NE(shot, nullptr);
+    EXPECT_FALSE(shot->picture.stored);
+    EXPECT_FALSE(session.Textures().Find(TextureKey{TextureKey::Kind::Picture, id}).has_value());
+    EXPECT_FALSE(store.HasImage(id));
+
+    session.SetLibraryStore(nullptr);
+}
+
 // A source whose picture is gone from the library gives its copy nothing,
 // and says so, rather than quietly producing a copy that looks captured.
 TEST(SessionTest, ACopyOfACaptureWhosePictureCannotBeReadSaysSo) {

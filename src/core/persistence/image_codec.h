@@ -30,9 +30,10 @@ struct DecodedImage {
 DecodedImage DownscaleToFit(const uint8_t* pixelsRGBA, int width, int height, int maxExtent);
 DecodedImage DownscaleToFit(const DecodedImage& source, int maxExtent);
 
-// Encodes `pixelsRGBA` as a QOI image, or returns nothing on bad input or
-// an encode error. What a snippet's picture is stored as (see
-// LibraryStore::SaveImage), synchronously at capture time.
+// Encodes `pixelsRGBA` as a QOI image, or returns nothing on bad input, an
+// image outside the budget below, or an encode error. What a snippet's
+// picture is stored as (see LibraryStore::SaveImage), synchronously at
+// capture time.
 //
 // QOI rather than PNG because both halves of that are measured costs.
 // Encoding a 1920x1080 capture: 13ms here against 296ms for PNG, paid on
@@ -47,10 +48,17 @@ std::vector<uint8_t> EncodeQoi(const uint8_t* pixelsRGBA, int width, int height)
 // is decoded. A header claiming 100000x100000 pixels
 // asked for a 40 GB allocation before these existed. 16384 on a side and 64
 // million pixels (an 8K display is 33 million) is well past any capture
-// this app takes; 256 MB is past any picture those dimensions encode to.
+// this app takes. The size is QOI's own worst case for that many pixels -
+// five bytes each, a header and an end marker - so that whatever the
+// encoder makes of an image within the budget, this reads back.
 constexpr int kMaxImageExtent = 16384;
 constexpr uint64_t kMaxImagePixels = uint64_t{64} << 20;
-constexpr uint64_t kMaxImageFileBytes = uint64_t{256} << 20;
+constexpr uint64_t kMaxImageFileBytes = kMaxImagePixels * 5 + 14 + 8;
+
+// Whether an image this size is within the budget above: one the encoder
+// writes and the decoder reads. The writer's side asks it of a capture
+// before the capture becomes a snippet's picture (Session::CaptureShotItem).
+bool WithinImageBudget(int64_t width, int64_t height);
 
 // Decodes a QOI image back into raw RGBA8 pixels - a snippet's picture,
 // for its GPU texture (see IOverlayWindow::CreateTextureFromPixels).

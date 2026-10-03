@@ -914,11 +914,20 @@ InputGrabDiagnostics Win32OverlayWindow::GetInputGrabDiagnostics() const {
 }
 
 CaptureResult Win32OverlayWindow::CaptureRegion(const Rect& rect) {
-    const int width = static_cast<int>(rect.w);
-    const int height = static_cast<int>(rect.h);
-    if (!renderer_ || !hwnd_ || width <= 0 || height <= 0) {
+    // Checked as floats, before anything is converted or allocated: a value
+    // past int's range makes the conversion undefined, and the size alone
+    // decides what is allocated. Nothing larger than all the displays
+    // together is on the screen to capture, and nothing further out than
+    // that from the window is either. Written so that a NaN fails it.
+    const float screenW = static_cast<float>(GetSystemMetrics(SM_CXVIRTUALSCREEN));
+    const float screenH = static_cast<float>(GetSystemMetrics(SM_CYVIRTUALSCREEN));
+    const auto within = [](float value, float low, float high) { return value >= low && value <= high; };
+    if (!renderer_ || !hwnd_ || !within(rect.w, 1.0f, screenW) || !within(rect.h, 1.0f, screenH) ||
+        !within(rect.x, -screenW, screenW) || !within(rect.y, -screenH, screenH)) {
         return CaptureResult{};
     }
+    const int width = static_cast<int>(rect.w);
+    const int height = static_cast<int>(rect.h);
     // `rect` is in the window's coordinates, which are the desktop's only
     // while the window is on the primary display. Asked of the window rather
     // than worked out from displayRect_, so it is wherever the window
