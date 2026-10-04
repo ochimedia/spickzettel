@@ -131,6 +131,54 @@ TEST(DrawToolTest, ATapWithATinyTwitchIsStillADot) {
     EXPECT_EQ(canvas.Strokes().front().points.size(), 1u);
 }
 
+// Pressed, moved and released between two frames: no move reaches the
+// pen, and the release alone says where the line went.
+TEST(DrawToolTest, AStrokeWithNoMoveBetweenPressAndReleaseIsALine) {
+    CanvasState canvas;
+    DrawTool tool(0xFF0000FF, 4.0f);
+
+    Down(tool, canvas, 0, 0);
+    Up(tool, canvas, 50, 0);
+
+    ASSERT_EQ(canvas.Strokes().size(), 1u);
+    const std::vector<StrokePoint>& points = canvas.Strokes().front().points;
+    ASSERT_GE(points.size(), 2u);
+    EXPECT_FLOAT_EQ(points.front().x, 0.0f);
+    EXPECT_FLOAT_EQ(points.back().x, 50.0f);
+}
+
+// ...and with only a first move too short to earn a point, or one that
+// went nowhere: the frame before took that one, and the rest of the stroke
+// came between it and the next.
+TEST(DrawToolTest, AStrokeWithOnlyAShortMoveBeforeTheReleaseIsALine) {
+    for (const float firstX : {1.0f, 0.0f}) {
+        CanvasState canvas;
+        DrawTool tool(0xFF0000FF, 4.0f);
+
+        Down(tool, canvas, 0, 0);
+        Move(tool, canvas, firstX, 0);
+        Up(tool, canvas, 50, 0);
+
+        ASSERT_EQ(canvas.Strokes().size(), 1u);
+        const std::vector<StrokePoint>& points = canvas.Strokes().front().points;
+        ASSERT_GE(points.size(), 2u) << "first move to " << firstX;
+        EXPECT_FLOAT_EQ(points.front().x, 0.0f);
+        EXPECT_FLOAT_EQ(points.back().x, 50.0f);
+    }
+}
+
+// A release that close to the press is a twitch, and still the dot.
+TEST(DrawToolTest, ATwitchWithNoMoveIsStillADot) {
+    CanvasState canvas;
+    DrawTool tool(0xFF0000FF, 4.0f);
+
+    Down(tool, canvas, 0, 0);
+    Up(tool, canvas, 3, 0);
+
+    ASSERT_EQ(canvas.Strokes().size(), 1u);
+    EXPECT_EQ(canvas.Strokes().front().points.size(), 1u);
+}
+
 // A real line ends where the hand stopped. Smoothing leaves the last kept
 // point trailing the cursor, which on a deliberate stroke reads as falling
 // short of the mark.

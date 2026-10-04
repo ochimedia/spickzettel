@@ -3644,7 +3644,18 @@ Consequences that shape `Win32InputGrab`:
   passes on to it (`Placement::Released`, `Marking::Released`), as the
   pen and the shapes always did. Ended at the last move, a quick drag
   landed a frame short, and a handle let go of with no move between
-  resized nothing. Found in review on 2026-09-27.
+  resized nothing. Found in review on 2026-09-27. The pen went further
+  than its last move only to snap the end of a line already drawn, so a
+  stroke pressed, moved and released between two frames, with no move at
+  all, stayed a dot. Since 0.3.1 a release with no second point yet is a
+  line when it is at least twice the point spacing from the press, which is
+  as far as a single move must go to earn a point through the smoothing
+  (`DrawTool::OnMouseEvent`); a twitch is still the dot. The first version
+  made the release stand in only when no move had come, and one short first
+  move, taken by the frame before, left the stroke a dot all the same
+  (follow-up review). The path between
+  two frames is still one straight step: a queue of every report for the
+  pen was left out until strokes are seen to need it.
 - **Modifiers are fed to ImGui by hand**, from `GetAsyncKeyState` OR'd
   with the grab's own record, since the backend learns them from key
   messages and key messages need focus. A keyboard chord has one frame

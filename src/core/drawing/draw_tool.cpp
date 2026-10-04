@@ -158,8 +158,18 @@ void DrawTool::OnMouseEvent(const platform::MouseEvent& event, CanvasState& canv
                 // a second control point - stays a single point on purpose:
                 // that is the dot, and snapping the end would turn it into a
                 // stub with two ends instead.
-                if (controls_.size() >= 2 &&
-                    DistanceSquared(point, controls_.back()) >= kEndPointSnapPx * kEndPointSnapPx) {
+                //
+                // Or for a release far enough from the press to be one.
+                // The pointer is read once a frame, and a quick stroke, or
+                // any stroke during a hitch, can be pressed, moved and
+                // released between two frames: no move reaches the pen, or
+                // only a first one too short to earn a point. Far enough is
+                // where a single move would have earned one through the
+                // smoothing, which goes half the way: twice the spacing.
+                const float distanceSquared = DistanceSquared(point, controls_.back());
+                const float lineFromPressPx = 2.0f * kMinPointSpacingPx;
+                if ((controls_.size() >= 2 && distanceSquared >= kEndPointSnapPx * kEndPointSnapPx) ||
+                    (controls_.size() == 1 && distanceSquared >= lineFromPressPx * lineFromPressPx)) {
                     controls_.push_back(point);
                 }
                 EmitReadySpans(canvas, /*final=*/true);
