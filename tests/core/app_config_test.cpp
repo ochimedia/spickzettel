@@ -367,6 +367,22 @@ TEST(AppConfigTest, AShortcutMayBeAMouseButtonAndAHotkeyMayNot) {
               DefaultConfig().hotkeyEditMode);
 }
 
+// Undo's and redo's keys are no shortcut's and no hotkey's: written by
+// hand, they read as nothing said, and the default stands. Only those
+// three combinations - Ctrl+Alt+Z is anybody's.
+TEST(AppConfigTest, UndoAndRedoKeysAreNoShortcutsAndNoHotkeys) {
+    const size_t copy = ShortcutActionIndex(ShortcutAction::Copy);
+    for (const char* key : {R"("Ctrl+Z")", R"("Ctrl+Y")", R"("Ctrl+Shift+Z")"}) {
+        EXPECT_EQ(ParseConfig(One("shortcuts", "copy", key)).profileable.shortcuts[copy],
+                  DefaultConfig().profileable.shortcuts[copy])
+            << key;
+        EXPECT_EQ(ParseConfig(One("hotkeys", "editMode", key)).hotkeyEditMode, DefaultConfig().hotkeyEditMode)
+            << key;
+    }
+    EXPECT_EQ(ParseConfig(One("shortcuts", "copy", R"("Ctrl+Alt+Z")")).profileable.shortcuts[copy],
+              (platform::KeyCombo{true, true, false, 'Z'}));
+}
+
 // A file from before an action existed says nothing of it, and the action
 // has its default - unless the file gave that combination to another one,
 // which keeps it: Ctrl+Shift+V put on Duplicate by hand before there was a

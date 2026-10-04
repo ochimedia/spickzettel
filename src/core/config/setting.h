@@ -162,17 +162,27 @@ std::optional<E> Hold(const ChoiceRule<E>& rule, E value) {
 inline std::optional<int> Hold(const AutoOrPercentRule& rule, int value) {
     return value == 0 ? 0 : std::clamp(value, rule.min, rule.max);
 }
+// Undo's Ctrl+Z and redo's Ctrl+Y and Ctrl+Shift+Z: keys of the editor's
+// own that no shortcut or hotkey may be given (see ui::kCommands, whose
+// tests hold the two lists together). A shortcut given one never ran, as
+// undo or redo matched first; a hotkey took it from every other program.
+inline bool IsFixedKey(const platform::KeyCombo& combo) {
+    return combo == platform::KeyCombo{true, false, false, 'Z'} ||
+           combo == platform::KeyCombo{true, false, false, 'Y'} ||
+           combo == platform::KeyCombo{true, false, true, 'Z'};
+}
+
 inline std::optional<platform::KeyCombo> Hold(const HotkeyRule&, platform::KeyCombo value) {
     if (value.key == 0) {
         return platform::KeyCombo{};  // unbound, whatever modifiers came with it
     }
-    return value.IsValid() ? std::optional(value) : std::nullopt;
+    return value.IsValid() && !IsFixedKey(value) ? std::optional(value) : std::nullopt;
 }
 inline std::optional<platform::KeyCombo> Hold(const ShortcutRule&, platform::KeyCombo value) {
     if (value.key == 0) {
         return platform::KeyCombo{};
     }
-    return value.IsValid() || value.IsMouseButton() ? std::optional(value) : std::nullopt;
+    return (value.IsValid() && !IsFixedKey(value)) || value.IsMouseButton() ? std::optional(value) : std::nullopt;
 }
 inline std::optional<std::string> Hold(const TextRule&, std::string value) { return value; }
 inline std::optional<std::map<std::string, std::string>> Hold(const TextMapRule&,

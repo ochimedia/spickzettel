@@ -165,7 +165,8 @@ except where marked. "Edited from" is where the app changes it. The
 effect classes are defined in section 7.
 
 **`hotkeys`**: Global. Rule: a key combination, or `null` for unbound;
-a mouse button reads as nothing said. Invariant: distinct (section 5).
+a mouse button, and undo's and redo's keys (Ctrl+Z, Ctrl+Y,
+Ctrl+Shift+Z), read as nothing said. Invariant: distinct (section 5).
 Edited from Settings > Hotkeys, upper box. Effect: Registration.
 
 | Key | Field | Default |
@@ -274,7 +275,8 @@ from the input options HUD, where the six booleans are a key each.
 | `freezeScreen` | `profileable.freezeScreen` | false | bool | Freeze; two answers (section 7) |
 
 **`shortcuts`**: Profile, one setting per `ShortcutAction` (15). Rule: a
-key, or Mouse3-5, with modifiers, or `null` for unbound. Invariant: one
+key, or Mouse3-5, with modifiers, or `null` for unbound; undo's and
+redo's keys read as nothing said. Invariant: one
 combination, one action within a target. Default: `DefaultShortcuts()`;
 an action the file does not name, one added since (`pasteInPlace` and
 `selectAll` in 0.2.3), has it only if the file gives that combination
@@ -363,8 +365,8 @@ The kinds are those the parser has today, named once:
 | color | `#RRGGBB` or `#RRGGBBAA`; written with eight digits only when not opaque | every color |
 | choice | one of a list of names, any case | image filter, triggers |
 | auto or percent | `"auto"`, or a whole number held to the band | `uiScale` |
-| hotkey | a key combination, or `null`; a mouse button rejected | summon hotkeys |
-| shortcut | a key or Mouse3-5, or `null` | tool shortcuts |
+| hotkey | a key combination, or `null`; a mouse button and undo's and redo's keys rejected | summon hotkeys |
+| shortcut | a key or Mouse3-5, or `null`; undo's and redo's keys rejected | tool shortcuts |
 | text | any string | display |
 | bar | names or `{button, shown}` objects; unknown names dropped; made to hold each of that bar's buttons once | bars |
 

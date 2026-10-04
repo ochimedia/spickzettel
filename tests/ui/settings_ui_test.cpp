@@ -12,6 +12,7 @@
 #include "core/build_info/build_info.h"
 
 #include "fakes/ui_test.h"
+#include "generated/ui_strings.h"
 #include "support/session_test_access.h"
 
 namespace sz::test {
@@ -350,6 +351,40 @@ TEST_F(UiTest, AShortcutRowTakesAMouseButton) {
     EXPECT_FALSE(App().IsCapturingShortcut());
     EXPECT_EQ(AppSettings().Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
               (platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button}));
+}
+
+// Undo's and redo's keys are refused to a shortcut row and to a hotkey row
+// alike, and it is said why: each row keeps its key, and stops waiting.
+TEST_F(UiTest, AKeyRowRefusesUndoAndRedoKeys) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("open the hotkeys", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionhotkeys");
+    });
+    const auto pressWithCtrl = [this](ImGuiKey key) {
+        KeyEvent(ImGuiMod_Ctrl, true);
+        PressKey(key);
+        KeyEvent(ImGuiMod_Ctrl, false);
+        StepFrame();
+    };
+
+    const size_t copy = ShortcutActionIndex(ShortcutAction::Copy);
+    const platform::KeyCombo copyKey = AppSettings().Stored().profileable.shortcuts[copy];
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    pressWithCtrl(ImGuiKey_Z);
+    EXPECT_FALSE(App().IsCapturingShortcut());
+    EXPECT_EQ(AppSettings().Stored().profileable.shortcuts[copy], copyKey);
+    EXPECT_EQ(App().ActionToastText(), strings::kHotkeysFixedKeyRefused);
+
+    const platform::KeyCombo editModeKey = AppSettings().Stored().hotkeyEditMode;
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::EditMode);
+    pressWithCtrl(ImGuiKey_Y);
+    EXPECT_FALSE(App().IsCapturingHotkey());
+    EXPECT_EQ(AppSettings().Stored().hotkeyEditMode, editModeKey);
+    EXPECT_EQ(App().ActionToastText(), strings::kHotkeysFixedKeyRefused);
 }
 
 // A row waiting for its key stops waiting when it goes out of sight - the

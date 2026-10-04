@@ -162,7 +162,7 @@ TEST(TrayControllerTest, ChangeHotkeySwapsTheRegistrationAndTriggersTheNewCombo)
     const int oldEditId = FindHotkeyId(host, config.hotkeyEditMode);
     ASSERT_NE(oldEditId, 0);
 
-    const platform::KeyCombo newCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/'Z'};
+    const platform::KeyCombo newCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/'Q'};
     EXPECT_TRUE(controller.ChangeHotkey(HotkeySlot::EditMode, newCombo));
 
     // Old id no longer does anything - UnregisterGlobalHotkey erased its
@@ -209,7 +209,7 @@ TEST(TrayControllerTest, ChangeHotkeyPersistsTheNewComboToDisk) {
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
 
-    const platform::KeyCombo newCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/'Z'};
+    const platform::KeyCombo newCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/true, /*key=*/'Q'};
     ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, newCombo));
 
     const AppConfig written = ParseConfig([&] {
@@ -1024,7 +1024,7 @@ TEST_F(TrayControllerPersistenceTest, ASettingsFileThatCannotBeWrittenIsSaidOnSc
     ASSERT_TRUE(controller.Initialize());
     EXPECT_TRUE(controller.Overlay().PersistenceWarning().empty()) << "nothing written yet, nothing failed";
 
-    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Z'}));
+    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Q'}));
     EXPECT_NE(controller.Overlay().PersistenceWarning().find("config.json"), std::string::npos)
         << "applied in memory, and said to be unsaved";
     ASSERT_GT(host.backgroundTimerIntervalMs, 0) << "owed, so tried again without waiting for another edit";
@@ -1038,7 +1038,7 @@ TEST_F(TrayControllerPersistenceTest, ASettingsFileThatCannotBeWrittenIsSaidOnSc
     EXPECT_TRUE(controller.Overlay().PersistenceWarning().empty()) << "cleared by the write that landed";
     EXPECT_EQ(host.backgroundTimerIntervalMs, 0) << "nothing owed any more";
     EXPECT_TRUE(std::filesystem::is_regular_file(dir_ / "config.json"));
-    EXPECT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).hotkeyViewMode, (platform::KeyCombo{true, false, true, 'Z'}));
+    EXPECT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).hotkeyViewMode, (platform::KeyCombo{true, false, true, 'Q'}));
 }
 
 // A settings file set aside whose stand-in could not be written in its
@@ -1125,14 +1125,14 @@ TEST_F(TrayControllerPersistenceTest, ExitWritesASettingsFileStillOwed) {
     host.configFilePath = dir_ / "config.json";
     TrayController controller(host, DefaultConfig());
     ASSERT_TRUE(controller.Initialize());
-    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Z'}));
+    ASSERT_TRUE(controller.ChangeHotkey(HotkeySlot::ViewMode, platform::KeyCombo{true, false, true, 'Q'}));
     ASSERT_FALSE(controller.Overlay().PersistenceWarning().empty());
 
     std::filesystem::remove_all(dir_ / "config.json");  // writable again, and no timer has fired since
     host.TriggerTrayCommand(platform::TrayCommand::Exit);
     EXPECT_TRUE(host.quitCalled);
     EXPECT_TRUE(std::filesystem::is_regular_file(dir_ / "config.json")) << "the last chance was taken";
-    EXPECT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).hotkeyViewMode, (platform::KeyCombo{true, false, true, 'Z'}));
+    EXPECT_EQ(ParseConfig(ReadFile(dir_ / "config.json")).hotkeyViewMode, (platform::KeyCombo{true, false, true, 'Q'}));
 }
 
 // The actual rescale math (position/size/fullscreen/clamping behavior) is

@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/config/app_config.h"
+#include "core/config/setting.h"
 #include "core/config/shortcut_action.h"
 #include "ui/view/settings_page.h"
 
@@ -108,6 +109,23 @@ TEST(CommandTest, EveryBarButtonIsACommandOfItsOwn) {
         EXPECT_TRUE(std::find(commands.begin(), commands.end(), command) == commands.end()) << NameOf(command);
         commands.push_back(command);
     }
+}
+
+// The keys no shortcut or hotkey may be given are the fixed keys a
+// Settings row could otherwise hold - undo's and redo's - and only those.
+// Escape, Delete, Backspace and the arrows are no key a row holds at all.
+TEST(CommandTest, TheKeysNobodyMayChooseAreTheFixedOnes) {
+    int choosable = 0;
+    for (const CommandInfo& info : kCommands) {
+        for (const platform::KeyCombo& key : info.keys) {
+            if (key.IsValid()) {
+                EXPECT_EQ(info.heldWith, HeldWith::Exactly) << NameOf(info.id);
+                EXPECT_TRUE(core::IsFixedKey(key)) << NameOf(info.id);
+                ++choosable;
+            }
+        }
+    }
+    EXPECT_EQ(choosable, 3) << "each of IsFixedKey's three is some command's";
 }
 
 }  // namespace

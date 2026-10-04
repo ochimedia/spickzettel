@@ -185,6 +185,8 @@ private:
     // app's own other hotkeys is not a rejection: that one is unbound
     // instead (see TrayController::ChangeHotkey).
     bool TryChangeHotkey(core::HotkeySlot slot, platform::KeyCombo combo);
+    // TryChangeHotkey for a key just captured, saying why one did not take.
+    void OfferHotkey(core::HotkeySlot slot, platform::KeyCombo combo);
     // The row waiting, if one is.
     std::optional<core::HotkeySlot> CapturingHotkey() const;
     std::optional<core::ShortcutAction> CapturingShortcut() const;
