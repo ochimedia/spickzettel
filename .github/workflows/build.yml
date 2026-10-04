@@ -3,12 +3,11 @@
 # run. See "Continuous integration" in docs/ARCHITECTURE.md.
 name: Build
 
+# Started by hand, from the Actions tab, for now - see the docs.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
-# A newer push to the same branch makes the older run's result moot.
+# A newer run on the same branch makes the older one's result moot.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

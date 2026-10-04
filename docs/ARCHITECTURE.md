@@ -79,9 +79,8 @@ Visual Studio itself with `vswhere`, so it runs from a double-click.
 ### Continuous integration
 
 `.github/workflows/build.yml` builds and tests `windows-msvc-debug` and
-`windows-msvc-release` on GitHub's hosted Windows runner for every push
-and pull request, and keeps `Spickzettel.exe` and its PDB as an artifact
-of the run. Added on 2026-10-04, so that a build can come from a clean
+`windows-msvc-release` on GitHub's hosted Windows runner, and keeps
+`Spickzettel.exe` and its PDB as an artifact of the run. Added on 2026-10-04, so that a build can come from a clean
 checkout of one commit, on a machine that has never seen the working
 tree, and be traced back to that commit. The local build stays the
 same; the workflow is the same presets, run somewhere else.
@@ -98,7 +97,12 @@ same; the workflow is the same presets, run somewhere else.
   the About tab of a CI build would show a bare hash.
 - **The prerelease and demo presets are not built.** They differ from
   release by one compile definition each, and build no tests.
-- **A newer push to the same branch cancels the run still going**, whose
+- **It is started by hand** ("Run workflow" in the Actions tab, for a
+  branch picked there), not by every push: changed on 2026-10-04, while
+  the details around it are still being worked out, as a run for every
+  small push costs minutes for nothing. GitHub offers the button only
+  for a workflow that is on the default branch.
+- **A newer run on the same branch cancels the one still going**, whose
   result no longer matters. Windows runners count double against a
   private repository's minutes.
 
