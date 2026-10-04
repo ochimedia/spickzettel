@@ -63,6 +63,12 @@ If the app crashes, it writes a crash report to
 Keys named below are the defaults; the cheat sheet shows them as they are
 currently bound.
 
+### 0.3.0
+
+#### Changes
+
+- Switched the license to the GNU GPL, version 3 or later, and set up building through GitHub Actions
+
 ### 0.2.3
 
 #### Features
