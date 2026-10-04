@@ -63,6 +63,12 @@ If the app crashes, it writes a crash report to
 Keys named below are the defaults; the cheat sheet shows them as they are
 currently bound.
 
+### 0.3.1
+
+#### Changes
+
+- The settings and the library are located through Windows itself rather than the APPDATA environment variables, which some sandboxes appear to set unreliably: started from one, the app could fail to open either
+
 ### 0.3.0
 
 #### Changes
