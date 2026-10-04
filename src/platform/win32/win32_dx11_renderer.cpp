@@ -36,28 +36,47 @@ float4 main(uint id : SV_VertexID) : SV_POSITION {
 )";
 
 // One mip level from the level above it: each texel the average of the
-// four it covers. Averaged premultiplied, which is the whole reason this is
-// not ID3D11DeviceContext::GenerateMips: the pictures are straight alpha,
-// and one with transparent parts is (0,0,0,0) around what it shows, so a
-// plain average darkens every edge toward black as the picture shrinks.
+// part of the level above it covers. Averaged premultiplied, which is the
+// whole reason this is not ID3D11DeviceContext::GenerateMips: the pictures
+// are straight alpha, and one with transparent parts is (0,0,0,0) around
+// what it shows, so a plain average darkens every edge toward black as the
+// picture shrinks.
+//
+// Along an even side a texel covers two above it, half each. Along an odd
+// one, 2n+1 texels shrinking to n, it covers parts of three, by how much of
+// each falls inside it; read as two, the last row or column of every odd
+// level would be left out. A side of 1 stays 1: its third texel, clamped,
+// is the only one, at full weight.
 constexpr const char* kMipPS = R"(
 Texture2D above : register(t0);
+void Taps(uint size, int at, out int3 index, out float3 weight) {
+    index = int3(2 * at, 2 * at + 1, 2 * at + 2);
+    if (size % 2 == 0) {
+        weight = float3(0.5, 0.5, 0.0);
+    } else {
+        float n = float(size / 2);
+        weight = float3(n - at, n, 1.0 + at) / (2.0 * n + 1.0);
+    }
+}
 float4 main(float4 pos : SV_POSITION) : SV_Target {
     uint w, h;
     above.GetDimensions(w, h);
     int2 last = int2(w, h) - 1;
-    int2 first = int2(pos.xy) * 2;
+    int2 at = int2(pos.xy);
+    int3 xs, ys;
+    float3 wx, wy;
+    Taps(w, at.x, xs, wx);
+    Taps(h, at.y, ys, wy);
     float4 sum = 0.0;
-    [unroll] for (int y = 0; y < 2; ++y) {
-        [unroll] for (int x = 0; x < 2; ++x) {
-            float4 c = above.Load(int3(min(first + int2(x, y), last), 0));
-            sum += float4(c.rgb * c.a, c.a);
+    [unroll] for (int y = 0; y < 3; ++y) {
+        [unroll] for (int x = 0; x < 3; ++x) {
+            float4 c = above.Load(int3(min(int2(xs[x], ys[y]), last), 0));
+            sum += wx[x] * wy[y] * float4(c.rgb * c.a, c.a);
         }
     }
-    return sum.a > 0.0 ? float4(sum.rgb / sum.a, sum.a * 0.25) : 0.0;
+    return sum.a > 0.0 ? float4(sum.rgb / sum.a, sum.a) : 0.0;
 }
 )";
-
 // Bicubic (Catmull-Rom) or Lanczos-3, by LANCZOS. Takes the place of
 // ImGui's pixel shader for one picture, so it reads ImGui's vertex output
 // and returns what that shader would: straight alpha, times the vertex

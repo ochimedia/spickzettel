@@ -232,6 +232,76 @@ TEST_F(Win32Dx11RendererTest, AMipAveragesTheInkNotTheTransparencyAroundIt) {
     renderer_.ReleaseTexture(srv);
 }
 
+// Opaque gray `values` laid out `width` x `height`; the red channel of mip
+// `level` back, `levelWidth` x `levelHeight` of it.
+std::vector<int> MipRed(Win32Dx11Renderer& renderer, const std::vector<uint8_t>& values, UINT width, UINT height,
+                        UINT level, UINT levelWidth, UINT levelHeight) {
+    std::vector<uint8_t> pixels;
+    for (const uint8_t v : values) {
+        pixels.insert(pixels.end(), {v, v, v, 255});
+    }
+    ID3D11ShaderResourceView* srv =
+        renderer.CreateTextureFromRGBA(pixels.data(), static_cast<int>(width), static_cast<int>(height));
+    if (!srv) {
+        return {};
+    }
+    renderer.RefreshMips();
+    ComPtr<ID3D11Device> device;
+    srv->GetDevice(&device);
+    ComPtr<ID3D11Resource> texture;
+    srv->GetResource(&texture);
+    const std::vector<uint8_t> mip = ReadBack(device.Get(), texture.Get(), level, levelWidth, levelHeight);
+    renderer.ReleaseTexture(srv);
+    std::vector<int> red;
+    for (size_t i = 0; i < mip.size(); i += 4) {
+        red.push_back(mip[i]);
+    }
+    return red;
+}
+
+// An odd side shrinks to fewer than half as many texels, each covering a
+// texel and a half: the last row and column count too, in proportion.
+TEST_F(Win32Dx11RendererTest, AnOddSidesLastRowAndColumnReachTheMip) {
+    const std::vector<int> across = MipRed(renderer_, {0, 0, 255}, 3, 1, 1, 1, 1);
+    ASSERT_EQ(across.size(), 1u);
+    EXPECT_NEAR(across[0], 85, 1);
+
+    const std::vector<int> down = MipRed(renderer_, {0, 0, 255}, 1, 3, 1, 1, 1);
+    ASSERT_EQ(down.size(), 1u);
+    EXPECT_NEAR(down[0], 85, 1);
+
+    // White in the last column and the last row only. The right texel
+    // covers a fifth of column 2 and two fifths each of 3 and 4; the left
+    // one two fifths each of 0 and 1 and a fifth of 2, so it sees the last
+    // row and not the column.
+    std::vector<uint8_t> edges(5 * 3, 0);
+    for (int y = 0; y < 3; ++y) {
+        edges[y * 5 + 4] = 255;
+    }
+    for (int x = 0; x < 5; ++x) {
+        edges[2 * 5 + x] = 255;
+    }
+    const std::vector<int> edged = MipRed(renderer_, edges, 5, 3, 1, 2, 1);
+    ASSERT_EQ(edged.size(), 2u);
+    EXPECT_NEAR(edged[0], 85, 1);
+    EXPECT_NEAR(edged[1], 153, 1);
+}
+
+// Even at the start and odd further down: 6x2, then 3x1, then 1x1.
+TEST_F(Win32Dx11RendererTest, ALevelThatTurnsOddKeepsItsEdge) {
+    std::vector<uint8_t> column(6 * 2, 0);
+    column[5] = 255;
+    column[11] = 255;
+    const std::vector<int> half = MipRed(renderer_, column, 6, 2, 1, 3, 1);
+    ASSERT_EQ(half.size(), 3u);
+    EXPECT_EQ(half[0], 0);
+    EXPECT_EQ(half[1], 0);
+    EXPECT_NEAR(half[2], 128, 1);
+    const std::vector<int> last = MipRed(renderer_, column, 6, 2, 2, 1, 1);
+    ASSERT_EQ(last.size(), 1u);
+    EXPECT_NEAR(last[0], 43, 1);
+}
+
 // One-pixel stripes at a third of their size: bilinear lands on one stripe
 // per pixel and shows them at full contrast - the aliasing that breaks up
 // text - where the two filters that widen with the reduction come out an
