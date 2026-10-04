@@ -6,6 +6,7 @@
 // FetchImGui.cmake), so it sees every piece of text ImGui draws: a
 // widget's, a window's, and every AddText of the app's own.
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -46,6 +47,13 @@ public:
     // one layer, the smaller.
     std::vector<DrawnText> Under(ImVec2 point) const;
 
+    // The call from the app's tooltips (ui/widgets.cpp), each frame the
+    // pointer is over what one explains, whether it is shown yet or not.
+    void RecordTooltip(const char* text, const char* source);
+    // The tooltip asked for this frame or the last, its rect the item it
+    // explains when the pointer is over that; none when none was.
+    std::optional<DrawnText> AskedTooltip() const;
+
 private:
     struct Pending {
         DrawnText drawn;
@@ -57,6 +65,8 @@ private:
     bool paused_ = false;
     std::vector<Pending> drawing_;
     std::vector<DrawnText> drawn_;
+    DrawnText tooltip_;
+    int tooltipFrame_ = -1;
 };
 
 }  // namespace sz::ui::string_editor

@@ -12,6 +12,9 @@
 #include <imgui_internal.h>
 
 #include "generated/ui_strings.h"
+#if SPICKZETTEL_STRING_EDITOR
+#include "ui/string_editor/text_ledger.h"
+#endif
 
 namespace sz::ui {
 
@@ -31,9 +34,29 @@ RestingTooltip resting;
 // With `marks`, a help text's {ui:} names are drawn as the help boxes draw
 // them (HelpMarker); an info text may hold the user's own words, braces
 // and all, and is shown as it is.
-void Tooltip(bool marks, const char* fmt, va_list args) {
+void Tooltip(bool shown, bool marks, const char* fmt, va_list args) {
     char text[1024];
+#if SPICKZETTEL_STRING_EDITOR
+    // For F3, shown or not: drawn from the catalog string passed for "%s",
+    // or from the one that is the format.
+    const char* source = fmt;
+    if (std::strcmp(fmt, "%s") == 0) {
+        va_list copy;
+        va_copy(copy, args);
+        source = va_arg(copy, const char*);
+        va_end(copy);
+    }
     std::vsnprintf(text, sizeof(text), fmt, args);
+    string_editor::TextLedger::Get().RecordTooltip(text, source);
+    if (!shown) {
+        return;
+    }
+#else
+    if (!shown) {
+        return;
+    }
+    std::vsnprintf(text, sizeof(text), fmt, args);
+#endif
     const int frame = ImGui::GetFrameCount();
     const double now = ImGui::GetTime();
     if (resting.lastFrame < frame - 1 || resting.text != text) {
@@ -58,19 +81,16 @@ void Tooltip(bool marks, const char* fmt, va_list args) {
 }  // namespace
 
 void HelpTooltip(const char* fmt, ...) {
-    if (!helpTooltipsShown) {
-        return;
-    }
     va_list args;
     va_start(args, fmt);
-    Tooltip(true, fmt, args);
+    Tooltip(helpTooltipsShown, true, fmt, args);
     va_end(args);
 }
 
 void InfoTooltip(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    Tooltip(false, fmt, args);
+    Tooltip(true, false, fmt, args);
     va_end(args);
 }
 

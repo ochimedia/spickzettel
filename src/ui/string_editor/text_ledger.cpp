@@ -97,4 +97,24 @@ std::vector<DrawnText> TextLedger::Under(ImVec2 point) const {
     return under;
 }
 
+void TextLedger::RecordTooltip(const char* text, const char* source) {
+    if (paused_) {
+        return;
+    }
+    tooltip_.text = text;
+    tooltip_.source = source;
+    // Asked for right after the item it explains, as a rule: its rect, when
+    // the pointer is over it, and nothing to ring when not.
+    const ImRect item(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    tooltip_.rect = item.Contains(ImGui::GetIO().MousePos) ? item : ImRect();
+    tooltipFrame_ = ImGui::GetFrameCount();
+}
+
+std::optional<DrawnText> TextLedger::AskedTooltip() const {
+    if (tooltipFrame_ < ImGui::GetFrameCount() - 1) {
+        return std::nullopt;
+    }
+    return tooltip_;
+}
+
 }  // namespace sz::ui::string_editor

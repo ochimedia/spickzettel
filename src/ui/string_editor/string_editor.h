@@ -1,10 +1,10 @@
 #pragma once
 
 // The string editor (docs/STRING_EDITOR.md), in its own build only: F2
-// over any text opens a small window on the catalog string it came from,
-// shows the edit on screen as it is typed, and saves it to
-// assets/ui_strings.json. Its own words are not in the catalog: it is a
-// tool for the catalog, never handed out.
+// over any text, or F3 over what has a tooltip, opens a small window on
+// the catalog string it came from, shows the edit on screen as it is
+// typed, and saves it to assets/ui_strings.json. Its own words are not in
+// the catalog: it is a tool for the catalog, never handed out.
 
 #include <cstddef>
 #include <optional>
@@ -25,7 +25,8 @@ public:
     StringEditor();
 
     // An input event, before the app sees it: F2 asks for the text under
-    // the pointer, and while the window is open every event is its own.
+    // the pointer, F3 for the tooltip of what it is over, and while the
+    // window is open every event is its own.
     // True for one taken.
     bool Offer(const platform::InputEvent& event);
     // Over everything else, once everything else is drawn and stacked.
@@ -33,6 +34,8 @@ public:
     void Draw(platform::IOverlayWindow* window, float displayW, float displayH);
 
 private:
+    enum class Asked { Nothing, Under, Tooltip };
+
     // The catalog string at `index` to edit, what was typed into another
     // one undone.
     void Choose(std::size_t index);
@@ -42,20 +45,22 @@ private:
     void Undo();
     bool Save();
     void Close(platform::IOverlayWindow* window);
-    void Pick(ImVec2 at);
+    void Pick(ImVec2 at, Asked asked);
     void DrawChoices();
 
     // Each catalog string by its current text.
     std::vector<std::string_view> Texts() const;
 
-    bool pickAsked_ = false;
+    Asked pickAsked_ = Asked::Nothing;
     bool open_ = false;
     bool placeAt_ = false;
     bool focusWindow_ = false;
     bool focusField_ = false;
     bool keyboard_ = false;
     ImVec2 pickedAt_;
-    // What was under the pointer, and the strings it could be.
+    // What was under the pointer, or its tooltip, and the strings it could
+    // be.
+    bool tooltip_ = false;
     std::optional<ImRect> pickedRect_;
     std::string pickedText_;
     Fit fit_ = Fit::Exact;

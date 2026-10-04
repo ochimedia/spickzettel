@@ -21,6 +21,7 @@ namespace {
 
 constexpr const char* kWindowName = "Edit text###sz_string_editor";
 constexpr int kF2 = platform::KeyCombo::kFunctionKeyBase + 2;
+constexpr int kF3 = platform::KeyCombo::kFunctionKeyBase + 3;
 // The field's width, and how many rows a search lists.
 constexpr float kWidth = 560.0f;
 constexpr std::size_t kMostFound = 20;
@@ -81,16 +82,16 @@ std::vector<std::string_view> StringEditor::Texts() const {
 }
 
 bool StringEditor::Offer(const platform::InputEvent& event) {
-    const bool f2 = (event.kind == platform::InputEventKind::KeyDown || event.kind == platform::InputEventKind::KeyUp) &&
-                    event.key == kF2 && event.modifiers == platform::Modifiers{};
-    if (f2 && event.kind == platform::InputEventKind::KeyDown && !event.repeat) {
-        pickAsked_ = true;
+    const bool key = (event.kind == platform::InputEventKind::KeyDown || event.kind == platform::InputEventKind::KeyUp) &&
+                     (event.key == kF2 || event.key == kF3) && event.modifiers == platform::Modifiers{};
+    if (key && event.kind == platform::InputEventKind::KeyDown && !event.repeat) {
+        pickAsked_ = event.key == kF2 ? Asked::Under : Asked::Tooltip;
     }
-    return f2 || open_;
+    return key || open_;
 }
 
-void StringEditor::Pick(ImVec2 at) {
-    // F2 over the window itself asks for nothing.
+void StringEditor::Pick(ImVec2 at, Asked asked) {
+    // F2 or F3 over the window itself asks for nothing.
     if (open_) {
         const ImGuiWindow* window = ImGui::FindWindowByName(kWindowName);
         if (window != nullptr && window->Rect().Contains(at)) {
@@ -104,8 +105,14 @@ void StringEditor::Pick(ImVec2 at) {
     pickedRect_.reset();
     pickedText_.clear();
     fit_ = Fit::Exact;
+    tooltip_ = asked == Asked::Tooltip;
 
-    const std::vector<DrawnText> under = TextLedger::Get().Under(at);
+    std::vector<DrawnText> under;
+    if (!tooltip_) {
+        under = TextLedger::Get().Under(at);
+    } else if (std::optional<DrawnText> tooltip = TextLedger::Get().AskedTooltip()) {
+        under.push_back(std::move(*tooltip));
+    }
     const std::vector<std::string_view> texts = Texts();
     for (const DrawnText& drawn : under) {
         if (const auto source = Sources().find(drawn.source); source != Sources().end()) {
@@ -124,6 +131,10 @@ void StringEditor::Pick(ImVec2 at) {
     if (choices_.empty() && !under.empty()) {
         pickedRect_ = under.front().rect;
         pickedText_ = under.front().text;
+    }
+    // A tooltip whose item is not known has nothing to ring.
+    if (pickedRect_.has_value() && pickedRect_->GetArea() <= 0.0f) {
+        pickedRect_.reset();
     }
     open_ = true;
     focusWindow_ = true;
@@ -226,7 +237,7 @@ void StringEditor::DrawChoices() {
         }
     } else if (choices_.empty()) {
         if (pickedText_.empty()) {
-            ImGui::TextDisabled("No text under the pointer.");
+            ImGui::TextDisabled("%s", tooltip_ ? "No tooltip here." : "No text under the pointer.");
         } else {
             ImGui::TextDisabled("Not from ui_strings.json - search for it, or for what it is made of:");
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Px(kWidth));
@@ -265,9 +276,9 @@ void StringEditor::DrawChoices() {
 void StringEditor::Draw(platform::IOverlayWindow* window, float displayW, float displayH) {
     TextLedger& ledger = TextLedger::Get();
     ledger.Watch(ImGui::GetCurrentContext());
-    if (pickAsked_) {
-        pickAsked_ = false;
-        Pick(ImGui::GetIO().MousePos);
+    if (pickAsked_ != Asked::Nothing) {
+        Pick(ImGui::GetIO().MousePos, pickAsked_);
+        pickAsked_ = Asked::Nothing;
     }
     if (!open_) {
         return;

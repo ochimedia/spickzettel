@@ -1,8 +1,8 @@
 # The string editor
 
-A build for rewording the app where the words are seen: F2 over any text
-opens a small window on the string in `assets/ui_strings.json` it came
-from, the edit shows on screen as it is typed, and Save writes it to the
+A build for rewording the app where the words are seen: F2 over any text,
+or F3 over anything with a tooltip, opens a small window on the string in
+`assets/ui_strings.json` it came from, the edit shows on screen as it is typed, and Save writes it to the
 file. Built on 2026-09-29 as an experiment, for a pass over the strings
 before a release. Never handed out.
 
@@ -20,6 +20,9 @@ before a release. Never handed out.
     the first chosen. Choose another from the list.
   - Nothing found, such as text built from pieces or the user's own: the
     text, and a search over keys and texts.
+- For a tooltip, point at what it explains and press F3. There is no need
+  to wait for the tooltip, and help tooltips switched off in Settings work
+  too. A tooltip made of two strings lists both.
 - Type; the app shows the edit as it goes. Save (or Ctrl+Enter) writes it
   to the file; Cancel (or Esc) puts the text back.
 - Menus and the delete confirmation stay open while the window is up, so
@@ -38,6 +41,8 @@ before a release. Never handed out.
   next build: each string has room for twice its length and a little more.
 - **Text made once and kept,** a string copied into a longer text when a
   screen opens, shows the edit only once that is made again.
+- **A tooltip shows the edit** only while the pointer stays over what it
+  explains.
 - While the window is open, the app gets no input of its own; ImGui's
   widgets still take clicks.
 
@@ -55,13 +60,17 @@ before a release. Never handed out.
   text ledger (`src/ui/string_editor/text_ledger.cpp`) keeps each frame's
   text with its rectangle, and once the frame is rendered, which draw list
   is on top of which.
+- **Tooltips** all go through `HelpTooltip` and `InfoTooltip` in
+  `src/ui/widgets.cpp`, each frame the pointer is over what one explains.
+  In this build they hand the ledger the text, and the catalog string it
+  was made from: the one passed for `"%s"`, or the format itself.
 - **From text to key** (`string_match.cpp`): text drawn straight from a
   catalog string is that string. Otherwise it is matched by its words:
   exactly; with `%s`, `{program}` and the like as anything; or in part.
 - **Saving** changes only that value's line in the file, so comments and
   layout stay as they are. Every value in the catalog is tested to write
   back byte for byte.
-- F2 is taken before the input machine sees it, and the window is drawn
+- F2 and F3 are taken before the input machine sees them, and the window is drawn
   over everything once the surfaces are stacked. While a popup is open,
   the window tells ImGui it sits within it (`ParentWindowInBeginStack`),
   so focusing it does not close a menu, and a modal leaves it the input.
