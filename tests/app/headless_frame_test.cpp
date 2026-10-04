@@ -4924,6 +4924,44 @@ TEST_F(HeadlessAppTest, LeavingEditModeForViewModeCheckpointsOnceViewModeIsDrawn
     EXPECT_EQ(store.UncheckpointedBytes(), 0);
 }
 
+// Edit mode left up for long is checkpointed all the same: once what is
+// unflushed has waited long enough, at a moment the hand is still.
+// (Shortened here from a minute and five seconds.)
+TEST_F(HeadlessAppTest, EditModeCheckpointsOnceTheHandIsStillAfterAWait) {
+    StartWithLibrary();
+    controller_->SetEditCheckpointTimesForTesting(1.0, 0.5);
+    ShowEditMode();
+    StepFrame();
+    PressKey(ImGuiKey_D);
+    Drag(200.0f, 200.0f, 800.0f, 600.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    persistence::LibraryStore& store = *controller_->GetSession().Store();
+    StepFrames(30);
+    EXPECT_GT(store.UncheckpointedBytes(), 0) << "half a second: not yet";
+    StepFrames(60);
+    EXPECT_EQ(store.UncheckpointedBytes(), 0);
+    EXPECT_EQ(controller_->State(), app::OverlayState::Edit);
+}
+
+// Never under a held button: a press held still is a gesture under way.
+TEST_F(HeadlessAppTest, EditModeDoesNotCheckpointUnderAHeldButton) {
+    StartWithLibrary();
+    controller_->SetEditCheckpointTimesForTesting(1.0, 0.5);
+    ShowEditMode();
+    StepFrame();
+    PressKey(ImGuiKey_D);
+    Drag(200.0f, 200.0f, 800.0f, 600.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    persistence::LibraryStore& store = *controller_->GetSession().Store();
+    MoveTo(900.0f, 300.0f);
+    RawMouse(900.0f, 300.0f, platform::MouseEventKind::Down);
+    StepFrames(120);
+    EXPECT_GT(store.UncheckpointedBytes(), 0) << "two seconds held";
+    RawMouse(900.0f, 300.0f, platform::MouseEventKind::Up);
+    StepFrames(60);
+    EXPECT_EQ(store.UncheckpointedBytes(), 0) << "let go, and still";
+}
+
 // A silent capture while the overlay is hidden, with nothing said on
 // screen, changes no state - and is checkpointed at once all the same,
 // with nothing on screen to wait for it.

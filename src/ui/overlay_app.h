@@ -149,6 +149,15 @@ public:
     // frame late is done there where it shows least. TrayController makes
     // the library's checkpoint there in view mode (see OnFrameStart).
     void SetFrameStartCallback(std::function<void()> callback) { frameStartCallback_ = std::move(callback); }
+    // The input stream's clock (platform::InputEvent::seconds) as the
+    // latest event told it, a frame's tick included; 0 before the first.
+    double InputNow() const { return inputNow_; }
+    // How long the hand has been still: seconds on that clock since the
+    // last input other than a frame's tick, and 0 while a mouse button is
+    // held, since a press held still is a gesture under way. When edit
+    // mode may make the library's checkpoint - see TrayController::
+    // OnFrameStart.
+    double SecondsStill() const { return buttonsDown_ != 0 ? 0.0 : inputNow_ - lastInput_; }
     // Drops the current message without showing it, for the caller that
     // asked for something and then decided nothing may appear on screen
     // (see AppConfig::showToastsWhileHidden). Worth doing rather than
@@ -606,6 +615,10 @@ private:
     std::function<void()> noticeFinishedCallback_;
     // See SetFrameStartCallback.
     std::function<void()> frameStartCallback_;
+    // See InputNow and SecondsStill.
+    double inputNow_ = 0.0;
+    double lastInput_ = 0.0;
+    uint8_t buttonsDown_ = 0;
     // See SetHotkeyChangeCallback's own doc comment.
     std::function<bool(HotkeySlot, platform::KeyCombo)> hotkeyChangeCallback_;
 

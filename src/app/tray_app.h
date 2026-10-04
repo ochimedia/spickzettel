@@ -119,8 +119,17 @@ public:
     void OnOpenedAgain();
     // The start of every frame - see OverlayApp::SetFrameStartCallback.
     // In view mode and the pinned view, once a frame of the state is on
-    // screen, the library's checkpoint (see CheckpointLibrary).
+    // screen, the library's checkpoint (see CheckpointLibrary); in edit
+    // mode, the one made while the hand is still (CheckpointWhenStill).
     void OnFrameStart();
+    // Edit mode's checkpoint is made once what is unflushed has waited
+    // `afterSeconds` and the hand has been still for `stillSeconds`.
+    static constexpr double kEditCheckpointAfterSeconds = 60.0;
+    static constexpr double kEditCheckpointStillSeconds = 5.0;
+    void SetEditCheckpointTimesForTesting(double afterSeconds, double stillSeconds) {
+        editCheckpointAfterSeconds_ = afterSeconds;
+        editCheckpointStillSeconds_ = stillSeconds;
+    }
 
     const OverlayApp& Overlay() const { return overlayApp_; }
     // Non-const for the tests that have to *arrange* a world before driving
@@ -179,9 +188,15 @@ private:
     // Makes what the library holds in its WAL durable (see
     // LibraryStore::Checkpoint), at a moment nothing on screen waits for
     // it: in Apply when the overlay is hidden, and in OnFrameStart in view
-    // mode and the pinned view. Never in edit mode, where it would be a
-    // hitch; nothing to do when nothing was written since.
+    // mode and the pinned view. Nothing to do when nothing was written
+    // since.
     void CheckpointLibrary();
+    // Edit mode's checkpoint, which would be a hitch anywhere else: only
+    // once what it moves has waited a minute unflushed, and only while
+    // the hand is still - no input for a few seconds, no button held -
+    // so that a frame it makes late is one nobody is waiting on. Without
+    // it, an hour in edit mode was an hour a power cut could take.
+    void CheckpointWhenStill();
     // What the table needs besides the state and the request.
     OverlayFacts Facts() const;
     // Section 6: one transition, every step in its order. A Stay does
@@ -312,6 +327,11 @@ private:
     // Frames started since the last transition, counted to one - see
     // OnFrameStart.
     int framesSinceTransition_ = 0;
+    // When, on the input stream's clock, a frame in edit mode first found
+    // the library holding something unflushed - see CheckpointWhenStill.
+    std::optional<double> unflushedSince_;
+    double editCheckpointAfterSeconds_ = kEditCheckpointAfterSeconds;
+    double editCheckpointStillSeconds_ = kEditCheckpointStillSeconds;
     // Constructed up front (from host.GetLibraryPath(), possibly empty) but
     // only ever used - Load()'d from, attached to overlayApp_ - when that
     // path is non-empty; see Initialize().

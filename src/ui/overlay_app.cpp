@@ -145,6 +145,18 @@ void OverlayApp::OnHotkey(CommandId command, const platform::KeyCombo& combo) {
 }
 
 void OverlayApp::OnInput(const platform::InputEvent& event) {
+    // The stream's clock, and the last time it carried more than the
+    // frame's tick - see SecondsStill.
+    inputNow_ = std::max(inputNow_, event.seconds);
+    if (event.kind != platform::InputEventKind::Tick) {
+        lastInput_ = event.seconds;
+        const auto bit = static_cast<uint8_t>(1u << static_cast<unsigned>(event.button));
+        if (event.kind == platform::InputEventKind::PointerDown) {
+            buttonsDown_ |= bit;
+        } else if (event.kind == platform::InputEventKind::PointerUp) {
+            buttonsDown_ &= static_cast<uint8_t>(~bit);
+        }
+    }
     // Real OS-level click-through (see IOverlayWindow::Present)
     // means view-only mode receives no input on Windows; guarded here too so
     // it is read-only on every backend, not just the real one.
@@ -694,6 +706,8 @@ void OverlayApp::Do(const ViewAction& action) {
 }
 
 void OverlayApp::OnOverlayShown() {
+    // A button held as the overlay went away had its release go elsewhere.
+    buttonsDown_ = 0;
     tutorialWorld_.CountShowing();
     settingsPage_.OnOverlayShown();
     // Something the app did while nobody was looking - see

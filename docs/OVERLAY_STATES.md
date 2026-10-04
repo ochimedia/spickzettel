@@ -262,7 +262,8 @@ the same order unless said otherwise.
     wait seconds on a busy one. View and Pinned are checkpointed too, but
     not here: at the start of the frame after the first that draws them
     (`TrayController::OnFrameStart`), so that the old state's last frame
-    is not what stays up while the disk takes its time. Edit never is
+    is not what stays up while the disk takes its time. Edit is only
+    while the hand is still, once what is unflushed has waited a minute
     (ARCHITECTURE.md, "Commits wait for nobody: the WAL").
 
 Step 6 comes before step 7 because "Don't steal focus" decides how the

@@ -1011,9 +1011,15 @@ that waits for a busy disk shows least (`TrayController::CheckpointLibrary`):
   mode draws a frame every 250 ms when nothing happens, so leaving edit
   mode for it is checkpointed a quarter second later, and anything
   written in it - a silent capture - at the frame after.
-- **Never in edit mode**, where it would be the hitch the WAL takes out -
-  but by a write once the WAL holds 64 MB, so that an overlay left in edit
-  mode does not grow it without end.
+- **In edit mode, only while the hand is still**
+  (`TrayController::CheckpointWhenStill`): once what is unflushed has
+  waited a minute, at the start of a frame with no input for five
+  seconds and no mouse button held. Anywhere else in edit mode it would
+  be the hitch the WAL takes out; there, a frame it makes late is one
+  nobody is waiting on. Added in 0.3.1, from a review: an hour in edit
+  mode had been an hour of changes a power cut could take. And by a
+  write once the WAL holds 64 MB, so that the WAL does not grow without
+  end however busy the hand.
 
 A checkpoint with nothing written since does nothing, so this is a
 flush per edit, however often the overlay changes mode. SQLite's own
@@ -1047,8 +1053,8 @@ app, of Windows, or a power cut, the next open finds a whole library,
 reading from the WAL what it holds and dropping a torn tail. A crash of
 the app loses nothing - what it committed is in Windows' cache already.
 A power cut or a crash of Windows may lose what was committed since the
-last checkpoint, which is since edit mode was last left: the library
-opens as it was a moment earlier. That holds as long as the disk does
+last checkpoint, which is since edit mode was last left or the hand last
+paused in it: the library opens as it was a moment earlier. That holds as long as the disk does
 what a flush asks, as the rollback journal needed too.
 
 The file is held for the store alone, from the open to the close

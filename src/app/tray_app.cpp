@@ -281,6 +281,7 @@ void TrayController::CheckpointLibrary() {
     if (session_.Store() != nullptr) {
         session_.Store()->Checkpoint();
     }
+    unflushedSince_.reset();
 }
 
 void TrayController::OnFrameStart() {
@@ -293,8 +294,31 @@ void TrayController::OnFrameStart() {
     // at the frame after it. Nothing to do costs nothing.
     if ((state_ == OverlayState::View || state_ == OverlayState::Pinned) && framesSinceTransition_ > 0) {
         CheckpointLibrary();
+    } else if (state_ == OverlayState::Edit) {
+        CheckpointWhenStill();
     }
     framesSinceTransition_ = 1;
+}
+
+void TrayController::CheckpointWhenStill() {
+    persistence::LibraryStore* store = session_.Store();
+    if (store == nullptr || store->UncheckpointedBytes() == 0) {
+        unflushedSince_.reset();
+        return;
+    }
+    const double now = overlayApp_.InputNow();
+    if (!unflushedSince_.has_value()) {
+        unflushedSince_ = now;
+        return;
+    }
+    if (now - *unflushedSince_ < editCheckpointAfterSeconds_ ||
+        overlayApp_.SecondsStill() < editCheckpointStillSeconds_) {
+        return;
+    }
+    // Made or not, not again before another wait: a disk that refuses it
+    // is not asked once a frame.
+    store->Checkpoint();
+    unflushedSince_ = now;
 }
 
 OverlayFacts TrayController::Facts() const {
