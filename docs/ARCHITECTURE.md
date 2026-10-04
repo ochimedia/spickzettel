@@ -3630,6 +3630,46 @@ Consequences that shape `Win32InputGrab`:
   timed-out stop posted to a thread that was about to quit. These paths
   are established from the source: the class offers no fault injection,
   and the rapid start/stop test exercises ordinary timing.
+- **The mouse hook and the raw-input sink are one grab, set up whole or
+  not at all** (`ReconcileHooks`). The hook alone swallows the mouse with
+  nothing left to read it: the overlay's pointer stands still and its
+  clicks never arrive. The sink alone posts every click to the overlay
+  on top of the one Windows delivers. Until 0.3.1 neither the sink's
+  window nor its `RegisterRawInputDevices` was checked, and a sink whose
+  registration failed was kept and never registered again. Now a failed
+  try takes down whatever it set up, `VirtualCursorActive` turns false so
+  that the overlay goes by the real cursor as it does without the grab,
+  and the hook thread tries again every second for as long as the grab is
+  wanted (a keyboard hook that could not be installed as well). A grab got
+  on a later try seeds the drawn pointer again from the real one
+  (`SeedVirtualCursor`). The seed happens on the hook thread, in the same
+  reconcile that installs the hook and the sink, and before the grab is
+  published. So no report is integrated, and no click is stamped with a
+  position, until the seed is in place. The app thread is told only to take
+  its frame baseline, the frame's last point, from the new position at its
+  next frame (`SampleFrameStep`), since that point is its own. Two earlier
+  versions were wrong: seeding the baseline from the hook thread was a data
+  race, and leaving the whole seed to the app thread's next frame let a click
+  through at the old position first and could lose the request (both found
+  in follow-up reviews).
+
+  A keyboard hook that cannot be installed swallows nothing, so the keys
+  reach whatever has focus. Its failure is published too:
+  `CanDeliverTyping` and `DeliversTypingToOverlay` say no, so a text field
+  opened meanwhile takes focus instead of waiting on a hook that is not
+  there. A field that chose the hook before the first failure, when no hook
+  was needed until it opened, is told by a message to the overlay
+  (`kKeyboardUnavailableMessage`) and then takes focus the same way
+  (`TakeTextInputFocus`). The modifier record is cleared on failure, leaving
+  the system's state alone to say what is held, and it is seeded from the
+  system just before every install, on the hook thread. With no hook in
+  place nothing has been swallowed, so the system is right; a modifier let
+  go of between `Refresh`'s seed and the install, a retry later, was
+  otherwise left held. Before
+  a try has failed, `VirtualCursorActive` says what is asked for, as it
+  always did, so the ordinary start has no frames on the real cursor
+  while the thread sets up. `FailPointerGrabForTesting` makes the
+  registration fail.
 - **The pointer's integration state has a lock of its own.** The
   raw-input sink integrates reports into it on the hook thread, and the
   app thread seeds it whenever the virtual pointer starts driving. The

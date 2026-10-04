@@ -23,6 +23,10 @@ constexpr ULONG_PTR kOwnInjectionMarker = 0x5A4B5053;  // 'SPKZ'
 // options. Only that thread may own them - see StartHookThread.
 constexpr UINT kReconcileHooksMessage = WM_USER + 1;
 
+// How long after a hook or the raw-input sink could not be set up the hook
+// thread tries again, for as long as it is wanted - see ReconcileHooks.
+constexpr UINT kHookRetryMs = 1000;
+
 // The performance counter, for the one thing here that is timed in
 // fractions of a millisecond - see InputGrabDiagnostics::correctionLagMsLast.
 int64_t NowTicks() {
@@ -254,6 +258,15 @@ void Win32InputGrab::EndGrabbedKeyboard() {
 // hand-back in Refresh, and it has to be the same one place, or the two ends
 // of the same handover drift apart.
 void Win32InputGrab::BeginVirtualCursor() {
+    SeedVirtualCursor();
+    lastFramePoint_ = VirtualCursor();
+}
+
+// The seed itself: the pointer's integration state, from the real cursor.
+// From the app thread as the pointer starts driving, and from the hook
+// thread as a retry gets the grab (see ReconcileHooks) - never the frame's
+// last point, which only the app thread keeps.
+void Win32InputGrab::SeedVirtualCursor() {
     POINT seed{};
     GetCursorPos(&seed);
     // The real cursor need not be on the overlay's display: the hotkey that
@@ -280,7 +293,6 @@ void Win32InputGrab::BeginVirtualCursor() {
         stepCounts_[i].store(0);
         frameSteps_[i].store(0);
     }
-    lastFramePoint_ = POINT{virtualCursorX_.load(), virtualCursorY_.load()};
     hookMovesSinceReport_.store(0, std::memory_order_relaxed);
     lastGain_ = 0.0f;
     LoadPointerBallistics();
@@ -483,6 +495,12 @@ DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
             grab.ReconcileHooks();
             continue;
         }
+        if (msg.message == WM_TIMER && msg.hwnd == nullptr && msg.wParam == grab.hookRetryTimer_) {
+            KillTimer(nullptr, grab.hookRetryTimer_);
+            grab.hookRetryTimer_ = 0;
+            grab.ReconcileHooks();
+            continue;
+        }
         TranslateMessage(&msg);
         DispatchMessageA(&msg);
     }
@@ -507,6 +525,12 @@ DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
         UnhookWindowsHookEx(grab.keyboardHook_);
         grab.keyboardHook_ = nullptr;
     }
+    if (grab.hookRetryTimer_) {
+        KillTimer(nullptr, grab.hookRetryTimer_);
+        grab.hookRetryTimer_ = 0;
+    }
+    grab.pointerGrabFailed_.store(false, std::memory_order_relaxed);
+    grab.keyboardGrabFailed_.store(false, std::memory_order_relaxed);
     return 0;
 }
 
@@ -514,39 +538,102 @@ void Win32InputGrab::ReconcileHooks() {
     const bool wantMouse = WantPointerGrab() && overlay_ != nullptr;
     const bool wantKeyboard = WantKeyboard();
 
-    if (wantMouse && !mouseHook_) {
-        swallowedButtons_.store(0, std::memory_order_relaxed);  // nothing is ours yet - see OnMouse
-        mouseHook_ = SetWindowsHookExA(WH_MOUSE_LL, &Win32InputGrab::MouseProc, GetModuleHandleA(nullptr), 0);
-    } else if (!wantMouse && mouseHook_) {
-        UnhookWindowsHookEx(mouseHook_);
-        mouseHook_ = nullptr;
-    }
-
-    if (wantKeyboard && !keyboardHook_) {
-        keyboardHook_ =
-            SetWindowsHookExA(WH_KEYBOARD_LL, &Win32InputGrab::KeyboardProc, GetModuleHandleA(nullptr), 0);
-    } else if (!wantKeyboard && keyboardHook_) {
-        UnhookWindowsHookEx(keyboardHook_);
-        keyboardHook_ = nullptr;
-    }
-
     // The raw-input sink lives here too, for the same reason the hooks do:
     // it drives the pointer, and a pointer whose position waits for the
     // render thread to pump arrives a frame behind the hand and out of
     // order with the clicks, which come from this thread. Needed whenever
     // the hook is - countering reads its device deltas from here, and in
     // that mode the buttons the hook discards are read from here too.
+    //
+    // The two are one grab, set up whole or not at all. The hook alone
+    // swallows the mouse with nothing left to read it, and the sink alone
+    // posts every click to the overlay on top of the one Windows delivers.
+    // Until a try fails, VirtualCursorActive says what is asked for, as it
+    // always did; after one, the overlay goes by the real cursor, as
+    // without the grab, and the grab is tried again shortly. (The order
+    // within this call does not matter: neither the hook nor the sink hears
+    // anything until this thread pumps again.)
+    bool pointerGrabbed = false;
     if (wantMouse) {
-        EnsureRawInputSink();
-    } else {
+        pointerGrabbed = EnsureRawInputSink();
+        if (pointerGrabbed && !mouseHook_) {
+            swallowedButtons_.store(0, std::memory_order_relaxed);  // nothing is ours yet - see OnMouse
+            mouseHook_ = SetWindowsHookExA(WH_MOUSE_LL, &Win32InputGrab::MouseProc, GetModuleHandleA(nullptr), 0);
+            pointerGrabbed = mouseHook_ != nullptr;
+        }
+    }
+    if (!pointerGrabbed) {
+        if (mouseHook_) {
+            UnhookWindowsHookEx(mouseHook_);
+            mouseHook_ = nullptr;
+        }
         DestroyRawInputSink();
     }
+    if (pointerGrabbed && pointerGrabFailed_.load()) {
+        // Got on a later try: the real cursor has gone on moving since the
+        // seed Refresh took, and the drawn one starts from where it is now.
+        // Seeded here, before the grab is published below and before this
+        // thread pumps again - so before the sink integrates a report or
+        // stamps a click with the position. The app thread is told only to
+        // take its frame baseline from the new position (SampleFrameStep).
+        SeedVirtualCursor();
+        frameBaselinePending_.store(true);
+    }
+    pointerGrabFailed_.store(wantMouse && !pointerGrabbed);
 
+    // The modifier record is seeded from the system just before the hook
+    // goes in, here on its own thread: with no hook nothing has been
+    // swallowed, so the system is right, and nothing records into it until
+    // this thread pumps again. Refresh seeded it as the grab was asked for;
+    // a modifier let go of since - a retry later, say - was left held.
+    //
+    // A keyboard hook that could not be installed swallows nothing: the
+    // keys go where they would without the grab, and the record, which no
+    // hook keeps, is cleared, so that what the overlay is told is held is
+    // the system's alone (see HeldModifiers). Typing is not delivered
+    // either, which CanDeliverTyping and DeliversTypingToOverlay say, so a
+    // text field takes focus instead. Tried again below.
+    if (wantKeyboard && !keyboardHook_) {
+        modifiers_.Seed([](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; });
+        if (!failKeyboardHookForTesting_.load()) {
+            keyboardHook_ =
+                SetWindowsHookExA(WH_KEYBOARD_LL, &Win32InputGrab::KeyboardProc, GetModuleHandleA(nullptr), 0);
+        }
+    } else if (!wantKeyboard && keyboardHook_) {
+        UnhookWindowsHookEx(keyboardHook_);
+        keyboardHook_ = nullptr;
+    }
+    const bool keyboardFailed = wantKeyboard && !keyboardHook_;
+    if (keyboardFailed) {
+        modifiers_.Clear();
+        // A text field that chose the hook to type through, before this
+        // try said it could not be had, is told: it takes focus instead
+        // (see Win32OverlayWindow::RequestTextInput).
+        if (!keyboardGrabFailed_.load()) {
+            HWND fieldWindow = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(stateMutex_);
+                fieldWindow = textFieldOpen_ ? overlay_ : nullptr;
+            }
+            if (fieldWindow != nullptr) {
+                PostMessageA(fieldWindow, kKeyboardUnavailableMessage, 0, 0);
+            }
+        }
+    }
+    keyboardGrabFailed_.store(keyboardFailed, std::memory_order_relaxed);
+
+    const bool missing = (wantMouse && !pointerGrabbed) || (wantKeyboard && !keyboardHook_);
+    if (missing && hookRetryTimer_ == 0) {
+        hookRetryTimer_ = SetTimer(nullptr, 0, kHookRetryMs, nullptr);
+    } else if (!missing && hookRetryTimer_ != 0) {
+        KillTimer(nullptr, hookRetryTimer_);
+        hookRetryTimer_ = 0;
+    }
 }
 
-void Win32InputGrab::EnsureRawInputSink() {
+bool Win32InputGrab::EnsureRawInputSink() {
     if (rawInputSink_) {
-        return;
+        return true;
     }
     HINSTANCE instance = GetModuleHandleA(nullptr);
     WNDCLASSA windowClass{};
@@ -558,7 +645,7 @@ void Win32InputGrab::EnsureRawInputSink() {
     rawInputSink_ = CreateWindowExA(0, kRawInputSinkClassName, "", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, instance,
                                    nullptr);
     if (!rawInputSink_) {
-        return;
+        return false;
     }
     // RIDEV_INPUTSINK is what makes this work at all: ordinary raw-input
     // registration only delivers to the foreground window, and the whole
@@ -569,7 +656,12 @@ void Win32InputGrab::EnsureRawInputSink() {
     device.usUsage = 0x02;  // mouse
     device.dwFlags = RIDEV_INPUTSINK;
     device.hwndTarget = rawInputSink_;
-    RegisterRawInputDevices(&device, 1, sizeof(device));
+    if (failPointerGrabForTesting_.load() || !RegisterRawInputDevices(&device, 1, sizeof(device))) {
+        DestroyWindow(rawInputSink_);
+        rawInputSink_ = nullptr;
+        return false;
+    }
+    return true;
 }
 
 void Win32InputGrab::DestroyRawInputSink() {
@@ -789,7 +881,9 @@ void Win32InputGrab::IntegrateRawMovement(LONG rawDx, LONG rawDy, int reports) {
     stepCounts_[std::clamp<LONG>(std::max(stepX, stepY), 0, 3)].fetch_add(1, std::memory_order_relaxed);
 }
 
-bool Win32InputGrab::VirtualCursorActive() const { return WantPointerGrab() && overlay_ != nullptr; }
+bool Win32InputGrab::VirtualCursorActive() const {
+    return WantPointerGrab() && overlay_ != nullptr && !pointerGrabFailed_.load();
+}
 
 // Whether a text field can be typed into without this window taking focus:
 // the hook is swallowing the whole keyboard and handing it to the overlay,
@@ -861,6 +955,11 @@ InputGrabDiagnostics Win32InputGrab::Diagnostics() const {
 // simply being drawn once a frame while the hand moves continuously - which
 // is a different problem with a different fix.
 void Win32InputGrab::SampleFrameStep() {
+    // A pointer grab got on a retry and seeded by the hook thread - see
+    // ReconcileHooks. Set after the seed, so the position read here is it.
+    if (frameBaselinePending_.exchange(false)) {
+        lastFramePoint_ = VirtualCursor();
+    }
     const POINT now = VirtualCursor();
     const LONG dx = now.x - lastFramePoint_.x;
     const LONG dy = now.y - lastFramePoint_.y;

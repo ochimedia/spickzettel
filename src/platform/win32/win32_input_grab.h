@@ -291,6 +291,16 @@ public:
     // movement, as the raw input sink would be handed it - for tests,
     // which cannot press buttons.
     void RawMouseButtonsForTesting(USHORT buttonFlags);
+    // Registrations for raw mouse input fail while `fail`, as
+    // RegisterRawInputDevices would - see ReconcileHooks.
+    void FailPointerGrabForTesting(bool fail) { failPointerGrabForTesting_.store(fail); }
+    // The keyboard hook is not installed while `fail`, as if
+    // SetWindowsHookEx had failed.
+    void FailKeyboardHookForTesting(bool fail) { failKeyboardHookForTesting_.store(fail); }
+
+    // Posted to the overlay when the keyboard hook a text field chose to
+    // type through could not be installed: the field takes focus instead.
+    static constexpr UINT kKeyboardUnavailableMessage = WM_APP + 2;
 
 private:
     Win32InputGrab() = default;
@@ -340,6 +350,7 @@ private:
     // from any one of the several setters that can cause it - see their
     // definitions, and the matching hand-backs in Refresh itself.
     void BeginVirtualCursor();
+    void SeedVirtualCursor();
     void BeginGrabbedKeyboard();
     void EndGrabbedKeyboard();
 
@@ -355,7 +366,8 @@ private:
     // EditModeInputOptions::counterThreshold. False when there was nothing
     // banked, or Windows refused the injection.
     bool FlushPendingCorrection();
-    void EnsureRawInputSink();
+    // False, with no sink left, when it could not be made or registered.
+    bool EnsureRawInputSink();
     void DestroyRawInputSink();
 
     // The hooks live on their own thread, and this is not a nicety. A
@@ -441,8 +453,11 @@ private:
     bool WantsAllKeystrokesLocked() const { return options_.dontForwardKeystrokes || textFieldOpen_; }
     // Everything typing needs except the decision to take the keyboard - what
     // SetTextFieldOpen turns into a yes.
+    // Not after a try to install the keyboard hook failed: until a retry
+    // gets it, nothing delivers the keys - see ReconcileHooks.
     bool CanDeliverTypingLocked() const {
         return active_ && !keyboardSuspended_ && overlay_ != nullptr &&
+               !keyboardGrabFailed_.load(std::memory_order_relaxed) &&
                EditModeInputOptions::KeystrokesCanBeHeld(gameKeepsFocus_);
     }
     bool WantCancellation() const {
@@ -572,8 +587,9 @@ private:
     std::atomic<LONG> virtualCursorY_{0};
     // Everything from here to lastGain_ is the pointer's integration state:
     // the raw-input sink moves it on the hook thread, report by report, and
-    // BeginVirtualCursor seeds it on the app thread whenever the virtual
-    // pointer starts driving - which can happen while the sink is still up,
+    // SeedVirtualCursor seeds it whenever the virtual pointer starts
+    // driving - on the app thread, or on the hook thread as a retry gets
+    // the grab - and the first can happen while the sink is still up,
     // since raw mouse input can go off and on again before the hook thread
     // has reconciled and taken the sink down. Diagnostics reads it from the
     // app thread too. So all of it is under this lock, which nothing else
@@ -606,7 +622,7 @@ private:
     // curve has to be read per report. The hook is called once for every
     // report regardless, so between two messages it counts them. Written by
     // the hook, read and reset by the sink, both on the hook thread; atomic
-    // because BeginVirtualCursor resets it from the app thread.
+    // because SeedVirtualCursor resets it from the app thread too.
     std::atomic<int> hookMovesSinceReport_{0};
     // Which mouse buttons' downs the hook has swallowed, one bit each (left,
     // right, middle, X1, X2) - so that the up of a button pressed before the
@@ -674,6 +690,20 @@ private:
     // about movement, buttons and the wheel from here, so it exists whenever
     // the mouse is grabbed and not merely while corrections are wanted.
     HWND rawInputSink_ = nullptr;
+    // The hook thread's timer for trying again what could not be set up -
+    // see ReconcileHooks. 0 when none is running.
+    UINT_PTR hookRetryTimer_ = 0;
+    // Whether the pointer grab is asked for and the last try to set it up
+    // failed; read by VirtualCursorActive on the app thread.
+    std::atomic<bool> pointerGrabFailed_{false};
+    // A pointer grab got on a retry and seeded, for the app thread to take
+    // its frame baseline from - see SampleFrameStep.
+    std::atomic<bool> frameBaselinePending_{false};
+    // Whether the keyboard hook is asked for and the last try to install it
+    // failed - see CanDeliverTypingLocked.
+    std::atomic<bool> keyboardGrabFailed_{false};
+    std::atomic<bool> failPointerGrabForTesting_{false};
+    std::atomic<bool> failKeyboardHookForTesting_{false};
 };
 
 }  // namespace sz::platform::win32

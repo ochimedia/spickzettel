@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cwchar>
 #include <functional>
+#include <cstdlib>
 #include <thread>
 #include <vector>
 
@@ -127,6 +128,173 @@ TEST(Win32InputGrabTest, RawMouseInputIsRegisteredAgainAfterHideAndShow) {
         << "second show: the sink from the first thread was remembered after Windows destroyed it";
 
     grab.SetActive(false);
+    grab.Shutdown();
+    DestroyWindow(overlay);
+}
+
+// A grab that cannot be set up whole is not set up at all: with raw input
+// refused, no hook is left swallowing the mouse with nothing to read it,
+// and the overlay goes by the real cursor - until a later try gets it.
+TEST(Win32InputGrabTest, APointerGrabThatFailsIsNotHalfSetUpAndIsTriedAgain) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = false;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    grab.FailPointerGrabForTesting(true);
+
+    grab.SetActive(true);
+    EXPECT_TRUE(Eventually([&grab] { return !grab.VirtualCursorActive(); }, std::chrono::milliseconds(800)))
+        << "the failure is published";
+    EXPECT_FALSE(QueryRawMouse().present) << "no sink left behind";
+
+    grab.FailPointerGrabForTesting(false);
+    EXPECT_TRUE(Eventually([&grab] { return grab.VirtualCursorActive() && QueryRawMouse().targetIsAWindow; },
+                           std::chrono::milliseconds(3000)))
+        << "tried again";
+
+    grab.SetActive(false);
+    grab.Shutdown();
+    DestroyWindow(overlay);
+}
+
+// A keyboard hook that cannot be installed delivers no typing, and says
+// so, so that a text field takes focus instead. A modifier let go of while
+// it was failing is not left held once a retry installs it: the record is
+// seeded from the system as the hook goes in.
+TEST(Win32InputGrabTest, AKeyboardHookThatFailsDeliversNoTypingAndIsSeededOnRetry) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = false;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = true;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    grab.FailKeyboardHookForTesting(true);
+
+    grab.SetActive(true);
+    EXPECT_TRUE(Eventually([&grab] { return !grab.CanDeliverTyping(); }, std::chrono::milliseconds(800)))
+        << "the failure is published";
+    EXPECT_FALSE(grab.DeliversTypingToOverlay());
+
+    // The thread tries once as it starts and once more for the request
+    // that started it; both fail, and the next try is the retry a second
+    // later. Waited past the second, so that it is the retry that finds
+    // the hook allowed.
+    std::this_thread::sleep_for(std::chrono::milliseconds(300));
+    // Ctrl as the record would have it from a seed while it was down, and
+    // let go of with no hook to see it.
+    grab.KeyEventForTesting(VK_LCONTROL, true);
+    grab.FailKeyboardHookForTesting(false);
+    EXPECT_TRUE(Eventually([&grab] { return grab.DeliversTypingToOverlay(); }, std::chrono::milliseconds(3000)))
+        << "tried again";
+    bool ctrl = true;
+    bool shift = true;
+    bool alt = true;
+    grab.HeldModifiers(ctrl, shift, alt);
+    EXPECT_FALSE(ctrl) << "seeded from the system, where nothing is held";
+
+    // Its down was swallowed: let go of here, or the grab's end would hand
+    // a held Ctrl to the system.
+    grab.KeyEventForTesting(VK_LCONTROL, false);
+    std::vector<INPUT> handedBack;
+    grab.CaptureHandBackForTesting(&handedBack, nullptr);
+    grab.SetActive(false);
+    grab.CaptureHandBackForTesting(nullptr, nullptr);
+    grab.Shutdown();
+    DestroyWindow(overlay);
+}
+
+// A grab got on a retry is seeded from where the real cursor went
+// meanwhile before it is published - before any frame, and so before a
+// click could be stamped with the old position.
+TEST(Win32InputGrabTest, APointerGrabGotOnARetryIsSeededBeforeItIsPublished) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    POINT before{};
+    GetCursorPos(&before);
+
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = false;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetPointerBounds(RECT{0, 0, 400, 300});
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    grab.FailPointerGrabForTesting(true);
+
+    SetCursorPos(50, 50);
+    grab.SetActive(true);
+    ASSERT_TRUE(Eventually([&grab] { return !grab.VirtualCursorActive(); }, std::chrono::milliseconds(800)));
+    SetCursorPos(250, 150);  // the hand goes on, with the real cursor
+    grab.FailPointerGrabForTesting(false);
+    ASSERT_TRUE(Eventually([&grab] { return grab.VirtualCursorActive(); }, std::chrono::milliseconds(3000)));
+    // Where the real cursor is: under the grab it stays where the seed
+    // found it. Not (250, 150) exactly, and with a little room, since a
+    // hand on this machine's mouse moves both meanwhile.
+    const POINT at = grab.VirtualCursor();
+    POINT real{};
+    GetCursorPos(&real);
+    EXPECT_LE(std::labs(at.x - real.x) + std::labs(at.y - real.y), 8)
+        << "seeded at (" << at.x << ", " << at.y << "), the real cursor at (" << real.x << ", " << real.y << ")";
+    EXPECT_GT(std::labs(at.x - 50) + std::labs(at.y - 50), 20) << "still the seed from before the failure";
+
+    grab.SetActive(false);
+    grab.Shutdown();
+    grab.SetPointerBounds(RECT{});
+    DestroyWindow(overlay);
+    SetCursorPos(before.x, before.y);
+}
+
+// A text field that chose the keyboard hook to type through, when no hook
+// was needed until then, is told when the hook cannot be installed: the
+// window then takes focus for it instead.
+TEST(Win32InputGrabTest, AFieldWhoseKeyboardHookFailsIsTold) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = false;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = false;  // no keyboard hook until a field opens
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    grab.FailKeyboardHookForTesting(true);
+    grab.SetActive(true);
+    ASSERT_TRUE(grab.CanDeliverTyping()) << "nothing has failed yet";
+
+    grab.SetTextFieldOpen(true);
+    MSG msg{};
+    EXPECT_TRUE(Eventually(
+        [&] { return PeekMessageA(&msg, overlay, Win32InputGrab::kKeyboardUnavailableMessage,
+                                  Win32InputGrab::kKeyboardUnavailableMessage, PM_REMOVE) != 0; },
+        std::chrono::milliseconds(1500)));
+
+    grab.SetTextFieldOpen(false);
+    grab.SetActive(false);
+    grab.FailKeyboardHookForTesting(false);
     grab.Shutdown();
     DestroyWindow(overlay);
 }
