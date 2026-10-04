@@ -25,7 +25,10 @@ TEST(BuildInfoTest, EmbeddedTextsArePresentAndLfOnly) {
     EXPECT_FALSE(NoticesText().empty());
     EXPECT_EQ(AboutText().find('\r'), std::string_view::npos);
     EXPECT_EQ(NoticesText().find('\r'), std::string_view::npos);
+    EXPECT_EQ(LicenseText().find('\r'), std::string_view::npos);
     EXPECT_NE(NoticesText().find("Dear ImGui"), std::string_view::npos);
+    EXPECT_NE(LicenseText().find("GNU GENERAL PUBLIC LICENSE"), std::string_view::npos);
+    EXPECT_NE(LicenseText().find("Version 3, 29 June 2007"), std::string_view::npos);
 }
 
 }  // namespace

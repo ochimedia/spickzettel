@@ -4,6 +4,7 @@
 // build_info.h for why that containment is the point.
 #include "generated/about_text.h"
 #include "generated/git_stamp.h"
+#include "generated/license_text.h"
 #include "generated/notices_text.h"
 
 namespace sz::core::build {
@@ -13,6 +14,8 @@ std::string_view GitDescribe() { return generated::kGitDescribe; }
 std::string_view AboutText() { return generated::kAboutText; }
 
 std::string_view NoticesText() { return generated::kNoticesText; }
+
+std::string_view LicenseText() { return generated::kLicenseText; }
 
 std::string VersionLine() {
     std::string line(kVersion);

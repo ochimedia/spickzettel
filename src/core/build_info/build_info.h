@@ -24,6 +24,11 @@ std::string_view AboutText();
 // the binary, in the binary because that is what those licenses ask for.
 std::string_view NoticesText();
 
+// LICENSE, compiled in: the GNU GPL, version 3, which the app is under. In
+// the binary because the GPL asks an interactive program to tell its user
+// how to view the license.
+std::string_view LicenseText();
+
 // What to show a person: the version, plus the git description when it
 // says something the version does not. An exact release build reads
 // "0.1.0"; a test build reads "0.1.0 (v0.1.0-12-gabc1234-dirty)".

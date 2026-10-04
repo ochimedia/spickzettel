@@ -616,6 +616,26 @@ TEST_F(UiTest, MakingAProfileForWhatIsUnderneathTakesOneClick) {
     EXPECT_TRUE(AppSettings().ActiveProfile().has_value());
 }
 
+// The app's own license has to be viewable from the app - the GPL asks an
+// interactive program to say how - and is one button away on About.
+TEST_F(UiTest, TheLicenseIsReachableFromAbout) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("license", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtababout");
+        ctx->ItemClick("**/###licenseopen");
+        ctx->Yield();
+        ctx->ItemClick("**/###noticesback");
+        // Back on About, where both buttons are again.
+        ctx->ItemClick("**/###noticesopen");
+        ctx->Yield();
+        ctx->ItemClick("**/###noticesback");
+    });
+    EXPECT_NE(build::LicenseText().find("GNU GENERAL PUBLIC LICENSE"), std::string_view::npos);
+}
+
 // The licenses of everything compiled in have to be reachable from the
 // app, not only from the repo - that is what MIT, ISC and the OFL each ask
 // for. Behind one button rather than in a tab of its own, so this is the

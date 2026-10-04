@@ -891,13 +891,20 @@ void OverviewPanel::RenderOverviewFooter(bool showCanvasesBody) {
         // The footer is the panel's own row of verbs - the Canvases tab
         // keeps New folder / New canvas here - so this is where a reader
         // already looks for one.
-        if (aboutShowsNotices_) {
+        if (aboutPage_ != AboutPage::About) {
             if (ImGui::Button(Labeled(strings::kAboutBackToAbout, "noticesback"))) {
-                aboutShowsNotices_ = false;
+                aboutPage_ = AboutPage::About;
                 overviewBodyScrollToTop_ = true;
             }
-        } else if (ImGui::Button(Labeled(strings::kAboutThirdPartyLicenses, "noticesopen"))) {
-            aboutShowsNotices_ = true;
+            return;
+        }
+        if (ImGui::Button(Labeled(strings::kAboutShowLicense, "licenseopen"))) {
+            aboutPage_ = AboutPage::License;
+            overviewBodyScrollToTop_ = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(Labeled(strings::kAboutThirdPartyLicenses, "noticesopen"))) {
+            aboutPage_ = AboutPage::Notices;
             overviewBodyScrollToTop_ = true;
         }
         return;
@@ -1111,10 +1118,10 @@ void OverviewPanel::SwitchOverviewTab(OverviewTab tab) {
     if (editor_.Input().As<KeyCapture>(Level::Text) != nullptr) {
         editor_.Input().End(Level::Text);
     }
-    // Leaving About also leaves its license page: coming back to a tab
+    // Leaving About also leaves its license pages: coming back to a tab
     // that is still showing somebody else's MIT text, several tabs later,
     // is not a place anyone meant to return to.
-    aboutShowsNotices_ = false;
+    aboutPage_ = AboutPage::About;
 }
 
 void OverviewPanel::RenderOverviewAboutPanel() {
@@ -1125,13 +1132,21 @@ void OverviewPanel::RenderOverviewAboutPanel() {
     // at roughly half the width once the panel is wide.
     ImGui::PushTextWrapPos(0.0f);
 
-    if (aboutShowsNotices_) {
+    if (aboutPage_ == AboutPage::Notices) {
         // The licenses, in the same panel and the same scroll region as
         // the About text rather than in a popup: this is a page you read,
         // not a thing you act on, and the Overview has enough windows
         // stacked over it already (see OverlayApp::StackSurfaces). The way back
         // is in the panel's footer, which does not scroll.
         RenderMarkdownSubset(build::NoticesText());
+        ImGui::PopTextWrapPos();
+        return;
+    }
+    if (aboutPage_ == AboutPage::License) {
+        // The GPL as the FSF publishes it: plain text, not Markdown, so it
+        // is shown as it is, wrapped where the panel ends.
+        const std::string_view license = build::LicenseText();
+        ImGui::TextUnformatted(license.data(), license.data() + license.size());
         ImGui::PopTextWrapPos();
         return;
     }
@@ -1143,12 +1158,19 @@ void OverviewPanel::RenderOverviewAboutPanel() {
     ImGui::SameLine(Px(90.0f));
     const std::string version = build::VersionLine();
     ImGui::TextUnformatted(version.c_str());
-    // Whose it is, right under what it is. This one stays in plain sight
-    // rather than behind the button below: it is the app saying who owns
-    // it, which is a different job from reproducing other people''s terms.
+    // Whose it is and under what terms, right under what it is. In plain
+    // sight rather than behind a button: the GPL asks an interactive
+    // program to show its copyright, that there is no warranty, and that
+    // the program may be passed on under the license - and how to view
+    // it, which is the License button in the footer.
     ImGui::TextColored(theme::kGraphite200, "%s", strings::kAboutCopyrightLabel);
     ImGui::SameLine(Px(90.0f));
     ImGui::TextUnformatted(strings::kAboutCopyright);
+    ImGui::TextColored(theme::kGraphite200, "%s", strings::kAboutLicenseLabel);
+    ImGui::SameLine(Px(90.0f));
+    ImGui::TextUnformatted(strings::kAboutLicense);
+    ImGui::Spacing();
+    ImGui::TextColored(theme::kGraphite300, "%s", strings::kAboutLicenseNotice);
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();

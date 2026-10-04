@@ -143,13 +143,14 @@ private:
     // rather than wherever its second page was left. One function so a
     // fourth tab, if there is ever one, cannot forget either.
     void SwitchOverviewTab(OverviewTab tab);
-    // Whether the About tab is showing the third-party licenses instead of
-    // its usual contents. A second page of the same tab rather than a tab
-    // of its own: the licenses have to be *reachable*, not prominent, and a
-    // permanent fourth entry in the tab row would charge every visit to
-    // Canvases and Settings for something read once, if ever. Not persisted
-    // - a fresh About always opens on About.
-    bool aboutShowsNotices_ = false;
+    // Which page the About tab shows: its usual contents, the app's own
+    // license, or the third-party licenses. Pages of the same tab rather
+    // than tabs of their own: the licenses have to be *reachable*, not
+    // prominent, and a permanent entry in the tab row would charge every
+    // visit to Canvases and Settings for something read once, if ever. Not
+    // persisted - a fresh About always opens on About.
+    enum class AboutPage { About, License, Notices };
+    AboutPage aboutPage_ = AboutPage::About;
     // Whether the Canvases tab shows what is deleted alongside what is not:
     // deleted folders in the sidebar and deleted canvases in the grid,
     // marked out in red with Restore and Delete permanently on each - a

@@ -18,7 +18,7 @@ function(spickzettel_configure_build_info)
     )
 
     # Configure time as well, and listed as configure dependencies so that
-    # editing either file re-runs cmake by itself.
+    # editing any of the files re-runs cmake by itself.
     spickzettel_embed_text_file(
         "${CMAKE_SOURCE_DIR}/ABOUT.md"
         "${_generated_dir}/about_text.h"
@@ -31,9 +31,16 @@ function(spickzettel_configure_build_info)
         kNoticesText
         sz::core::build::generated
     )
+    spickzettel_embed_text_file(
+        "${CMAKE_SOURCE_DIR}/LICENSE"
+        "${_generated_dir}/license_text.h"
+        kLicenseText
+        sz::core::build::generated
+    )
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
         "${CMAKE_SOURCE_DIR}/ABOUT.md"
         "${CMAKE_SOURCE_DIR}/THIRD-PARTY-NOTICES.md"
+        "${CMAKE_SOURCE_DIR}/LICENSE"
         "${CMAKE_SOURCE_DIR}/VERSION"
     )
 

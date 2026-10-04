@@ -163,7 +163,7 @@ runs, and all three land in `build/<preset>/generated/` through
 | --- | --- | --- | --- |
 | `build_config.h` | `kVersion` | configure | `build_info.h`, so widely |
 | `git_stamp.h` | `kGitDescribe` | **every build** | `build_info.cpp` only |
-| `about_text.h`, `notices_text.h` | `ABOUT.md`, `THIRD-PARTY-NOTICES.md` | configure | `build_info.cpp` only |
+| `about_text.h`, `notices_text.h`, `license_text.h` | `ABOUT.md`, `THIRD-PARTY-NOTICES.md`, `LICENSE` | configure | `build_info.cpp` only |
 
 The third column is the design: the git stamp changes with every commit
 and the embedded texts are by far the largest, so both sit behind
@@ -230,28 +230,46 @@ keeping for whoever adds it back:
 
 ### Licenses: what ships, and where the notices are
 
-`LICENSE` covers Spickzettel itself, which is proprietary.
+`LICENSE` covers Spickzettel itself: the GNU GPL, version 3 or (at the
+user's option) any later version, since 2026-10-04, when the app went
+from proprietary to open source. The file is the license text exactly
+as the FSF publishes it, so that it is recognized as what it is; the
+copyright line, "The Spickzettel Authors", is in `README.md`, the
+exe's version resource and the About tab.
+
+The About tab carries what GPLv3 asks of an interactive program: the
+copyright, the license, that there is no warranty, and a way to read
+the license, which is compiled in (`build::LicenseText`) and is one
+button away in the footer, beside the third-party licenses. Where the
+source is found is the download page's to say, next to the binary, not
+the app's.
+
 `THIRD-PARTY-NOTICES.md` covers everything that ends up inside the
 binary, and is compiled into it and shown on the About tab, because MIT,
 ISC and the OFL all require the notice to reach whoever received the
 software; a text file next to the executable is one copy away from not
 doing that.
 
-What is in a release binary, and why each is allowed in a paid,
-closed-source one:
+What is in a release binary, and why each is allowed in it:
 
 - **Dear ImGui**, **nlohmann/json**, **QOI**: MIT. Reproduce the notice.
 - **SQLite**: public domain. Nothing is required; the notices file names
   it all the same, so that what the binary holds is all in one place.
 - **Manrope**: SIL OFL 1.1, which permits bundling and selling a font
   *with* software provided the license travels with it, and forbids only
-  selling the font by itself.
+  selling the font by itself. The font stays under the OFL inside a GPL
+  program; neither license asks the other to give way.
 - **Icon designs**: ISC (Lucide) and MIT (Feather). The SVGs here are
   drawn from this project's own path data, but both licenses cover the
   designs.
 
 googletest and imgui_test_engine only build or test the app and are not
-in a release binary, so they are not in the notices.
+in a release binary, so they are not in the notices. imgui_test_engine
+is under a license of its own, not an open-source one, which is free for
+a project released publicly under an open-source license; it is linked
+only into the UI tests, which nobody is handed. The MSVC runtime, linked
+statically, and the Windows DLLs the app loads are the GPL's System
+Libraries.
 
 Every dependency is fetched at a commit hash, with the tag it
 corresponds to in a comment beside it. A tag is a mutable reference -
