@@ -132,7 +132,7 @@ void Popups::RenderItemPropertiesPopover() {
         PreviewPopoverStyle(item, style);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverKeepAspectTip);
+        HelpTooltip("%s", strings::kPopoverKeepAspectTip);
     }
     RenderItemBackgroundColor(item);
     RenderItemTextStyle(item);
@@ -170,7 +170,7 @@ void Popups::RenderItemOpacity(PopoverItem& item) {
         PreviewPopoverStyle(item, style);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverForegroundTip);
+        HelpTooltip("%s", strings::kPopoverForegroundTip);
     }
 
     int backgroundPct = static_cast<int>(std::round(item.style.pictureOpacity * 100.0f));
@@ -181,7 +181,7 @@ void Popups::RenderItemOpacity(PopoverItem& item) {
         PreviewPopoverStyle(item, style);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", item.pictureStored ? strings::kPopoverBackgroundShotTip
+        HelpTooltip("%s", item.pictureStored ? strings::kPopoverBackgroundShotTip
                                                    : strings::kPopoverBackgroundFillTip);
     }
 }
@@ -204,7 +204,7 @@ void Popups::RenderItemBackgroundColor(PopoverItem& item) {
         setTint(kWhiteBackground);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverBackgroundWhiteTip);
+        HelpTooltip("%s", strings::kPopoverBackgroundWhiteTip);
     }
     ImGui::SameLine(0.0f, Px(6.0f));
     float rgb[3];
@@ -238,7 +238,7 @@ void Popups::RenderItemTextStyle(PopoverItem& item) {
         PreviewPopoverStyle(item, style);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kPopoverTextSizeTip);
+        HelpTooltip("%s", strings::kPopoverTextSizeTip);
     }
     // ColorEdit4, not the ColorEdit3 the background color uses: unlike
     // the background color, Item::noteTextColorRGBA's own alpha byte is

@@ -3140,6 +3140,27 @@ says it instead: its Pin button is lit for a pinned selection.
 Every border is drawn inside the snippet's rect on whole pixels
 (`AddInnerOutline`); see the next section.
 
+### Tooltips
+
+Every tooltip goes through `HelpTooltip` or `InfoTooltip` (`ui/widgets.h`),
+never `ImGui::SetTooltip` directly. Both wait until the pointer has rested
+on the same tooltip for half a second, so crossing the interface on the way
+somewhere no longer flashes a text at every button it passes. ImGui's own
+`ImGuiHoveredFlags_ForTooltip` delay was not used: it goes by the last
+item, and half the tooltips here are for things ImGui does not see as
+items (the bar's tiles and the canvas bar are hit-tested by hand), so the
+wait is kept by the tooltip's words instead. Another tooltip, or a frame
+with none, starts it again. A text that changes while it is up, such as
+"deleted 2 minutes ago", starts it again too, which is rare enough not to
+matter.
+
+The two differ in the Appearance setting `showHelpTooltips`. Help, which
+says what a control does, can be switched off by someone who knows the
+app. Information shown nowhere else always appears: a canvas tile's name
+and place, when something was deleted and what a deleted folder holds,
+and the default that a "set here" mark resets to. ImGui's own tooltips,
+like a color swatch's values, are left as ImGui has them.
+
 ### ImGui gotchas worth knowing before touching this code
 
 - `##` hides an id from the display; only `###` detaches it from the

@@ -15,6 +15,7 @@
   },
   "appearance": {
     "showItemBorders": true,
+    "showHelpTooltips": true,
     "showToastsWhileHidden": true,
     "imageFilter": "bilinear",
     "accentColor": "#2C6C7C",

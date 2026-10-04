@@ -542,7 +542,7 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
             drawList->AddCircleFilled(center, swatchRadius, ToImColor(editor_.DrawColorRGBA()));
             drawList->AddCircle(center, swatchRadius, ImGui::GetColorU32(theme::kWhite), 0, Px(1.5f));
             if (hovered) {
-                ImGui::SetTooltip("%s", strings::kBarColorTip);
+                HelpTooltip("%s", strings::kBarColorTip);
             }
             continue;
         }
@@ -603,7 +603,7 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         if (hovered) {
             // A tool in hand says how it is put down again.
             const bool toolInHand = active && button != ChromeButton::Pin;
-            ImGui::SetTooltip(toolInHand ? "%s\n%s" : "%s", tooltip, strings::kBarStopDrawingTip);
+            HelpTooltip(toolInHand ? "%s\n%s" : "%s", tooltip, strings::kBarStopDrawingTip);
         }
     }
 }
@@ -789,7 +789,7 @@ void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTo
             host_.Act(action::RestoreMinimized{item->id});
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("%s", strings::kDockRestoreTip);
+            HelpTooltip("%s", strings::kDockRestoreTip);
         }
     }
     ImGui::End();

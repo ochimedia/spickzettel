@@ -128,7 +128,7 @@ AppConfig EveryRowChanged() {
 
 auto Fields(const AppConfig& c) {
     const auto& [hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
-                 strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showFrameGraph, showItemBorders,
+                 strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showFrameGraph, showItemBorders, showHelpTooltips,
                  showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
                  itemBorderColorOtherRGBA, itemBorderColorPinnedRGBA, itemBorderSelectedFollowsAccent,
                  itemBorderColorSelectedRGBA, imageFilter,
@@ -140,7 +140,7 @@ auto Fields(const AppConfig& c) {
                  tutorialProgress] = c;
     return std::tie(hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
                     strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showFrameGraph,
-                    showItemBorders, showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
+                    showItemBorders, showHelpTooltips, showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
                     itemBorderColorOtherRGBA, itemBorderColorPinnedRGBA, itemBorderSelectedFollowsAccent,
                     itemBorderColorSelectedRGBA, imageFilter,
                     raiseSelectedSnippet, screenshotTrigger, drawingTrigger, snippetBar, drawingBar,

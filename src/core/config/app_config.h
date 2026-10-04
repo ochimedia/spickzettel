@@ -136,6 +136,12 @@ struct AppConfig {
     // until it's hovered or has ink on it - easy to lose track of on a
     // busy canvas. Set to false to only show it on hover.
     bool showItemBorders = true;
+    // true (default): the tooltips that say what a control does appear
+    // when the pointer rests on it. Off for someone who knows the app;
+    // tooltips with information that is nowhere else on screen - a
+    // canvas's name, when something was deleted - stay. See
+    // ui::HelpTooltip.
+    bool showHelpTooltips = true;
     // Whether a hotkey that acts while the overlay is hidden may put a
     // message on screen to say what it did - which means showing the
     // overlay for as long as that message lasts, click-through and with

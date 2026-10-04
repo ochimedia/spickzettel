@@ -35,6 +35,22 @@ namespace sz::ui {
 // label, pass it straight to ImGui" use here is always. Nothing keeps one.
 const char* Labeled(const char* text, const char* id);
 
+// The tooltips, in place of ImGui::SetTooltip, called where it was: each
+// frame the pointer is over what it explains. Shown once the pointer has
+// rested on the same one for kTooltipDelaySeconds, so that crossing the
+// interface on the way somewhere does not flash a text at every button.
+//
+// Help - what a control does, which someone who knows the app can do
+// without - only while AppConfig::showHelpTooltips allows (see
+// SetHelpTooltipsShown). Information that is nowhere else on screen - a
+// canvas's name and place in the bar, when something was deleted, the
+// default a reset goes back to - always.
+inline constexpr double kTooltipDelaySeconds = 0.5;
+void HelpTooltip(const char* fmt, ...) IM_FMTARGS(1);
+void InfoTooltip(const char* fmt, ...) IM_FMTARGS(1);
+// Set once a frame from the setting, before anything is drawn.
+void SetHelpTooltipsShown(bool shown);
+
 // Whether the button about to be drawn as `strId`, at `size` (as passed to
 // ImGui::Button), is pressed this frame: held since an earlier frame and
 // released over it now. For a button that turns accent once it has been

@@ -473,6 +473,8 @@ void OverlayApp::Prepare(float displayW, float displayH) {
             appliedFramePacing_ = pacing;
         }
     }
+    // Whether the help tooltips appear - see HelpTooltip.
+    SetHelpTooltipsShown(Cfg().showHelpTooltips);
     // Mip chains only for the filters that read them - see IOverlayWindow::
     // SetMipmapsWanted. Before the textures are asked for, so that a change
     // makes them again in this same frame.

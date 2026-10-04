@@ -313,7 +313,7 @@ void CanvasBar::Draw(float displayW, float displayH) {
         // Not while a tile is being dragged, whose own name follows the
         // pointer instead.
         if (hovered && !dragging) {
-            ImGui::SetTooltip(strings::kCanvasBarTileTip, canvas->name.c_str(), static_cast<int>(i + 1),
+            InfoTooltip(strings::kCanvasBarTileTip, canvas->name.c_str(), static_cast<int>(i + 1),
                               static_cast<int>(ids.size()));
         }
     }
@@ -332,7 +332,7 @@ void CanvasBar::Draw(float displayW, float displayH) {
     }
     host_.Mark(Anchor{AnchorId::CanvasBarNew}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kCanvasBarNewCanvasTip);
+        HelpTooltip("%s", strings::kCanvasBarNewCanvasTip);
     }
     // And the Overview - every canvas, every folder, the settings. The bar
     // is the one panel that is always there (out of the bottom edge), so
@@ -344,7 +344,7 @@ void CanvasBar::Draw(float displayW, float displayH) {
     }
     host_.Mark(Anchor{AnchorId::CanvasBarOverview}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kCanvasBarOverviewTip);
+        HelpTooltip("%s", strings::kCanvasBarOverviewTip);
     }
 
     ImGui::End();

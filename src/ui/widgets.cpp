@@ -1,6 +1,7 @@
 #include "ui/widgets.h"
 
 #include <algorithm>
+#include <cstdarg>
 #include <cstdio>
 #include <string>
 
@@ -10,6 +11,55 @@
 #include "generated/ui_strings.h"
 
 namespace sz::ui {
+
+namespace {
+
+bool helpTooltipsShown = true;
+
+// The tooltip asked for last, by its words, and since when it has been
+// asked for without a frame in between that asked for none or another.
+struct RestingTooltip {
+    std::string text;
+    int lastFrame = -1;
+    double since = 0.0;
+};
+RestingTooltip resting;
+
+void Tooltip(const char* fmt, va_list args) {
+    char text[1024];
+    std::vsnprintf(text, sizeof(text), fmt, args);
+    const int frame = ImGui::GetFrameCount();
+    const double now = ImGui::GetTime();
+    if (resting.lastFrame < frame - 1 || resting.text != text) {
+        resting.text = text;
+        resting.since = now;
+    }
+    resting.lastFrame = frame;
+    if (now - resting.since >= kTooltipDelaySeconds) {
+        ImGui::SetTooltip("%s", text);
+    }
+}
+
+}  // namespace
+
+void HelpTooltip(const char* fmt, ...) {
+    if (!helpTooltipsShown) {
+        return;
+    }
+    va_list args;
+    va_start(args, fmt);
+    Tooltip(fmt, args);
+    va_end(args);
+}
+
+void InfoTooltip(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    Tooltip(fmt, args);
+    va_end(args);
+}
+
+void SetHelpTooltipsShown(bool shown) { helpTooltipsShown = shown; }
 
 namespace {
 

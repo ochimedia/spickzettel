@@ -61,6 +61,8 @@ inline constexpr GlobalSetting<ChoiceRule<CreationTrigger>> kDrawingTrigger{
 // ----- appearance -----
 inline constexpr GlobalSetting<BoolRule> kShowItemBorders{
     {"appearance", "", "showItemBorders"}, {}, E::Frame, [](AppConfig& c) { return &c.showItemBorders; }};
+inline constexpr GlobalSetting<BoolRule> kShowHelpTooltips{
+    {"appearance", "", "showHelpTooltips"}, {}, E::Frame, [](AppConfig& c) { return &c.showHelpTooltips; }};
 inline constexpr GlobalSetting<BoolRule> kShowToastsWhileHidden{
     {"appearance", "", "showToastsWhileHidden"}, {}, E::Use, [](AppConfig& c) { return &c.showToastsWhileHidden; }};
 inline constexpr GlobalSetting<ChoiceRule<platform::ImageFilter>> kImageFilter{
@@ -208,7 +210,7 @@ inline constexpr GlobalSetting<BoolRule> kShowFrameGraph{
 inline constexpr auto kAll = std::tuple{
     &kHotkeyEditMode, &kHotkeyViewMode, &kHotkeyQuickCapture, &kHotkeySilentCapture,
     &kStrokeColor, &kStrokeWidth, &kRaiseSelected, &kScreenshotTrigger, &kDrawingTrigger,
-    &kShowItemBorders, &kShowToastsWhileHidden, &kImageFilter, &kAccentColor, &kUiScale,
+    &kShowItemBorders, &kShowHelpTooltips, &kShowToastsWhileHidden, &kImageFilter, &kAccentColor, &kUiScale,
     &kBorderFront, &kBorderOther, &kBorderPinned, &kBorderSelectedFollowsAccent, &kBorderSelected,
     &kShowCanvasBar,
     &kShowEditModeBorder, &kEditModeBorderColor, &kEditModeBorderWidth,

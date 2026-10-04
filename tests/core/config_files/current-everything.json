@@ -15,6 +15,7 @@
   },
   "appearance": {
     "showItemBorders": false,
+    "showHelpTooltips": false,
     "showToastsWhileHidden": false,
     "imageFilter": "lanczos",
     "accentColor": "#8040C0",

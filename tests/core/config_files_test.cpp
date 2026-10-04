@@ -100,6 +100,7 @@ AppConfig Everything() {
     c.profileable.counterRawMouseInput = true;
     c.profileable.counterThreshold = 40;
     c.showItemBorders = false;
+    c.showHelpTooltips = false;
     c.showToastsWhileHidden = false;
     c.accentColorRGBA = 0x8040C0FFu;
     c.uiScalePercent = 150;
@@ -198,6 +199,7 @@ TEST(ConfigFilesTest, TheFirstReleasesSettingsAreReadAsItWroteThem) {
     expected.itemBorderColorSelectedRGBA = defaults.itemBorderColorSelectedRGBA;
     expected.librarySizeReminder = defaults.librarySizeReminder;
     expected.librarySizeReminderMb = defaults.librarySizeReminderMb;
+    expected.showHelpTooltips = defaults.showHelpTooltips;
     // Everything() has retention on now that the default is off; 0.1.0's
     // file has it off, as everything but the default then.
     expected.purgeDeleted = false;

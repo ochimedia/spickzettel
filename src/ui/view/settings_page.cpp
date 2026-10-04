@@ -488,6 +488,8 @@ void SettingsPage::RenderSettingsAppearance() {
     SettingsHeading("appearancedisplayheading", strings::kAppearanceDisplayHeading);
     SettingCheckbox(settings_, setting::kShowItemBorders, "appearanceshowitemborders",
                     strings::kAppearanceShowItemBorders, strings::kAppearanceShowItemBordersHelp);
+    SettingCheckbox(settings_, setting::kShowHelpTooltips, "appearanceshowhelptooltips",
+                    strings::kAppearanceShowHelpTooltips, strings::kAppearanceShowHelpTooltipsHelp);
 
     SettingsGroupBreak();
 
@@ -688,7 +690,7 @@ void SettingsPage::RenderBarButtonRow(const char* id, const char* label, const G
             ImGui::EndDragDropTarget();
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("%s\n%s", BarButtonName(entry.button),
+            HelpTooltip("%s\n%s", BarButtonName(entry.button),
                                entry.shown ? strings::kBarsShownTip : strings::kBarsHiddenTip);
         }
     }
@@ -701,7 +703,7 @@ void SettingsPage::RenderBarButtonRow(const char* id, const char* label, const G
         changed = true;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kBarsResetTip);
+        HelpTooltip("%s", strings::kBarsResetTip);
     }
 
     if (toggle.has_value()) {
@@ -1041,7 +1043,7 @@ void SettingsPage::RenderShortcutEditor(ShortcutAction action, const Icon& icon,
         }
     }
     if (ImGui::IsItemHovered() && !capturing) {
-        ImGui::SetTooltip("%s", strings::kHotkeysShortcutTooltip);
+        HelpTooltip("%s", strings::kHotkeysShortcutTooltip);
     }
     if (overridden) {
         ImGui::SameLine();
@@ -1052,7 +1054,7 @@ void SettingsPage::RenderShortcutEditor(ShortcutAction action, const Icon& icon,
             // The one place where "(none)" was genuinely ambiguous before:
             // a row reading it could mean "inherited, nothing bound" or
             // "unbound here on purpose", and those are different things.
-            ImGui::SetTooltip(strings::kHotkeysShortcutSetHere,
+            InfoTooltip(strings::kHotkeysShortcutSetHere,
                                FormatKeyComboLabel(settings_.Base().shortcuts[index]).c_str());
         }
     }
@@ -1365,7 +1367,7 @@ bool SettingsPage::RenderProfileMakers(std::vector<Profile>& edited) {
         }
         host_.Mark(Anchor{AnchorId::SettingsMakeProfile}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("%s", strings::kProfilesMakeForThisTooltip);
+            HelpTooltip("%s", strings::kProfilesMakeForThisTooltip);
         }
     }
     ImGui::SameLine();
@@ -1378,7 +1380,7 @@ bool SettingsPage::RenderProfileMakers(std::vector<Profile>& edited) {
     }
     host_.Mark(Anchor{AnchorId::SettingsNewProfile}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kProfilesNewProfileTooltip);
+        HelpTooltip("%s", strings::kProfilesNewProfileTooltip);
     }
     return changed;
 }
@@ -1439,7 +1441,7 @@ bool SettingsPage::RenderProfileRow(size_t index, Profile& profile, bool& remove
     }
     host_.Mark(Anchor{AnchorId::SettingsDeleteProfile, index}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kProfilesDeleteThis);
+        HelpTooltip("%s", strings::kProfilesDeleteThis);
     }
 
     if (!open) {
@@ -1590,7 +1592,7 @@ void SettingsPage::RenderHotkeyEditor(const char* id, const char* label, HotkeyS
         }
     }
     if (ImGui::IsItemHovered() && !capturing) {
-        ImGui::SetTooltip("%s", strings::kHotkeysComboTooltip);
+        HelpTooltip("%s", strings::kHotkeysComboTooltip);
     }
 
     // What a waiting row does with the next key is its KeyCapture's - see

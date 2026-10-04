@@ -180,7 +180,7 @@ void SettingCheckbox(Settings& settings, std::optional<size_t> target, const Pro
             settings.ClearOverride(row, target);
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(strings::kHotkeysComboSetHere,
+            InfoTooltip(strings::kHotkeysComboSetHere,
                                (settings.Base().*row.value) ? strings::kHotkeysOn : strings::kHotkeysOff);
         }
     }
@@ -229,7 +229,7 @@ void SettingNumber(Settings& settings, std::optional<size_t> target, const Profi
             settings.ClearOverride(row, target);
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip(strings::kHotkeysComboSetHere, std::to_string(settings.Base().*row.value).c_str());
+            InfoTooltip(strings::kHotkeysComboSetHere, std::to_string(settings.Base().*row.value).c_str());
         }
     }
     ImGui::PopID();

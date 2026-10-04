@@ -609,6 +609,8 @@
   "appearance.accentReset": "Reset",
   "appearance.displayHeading": "Display",
   "appearance.showItemBorders": "Show item borders",
+  "appearance.showHelpTooltips": "Show help tooltips",
+  "appearance.showHelpTooltipsHelp": "The short texts that say what a button or control does, shown when the pointer rests on it for a moment. Turn them off once you know your way around.\n\nTooltips that tell something shown nowhere else, such as a canvas's name in the canvas bar or when something was deleted, still appear.",
   "appearance.showItemBordersHelp": "Every snippet gets a border, not just the frontmost one - handy for spotting snippets that are still empty.",
   "appearance.imageFilterHeading": "Picture scaling",
   "appearance.imageFilterHelp": "How screenshots are drawn when scaled.\n\nBilinear: what the graphics card does by default. Soft when enlarged; below about half size, thin lines and text break up.\n\nNearest: whole pixels, unblended. Blocky when enlarged, which suits pixel art and small captures blown up.\n\nBicubic: sharper than bilinear when enlarged, and clean when shrunk.\n\nLanczos: the sharpest, at a little more cost. Hard edges can show a faint halo.\n\nBicubic and Lanczos also keep every picture at smaller sizes to shrink from, which takes about a third more graphics memory.\n\nTakes effect immediately; the pictures themselves are not changed and can be reset to their original size using the context menu of a snippet.",

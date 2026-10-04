@@ -191,6 +191,7 @@ one row noted.
 | Key | Field | Default | Rule | Effect |
 |---|---|---|---|---|
 | `showItemBorders` | `showItemBorders` | true | bool | Frame |
+| `showHelpTooltips` | `showHelpTooltips` | true | bool | Frame |
 | `showToastsWhileHidden` | `showToastsWhileHidden` | true | bool; edited from Settings > Hotkeys | Use |
 | `imageFilter` | `imageFilter` | bilinear | bilinear, nearest, bicubic, lanczos | Frame |
 | `accentColor` | `accentColorRGBA` | `#2C6C7C` | color; previewed while dragged | Frame |

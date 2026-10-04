@@ -657,7 +657,7 @@ void TutorialCard::DrawStep() {
     const bool next = AccentButton(Labeled(strings::kTutorialCardNext, "tutorial_next"));
     ImGui::EndDisabled();
     if (!enabled && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("%s", strings::kTutorialCardNextWaits);
+        HelpTooltip("%s", strings::kTutorialCardNextWaits);
     }
     if (next) {
         host_.Act(action::TutorialPress{TutorialButton::Next});

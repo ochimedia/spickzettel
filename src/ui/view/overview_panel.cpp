@@ -157,14 +157,14 @@ DeletedButton DeletedButtons(const char* restoreTip, const char* deleteTip, ImRe
     }
     restore = ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", restoreTip);
+        HelpTooltip("%s", restoreTip);
     }
     ImGui::SameLine(0.0f, Px(kDeletedButtonGap));
     if (DangerIconButton("##deleteforgood", icons::kTrash)) {
         pressed = DeletedButton::DeleteForGood;
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", deleteTip);
+        HelpTooltip("%s", deleteTip);
     }
     return pressed;
 }
@@ -387,7 +387,7 @@ void OverviewPanel::RenderOverviewHeader() {
     }
     host_.Mark(Anchor{AnchorId::OverviewShowDeleted}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kOverviewShowDeletedHelp);
+        HelpTooltip("%s", strings::kOverviewShowDeletedHelp);
     }
     ImGui::SameLine(0.0f, gapBeforePreviews);
     ImGui::AlignTextToFramePadding();
@@ -401,7 +401,7 @@ void OverviewPanel::RenderOverviewHeader() {
         settings_.Set(setting::kOverviewShowsStrokes, strokes);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kOverviewPreviewsVectorHelp);
+        HelpTooltip("%s", strings::kOverviewPreviewsVectorHelp);
     }
     ImGui::SameLine();
     bool bitmaps = settings_.Get(setting::kOverviewShowsBitmaps);
@@ -409,7 +409,7 @@ void OverviewPanel::RenderOverviewHeader() {
         settings_.Set(setting::kOverviewShowsBitmaps, bitmaps);
     }
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("%s", strings::kOverviewPreviewsBitmapHelp);
+        HelpTooltip("%s", strings::kOverviewPreviewsBitmapHelp);
     }
 }
 
@@ -459,7 +459,7 @@ void OverviewPanel::RenderDeletedControls(bool withLegend, float gap) {
     const bool emptyPressed = DangerButton("##emptytrash", icons::kTrash, strings::kOverviewEmptyTrash);
     ImGui::EndDisabled();
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-        ImGui::SetTooltip("%s", strings::kOverviewEmptyTrashHelp);
+        HelpTooltip("%s", strings::kOverviewEmptyTrashHelp);
     }
     if (emptyPressed) {
         host_.AskToDelete(DeleteTarget{DeleteTarget::Kind::Trash});
@@ -555,13 +555,13 @@ void OverviewPanel::RenderFolderSidebar() {
             }
             if (rowHovered && marked) {
                 if (deleted && Cfg().purgeDeleted) {
-                    ImGui::SetTooltip("%s\n%s", DeletedWhen(f.deletedAt, now).c_str(),
+                    InfoTooltip("%s\n%s", DeletedWhen(f.deletedAt, now).c_str(),
                                       GoesOn(f.deletedAt, Cfg().purgeDeletedAfterDays).c_str());
                 } else if (deleted) {
-                    ImGui::SetTooltip("%s", DeletedWhen(f.deletedAt, now).c_str());
+                    InfoTooltip("%s", DeletedWhen(f.deletedAt, now).c_str());
                 } else {
                     const size_t count = Manager().MarkedCanvasesIn(f.id).size();
-                    ImGui::SetTooltip(count == 1 ? strings::kDeletedHoldsOne : strings::kDeletedHoldsMany, count);
+                    InfoTooltip(count == 1 ? strings::kDeletedHoldsOne : strings::kDeletedHoldsMany, count);
                 }
             }
             // Nothing is dragged out of or into what is deleted: it stays
@@ -649,7 +649,7 @@ void OverviewPanel::RenderFolderSidebar() {
                     host_.AskToDelete(DeleteTarget{DeleteTarget::Kind::Folder, f.id, f.name});
                 }
                 if (ImGui::IsItemHovered()) {
-                    ImGui::SetTooltip("%s", strings::kOverviewDeleteFolder);
+                    HelpTooltip("%s", strings::kOverviewDeleteFolder);
                 }
             }
         }
@@ -777,10 +777,10 @@ void OverviewPanel::RenderCanvasGrid(float displayW, float displayH, const ViewH
             const Folder* folder = Manager().FindFolder(c.folderId);
             const int64_t stamp = c.deletedAt != 0 ? c.deletedAt : folder != nullptr ? folder->deletedAt : 0;
             if (Cfg().purgeDeleted) {
-                ImGui::SetTooltip("%s\n%s\n%s", DeletedWhen(stamp, now).c_str(),
+                InfoTooltip("%s\n%s\n%s", DeletedWhen(stamp, now).c_str(),
                                   GoesOn(stamp, Cfg().purgeDeletedAfterDays).c_str(), strings::kDeletedRestoreToOpen);
             } else {
-                ImGui::SetTooltip("%s\n%s", DeletedWhen(stamp, now).c_str(), strings::kDeletedRestoreToOpen);
+                InfoTooltip("%s\n%s", DeletedWhen(stamp, now).c_str(), strings::kDeletedRestoreToOpen);
             }
         }
         if (!deleted && ImGui::BeginDragDropSource()) {
@@ -858,7 +858,7 @@ void OverviewPanel::RenderCanvasGrid(float displayW, float displayH, const ViewH
                 host_.AskToDelete(DeleteTarget{DeleteTarget::Kind::Canvas, c.id, c.name});
             }
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("%s", strings::kOverviewDeleteCanvas);
+                HelpTooltip("%s", strings::kOverviewDeleteCanvas);
             }
         }
 
