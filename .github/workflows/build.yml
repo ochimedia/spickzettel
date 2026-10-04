@@ -1,9 +1,11 @@
 # Builds and tests the debug and release presets on a hosted Windows
 # runner, and keeps the release exe and its PDB as an artifact of the
-# run. See "Continuous integration" in docs/ARCHITECTURE.md.
+# run. Run on a release tag, it also makes a draft GitHub release of
+# that build. See "Continuous integration" in docs/ARCHITECTURE.md.
 name: Build
 
-# Started by hand, from the Actions tab, for now - see the docs.
+# Started by hand, from the Actions tab, for now - see the docs. The
+# branch or tag it runs on is picked there.
 on:
   workflow_dispatch:
 
@@ -12,19 +14,40 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 60
+    # Write, to make the draft release; a run on a branch writes nothing.
+    permissions:
+      contents: write
     steps:
       # The whole history and its tags: the version stamp is
       # `git describe --tags`, which a shallow clone cannot answer.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+
+      # Before anything is built: a tag that is not the version in VERSION,
+      # or a version the changelog says nothing about, is not a release.
+      - name: Check the tag against VERSION and the changelog
+        if: github.ref_type == 'tag'
+        run: |
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ("${{ github.ref_name }}" -ne "v$version") {
+              throw "The tag ${{ github.ref_name }} is not v$version, the version in VERSION."
+          }
+          $lines = Get-Content ABOUT.md -Encoding utf8
+          $start = [array]::IndexOf($lines, "### $version")
+          if ($start -lt 0) {
+              throw "ABOUT.md's changelog has no section '### $version'."
+          }
+          $end = $start + 1
+          while ($end -lt $lines.Count -and -not $lines[$end].StartsWith('### ') -and -not $lines[$end].StartsWith('## ')) {
+              $end++
+          }
+          $lines[($start + 1)..($end - 1)] | Set-Content "$env:RUNNER_TEMP\release-notes.md" -Encoding utf8
+          "SZ_RELEASE_VERSION=$version" >> $env:GITHUB_ENV
 
       # What scripts/clean_build.cmd does, kept for the steps after this
       # one: find Visual Studio, load vcvars64, and hand its environment
@@ -72,3 +95,20 @@ jobs:
             dist/symbols/Spickzettel.pdb
           if-no-files-found: error
           retention-days: 30
+
+      # A draft, for a person to read over and publish: nothing of it is
+      # public until then. The exe as it is, and its PDB zipped and named
+      # as symbols, so that nobody takes it for the download; kept with the
+      # release because a crash dump from this build is read with it, and
+      # an artifact is deleted after 30 days.
+      - name: Make a draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $symbols = "$env:RUNNER_TEMP\Spickzettel-$env:SZ_RELEASE_VERSION-symbols.zip"
+          Compress-Archive -Path dist\symbols\Spickzettel.pdb -DestinationPath $symbols
+          gh release create "${{ github.ref_name }}" --draft --verify-tag `
+              --title "Spickzettel $env:SZ_RELEASE_VERSION" `
+              --notes-file "$env:RUNNER_TEMP\release-notes.md" `
+              dist\Spickzettel.exe $symbols

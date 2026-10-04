@@ -78,10 +78,12 @@ Visual Studio itself with `vswhere`, so it runs from a double-click.
 
 `.github/workflows/build.yml` builds and tests `windows-msvc-debug` and
 `windows-msvc-release` on GitHub's hosted Windows runner, and keeps
-`Spickzettel.exe` and its PDB as an artifact of the run. Added on 2026-10-04, so that a build can come from a clean
-checkout of one commit, on a machine that has never seen the working
-tree, and be traced back to that commit. The local build stays the
-same; the workflow is the same presets, run somewhere else.
+`Spickzettel.exe` and its PDB as an artifact of the run; run on a
+release tag, it also makes a draft GitHub release (below). Added on
+2026-10-04, so that a build can come from a clean checkout of one
+commit, on a machine that has never seen the working tree, and be
+traced back to that commit. The local build stays the same; the
+workflow is the same presets, run somewhere else.
 
 - **The toolchain is loaded as `scripts/clean_build.cmd` loads it**:
   `vswhere` finds Visual Studio, `vcvars64.bat` sets it up, and its
@@ -101,6 +103,36 @@ same; the workflow is the same presets, run somewhere else.
 - **A newer run on the same branch cancels the one still going**, whose
   result no longer matters. Windows runners count double against a
   private repository's minutes.
+
+**A release** is the same run, started on a tag instead of a branch:
+
+1. Raise `VERSION`, give the version its section in `ABOUT.md`'s
+   changelog (`### 0.2.4`), and commit.
+2. Tag that commit `v0.2.4`, annotated (`Spickzettel 0.2.4`), and push
+   the tag.
+3. Run the workflow, picking the tag in "Use workflow from".
+4. Read over the draft release it makes, and publish it.
+
+On a tag, the run first checks that the tag is `v` and the version in
+`VERSION`, and that the changelog has a section for it, and stops before
+building if not. The tag is made by hand rather than by the workflow:
+the build then runs on the commit the tag names, so its `git describe`
+is the tag itself and the About tab reads "0.2.4", and the tag is the
+person's, annotated like the ones before it. The draft release carries
+that section of the changelog as its notes, and two files:
+
+- **`Spickzettel.exe`, as it is.** It needs nothing installed beside it,
+  and the license and the notices are compiled in, so a zip around it
+  would only add a step.
+- **`Spickzettel-0.2.4-symbols.zip`**, the PDB, zipped and named so
+  that nobody takes it for the download. It is kept with the release
+  because a crash dump from that build is read with it and with nothing
+  else, and a workflow artifact is deleted after 30 days.
+
+GitHub adds the tagged commit's source to every release by itself, which
+is the source the GPL asks to be offered beside the binary. The job may
+write to the repository for this (`contents: write`); a run on a branch
+writes nothing.
 
 The C++ runtime is linked statically (`CMAKE_MSVC_RUNTIME_LIBRARY`), so
 the exe needs nothing beyond what Windows itself ships: no Visual C++
