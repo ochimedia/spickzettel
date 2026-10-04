@@ -25,18 +25,14 @@ ctest --preset windows-msvc-release
 ```
 
 `Spickzettel.exe` lands in `build/windows-release/src/app_main/`, and is
-copied to `dist/` at the repo root, next to `Spickzettel Prerelease.exe`
-and `Spickzettel Demo.exe` from their presets; the PDBs go to
-`dist/symbols/`. `scripts/clean_build.cmd` builds all of them from
-nothing, for a release, and runs the debug and release tests; the
-prerelease and demo presets build no tests. Keep the PDB of any build you hand out - it is what reads a crash dump from it (see
+copied to `dist/` at the repo root; the PDB goes to `dist/symbols/`.
+`scripts/clean_build.cmd` builds it from nothing, for a release, and runs
+the debug and release tests. Keep the PDB of any build you hand out - it is what reads a crash dump from it (see
 `docs/ARCHITECTURE.md`). All third-party code is fetched by CMake on the first
 configure; nothing has to be installed or vendored by hand.
 `windows-msvc-debug` also builds the UI tests, and `windows-msvc-asan` is
-that build under AddressSanitizer; `windows-msvc-demo` is the
-release build with a permanent demo watermark; `windows-msvc-prerelease`
-is the release build with a not-for-redistribution notice at every
-start; `linux-tests` builds and tests the portable core on Linux.
+that build under AddressSanitizer; `linux-tests` builds and tests the
+portable core on Linux.
 
 ## Configuration
 

@@ -1,5 +1,5 @@
-# Everything baked into the binary at build time: the version, the
-# compile-time feature flags, the git description, and the embedded About
+# Everything baked into the binary at build time: the version, the git
+# description, and the embedded About
 # and third-party-notices text. All of it lands in
 # ${CMAKE_BINARY_DIR}/generated/ and is included as "generated/<name>.h";
 # the include root is CMAKE_BINARY_DIR, which sz_core exports.
@@ -9,18 +9,8 @@ function(spickzettel_configure_build_info)
     set(_generated_dir "${CMAKE_BINARY_DIR}/generated")
     file(MAKE_DIRECTORY "${_generated_dir}")
 
-    # Configure time: the version and the flags only change when cmake is
-    # re-run, which is exactly when they can change.
-    if(SPICKZETTEL_DEMO_MODE)
-        set(SPICKZETTEL_DEMO_MODE_CXX "true")
-    else()
-        set(SPICKZETTEL_DEMO_MODE_CXX "false")
-    endif()
-    if(SPICKZETTEL_PRERELEASE_NOTICE)
-        set(SPICKZETTEL_PRERELEASE_NOTICE_CXX "true")
-    else()
-        set(SPICKZETTEL_PRERELEASE_NOTICE_CXX "false")
-    endif()
+    # Configure time: the version only changes when cmake is re-run,
+    # which is exactly when it can change.
     configure_file(
         "${CMAKE_SOURCE_DIR}/src/core/build_info/build_config.h.in"
         "${_generated_dir}/build_config.h"

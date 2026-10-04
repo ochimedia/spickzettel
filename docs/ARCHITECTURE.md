@@ -46,32 +46,30 @@ struct.
 
 Presets live in `CMakePresets.json`. `windows-msvc-release` is what a
 release is built with; `windows-msvc-debug` additionally builds the UI
-tests; `windows-msvc-demo` is the release build with a permanent demo
-watermark compiled in; `windows-msvc-prerelease` is the release build
-with a not-for-redistribution notice at every start; `linux-tests`
-builds the portable core and its tests on a Linux host.
+tests; `linux-tests` builds the portable core and its tests on a Linux
+host.
 
-The presets whose build is handed out copy the finished exe straight
-into `dist/` at the repo root (`SPICKZETTEL_COPY_TO_DIST`), each under
-a name of its own (`SPICKZETTEL_EXE_NAME`): `Spickzettel.exe`,
-`Spickzettel Prerelease.exe`, `Spickzettel Demo.exe`. Side by side in
-one folder, and named for what they are, rather than each
-`Spickzettel.exe` in a folder of its own: the name goes wherever the
-file goes, into a download folder or an email, where the folder it came
-from does not, and Task Manager shows which kind is running. The name
-is the linker's output name, not a rename of the copy, so the PDB is
-named to match and is the name the exe records for it - what a debugger
-looks for when it reads a dump. Debug is not copied: it is built for
-its tests, and nobody is handed it.
+The release preset copies the finished exe straight into `dist/` at the
+repo root (`SPICKZETTEL_COPY_TO_DIST`), as `Spickzettel.exe`
+(`SPICKZETTEL_EXE_NAME`). The name is the linker's output name, not a
+rename of the copy, so the PDB is named to match and is the name the exe
+records for it - what a debugger looks for when it reads a dump. Debug
+is not copied: it is built for its tests, and nobody is handed it.
+
+Until 2026-10-04 there were two more presets: a demo build with a
+watermark that wandered over the overlay, and a prerelease build that
+asked at every start not to be passed on. Both went with the move to
+an open-source license, under which anyone may rebuild without the
+watermark and pass on what they were given.
 
 The copy is a target of its own that runs on every build and copies
 only when the exe differs, so a copy deleted by hand comes back without
 a relink. A copy that is running cannot be overwritten, and fails the
 build just as a running build-tree exe fails the link.
 
-`scripts/clean_build.cmd` is the release build: it deletes the Windows
-presets' build trees and `dist/`, then configures, builds and tests
-every preset in turn and stops at the first failure. Nothing an earlier
+`scripts/clean_build.cmd` is the release build: it deletes the debug
+and release build trees and `dist/`, then configures, builds and tests
+both in turn and stops at the first failure. Nothing an earlier
 build left behind - a stale object, a cached option, an exe in `dist/`
 from before a rename - can end up in what is handed out. It finds
 Visual Studio itself with `vswhere`, so it runs from a double-click.
@@ -95,8 +93,6 @@ same; the workflow is the same presets, run somewhere else.
 - **The checkout is the whole history** (`fetch-depth: 0`). The version
   stamp is `git describe --tags`, which a shallow clone cannot answer;
   the About tab of a CI build would show a bare hash.
-- **The prerelease and demo presets are not built.** They differ from
-  release by one compile definition each, and build no tests.
 - **It is started by hand** ("Run workflow" in the Actions tab, for a
   branch picked there), not by every push: changed on 2026-10-04, while
   the details around it are still being worked out, as a run for every
@@ -157,7 +153,7 @@ of the machine that built it. The dist copy puts the PDB in
 handed out. Keep the PDB of every build you hand out: a later
 build's PDB does not match an earlier build's dump.
 
-### Build-time configuration: version, flags, embedded text
+### Build-time configuration: version, embedded text
 
 Three things are decided when a binary is *built* rather than when it
 runs, and all three land in `build/<preset>/generated/` through
@@ -165,7 +161,7 @@ runs, and all three land in `build/<preset>/generated/` through
 
 | Header | Holds | Regenerated | Included by |
 | --- | --- | --- | --- |
-| `build_config.h` | `kVersion`, `kDemoMode`, `kPrereleaseNotice` | configure | `build_info.h`, so widely |
+| `build_config.h` | `kVersion` | configure | `build_info.h`, so widely |
 | `git_stamp.h` | `kGitDescribe` | **every build** | `build_info.cpp` only |
 | `about_text.h`, `notices_text.h` | `ABOUT.md`, `THIRD-PARTY-NOTICES.md` | configure | `build_info.cpp` only |
 
@@ -175,28 +171,12 @@ functions in a header that declares but does not contain them. In
 `build_config.h` they would rebuild everything that merely wanted the
 version number.
 
-Feature flags are `constexpr bool`, not `#ifdef`. Both branches of an
-`if (build::kDemoMode)` are compiled and type-checked in every
-configuration, where an `#ifdef`-ed branch nobody builds for months has
-quietly stopped compiling; the optimizer removes the dead side either
-way. Demo mode is deliberately not a setting: a watermark that can be
-switched off in `config.json` is not a watermark.
-
-The prerelease notice follows the same reasoning. A prerelease build
-shows a message box at every start saying it is not for redistribution,
-and `VersionLine` names it a prerelease, so the About tab says so too.
-The box is native rather than drawn by the overlay: on most starts the
-overlay is not shown at all, and on a first run it comes up fullscreen,
-topmost and in edit mode. So `WinMain` shows it before the tray
-controller initializes - before the overlay exists to cover it or take
-its input. A second copy started by mistake shows the notice before it
-finds the first one running and stops; that is the price of the
-ordering.
-
 The boxes about what the start itself found - a library set aside, or
-hotkeys another application owns - follow the same rule, although they
-can only be shown once the controller has looked. `Initialize` loads the
-library and registers the hotkeys but leaves the overlay hidden;
+hotkeys another application owns - are native rather than drawn by the
+overlay: on a first run it comes up fullscreen, topmost and in edit
+mode, and would cover them. They can only be shown once the controller
+has looked. `Initialize` loads the library and registers the hotkeys but
+leaves the overlay hidden;
 `WinMain` shows the boxes; `TrayController::Start` then brings the
 overlay to where a start puts it. They were once shown after it, and a
 start on a library set aside is always a first run: the box sat under
@@ -2151,7 +2131,7 @@ and `OverlayApp` is the one object that knows them all:
 - `OverviewPanel` and `SettingsPage`: the Overview, and its Settings tab,
   which the Overview draws inside its body through a call `OverlayApp`
   hands it.
-- `CheatSheet`, `ScreenChrome` (the HUD, the border, the demo mark),
+- `CheatSheet`, `ScreenChrome` (the HUD, the border, the frame graph),
   `Messages` (the toast, the persistence warning) and `Pointer` (its
   shape, the software pointer, the drag previews, the size preview, the
   badge).
@@ -3034,7 +3014,7 @@ ends the process on (see platform/win32/win32_crash_dump.cpp). The load
 no longer lets such a stamp in (see "Reading what cannot be used"), so
 what is left to reach it is a clock set near the year 3000.
 
-### Cursors and the demo mark
+### Cursors
 
 Every cursor is ImGui's except the crosshair and the pen, which ImGui's
 set does not have and every OS does, so those go through
@@ -3050,14 +3030,6 @@ Over a panel the pointer is ImGui's, whatever tool is in hand: the
 crosshair of a creation tool is asked for only over the canvas, where
 the click places the snippet. Found in the next review on 2026-09-27:
 it was asked for first, and a menu or the Overview wore it.
-
-The demo watermark is drawn wherever the overlay is visible, above every
-snippet and every popup over the canvas, and below only the panels, the
-delete confirmation and what ImGui's foreground list carries: a mark a
-snippet can be parked on top of is not one. It wanders every ten seconds across a 3x3 grid, never
-landing where it was, so it cannot be hidden permanently under a snippet
-that is never moved again. It needs no special handling for capture,
-which leaves the whole overlay out (see "Screen capture").
 
 ### A snippet's border: one line, color by state, weight by pointer
 

@@ -3,12 +3,9 @@
 // The screen chrome - docs/VIEW_LAYER.md, section 7: what sits over the
 // canvas rather than in it, each in a layer of its own so that its height
 // is stated rather than inherited from where in the frame it is drawn -
-// the input options HUD, the edit-mode border, the frame graph and the
-// demo mark. None of it takes input. What it keeps of its own is the HUD's
-// applied digits, its restart waiting for a key to come up and the record
-// of its last key, and where the demo mark stands.
-
-#include <cstdint>
+// the input options HUD, the edit-mode border and the frame graph. None
+// of it takes input. What it keeps of its own is the HUD's applied digits,
+// its restart waiting for a key to come up and the record of its last key.
 
 #include <imgui.h>
 
@@ -23,18 +20,13 @@ class ScreenChrome {
 public:
     ScreenChrome(core::Session& session, core::Settings& settings, ViewHost& host);
 
-    // The HUD's layer, then the border's and the demo mark's, over
+    // The HUD's layer, then the border's, over
     // everything the canvas holds and under the Overview - see the
     // definition for the order and why each is where it is.
     void Draw(float displayW, float displayH);
-    // The demo build's permanent "Spickzettel / Demo Version" mark (see
-    // build::kDemoMode), into `drawList` - the chrome's layer in edit mode,
-    // the view-only layer otherwise: it belongs wherever the overlay is
-    // visible. It moves itself around the screen on a timer.
-    void DrawDemoMark(ImDrawList* drawList, float displayW, float displayH);
     // A debugging aid, off by default - see AppConfig::showFrameGraph. Into
-    // `drawList`, as the demo mark: the chrome's layer in edit mode, the
-    // view-only layer otherwise.
+    // `drawList`: the chrome's layer in edit mode, the view-only layer
+    // otherwise.
     void DrawFrameGraph(ImDrawList* drawList, float displayW) const;
     // Once a frame, after the draw: the window told how many number keys the
     // HUD takes - none but in edit mode - and the overlay restarted once a
@@ -87,15 +79,6 @@ private:
     int hudLastToggledRow_ = 0;      // 1-based, 0 for "nothing yet"
     bool hudLastToggledTo_ = false;  // what that press asked for
     bool hudLastWentToProfile_ = false;
-
-    // Where the demo build's mark currently stands, and which ten-second
-    // step put it there - see DrawDemoMark. The cell is an index into its
-    // own 3x3 grid rather than a pixel position, so a resolution change
-    // moves the mark with the screen instead of stranding it off the edge.
-    // Dead weight in a non-demo build, and 20 bytes of it.
-    int64_t demoWatermarkMove_ = -1;
-    int demoWatermarkCell_ = 0;
-    ImVec2 demoWatermarkJitter_{0.5f, 0.5f};
 };
 
 }  // namespace sz::ui

@@ -46,20 +46,6 @@ sz::core::LoadedConfig LoadConfig(const std::filesystem::path& path) {
     return loaded;
 }
 
-// A prerelease build's notice, at every start and before anything else
-// comes up. Native rather than drawn by the overlay: on most starts the
-// overlay is not shown at all, and on a first run it comes up fullscreen,
-// topmost and in edit mode - the box is shown first so it is neither
-// hidden behind that nor competing with it for input. Blocks until
-// dismissed, which is the point.
-void ShowPrereleaseNotice() {
-    const std::string version = sz::core::build::VersionLine();
-    char body[512];
-    std::snprintf(body, sizeof(body), sz::strings::kPrereleaseBody, version.c_str());
-    MessageBoxA(nullptr, body, sz::strings::kPrereleaseTitle,
-                MB_OK | MB_ICONINFORMATION | MB_SETFOREGROUND | MB_TOPMOST);
-}
-
 }  // namespace
 
 int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*cmdLine*/, int /*showCmd*/) {
@@ -80,8 +66,8 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     }
     // Before the config is read: a second copy that could not read it
     // would set it aside and write defaults in its place - under the copy
-    // already running, which then saves over both - and show the prerelease
-    // notice and the set-aside message before giving up. TrayController
+    // already running, which then saves over both - and show the set-aside
+    // message before giving up. TrayController
     // asks again, and is answered from the mutex already held.
     // Started again while a copy runs, what is wanted is that copy: it is
     // asked to come up, and this one goes. The message only when no copy
@@ -95,10 +81,6 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     }
 
     const sz::core::LoadedConfig config = LoadConfig(host->GetConfigFilePath());
-
-    if constexpr (sz::core::build::kPrereleaseNotice) {
-        ShowPrereleaseNotice();
-    }
 
     sz::app::TrayController trayController(*host, config.config);
     // Kept, and the retention period skipped, for a file that could not be
@@ -128,8 +110,9 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
         return 1;
     }
     // What the start found is said before the overlay comes up - see
-    // TrayController::Start, and ShowPrereleaseNotice for the same reason -
-    // and nothing brings it up while a box says so.
+    // TrayController::Start - and nothing brings it up while a box says so.
+    // Native boxes rather than drawn by the overlay: on a first run it
+    // comes up fullscreen, topmost and in edit mode, and would cover them.
     trayController.HoldUntilStart();
     //
     // Started on an empty library because the file there could not be read:

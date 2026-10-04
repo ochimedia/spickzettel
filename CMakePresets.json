@@ -37,28 +37,6 @@
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     },
     {
-      "name": "windows-msvc-demo",
-      "displayName": "Windows (MSVC + Ninja, Release, demo watermark)",
-      "inherits": "windows-msvc-release",
-      "binaryDir": "${sourceDir}/build/windows-demo",
-      "cacheVariables": {
-        "SPICKZETTEL_DEMO_MODE": "ON",
-        "SPICKZETTEL_EXE_NAME": "Spickzettel Demo",
-        "SPICKZETTEL_BUILD_TESTS": "OFF"
-      }
-    },
-    {
-      "name": "windows-msvc-prerelease",
-      "displayName": "Windows (MSVC + Ninja, Release, prerelease notice)",
-      "inherits": "windows-msvc-release",
-      "binaryDir": "${sourceDir}/build/windows-prerelease",
-      "cacheVariables": {
-        "SPICKZETTEL_PRERELEASE_NOTICE": "ON",
-        "SPICKZETTEL_EXE_NAME": "Spickzettel Prerelease",
-        "SPICKZETTEL_BUILD_TESTS": "OFF"
-      }
-    },
-    {
       "name": "linux-tests",
       "displayName": "Linux (portable core and its tests only)",
       "generator": "Ninja",
@@ -74,8 +52,6 @@
     { "name": "windows-msvc-debug", "configurePreset": "windows-msvc-debug" },
     { "name": "windows-msvc-asan", "configurePreset": "windows-msvc-asan" },
     { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release" },
-    { "name": "windows-msvc-demo", "configurePreset": "windows-msvc-demo" },
-    { "name": "windows-msvc-prerelease", "configurePreset": "windows-msvc-prerelease" },
     { "name": "linux-tests", "configurePreset": "linux-tests" }
   ],
   "testPresets": [

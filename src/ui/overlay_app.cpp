@@ -288,10 +288,8 @@ void OverlayApp::OnFrame(float /*deltaSeconds*/) {
         // out: nothing of the library on screen, only the message. See
         // OverlayMode::Notice.
         if (!IsNoticeOnly()) {
-            canvasView_.DrawViewOnly(display.x, display.y, IsPinnedOnly(), [&](ImDrawList* layer) {
-                chrome_.DrawFrameGraph(layer, display.x);
-                chrome_.DrawDemoMark(layer, display.x, display.y);
-            });
+            canvasView_.DrawViewOnly(display.x, display.y, IsPinnedOnly(),
+                                     [&](ImDrawList* layer) { chrome_.DrawFrameGraph(layer, display.x); });
         }
         DrawMessages();
         Apply();
@@ -358,7 +356,7 @@ ImGuiWindow* AppPopupWindow(PopupKind kind) {
 // popup inside the Overview had to come after the panel's own call, or it
 // opened behind it - a dropdown that could not be clicked, a color picker
 // that flashed up and vanished. The order is today's, including the
-// border and the demo mark over the popups on the canvas (finding 3).
+// border over the popups on the canvas (finding 3).
 void OverlayApp::StackSurfaces() {
     Front("##spickzettel_canvas");
     Front("##sz_items_layer");

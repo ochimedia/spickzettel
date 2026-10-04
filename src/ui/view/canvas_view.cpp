@@ -932,7 +932,7 @@ std::optional<uint64_t> CanvasView::PicturePreviewTexture(const Item& item) {
 // ================= View-only mode =================
 
 void CanvasView::DrawViewOnly(float displayW, float displayH, bool pinnedOnly,
-                              const std::function<void(ImDrawList*)>& demoMark) {
+                              const std::function<void(ImDrawList*)>& chrome) {
     ImDrawList* drawList = BeginScreenLayer("##spickzettel_view_only", displayW, displayH);
     // Nothing to show with an empty library (see CanvasManager's class
     // comment) - view-only mode has no UI of its own to offer instead, so
@@ -959,10 +959,10 @@ void CanvasView::DrawViewOnly(float displayW, float displayH, bool pinnedOnly,
         DrawDebugOverlay(drawList, ImGui::GetIO(), Manager(), debugHoveredResizeHandle_);
     }
 
-    // Also here, not just in edit mode - see ScreenChrome::DrawDemoMark. Drawn last
+    // What of the screen chrome shows in view-only mode too. Drawn last
     // within this one layer rather than in a layer of its own: view-only
     // mode has nothing else on screen for it to be under.
-    demoMark(drawList);
+    chrome(drawList);
 
     EndScreenLayer();
 }

@@ -477,7 +477,7 @@ private:
     // canvas.
     void DrawPopups(float displayW, float displayH);
     // 5. What sits over the canvas and takes no input: the drag previews,
-    // the size preview, the badge, the HUD, the border and the demo mark.
+    // the size preview, the badge, the HUD and the border.
     void DrawOverCanvas(float displayW, float displayH);
     // 6. The Overview, the cheat sheet, the delete confirmation.
     void DrawPanels(float displayW, float displayH);

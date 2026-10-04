@@ -1,10 +1,9 @@
 @echo off
-rem Builds every Windows preset from nothing, for a release: deletes the
-rem presets' build trees and dist\, then configures, builds and tests each
-rem one in turn, and stops at the first failure. What is handed out lands
-rem in dist\: Spickzettel.exe, Spickzettel Prerelease.exe and Spickzettel
-rem Demo.exe, their PDBs in dist\symbols\. Debug is built for its UI tests
-rem and copied nowhere.
+rem Builds the debug and release presets from nothing, for a release:
+rem deletes their build trees and dist\, then configures, builds and tests
+rem each in turn, and stops at the first failure. What is handed out lands
+rem in dist\: Spickzettel.exe, its PDB in dist\symbols\. Debug is built
+rem for its UI tests and copied nowhere.
 rem
 rem Needs Visual Studio with the C++ workload; finds it itself, so it runs
 rem from a plain command prompt or a double-click. The first configure of
@@ -38,7 +37,7 @@ if not errorlevel 1 (
 )
 
 echo === Deleting the build trees and dist\
-for %%d in (build\windows-debug build\windows-release build\windows-prerelease build\windows-demo dist) do (
+for %%d in (build\windows-debug build\windows-release dist) do (
     if exist "%%d" rmdir /s /q "%%d" || goto :failed
     if exist "%%d" (
         echo Could not delete %%d - is something in it open?
@@ -48,8 +47,6 @@ for %%d in (build\windows-debug build\windows-release build\windows-prerelease b
 
 call :preset windows-msvc-debug test || goto :failed
 call :preset windows-msvc-release test || goto :failed
-call :preset windows-msvc-prerelease || goto :failed
-call :preset windows-msvc-demo || goto :failed
 
 echo.
 echo === Done. In dist\:

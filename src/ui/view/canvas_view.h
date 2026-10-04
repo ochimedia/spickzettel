@@ -54,10 +54,10 @@ public:
     void Draw(float displayW, float displayH, std::optional<core::ItemId> propertiesItem, float bottomPanelsTop);
     // The read-only modes' whole canvas: the current canvas's items at their
     // real screen positions - in the pinned view only the pinned ones - with
-    // no selection and nothing to click, and `demoMark` drawn last into the
+    // no selection and nothing to click, and `chrome` drawn last into the
     // same layer.
     void DrawViewOnly(float displayW, float displayH, bool pinnedOnly,
-                      const std::function<void(ImDrawList*)>& demoMark);
+                      const std::function<void(ImDrawList*)>& chrome);
 
     // What a canvas's preview is drawn with - see ViewHost::Previews. Starts
     // the frame's reading budget over.

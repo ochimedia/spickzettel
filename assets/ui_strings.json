@@ -478,9 +478,6 @@
   "cheatSheet.dragTileKey": "Drag a canvas",
   "cheatSheet.dragTile": "Reorder, or drop it on a folder",
 
-  "_demo": "The watermark a demo build carries. Only ever drawn by that build.",
-  "demo.title": "Spickzettel",
-  "demo.subtitle": "Demo Version",
 
   "_status": "The warning along the bottom while the disk cannot be written to - see OverlayApp::RenderPersistenceWarning. %s is a path.",
   "status.writeFailed": "Could not write to the library at %s, so the last change was not made - it is back as it was",
@@ -494,9 +491,6 @@
   "startup.hotkeysTaken": "Spickzettel started, but these hotkeys are already used by another application and do nothing:\n%s\n\nThe tray icon's menu opens the overlay without them, and Settings > Hotkeys can give them other keys.",
   "startup.newerLibrary": "Spickzettel could not start: your library was saved by a newer version of Spickzettel. This version would lose what the newer one saved, so it leaves the library alone. Please use the newer version.",
   "startup.libraryUnreadable": "Spickzettel could not start: it could not read its library file, %s. Nothing was changed. Another program may be holding it - a backup or sync tool, say - or the file's permissions may not let Spickzettel read it. Start Spickzettel again once the file can be read.",
-  "_prerelease": "The notice a prerelease build shows at every start (see build::kPrereleaseNotice). %s is the version line.",
-  "prerelease.title": "Spickzettel - Prerelease",
-  "prerelease.body": "This is a prerelease build of Spickzettel, version %s.\n\nIt is for testing only. Please do not redistribute it or pass it on to anyone else.",
   "_tray": "The system tray icon's own menu.",
   "tray.toggleOverlay": "Show/Hide overlay",
   "tray.exit": "Exit",

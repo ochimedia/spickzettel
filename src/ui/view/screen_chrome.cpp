@@ -1,11 +1,9 @@
 #include "ui/view/screen_chrome.h"
 
 #include <algorithm>
-#include <cfloat>
 #include <cstdio>
 #include <iterator>
 
-#include "core/build_info/build_info.h"
 #include "core/config/settings_catalog.h"
 #include "core/diagnostics/timeline.h"
 #include "generated/ui_strings.h"
@@ -358,92 +356,9 @@ bool ScreenChrome::HandleKey(const Event& event, bool editMode) {
     return false;
 }
 
-// The demo build's permanent mark (see build::kDemoMode). Drawn in *both*
-// edit and view-only mode - it goes wherever the overlay is visible at all,
-// and a mark you could drop by pressing the other hotkey wouldn't be one.
-// It needs no suppression for screen capture: the platform layer leaves the
-// whole overlay window out of what it grabs (see CaptureScreen), so nothing
-// this draws can reach a captured image.
-//
-// It moves, every kMoveSeconds. A mark that lives in one
-// corner is a mark you stop seeing after a minute and can work around
-// permanently - putting one snippet over it and never moving that snippet
-// again. Wandering, it has to be dealt with rather than arranged around,
-// which is the whole point of a nag.
-//
-// The screen is divided into a 3x3 grid and each move picks a *different*
-// cell, plus a jitter within it: pure randomness lands in nearly the same
-// spot often enough to read as the mark being stuck, and picking a new
-// cell by stepping 1..8 cells on cannot repeat by construction.
 void ScreenChrome::DrawFrameGraph(ImDrawList* drawList, float displayW) const {
     if (Cfg().showFrameGraph && drawList != nullptr) {
         ui::DrawFrameGraph(drawList, displayW, Timeline::Instance(), Timeline::Now());
-    }
-}
-
-void ScreenChrome::DrawDemoMark(ImDrawList* drawList, float displayW, float displayH) {
-    if constexpr (!build::kDemoMode) {
-        // Compiled and type-checked in every build; folded away entirely in
-        // the ones where it's false. See build_config.h.in.
-        return;
-    } else {
-        constexpr float kTextSize = 30.0f;
-        constexpr float kMargin = 26.0f;
-        constexpr float kLineGap = 2.0f;
-        constexpr double kMoveSeconds = 10.0;
-        constexpr int kGrid = 3;  // cells per axis
-
-        // ImGui's clock only advances while frames are being drawn, so a
-        // hidden overlay doesn't burn through positions it never showed -
-        // the mark moves ten seconds of *being visible* after the last one.
-        const auto move = static_cast<int64_t>(ImGui::GetTime() / kMoveSeconds);
-        if (move != demoWatermarkMove_) {
-            // One scramble, three uses: which cell to step to, and where in
-            // it to sit. Cheap enough to not be worth a real generator, and
-            // being a pure function of the move number keeps this
-            // reproducible when something looks wrong.
-            auto scramble = static_cast<uint32_t>(move) * 2654435761u;
-            scramble ^= scramble >> 15;
-            scramble *= 2246822519u;
-            scramble ^= scramble >> 13;
-            // 1..(cells-1), so the new cell is never the current one.
-            constexpr int kCells = kGrid * kGrid;
-            demoWatermarkCell_ = (demoWatermarkCell_ + 1 + static_cast<int>(scramble % (kCells - 1))) % kCells;
-            demoWatermarkJitter_ = ImVec2(static_cast<float>((scramble >> 8) & 0xFF) / 255.0f,
-                                           static_cast<float>((scramble >> 16) & 0xFF) / 255.0f);
-            demoWatermarkMove_ = move;
-        }
-
-        // Faint enough to read as a mark on the glass rather than as
-        // content, but not so faint it can be missed on a bright
-        // background - which is the whole job.
-        const ImU32 color = ToImColor(0xFFFFFFFFu, 0.20f);
-        ImFont* font = ImGui::GetFont();
-        const char* lines[] = {strings::kDemoTitle, strings::kDemoSubtitle};
-        // Measured at the size actually being drawn, not the UI font's -
-        // GetFont()->CalcTextSizeA takes the size, ImGui::CalcTextSize
-        // doesn't - so the block's own width is the wider of the two lines.
-        float blockW = 0.0f;
-        for (const char* line : lines) {
-            blockW = std::max(blockW, font->CalcTextSizeA(Px(kTextSize), FLT_MAX, 0.0f, line).x);
-        }
-        const float blockH = 2.0f * Px(kTextSize) + Px(kLineGap);
-
-        // The cell grid covers the positions the block's *top-left* may
-        // take, so the whole mark stays inside the margin whichever cell it
-        // lands in.
-        const float spanX = std::max(0.0f, displayW - 2.0f * Px(kMargin) - blockW);
-        const float spanY = std::max(0.0f, displayH - 2.0f * Px(kMargin) - blockH);
-        const float cellW = spanX / kGrid;
-        const float cellH = spanY / kGrid;
-        const float x = Px(kMargin) + static_cast<float>(demoWatermarkCell_ % kGrid) * cellW +
-                        demoWatermarkJitter_.x * cellW;
-        float y = Px(kMargin) + static_cast<float>(demoWatermarkCell_ / kGrid) * cellH +
-                  demoWatermarkJitter_.y * cellH;
-        for (const char* line : lines) {
-            drawList->AddText(font, Px(kTextSize), ImVec2(x, y), color, line);
-            y += Px(kTextSize) + Px(kLineGap);
-        }
     }
 }
 
@@ -497,8 +412,6 @@ void ScreenChrome::DrawEditModeBorder(ImDrawList* drawList, float displayW, floa
 //  - The frame graph, in the border's layer, over the snippets for the
 //    same reason: a diagnostic a snippet can hide is one that fails when
 //    the screen is full.
-//  - The demo mark, above the border and everything below it, so nothing
-//    but the Overview can cover it.
 //
 // Nothing here takes input (see BeginScreenLayer), so none of it changes
 // what can be clicked, dragged or drawn on.
@@ -509,7 +422,6 @@ void ScreenChrome::Draw(float displayW, float displayH) {
     ImDrawList* chrome = BeginScreenLayer("##sz_chrome_layer", displayW, displayH);
     DrawEditModeBorder(chrome, displayW, displayH);
     DrawFrameGraph(chrome, displayW);
-    DrawDemoMark(chrome, displayW, displayH);
     EndScreenLayer();
 }
 

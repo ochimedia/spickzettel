@@ -59,23 +59,15 @@ if(SPICKZETTEL_ASAN AND MSVC)
 endif()
 
 option(SPICKZETTEL_BUILD_TESTS "Build the unit tests" ON)
-# Compile-time flag rather than a setting: a demo watermark that can be
-# switched off in config.json is not a watermark. See docs/ARCHITECTURE.md.
-option(SPICKZETTEL_DEMO_MODE "Build a demo binary with a permanent 'Demo Version' mark" OFF)
-# The same reasoning: a build handed out ahead of a release, which says so at
-# every start and wherever it states its version.
-option(SPICKZETTEL_PRERELEASE_NOTICE "Build a prerelease binary that shows a not-for-redistribution notice at every start" OFF)
 # Off by default because it defines IMGUI_ENABLE_TEST_ENGINE for ImGui
 # itself, which every consumer then has to link. On in the debug preset.
 option(SPICKZETTEL_UI_TESTS "Build the UI tests, which drive real widgets by name" OFF)
-# What the exe is called - "Spickzettel", or "Spickzettel Demo" for the
-# demo build - so that builds of different kinds can sit side by side in
-# dist/ and a person can tell which one they are running. The PDB takes
-# the same name, which is the name the exe records for it.
+# What the exe is called. The PDB takes the same name, which is the name
+# the exe records for it.
 set(SPICKZETTEL_EXE_NAME "Spickzettel" CACHE STRING "The exe's file name, without .exe")
-# Whether the finished exe is also copied to dist/ at the repo root, next
-# to the other presets' exes instead of deep in the build tree, and its
-# PDB to dist/symbols/. On in the presets whose build is handed out.
+# Whether the finished exe is also copied to dist/ at the repo root,
+# instead of staying deep in the build tree, and its PDB to
+# dist/symbols/. On in the release preset, whose build is handed out.
 option(SPICKZETTEL_COPY_TO_DIST "Copy the exe to dist/ and its PDB to dist/symbols/ after each build" OFF)
 
 # Warnings are per target rather than global so that fetched third-party

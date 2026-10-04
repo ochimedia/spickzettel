@@ -60,8 +60,8 @@ TEST_F(Win32CrashDumpTest, TheDumpFolderIsMadeWithEveryFolderAboveIt) {
 }
 
 TEST_F(Win32CrashDumpTest, ThePrefixIsAlwaysAFileName) {
-    EXPECT_EQ(CrashDumpPrefix("0.1.0 (v0.1.0-3-gabc1234-dirty) - demo, prerelease"),
-              L"Spickzettel-0.1.0_(v0.1.0-3-gabc1234-dirty)_-_demo__prerelease-");
+    EXPECT_EQ(CrashDumpPrefix("0.1.0 (v0.1.0-3-gabc1234-dirty), x"),
+              L"Spickzettel-0.1.0_(v0.1.0-3-gabc1234-dirty)__x-");
     EXPECT_EQ(CrashDumpPrefix("1/2\\3:4"), L"Spickzettel-1_2_3_4-");
 }
 
