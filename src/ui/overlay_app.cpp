@@ -473,6 +473,13 @@ void OverlayApp::Prepare(float displayW, float displayH) {
             appliedFramePacing_ = pacing;
         }
     }
+    // Mip chains only for the filters that read them - see IOverlayWindow::
+    // SetMipmapsWanted. Before the textures are asked for, so that a change
+    // makes them again in this same frame.
+    if (window_ != nullptr) {
+        window_->SetMipmapsWanted(Cfg().imageFilter == platform::ImageFilter::Bicubic ||
+                                  Cfg().imageFilter == platform::ImageFilter::Lanczos);
+    }
     // Before anything draws: what the last frame drew and this one has not
     // asked for yet is let go of (see TextureCache::BeginFrame), and the
     // current canvas's pictures - from the library, the first time - are

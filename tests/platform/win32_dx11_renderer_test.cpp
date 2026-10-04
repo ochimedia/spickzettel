@@ -85,6 +85,9 @@ protected:
         hwnd_ = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 64, 64, nullptr, nullptr,
                                 GetModuleHandleW(nullptr), nullptr);
         ASSERT_NE(hwnd_, nullptr);
+        // The chain the filters below shrink from - see the test of a
+        // renderer that makes none.
+        renderer_.SetMipsWanted(true);
         if (!renderer_.Initialize(hwnd_)) {
             GTEST_SKIP() << "no D3D11 device here";
         }
@@ -229,6 +232,35 @@ TEST_F(Win32Dx11RendererTest, AMipAveragesTheInkNotTheTransparencyAroundIt) {
     EXPECT_EQ(mip[1], 255);
     EXPECT_EQ(mip[2], 255);
     EXPECT_NEAR(mip[3], 128, 1);
+    renderer_.ReleaseTexture(srv);
+}
+
+// With no chain wanted - Bilinear and Nearest, which never read one - a
+// texture is its top level alone, and no render target.
+TEST_F(Win32Dx11RendererTest, ATextureWithNoChainWantedIsItsTopLevelAlone) {
+    renderer_.SetMipsWanted(false);
+    const std::vector<uint8_t> stripes = Stripes(48, 2);
+    ID3D11ShaderResourceView* srv = renderer_.CreateTextureFromRGBA(stripes.data(), 48, 2);
+    ASSERT_NE(srv, nullptr);
+    ComPtr<ID3D11Resource> resource;
+    srv->GetResource(&resource);
+    ComPtr<ID3D11Texture2D> texture;
+    ASSERT_TRUE(SUCCEEDED(resource.As(&texture)));
+    D3D11_TEXTURE2D_DESC desc{};
+    texture->GetDesc(&desc);
+    EXPECT_EQ(desc.MipLevels, 1u);
+    EXPECT_EQ(desc.BindFlags & D3D11_BIND_RENDER_TARGET, 0u);
+    EXPECT_TRUE(renderer_.UpdateTextureRegionRGBA(srv, stripes.data(), 48, 0, 0, 48, 2));
+    renderer_.RefreshMips();
+    renderer_.ReleaseTexture(srv);
+
+    renderer_.SetMipsWanted(true);
+    srv = renderer_.CreateTextureFromRGBA(stripes.data(), 48, 2);
+    ASSERT_NE(srv, nullptr);
+    srv->GetResource(&resource);
+    ASSERT_TRUE(SUCCEEDED(resource.As(&texture)));
+    texture->GetDesc(&desc);
+    EXPECT_EQ(desc.MipLevels, 6u) << "48 wide: 48, 24, 12, 6, 3, 1";
     renderer_.ReleaseTexture(srv);
 }
 

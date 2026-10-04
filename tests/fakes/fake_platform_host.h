@@ -176,6 +176,14 @@ public:
     }
 
     uint64_t TextureGeneration() const override { return textureGeneration; }
+    // As the real window: a change makes every texture again.
+    void SetMipmapsWanted(bool wanted) override {
+        if (wanted != mipmapsWanted) {
+            mipmapsWanted = wanted;
+            ++textureGeneration;
+        }
+    }
+    bool mipmapsWanted = false;
 
     // Whether `handle` is one that may be drawn with now: made, not
     // released, and on the device there is.

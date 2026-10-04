@@ -61,6 +61,7 @@ public:
                               int w, int h) override;
     void ReleaseTexture(uint64_t textureHandle) override;
     uint64_t TextureGeneration() const override;
+    void SetMipmapsWanted(bool wanted) override;
     DrawCallback ImageFilterCallback() const override;
     DrawCallback StrokeDepthCallback() const override;
     DrawCallback StrokeLayerCallback() const override;
@@ -191,6 +192,8 @@ private:
     // The texture generations of renderers since destroyed, which took
     // every texture they made with them. See TextureGeneration.
     uint64_t pastTextureGenerations_ = 0;
+    // See SetMipmapsWanted; handed to every renderer made.
+    bool mipmapsWanted_ = false;
     LARGE_INTEGER lastFrameTime_{};
     LARGE_INTEGER perfFrequency_{};
 };

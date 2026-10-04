@@ -56,6 +56,11 @@ public:
     }
     bool ResizePendingForTesting() const { return resizePending_; }
 
+    // Whether textures made from now on carry a mip chain - see
+    // IOverlayWindow::SetMipmapsWanted. Those made before keep theirs, or
+    // their lack of one.
+    void SetMipsWanted(bool wanted) { mipsWanted_ = wanted; }
+
     // Overrides the mouse position ImGui sees for subsequent frames, in
     // client coordinates - for when the overlay is navigating by its own
     // pointer rather than the OS one (see Win32InputGrab::
@@ -175,6 +180,7 @@ private:
     // it works; drawn at the old size, stretched, meanwhile. Not retried,
     // the frames went on stretched until the next WM_SIZE.
     bool resizePending_ = false;
+    bool mipsWanted_ = false;
     // See ReleaseTexture.
     bool inFrame_ = false;
     std::vector<ID3D11ShaderResourceView*> releaseAfterFrame_;

@@ -176,6 +176,13 @@ public:
     // ReleaseTexture, and what it showed uploaded again.
     virtual uint64_t TextureGeneration() const = 0;
 
+    // Whether textures carry a mip chain: what the Bicubic and Lanczos
+    // filters shrink from, and a third more memory per picture that the
+    // Bilinear and Nearest ones never read. A change moves
+    // TextureGeneration, so that every texture is made again, with the
+    // chain or without it.
+    virtual void SetMipmapsWanted(bool wanted) = 0;
+
     // A draw callback that makes the pictures drawn after it resample with
     // the ImageFilter carried as its user data (the enum's value cast to a
     // pointer), until ImGui's DrawCallback_ResetRenderState puts the

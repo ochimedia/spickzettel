@@ -4055,9 +4055,18 @@ updates there were in between. Each texel of a level averages the part
 of the level above that it covers: two texels along an even side, and
 parts of three along an odd one, weighted by how much of each falls
 inside it. A plain 2x2 box, which this was until 0.3.1, left the last
-row or column of every odd level out of the chain. The chain costs a third more memory
-per picture whatever the filter, and Bilinear and Nearest never read it:
-ImGui's samplers clamp to the top level.
+row or column of every odd level out of the chain.
+
+**Only Bicubic and Lanczos get a chain.** It costs a third more memory
+per picture, and Bilinear and Nearest never read it: ImGui's samplers
+clamp to the top level. Each frame the overlay tells the window which
+the setting asks for (`IOverlayWindow::SetMipmapsWanted`), and a change
+moves `TextureGeneration`, so every texture is made again, with the
+chain or without it, the way it is after a lost device: pictures from
+the library, the frozen screen from the pixels kept. Switching between
+Bicubic and Lanczos keeps the textures as they are. Until 0.3.1 every
+picture had a chain whatever the filter, so that the default paid for
+what only the other two use.
 
 ### Displays
 

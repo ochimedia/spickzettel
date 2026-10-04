@@ -498,11 +498,12 @@ ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t
     D3D11_TEXTURE2D_DESC desc{};
     desc.Width = static_cast<UINT>(width);
     desc.Height = static_cast<UINT>(height);
-    // The whole chain, down to 1x1. Bilinear and Nearest never look past
-    // the top level (ImGui's samplers clamp to it), so what the chain buys
-    // is Bicubic and Lanczos shrinking without aliasing - for a third more
-    // memory per picture. See kResamplePS.
-    desc.MipLevels = 0;
+    // The whole chain, down to 1x1, while it is wanted - see SetMipsWanted.
+    // Bilinear and Nearest never look past the top level (ImGui's samplers
+    // clamp to it), so what the chain buys is Bicubic and Lanczos shrinking
+    // without aliasing - for a third more memory per picture. See
+    // kResamplePS.
+    desc.MipLevels = mipsWanted_ ? 0 : 1;
     desc.ArraySize = 1;
     desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     desc.SampleDesc.Count = 1;
@@ -511,9 +512,9 @@ ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t
     // that never is pays nothing for the difference - the GPU-side
     // placement is the same, only the promise is weaker.
     desc.Usage = D3D11_USAGE_DEFAULT;
-    // A render target as well, because that is how BuildMips writes the
-    // levels below the top.
-    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    // A render target as well, with a chain, because that is how BuildMips
+    // writes the levels below the top.
+    desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | (mipsWanted_ ? D3D11_BIND_RENDER_TARGET : 0u);
 
     // No initial data: with a mip chain it would have to be given for
     // every level, and only the top one exists yet.
@@ -536,7 +537,9 @@ ID3D11ShaderResourceView* Win32Dx11Renderer::CreateTextureFromRGBA(const uint8_t
     // (AddRef'd internally by CreateShaderResourceView) - `texture` going
     // out of scope here just drops our extra ComPtr reference, not the
     // last one.
-    staleMips_.push_back(srv);
+    if (mipsWanted_) {
+        staleMips_.push_back(srv);
+    }
     return srv;
 }
 
@@ -586,7 +589,7 @@ bool Win32Dx11Renderer::UpdateTextureRegionRGBA(ID3D11ShaderResourceView* srv, c
     box.back = 1;
     const uint8_t* first = pixelsRGBA + (static_cast<size_t>(y) * sourceWidth + x) * 4;
     context_->UpdateSubresource(resource.Get(), 0, &box, first, static_cast<UINT>(sourceWidth) * 4, 0);
-    if (std::find(staleMips_.begin(), staleMips_.end(), srv) == staleMips_.end()) {
+    if (desc.MipLevels > 1 && std::find(staleMips_.begin(), staleMips_.end(), srv) == staleMips_.end()) {
         staleMips_.push_back(srv);
     }
     return true;

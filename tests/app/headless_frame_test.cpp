@@ -864,10 +864,15 @@ TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
     const uint64_t picture = PictureTextureOf(controller_->GetSession(), Canvases().CurrentOrNull()->items[0].id);
     ASSERT_NE(picture, 0u);
     EXPECT_EQ(FilterDrawnWith(picture), platform::ImageFilter::Lanczos);
+    EXPECT_TRUE(host_.overlayWindow.mipmapsWanted) << "the chain Lanczos shrinks from";
 
+    // Bilinear reads no chain, so the pictures are made again without one
+    // (from the library: see the same in HeadlessSaveTest, which has one).
     controller_->GetSettings().Set(setting::kImageFilter, platform::ImageFilter::Bilinear);
     StepFrame();
-    EXPECT_EQ(FilterDrawnWith(picture), std::nullopt);
+    EXPECT_FALSE(host_.overlayWindow.mipmapsWanted);
+    EXPECT_EQ(host_.overlayWindow.liveTextures.count(picture), 0u) << "let go of";
+    EXPECT_EQ(host_.overlayWindow.badTextureUses, 0);
 }
 
 // A drawing is kept empty, whatever the hand does next: it may be one made
@@ -5222,6 +5227,44 @@ TEST_F(HeadlessSaveTest, AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn)
     EXPECT_TRUE(host_.overlayWindow.IsDrawable(pictureAfter)) << "read back from the library";
     EXPECT_TRUE(host_.overlayWindow.IsDrawable(session.FrozenScreenTexture())) << "from the pixels kept";
     EXPECT_TRUE(FilterDrawnWith(pictureAfter) == std::nullopt) << "drawn, with the new texture";
+    EXPECT_EQ(host_.overlayWindow.badTextureUses, 0);
+}
+
+// The filter changed between one that reads a mip chain and one that does
+// not: every texture is made again, with the chain or without it, as after
+// a lost device.
+TEST_F(HeadlessSaveTest, ChangingTheFilterMakesEveryTextureAgain) {
+    AppConfig config = DefaultConfig();
+    config.profileable.freezeScreen = true;  // the drag crops the frozen screen
+    StartWith(config);
+    AttachStore();
+    host_.overlayWindow.captureReturnsWidth = static_cast<int>(kDisplayWidth);
+    host_.overlayWindow.captureReturnsHeight = static_cast<int>(kDisplayHeight);
+    host_.overlayWindow.captureReturnsPixelsRGBA.assign(static_cast<size_t>(kDisplayWidth * kDisplayHeight) * 4, 255);
+    host_.overlayWindow.uploadsSucceed = true;
+    ShowEditMode();
+    StepFrame();
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    StepFrame();
+    Session& session = controller_->GetSession();
+    const ItemId shot = Canvases().CurrentOrNull()->items[0].id;
+    const uint64_t before = PictureTextureOf(session, shot);
+    ASSERT_TRUE(host_.overlayWindow.IsDrawable(before));
+    EXPECT_FALSE(host_.overlayWindow.mipmapsWanted) << "Bilinear, the default";
+
+    controller_->GetSettings().Set(setting::kImageFilter, platform::ImageFilter::Bicubic);
+    StepFrame();
+    EXPECT_TRUE(host_.overlayWindow.mipmapsWanted);
+    EXPECT_EQ(host_.overlayWindow.liveTextures.count(before), 0u) << "let go of";
+    const uint64_t after = PictureTextureOf(session, shot);
+    EXPECT_TRUE(host_.overlayWindow.IsDrawable(after)) << "read back from the library";
+    EXPECT_EQ(FilterDrawnWith(after), platform::ImageFilter::Bicubic);
+    EXPECT_TRUE(host_.overlayWindow.IsDrawable(session.FrozenScreenTexture())) << "from the pixels kept";
+
+    controller_->GetSettings().Set(setting::kImageFilter, platform::ImageFilter::Lanczos);
+    StepFrame();
+    EXPECT_EQ(PictureTextureOf(session, shot), after) << "Lanczos reads the same chain";
     EXPECT_EQ(host_.overlayWindow.badTextureUses, 0);
 }
 

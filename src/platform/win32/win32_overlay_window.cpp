@@ -273,6 +273,7 @@ bool Win32OverlayWindow::EnsureCreated(const DisplayInfo& display) {
     Win32InputGrab::Instance().SetOverlayWindow(hwnd_);
 
     renderer_ = std::make_unique<Win32Dx11Renderer>();
+    renderer_->SetMipsWanted(mipmapsWanted_);
     if (!renderer_->Initialize(hwnd_)) {
         renderer_.reset();
         // Not left posting to a window about to be gone.
@@ -1000,6 +1001,18 @@ void Win32OverlayWindow::ReleaseTexture(uint64_t textureHandle) {
 
 uint64_t Win32OverlayWindow::TextureGeneration() const {
     return pastTextureGenerations_ + (renderer_ ? renderer_->DeviceGeneration() : 0);
+}
+
+void Win32OverlayWindow::SetMipmapsWanted(bool wanted) {
+    if (wanted == mipmapsWanted_) {
+        return;
+    }
+    mipmapsWanted_ = wanted;
+    if (renderer_) {
+        renderer_->SetMipsWanted(wanted);
+    }
+    // Every texture made again, now with the chain or without it.
+    ++pastTextureGenerations_;
 }
 
 DrawCallback Win32OverlayWindow::ImageFilterCallback() const { return &Win32Dx11Renderer::ApplyImageFilter; }
