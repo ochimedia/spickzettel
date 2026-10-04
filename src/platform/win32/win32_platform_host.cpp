@@ -2,6 +2,7 @@
 
 #include <sddl.h>
 #include <shellapi.h>
+#include <shlobj.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -326,30 +327,26 @@ std::vector<DisplayInfo> Win32PlatformHost::ListDisplays() const { return Enumer
 
 namespace {
 // Shared by GetConfigFilePath/GetLibraryPath below: the app's folder in
-// %APPDATA% (`variable` APPDATA), which roams with the user, or in
-// %LOCALAPPDATA%, which stays on this computer.
-std::filesystem::path AppDataBase(const wchar_t* variable) {
+// the user's roaming application data (%APPDATA%), which roams with the
+// user, or local one (%LOCALAPPDATA%), which stays on this computer.
+//
+// Asked of the shell for this process's own account, not read from the
+// environment variables of those names. Those are only what the parent
+// process handed down, and some sandboxes appear to provide unreliable
+// ones: another account's folders, which this process may not open, so
+// that neither the settings nor the library could be read. The cost is
+// that a deliberately changed %APPDATA% is not followed. The shell's
+// answer does follow Folder Redirection, as the variable does.
+std::filesystem::path AppDataBase(REFKNOWNFOLDERID folder) {
     std::filesystem::path base;
-    // GetEnvironmentVariableW rather than std::getenv: the wide form is
-    // what %APPDATA% actually is, so a user whose profile folder holds a
-    // character outside the system code page gets a path that works rather
-    // than one the ANSI copy mangled; it is a plain kernel32 export, so it
-    // exists on every toolchain; and MSVC deprecates getenv.
-    //
-    // Called twice on purpose: with (nullptr, 0) it answers with the size
-    // it needs, terminator included, and 0 only when the variable is not
-    // set at all.
-    std::wstring appData;
-    if (const DWORD needed = GetEnvironmentVariableW(variable, nullptr, 0); needed > 0) {
-        appData.resize(needed);
-        // ...and this time it answers with how much it wrote, terminator
-        // excluded, which is where the string really ends.
-        appData.resize(GetEnvironmentVariableW(variable, appData.data(), needed));
+    PWSTR path = nullptr;
+    if (SUCCEEDED(SHGetKnownFolderPath(folder, KF_FLAG_DEFAULT, nullptr, &path))) {
+        base = path;
     }
-    if (appData.empty()) {
+    // Freed whether or not the call succeeded, as documented; null is fine.
+    CoTaskMemFree(path);
+    if (base.empty()) {
         base = std::filesystem::current_path();
-    } else {
-        base = appData;
     }
     // Capitalized because %APPDATA% is somewhere people actually browse,
     // and the name is a proper noun there.
@@ -358,7 +355,7 @@ std::filesystem::path AppDataBase(const wchar_t* variable) {
 }  // namespace
 
 std::filesystem::path Win32PlatformHost::GetConfigFilePath() const {
-    return AppDataBase(L"APPDATA") / "config.json";
+    return AppDataBase(FOLDERID_RoamingAppData) / "config.json";
 }
 
 // Local, not roaming: a roaming profile copies %APPDATA% at every sign-in
@@ -367,11 +364,11 @@ std::filesystem::path Win32PlatformHost::GetConfigFilePath() const {
 // displays, is for. %LOCALAPPDATA% cannot be redirected. See
 // docs/ARCHITECTURE.md, "Persistence".
 std::filesystem::path Win32PlatformHost::GetLibraryPath() const {
-    return AppDataBase(L"LOCALAPPDATA") / "library.db";
+    return AppDataBase(FOLDERID_LocalAppData) / "library.db";
 }
 
 std::filesystem::path Win32PlatformHost::GetFormerLibraryPath() const {
-    return AppDataBase(L"APPDATA") / "library.db";
+    return AppDataBase(FOLDERID_RoamingAppData) / "library.db";
 }
 
 // Until Quit, which may come before the loop starts - a close while a

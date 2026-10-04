@@ -34,7 +34,9 @@ target_link_libraries(sz_platform_win32
         d3dcompiler
         dwmapi
         shcore   # GetDpiForMonitor
-        shell32
+        shell32  # also SHGetKnownFolderPath
+        ole32    # CoTaskMemFree, for the path SHGetKnownFolderPath returns
+        uuid     # the FOLDERID_ constants
         user32
         gdi32
         # OpenProcessToken/GetTokenInformation, for the foreground process's

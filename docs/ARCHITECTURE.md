@@ -911,6 +911,16 @@ settings with the user, in `%APPDATA%` (`config.json`) - since
   its displays. Settings - hotkeys, profiles, the look - are what is
   worth having on another.
 
+Both folders are asked of the shell (`SHGetKnownFolderPath`) for the
+account the process runs as, not read from the `APPDATA` and
+`LOCALAPPDATA` environment variables, as they were until 0.3.0. The
+variables are only what the parent process handed down, and some
+sandboxes appear to provide unreliable ones: another account's folders,
+which the sandboxed process may not open, so that the settings and the
+library both failed to load at a start. The shell's answer comes from
+the process's own account and still follows Folder Redirection. The
+cost is that a deliberately changed `%APPDATA%` is no longer followed.
+
 A library where 0.2.0 kept it is moved at the first start that finds
 none in `%LOCALAPPDATA%` (`LibraryStore::MoveHereFrom`, called by
 `TrayController::Initialize` after the instance check, so that no copy of
