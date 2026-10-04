@@ -76,6 +76,26 @@ WriteResult WriteNewFile(const std::filesystem::path& path, const void* data, si
 
 }  // namespace
 
+bool FlushFileToDisk(const std::filesystem::path& path) {
+#if defined(_WIN32)
+    // Opened for writing, which FlushFileBuffers asks of the handle, and
+    // without truncating or creating anything.
+    std::FILE* file = nullptr;
+    if (_wfopen_s(&file, path.c_str(), L"r+b") != 0) {
+        return false;
+    }
+    bool ok = _commit(_fileno(file)) == 0;
+#else
+    std::FILE* file = std::fopen(path.c_str(), "r+b");
+    if (!file) {
+        return false;
+    }
+    bool ok = fsync(fileno(file)) == 0;
+#endif
+    ok = (std::fclose(file) == 0) && ok;
+    return ok;
+}
+
 bool WriteFileAtomically(const std::filesystem::path& path, const void* data, size_t size) {
     std::error_code ec;
     if (!path.parent_path().empty()) {

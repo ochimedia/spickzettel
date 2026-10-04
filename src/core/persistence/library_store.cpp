@@ -16,6 +16,7 @@
 
 #include "core/canvas/item_geometry.h"
 #include "core/diagnostics/timeline.h"
+#include "core/util/atomic_file.h"
 #include "core/util/timestamp_name.h"
 
 namespace sz::core::persistence {
@@ -624,15 +625,23 @@ void LibraryStore::MoveHereFrom(const std::filesystem::path& former) {
     }
     std::filesystem::create_directories(file_.parent_path(), ec);
     if (!ec) {
-        std::filesystem::rename(former, file_, ec);
-        if (!ec) {
-            return;
+        if (!copyOnMove_) {
+            std::filesystem::rename(former, file_, ec);
+            if (!ec) {
+                return;
+            }
         }
         // Another drive - a roaming profile redirected to a server share:
-        // copied, and made the library only once the copy is whole.
+        // copied, and made the library only once the copy is whole and on
+        // the disk. The original is removed next, and a copy still in the
+        // OS's cache would have gone with it at a power cut.
         std::filesystem::path moving = file_;
         moving += ".moving";
+        ec.clear();
         std::filesystem::copy_file(former, moving, std::filesystem::copy_options::overwrite_existing, ec);
+        if (!ec && !FlushFileToDisk(moving)) {
+            ec = std::make_error_code(std::errc::io_error);
+        }
         if (!ec) {
             std::filesystem::rename(moving, file_, ec);
         }

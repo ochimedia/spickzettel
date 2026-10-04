@@ -1161,6 +1161,23 @@ TEST_F(LibraryStoreTest, ALibraryWhereItWasIsMovedHere) {
     EXPECT_EQ(loaded->canvases[0].items.size(), 2u);
 }
 
+// To another drive it is copied, and the copy is the library once it is
+// whole: nothing is left where it was, and no copy in between.
+TEST_F(LibraryStoreTest, ALibraryCopiedToAnotherDriveIsMovedWhole) {
+    const std::filesystem::path former = dir_ / "roaming" / "library.db";
+    const std::filesystem::path here = dir_ / "local" / "library.db";
+    ASSERT_TRUE(LibraryStore(former).Save(MakeSampleSnapshot()));
+    LibraryStore store(here);
+    store.CopyOnMoveForTesting();
+    store.MoveHereFrom(former);
+    EXPECT_EQ(store.File(), here);
+    EXPECT_FALSE(std::filesystem::exists(former));
+    EXPECT_FALSE(std::filesystem::exists(Beside(here, ".moving")));
+    const std::optional<CanvasManagerSnapshot> loaded = store.Load();
+    ASSERT_TRUE(loaded.has_value());
+    EXPECT_EQ(loaded->canvases[0].items.size(), 2u);
+}
+
 // A library here already is the one: the one where it was, left by a
 // build from before that ran again, say, is left alone.
 TEST_F(LibraryStoreTest, ALibraryHereIsKeptOverOneWhereItWas) {

@@ -31,4 +31,10 @@ inline bool WriteFileAtomically(const std::filesystem::path& path, std::string_v
     return WriteFileAtomically(path, content.data(), content.size());
 }
 
+// Has the OS put the file at `path` on the disk itself, not only in its
+// cache: what is written through it, what a copy made of it, as
+// WriteFileAtomically does for its own temporary. False when the file
+// cannot be opened for writing or the flush fails. Nothing here throws.
+bool FlushFileToDisk(const std::filesystem::path& path);
+
 }  // namespace sz::core

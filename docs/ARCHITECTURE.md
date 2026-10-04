@@ -926,8 +926,10 @@ none in `%LOCALAPPDATA%` (`LibraryStore::MoveHereFrom`, called by
 `TrayController::Initialize` after the instance check, so that no copy of
 the app has it open): opened and closed first, which plays a journal a
 crash left back into it, so that it is one file to move; renamed, or on
-another drive copied and made the library only once the copy is whole.
-One that cannot be moved is opened where it is, and the move is tried
+another drive copied and made the library only once the copy is whole
+and flushed to the disk. Since 0.3.1 the flush is explicit: the original
+is removed right after, and a copy still in the OS's cache would have
+gone with it at a power cut. One that cannot be moved is opened where it is, and the move is tried
 again at the next start. One in `%LOCALAPPDATA%` already wins, and the
 old one is left alone. The crash dumps went along
 (`%LOCALAPPDATA%\Spickzettel\crashes`); old ones stay where they were.

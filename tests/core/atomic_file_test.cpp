@@ -101,5 +101,17 @@ TEST_F(AtomicFileTest, AWriteThatCannotLandLeavesNothingNew) {
     EXPECT_TRUE(std::filesystem::is_directory(file));
 }
 
+// A flush leaves the file as it was, and makes none where there is none.
+TEST_F(AtomicFileTest, AFlushKeepsTheFileAndMakesNone) {
+    const std::filesystem::path file = dir_ / "library.db";
+    Put(file, "contents");
+    EXPECT_TRUE(FlushFileToDisk(file));
+    EXPECT_EQ(Read(file), "contents");
+
+    const std::filesystem::path missing = dir_ / "missing.db";
+    EXPECT_FALSE(FlushFileToDisk(missing));
+    EXPECT_FALSE(std::filesystem::exists(missing));
+}
+
 }  // namespace
 }  // namespace sz::core
