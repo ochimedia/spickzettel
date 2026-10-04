@@ -180,8 +180,9 @@ void ScreenChrome::DrawInputOptionsHud(ImDrawList* drawList) const {
     if (settings_.Live().InputOptions().counterRawMouseInput &&
         settings_.Live().InputOptions().CounterRawMouseInputCanBeUsed(settings_.Live().dontStealFocus) && host_.Window() != nullptr) {
         const platform::InputGrabDiagnostics diag = host_.Window()->GetInputGrabDiagnostics();
-        std::snprintf(counter, sizeof(counter), "counter lag %.2f ms (max %.2f)  n=%d",
-                       diag.correctionLagMsLast, diag.correctionLagMsMax, diag.correctionsInjected);
+        std::snprintf(counter, sizeof(counter), "counter lag %.2f ms (max %.2f)  n=%d  failed=%d",
+                       diag.correctionLagMsLast, diag.correctionLagMsMax, diag.correctionsInjected,
+                       diag.correctionsFailed);
     }
 
     // What is in front and where it sits relative to us - the line that

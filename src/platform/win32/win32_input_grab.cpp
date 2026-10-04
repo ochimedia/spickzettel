@@ -319,6 +319,7 @@ void Win32InputGrab::Refresh() {
         correctionLagMsLast_.store(0.0f, std::memory_order_relaxed);
         correctionLagMsMax_.store(0.0f, std::memory_order_relaxed);
         correctionsInjected_.store(0, std::memory_order_relaxed);
+        correctionsFailed_.store(0, std::memory_order_relaxed);
     } else if (!countering && counteringWasOn_) {
         // Settling the account while the hook is still installed - it is
         // only taken down at the end of this - so the correction is
@@ -609,7 +610,6 @@ bool Win32InputGrab::FlushPendingCorrection() {
             }
         }
     }
-    correctionsInjected_.fetch_add(1, std::memory_order_relaxed);
 
     // One correction carrying everything banked, rather than one per report
     // or per frame. The total the game integrates is identical, and it is a
@@ -620,7 +620,14 @@ bool Win32InputGrab::FlushPendingCorrection() {
     correction.mi.dy = -dy;
     correction.mi.dwFlags = MOUSEEVENTF_MOVE;
     correction.mi.dwExtraInfo = kOwnInjectionMarker;
-    SendInput(1, &correction, sizeof(correction));
+    if (SendInput(1, &correction, sizeof(correction)) != 1) {
+        // Refused - blocked by a program of higher integrity in front, say.
+        // Counted, and the movement is let go rather than banked again: put
+        // back later, it would move whatever has the input by then.
+        correctionsFailed_.fetch_add(1, std::memory_order_relaxed);
+        return false;
+    }
+    correctionsInjected_.fetch_add(1, std::memory_order_relaxed);
     return true;
 }
 
@@ -843,6 +850,7 @@ InputGrabDiagnostics Win32InputGrab::Diagnostics() const {
     out.correctionLagMsLast = correctionLagMsLast_.load(std::memory_order_relaxed);
     out.correctionLagMsMax = correctionLagMsMax_.load(std::memory_order_relaxed);
     out.correctionsInjected = correctionsInjected_.load(std::memory_order_relaxed);
+    out.correctionsFailed = correctionsFailed_.load(std::memory_order_relaxed);
     out.desktopSwitches = desktopSwitches_.load(std::memory_order_relaxed);
     return out;
 }

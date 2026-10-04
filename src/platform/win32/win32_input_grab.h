@@ -227,7 +227,7 @@ public:
     // Injects the correction banked so far right now, rather than when
     // countering next ends - for the window to call before it stops hiding
     // the game, so that what the game shows next is already the camera put
-    // back. True if there was anything to inject.
+    // back. True if there was anything to inject, and it was.
     bool SettleCorrection();
 
     // Debug scaffolding for the input options HUD - see
@@ -353,7 +353,7 @@ private:
     // bank passes the threshold on either axis, by Refresh as countering
     // ends, and by SettleCorrection - never once per frame, see
     // EditModeInputOptions::counterThreshold. False when there was nothing
-    // banked.
+    // banked, or Windows refused the injection.
     bool FlushPendingCorrection();
     void EnsureRawInputSink();
     void DestroyRawInputSink();
@@ -634,6 +634,7 @@ private:
     std::atomic<float> correctionLagMsLast_{0.0f};
     std::atomic<float> correctionLagMsMax_{0.0f};
     std::atomic<int> correctionsInjected_{0};
+    std::atomic<int> correctionsFailed_{0};
     // See InputGrabDiagnostics::desktopSwitches.
     std::atomic<int> desktopSwitches_{0};
 
