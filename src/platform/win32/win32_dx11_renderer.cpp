@@ -383,6 +383,12 @@ void Win32Dx11Renderer::HandleResize() {
 
 bool Win32Dx11Renderer::ResizeSwapChain() {
     CleanupRenderTarget();
+    // The last frame left its target bound, and ResizeBuffers asks for no
+    // view of the buffers to be bound anywhere. It has been seen to work
+    // all the same; this is the documented way, not a fix for a failure.
+    if (context_) {
+        context_->OMSetRenderTargets(0, nullptr, nullptr);
+    }
     // A failure is a lost device, which ReadyToRender replaces, or buffers
     // still held, which it tries again - see resizePending_.
     if (FAILED(swapChain_->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0))) {

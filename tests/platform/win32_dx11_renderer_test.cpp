@@ -306,6 +306,18 @@ TEST_F(Win32Dx11RendererTest, AFailedResizeIsTriedAgainByTheNextFrame) {
     EXPECT_FALSE(renderer_.ResizePendingForTesting());
 }
 
+// After a frame, which left its target bound: the resize goes through all
+// the same, rather than failing and being tried again every frame.
+TEST_F(Win32Dx11RendererTest, AResizeAfterADrawnFrameGoesThrough) {
+    ASSERT_TRUE(renderer_.ReadyToRender());
+    renderer_.NewFrame();
+    renderer_.RenderAndPresent();
+    SetWindowPos(hwnd_, nullptr, 0, 0, 128, 96, SWP_NOZORDER | SWP_NOACTIVATE);
+    renderer_.HandleResize();
+    EXPECT_FALSE(renderer_.ResizePendingForTesting());
+    EXPECT_TRUE(renderer_.ReadyToRender());
+}
+
 TEST_F(Win32Dx11RendererTest, WithItsDeviceInPlaceTheRendererIsReadyAsItWas) {
     EXPECT_TRUE(renderer_.ReadyToRender());
     EXPECT_EQ(renderer_.DeviceGeneration(), 0u);
