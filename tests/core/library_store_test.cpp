@@ -20,6 +20,12 @@
 namespace sz::core::persistence {
 namespace {
 
+std::filesystem::path Beside(const std::filesystem::path& file, const char* suffix) {
+    std::filesystem::path beside = file;
+    beside += suffix;
+    return beside;
+}
+
 class LibraryStoreTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -691,6 +697,39 @@ TEST_F(LibraryStoreTest, AFileThatIsNotALibraryIsSetAsideAndANewOneStarted) {
     EXPECT_TRUE(store.Save(MakeSampleSnapshot()));
 }
 
+// A WAL beside it that cannot go along - held open by another program -
+// would be played into the new library. Nothing is started over it, then:
+// the file is put back with it, and the library is not used this time.
+// (Windows renames no file that is open without delete sharing, which
+// std::ofstream's is.)
+//
+// Windows only: elsewhere an open file can be renamed. Not faked with an
+// injected failure instead, because nothing short of a holder keeps the
+// WAL there to fail: SQLite deletes a stale one itself as it opens and
+// closes the file, before it is ever set aside.
+#if defined(_WIN32)
+TEST_F(LibraryStoreTest, AFileWhoseWalCannotGoAlongIsPutBackAndNotStartedOver) {
+    std::filesystem::create_directories(dir_);
+    std::ofstream(file_, std::ios::binary) << "not a database, but somebody's text";
+    std::ofstream held(Beside(file_, "-wal"), std::ios::binary);
+    held << "a WAL of its own";
+    held.flush();
+
+    LibraryStore store(file_);
+    EXPECT_EQ(store.Open(), LibraryStore::OpenResult::Unreadable);
+    EXPECT_TRUE(store.SetAsideAs().empty());
+    held.close();
+    std::ifstream back(file_, std::ios::binary);
+    EXPECT_EQ(std::string(std::istreambuf_iterator<char>(back), {}), "not a database, but somebody's text");
+    EXPECT_TRUE(std::filesystem::exists(Beside(file_, "-wal")));
+    size_t files = 0;
+    for ([[maybe_unused]] const auto& entry : std::filesystem::directory_iterator(dir_)) {
+        ++files;
+    }
+    EXPECT_EQ(files, 2u) << "nothing set aside, nothing new";
+}
+#endif
+
 TEST_F(LibraryStoreTest, SomeoneElsesDatabaseIsSetAside) {
     {
         std::filesystem::create_directories(dir_);
@@ -1000,12 +1039,6 @@ public:
 private:
     bool shared_;
 };
-
-std::filesystem::path Beside(const std::filesystem::path& file, const char* suffix) {
-    std::filesystem::path beside = file;
-    beside += suffix;
-    return beside;
-}
 
 // Pixels that do not compress: QOI stores them at about five bytes each.
 std::vector<uint8_t> NoisePixels(int width, int height) {

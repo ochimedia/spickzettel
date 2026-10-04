@@ -772,14 +772,29 @@ LibraryStore::OpenResult LibraryStore::SetAsideAndStartOver() {
         return OpenResult::Unreadable;
     }
     // A journal or a WAL left beside it belongs to it, and would be played
-    // back into the new file otherwise.
+    // back into the new file otherwise. One that cannot go with it - held
+    // open by another program, say - stops the new start: what was moved
+    // is put back, and the library is not used this time, as when the
+    // file itself cannot be moved.
+    std::vector<std::pair<std::filesystem::path, std::filesystem::path>> moved{{file_, aside}};
     for (const char* suffix : {"-journal", "-wal"}) {
         std::filesystem::path left = file_;
         left += suffix;
-        if (std::filesystem::exists(left, ec)) {
+        const bool there = std::filesystem::exists(left, ec);
+        if (!ec && there) {
             std::filesystem::path asideLeft = aside;
             asideLeft += suffix;
             std::filesystem::rename(left, asideLeft, ec);
+            if (!ec) {
+                moved.emplace_back(left, asideLeft);
+            }
+        }
+        if (ec) {
+            for (auto it = moved.rbegin(); it != moved.rend(); ++it) {
+                std::error_code ignored;
+                std::filesystem::rename(it->second, it->first, ignored);
+            }
+            return OpenResult::Unreadable;
         }
     }
     setAsideAs_ = aside;
