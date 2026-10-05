@@ -125,6 +125,24 @@ TEST_F(UiTest, PickingAMonitorPutsTheOverlayOnIt) {
     EXPECT_EQ(host_.overlayWindow.onDisplay.id, "fake-left");
 }
 
+// The picture filter is a dropdown, each choice saying what it does and
+// costs: picked there, it is the setting.
+TEST_F(UiTest, TheImageFilterIsPickedFromItsDropdown) {
+    ShowEditMode();
+    StepFrame();
+    ASSERT_NE(AppSettings().Stored().imageFilter, platform::ImageFilter::Lanczos);
+    OpenOverviewUi();
+    RunUi("pick Lanczos", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionappearance");
+        ctx->SetRef(ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID);
+        ctx->ItemClick("###imagefilter");
+        ctx->ItemClick("**/###imagefilterlanczos");
+    });
+    EXPECT_EQ(AppSettings().Stored().imageFilter, platform::ImageFilter::Lanczos);
+}
+
 // What the display latch was for, before the overlay's move came after the
 // frame: a frozen screen taken again on the new monitor lets go of the old
 // one, and no frame draws the texture that went with it (docs/SETTINGS.md,

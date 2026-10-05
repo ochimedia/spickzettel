@@ -25,6 +25,7 @@
 #include "core/canvas/canvas.h"
 #include "core/drawing/stroke_mesh.h"
 #include "generated/ui_strings.h"
+#include "ui/interaction/command.h"
 #include "ui/interaction/gestures.h"
 #include "ui/interaction/levels.h"
 #include "ui/theme.h"
@@ -601,9 +602,14 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
         const ImVec2 iconPos((rect.min.x + rect.max.x - iconSize) * 0.5f, (rect.min.y + rect.max.y - iconSize) * 0.5f);
         DrawIcon(drawList, *icon, iconPos, iconSize, ImGui::GetColorU32(active ? theme::AccentInk() : theme::kWhite));
         if (hovered) {
-            // A tool in hand says how it is put down again.
+            // A tool in hand says how it is put down again; the pen and the
+            // eraser out of hand, that their menus hold the other shapes.
             const bool toolInHand = active && button != ChromeButton::Pin;
-            HelpTooltip(toolInHand ? "%s\n%s" : "%s", tooltip, strings::kBarStopDrawingTip);
+            const bool hasMenu = MenuForBarButton(button).has_value();
+            const char* second = toolInHand ? strings::kBarStopDrawingTip
+                                 : hasMenu  ? strings::kBarMoreToolsTip
+                                            : nullptr;
+            HelpTooltip(second != nullptr ? "%s\n%s" : "%s", tooltip, second);
         }
     }
 }

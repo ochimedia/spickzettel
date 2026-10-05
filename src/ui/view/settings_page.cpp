@@ -488,9 +488,9 @@ void SettingsPage::RenderSettingsAppearance() {
 
     SettingsHeading("appearancedisplayheading", strings::kAppearanceDisplayHeading);
     SettingCheckbox(settings_, setting::kShowItemBorders, "appearanceshowitemborders",
-                    strings::kAppearanceShowItemBorders, strings::kAppearanceShowItemBordersHelp);
+                    strings::kAppearanceShowItemBorders, nullptr);
     SettingCheckbox(settings_, setting::kShowHelpTooltips, "appearanceshowhelptooltips",
-                    strings::kAppearanceShowHelpTooltips, strings::kAppearanceShowHelpTooltipsHelp);
+                    strings::kAppearanceShowHelpTooltips, nullptr);
 
     SettingsGroupBreak();
 
@@ -502,7 +502,9 @@ void SettingsPage::RenderSettingsAppearance() {
         {platform::ImageFilter::Bicubic, strings::kAppearanceImageFilterBicubic, "imagefilterbicubic"},
         {platform::ImageFilter::Lanczos, strings::kAppearanceImageFilterLanczos, "imagefilterlanczos"},
     };
-    SettingRadio(settings_, setting::kImageFilter, filters);
+    // A dropdown rather than a row of radio buttons: each choice says what
+    // it does and costs, which made the row wider than the panel.
+    SettingCombo(settings_, setting::kImageFilter, "imagefilter", nullptr, filters, 0.0f, 360.0f);
 
     SettingsGroupBreak();
 
@@ -828,7 +830,7 @@ void SettingsPage::RenderSettingsBehavior() {
     // One row: the switch, the number of days, the unit. The days are
     // disabled while the switch is off but keep their value, so turning it
     // back on brings back the period chosen before.
-    SettingsHeading("deletedheading", strings::kSettingsDeletedHeading, strings::kSettingsPurgeDeletedHelp);
+    SettingsHeading("deletedheading", strings::kSettingsDeletedHeading);
     SettingCheckbox(settings_, setting::kConfirmDelete, "confirmdelete", strings::kSettingsConfirmDelete,
                     strings::kSettingsConfirmDeleteHelp);
     SettingCheckbox(settings_, setting::kConfirmDeleteForGood, "confirmdeleteforgood",
@@ -842,6 +844,9 @@ void SettingsPage::RenderSettingsBehavior() {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(strings::kSettingsPurgeDeletedDays);
     ImGui::EndDisabled();
+    // At the end of the row, after the days, and not grayed with them.
+    ImGui::SameLine();
+    HelpMarker("purgedeleted", strings::kSettingsPurgeDeleted, strings::kSettingsPurgeDeletedHelp);
     // The reminder, laid out as retention is: the size kept while it is off.
     SettingCheckbox(settings_, setting::kLibrarySizeReminder, "librarysizereminder",
                     strings::kSettingsLibrarySizeReminder, nullptr);
@@ -853,6 +858,8 @@ void SettingsPage::RenderSettingsBehavior() {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(strings::kSettingsLibrarySizeReminderUnit);
     ImGui::EndDisabled();
+    ImGui::SameLine();
+    HelpMarker("librarysizereminder", strings::kSettingsLibrarySizeReminder, strings::kSettingsLibrarySizeReminderHelp);
     EndSettingsScope(globalBox);
 
     SettingsScopeBox profileBox;

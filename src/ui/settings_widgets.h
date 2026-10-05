@@ -77,22 +77,8 @@ struct ChoiceLabel {
     const char* id;
 };
 
-// A choice as radio buttons on one line.
-template <typename E, size_t N>
-void SettingRadio(Settings& settings, const GlobalSetting<ChoiceRule<E>>& row, const ChoiceLabel<E> (&choices)[N]) {
-    const E current = settings.Get(row);
-    for (size_t i = 0; i < N; ++i) {
-        if (i > 0) {
-            ImGui::SameLine();
-        }
-        if (ImGui::RadioButton(Labeled(choices[i].label, choices[i].id), current == choices[i].value) &&
-            current != choices[i].value) {
-            settings.Set(row, choices[i].value);
-        }
-    }
-}
-
-// A choice as a dropdown, its label in a column of `labelColumn`.
+// A choice as a dropdown, its label in a column of `labelColumn` - or
+// none, for a `label` of nullptr: a row whose heading says what it is.
 template <typename E, size_t N>
 void SettingCombo(Settings& settings, const GlobalSetting<ChoiceRule<E>>& row, const char* id, const char* label,
                   const ChoiceLabel<E> (&choices)[N], float labelColumn, float width) {
@@ -103,9 +89,11 @@ void SettingCombo(Settings& settings, const GlobalSetting<ChoiceRule<E>>& row, c
             preview = choice.label;
         }
     }
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label);
-    ImGui::SameLine(Px(labelColumn));
+    if (label != nullptr) {
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        ImGui::SameLine(Px(labelColumn));
+    }
     ImGui::SetNextItemWidth(Px(width));
     if (ImGui::BeginCombo(Labeled("", id), preview)) {
         for (const ChoiceLabel<E>& choice : choices) {
