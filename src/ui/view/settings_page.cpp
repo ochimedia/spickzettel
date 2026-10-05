@@ -517,10 +517,10 @@ void SettingsPage::RenderSettingsAppearance() {
     SettingColor(settings_, setting::kBorderFront, "##snipcolfrontborder", strings::kAppearanceFrontmostBorder,
                  SwatchAlpha::Bar);
     ImGui::SameLine(colorsX + Px(kColorColumnWidth));
-    SettingColor(settings_, setting::kBorderOther, "##snipcolotherborder", strings::kAppearanceOtherBorders,
+    SettingColor(settings_, setting::kBorderPinned, "##snipcolpinnedborder", strings::kAppearancePinnedBorder,
                  SwatchAlpha::Bar);
     ImGui::SameLine(colorsX + Px(2.0f * kColorColumnWidth));
-    SettingColor(settings_, setting::kBorderPinned, "##snipcolpinnedborder", strings::kAppearancePinnedBorder,
+    SettingColor(settings_, setting::kBorderOther, "##snipcolotherborder", strings::kAppearanceOtherBorders,
                  SwatchAlpha::Bar);
     // The selection's, on a row of its own: a color of its own - kept,
     // grayed, while the accent stands in for it - and the switch that says

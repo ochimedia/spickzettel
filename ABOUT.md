@@ -100,7 +100,7 @@ currently bound.
 #### Features
 
 - Drawing on several snippets at once: pick a tool on the bar with them selected
-- Optional separate color for the border of a selected snippet (see Settings > Appearance > Snippet colors)
+- Optional separate color for the border of a selected snippet (see Settings > Appearance > Snippet border colors)
 - A Questions section in About
 
 #### Changes
