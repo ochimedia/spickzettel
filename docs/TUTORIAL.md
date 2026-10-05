@@ -2196,7 +2196,7 @@ the rest of the grid dimmed.
   sets how long that is.
 - **Deleting a canvas from the canvas bar,** by a right-click on its
   tile: the end card names it.
-- **The rest of the Overview:** the Vector and Bitmap previews, and the
+- **The rest of the Overview:** the Drawings and Screenshots previews, and the
   Settings and About tabs.
 
 ### 17.2 The chain
