@@ -67,7 +67,8 @@ TEST_F(EditorTest, DeleteTakesShiftButNotCtrlOrAlt) {
     }
     EXPECT_EQ(command(platform::KeyCombo::kEscape, true, true, true), CommandId::PutDown);
     EXPECT_EQ(command(platform::KeyCombo::kLeftArrow, true, false, true), CommandId::NudgeLeft);
-    EXPECT_EQ(command('Z', true, true, false), CommandId::Redo) << "and Ctrl+Z exactly";
+    EXPECT_EQ(command('Z', true, false, false), CommandId::Undo);
+    EXPECT_EQ(command('Z', true, true, false), std::nullopt) << "and a chosen key exactly";
 }
 
 TEST_F(EditorTest, AMarkingToolKeyEntersDrawingModeOnTheSelection) {

@@ -130,6 +130,8 @@
     "newDrawing": "D",
     "newCanvas": "Ctrl+N",
     "newCanvasWithSelection": "Ctrl+Shift+N",
+    "undo": "Ctrl+Z",
+    "redo": "Ctrl+Y",
     "selectAll": "Ctrl+A",
     "copy": "Ctrl+C",
     "cut": "Ctrl+X",

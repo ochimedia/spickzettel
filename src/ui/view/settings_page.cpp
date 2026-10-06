@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "core/config/display_choice.h"
-#include "core/config/setting.h"
 #include "ui/icons_generated.h"
 #include "core/util/timestamp_name.h"
 #include "generated/ui_strings.h"
@@ -1565,8 +1564,10 @@ void SettingsPage::RenderSettingsHotkeys() {
     }
 
     SettingsGroupBreak();
-    SettingsHeading("hotkeysshortcutclipboardheading", strings::kHotkeysShortcutClipboardHeading);
+    SettingsHeading("hotkeysshortcuteditheading", strings::kHotkeysShortcutEditHeading);
     ImGui::Spacing();
+    RenderShortcutEditor(ShortcutAction::Undo, icons::kUndo, strings::kHotkeysShortcutUndo, buttonX);
+    RenderShortcutEditor(ShortcutAction::Redo, icons::kRedo, strings::kHotkeysShortcutRedo, buttonX);
     for (const ClipboardActionInfo& info : kClipboardActions) {
         RenderShortcutEditor(ShortcutForClipboardAction(info.action), *info.icon, info.name, buttonX);
     }
@@ -1611,21 +1612,19 @@ void SettingsPage::RenderHotkeyEditor(const char* id, const char* label, HotkeyS
 // A row waiting is a KeyCapture on the machine's Text level - one at a
 // time, so arming one disarms the other, as the level holds one.
 void SettingsPage::ArmHotkeyCapture(HotkeySlot slot) {
-    editor_.Input().Push(
-        std::make_unique<KeyCapture>(slot, [this, slot](platform::KeyCombo combo) { OfferHotkey(slot, combo); }),
-        Event{});
+    editor_.Input().Push(std::make_unique<KeyCapture>(slot,
+                                                      [this, slot](platform::KeyCombo combo) {
+                                                          if (!TryChangeHotkey(slot, combo)) {
+                                                              host_.Say(strings::kHotkeysComboRejected);
+                                                          }
+                                                      }),
+                         Event{});
 }
 
 void SettingsPage::ArmShortcutCapture(ShortcutAction action) {
     editor_.Input().Push(std::make_unique<KeyCapture>(
                              action,
                              [this, action](platform::KeyCombo combo) {
-                                 // Refused by the rule too; said here, or the
-                                 // row would just keep its key.
-                                 if (core::IsFixedKey(combo)) {
-                                     host_.Say(strings::kHotkeysFixedKeyRefused);
-                                     return;
-                                 }
                                  settings_.SetShortcut(action, combo, editProfile_);
                              }),
                          Event{});
@@ -1659,17 +1658,7 @@ void SettingsPage::CompleteHotkeyCapture(platform::KeyCombo combo) {
         return;
     }
     DisarmCapture();
-    OfferHotkey(*slot, combo);
-}
-
-// An undo or redo key is refused before the OS is asked, and said as such
-// rather than as a key another app has.
-void SettingsPage::OfferHotkey(HotkeySlot slot, platform::KeyCombo combo) {
-    if (core::IsFixedKey(combo)) {
-        host_.Say(strings::kHotkeysFixedKeyRefused);
-        return;
-    }
-    if (!TryChangeHotkey(slot, combo)) {
+    if (!TryChangeHotkey(*slot, combo)) {
         host_.Say(strings::kHotkeysComboRejected);
     }
 }

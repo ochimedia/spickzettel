@@ -20,6 +20,10 @@ std::string_view ShortcutActionKey(ShortcutAction action) {
             return "newCanvas";
         case ShortcutAction::NewCanvasWithSelection:
             return "newCanvasWithSelection";
+        case ShortcutAction::Undo:
+            return "undo";
+        case ShortcutAction::Redo:
+            return "redo";
         case ShortcutAction::SelectAll:
             return "selectAll";
         case ShortcutAction::Copy:
@@ -65,6 +69,10 @@ ShortcutBindings DefaultShortcuts() {
     bind(ShortcutAction::NewScreenshot, 'S');
     bind(ShortcutAction::NewDrawing, 'D');
     bindWithCtrl(ShortcutAction::NewCanvas, 'N');
+    // Redo on Ctrl+Y alone: one key a row. Ctrl+Shift+Z, the other one
+    // programs use, is anybody's to choose.
+    bindWithCtrl(ShortcutAction::Undo, 'Z');
+    bindWithCtrl(ShortcutAction::Redo, 'Y');
     bindWithCtrl(ShortcutAction::SelectAll, 'A');
     bindWithCtrl(ShortcutAction::Copy, 'C');
     bindWithCtrl(ShortcutAction::Cut, 'X');

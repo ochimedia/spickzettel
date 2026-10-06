@@ -72,7 +72,8 @@ std::vector<CheatSheetSection> BuildCheatSheet(const AppConfig& config, const Sh
     shortcut(general, CommandId::QuickCapture, strings::kCheatSheetQuickCapture);
     shortcut(general, CommandId::SilentCapture, strings::kCheatSheetSilentCapture);
     shortcut(general, CommandId::CheatSheet, strings::kCheatSheetSelf);
-    general.push_back({firstKey(CommandId::Undo) + ", " + firstKey(CommandId::Redo), strings::kCheatSheetUndo});
+    shortcut(general, CommandId::Undo, strings::kCheatSheetUndo);
+    shortcut(general, CommandId::Redo, strings::kCheatSheetRedo);
     general.push_back({firstKey(CommandId::PutDown), strings::kCheatSheetEsc});
     general.push_back({strings::kCheatSheetRightClickKey, strings::kCheatSheetRightClick});
 

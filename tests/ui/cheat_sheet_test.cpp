@@ -41,7 +41,8 @@ TEST(CheatSheetTest, ShowsTheKeysAsShipped) {
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetScreenshotArea), "Drag");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetDrawingArea), "Ctrl+Drag");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetText), "A");
-    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetUndo), "Ctrl+Z, Ctrl+Y");
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetUndo), "Ctrl+Z");
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetRedo), "Ctrl+Y");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetEsc), "Esc");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetDelete), "Delete, Backspace");
 }

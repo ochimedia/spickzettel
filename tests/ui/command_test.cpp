@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "core/config/app_config.h"
-#include "core/config/setting.h"
 #include "core/config/shortcut_action.h"
 #include "ui/view/settings_page.h"
 
@@ -83,9 +82,10 @@ TEST(CommandTest, KeysForListsFixedChosenAndHotkeyKeys) {
     ShortcutBindings shortcuts = DefaultShortcuts();
     const auto keys = [&](CommandId id) { return KeysFor(id, config, shortcuts); };
 
-    ASSERT_EQ(keys(CommandId::Redo).size(), 2u);
-    EXPECT_EQ(keys(CommandId::Redo)[0], (platform::KeyCombo{true, false, false, 'Y'}));
-    EXPECT_EQ(keys(CommandId::Redo)[1], (platform::KeyCombo{true, false, true, 'Z'}));
+    ASSERT_EQ(keys(CommandId::DeleteSelection).size(), 2u);
+    EXPECT_EQ(keys(CommandId::DeleteSelection)[0].key, platform::KeyCombo::kDelete);
+    EXPECT_EQ(keys(CommandId::DeleteSelection)[1].key, platform::KeyCombo::kBackspace);
+    EXPECT_EQ(keys(CommandId::Redo), (std::vector<platform::KeyCombo>{platform::KeyCombo{true, false, false, 'Y'}}));
     EXPECT_EQ(keys(CommandId::Copy),
               std::vector<platform::KeyCombo>{shortcuts[ShortcutActionIndex(ShortcutAction::Copy)]});
     EXPECT_EQ(keys(CommandId::ToggleEditMode), std::vector<platform::KeyCombo>{config.hotkeyEditMode});
@@ -111,21 +111,14 @@ TEST(CommandTest, EveryBarButtonIsACommandOfItsOwn) {
     }
 }
 
-// The keys no shortcut or hotkey may be given are the fixed keys a
-// Settings row could otherwise hold - undo's and redo's - and only those.
-// Escape, Delete, Backspace and the arrows are no key a row holds at all.
-TEST(CommandTest, TheKeysNobodyMayChooseAreTheFixedOnes) {
-    int choosable = 0;
+// The fixed keys - Escape, Delete, Backspace, the arrows - are no key a
+// Settings row holds, so none of them is ever a chosen key as well.
+TEST(CommandTest, NoFixedKeyIsOneARowHolds) {
     for (const CommandInfo& info : kCommands) {
         for (const platform::KeyCombo& key : info.keys) {
-            if (key.IsValid()) {
-                EXPECT_EQ(info.heldWith, HeldWith::Exactly) << NameOf(info.id);
-                EXPECT_TRUE(core::IsFixedKey(key)) << NameOf(info.id);
-                ++choosable;
-            }
+            EXPECT_FALSE(key.IsValid()) << NameOf(info.id);
         }
     }
-    EXPECT_EQ(choosable, 3) << "each of IsFixedKey's three is some command's";
 }
 
 }  // namespace

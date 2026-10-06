@@ -10,8 +10,8 @@
 namespace sz::core {
 
 // Everything a key can be bound to while the overlay is up in edit mode:
-// the drawing tools, the create actions, what the clipboard does with
-// the selection, and the cheat sheet. One flat list rather than the two enums the app itself uses
+// the drawing tools, the create actions, undo and redo, what the clipboard
+// does with the selection, and the cheat sheet. One flat list rather than the two enums the app itself uses
 // (`Tool`, `CreateAction`), for two reasons: a shortcut list is one list to
 // the person reading it, and this is the layer that persists it - config
 // sits below the app and cannot see those enums at all.
@@ -34,6 +34,8 @@ enum class ShortcutAction {
     NewDrawing,
     NewCanvas,
     NewCanvasWithSelection,
+    Undo,
+    Redo,
     SelectAll,
     Copy,
     Cut,
@@ -43,10 +45,11 @@ enum class ShortcutAction {
     CheatSheet,
 };
 
-inline constexpr std::array<ShortcutAction, 15> kAllShortcutActions = {
+inline constexpr std::array<ShortcutAction, 17> kAllShortcutActions = {
     ShortcutAction::Draw,      ShortcutAction::Erase,    ShortcutAction::Text,
     ShortcutAction::Select,    ShortcutAction::NewScreenshot, ShortcutAction::NewDrawing,
-    ShortcutAction::NewCanvas, ShortcutAction::NewCanvasWithSelection, ShortcutAction::SelectAll,
+    ShortcutAction::NewCanvas, ShortcutAction::NewCanvasWithSelection, ShortcutAction::Undo,
+    ShortcutAction::Redo,      ShortcutAction::SelectAll,
     ShortcutAction::Copy,      ShortcutAction::Cut,      ShortcutAction::Paste,
     ShortcutAction::PasteInPlace, ShortcutAction::Duplicate, ShortcutAction::CheatSheet,
 };
@@ -67,7 +70,8 @@ std::optional<ShortcutAction> ShortcutActionFromKey(std::string_view key);
 // What ships bound: the tools on the letters around W, A, S and D, where
 // the left hand already rests over a game - Q the plain pointer, W the
 // pen, E the eraser, A text, S a screenshot, D a drawing - so that every
-// tool is reached without looking. The clipboard's three on Ctrl+C/X/V,
+// tool is reached without looking. Undo and redo on Ctrl+Z and Ctrl+Y,
+// and the clipboard's three on Ctrl+C/X/V,
 // which every application on the machine has already taught the hand,
 // with Paste in place on Ctrl+Shift+V, where the programs that have it
 // put it, and Select all on Ctrl+A. New canvas is Ctrl+N, as "new" is

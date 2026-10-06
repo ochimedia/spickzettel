@@ -27,8 +27,6 @@ namespace sz::ui {
 // KeysFor): the chosen ones are what a person can move.
 enum class CommandId {
     // Fixed keys.
-    Undo,
-    Redo,
     PutDown,  // Escape: the tool down, then drawing mode, a cut, the selection
     DeleteSelection,
     NudgeLeft,
@@ -45,6 +43,8 @@ enum class CommandId {
     NewDrawingTool,
     NewCanvas,
     NewCanvasWithSelection,
+    Undo,
+    Redo,
     SelectAll,
     Copy,
     Cut,
@@ -130,9 +130,10 @@ constexpr bool IsNudge(CommandId id) {
            id == CommandId::NudgeDown;
 }
 
-// Which modifiers a command's own keys match with (CommandInfo::keys).
+// Which modifiers a command's keys match with.
 enum class HeldWith {
-    // Exactly those the binding names: Ctrl+Z is not Ctrl+Shift+Z.
+    // Exactly those the binding names: Ctrl+Z is not Ctrl+Shift+Z. Every
+    // chosen key matches so.
     Exactly,
     // Any at all: Escape puts down whatever is held, and a nudge reads
     // Shift itself, for ten pixels.
@@ -155,8 +156,8 @@ struct CommandInfo {
     // The global hotkey that runs it (see AppConfig::hotkeyEditMode and
     // the three after it) - or none.
     std::optional<core::HotkeySlot> hotkey;
-    // Keys of its own that nobody rebinds: undo's Ctrl+Z, Escape, the
-    // arrows. A key of 0 is none.
+    // Keys of its own that nobody rebinds: Escape, Delete, the arrows. A
+    // key of 0 is none.
     std::array<platform::KeyCombo, 2> keys{};
     // Which modifiers those match with - see HeldWith.
     HeldWith heldWith = HeldWith::Exactly;
@@ -174,8 +175,8 @@ constexpr CommandInfo Fixed(CommandId id, std::string_view name, std::array<KeyC
     return CommandInfo{id, name, Scope::Hand, std::nullopt, std::nullopt, keys, heldWith, repeats};
 }
 constexpr CommandInfo Chosen(CommandId id, std::string_view name, core::ShortcutAction shortcut,
-                             Scope scope = Scope::Hand) {
-    return CommandInfo{id, name, scope, shortcut};
+                             Scope scope = Scope::Hand, bool repeats = false) {
+    return CommandInfo{id, name, scope, shortcut, std::nullopt, {}, HeldWith::Exactly, repeats};
 }
 constexpr CommandInfo Hotkey(CommandId id, std::string_view name, core::HotkeySlot slot, Scope scope = Scope::Hand) {
     return CommandInfo{id, name, scope, std::nullopt, slot};
@@ -189,12 +190,9 @@ inline constexpr std::array kCommands = [] {
     using namespace command_detail;
     using core::HotkeySlot;
     using core::ShortcutAction;
-    constexpr HeldWith kExactly = HeldWith::Exactly;
     constexpr HeldWith kAny = HeldWith::Any;
     constexpr bool kRepeats = true;  // repeats
     return std::array{
-        Fixed(CommandId::Undo, "undo", {Key('Z', /*ctrl=*/true)}, kExactly, kRepeats),
-        Fixed(CommandId::Redo, "redo", {Key('Y', true), Key('Z', true, /*shift=*/true)}, kExactly, kRepeats),
         Fixed(CommandId::PutDown, "putDown", {Key(KeyCombo::kEscape)}, kAny, kRepeats),
         Fixed(CommandId::DeleteSelection, "deleteSelection", {Key(KeyCombo::kDelete), Key(KeyCombo::kBackspace)},
               HeldWith::NothingButShift, !kRepeats),
@@ -211,6 +209,8 @@ inline constexpr std::array kCommands = [] {
         Chosen(CommandId::NewCanvas, "newCanvas", ShortcutAction::NewCanvas, Scope::Canvas),
         Chosen(CommandId::NewCanvasWithSelection, "newCanvasWithSelection", ShortcutAction::NewCanvasWithSelection,
                Scope::Canvas),
+        Chosen(CommandId::Undo, "undo", ShortcutAction::Undo, Scope::Hand, kRepeats),
+        Chosen(CommandId::Redo, "redo", ShortcutAction::Redo, Scope::Hand, kRepeats),
         Chosen(CommandId::SelectAll, "selectAll", ShortcutAction::SelectAll),
         Chosen(CommandId::Copy, "copy", ShortcutAction::Copy),
         Chosen(CommandId::Cut, "cut", ShortcutAction::Cut),

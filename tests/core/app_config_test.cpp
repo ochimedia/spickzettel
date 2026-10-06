@@ -367,20 +367,25 @@ TEST(AppConfigTest, AShortcutMayBeAMouseButtonAndAHotkeyMayNot) {
               DefaultConfig().hotkeyEditMode);
 }
 
-// Undo's and redo's keys are no shortcut's and no hotkey's: written by
-// hand, they read as nothing said, and the default stands. Only those
-// three combinations - Ctrl+Alt+Z is anybody's.
-TEST(AppConfigTest, UndoAndRedoKeysAreNoShortcutsAndNoHotkeys) {
-    const size_t copy = ShortcutActionIndex(ShortcutAction::Copy);
-    for (const char* key : {R"("Ctrl+Z")", R"("Ctrl+Y")", R"("Ctrl+Shift+Z")"}) {
-        EXPECT_EQ(ParseConfig(One("shortcuts", "copy", key)).profileable.shortcuts[copy],
-                  DefaultConfig().profileable.shortcuts[copy])
-            << key;
-        EXPECT_EQ(ParseConfig(One("hotkeys", "editMode", key)).hotkeyEditMode, DefaultConfig().hotkeyEditMode)
-            << key;
-    }
-    EXPECT_EQ(ParseConfig(One("shortcuts", "copy", R"("Ctrl+Alt+Z")")).profileable.shortcuts[copy],
-              (platform::KeyCombo{true, true, false, 'Z'}));
+// Undo and redo are shortcuts like the others: their keys may be given to
+// another one, or to a hotkey. A file from before they were says nothing
+// of them, and they have Ctrl+Z and Ctrl+Y - unless the file gave one
+// away, as for any action added since.
+TEST(AppConfigTest, UndoAndRedoKeysAreShortcutsLikeAnyOther) {
+    const size_t undo = ShortcutActionIndex(ShortcutAction::Undo);
+    const size_t redo = ShortcutActionIndex(ShortcutAction::Redo);
+    const AppConfig before = ParseConfig(One("shortcuts", "copy", R"("Ctrl+C")"));
+    EXPECT_EQ(before.profileable.shortcuts[undo], (platform::KeyCombo{true, false, false, 'Z'}));
+    EXPECT_EQ(before.profileable.shortcuts[redo], (platform::KeyCombo{true, false, false, 'Y'}));
+
+    const AppConfig given = ParseConfig(One("shortcuts", "copy", R"("Ctrl+Z")"));
+    EXPECT_EQ(given.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
+              (platform::KeyCombo{true, false, false, 'Z'}));
+    EXPECT_FALSE(given.profileable.shortcuts[undo].IsValid());
+    EXPECT_EQ(ParseConfig(One("hotkeys", "editMode", R"("Ctrl+Y")")).hotkeyEditMode,
+              (platform::KeyCombo{true, false, false, 'Y'}));
+    EXPECT_EQ(ParseConfig(One("shortcuts", "redo", R"("Ctrl+Shift+Z")")).profileable.shortcuts[redo],
+              (platform::KeyCombo{true, false, true, 'Z'}));
 }
 
 // A file from before an action existed says nothing of it, and the action

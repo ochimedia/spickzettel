@@ -37,6 +37,16 @@ TEST(ShortcutActionTest, TheToolsShipAroundWASD) {
     EXPECT_EQ(BindingFor(bindings, ShortcutAction::NewDrawing), Plain('D'));
 }
 
+// Undo and redo where every program has them - redo on Ctrl+Y alone, as a
+// row holds one key.
+TEST(ShortcutActionTest, UndoAndRedoShipOnCtrlZAndCtrlY) {
+    const ShortcutBindings bindings = DefaultShortcuts();
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Undo), WithCtrl('Z'));
+    EXPECT_EQ(BindingFor(bindings, ShortcutAction::Redo), WithCtrl('Y'));
+    EXPECT_EQ(ShortcutActionKey(ShortcutAction::Undo), "undo");
+    EXPECT_EQ(ShortcutActionKey(ShortcutAction::Redo), "redo");
+}
+
 // The clipboard's three on the chords every application on the machine
 // has already taught the hand.
 TEST(ShortcutActionTest, TheClipboardShipsOnTheUsualChords) {

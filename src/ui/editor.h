@@ -495,7 +495,7 @@ public:
 
     // ===== The history =====
 
-    // Undo and redo, as Ctrl+Z and Ctrl+Y reach them: the session steps the
+    // Undo and redo, as their keys reach them: the session steps the
     // current canvas's history (see Session::Undo), and this says what
     // happened.
     void Undo();

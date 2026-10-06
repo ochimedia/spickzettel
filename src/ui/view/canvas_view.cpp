@@ -606,9 +606,22 @@ void CanvasView::PaintSelectionBar(ImDrawList* drawList, const std::optional<Chr
             // eraser out of hand, that their menus hold the other shapes.
             const bool toolInHand = active && button != ChromeButton::Pin;
             const bool hasMenu = MenuForBarButton(button).has_value();
-            const char* second = toolInHand ? strings::kBarStopDrawingTip
-                                 : hasMenu  ? strings::kBarMoreToolsTip
-                                            : nullptr;
+            // Delete, that undo brings it back - by its key, as bound.
+            std::string undoTip;
+            if (button == ChromeButton::Close) {
+                const std::vector<platform::KeyCombo> keys =
+                    KeysFor(CommandId::Undo, Cfg(), settings_.Live().shortcuts);
+                if (!keys.empty()) {
+                    char line[96];
+                    std::snprintf(line, sizeof(line), strings::kItemCloseUndoTip,
+                                  FormatKeyComboLabel(keys.front()).c_str());
+                    undoTip = line;
+                }
+            }
+            const char* second = toolInHand        ? strings::kBarStopDrawingTip
+                                 : hasMenu         ? strings::kBarMoreToolsTip
+                                 : !undoTip.empty() ? undoTip.c_str()
+                                                    : nullptr;
             HelpTooltip(second != nullptr ? "%s\n%s" : "%s", tooltip, second);
         }
     }

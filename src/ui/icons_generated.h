@@ -197,6 +197,19 @@ constexpr IconCmd kUndoCmds[] = {
 };
 constexpr Icon kUndo = {kUndoCmds, IM_ARRAYSIZE(kUndoCmds)};
 
+constexpr IconCmd kRedoCmds[] = {
+    {IconOp::MoveTo, 21.0000f, 7.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 21.0000f, 13.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::LineTo, 15.0000f, 13.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::EndSubpath, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::MoveTo, 3.0000f, 17.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::ArcTo, 12.0000f, 17.0000f, 9.0000f, 3.1416f, 4.7124f, 0.0000f},
+    {IconOp::ArcTo, 11.9908f, 17.0000f, 9.0000f, -1.5698f, -0.8397f, 0.0000f},
+    {IconOp::LineTo, 21.0000f, 13.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+    {IconOp::EndSubpath, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f, 0.0000f},
+};
+constexpr Icon kRedo = {kRedoCmds, IM_ARRAYSIZE(kRedoCmds)};
+
 constexpr IconCmd kRectangleCmds[] = {
     {IconOp::RoundedRect, 3.0000f, 3.0000f, 21.0000f, 21.0000f, 2.0000f, 0.0000f},
 };

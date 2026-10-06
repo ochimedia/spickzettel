@@ -4480,6 +4480,42 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
     EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "");
 }
 
+// Undo moved to another key: in a note being typed, the field has every
+// key, the chosen one too, and its own Ctrl+Z still takes the typing
+// back. On the canvas, the chosen key undoes, and Ctrl+Z no longer does.
+TEST_F(HeadlessAppTest, AChosenUndoKeyIsTheCanvasesAndANoteKeepsCtrlZ) {
+    AppConfig config = WithTextOnT();
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Undo)] =
+        platform::KeyCombo{/*ctrl=*/true, /*alt=*/false, /*shift=*/false, /*key=*/'U'};
+    StartWith(config);
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
+    PressKey(ImGuiKey_T);
+    RawClick(400.0f, 400.0f);
+    const ItemId note = Canvases().CurrentOrNull()->items[0].id;
+    ASSERT_EQ(App().EditingNote(), std::optional<ItemId>(note));
+    ImGui::GetIO().AddInputCharacter('w');
+    StepFrame();
+    PressCtrlKey(ImGuiKey_U);
+    EXPECT_EQ(App().EditingNote(), std::optional<ItemId>(note)) << "the field's, as every key is";
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    PressCtrlKey(ImGuiKey_Z);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "") << "the field's own undo took the w back";
+
+    PressKey(ImGuiKey_Escape);
+    PressKey(ImGuiKey_Escape);
+    DoubleClick(1000.0f, 650.0f);
+    ASSERT_EQ(ItemCountOnCurrentCanvas(), 2u);
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "Ctrl+Z is nobody's";
+    PressCtrlKey(ImGuiKey_U);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    PressCtrlKey(ImGuiKey_Y);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 2u) << "redo kept its key";
+}
+
 // The key for Text pressed halfway through a stroke: a command, so the
 // stroke ends where the key found it and is kept (see
 // Editor::Settle), and the rest of the drag draws nothing. Taken

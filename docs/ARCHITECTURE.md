@@ -2662,9 +2662,9 @@ the same file.
 Everything the app can be told to do in one step is a `Command`, and all
 of them are in one table, `ui/interaction/command.h`: its id, its scope
 (what it ends first), and what reaches it - keys of its own that nobody
-rebinds (undo's `Ctrl+Z`, Escape, Delete, the arrows), the key a person
-chooses in Settings (by the `ShortcutAction` name config stores it
-under), or a global hotkey. The table is checked at compile time to hold
+rebinds (Escape, Delete, the arrows), the key a person chooses in
+Settings (by the `ShortcutAction` name config stores it under), or a
+global hotkey. The table is checked at compile time to hold
 one row per id, in order. No ImGui in it: what a command is and what
 reaches it are the app's words, not its widgets'.
 
@@ -2716,6 +2716,24 @@ with the tool in hand puts it down, as `S` does).
 Delete, Backspace, the arrows), outside what a global hotkey or a key
 editor accepts - Escape, Backspace and Delete are what unbind a row
 there.
+
+Undo and redo are chosen keys, Ctrl+Z and Ctrl+Y as shipped, since
+2026-10-06. They were fixed keys, and from 2026-10-04 no row or hotkey
+could be given theirs - a row given one never ran, as undo matched
+first. That made them the one exception among keys a person might want
+elsewhere, while Copy, Cut and Paste, as common, could be moved. Now
+they all follow one rule: a key given to another row is taken from the
+row that had it. Redo has one key, as every row does; Ctrl+Shift+Z,
+its other usual key, is free to choose for it.
+
+A text field is the other side of that rule. ImGui's `InputText` reads
+Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, Ctrl+C, Ctrl+X, Ctrl+V and Ctrl+A itself,
+with no way to rebind them, and a note being typed or a name being
+edited claims every key (`TypingNote`, `NameEdit`), so no chosen key
+reaches the canvas from there. Handing a field the chosen keys instead
+would mean rewriting key events before ImGui sees them, and a key that
+types a letter could not be one there anyway. The fields keep the keys
+every program has, whatever is chosen; the Shortcuts help says so.
 
 ### Input, in order
 

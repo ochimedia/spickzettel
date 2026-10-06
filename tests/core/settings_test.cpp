@@ -249,19 +249,5 @@ TEST(SettingsTest, AShortcutTakesItsKeyFromTheActionThatHadIt) {
     EXPECT_FALSE(settings.Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewScreenshot)].IsValid());
 }
 
-// Undo's key is refused, in the defaults as in a profile, and the action
-// keeps the key it had.
-TEST(SettingsTest, NoShortcutIsGivenUndosKey) {
-    Settings settings(ConfigWithOneProfile());
-    const size_t copy = ShortcutActionIndex(ShortcutAction::Copy);
-    const platform::KeyCombo had = settings.Stored().profileable.shortcuts[copy];
-    const platform::KeyCombo undo{true, false, false, 'Z'};
-
-    settings.SetShortcut(ShortcutAction::Copy, undo, std::nullopt);
-    EXPECT_EQ(settings.Stored().profileable.shortcuts[copy], had);
-    settings.SetShortcut(ShortcutAction::Copy, undo, 0u);
-    EXPECT_FALSE(settings.IsShortcutOverridden(ShortcutAction::Copy, 0u));
-}
-
 }  // namespace
 }  // namespace sz::core
