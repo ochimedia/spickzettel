@@ -34,7 +34,8 @@ void TextLedger::Watch(ImGuiContext* context) {
 
 void TextLedger::Record(ImDrawList* list, ImFont* font, float size, const ImVec2& pos, const ImVec4& clip,
                         const char* begin, const char* end, float wrap) {
-    if (paused_ || context_ == nullptr || ImGui::GetCurrentContext() != context_ || begin == nullptr) {
+    if (paused_ || inBlock_ || context_ == nullptr || ImGui::GetCurrentContext() != context_ ||
+        begin == nullptr) {
         return;
     }
     if (end == nullptr) {
@@ -54,6 +55,24 @@ void TextLedger::Record(ImDrawList* list, ImFont* font, float size, const ImVec2
     pending.drawn.source = begin;
     pending.drawn.rect = rect;
     pending.list = list;
+    drawing_.push_back(std::move(pending));
+}
+
+void TextLedger::BeginBlock() { inBlock_ = true; }
+
+void TextLedger::EndBlock(std::string text, ImRect rect) {
+    inBlock_ = false;
+    if (paused_ || context_ == nullptr || ImGui::GetCurrentContext() != context_) {
+        return;
+    }
+    rect.ClipWithFull(ImGui::GetCurrentWindow()->ClipRect);
+    if (rect.GetWidth() <= 0.0f || rect.GetHeight() <= 0.0f) {
+        return;
+    }
+    Pending pending;
+    pending.drawn.text = std::move(text);
+    pending.drawn.rect = rect;
+    pending.list = ImGui::GetWindowDrawList();
     drawing_.push_back(std::move(pending));
 }
 

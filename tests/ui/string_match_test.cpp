@@ -35,6 +35,14 @@ TEST(StringMatchTest, FilledInFieldsFitAnything) {
     EXPECT_EQ(unfilled.indices, (Indices{0})) << "nothing but a field fits nothing";
 }
 
+// A help text or a card's text is drawn with its names, braces and all
+// left out; it is found by those words.
+TEST(StringMatchTest, AMarkedNameIsMatchedAsItIsDrawn) {
+    const std::vector<std::string_view> catalog = {"Turn on {ui:Show deleted} first.", "Show deleted"};
+    EXPECT_EQ(Match("Turn on Show deleted first.", catalog).indices, (Indices{0}));
+    EXPECT_NE(Match("Turn on Show deleted first.", catalog).fit, Fit::Part);
+}
+
 TEST(StringMatchTest, APieceOfAStringOrAStringInAPieceIsAPartFit) {
     const std::vector<std::string_view> catalog = {"First paragraph.\n\nSecond paragraph.", "Basics", "of"};
     const Matches piece = Match("Second paragraph.", catalog);
@@ -63,6 +71,9 @@ TEST(StringMatchTest, AnEditMustKeepTheConversionsAndFillNothingNew) {
               (std::vector<std::string>{"{key:undo}", "{trigger:screenshot}"}));
     EXPECT_NE(FieldsProblem("Press Ctrl+Z", "Press {key:undo}"), "");
     EXPECT_EQ(FieldsProblem("Press Ctrl+Z", "Press {key:undo}", /*anyKey=*/true), "") << "the tutorial's";
+    EXPECT_NE(FieldsProblem("Press Next", "Press {ui:Next}"), "") << "drawn with its braces here";
+    EXPECT_EQ(FieldsProblem("Press Next", "Press {ui:Next}", false, /*marks=*/true), "");
+    EXPECT_EQ(FieldsProblem("Turn on {ui:Show deleted}", "Turn on Show deleted"), "") << "a name is no field";
     EXPECT_NE(FieldsProblem("Open {program}", "Open {canvas}", /*anyKey=*/true), "");
 }
 

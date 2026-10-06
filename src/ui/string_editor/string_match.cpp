@@ -33,6 +33,16 @@ std::size_t ConversionLength(std::string_view text, std::size_t at) {
     return i + 1 - at;
 }
 
+// The marked name at `text[at]`, a '{', as long as it is - 0 for none:
+// "{ui:Show deleted}", drawn as the name alone (ui/text_spans.h).
+std::size_t MarkLength(std::string_view text, std::size_t at) {
+    if (text.substr(at, 4) != "{ui:") {
+        return 0;
+    }
+    const std::size_t close = text.find('}', at);
+    return close == std::string_view::npos ? 0 : close + 1 - at;
+}
+
 // The named field at `text[at]`, a '{', as long as it is - 0 for none:
 // "{program}", or with what it names, "{key:undo}".
 std::size_t NamedLength(std::string_view text, std::size_t at) {
@@ -67,6 +77,9 @@ std::vector<std::string> Literals(std::string_view text) {
         } else if (const std::size_t conversion = text[i] == '%' ? ConversionLength(text, i) : 0) {
             literals.emplace_back();
             i += conversion;
+        } else if (const std::size_t mark = text[i] == '{' ? MarkLength(text, i) : 0) {
+            literals.back() += text.substr(i + 4, mark - 5);
+            i += mark;
         } else if (const std::size_t named = text[i] == '{' ? NamedLength(text, i) : 0) {
             literals.emplace_back();
             i += named;
@@ -151,8 +164,10 @@ Matches Match(std::string_view drawn, const std::vector<std::string_view>& catal
         for (const std::string& literal : literals[i]) {
             words += literal.size();
         }
-        // A string that is nothing but a field fits anything.
-        if (literals[i].size() > 1 && words >= 2 && Fills(drawn, literals[i])) {
+        // A string that is nothing but a field fits anything. One whose
+        // only fields are marked names is drawn as its one literal.
+        const bool filled = literals[i].size() > 1 || literals[i].front() != catalog[i];
+        if (filled && words >= 2 && Fills(drawn, literals[i])) {
             matches.indices.push_back(i);
         }
     }
@@ -201,6 +216,9 @@ Fields FieldsOf(std::string_view text) {
         } else if (text[i] == '%') {
             fields.lonePercent = true;
             ++i;
+        } else if (const std::size_t mark = text[i] == '{' ? MarkLength(text, i) : 0) {
+            fields.marks = true;
+            i += mark;
         } else if (const std::size_t named = text[i] == '{' ? NamedLength(text, i) : 0) {
             fields.named.emplace_back(text.substr(i, named));
             i += named;
@@ -211,7 +229,7 @@ Fields FieldsOf(std::string_view text) {
     return fields;
 }
 
-std::string FieldsProblem(std::string_view original, std::string_view edited, bool anyKey) {
+std::string FieldsProblem(std::string_view original, std::string_view edited, bool anyKey, bool marks) {
     const Fields before = FieldsOf(original);
     const Fields after = FieldsOf(edited);
     std::string wanted;
@@ -234,6 +252,9 @@ std::string FieldsProblem(std::string_view original, std::string_view edited, bo
     }
     if (after.lonePercent && (!before.printf.empty() || before.percents)) {
         return "A percent sign is written %% here.";
+    }
+    if (after.marks && !marks) {
+        return "Only the tutorial's cards and the help texts draw {ui:} names.";
     }
     for (const std::string& named : after.named) {
         const bool key = named.starts_with("{key:") || named.starts_with("{trigger:");

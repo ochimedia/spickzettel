@@ -47,6 +47,12 @@ public:
     // one layer, the smaller.
     std::vector<DrawnText> Under(ImVec2 point) const;
 
+    // Around a text laid out a word at a time (WrappedSpans): its words are
+    // not recorded one by one, and the whole of it is, in `rect` - for it
+    // to be matched to the catalog as the string it is.
+    void BeginBlock();
+    void EndBlock(std::string text, ImRect rect);
+
     // The call from the app's tooltips (ui/widgets.cpp), each frame the
     // pointer is over what one explains, whether it is shown yet or not.
     void RecordTooltip(const char* text, const char* source);
@@ -63,6 +69,7 @@ private:
 
     ImGuiContext* context_ = nullptr;
     bool paused_ = false;
+    bool inBlock_ = false;
     std::vector<Pending> drawing_;
     std::vector<DrawnText> drawn_;
     DrawnText tooltip_;

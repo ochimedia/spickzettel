@@ -28,13 +28,16 @@ Matches Match(std::string_view drawn, const std::vector<std::string_view>& catal
 
 // What the code fills into `text`: its printf conversions in order ("%s",
 // "%.0f"; "%%" is a percent sign, not one), and its named fields
-// ("{program}", "{key:undo}").
+// ("{program}", "{key:undo}"). A marked name, "{ui:Show deleted}", is no
+// field: it is drawn as the name.
 struct Fields {
     std::vector<std::string> printf;
     std::vector<std::string> named;
     // A "%%", and a '%' that starts no conversion at all.
     bool percents = false;
     bool lonePercent = false;
+    // A "{ui:...}".
+    bool marks = false;
 };
 Fields FieldsOf(std::string_view text);
 
@@ -43,8 +46,10 @@ Fields FieldsOf(std::string_view text);
 // in that order and one more reads what is not there; in a format, a
 // percent sign as "%%"; and no named field the code does not fill in -
 // but with `anyKey`, as in the tutorial's texts (tutorial::Expand), any
-// "{key:...}" and "{trigger:...}".
-std::string FieldsProblem(std::string_view original, std::string_view edited, bool anyKey = false);
+// "{key:...}" and "{trigger:...}"; and no "{ui:...}" but with `marks`,
+// where the text is drawn with its names marked.
+std::string FieldsProblem(std::string_view original, std::string_view edited, bool anyKey = false,
+                          bool marks = false);
 
 // `text` as a JSON string literal, quotes included, escaped as the catalog
 // file is written: quotes, backslashes and control characters, the rest

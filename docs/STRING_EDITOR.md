@@ -37,6 +37,9 @@ before a release. Never handed out.
   not have - except in the tutorial's texts, where any `{key:<command>}`
   and `{trigger:...}` can be added. An edit that breaks one is not shown or
   saved, and says why.
+- **Marked names,** `{ui:Show deleted}`, are no field: they can be added
+  and removed, but only in the tutorial's texts and the help texts (keys
+  ending in `Help`), the ones drawn with their names marked.
 - **An edit much longer than the text** is saved but not shown until the
   next build: each string has room for twice its length and a little more.
 - **Text made once and kept,** a string copied into a longer text when a
@@ -64,9 +67,13 @@ before a release. Never handed out.
   `src/ui/widgets.cpp`, each frame the pointer is over what one explains.
   In this build they hand the ledger the text, and the catalog string it
   was made from: the one passed for `"%s"`, or the format itself.
+- **Text laid out a word at a time** (`WrappedSpans`: the tutorial's
+  cards, the help boxes and help tooltips) is recorded as one text, not
+  as its words, so it is matched as the string it is.
 - **From text to key** (`string_match.cpp`): text drawn straight from a
   catalog string is that string. Otherwise it is matched by its words:
-  exactly; with `%s`, `{program}` and the like as anything; or in part.
+  exactly; with `%s`, `{program}` and the like as anything, and a
+  `{ui:}` name as the name; or in part.
 - **Saving** changes only that value's line in the file, so comments and
   layout stay as they are. Every value in the catalog is tested to write
   back byte for byte.

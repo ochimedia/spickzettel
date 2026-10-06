@@ -161,8 +161,10 @@ void StringEditor::Show() {
     }
     // The tutorial's texts go through tutorial::Expand, which fills in the
     // key of any command.
-    const bool tutorial = std::string_view(strings::kEditable[*chosen_].key).starts_with("tutorial.");
-    problem_ = FieldsProblem(before_, typed_, tutorial);
+    const std::string_view key = strings::kEditable[*chosen_].key;
+    const bool tutorial = key.starts_with("tutorial.");
+    // Marked names where they are drawn marked (ui_strings_file_test).
+    problem_ = FieldsProblem(before_, typed_, tutorial, tutorial || key.ends_with("Help"));
     note_.clear();
     if (!problem_.empty()) {
         Put(*chosen_, before_);

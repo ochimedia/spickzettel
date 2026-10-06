@@ -97,6 +97,9 @@ void InfoTooltip(const char* fmt, ...) {
 void SetHelpTooltipsShown(bool shown) { helpTooltipsShown = shown; }
 
 void WrappedSpans(const ImVec4& color, const ImVec4& markColor, const std::vector<TextSpan>& spans) {
+#if SPICKZETTEL_STRING_EDITOR
+    string_editor::TextLedger::Get().BeginBlock();
+#endif
     struct Word {
         std::vector<TextSpan> runs;
         int breaksBefore = 0;
@@ -167,6 +170,13 @@ void WrappedSpans(const ImVec4& color, const ImVec4& markColor, const std::vecto
         widest = std::max(widest, x - origin.x);
     }
     ImGui::Dummy(ImVec2(widest, y + lineHeight - top.y));
+#if SPICKZETTEL_STRING_EDITOR
+    std::string whole;
+    for (const TextSpan& span : spans) {
+        whole += span.text;
+    }
+    string_editor::TextLedger::Get().EndBlock(std::move(whole), ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
+#endif
 }
 
 namespace {
