@@ -192,7 +192,13 @@ std::vector<Step> MakeBasics() {
         .id = "undo",
         .kind = StepKind::Do,
         .title = strings::kTutorialUndoTitle,
-        .text = [](const World&) { return Fixed(strings::kTutorialUndoText); },
+        // With no key, nothing else undoes: the step says where to set one
+        // and moves on with Next, as view mode's does.
+        .text =
+            [](const World& world) {
+                return Fixed(world.KeyLabel(CommandId::Undo) ? strings::kTutorialUndoText
+                                                             : strings::kTutorialUndoTextNoKey);
+            },
         // Undo takes back the canvas's own steps, and none while a panel
         // has the keys.
         .needs = {InTutorialFolder, CanvasUncovered, SubjectHere, DeletedSubject},

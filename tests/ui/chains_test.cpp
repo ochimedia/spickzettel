@@ -1299,6 +1299,10 @@ TEST_F(BasicsChainTest, TheTextsFollowTheTriggersAndTheKeys) {
     EXPECT_STREQ(textOf("end"), strings::kTutorialEndText);
     world_.keys.erase(CommandId::CheatSheet);
     EXPECT_STREQ(textOf("end"), strings::kTutorialEndTextNoCheatSheetKey);
+
+    EXPECT_STREQ(textOf("undo"), strings::kTutorialUndoText);
+    world_.keys.erase(CommandId::Undo);
+    EXPECT_STREQ(textOf("undo"), strings::kTutorialUndoTextNoKey);
 }
 
 TEST_F(ProfilesChainTest, CanBeWalkedTheWayAUserWould) {
@@ -1519,6 +1523,7 @@ TEST_F(BasicsChainTest, EveryTextHasItsPlaceholdersFilledIn) {
         strings::kTutorialNeedAProgramUnderneath, strings::kTutorialNeedAProgramUnderneathTray,
         strings::kTutorialNeedTutorialsProfile, strings::kTutorialNeedShowingIt,
         strings::kTutorialNeedSomethingSetInIt, strings::kTutorialOpenProfilesTextOverview,
+        strings::kTutorialUndoTextNoKey,
     };
     world_.keys[CommandId::NewCanvas] = "Ctrl+N";
     for (const Topic& topic : Topics()) {

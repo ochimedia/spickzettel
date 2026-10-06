@@ -297,7 +297,7 @@ column, "waits" marks a gated step (section 3).
 | 2 | `move` | do | moves on | Drag it to move it. A press selects it, and a drag takes it along. | the subject | a subject that can move; no drawing mode | the subject moved 16 px or more from where the step found it, its size changed by less than 10%, and not fullscreen | resized instead: "That changed its size. Drag from the middle to move it." |
 | 3 | `resize` | do | moves on | Drag just outside a corner or an edge to resize it - the pointer turns into arrows there. Shift switches keeping its shape. A right-drag on it does it too. | the subject's resize band at its lower right corner (since 2026-10-01; its handle before) | a subject that can move; no drawing mode; the subject selected | its width or height changed by 10% or more, and not fullscreen | - |
 | 4 | `delete` | do | **waits** | Select it and press Delete, or the close button on its bar. | the subject's close button | a subject; no drawing mode | one of the tutorial's snippets, there when the step began, deleted: the subject follows the hand | - |
-| 5 | `undo` | do | moves on | Deleted by mistake? {undo} brings it back. It takes back anything you did, a step at a time. | - | in the tutorial folder; canvas uncovered; the subject's canvas; a deleted subject | the subject back on the canvas, after being deleted in this step (or when it began) | - |
+| 5 | `undo` | do | moves on | Deleted by mistake? {undo} brings it back. It takes back anything you did, a step at a time. With {undo} unbound: "Deleted by mistake? Undo brings it back, a step at a time, but it has no key yet. Set one in Settings > Hotkeys to use it, and go on with Next." | - | in the tutorial folder; canvas uncovered; the subject's canvas; a deleted subject | the subject back on the canvas, after being deleted in this step (or when it began) | - |
 | 6 | `programs` | read | moves on | Set it up for your programs. Some games break when the overlay takes focus; others need it to. Look through Settings > Behavior, and make a profile for each program that needs its own. | - | - | Next | - |
 | 7 | `antiCheat` | read | moves on | Careful with anti-cheat. Some games watch for tools that draw over them or read their input. If a game might object, quit Spickzettel before you start it. | - | - | Next | - |
 | 8 | `exclusiveFullscreen` | read | moves on | Exclusive fullscreen. The overlay may not work correctly with games running in exclusive fullscreen mode. In such cases, check if the game has support for a borderless window mode. | - | - | Next | - |
@@ -1648,7 +1648,10 @@ the hand check.
     understood without a demonstration.
 20. **View mode with no key:** the step says where to set one and moves
     on with Next. It does not wait, since nothing later needs it.
-    *Answer:* as proposed, to be judged in the hand check.
+    *Answer:* as proposed, to be judged in the hand check. Undo does the
+    same since 2026-10-06, when its key became one a person chooses: no
+    menu row or button undoes, so with no key there is nothing else to
+    point at.
 
 ### 14.8 Found while building
 

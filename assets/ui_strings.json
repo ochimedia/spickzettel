@@ -222,6 +222,7 @@
   "tutorial.delete.text": "Select it and press {ui:Delete}, or the close button on its bar.",
   "tutorial.undo.title": "Bring it back",
   "tutorial.undo.text": "Deleted by mistake? {key:undo} brings it back. It takes back anything you did, a step at a time.",
+  "tutorial.undo.textNoKey": "Deleted by mistake? Undo brings it back, a step at a time, but it has no key yet. Set one in {ui:Settings > Hotkeys} to use it, and go on with {ui:Next}.",
   "tutorial.programs.title": "Set it up for your programs",
   "tutorial.programs.text": "Different applications and games behave differently with an overlay on top. Look through {ui:Settings > Behavior}, and make a profile for each program that needs different settings.",
   "tutorial.antiCheat.title": "Careful with anti-cheat",
