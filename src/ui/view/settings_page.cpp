@@ -1531,6 +1531,8 @@ float SettingsPage::KeyButtonColumn() const {
     for (const CreateActionInfo& info : kCreateActions) {
         shortcutLabel(info.name);
     }
+    shortcutLabel(strings::kHotkeysShortcutUndo);
+    shortcutLabel(strings::kHotkeysShortcutRedo);
     for (const ClipboardActionInfo& info : kClipboardActions) {
         shortcutLabel(info.name);
     }
