@@ -1014,6 +1014,18 @@ void SettingsPage::RenderSettingsDebug() {
                     strings::kDebugShowFrameGraphHelp);
 }
 
+namespace {
+
+// Every key button in the section is as wide as the widest of its two
+// prompts, and at least 200 px: the prompt says what Escape does, which
+// differs between the two kinds of row, so it is not cut short.
+float KeyButtonWidth() {
+    const float prompt = std::max(ImGui::CalcTextSize(strings::kHotkeysComboPrompt).x,
+                                  ImGui::CalcTextSize(strings::kHotkeysShortcutPrompt).x);
+    return std::max(Px(200.0f), prompt + ImGui::GetStyle().FramePadding.x * 2.0f);
+}
+
+}  // namespace
 
 void SettingsPage::RenderShortcutEditor(ShortcutAction action, const Icon& icon, const char* label, float buttonX) {
     const size_t index = ShortcutActionIndex(action);
@@ -1042,7 +1054,7 @@ void SettingsPage::RenderShortcutEditor(ShortcutAction action, const Icon& icon,
 
     if (ImGui::Button(capturing ? Labeled(strings::kHotkeysShortcutPrompt, "shortcut_btn")
                                  : (FormatKeyComboLabel(current) + "##shortcut_btn").c_str(),
-                       ImVec2(Px(200.0f), 0.0f))) {
+                       ImVec2(KeyButtonWidth(), 0.0f))) {
         if (capturing) {
             DisarmCapture();
         } else {
@@ -1591,7 +1603,7 @@ void SettingsPage::RenderHotkeyEditor(const char* id, const char* label, HotkeyS
     const bool capturing = CapturingHotkey() == slot;
     if (ImGui::Button(capturing ? Labeled(strings::kHotkeysComboPrompt, "combo_btn")
                                  : (FormatKeyComboLabel(current) + "##combo_btn").c_str(),
-                       ImVec2(Px(200.0f), 0.0f))) {
+                       ImVec2(KeyButtonWidth(), 0.0f))) {
         // Clicking the armed row's own button cancels capture instead of
         // re-arming it, as Escape does (see KeyCapture).
         if (capturing) {

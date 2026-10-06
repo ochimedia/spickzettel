@@ -12,6 +12,7 @@
 #include "core/build_info/build_info.h"
 
 #include "fakes/ui_test.h"
+#include "generated/ui_strings.h"
 #include "support/session_test_access.h"
 
 namespace sz::test {
@@ -390,6 +391,33 @@ TEST_F(UiTest, AShortcutRowTakesUndosKey) {
     const ShortcutBindings& shortcuts = AppSettings().Stored().profileable.shortcuts;
     EXPECT_EQ(shortcuts[ShortcutActionIndex(ShortcutAction::Copy)], (platform::KeyCombo{true, false, false, 'Z'}));
     EXPECT_FALSE(shortcuts[ShortcutActionIndex(ShortcutAction::Undo)].IsValid());
+}
+
+// A row waiting for its key says so, and what Escape does, in full: its
+// button is as wide as the prompt.
+TEST_F(UiTest, AWaitingKeyRowShowsItsWholePrompt) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("open the hotkeys", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionhotkeys");
+    });
+    const auto measure = [this](const char* button, const char* prompt) {
+        StepFrame();
+        RunUi("measure the button", [&](ImGuiTestContext* ctx) {
+            ctx->SetRef("//##overview_panel");
+            const ImRect rect = ctx->ItemInfo(button).RectFull;
+            EXPECT_GE(rect.GetWidth(), ImGui::CalcTextSize(prompt).x + ImGui::GetStyle().FramePadding.x * 2.0f)
+                << button;
+        });
+    };
+    // The first row of each kind, in sight without scrolling.
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Draw);
+    measure("**/###shortcut_btn", strings::kHotkeysShortcutPrompt);
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::EditMode);
+    measure("**/###combo_btn", strings::kHotkeysComboPrompt);
 }
 
 // A row waiting for its key stops waiting when it goes out of sight - the
