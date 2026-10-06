@@ -7,11 +7,13 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 
 #include "platform/i_overlay_window.h"
 #include "ui/icon_draw.h"
+#include "ui/text_spans.h"
 #include "ui/theme.h"
 
 namespace sz::ui {
@@ -50,6 +52,15 @@ void HelpTooltip(const char* fmt, ...) IM_FMTARGS(1);
 void InfoTooltip(const char* fmt, ...) IM_FMTARGS(1);
 // Set once a frame from the setting, before anything is drawn.
 void SetHelpTooltipsShown(bool shown);
+
+// Text in runs (see text_spans.h), the marked ones in `markColor` and the
+// rest in `color`. ImGui wraps only text of one color, so this lays the
+// words out itself, as TextUnformatted would: wrapped at the pushed wrap
+// position (PushTextWrapPos), and at each line break, a word that spans
+// two runs ("Next." of a name and a period) kept whole. Unlike ImGui, it
+// breaks lines only at spaces - ImGui also breaks after a quote, which
+// left an opening one at the end of a line.
+void WrappedSpans(const ImVec4& color, const ImVec4& markColor, const std::vector<TextSpan>& spans);
 
 // Whether the button about to be drawn as `strId`, at `size` (as passed to
 // ImGui::Button), is pressed this frame: held since an earlier frame and

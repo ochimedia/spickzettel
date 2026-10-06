@@ -34,9 +34,11 @@ TEST(UiStringsFileTest, TheCatalogIsStrictJson) {
 }
 
 // A {ui:name} is drawn marked by the tutorial card, which fills a card's
-// texts in (tutorial::ExpandSpans). Anywhere else it would show as typed:
-// a tooltip, a label, a title, the list, or the tutorial's Settings row.
-TEST(UiStringsFileTest, AMarkedNameIsOnlyInTheTutorialCardsTexts) {
+// texts in (tutorial::ExpandSpans), and by the help boxes and help
+// tooltips, which draw the help texts (MarkedSpans). Anywhere else it
+// would show as typed: a label, a title, a message, the list, or the
+// tutorial's Settings row.
+TEST(UiStringsFileTest, AMarkedNameIsOnlyWhereItIsDrawnMarked) {
     std::ifstream in(SPICKZETTEL_UI_STRINGS_JSON, std::ios::binary);
     ASSERT_TRUE(in.is_open());
     std::ostringstream text;
@@ -49,7 +51,8 @@ TEST(UiStringsFileTest, AMarkedNameIsOnlyInTheTutorialCardsTexts) {
         const bool cardText = key.starts_with("tutorial.") && !key.ends_with(".title") &&
                               !key.starts_with("tutorial.card.") && !key.starts_with("tutorial.list.") &&
                               !key.starts_with("tutorial.topics.") && !key.starts_with("tutorial.settings.");
-        EXPECT_TRUE(cardText) << key;
+        const bool helpText = key.ends_with("Help");
+        EXPECT_TRUE(cardText || helpText) << key;
     }
 }
 

@@ -44,6 +44,7 @@ add_executable(sz_core_tests
     ui/interaction_cases_test.cpp
     ui/machine_test.cpp
     ui/selection_layout_test.cpp
+    ui/text_spans_test.cpp
     ui/tutorial_test.cpp
     ui/ui_strings_file_test.cpp
     ui/chains_test.cpp

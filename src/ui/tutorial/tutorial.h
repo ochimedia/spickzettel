@@ -17,6 +17,7 @@
 
 #include "core/canvas/canvas.h"
 #include "core/canvas/item.h"
+#include "ui/text_spans.h"
 #include "ui/tutorial/step.h"
 #include "ui/tutorial/world.h"
 
@@ -180,13 +181,7 @@ private:
     std::optional<core::ProfileId> profile_;
 };
 
-// A run of a card's text, and whether it names something to press, tick
-// or pick - a key, a button, a menu row - which the card draws in a color
-// of its own.
-struct TextSpan {
-    std::string text;
-    bool marked = false;
-};
+using ui::TextSpan;
 
 // `text` with its placeholders filled in from `world`, in runs:
 //  - {key:<command>}, the key bound to the command of that name in

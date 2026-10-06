@@ -1,9 +1,11 @@
 #include "ui/widgets.h"
 
 #include <algorithm>
+#include <cfloat>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include <imgui.h>
 #include <imgui_internal.h>
@@ -25,7 +27,10 @@ struct RestingTooltip {
 };
 RestingTooltip resting;
 
-void Tooltip(const char* fmt, va_list args) {
+// With `marks`, a help text's {ui:} names are drawn as the help boxes draw
+// them (HelpMarker); an info text may hold the user's own words, braces
+// and all, and is shown as it is.
+void Tooltip(bool marks, const char* fmt, va_list args) {
     char text[1024];
     std::vsnprintf(text, sizeof(text), fmt, args);
     const int frame = ImGui::GetFrameCount();
@@ -35,8 +40,17 @@ void Tooltip(const char* fmt, va_list args) {
         resting.since = now;
     }
     resting.lastFrame = frame;
-    if (now - resting.since >= kTooltipDelaySeconds) {
+    if (now - resting.since < kTooltipDelaySeconds) {
+        return;
+    }
+    if (!marks) {
         ImGui::SetTooltip("%s", text);
+        return;
+    }
+    // As SetTooltip opens it: over one asked for earlier this frame.
+    if (ImGui::BeginTooltipEx(ImGuiTooltipFlags_OverridePrevious, ImGuiWindowFlags_None)) {
+        WrappedSpans(ImGui::GetStyleColorVec4(ImGuiCol_Text), theme::Accent(), MarkedSpans(text));
+        ImGui::EndTooltip();
     }
 }
 
@@ -48,18 +62,87 @@ void HelpTooltip(const char* fmt, ...) {
     }
     va_list args;
     va_start(args, fmt);
-    Tooltip(fmt, args);
+    Tooltip(true, fmt, args);
     va_end(args);
 }
 
 void InfoTooltip(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
-    Tooltip(fmt, args);
+    Tooltip(false, fmt, args);
     va_end(args);
 }
 
 void SetHelpTooltipsShown(bool shown) { helpTooltipsShown = shown; }
+
+void WrappedSpans(const ImVec4& color, const ImVec4& markColor, const std::vector<TextSpan>& spans) {
+    struct Word {
+        std::vector<TextSpan> runs;
+        int breaksBefore = 0;
+        bool spaceBefore = false;
+    };
+    std::vector<Word> words;
+    int breaks = 0;
+    bool space = false;
+    bool inWord = false;
+    for (const TextSpan& span : spans) {
+        for (const char c : span.text) {
+            if (c == '\n' || c == ' ') {
+                breaks += c == '\n' ? 1 : 0;
+                space = space || c == ' ';
+                inWord = false;
+                continue;
+            }
+            if (!inWord) {
+                words.push_back(Word{{}, breaks, space});
+                breaks = 0;
+                space = false;
+                inWord = true;
+            }
+            std::vector<TextSpan>& runs = words.back().runs;
+            if (runs.empty() || runs.back().marked != span.marked) {
+                runs.push_back(TextSpan{{}, span.marked});
+            }
+            runs.back().text += c;
+        }
+    }
+
+    ImDrawList* drawList = ImGui::GetWindowDrawList();
+    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    // Where TextUnformatted would wrap: at the pushed wrap position, and
+    // nowhere without one.
+    const float wrapWidth = ImGui::CalcWrapWidthForPos(origin, ImGui::GetCurrentWindow()->DC.TextWrapPos);
+    const float right = wrapWidth > 0.0f ? origin.x + wrapWidth : FLT_MAX;
+    const float lineHeight = ImGui::GetTextLineHeight();
+    const float spaceWidth = ImGui::CalcTextSize(" ").x;
+    const ImU32 plain = ImGui::GetColorU32(color);
+    const ImU32 marked = ImGui::GetColorU32(markColor);
+    float x = origin.x;
+    float y = origin.y;
+    float widest = 0.0f;
+    for (const Word& word : words) {
+        if (word.breaksBefore > 0) {
+            x = origin.x;
+            y += lineHeight * static_cast<float>(word.breaksBefore);
+        }
+        float width = 0.0f;
+        for (const TextSpan& run : word.runs) {
+            width += ImGui::CalcTextSize(run.text.c_str()).x;
+        }
+        float at = x > origin.x && word.spaceBefore ? x + spaceWidth : x;
+        if (x > origin.x && at + width > right) {
+            at = origin.x;
+            y += lineHeight;
+        }
+        for (const TextSpan& run : word.runs) {
+            drawList->AddText(ImVec2(at, y), run.marked ? marked : plain, run.text.c_str());
+            at += ImGui::CalcTextSize(run.text.c_str()).x;
+        }
+        x = at;
+        widest = std::max(widest, x - origin.x);
+    }
+    ImGui::Dummy(ImVec2(widest, y + lineHeight - origin.y));
+}
 
 namespace {
 

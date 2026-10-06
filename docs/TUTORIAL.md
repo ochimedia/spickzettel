@@ -149,12 +149,19 @@ at 100%. It holds:
     color already, in white (since 2026-10-02). A key comes from
     `{key:}` and `{trigger:}`; a name is written `{ui:More topics}` in
     the string (`tutorial::ExpandSpans`). Quotes around names were the
-    other way, and the one that works in a tooltip too, which cannot
-    color part of a line - Settings' help keeps them. On the card they
-    made a busier text, and left keys unmarked. ImGui wraps text of
-    one color only, so the card lays out the words itself
-    (`WrappedSpans`), as `TextUnformatted` would; a test keeps `{ui:}`
-    out of every string the card does not fill in this way.
+    other way. On the card they made a busier text, and left keys
+    unmarked. ImGui wraps text of one color only, so the card lays out
+    the words itself (`WrappedSpans`, in `ui/widgets.h`), as
+    `TextUnformatted` would.
+  - Settings' help boxes and the help tooltips mark names the same way
+    since 2026-10-06: `{ui:}` only, through `MarkedSpans`
+    (`ui/text_spans.h`), and in the accent - the color of a help box's
+    title, which names its own row; there is no spotlight to match.
+    They had kept quotes, and ImGui's own wrapping may break a line
+    after a quote, which left an opening one alone at the end of a line;
+    `WrappedSpans` breaks at spaces only. A test keeps `{ui:}` out of
+    every string other than a card's text and a help text (a key ending
+    in `Help`).
   - Every text is in `assets/ui_strings.json`, under `tutorial.*`.
 - the hint line, when one applies, and its button if it has one ("Put
   one here");

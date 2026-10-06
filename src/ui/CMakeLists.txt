@@ -21,6 +21,7 @@ add_library(sz_ui STATIC
     overlay_app_tutorial.cpp
     selection_layout.cpp
     settings_widgets.cpp
+    text_spans.cpp
     theme.cpp
     tutorial/tutorial.cpp
     tutorial/chains.cpp

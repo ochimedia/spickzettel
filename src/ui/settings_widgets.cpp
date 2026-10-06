@@ -103,7 +103,9 @@ void HelpMarker(const char* id, const char* title, const char* text) {
         // row that opened it.
         ImGui::TextColored(theme::Accent(), "%s", title);
         ImGui::Spacing();
-        ImGui::TextUnformatted(text);
+        // The names of other rows and buttons in the accent, as the title
+        // names this one: "this is a name", without quotes.
+        WrappedSpans(ImGui::GetStyleColorVec4(ImGuiCol_Text), theme::Accent(), MarkedSpans(text));
         ImGui::PopTextWrapPos();
         ImGui::EndPopup();
     }
