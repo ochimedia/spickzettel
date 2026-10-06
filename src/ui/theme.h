@@ -93,10 +93,14 @@ inline constexpr float kRadiusSm = 7.0f;
 // starts, shared verbatim by DrawItemContent's read-only caption band and
 // the note editor's window - both need to land text at the *exact* same
 // pixel so nothing visibly shifts when editing starts or ends. The editor
-// achieves this by using it as WindowPadding and zeroing
-// InputTextMultiline's own FramePadding for that one widget, so neither
-// side adds any padding this constant doesn't already account for.
+// splits it between its window's WindowPadding and InputTextMultiline's
+// own FramePadding, kNoteCaretRoom, so neither side adds any padding this
+// constant doesn't already account for.
 inline constexpr float kNoteTextPad = 6.0f;
+// The part of kNoteTextPad inside the note editor's field: the field clips
+// to its frame, and a caret at the start of a line sits on the text's left
+// edge - with no room there it was cut off until the text moved it right.
+inline constexpr float kNoteCaretRoom = 2.0f;
 
 // Sets up ImGui's global style/colors for the app's dark "graphite +
 // accent" material look, in place of ImGui's own built-in dark theme (flat

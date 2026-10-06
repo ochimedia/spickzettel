@@ -649,12 +649,13 @@ void CanvasView::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     std::snprintf(noteWinName, sizeof(noteWinName), "##noteedit%llu", static_cast<unsigned long long>(item.id));
     ImGui::SetNextWindowPos(pMin);
     ImGui::SetNextWindowSize(ImVec2(pMax.x - pMin.x, pMax.y - pMin.y));
-    // WindowPadding is theme::kNoteTextPad, not an arbitrary value - this
-    // has to land the widget's content area at exactly the same offset
-    // DrawItemContent's read-only band uses (see kNoteTextPad's own doc
-    // comment), or the text visibly jumps the moment editing starts or
-    // ends.
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(theme::kNoteTextPad, theme::kNoteTextPad));
+    // WindowPadding and the field's FramePadding (below) add up to
+    // theme::kNoteTextPad, not an arbitrary value - this has to land the
+    // text at exactly the same offset DrawItemContent's read-only band uses
+    // (see kNoteTextPad's own doc comment), or the text visibly jumps the
+    // moment editing starts or ends.
+    constexpr float kWindowPad = theme::kNoteTextPad - theme::kNoteCaretRoom;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(kWindowPad, kWindowPad));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     // No backing panel while editing either - transparent background is
@@ -687,11 +688,14 @@ void CanvasView::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     // EndEditingNote below actually needs to commit - see its own doc
     // comment. FrameBg is cleared here too, scoped to just this one
     // widget, so no default input-field fill shows through the transparent
-    // window behind it either.
+    // window behind it either, and so is the frame's border: the field is
+    // a child window, which drew it as a faint rounded outline inside the
+    // snippet's own, and clipped what it holds to inside it.
     ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
     ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(theme::kNoteCaretRoom, theme::kNoteCaretRoom));
     const std::string preCallBuffer(editor_.NoteEditBuffer());
     const ImVec2 avail = ImGui::GetContentRegionAvail();
     // The widget edits the string's own storage and asks for more through
@@ -706,7 +710,7 @@ void CanvasView::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
         // Session::PreviewText - so that whatever ends the edit keeps it.
         session_.PreviewText(buffer);
     }
-    ImGui::PopStyleVar();
+    ImGui::PopStyleVar(2);
     ImGui::PopStyleColor(3);
     if (ImGui::IsItemDeactivated()) {
         // Covers both a real commit (Enter/Tab/click-away after typing)

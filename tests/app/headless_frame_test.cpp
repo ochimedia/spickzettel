@@ -4480,6 +4480,36 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
     EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "");
 }
 
+// A note opened for typing shows its caret at once: the field draws no
+// border of its own, whose clip cut off a caret at the start of a line,
+// and the caret there is inside what the field draws. The text starts
+// where the read-only note's does, so nothing jumps.
+TEST_F(HeadlessAppTest, ANoteFieldHasNoBorderAndRoomForTheCaret) {
+    StartWith(WithTextOnT());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
+    PressKey(ImGuiKey_T);
+    RawClick(400.0f, 400.0f);
+    const Item& note = Canvases().CurrentOrNull()->items[0];
+    ASSERT_EQ(App().EditingNote(), std::optional<ItemId>(note.id));
+    StepFrame();
+
+    const ImGuiWindow* field = nullptr;
+    for (const ImGuiWindow* window : ImGui::GetCurrentContext()->Windows) {
+        if (std::strstr(window->Name, "##notetext") != nullptr) {
+            field = window;
+        }
+    }
+    ASSERT_NE(field, nullptr);
+    EXPECT_EQ(field->WindowBorderSize, 0.0f);
+    const float textX = field->Pos.x + theme::kNoteCaretRoom;
+    const float textY = field->Pos.y + theme::kNoteCaretRoom;
+    EXPECT_GT(textX, field->InnerClipRect.Min.x) << "the caret's column, inside the clip";
+    EXPECT_FLOAT_EQ(textX, note.rect.x + theme::kNoteTextPad);
+    EXPECT_FLOAT_EQ(textY, note.rect.y + theme::kNoteTextPad);
+}
+
 // Undo moved to another key: in a note being typed, the field has every
 // key, the chosen one too, and its own Ctrl+Z still takes the typing
 // back. On the canvas, the chosen key undoes, and Ctrl+Z no longer does.
