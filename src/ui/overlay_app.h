@@ -16,6 +16,7 @@
 #include "ui/item_painting.h"
 #include "ui/view/canvas_bar.h"
 #include "ui/view/canvas_view.h"
+#include "ui/view/behavior_panel.h"
 #include "ui/view/cheat_sheet.h"
 #include "ui/view/messages.h"
 #include "ui/view/overview_panel.h"
@@ -223,6 +224,13 @@ public:
     // level (see Panel).
     bool IsOverviewOpen() const { return PanelUp(PanelKind::Overview); }
     bool IsCheatSheetOpen() const { return PanelUp(PanelKind::CheatSheet); }
+    // Whether the Behavior panel is up - its own to say, as it covers
+    // nothing.
+    bool IsBehaviorPanelOpen() const { return behaviorPanel_.IsOpen(); }
+    // The Behavior panel's hotkey, run by the tray: up, or put away from
+    // edit mode - the tray brings the overlay up first when it is not.
+    void OpenBehaviorPanel() { behaviorPanel_.Open(); }
+    void ToggleBehaviorPanel() { behaviorPanel_.Toggle(); }
     // Whether the Overview is up on its Settings tab.
     bool IsOverviewOnSettings() const { return overview_.OnSettingsTab(); }
     // Whether it shows what is deleted, and which section Settings shows.
@@ -394,11 +402,11 @@ public:
     void WelcomeAtStart(LibraryAtStart library);
 
     // Asks the host to hide the overlay and show it again. Installed by
-    // TrayController alongside the callbacks above, and used by the input
-    // options HUD: several of the options it toggles only take effect on
-    // entry to edit mode (freezing captures there; no-activate is decided
-    // by how the window is shown), so a toggle that didn't re-enter would
-    // appear to do nothing.
+    // TrayController alongside the callbacks above, and used by the
+    // Behavior panel: several of the options it switches only take effect
+    // on entry to edit mode (freezing captures there; no-activate is
+    // decided by how the window is shown), so a switch that didn't re-enter
+    // would appear to do nothing.
     void SetRestartOverlayCallback(std::function<void()> callback) {
         restartOverlayCallback_ = std::move(callback);
     }
@@ -455,7 +463,7 @@ private:
     }
     void ClosePanel(PanelKind kind) override;
     void ToolSized(bool pen) override { pointer_.ToolSized(pen); }
-    bool InputOptionsKey(const Event& event) override { return chrome_.HandleKey(event, !IsViewOnly()); }
+    bool BehaviorPanelKey(const Event& event) override { return behaviorPanel_.Key(event, !IsViewOnly()); }
     void LetGoOfWidget() override { popups_.LetGoOfWidget(); }
     bool PopupOpen() const override;
     // Asked for, a popup is up - including the frames before one draws it,
@@ -480,13 +488,14 @@ private:
     // library fitted to the display, and in edit mode the hand's
     // housekeeping and where the canvas bar is.
     void Prepare(float displayW, float displayH);
-    // 2. The canvas, the snippets, the note editor, the dock, the canvas bar.
+    // 2. The canvas, the snippets, the note editor, the dock, the canvas bar,
+    // the Behavior panel.
     void DrawCanvas(float displayW, float displayH);
     // 3. Open: the effect queue (see Popups::ApplyEffects). 4. The popups over the
     // canvas.
     void DrawPopups(float displayW, float displayH);
     // 5. What sits over the canvas and takes no input: the drag previews,
-    // the size preview, the badge, the HUD and the border.
+    // the size preview, the badge, the border and the debug readouts.
     void DrawOverCanvas(float displayW, float displayH);
     // 6. The Overview, the cheat sheet, the delete confirmation.
     void DrawPanels(float displayW, float displayH);
@@ -498,7 +507,7 @@ private:
     // 9. The pointer's shape, and the software pointer.
     void DrawPointer();
     // 10. The actions recorded in 2 to 6, in order; the pen's width once its
-    // preview has faded; the HUD's restart; a notice's end.
+    // preview has faded; the Behavior panel's restart; a notice's end.
     void Apply();
 
     // What the owners of the surfaces ask of this class - see ViewHost.
@@ -647,6 +656,7 @@ private:
     SettingsPage settingsPage_{settings_, editor_, *this};
     OverviewPanel overview_{session_, settings_, editor_, *this};
     CheatSheet cheatSheet_{settings_, editor_, *this};
+    BehaviorPanel behaviorPanel_{settings_, *this};
     Popups popups_{session_, settings_, editor_, *this};
     // See RemindOfLibrarySize: what it holds, until the box is opened.
     std::optional<int64_t> libraryReminder_;

@@ -29,13 +29,13 @@ inline const std::vector<std::string>& StackTable() {
         "note editor",
         "dock",
         "canvas bar",
+        "behavior panel",
         "snippet menu",
         "canvas tile menu",
         "empty canvas menu",
         "properties",
         "popup in properties",
         "color chooser",
-        "hud",
         "chrome",
         "overview backdrop",
         "overview",
@@ -77,12 +77,12 @@ inline std::string SurfaceOf(const ImGuiWindow* window) {
     if (starts("##noteedit")) return "note editor";
     if (starts("##dock")) return "dock";
     if (starts("##canvas_bar")) return "canvas bar";
-    if (starts("##sz_input_hud_layer")) return "hud";
     if (starts("##sz_chrome_layer")) return "chrome";
     if (starts("##overview_backdrop")) return "overview backdrop";
     if (starts("##overview_panel")) return "overview";
     if (starts("##cheat_sheet_backdrop")) return "cheat sheet backdrop";
     if (starts("##cheat_sheet_panel")) return "cheat sheet";
+    if (starts("##behavior_panel")) return "behavior panel";
     if (starts("##tutorial_card")) return "tutorial card";
     return name;  // a window with no row: the comparison shows it
 }

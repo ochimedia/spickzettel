@@ -35,6 +35,7 @@ TEST(CheatSheetTest, ShowsTheKeysAsShipped) {
     const auto sheet = BuildCheatSheet(config, config.profileable.shortcuts);
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetShowHide), "Ctrl+Alt+S");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetSilentCapture), "Ctrl+Alt+X");
+    EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetBehaviorPanel), "Ctrl+Alt+B");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetSelf), "Ctrl+H");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetPen), "W");
     EXPECT_EQ(KeysFor(sheet, strings::kCheatSheetCopy), "Ctrl+C");

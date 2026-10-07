@@ -10,7 +10,8 @@
 // input options' tree - stays the panel's, written out by hand: its rows
 // are as many different explanations, not a list.
 //
-// Only the Settings page draws these.
+// The Settings page draws these, and the Behavior panel its few switches,
+// so that a row there reads as it does in Settings.
 
 #include <cstddef>
 #include <optional>

@@ -11,7 +11,7 @@
 #
 # The CPU figure is a percentage of ONE core. The overlay presents on vsync,
 # so the frame budget is one refresh interval - read the actual rate off the
-# HUD with -ShowFpsHud rather than assuming 60 Hz; this machine runs at 120,
+# debug overlay with -ShowFps rather than assuming 60 Hz; this machine runs at 120,
 # where the budget is 8.3 ms, not 16.7.
 
 [CmdletBinding()]
@@ -21,12 +21,10 @@ param(
     [int]$Seconds = 8,
     [int]$Repeat = 1,
     [int]$SettleSeconds = 6,
-    # Turns on the input-options HUD, whose first line is the frame rate and
-    # frame time (see ScreenChrome::DrawInputOptionsHud). Note this is NOT
-    # `showDebugOverlay`, which draws the cyan border and the canvas/mouse
-    # readout and carries no timing at all. The HUD also claims the number
-    # keys while it is up, so don't send digits during a measurement.
-    [switch]$ShowFpsHud,
+    # Turns on the debug overlay, whose third line in edit mode is the frame
+    # rate and frame time (see ScreenChrome::DrawInputReadout). -ShowFpsHud
+    # is its name from when that line was the input options HUD's.
+    [Alias('ShowFpsHud')][switch]$ShowFps,
     [string]$Screenshot,
     [string]$Label = '',
     # Only used to turn the CPU percentage into milliseconds per frame.
@@ -66,7 +64,7 @@ public static class SzMeasure {
 # input, and the grab/software-pointer paths would fight it. Everything else
 # is the shipped default, so a measurement reflects the app as delivered.
 function New-MeasurementConfig {
-    param([string]$Path, [bool]$Hud)
+    param([string]$Path, [bool]$Fps)
     $json = @"
 {
   "version": 1,
@@ -76,7 +74,7 @@ function New-MeasurementConfig {
   "overview": { "showStrokes": true, "showBitmaps": false },
   "behavior": { "dontStealFocus": false, "softwarePointer": false, "rawMouseInput": false,
                 "dontForwardKeystrokes": false, "counterRawMouseInput": false, "freezeScreen": false },
-  "diagnostics": { "showDebugOverlay": false, "showInputOptionsHud": $($Hud.ToString().ToLower()) }
+  "diagnostics": { "showDebugOverlay": $($Fps.ToString().ToLower()) }
 }
 "@
     Set-Content -Path $Path -Value $json -Encoding UTF8
@@ -90,7 +88,7 @@ New-Item -ItemType Directory -Force -Path (Join-Path $sandbox 'Spickzettel') | O
 if ($LibrarySource -and (Test-Path $LibrarySource)) {
     Copy-Item $LibrarySource (Join-Path $sandbox 'Spickzettel\library.db') -Force
 }
-New-MeasurementConfig -Path (Join-Path $sandbox 'Spickzettel\config.json') -Hud ([bool]$ShowFpsHud)
+New-MeasurementConfig -Path (Join-Path $sandbox 'Spickzettel\config.json') -Fps ([bool]$ShowFps)
 
 try {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -146,10 +144,10 @@ try {
         Add-Type -AssemblyName System.Drawing
         Add-Type -AssemblyName System.Windows.Forms
         $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-        # With -ShowFpsHud the fps/frame-time readout is the top line of the
-        # HUD panel at (14,14), so a small top-left crop captures it.
-        $w = if ($ShowFpsHud) { 680 } else { $bounds.Width }
-        $h = if ($ShowFpsHud) { 200 } else { $bounds.Height }
+        # With -ShowFps the fps/frame-time readout is the debug overlay's
+        # third line, top left, so a small top-left crop captures it.
+        $w = if ($ShowFps) { 680 } else { $bounds.Width }
+        $h = if ($ShowFps) { 200 } else { $bounds.Height }
         $bmp = New-Object System.Drawing.Bitmap($w, $h)
         $gfx = [System.Drawing.Graphics]::FromImage($bmp)
         $gfx.CopyFromScreen(0, 0, 0, 0, $bmp.Size)
@@ -161,7 +159,7 @@ try {
         Label       = $Label
         CpuPctOfOne = [math]::Round($pct, 1)
         # What one frame costs in CPU, at whatever rate the display actually
-        # refreshes - so this needs the real rate, read off the HUD. Once
+        # refreshes - so this needs the real rate, read off the debug overlay. Once
         # CpuPctOfOne approaches 100 the render thread is saturated and frames
         # are being missed, and the fps line is the thing to read instead.
         CpuMsPerFrame = [math]::Round($pct / 100.0 * (1000.0 / $RefreshHz), 2)

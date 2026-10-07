@@ -906,9 +906,9 @@ void SettingsPage::RenderSettingsBehavior() {
     constexpr float kTreeIndent = 24.0f;
 
     // Each checkbox is disabled exactly when its own precondition fails, read
-    // from EditModeInputOptions rather than restated here - the HUD grays the
-    // same rows on the same answers, and two copies of these rules would
-    // eventually disagree.
+    // from EditModeInputOptions rather than restated here - the Behavior
+    // panel grays the same rows on the same answers, and two copies of these
+    // rules would eventually disagree.
     const ProfileableSettings edited = EditedSettings();
     const bool keystrokesAvailable =
         platform::EditModeInputOptions::KeystrokesCanBeHeld(edited.dontStealFocus);
@@ -1008,8 +1008,6 @@ void SettingsPage::RenderSettingsDebug() {
     SettingsHeading("debugheading", strings::kDebugHeading);
     SettingCheckbox(settings_, setting::kShowDebugOverlay, "debugshowdebugoverlay", strings::kDebugShowDebugOverlay,
                     strings::kDebugShowDebugOverlayHelp);
-    SettingCheckbox(settings_, setting::kShowInputOptionsHud, "debugshowinputhud", strings::kDebugShowInputHud,
-                    strings::kDebugShowInputHudHelp);
     SettingCheckbox(settings_, setting::kShowFrameGraph, "debugshowframegraph", strings::kDebugShowFrameGraph,
                     strings::kDebugShowFrameGraphHelp);
 }
@@ -1519,7 +1517,7 @@ float SettingsPage::KeyButtonColumn() const {
     constexpr float kGap = 16.0f;
     float widest = 0.0f;
     for (const char* label : {strings::kHotkeysEditMode, strings::kHotkeysViewMode, strings::kHotkeysQuickCapture,
-                              strings::kHotkeysSilentCapture}) {
+                              strings::kHotkeysSilentCapture, strings::kHotkeysBehaviorPanel}) {
         widest = std::max(widest, ImGui::CalcTextSize(label).x);
     }
     const auto shortcutLabel = [&widest](const char* label) {
@@ -1555,6 +1553,7 @@ void SettingsPage::RenderSettingsHotkeys() {
     RenderHotkeyEditor("hkview", strings::kHotkeysViewMode, HotkeySlot::ViewMode, buttonX);
     RenderHotkeyEditor("hkquick", strings::kHotkeysQuickCapture, HotkeySlot::QuickCapture, buttonX);
     RenderHotkeyEditor("hksilent", strings::kHotkeysSilentCapture, HotkeySlot::SilentCapture, buttonX);
+    RenderHotkeyEditor("hkbehavior", strings::kHotkeysBehaviorPanel, HotkeySlot::BehaviorPanel, buttonX);
     SettingCheckbox(settings_, setting::kShowToastsWhileHidden, "hotkeyssaywhenhidden", strings::kHotkeysSayWhenHidden,
                     strings::kHotkeysSayWhenHiddenHelp);
     EndSettingsScope(globalBox);

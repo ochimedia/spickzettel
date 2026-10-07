@@ -60,7 +60,7 @@ what settings are called:
 
 | File | `AppConfig` | Elsewhere |
 |---|---|---|
-| `behavior.dontStealFocus` | `editModeNoActivate` | `ProfileableSettings::dontStealFocus`; `SetEditModeNoActivate`; the HUD's `NoActivate` |
+| `behavior.dontStealFocus` | `editModeNoActivate` | `ProfileableSettings::dontStealFocus`; `SetEditModeNoActivate` |
 | `behavior.freezeScreen` | `freezeScreenInEditMode` | `ProfileableSettings::freezeScreen` |
 | `behavior.softwarePointer` | `editModeInput.useSoftwarePointer` | `ProfileableSettings::softwarePointer` |
 | `deleted.deleteForGoodAutomatically` | `purgeDeleted` | |
@@ -174,6 +174,12 @@ Edited from Settings > Hotkeys, upper box. Effect: Registration.
 | `viewMode` | `hotkeyViewMode` | Ctrl+Alt+V |
 | `quickCapture` | `hotkeyQuickCapture` | Ctrl+Alt+C |
 | `silentCapture` | `hotkeySilentCapture` | Ctrl+Alt+X |
+| `behaviorPanel` | `hotkeyBehaviorPanel` | Ctrl+Alt+B |
+
+`behaviorPanel` was added after 0.3.1. A file from before it names it
+nowhere and gets the default, unless the file gives Ctrl+Alt+B to
+another hotkey: the load repair unbinds the later of two hotkeys that
+share a combination, and the new one is last.
 
 **`drawing`**: Global.
 
@@ -260,7 +266,7 @@ Effect: Display.
 | `name` | `overlayDisplayName` | empty |
 
 **`behavior`**: Profile. Edited from Settings > Behavior, lower box, and
-from the input options HUD, where the six booleans are a key each.
+from the Behavior panel, where the booleans are a key each.
 
 | Key | Field | Default | Rule | Effect |
 |---|---|---|---|---|
@@ -299,8 +305,11 @@ Effect: Frame.
 | Key | Field | Default |
 |---|---|---|
 | `showDebugOverlay` | `showDebugOverlay` | false |
-| `showInputOptionsHud` | `showInputOptionsHud` | false |
 | `showFrameGraph` | `showFrameGraph` | false |
+
+`showInputOptionsHud`, the input options HUD's switch, was removed after
+0.3.1, when the Behavior panel took the HUD's place and its readouts went
+to the debug overlay. A file that has it reads as one that does not.
 
 **`profiles`**: not a setting but the list of profiles. Each profile has
 a name, match rules, and sparse `behavior` and `shortcuts` objects (the
@@ -487,7 +496,7 @@ longer on every frame the section is drawn.
 **Two answers today.** Two Behavior rows take effect differently
 depending on where they are changed:
 
-| While in edit mode | Settings > Behavior | Input options HUD |
+| While in edit mode | Settings > Behavior | Behavior panel |
 |---|---|---|
 | "Don't steal focus" on | restyled at once; the overlay keeps the focus it took until the next entry | restart (hidden and shown), which hands focus back |
 | "Don't steal focus" off | restyled, and focus taken at once | restart |
@@ -496,7 +505,7 @@ depending on where they are changed:
 
 The Settings panel's reason for waiting to freeze is out of date
 (section 10, finding 1). A display move already retakes the frozen
-screen in place in edit mode. Removing the HUD's restart in favor of
+screen in place in edit mode. Removing the Behavior panel's restart in favor of
 applying these in place was left for later during the overlay work
 (`docs/OVERLAY_STATES.md`, question 4). It needs the camera settle
 measured with the input grab on in a game. This document records both
@@ -613,7 +622,7 @@ of two kinds:
 - every setting is written, defaults included;
 - keys are ordered, and floats are rounded to six decimals.
 
-## 9. The Settings panel and the HUD
+## 9. The Settings panel and the Behavior panel
 
 **The layout stays hand-written.** The survey suggested generating the
 Settings rows from the catalog. `profile.h` records why the panel does
@@ -642,7 +651,7 @@ Each widget reads the value for the panel's target, writes with `Set`
 or `Preview` and `Commit`, and takes its band from the rule. On a
 profileable row it shows the override mark and the revert arrow. The
 `anyChanged` flag goes. Grayed rows keep asking the preconditions in
-`EditModeInputOptions`, as the HUD and the grab do.
+`EditModeInputOptions`, as the Behavior panel and the grab do.
 
 **Showing follows a profile just made.** Make a profile for this and New
 profile point the picker at the profile they made, as the overlay coming
@@ -650,10 +659,9 @@ up points it at the profile that runs. Left where it was, the first
 change after making a profile went to the defaults, for every program
 (`docs/TUTORIAL.md`, question 42).
 
-The HUD's rows name their row, not one of the two switches
-(`InputOptionField` and `InputOptionValue`) it keeps in parallel today.
-Keys 1-6 and what each writes into (the active profile, or the
-defaults) stay as they are.
+The Behavior panel's rows name their row in the catalog. A number key
+each switches one, into the active profile, or the defaults when none
+matches, as the input options HUD's did before it.
 
 ## 10. What changes
 

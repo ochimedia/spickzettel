@@ -120,7 +120,7 @@ These hold after every transition and are checked in debug builds:
 | Quick capture | its hotkey | as a message | captures, then asks for Edit |
 | Silent capture | its hotkey | as a message | captures; says so |
 | Notice faded | `OverlayApp` | in a frame | the notice's message has gone |
-| Restart | the input options HUD | in a frame | a row read only on entry (Don't steal focus, Freeze screen while editing) was toggled, and its key is up |
+| Restart | the Behavior panel | in a frame | a row read only on entry (Don't steal focus, Take focus from elevated applications, Freeze screen while editing) was switched, and its key is up |
 | Settings changed | a setting committed | in a frame | |
 | Displays changed | the OS | as a message | |
 | Session ending | `WM_QUERYENDSESSION`; `WM_ENDSESSION` for a logoff | as a message | |
@@ -179,7 +179,7 @@ means the request does nothing in that state.
    the new one fades.
 9. Written as Hidden, though it is Away. A notice comes up only from
    Hidden, over the new capture's canvas, which has nothing pinned.
-10. Only the HUD asks for a restart, and it is up only in Edit. This was
+10. Only the Behavior panel asks for a restart, and it is up only in Edit. This was
     unreachable before, so ignoring it changes nothing.
 
 Four requests change no state, and do the same in every state:
@@ -404,7 +404,7 @@ synchronous: its caller needs the answer.
 | C2 | Focus is handed back only while held, to the window it was taken from | a stale foreground brought back; focus returned to the wrong window | the view hotkey in the pinned view or a notice; hiding after View to Edit |
 | C3 | Every View has a session: from Pinned or a Notice, the profile is resolved in place | Edit from such a View hides and reshows (the pinned snippets blink); `profileAppliedThisShowing_` goes | the view hotkey in the pinned view, then the edit hotkey |
 | C4 | ClickThrough to Interactive places the pointer and forgets keys | a first click that hovers nothing | View to Edit, clicking before moving |
-| C5 | Requests from a frame are applied after it | transitions inside a frame | a notice fading; a HUD restart |
+| C5 | Requests from a frame are applied after it | transitions inside a frame | a notice fading; a restart from the input options HUD, now the Behavior panel |
 | C6 | *Not made* (section 10, finding 1): Pinned and Notice as away, entering them settling the hand, not everything | - | - |
 | C7 | Edit to Pinned is in place | the pinned snippets blink off and on | the edit hotkey in edit mode, with a snippet pinned |
 
@@ -450,7 +450,7 @@ then, rather than at the next edit mode that comes up from Hidden.
    while editing" are read on entry. With the reconciliation of section
    5, both could be applied in place: the freeze taken or released, and focus handed
    back when no-activate turns on while the window holds it. The restart,
-   and the HUD's wait for its key to come up, would then go. This is not
+   and the Behavior panel's wait for its key to come up, would then go. This is not
    proposed now: releasing a frozen screen in place reveals the game, and
    that needs the camera settled first, which is the input grab's timing.
    It would be a later change, measured as the grab's changes are. Left

@@ -42,6 +42,8 @@ inline constexpr GlobalSetting<HotkeyRule> kHotkeyQuickCapture{
     {"hotkeys", "", "quickCapture"}, {}, E::Registration, [](AppConfig& c) { return &c.hotkeyQuickCapture; }};
 inline constexpr GlobalSetting<HotkeyRule> kHotkeySilentCapture{
     {"hotkeys", "", "silentCapture"}, {}, E::Registration, [](AppConfig& c) { return &c.hotkeySilentCapture; }};
+inline constexpr GlobalSetting<HotkeyRule> kHotkeyBehaviorPanel{
+    {"hotkeys", "", "behaviorPanel"}, {}, E::Registration, [](AppConfig& c) { return &c.hotkeyBehaviorPanel; }};
 
 // ----- drawing -----
 // The pen's color and width are what it starts with: the pen holds its own
@@ -201,14 +203,12 @@ inline constexpr GlobalSetting<TextMapRule> kTutorialProgress{
 // ----- diagnostics -----
 inline constexpr GlobalSetting<BoolRule> kShowDebugOverlay{
     {"diagnostics", "", "showDebugOverlay"}, {}, E::Frame, [](AppConfig& c) { return &c.showDebugOverlay; }};
-inline constexpr GlobalSetting<BoolRule> kShowInputOptionsHud{
-    {"diagnostics", "", "showInputOptionsHud"}, {}, E::Frame, [](AppConfig& c) { return &c.showInputOptionsHud; }};
 inline constexpr GlobalSetting<BoolRule> kShowFrameGraph{
     {"diagnostics", "", "showFrameGraph"}, {}, E::Frame, [](AppConfig& c) { return &c.showFrameGraph; }};
 
 // All of them, in file order.
 inline constexpr auto kAll = std::tuple{
-    &kHotkeyEditMode, &kHotkeyViewMode, &kHotkeyQuickCapture, &kHotkeySilentCapture,
+    &kHotkeyEditMode, &kHotkeyViewMode, &kHotkeyQuickCapture, &kHotkeySilentCapture, &kHotkeyBehaviorPanel,
     &kStrokeColor, &kStrokeWidth, &kRaiseSelected, &kScreenshotTrigger, &kDrawingTrigger,
     &kShowItemBorders, &kShowHelpTooltips, &kShowToastsWhileHidden, &kImageFilter, &kAccentColor, &kUiScale,
     &kBorderFront, &kBorderOther, &kBorderPinned, &kBorderSelectedFollowsAccent, &kBorderSelected,
@@ -227,7 +227,7 @@ inline constexpr auto kAll = std::tuple{
     &kCounterRawMouseInput, &kCounterThreshold, &kFreezeScreen,
     &kShortcuts,
     &kTutorialProgress,
-    &kShowDebugOverlay, &kShowInputOptionsHud, &kShowFrameGraph,
+    &kShowDebugOverlay, &kShowFrameGraph,
 };
 
 }  // namespace setting

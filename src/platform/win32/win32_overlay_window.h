@@ -46,7 +46,7 @@ public:
     int ScalePercent() const override;
     ForegroundApp UnderlyingApplication() const override;
     void SetEditModeInput(const EditModeInputOptions& options) override;
-    void SetInputOptionsHudDigits(int digitCount) override;
+    void SetPanelDigits(int digitCount) override;
     void SetEditModeNoActivate(bool enabled) override;
     void SetCursorShape(CursorShape shape) override;
     void RequestTextInput() override;

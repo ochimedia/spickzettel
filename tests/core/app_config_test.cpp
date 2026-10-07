@@ -191,13 +191,12 @@ TEST(AppConfigTest, CounterThresholdIsReadClampedAndRoundTrips) {
     EXPECT_EQ(ParseConfig(SerializeConfig(config)).profileable.counterThreshold, 123);
 }
 
-TEST(AppConfigTest, InputOptionsHudDefaultsToOffAndRoundTrips) {
-    EXPECT_FALSE(DefaultConfig().showInputOptionsHud);
-    EXPECT_TRUE(ParseConfig(One("diagnostics", "showInputOptionsHud", "true")).showInputOptionsHud);
-
-    AppConfig config = DefaultConfig();
-    config.showInputOptionsHud = true;
-    EXPECT_TRUE(ParseConfig(SerializeConfig(config)).showInputOptionsHud);
+// The input options HUD's switch, from before the Behavior panel took its
+// place: a file that has it reads as one that does not, and it is not
+// written back.
+TEST(AppConfigTest, TheInputOptionsHudsSwitchIsReadAsNothing) {
+    EXPECT_EQ(ParseConfig(One("diagnostics", "showInputOptionsHud", "true")), DefaultConfig());
+    EXPECT_EQ(SerializeConfig(DefaultConfig()).find("showInputOptionsHud"), std::string::npos);
 }
 
 TEST(AppConfigTest, FrameGraphDefaultsToOffAndRoundTrips) {
@@ -276,7 +275,6 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.editModeBorderWidthPx = 16.0f;
     config.editModeBorderOnlyWhenEmpty = true;
     config.profileable.freezeScreen = true;
-    config.showInputOptionsHud = true;
     config.profileable.softwarePointer = false;
     config.profileable.rawMouseInput = true;
     config.profileable.dontForwardKeystrokes = false;
@@ -578,6 +576,24 @@ TEST(AppConfigTest, SilentCaptureHasItsOwnDefaultHotkeyAndSaysSoByDefault) {
     EXPECT_FALSE(config.hotkeySilentCapture == config.hotkeyViewMode);
     EXPECT_FALSE(config.hotkeySilentCapture == config.hotkeyQuickCapture);
     EXPECT_TRUE(config.showToastsWhileHidden);
+}
+
+// The Behavior panel's hotkey ships bound, on a combination of its own. A
+// file from before it says nothing of it, and it has its default - unless
+// the file gave that combination to another hotkey, which keeps it.
+TEST(AppConfigTest, TheBehaviorPanelHotkeyShipsBoundAndGivesWayToAnOlderOne) {
+    const AppConfig config = DefaultConfig();
+    EXPECT_EQ(config.hotkeyBehaviorPanel, (platform::KeyCombo{true, true, false, 'B'}));
+    for (const platform::KeyCombo& other : {config.hotkeyEditMode, config.hotkeyViewMode, config.hotkeyQuickCapture,
+                                            config.hotkeySilentCapture}) {
+        EXPECT_FALSE(config.hotkeyBehaviorPanel == other);
+    }
+
+    EXPECT_EQ(ParseConfig(One("hotkeys", "editMode", R"("Ctrl+Alt+S")")).hotkeyBehaviorPanel,
+              config.hotkeyBehaviorPanel);
+    const AppConfig given = ParseConfig(One("hotkeys", "editMode", R"("Ctrl+Alt+B")"));
+    EXPECT_EQ(given.hotkeyEditMode, (platform::KeyCombo{true, true, false, 'B'}));
+    EXPECT_FALSE(given.hotkeyBehaviorPanel.IsValid());
 }
 
 TEST(AppConfigTest, TheAccentIsTealUntilChangedAndRoundTrips) {

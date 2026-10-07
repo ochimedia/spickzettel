@@ -95,7 +95,7 @@ TEST_F(ViewLayerTest, EverythingOverTheCanvasStacksInTheTablesOrder) {
     RevealTheBar();
     ASSERT_GE(App().CanvasBarReveal(), 1.0f);
 
-    ExpectStack({"canvas", "items", "note editor", "dock", "canvas bar", "hud", "chrome"});
+    ExpectStack({"canvas", "items", "note editor", "dock", "canvas bar", "chrome"});
 }
 
 TEST_F(ViewLayerTest, TheSnippetMenuSitsOverTheBarAndUnderTheChrome) {
@@ -107,7 +107,7 @@ TEST_F(ViewLayerTest, TheSnippetMenuSitsOverTheBarAndUnderTheChrome) {
     RevealTheBar();
     ASSERT_TRUE(App().IsItemContextMenuOpen());
 
-    ExpectStack({"canvas", "items", "canvas bar", "snippet menu", "hud", "chrome"}, "snippet menu");
+    ExpectStack({"canvas", "items", "canvas bar", "snippet menu", "chrome"}, "snippet menu");
 }
 
 TEST_F(ViewLayerTest, TheEmptyCanvasMenuSitsOverTheBarAndUnderTheChrome) {
@@ -118,7 +118,7 @@ TEST_F(ViewLayerTest, TheEmptyCanvasMenuSitsOverTheBarAndUnderTheChrome) {
     RevealTheBar();
     ASSERT_TRUE(App().IsEmptyCanvasMenuOpen());
 
-    ExpectStack({"canvas", "items", "canvas bar", "empty canvas menu", "hud", "chrome"}, "empty canvas menu");
+    ExpectStack({"canvas", "items", "canvas bar", "empty canvas menu", "chrome"}, "empty canvas menu");
 }
 
 TEST_F(ViewLayerTest, TheCanvasTileMenuSitsOverTheBarItCameFrom) {
@@ -136,7 +136,7 @@ TEST_F(ViewLayerTest, TheCanvasTileMenuSitsOverTheBarItCameFrom) {
     StepFrames(3);
     ASSERT_TRUE(App().IsCanvasContextMenuOpen());
 
-    ExpectStack({"canvas", "items", "canvas bar", "canvas tile menu", "hud", "chrome"}, "canvas tile menu");
+    ExpectStack({"canvas", "items", "canvas bar", "canvas tile menu", "chrome"}, "canvas tile menu");
 }
 
 // A tile held on the bar - the start of a drag to reorder it - is a press
@@ -215,7 +215,7 @@ TEST_F(ViewLayerTest, PropertiesSitOverTheSnippetsAndUnderTheChrome) {
     RevealTheBar();
     ASSERT_EQ(App().InputStack(), "Canvas / - / - / ItemProperties / - / -");
 
-    ExpectStack({"canvas", "items", "canvas bar", "properties", "hud", "chrome"}, "properties");
+    ExpectStack({"canvas", "items", "canvas bar", "properties", "chrome"}, "properties");
 }
 
 TEST_F(ViewLayerTest, TheColorChooserSitsOverTheSnippetsAndUnderTheChrome) {
@@ -228,7 +228,7 @@ TEST_F(ViewLayerTest, TheColorChooserSitsOverTheSnippetsAndUnderTheChrome) {
     RevealTheBar();
     ASSERT_TRUE(App().IsColorChooserOpen());
 
-    ExpectStack({"canvas", "items", "canvas bar", "color chooser", "hud", "chrome"}, "color chooser");
+    ExpectStack({"canvas", "items", "canvas bar", "color chooser", "chrome"}, "color chooser");
 }
 
 TEST_F(ViewLayerTest, TheOverviewCoversTheChromeAndTheBarGoesUnderIt) {
@@ -239,7 +239,7 @@ TEST_F(ViewLayerTest, TheOverviewCoversTheChromeAndTheBarGoesUnderIt) {
     StepFrames(2);
     ASSERT_TRUE(App().IsOverviewOpen());
 
-    ExpectStack({"canvas", "items", "hud", "chrome", "overview backdrop", "overview"});
+    ExpectStack({"canvas", "items", "chrome", "overview backdrop", "overview"});
 }
 
 TEST_F(ViewLayerTest, TheCheatSheetCoversTheChrome) {
@@ -249,7 +249,19 @@ TEST_F(ViewLayerTest, TheCheatSheetCoversTheChrome) {
     StepFrames(2);
     ASSERT_TRUE(App().IsCheatSheetOpen());
 
-    ExpectStack({"canvas", "items", "hud", "chrome", "cheat sheet backdrop", "cheat sheet"});
+    ExpectStack({"canvas", "items", "chrome", "cheat sheet backdrop", "cheat sheet"});
+}
+
+// A window over the canvas and the bar, not a panel: under the chrome and
+// the popups, so a snippet's menu opened beside it is not hidden behind it.
+TEST_F(ViewLayerTest, TheBehaviorPanelSitsOverTheSnippetsAndUnderTheChrome) {
+    ShowEditMode();
+    StepFrame();
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
+    StepFrames(2);
+    ASSERT_TRUE(App().IsBehaviorPanelOpen());
+
+    ExpectStack({"canvas", "items", "canvas bar", "behavior panel", "chrome"});
 }
 
 TEST_F(ViewLayerTest, TheDeleteConfirmationIsOverEverythingElse) {
@@ -259,7 +271,7 @@ TEST_F(ViewLayerTest, TheDeleteConfirmationIsOverEverythingElse) {
     deleteCanvas.canvas = Canvases().CurrentCanvasId();
     ASSERT_TRUE(Overlay().Dispatch(deleteCanvas));
     RevealTheBar();
-    ExpectStack({"canvas", "items", "canvas bar", "hud", "chrome", "delete confirmation"}, "delete confirmation");
+    ExpectStack({"canvas", "items", "canvas bar", "chrome", "delete confirmation"}, "delete confirmation");
 
     // And over the Overview, whose own delete buttons ask it.
     PressKey(ImGuiKey_Escape);
@@ -268,7 +280,7 @@ TEST_F(ViewLayerTest, TheDeleteConfirmationIsOverEverythingElse) {
     StepFrame();
     ASSERT_TRUE(Overlay().Dispatch(deleteCanvas));
     StepFrames(2);
-    ExpectStack({"canvas", "items", "hud", "chrome", "overview backdrop", "overview", "delete confirmation"},
+    ExpectStack({"canvas", "items", "chrome", "overview backdrop", "overview", "delete confirmation"},
                 "delete confirmation");
 }
 

@@ -58,7 +58,7 @@ TEST_F(ViewLayerUiTest, APopupInsideTheOverviewSitsAboveIt) {
         ctx->Yield(2);
         stack = SurfacesBackToFront();
     });
-    const std::vector<std::string> expected = {"canvas",  "items",    "hud", "chrome", "overview backdrop",
+    const std::vector<std::string> expected = {"canvas",   "items",   "chrome", "overview backdrop",
                                                "overview", "popup in overview"};
     ASSERT_TRUE(InStackOrder(expected));
     EXPECT_EQ(Describe(stack), Describe(expected));
@@ -81,8 +81,7 @@ TEST_F(ViewLayerUiTest, APickerInsidePropertiesSitsAboveIt) {
     // The canvas bar is out for a moment after the overlay comes up, and
     // may or may not be by now; it sits below the popups either way.
     std::erase(stack, std::string("canvas bar"));
-    const std::vector<std::string> expected = {"canvas", "items", "properties", "popup in properties", "hud",
-                                               "chrome"};
+    const std::vector<std::string> expected = {"canvas", "items", "properties", "popup in properties", "chrome"};
     ASSERT_TRUE(InStackOrder(expected));
     EXPECT_EQ(Describe(stack), Describe(expected));
 }

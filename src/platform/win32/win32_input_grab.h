@@ -73,16 +73,18 @@ public:
     // is a matter of appearance and stays available either way.
     void SetGameKeepsFocus(bool gameKeepsFocus);
 
-    // How many number keys the input options HUD is claiming, starting at
-    // '1'; 0 when it is not up. It reads its own toggles from those keys, and
-    // an overlay with no focus can only be handed them by the keyboard hook -
-    // so a non-zero count keeps the hook installed for the HUD's sake even
-    // when nothing asked for the keyboard. See WantKeyboard.
+    // How many bare digits the Behavior panel takes, starting at '1'; 0 when
+    // it is not up - see IOverlayWindow::SetPanelDigits. A non-zero count
+    // keeps the hook installed for the panel's sake even when nothing asked
+    // for the keyboard, and then it swallows those digits and nothing else
+    // (see OnKeyboard). Not cleared with the grab, as a text field's claim
+    // is (see SetActive): the panel stays up across a restart of the
+    // overlay, and says so again only when it closes.
     //
     // The count comes across rather than being a constant on this side: it
-    // has to match the HUD's row count, and a constant here only matched it
-    // by comment.
-    void SetInputOptionsHudDigits(int digitCount);
+    // has to match the panel's row count, and a constant here would only
+    // match it by comment.
+    void SetPanelDigits(int digitCount);
 
     // The app's global hotkeys, so the grab can dispatch them itself while
     // the keyboard is swallowed. Measured: a swallowing low-level keyboard
@@ -135,8 +137,8 @@ public:
     // this is simply another thing that moves the boundary.
     void SetTextFieldOpen(bool open);
 
-    // Whether the whole keyboard is currently ours rather than only the input
-    // options HUD's digits - see WantsAllKeystrokesLocked.
+    // Whether the whole keyboard is currently ours rather than only the
+    // Behavior panel's digits - see WantsAllKeystrokesLocked.
     bool WantsAllKeystrokes() const;
 
     // Where that pointer is, in screen coordinates. Accumulated from the
@@ -230,9 +232,9 @@ public:
     // back. True if there was anything to inject, and it was.
     bool SettleCorrection();
 
-    // Debug scaffolding for the input options HUD - see
+    // Debug scaffolding for the debug overlay's input readout - see
     // InputGrabDiagnostics. SampleFrameStep is called once per rendered
-    // frame; Diagnostics is read by the HUD.
+    // frame; Diagnostics is read by the readout.
     InputGrabDiagnostics Diagnostics() const;
     void SampleFrameStep();
 
@@ -404,16 +406,12 @@ private:
     // to a focused window. See its definition.
     void PostCharactersToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event);
 
-    // All four read state the app thread writes, and all four are called
+    // Each reads state the app thread writes, and each is called
     // from the hook thread, so they take the lock. Never called while it is
     // already held: the setters release before calling Refresh.
     EditModeInputOptions OptionsSnapshot() const {
         std::lock_guard<std::mutex> lock(stateMutex_);
         return options_;
-    }
-    int HudDigits() const {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        return hudDigits_;
     }
     // Every Want* below carries gameKeepsFocus_, so that turning off "Don't
     // steal focus" takes the hooks down rather than leaving them installed
@@ -431,25 +429,28 @@ private:
         std::lock_guard<std::mutex> lock(stateMutex_);
         return active_ && options_.useRawMouseInput && options_.RawMouseInputCanBeUsed(gameKeepsFocus_);
     }
-    // The hook is installed for either of two reasons: the option asks for
-    // it, or the input options HUD is up and its number keys have to reach
-    // an overlay that deliberately has no focus. In the second case it
-    // swallows nothing but those digits - see OnKeyboard - which is still
-    // a keystroke the game doesn't get, and is why the HUD is opt-in.
+    int PanelDigits() const {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        return panelDigits_;
+    }
+    // The hook is installed for either of two reasons: something wants the
+    // whole keyboard (see WantsAllKeystrokesLocked), or the Behavior panel
+    // is up and its digits have to reach an overlay that deliberately has
+    // no focus. In the second case it swallows nothing but those digits -
+    // see OnKeyboard.
     //
     // Both reasons need gameKeepsFocus_. Without it this window holds focus
-    // and receives key messages the ordinary way, so the HUD's digits arrive
-    // through ImGui with no hook involved.
+    // and receives key messages the ordinary way, the panel's digits
+    // included, with no hook involved.
     bool WantKeyboard() const {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        return active_ && !keyboardSuspended_ &&
-               EditModeInputOptions::KeystrokesCanBeHeld(gameKeepsFocus_) &&
-               (WantsAllKeystrokesLocked() || hudDigits_ > 0);
+        return active_ && !keyboardSuspended_ && EditModeInputOptions::KeystrokesCanBeHeld(gameKeepsFocus_) &&
+               (WantsAllKeystrokesLocked() || panelDigits_ > 0);
     }
-    // Whether the whole keyboard is ours, as opposed to only the HUD's
-    // digits. The option asks for it permanently; an open text field asks for
-    // it while it is open, which is the difference between a field costing
-    // the game its focus and costing it nothing at all.
+    // Whether the whole keyboard is ours, as opposed to only the Behavior
+    // panel's digits. The option asks for it permanently; an open text field
+    // asks for it while it is open, which is the difference between a field
+    // costing the game its focus and costing it nothing at all.
     bool WantsAllKeystrokesLocked() const { return options_.dontForwardKeystrokes || textFieldOpen_; }
     // Everything typing needs except the decision to take the keyboard - what
     // SetTextFieldOpen turns into a yes.
@@ -517,11 +518,6 @@ private:
     EditModeInputOptions options_;
     bool active_ = false;
     bool keyboardSuspended_ = false;
-    // How many number keys the input options HUD is currently claiming, 0 when
-    // it is not up. Carried across the interface rather than duplicated as a
-    // constant here: a mismatch with the row count in the UI leaves a row
-    // unreachable or swallows a digit that does nothing.
-    int hudDigits_ = 0;
     // Which keys this hook swallowed the key-down of, so their key-ups can be
     // told apart from the ups of keys pressed before the grab started - see
     // OnKeyboard, where letting those through is what keeps Windows' own idea
@@ -551,6 +547,8 @@ private:
     bool gameKeepsFocus_ = false;
     // See SetTextFieldOpen.
     bool textFieldOpen_ = false;
+    // See SetPanelDigits.
+    int panelDigits_ = 0;
     // What Refresh saw last time, so each handover runs once, on its own
     // transition - see Refresh.
     bool virtualCursorWasDriving_ = false;

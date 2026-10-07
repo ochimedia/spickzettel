@@ -64,14 +64,13 @@ library in an isolated `APPDATA` and `LOCALAPPDATA`, so it can neither touch
 nor be perturbed by the real one.
 
     .\tools\perf_library\measure.ps1 -Exe <path-to-exe> -LibrarySource %TEMP%\libs\heavy.db `
-        -Seconds 5 -Repeat 3 -ShowFpsHud -Screenshot heavy.png
+        -Seconds 5 -Repeat 3 -ShowFps -Screenshot heavy.png
 
-`-ShowFpsHud` turns on the **input-options HUD**, whose first line is the
-frame rate and frame time. That is `showInputOptionsHud`, *not*
-`showDebugOverlay` - the latter draws the cyan border and the canvas/mouse
-readout and carries no timing at all. For frame times over time, and what
-made one late, see instrument 4. The HUD also claims the number keys
-while it is up, so don't send digits during a measurement.
+`-ShowFps` turns on the **debug overlay** (`showDebugOverlay`), whose
+third line in edit mode is the frame rate and frame time - the input
+readout, which was the input options HUD's first line until the Behavior
+panel replaced the HUD. `-ShowFpsHud` still works. For frame times over
+time, and what made one late, see instrument 4.
 
 **Read the fps line, not the CPU percentage.** Process CPU sampling of a
 vsync-locked GUI app is a poor instrument: on this machine, repeated

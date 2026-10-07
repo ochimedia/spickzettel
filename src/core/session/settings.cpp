@@ -17,6 +17,8 @@ const GlobalSetting<HotkeyRule>& HotkeySetting(HotkeySlot slot) {
             return setting::kHotkeyQuickCapture;
         case HotkeySlot::SilentCapture:
             return setting::kHotkeySilentCapture;
+        case HotkeySlot::BehaviorPanel:
+            return setting::kHotkeyBehaviorPanel;
     }
     return setting::kHotkeyEditMode;  // unreachable: the switch names every slot
 }
@@ -24,7 +26,6 @@ const GlobalSetting<HotkeyRule>& HotkeySetting(HotkeySlot slot) {
 Settings::Settings(AppConfig stored) : stored_(std::move(stored)) { Resolve(); }
 
 void Settings::Resolve() {
-    ++resolveCount_;
     activeProfile_ = FindMatchingProfile(stored_.profiles, underlyingApp_);
     live_ = activeProfile_ ? ResolveProfile(Base(), stored_.profiles, *activeProfile_) : Base();
 }

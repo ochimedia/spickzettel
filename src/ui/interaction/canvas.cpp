@@ -49,9 +49,9 @@ Answer CanvasLevel::Offer(const Event& event, Editor& editor) {
             return Answer::Claim();
         }
         case EventKind::KeyDown:
-            // The input options HUD's number keys, while it is up, ahead of
-            // any command they might be bound to.
-            if (editor.Views().InputOptionsKey(event)) {
+            // The Behavior panel's digits, while it is up, ahead of any
+            // command they might be bound to.
+            if (editor.Views().BehaviorPanelKey(event)) {
                 return Answer::Claim();
             }
             return Bound(event.key, event, editor);

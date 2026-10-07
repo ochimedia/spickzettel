@@ -537,12 +537,12 @@ TEST(Win32InputGrabTest, ASwitchOfDesktopIsHeardWhileTheGrabRuns) {
     DestroyWindow(overlay);
 }
 
-// With only the input options HUD's digits taken, the keyboard stays the
+// With only the Behavior panel's digits taken, the keyboard stays the
 // game's: a key held there repeats there, and so does a digit held since
-// before, whose down went there. Only a fresh digit is the HUD's. The rule
-// for keys held from before was asked first and swallowed every repeat: a
-// Backspace or an arrow held in the game acted once.
-TEST(Win32InputGrabTest, TheHudLeavesTheRepeatsOfTheGamesKeysAlone) {
+// before, whose down went there. Only a fresh digit is the panel's. The
+// rule for keys held from before was asked first and swallowed every
+// repeat: a Backspace or an arrow held in the game acted once.
+TEST(Win32InputGrabTest, ThePanelLeavesTheRepeatsOfTheGamesKeysAlone) {
     HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                    GetModuleHandleA(nullptr), nullptr);
     ASSERT_NE(overlay, nullptr);
@@ -551,25 +551,45 @@ TEST(Win32InputGrabTest, TheHudLeavesTheRepeatsOfTheGamesKeysAlone) {
     options.dontForwardKeystrokes = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);  // not active: no hook, the keys are handed in
-    grab.SetInputOptionsHudDigits(3);
+    grab.SetPanelDigits(3);
 
     EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, true), 0);
     EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, true, /*heldByWindows=*/true), 0) << "its repeats";
     EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, false), 0);
+    EXPECT_EQ(grab.KeyEventForTesting('W', true), 0) << "the game's, while the panel is up";
+    EXPECT_EQ(grab.KeyEventForTesting('W', false), 0);
     EXPECT_EQ(grab.KeyEventForTesting('2', true, /*heldByWindows=*/true), 0) << "a digit held since before";
     EXPECT_EQ(grab.KeyEventForTesting('2', false), 0);
     EXPECT_EQ(grab.KeyEventForTesting('2', true), 1) << "a fresh one";
     EXPECT_EQ(grab.KeyEventForTesting('2', true, /*heldByWindows=*/true), 1) << "and its repeats";
     EXPECT_EQ(grab.KeyEventForTesting('2', false), 1);
+    EXPECT_EQ(grab.KeyEventForTesting('4', true), 0) << "past the panel's rows";
+    EXPECT_EQ(grab.KeyEventForTesting('4', false), 0);
 
-    // Every key the overlay's: the repeat of one held from before is still
-    // taken, and its up left to Windows.
+    grab.SetPanelDigits(0);
+    EXPECT_EQ(grab.KeyEventForTesting('2', true), 0) << "the game's again with the panel closed";
+    EXPECT_EQ(grab.KeyEventForTesting('2', false), 0);
+
+    grab.SetOptions(EditModeInputOptions{});
+    grab.SetOverlayWindow(nullptr);
+    DestroyWindow(overlay);
+}
+
+// With every key the overlay's, the repeat of one held since before the
+// grab is taken too, and its up left to Windows, which saw it go down.
+TEST(Win32InputGrabTest, TheRepeatOfAKeyHeldFromBeforeIsTakenAndItsUpLeft) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
     options.dontForwardKeystrokes = true;
-    grab.SetOptions(options);
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);  // not active: no hook, the keys are handed in
+
     EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, true, /*heldByWindows=*/true), 1);
     EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, false), 0);
 
-    grab.SetInputOptionsHudDigits(0);
     grab.SetOptions(EditModeInputOptions{});
     grab.SetOverlayWindow(nullptr);
     DestroyWindow(overlay);

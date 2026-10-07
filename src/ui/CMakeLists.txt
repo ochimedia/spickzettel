@@ -27,6 +27,7 @@ add_library(sz_ui STATIC
     tutorial/chains.cpp
     tutorial/topics.cpp
     ui_scale.cpp
+    view/behavior_panel.cpp
     view/canvas_bar.cpp
     view/canvas_view.cpp
     view/cheat_sheet.cpp

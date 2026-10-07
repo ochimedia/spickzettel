@@ -61,6 +61,7 @@ AppConfig Everything() {
     c.hotkeyViewMode = platform::KeyCombo{false, false, false, platform::KeyCombo::kFunctionKeyBase + 9};
     c.hotkeyQuickCapture = platform::KeyCombo{true, true, true, 'S'};
     c.hotkeySilentCapture = platform::KeyCombo{};
+    c.hotkeyBehaviorPanel = platform::KeyCombo{false, true, true, 'P'};
     c.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Draw)] = platform::KeyCombo{false, false, true, 'Q'};
     c.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Erase)] = platform::KeyCombo{};
     c.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Text)] =
@@ -90,7 +91,6 @@ AppConfig Everything() {
     c.strokeColorRGBA = 0x00FF00FFu;
     c.strokeWidth = 6.5f;
     c.showDebugOverlay = true;
-    c.showInputOptionsHud = true;
     c.showFrameGraph = true;
     c.profileable.dontStealFocus = false;
     c.profileable.takeFocusOverElevated = false;
@@ -200,6 +200,7 @@ TEST(ConfigFilesTest, TheFirstReleasesSettingsAreReadAsItWroteThem) {
     expected.librarySizeReminder = defaults.librarySizeReminder;
     expected.librarySizeReminderMb = defaults.librarySizeReminderMb;
     expected.showHelpTooltips = defaults.showHelpTooltips;
+    expected.hotkeyBehaviorPanel = defaults.hotkeyBehaviorPanel;
     // Everything() has retention on now that the default is off; 0.1.0's
     // file has it off, as everything but the default then.
     expected.purgeDeleted = false;

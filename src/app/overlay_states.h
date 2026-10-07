@@ -20,7 +20,7 @@ enum class OverlayRequest {
     QuickCapture,
     SilentCapture,
     NoticeFaded,
-    // The input options HUD's, for a row only read on the way up.
+    // The Behavior panel's, for a row only read on the way up.
     Restart,
     // Once, from Initialize.
     Start,

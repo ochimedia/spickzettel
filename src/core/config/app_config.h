@@ -87,6 +87,13 @@ struct AppConfig {
     // unregistered and noted at start, and the app runs without it (see
     // TrayController::UnregisteredHotkeys); rebind it in Settings.
     platform::KeyCombo hotkeySilentCapture{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'X'};
+    // Brings up the Behavior panel - edit mode's input options, a key each
+    // - from wherever, the overlay coming up in edit mode for it if it is
+    // not there already. Bound from the start: it is how to get out of a
+    // combination of options that left the mouse hard to use, and a way
+    // out nobody has set up is no way out. Not needed to start, like every
+    // hotkey (see hotkeySilentCapture).
+    platform::KeyCombo hotkeyBehaviorPanel{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'B'};
     // The settings a per-application profile may override - the file's
     // `behavior` and `shortcuts` groups - as the defaults have them. See
     // ProfileableSettings for each.
@@ -104,22 +111,11 @@ struct AppConfig {
     // Draws a border around the screen plus a status line (stroke count,
     // active-stroke state, tracked mouse position) whenever the overlay is
     // shown — useful for confirming the overlay is rendering/receiving
-    // input at all when bringing Spickzettel up on a new machine. Off by
-    // default since it's a diagnostic aid, not part of the drawing surface.
+    // input at all when bringing Spickzettel up on a new machine - and in
+    // edit mode, what the input options are doing (see ScreenChrome::
+    // DrawInputReadout). Off by default since it's a diagnostic aid, not
+    // part of the drawing surface.
     bool showDebugOverlay = false;
-    // Diagnostic aid for the input options (ProfileableSettings), off by default:
-    // a panel listing every one of them with its current state, plus a
-    // frame rate and the pointer's own step statistics, and a number key per
-    // row to flip that option without leaving the game. Meant for standing
-    // in front of a misbehaving game and finding the combination that works;
-    // the Settings tab is where the same options live for ordinary use.
-    //
-    // The number keys need the keyboard hook to reach a deliberately
-    // focus-less overlay, so turning this on installs one even when
-    // `dontForwardKeystrokes` is off - which means digits go
-    // to the overlay instead of the game for as long as it's on. That is
-    // the whole reason it isn't on all the time.
-    bool showInputOptionsHud = false;
     // Diagnostic aid, off by default: a graph in the top right corner of
     // the last ten seconds' frames - how long each took to come, and how
     // long the overlay spent building it - over lanes that mark the work

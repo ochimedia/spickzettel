@@ -379,12 +379,12 @@ void OverlayApp::StackSurfaces() {
     }
     Front("##dock");
     Front("##canvas_bar");
+    Front("##behavior_panel");
     // The popups over the canvas, one up at a time.
     for (const PopupKind kind : {PopupKind::ItemProperties, PopupKind::ItemMenu, PopupKind::CanvasMenu,
                                  PopupKind::EmptyCanvasMenu, PopupKind::ColorChooser, PopupKind::ShapeMenu}) {
         Front(AppPopupWindow(kind));
     }
-    Front("##sz_input_hud_layer");
     Front("##sz_chrome_layer");
     Front("##overview_backdrop");
     Front("##overview_panel");
@@ -550,6 +550,7 @@ void OverlayApp::DrawCanvas(float displayW, float displayH) {
     canvasView_.Draw(displayW, displayH, popups_.ItemOf(PopupKind::ItemProperties), canvasBar_.BottomPanelsTop());
     // Over the items, and under the popups.
     canvasBar_.Draw(displayW, displayH);
+    behaviorPanel_.Draw();
 }
 
 void OverlayApp::DrawPopups(float displayW, float displayH) { popups_.DrawOverCanvas(displayW, displayH); }
@@ -599,6 +600,9 @@ void OverlayApp::Apply() {
         Do(action);
     }
     KeepTutorialProgress();
+    // In view mode too, where the panel cannot be up and the keyboard it
+    // asked for goes back.
+    behaviorPanel_.Update(/*editMode=*/!IsViewOnly());
 
     if (IsViewOnly()) {
         // A notice exists only to carry its message, so it is over when the
@@ -609,7 +613,6 @@ void OverlayApp::Apply() {
         return;
     }
     pointer_.Apply();
-    chrome_.Update(/*editMode=*/true);
 }
 
 namespace {
@@ -695,7 +698,7 @@ void OverlayApp::Do(const ViewAction& action) {
                    [&](const action::ClosePanel& a) {
                        if (a.panel == PanelKind::Overview) {
                            overview_.Close();
-                       } else if (IsCheatSheetOpen()) {
+                       } else if (PanelUp(a.panel)) {
                            editor_.Input().End(Level::Panel);
                        }
                    },

@@ -469,14 +469,13 @@ TEST_F(OverlayStatesTest, ASilentCaptureWhileHiddenStaysHiddenWithMessagesOff) {
     EXPECT_TRUE(App().ActionToastText().empty());
 }
 
-// The restart the input options HUD asks for, once the key that asked for
-// it is up: through hidden, in the same session - so the profile is not
+// The restart the Behavior panel asks for, once the key that asked for it
+// is up: through hidden, in the same session - so the profile is not
 // resolved again - and frozen again.
 TEST_F(OverlayStatesTest, ARestartGoesThroughHiddenInTheSameSession) {
-    AppConfig config = Config();
-    config.showInputOptionsHud = true;
-    Restart(config);
     ShowEditMode();
+    StepFrame();
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
     StepFrame();
     host_.overlayWindow.calls.clear();
 
@@ -571,10 +570,9 @@ TEST_F(OverlayStatesTest, ANoticeFadedInAFrameGoesAfterIt) {
 
 // The same for a restart, and for the window's half of a setting.
 TEST_F(OverlayStatesTest, ARestartAndASettingAskedForInAFrameHappenAfterIt) {
-    AppConfig config = Config();
-    config.showInputOptionsHud = true;
-    Restart(config);
     ShowEditMode();
+    StepFrame();
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
     StepFrame();
     std::vector<std::vector<std::string>> callsInFrames;
     platform::FrameCallback frame = host_.overlayWindow.frameCallback;

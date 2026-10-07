@@ -1160,7 +1160,7 @@ TEST_F(TutorialAppTest, TheCardSitsAboveThePanelsAndBelowTheDeleteConfirmation) 
     StartTheTutorial();
     ASSERT_TRUE(Overlay().Dispatch(Command{CommandId::CheatSheet}));
     StepFrames(2);
-    const std::vector<std::string> overSheet = {"canvas", "items", "hud", "chrome", "cheat sheet backdrop",
+    const std::vector<std::string> overSheet = {"canvas", "items", "chrome", "cheat sheet backdrop",
                                                 "cheat sheet", "tutorial card"};
     ASSERT_TRUE(InStackOrder(overSheet));
     EXPECT_EQ(Describe(SurfacesBackToFront()), Describe(overSheet));

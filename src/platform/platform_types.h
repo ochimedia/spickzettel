@@ -218,10 +218,10 @@ struct EditModeInputOptions {
     // Which options can do anything, given whether the game still holds
     // focus. Preconditions, not settings: an option whose precondition
     // fails keeps its stored value and has no effect, and every reader -
-    // the Settings tab, the HUD, the grab - asks these rather than the
-    // stored value. With focus taken the ordinary way there is nothing to
-    // take: a game registers raw input without RIDEV_INPUTSINK and so only
-    // receives it while foreground.
+    // the Settings tab, the Behavior panel, the grab - asks these rather
+    // than the stored value. With focus taken the ordinary way there is
+    // nothing to take: a game registers raw input without RIDEV_INPUTSINK
+    // and so only receives it while foreground.
     static bool KeystrokesCanBeHeld(bool gameKeepsFocus) { return gameKeepsFocus; }
     bool RawMouseInputCanBeUsed(bool gameKeepsFocus) const { return gameKeepsFocus; }
     // A correction is injected as relative motion and goes through the
@@ -300,11 +300,11 @@ struct DisplayInfo {
     bool operator==(const DisplayInfo&) const = default;
 };
 
-// Debug scaffolding for the input options HUD: what the pointer is actually
-// doing. `stepCounts` buckets how far the pointer moved per mouse report
-// ([0] no whole pixel, [1] one, [2] two, [3] three or more), which tells a
-// coarse gain from a smooth pointer sampled coarsely. Zeroed when a grab
-// starts.
+// Debug scaffolding for the debug overlay's input readout: what the
+// pointer is actually doing. `stepCounts` buckets how far the pointer moved
+// per mouse report ([0] no whole pixel, [1] one, [2] two, [3] three or
+// more), which tells a coarse gain from a smooth pointer sampled coarsely.
+// Zeroed when a grab starts.
 struct InputGrabDiagnostics {
     float pointerGain = 0.0f;        // pixels per device count, most recent report
     bool ballisticsEnabled = false;  // "enhance pointer precision" is on and its curve loaded

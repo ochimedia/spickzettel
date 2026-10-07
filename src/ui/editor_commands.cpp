@@ -93,6 +93,7 @@ bool Editor::Available(const Command& command) const {
         case CommandId::ToggleViewMode:
         case CommandId::QuickCapture:
         case CommandId::SilentCapture:
+        case CommandId::BehaviorPanel:
         case CommandId::FullscreenScreenshot:
         case CommandId::FullscreenDrawing:
         case CommandId::Overview:
@@ -252,6 +253,7 @@ void Editor::Run(const Command& command, Filing filing) {
         case CommandId::ToggleViewMode:
         case CommandId::QuickCapture:
         case CommandId::SilentCapture:
+        case CommandId::BehaviorPanel:
             if (appCommandCallback_) {
                 appCommandCallback_(command.id);
             }

@@ -175,8 +175,8 @@ only as the positions of calls and the comments beside them.
 - **Surface**: something the view draws that has its own place in the
   stack. There are five kinds:
   - a *layer*: a full-screen window that takes no input
-    (`BeginScreenLayer`), such as the canvas, the items, the HUD and the
-    screen chrome;
+    (`BeginScreenLayer`), such as the canvas, the items and the screen
+    chrome;
   - a *window*: an ImGui window that takes input, such as the canvas bar,
     the dock and the note editor;
   - a *panel*: a window over a dimming backdrop that covers the canvas,
@@ -211,9 +211,9 @@ order, including where that is surprising (section 9, finding 3).
 | 3 | The note editor | window `##noteedit<id>` | a note is being typed | Canvas view |
 | 4 | The dock | window `##dock` | a snippet on the canvas is minimized | Canvas view |
 | 5 | The canvas bar | window `##canvas_bar` | the pointer is at the bottom edge or on the bar, or its menu is up; not under a panel | Canvas bar |
+| 5a | The Behavior panel | window `##behavior_panel` | its hotkey brought it up | Behavior panel |
 | 6 | The snippet menu, the canvas tile menu, the empty canvas menu, Properties, the color chooser, the shape menu | popups | the Popup level holds it | Popups |
-| 7 | The input options HUD | layer `##sz_input_hud_layer` | its setting is on | Screen chrome |
-| 8 | The edit-mode border, the frame graph, the demo mark | layer `##sz_chrome_layer` | always, each as its setting says | Screen chrome |
+| 8 | The edit-mode border, the frame graph, the input readout, the demo mark | layer `##sz_chrome_layer` | always, each as its setting says | Screen chrome |
 | 9 | The Overview: its backdrop, its panel, and ImGui's popups inside it | panel | the Panel level holds the Overview | Overview; Settings page |
 | 10 | The cheat sheet: its backdrop and its panel | panel | the Panel level holds the cheat sheet | Cheat sheet |
 | 10a | The tutorial card | window `##tutorial_card` | a tutorial topic runs, or its list is up | Tutorial card |
@@ -223,7 +223,10 @@ order, including where that is surprising (section 9, finding 3).
 | 13a | The tutorial's spotlight | overlay | the step points at something on screen, and its goal is not met | Tutorial card |
 | 14 | The software pointer | overlay | its setting draws one | Pointer |
 
-Rows 10a and 13a came with the tutorial (`docs/TUTORIAL.md`, section
+Row 5a came with the Behavior panel, numbered so that no other row's
+number changed. It took
+the place of row 7, the input options HUD, whose readouts are in row 8
+now, with the debug overlay. Rows 10a and 13a came with the tutorial (`docs/TUTORIAL.md`, section
 7.4), numbered so that no other row's number changed. The card sits
 above the panels, so that a step can talk about them, and below the
 delete confirmation, which must stay reachable. The spotlight sits above
@@ -339,7 +342,7 @@ Every frame of edit mode runs these stages, in order:
 | 7. Messages | surfaces 13 and 13a | nothing | `RenderActionToast`, `RenderPersistenceWarning` |
 | 8. Stack | the pass of C1 | the windows' order | the 19 calls, spread over stages 2 to 6 |
 | 9. Pointer | the pointer's shape; surface 14 | the window's cursor | `ApplyPointerShape`, `DrawSoftwareCursor` |
-| 10. Apply | the actions recorded in stages 2 to 6, in order; the tutorial's progress set, where it changed; the pen's width, once its preview has faded; the HUD's restart, once its key is up; a notice's end | the library, the editor, settings, what is up | new (C5, C6); today spread over the draws |
+| 10. Apply | the actions recorded in stages 2 to 6, in order; the tutorial's progress set, where it changed; the pen's width, once its preview has faded; the Behavior panel's restart, once its key is up; a notice's end | the library, the editor, settings, what is up | new (C5, C6); today spread over the draws |
 
 The view-only modes run part of Prepare, the view-only layer, Messages
 and Apply.
@@ -465,7 +468,8 @@ what it is handed, and records actions:
 | Overview | 9, but for the Settings tab | the tab; the picker; Show deleted and the deleted folder shown; the renames; the scroll requests; About's page | `overlay_app_overview.cpp` (Canvases, About), `overlay_app_deleted.cpp` |
 | Settings page | the Settings tab | the section; the edit target; a refused profile name; the display list | `overlay_app_overview.cpp` (Settings), `settings_widgets.*` |
 | Cheat sheet | 10 | none | `overlay_app_cheatsheet.cpp` |
-| Screen chrome | 7, 8 | the HUD's applied digits, restart request and last-key record; the demo mark's place | `overlay_app.cpp` |
+| Behavior panel | 5a | whether it is up; the digits asked for; a restart waiting for its key | new with the panel |
+| Screen chrome | 8 | the demo mark's place | `overlay_app.cpp` |
 | Messages | 13 | the message and when it expires; the message for the next showing; the settings file that failed; whether a notice's end was reported | `overlay_app.cpp`, `overlay_app_overview.cpp` |
 | Pointer | 12, 14; the pointer's shape | the applied shape and the cursor history; when the size preview expires; the pen's width owed | `overlay_app.cpp`, `overlay_app_popovers.cpp` |
 | Tutorial card | 10a, 13a | the runner and the topic it runs; whether the list is up; whether a topic has run; whether the card was dragged | new with the tutorial (`docs/TUTORIAL.md`) |

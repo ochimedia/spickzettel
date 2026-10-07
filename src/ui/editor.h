@@ -117,9 +117,9 @@ public:
     // or the eraser's: the view shows it for a moment, and keeps the pen's
     // once it has.
     virtual void ToolSized(bool pen) = 0;
-    // A key the input options HUD takes, while it is up - a debugging aid
-    // of the view's. False for one it does not.
-    virtual bool InputOptionsKey(const Event& event) = 0;
+    // A key the Behavior panel takes, while it is up - one of its digits.
+    // False for one it does not.
+    virtual bool BehaviorPanelKey(const Event& event) = 0;
     // The widget held down let go of - a slider's drag, a tile's - as if
     // the button had come up somewhere it means nothing.
     virtual void LetGoOfWidget() = 0;

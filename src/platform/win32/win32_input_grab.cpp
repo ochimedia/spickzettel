@@ -148,17 +148,6 @@ void Win32InputGrab::SetGameKeepsFocus(bool gameKeepsFocus) {
     Refresh();
 }
 
-void Win32InputGrab::SetInputOptionsHudDigits(int digitCount) {
-    {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        if (hudDigits_ == digitCount) {
-            return;
-        }
-        hudDigits_ = digitCount;
-    }
-    Refresh();
-}
-
 void Win32InputGrab::SetKeyboardSuspended(bool suspended) {
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
@@ -349,9 +338,10 @@ void Win32InputGrab::Refresh() {
 
     // The keyboard's handover, on the same shape and for the same reason: it
     // belongs to the transition, not to any one of the things that can cause
-    // it. WantKeyboard depends on five pieces of state, so the hook comes and
+    // it. WantKeyboard depends on six pieces of state, so the hook comes and
     // goes through SetActive, SetKeyboardSuspended, SetGameKeepsFocus,
-    // SetOptions and SetInputOptionsHudDigits alike. In SetActive alone,
+    // SetOptions, SetTextFieldOpen and SetPanelDigits alike. In
+    // SetActive alone,
     // opening a rename field (which suspends the keyboard) or switching
     // keystroke forwarding off from the Settings tab would skip all of it -
     // leaving ImGui with a latched key, or the OS with no
@@ -726,7 +716,7 @@ bool Win32InputGrab::FlushPendingCorrection() {
 // The absolute counterpart of MoveVirtualCursorRaw: the device has named a
 // position rather than a movement, so there is nothing to scale, accelerate
 // or accumulate - only to clamp and record. Still feeds the same step
-// histogram, so the HUD reads the same way on either kind of device.
+// histogram, so the readout reads the same way on either kind of device.
 void Win32InputGrab::SetVirtualCursorAbsolute(LONG x, LONG y) {
     const RECT bounds = PointerBounds();
     {
@@ -743,7 +733,7 @@ void Win32InputGrab::SetVirtualCursorAbsolute(LONG x, LONG y) {
         const LONG stepX = std::labs(virtualCursorX_.load(std::memory_order_relaxed) - beforeX);
         const LONG stepY = std::labs(virtualCursorY_.load(std::memory_order_relaxed) - beforeY);
         stepCounts_[std::clamp<LONG>(std::max(stepX, stepY), 0, 3)].fetch_add(1, std::memory_order_relaxed);
-        // Gain is meaningless here and the HUD says so by reading zero rather
+        // Gain is meaningless here and the readout says so by reading zero rather
         // than showing the last relative report's figure forever.
         lastGain_ = 0.0f;
     }
@@ -873,7 +863,7 @@ void Win32InputGrab::IntegrateRawMovement(LONG rawDx, LONG rawDy, int reports) {
     const LONG beforeY =
         virtualCursorY_.exchange(static_cast<LONG>(std::floor(preciseY_)), std::memory_order_relaxed);
 
-    // How far this one report moved the pointer, bucketed for the HUD - the
+    // How far this one report moved the pointer, bucketed for the readout - the
     // difference between coarse arithmetic here and a smooth pointer being
     // sampled coarsely further down.
     const LONG stepX = std::labs(virtualCursorX_.load(std::memory_order_relaxed) - beforeX);
@@ -890,7 +880,7 @@ bool Win32InputGrab::VirtualCursorActive() const {
 // characters included (see PostCharactersToOverlay).
 //
 // Deliberately not the same question as WantKeyboard, which is also true for
-// the input options HUD alone - that case swallows the digits and lets
+// the Behavior panel alone - that case swallows the digits and lets
 // everything else through to whoever has focus, which is no use to a text
 // field.
 bool Win32InputGrab::DeliversTypingToOverlay() const {
@@ -920,6 +910,17 @@ void Win32InputGrab::SetTextFieldOpen(bool open) {
     // that transition is already written - hook installed and modifiers
     // seeded on the way in, key-ups and modifiers handed back on the way out.
     Refresh();
+}
+
+void Win32InputGrab::SetPanelDigits(int digitCount) {
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (panelDigits_ == digitCount) {
+            return;
+        }
+        panelDigits_ = digitCount;
+    }
+    Refresh();  // as SetTextFieldOpen: the boundary handling is Refresh's
 }
 
 bool Win32InputGrab::SoftwarePointerWanted() const {
@@ -1349,8 +1350,10 @@ void Win32InputGrab::PostCharactersToOverlay(UINT vk, const KBDLLHOOKSTRUCT& eve
     keyboardState_[VK_MENU] = alt ? 0x80 : 0;
     // Toggles, not held states: Caps Lock survives the hook untouched, so the
     // OS still has the truth about it - and GetKeyState reads it here, on a
-    // thread that reads no keyboard messages (see the HUD digits in
-    // OnKeyboard).
+    // thread that reads no keyboard messages: it follows the keys all the
+    // same. Measured on Windows 11 (build 26200), with the keys sent from
+    // another process - a Shift held and Caps Lock toggled show here as
+    // GetAsyncKeyState has them.
     keyboardState_[VK_CAPITAL] = static_cast<BYTE>(GetKeyState(VK_CAPITAL) & 0x0001);
 
     const HKL layout = GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), nullptr));
@@ -1717,7 +1720,7 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // not recorded, and not handed to the overlay, which never saw the key go
     // down either. A modifier held that way is in the grab's record already,
     // from BeginGrabbedKeyboard. Only for a key the grab takes: asked
-    // ahead of the HUD's digits below, it swallowed the repeats of every
+    // ahead of the panel's digits below, it swallowed the repeats of every
     // key the game kept, and a Backspace or an arrow held there acted once.
     const bool isRepeat = isDown && vk < kVirtualKeyCount && swallowedDown_[vk].load(std::memory_order_relaxed);
     const bool heldFromBefore =
@@ -1725,27 +1728,21 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
         (vk == heldByWindowsForTesting_.load(std::memory_order_relaxed) ||
          (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0);
 
-    // Debug scaffolding, and the reason this hook is installed for the whole
-    // of edit mode rather than only while grabbing: the input options HUD
-    // offers a number key per option, and the situation those options exist
-    // for is precisely the one where the overlay has no keyboard focus to
-    // receive them - dontStealFocus leaves focus with the game on
-    // purpose. So the bare digits the HUD advertises are taken here and
-    // handed to the overlay, and every other key passes through untouched.
-    // Remove this branch (and restore WantKeyboard to requiring
-    // options_.dontForwardKeystrokes) when the HUD goes.
+    // The Behavior panel's digits, and nothing else, when nothing wants the
+    // whole keyboard: the situation its rows exist for is the one where the
+    // overlay has no keyboard focus to receive them, dontStealFocus leaving
+    // focus with the game on purpose. So the bare digits the panel offers
+    // are taken here and handed to the overlay, and every other key goes
+    // where it would without the panel.
     if (!WantsAllKeystrokes()) {
-        const bool isHudDigit = vk >= '1' && vk < '1' + static_cast<UINT>(HudDigits());
-        // GetKeyState, on the hook thread, which reads no keyboard messages
-        // of its own: it follows the keys all the same. Measured on Windows
-        // 11 (build 26200), with the keys sent from another process - a
-        // Shift held and Caps Lock toggled show here as GetAsyncKeyState
-        // has them. A review had taken it for a state that never changes.
+        const bool isPanelDigit = vk >= '1' && vk < '1' + static_cast<UINT>(PanelDigits());
+        // GetKeyState, on the hook thread - see PostCharactersToOverlay for
+        // why it follows the keys there.
         const bool bare = (GetKeyState(VK_CONTROL) & 0x8000) == 0 &&
                           (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
         // A digit held since before the edit mode is the game's too: its
         // down went there.
-        if (!isHudDigit || !bare || heldFromBefore) {
+        if (!isPanelDigit || !bare || heldFromBefore) {
             return 0;  // everyone else's key, left alone
         }
         PostKeyToOverlay(vk, event, isDown);

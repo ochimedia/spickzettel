@@ -51,7 +51,7 @@ public:
     void CloseInnermostPopup() override {}
     void ClosePanel(PanelKind /*kind*/) override {}
     void ToolSized(bool /*pen*/) override {}
-    bool InputOptionsKey(const Event& /*event*/) override { return false; }
+    bool BehaviorPanelKey(const Event& /*event*/) override { return false; }
     void LetGoOfWidget() override {}
 };
 

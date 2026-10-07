@@ -2670,13 +2670,13 @@ TEST_F(HeadlessAppTest, CreatingAnItemWithNoCanvasMakesOne) {
     EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
 }
 
-// The HUD names what is in front and where it sits relative to us, which
-// is the line that answers "nothing in this panel is moving". It has to
-// cope with there being nothing to name: over a hidden or just-started
-// desktop the foreground is unknown on both counts.
-TEST_F(HeadlessAppTest, TheHudDrawsWithNothingIdentifiableInFront) {
+// The debug overlay's input readout names what is in front and where it
+// sits relative to us, which is the line that answers "nothing reaches the
+// overlay". It has to cope with there being nothing to name: over a hidden
+// or just-started desktop the foreground is unknown on both counts.
+TEST_F(HeadlessAppTest, TheInputReadoutDrawsWithNothingIdentifiableInFront) {
     AppConfig config = DefaultConfig();
-    config.showInputOptionsHud = true;
+    config.showDebugOverlay = true;
     host_.overlayWindow.underlyingApp = platform::ForegroundApp{};
     StartWith(std::move(config));
 
@@ -2689,9 +2689,9 @@ TEST_F(HeadlessAppTest, TheHudDrawsWithNothingIdentifiableInFront) {
 
 // An elevated application is named too, and is the case the line exists
 // for: every number beside it is a readout of input that never arrived.
-TEST_F(HeadlessAppTest, TheHudDrawsOverAnApplicationAboveUs) {
+TEST_F(HeadlessAppTest, TheInputReadoutDrawsOverAnApplicationAboveUs) {
     AppConfig config = DefaultConfig();
-    config.showInputOptionsHud = true;
+    config.showDebugOverlay = true;
     platform::ForegroundApp elevated;
     elevated.executable = "taskmgr.exe";
     elevated.title = "Task Manager";
@@ -2726,15 +2726,81 @@ TEST_F(HeadlessAppTest, SavingASettingOverAnElevatedApplicationKeepsItsFocusTake
     EXPECT_EQ(host_.overlayWindow.setEditModeNoActivateCallCount, noActivateCalls) << "nothing to tell it";
 }
 
-// The HUD's number keys write into the profile that is running, and the two
-// rows that need edit mode re-entered then restart the overlay. A restart
-// that re-asked what was underneath - in the middle of hiding itself, when
-// the answer can be "nothing identifiable" - would stop the profile
-// matching, read the value from the defaults again, and make the option
-// look as if it had switched itself back a moment after being pressed.
-TEST_F(HeadlessAppTest, AHudToggleSurvivesTheRestartItAsksFor) {
+// ===== The Behavior panel =====
+
+// Its hotkey brings the overlay up in edit mode with the panel open, from
+// hidden, and the panel takes its digits while it is up. Pressed again, it
+// puts the panel away and leaves edit mode where it is. Escape is the
+// canvas's still: the panel covers nothing for it to close first.
+TEST_F(HeadlessAppTest, TheBehaviorPanelHotkeyBringsTheOverlayUpWithThePanel) {
+    StepFrame();
+    ASSERT_EQ(controller_->State(), app::OverlayState::Hidden);
+
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
+    StepFrame();
+    EXPECT_EQ(controller_->State(), app::OverlayState::Edit);
+    EXPECT_TRUE(App().IsBehaviorPanelOpen());
+    EXPECT_EQ(host_.overlayWindow.panelDigits, 7);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_TRUE(App().IsBehaviorPanelOpen());
+
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
+    StepFrame();
+    EXPECT_EQ(controller_->State(), app::OverlayState::Edit);
+    EXPECT_FALSE(App().IsBehaviorPanelOpen());
+    EXPECT_EQ(host_.overlayWindow.panelDigits, 0) << "the digits back with the panel";
+}
+
+// A row's number switches it, into the profile that runs. The panel
+// covers nothing: with it up, the canvas is worked as ever.
+TEST_F(HeadlessAppTest, TheBehaviorPanelsDigitsSwitchARowAndTheCanvasStaysInReach) {
     AppConfig config = DefaultConfig();
-    config.showInputOptionsHud = true;
+    Profile profile;
+    profile.name = "Game";
+    profile.match.executables.push_back("game.exe");
+    config.profiles.push_back(profile);
+    host_.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "Game"};
+    StartWith(std::move(config));
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
+    StepFrame();
+    ASSERT_TRUE(AppSettings().ActiveProfile().has_value());
+    const bool forwardBefore = AppSettings().Live().dontForwardKeystrokes;
+    const bool pointerBefore = AppSettings().Live().softwarePointer;
+
+    PressKey(ImGuiKey_3);  // Don't forward keystrokes
+    EXPECT_EQ(AppSettings().Live().dontForwardKeystrokes, !forwardBefore);
+    ASSERT_TRUE(AppSettings().Profiles()[0].overrides.dontForwardKeystrokes.has_value());
+    EXPECT_EQ(AppSettings().Base().dontForwardKeystrokes, forwardBefore) << "not into the defaults";
+    PressKey(ImGuiKey_6);  // Use a software pointer
+    EXPECT_EQ(AppSettings().Live().softwarePointer, !pointerBefore);
+
+    MakeADrawing(700.0f, 400.0f, 1000.0f, 600.0f);
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+    EXPECT_TRUE(App().IsBehaviorPanelOpen());
+}
+
+// A row that can do nothing with the rows above as they are is grayed,
+// and its key does nothing either: a change stored with nothing on screen
+// saying so is how an option comes to look broken.
+TEST_F(HeadlessAppTest, AGrayedBehaviorRowIgnoresItsKey) {
+    AppConfig config = DefaultConfig();
+    config.profileable.dontStealFocus = false;
+    StartWith(std::move(config));
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
+    StepFrame();
+    const bool before = AppSettings().Live().dontForwardKeystrokes;
+
+    PressKey(ImGuiKey_3);  // Don't forward keystrokes, which needs Don't steal focus
+
+    EXPECT_EQ(AppSettings().Live().dontForwardKeystrokes, before);
+}
+
+// A row read only on the way up restarts the overlay once its key is up.
+// The restart is the same showing: the profile is not looked for again -
+// in the middle of hiding, what is underneath can read as nothing - and
+// the panel is still up after it, with the keyboard.
+TEST_F(HeadlessAppTest, ABehaviorSwitchSurvivesTheRestartItAsksFor) {
+    AppConfig config = DefaultConfig();
     Profile profile;
     profile.name = "Game";
     profile.match.executables.push_back("game.exe");
@@ -2742,24 +2808,26 @@ TEST_F(HeadlessAppTest, AHudToggleSurvivesTheRestartItAsksFor) {
     host_.overlayWindow.underlyingApp = platform::ForegroundApp{"game.exe", "Game"};
     host_.overlayWindow.forgetUnderlyingAppOnHide = true;
     StartWith(std::move(config));
-
-    ShowEditMode();
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
     StepFrame();
     ASSERT_TRUE(AppSettings().ActiveProfile().has_value());
     const bool before = AppSettings().Live().dontStealFocus;
+    host_.overlayWindow.calls.clear();
 
-    // Row 1 is "Don't steal focus" - one of the two that restart.
-    PressKey(ImGuiKey_1);
-    StepFrames(4);  // the restart waits for the key to be up, then runs
+    PressKey(ImGuiKey_1);  // Don't steal focus
+    StepFrames(4);
 
-    // What the key asked for, still - and still the profile's, since the
-    // restart is the same showing rather than a new one.
+    EXPECT_NE(std::find(host_.overlayWindow.calls.begin(), host_.overlayWindow.calls.end(), "Present(Hidden)"),
+              host_.overlayWindow.calls.end())
+        << "restarted";
+    EXPECT_EQ(controller_->State(), app::OverlayState::Edit);
     EXPECT_NE(AppSettings().Live().dontStealFocus, before);
     ASSERT_TRUE(AppSettings().ActiveProfile().has_value());
     ASSERT_TRUE(AppSettings().Profiles()[0].overrides.dontStealFocus.has_value());
     EXPECT_EQ(*AppSettings().Profiles()[0].overrides.dontStealFocus, !before);
-    // The defaults were not the ones written to.
     EXPECT_EQ(AppSettings().Base().dontStealFocus, before);
+    EXPECT_TRUE(App().IsBehaviorPanelOpen());
+    EXPECT_EQ(host_.overlayWindow.panelDigits, 7);
 }
 
 TEST_F(HeadlessAppTest, ShortcutsAreIgnoredInViewOnlyMode) {

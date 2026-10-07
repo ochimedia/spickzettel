@@ -466,9 +466,7 @@ void Win32OverlayWindow::TakeFocus() {
     SetForegroundWindow(hwnd_);
 }
 
-void Win32OverlayWindow::SetInputOptionsHudDigits(int digitCount) {
-    Win32InputGrab::Instance().SetInputOptionsHudDigits(digitCount);
-}
+void Win32OverlayWindow::SetPanelDigits(int digitCount) { Win32InputGrab::Instance().SetPanelDigits(digitCount); }
 
 void Win32OverlayWindow::SetEditModeInput(const EditModeInputOptions& options) {
     editModeInput_ = options;

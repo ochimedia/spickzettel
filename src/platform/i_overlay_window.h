@@ -106,11 +106,12 @@ public:
     // never while hidden or click-through.
     virtual void SetEditModeInput(const EditModeInputOptions& options) = 0;
 
-    // The input options HUD is up: its rows are toggled by number keys, and
-    // an overlay deliberately holding no keyboard focus can only be handed
-    // those by the backend's keyboard grab, so that grab has to stay
-    // available even with dontForwardKeystrokes off. 0 when the HUD closes.
-    virtual void SetInputOptionsHudDigits(int digitCount) = 0;
+    // The Behavior panel is up and switches its rows with the bare digits
+    // '1' and on, `digitCount` of them; 0 when it closes. They have to reach
+    // the overlay without taking focus, since how the overlay sits over the
+    // game is what the panel is for - so the backend takes those digits
+    // from the game while it is up, and leaves it every other key.
+    virtual void SetPanelDigits(int digitCount) = 0;
 
     // Which application the overlay is up over - see ForegroundApp. Asked
     // at the moment the overlay is shown, when the answer means something.
@@ -122,8 +123,8 @@ public:
     // reinstated; must be idempotent and cheap on an unchanged shape.
     virtual void SetCursorShape(CursorShape shape) = 0;
 
-    // Debug scaffolding for the input options HUD. Backends without an
-    // input grab return a default-constructed value.
+    // Debug scaffolding for the debug overlay's input readout. Backends
+    // without an input grab return a default-constructed value.
     virtual InputGrabDiagnostics GetInputGrabDiagnostics() const = 0;
 
     // ===== Callbacks =====

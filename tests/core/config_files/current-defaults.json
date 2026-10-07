@@ -4,7 +4,8 @@
     "editMode": "Ctrl+Alt+S",
     "viewMode": "Ctrl+Alt+V",
     "quickCapture": "Ctrl+Alt+C",
-    "silentCapture": "Ctrl+Alt+X"
+    "silentCapture": "Ctrl+Alt+X",
+    "behaviorPanel": "Ctrl+Alt+B"
   },
   "drawing": {
     "strokeColor": "#FF0000",
@@ -145,7 +146,6 @@
   },
   "diagnostics": {
     "showDebugOverlay": false,
-    "showInputOptionsHud": false,
     "showFrameGraph": false
   },
   "profiles": []

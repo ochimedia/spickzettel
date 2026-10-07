@@ -292,8 +292,8 @@ private:
     // the middle of that gets a different answer: it has just hidden itself,
     // and may have taken the foreground on the way (turning "Don't steal
     // focus" off does exactly that). The profile that matched then stops
-    // matching, and a HUD toggle that went into that profile reads as if it
-    // had switched itself back.
+    // matching, and a switch on the Behavior panel that went into that
+    // profile reads as if it had switched itself back.
     std::optional<platform::ForegroundApp> sessionApp_;
 
     platform::IPlatformHost& host_;

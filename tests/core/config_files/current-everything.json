@@ -4,7 +4,8 @@
     "editMode": "Ctrl+Shift+D",
     "viewMode": "F9",
     "quickCapture": "Ctrl+Alt+Shift+S",
-    "silentCapture": null
+    "silentCapture": null,
+    "behaviorPanel": "Alt+Shift+P"
   },
   "drawing": {
     "strokeColor": "#00FF00",
@@ -149,7 +150,6 @@
   },
   "diagnostics": {
     "showDebugOverlay": true,
-    "showInputOptionsHud": true,
     "showFrameGraph": true
   },
   "profiles": [

@@ -58,6 +58,7 @@ enum class CommandId {
     ToggleViewMode,
     QuickCapture,
     SilentCapture,
+    BehaviorPanel,
     // Reached from a menu or the selection bar only - and the two
     // fullscreen snippets from a gesture too, a double-click or a hold.
     ToggleFullscreen,
@@ -222,6 +223,7 @@ inline constexpr std::array kCommands = [] {
         Hotkey(CommandId::ToggleViewMode, "toggleViewMode", HotkeySlot::ViewMode),
         Hotkey(CommandId::QuickCapture, "quickCapture", HotkeySlot::QuickCapture, Scope::Canvas),
         Hotkey(CommandId::SilentCapture, "silentCapture", HotkeySlot::SilentCapture, Scope::Canvas),
+        Hotkey(CommandId::BehaviorPanel, "behaviorPanel", HotkeySlot::BehaviorPanel),
         Clicked(CommandId::ToggleFullscreen, "toggleFullscreen"),
         Clicked(CommandId::ToggleFullscreenStretched, "toggleFullscreenStretched"),
         Clicked(CommandId::ResetSize, "resetSize"),

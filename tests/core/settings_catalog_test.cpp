@@ -127,8 +127,8 @@ AppConfig EveryRowChanged() {
 // count in app_config.cpp.
 
 auto Fields(const AppConfig& c) {
-    const auto& [hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
-                 strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showFrameGraph, showItemBorders, showHelpTooltips,
+    const auto& [hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, hotkeyBehaviorPanel, profileable, profiles,
+                 strokeColorRGBA, strokeWidth, showDebugOverlay, showFrameGraph, showItemBorders, showHelpTooltips,
                  showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
                  itemBorderColorOtherRGBA, itemBorderColorPinnedRGBA, itemBorderSelectedFollowsAccent,
                  itemBorderColorSelectedRGBA, imageFilter,
@@ -138,8 +138,8 @@ auto Fields(const AppConfig& c) {
                  purgeDeletedAfterDays, librarySizeReminder, librarySizeReminderMb, confirmDelete, confirmDeleteForGood, screenshotDefaults, drawingDefaults,
                  drawingBackgroundColorRGBA, noteTextSizePx, noteTextColorRGBA, overlayDisplayId, overlayDisplayName,
                  tutorialProgress] = c;
-    return std::tie(hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, profileable, profiles,
-                    strokeColorRGBA, strokeWidth, showDebugOverlay, showInputOptionsHud, showFrameGraph,
+    return std::tie(hotkeyEditMode, hotkeyViewMode, hotkeyQuickCapture, hotkeySilentCapture, hotkeyBehaviorPanel, profileable, profiles,
+                    strokeColorRGBA, strokeWidth, showDebugOverlay, showFrameGraph,
                     showItemBorders, showHelpTooltips, showToastsWhileHidden, accentColorRGBA, uiScalePercent, itemBorderColorFrontRGBA,
                     itemBorderColorOtherRGBA, itemBorderColorPinnedRGBA, itemBorderSelectedFollowsAccent,
                     itemBorderColorSelectedRGBA, imageFilter,
@@ -246,9 +246,9 @@ TEST(SettingsCatalogTest, EveryRowReadsBackItsOwnFieldAndNoOther) {
 TEST(SettingsCatalogTest, EveryFieldIsSomeRows) {
     const AppConfig defaults = DefaultConfig();
     const AppConfig everyRow = EveryRowChanged();
-    // Position 5 is `profiles`, which is not a row: the profiles are read
+    // Position 6 is `profiles`, which is not a row: the profiles are read
     // and written as a list, their overrides by the rows (below).
-    EXPECT_EQ(EqualFields(everyRow, defaults), std::vector<size_t>{5}) << "AppConfig fields, by position";
+    EXPECT_EQ(EqualFields(everyRow, defaults), std::vector<size_t>{6}) << "AppConfig fields, by position";
     EXPECT_EQ(EqualFields(everyRow.profileable, defaults.profileable), std::vector<size_t>{})
         << "ProfileableSettings fields, by position";
     EXPECT_EQ(EqualFields(everyRow.screenshotDefaults, defaults.screenshotDefaults), std::vector<size_t>{});

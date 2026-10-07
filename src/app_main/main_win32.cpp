@@ -131,10 +131,11 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     if (!trayController.UnregisteredHotkeys().empty()) {
         std::string list;
         for (const auto& [slot, combo] : trayController.UnregisteredHotkeys()) {
-            const char* label = slot == sz::core::HotkeySlot::EditMode       ? sz::strings::kHotkeysEditMode
-                                : slot == sz::core::HotkeySlot::ViewMode     ? sz::strings::kHotkeysViewMode
-                                : slot == sz::core::HotkeySlot::QuickCapture ? sz::strings::kHotkeysQuickCapture
-                                                                             : sz::strings::kHotkeysSilentCapture;
+            const char* label = slot == sz::core::HotkeySlot::EditMode        ? sz::strings::kHotkeysEditMode
+                                : slot == sz::core::HotkeySlot::ViewMode      ? sz::strings::kHotkeysViewMode
+                                : slot == sz::core::HotkeySlot::QuickCapture  ? sz::strings::kHotkeysQuickCapture
+                                : slot == sz::core::HotkeySlot::SilentCapture ? sz::strings::kHotkeysSilentCapture
+                                                                              : sz::strings::kHotkeysBehaviorPanel;
             list += std::string("\n    ") + label + ": " + sz::core::HotkeyText(combo);
         }
         char body[1024];

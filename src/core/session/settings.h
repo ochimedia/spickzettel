@@ -17,8 +17,8 @@
 namespace sz::core {
 
 // Every summon hotkey, in the order they are registered and listed.
-inline constexpr HotkeySlot kAllHotkeySlots[] = {HotkeySlot::EditMode, HotkeySlot::ViewMode,
-                                                 HotkeySlot::QuickCapture, HotkeySlot::SilentCapture};
+inline constexpr HotkeySlot kAllHotkeySlots[] = {HotkeySlot::EditMode, HotkeySlot::ViewMode, HotkeySlot::QuickCapture,
+                                                 HotkeySlot::SilentCapture, HotkeySlot::BehaviorPanel};
 // A summon hotkey's row in the catalog: the one table from a slot to where
 // its combination is stored, which the tray, the command table and the
 // Settings panel all go through.
@@ -186,11 +186,6 @@ public:
     // one being typed would change the text under the cursor.
     bool RenameProfile(size_t index, std::string name);
 
-    // How many times the settings have been resolved - for the input
-    // options HUD, which shows it so that a toggle that seems to undo itself
-    // can be told apart from one that never happened.
-    int ResolveCount() const { return resolveCount_; }
-
 private:
     bool IsProfile(std::optional<size_t> index) const { return index && *index < stored_.profiles.size(); }
     void Resolve();
@@ -223,7 +218,6 @@ private:
     platform::ForegroundApp underlyingApp_;
     std::optional<size_t> activeProfile_;
     ProfileableSettings live_;
-    int resolveCount_ = 0;
     // A preview stored and not committed yet - see Preview.
     bool previewing_ = false;
     // What was stored before the first preview - see CancelPreviews.

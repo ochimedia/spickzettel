@@ -115,7 +115,8 @@ public:
         editModeInput = options;
     }
 
-    void SetInputOptionsHudDigits(int /*digitCount*/) override {}
+    // Not among `calls`: it says nothing about how the window is shown.
+    void SetPanelDigits(int digitCount) override { panelDigits = digitCount; }
 
     void SetCursorShape(platform::CursorShape shape) override {
         ++setCursorShapeCallCount;
@@ -231,6 +232,8 @@ public:
     // open; the two have to balance, or the game is left without it.
     int requestTextInputCallCount = 0;
     int releaseTextInputCallCount = 0;
+    // See SetPanelDigits.
+    int panelDigits = 0;
     platform::CursorShape cursorShape = platform::CursorShape::Default;
     // Off, the window is never made: what the OS answers when it will not
     // give the overlay a window, and every show and capture has to cope.

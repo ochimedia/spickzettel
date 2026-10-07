@@ -36,12 +36,13 @@ TEST(TrayControllerTest, InitializeShowsTrayAndRegistersAllConfiguredHotkeys) {
     config.hotkeyViewMode = platform::KeyCombo{true, true, false, 'L'};
     config.hotkeyQuickCapture = platform::KeyCombo{true, true, false, 'M'};
     config.hotkeySilentCapture = platform::KeyCombo{true, true, false, 'N'};
+    config.hotkeyBehaviorPanel = platform::KeyCombo{true, true, false, 'O'};
     TrayController controller(host, config);
 
     ASSERT_TRUE(controller.Initialize());
 
     EXPECT_TRUE(host.trayIconShown);
-    ASSERT_EQ(host.registeredCombos.size(), 4u);
+    ASSERT_EQ(host.registeredCombos.size(), 5u);
     EXPECT_TRUE(std::any_of(host.registeredCombos.begin(), host.registeredCombos.end(),
                              [&](const auto& kv) { return kv.second == config.hotkeySilentCapture; }));
     EXPECT_TRUE(std::any_of(host.registeredCombos.begin(), host.registeredCombos.end(),
@@ -50,6 +51,8 @@ TEST(TrayControllerTest, InitializeShowsTrayAndRegistersAllConfiguredHotkeys) {
                              [&](const auto& kv) { return kv.second == config.hotkeyViewMode; }));
     EXPECT_TRUE(std::any_of(host.registeredCombos.begin(), host.registeredCombos.end(),
                              [&](const auto& kv) { return kv.second == config.hotkeyQuickCapture; }));
+    EXPECT_TRUE(std::any_of(host.registeredCombos.begin(), host.registeredCombos.end(),
+                             [&](const auto& kv) { return kv.second == config.hotkeyBehaviorPanel; }));
 }
 
 TEST(TrayControllerTest, InitializeConfiguresEditModeNoActivateFromConfig) {
@@ -104,11 +107,12 @@ TEST(TrayControllerTest, HotkeysAnotherApplicationOwnsAreNamedNotFatal) {
 
     EXPECT_TRUE(controller.Initialize());
     const auto& taken = controller.UnregisteredHotkeys();
-    ASSERT_EQ(taken.size(), 3u);
+    ASSERT_EQ(taken.size(), 4u);
     EXPECT_EQ(taken[0].first, HotkeySlot::EditMode);
     EXPECT_EQ(taken[0].second, config.hotkeyEditMode);
     EXPECT_EQ(taken[1].first, HotkeySlot::ViewMode);
     EXPECT_EQ(taken[2].first, HotkeySlot::QuickCapture);
+    EXPECT_EQ(taken[3].first, HotkeySlot::BehaviorPanel);
 
     host.TriggerTrayCommand(platform::TrayCommand::ToggleOverlay);
     EXPECT_TRUE(host.overlayWindow.IsVisible()) << "the tray still brings it up";

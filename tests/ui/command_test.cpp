@@ -8,6 +8,7 @@
 
 #include "core/config/app_config.h"
 #include "core/config/shortcut_action.h"
+#include "core/session/settings.h"
 #include "ui/view/settings_page.h"
 
 namespace sz::ui {
@@ -24,8 +25,7 @@ TEST(CommandTest, EveryChosenKeyAndHotkeyRunsExactlyOneCommand) {
                                          [&](const CommandInfo& info) { return info.shortcut == action; });
         EXPECT_EQ(count, 1) << ShortcutActionKey(action);
     }
-    for (const HotkeySlot slot :
-         {HotkeySlot::EditMode, HotkeySlot::ViewMode, HotkeySlot::QuickCapture, HotkeySlot::SilentCapture}) {
+    for (const HotkeySlot slot : kAllHotkeySlots) {
         const auto count = std::count_if(kCommands.begin(), kCommands.end(),
                                          [&](const CommandInfo& info) { return info.hotkey == slot; });
         EXPECT_EQ(count, 1) << static_cast<int>(slot);

@@ -561,10 +561,11 @@ bool RepairCreationTriggers(AppConfig& config) {
 // One combination cannot summon two things, so a later duplicate of an
 // earlier one is unbound and the earlier keeps it - what TrayController::
 // ChangeHotkey does for an edit made in the app, done here for a file
-// edited by hand.
+// edited by hand. A hotkey added since, last in the list, is the one that
+// gives way to a file that gave its default to another.
 bool RepairSummonHotkeys(AppConfig& config) {
     platform::KeyCombo* hotkeys[] = {&config.hotkeyEditMode, &config.hotkeyViewMode, &config.hotkeyQuickCapture,
-                                     &config.hotkeySilentCapture};
+                                     &config.hotkeySilentCapture, &config.hotkeyBehaviorPanel};
     bool repaired = false;
     for (size_t later = 1; later < std::size(hotkeys); ++later) {
         for (size_t earlier = 0; earlier < later; ++earlier) {

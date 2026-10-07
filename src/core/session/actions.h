@@ -111,6 +111,6 @@ enum class ClipboardAction { SelectAll, Copy, Cut, Paste, PasteInPlace, Duplicat
 // Identifies one of the global hotkeys - kept distinct from any index into
 // AppConfig itself, so that nothing naming one depends on how the config
 // stores them.
-enum class HotkeySlot { EditMode, ViewMode, QuickCapture, SilentCapture };
+enum class HotkeySlot { EditMode, ViewMode, QuickCapture, SilentCapture, BehaviorPanel };
 
 }  // namespace sz::core

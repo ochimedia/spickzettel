@@ -211,6 +211,19 @@ void TrayController::RunAppCommand(CommandId id) {
         case CommandId::SilentCapture:
             SilentCapture();
             return;
+        case CommandId::BehaviorPanel:
+            // From edit mode, up or put away again. From anywhere else, edit
+            // mode with the panel up - put away with the overlay last time,
+            // it is up still, and stays.
+            if (state_ == OverlayState::Edit) {
+                overlayApp_.ToggleBehaviorPanel();
+                return;
+            }
+            Request(OverlayRequest::Edit);
+            if (state_ == OverlayState::Edit) {
+                overlayApp_.OpenBehaviorPanel();
+            }
+            return;
         default:
             return;  // the overlay's own, which never come here
     }
@@ -598,7 +611,8 @@ void TrayController::ApplySettingsToWindow() {
     // rather than as a side effect of drawing the Settings panel. Switching
     // it on takes nothing here: it is taken at the next entry into edit
     // mode, or again on a display move below, as Settings' help says; the
-    // HUD's row restarts the overlay instead (docs/SETTINGS.md, section 7).
+    // Behavior panel's row restarts the overlay instead (docs/SETTINGS.md,
+    // section 7).
     if (!settings_.Live().freezeScreen) {
         session_.ReleaseFrozenScreen();
     }

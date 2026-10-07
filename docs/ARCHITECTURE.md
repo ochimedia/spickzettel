@@ -2204,7 +2204,8 @@ and `OverlayApp` is the one object that knows them all:
 - `OverviewPanel` and `SettingsPage`: the Overview, and its Settings tab,
   which the Overview draws inside its body through a call `OverlayApp`
   hands it.
-- `CheatSheet`, `ScreenChrome` (the HUD, the border, the frame graph),
+- `CheatSheet`, `BehaviorPanel`, `ScreenChrome` (the border, the frame
+  graph, the input readout),
   `Messages` (the toast, the persistence warning) and `Pointer` (its
   shape, the software pointer, the drag previews, the size preview, the
   badge).
@@ -2826,8 +2827,7 @@ A row stops waiting when it goes out of sight - its Settings section
 left, the Overview's tab, or the profile it edits - as it does when the
 Overview closes: left waiting, Escape pressed to close the Overview went
 to the row no one could see and unbound its shortcut, and a letter bound
-that letter. Found in review on 2026-09-27. The input options HUD's number keys are the Canvas level's, ahead of any
-command they might be bound to.
+that letter. Found in review on 2026-09-27.
 
 ### Item text
 
@@ -2997,6 +2997,77 @@ like the tools, so it is rebound in Settings > Hotkeys and a profile can
 override it. The panel sizes itself to its text and fits up to three
 columns within the Overview's margins. Its six groups are split across
 the columns so that the tallest column is as short as it can be.
+
+### The Behavior panel
+
+The options of Settings > Behavior that decide how edit mode sits over a
+game - Don't steal focus and the rows under it, the software pointer,
+freezing the screen - in a window of their own, a number key each,
+behind a global hotkey (Ctrl+Alt+B). They interact in ways that are
+found by trying combinations in front of the game, and a combination
+being tried can leave the mouse hard to use: clicks reaching the overlay
+and the game at once, a pointer that is not where the hand is. Settings
+is then several clicks away through exactly that mouse. A global hotkey
+is the one key that reaches the overlay whatever the options are, so the
+panel hangs off one, and its rows switch from the keyboard.
+
+It replaced the input options HUD, a debugging aid in the corner that
+listed the same rows with a number key each, behind a switch in
+Settings > Debug. The HUD took the digits from the game for as long as
+it was switched on; the panel takes them only while it is up. The HUD's
+readouts - the frame rate, the pointer's steps, the countering's lag,
+what is in front - are the debug overlay's now, under its own lines, in
+edit mode.
+
+- **A window, not a panel.** It sits top left, over the snippets and
+  under the popups, dims nothing, and can be dragged anywhere by its
+  background. The game and the snippets stay in view and in reach while
+  it is up, since seeing them behave, and working the snippets, is how a
+  combination is judged. It was built first as a panel over a dimmed
+  screen, on the machine's Panel level like the cheat sheet, and that
+  hid exactly what was being tried. So it is not on the machine at all:
+  it keeps whether it is up itself, a click on it is a click on an ImGui
+  window like the canvas bar's, and it closes by its key or its button,
+  never by Escape, which stays the canvas's.
+- **Its digits, and no other key.** While it is up the keyboard grab
+  takes the bare digits 1 to 7 from the game and hands them to the
+  overlay (`IOverlayWindow::SetPanelDigits`), and every other key goes
+  where it would without the panel: to the game with keystrokes
+  forwarded, so that forwarding can be judged with the panel up. The
+  Canvas level hands the digits to the panel ahead of any command bound
+  to them, as it did the HUD's. Taking focus instead would change the
+  very thing being tried. With Don't steal focus off the overlay has
+  focus already, and the digits come the ordinary way. Arrow keys and
+  Space, which a first version used to pick a row and switch it, are
+  game keys and canvas keys too, so the panel has none: a row is a
+  digit, or a click.
+- **Into the profile that runs.** A switch goes into the profile that
+  matched the application in front, or into the defaults when none did,
+  and the panel says which. That is the configuration being looked at;
+  the Settings panel's edit target can be another profile entirely.
+- **Rows read on the way up restart the overlay.** Don't steal focus,
+  Take focus from elevated applications and Freeze screen decide how the
+  window comes up, so a switch on one hides and shows the overlay again
+  (`OverlayRequest::Restart`) once the key or button that made it is up.
+  A restart with the key still down loses its up, and the next press of
+  that key was no press at all. The panel stays up through the restart.
+- **Drawn as in Settings.** A row is Settings' own checkbox
+  (`SettingCheckbox`), for the profile that runs: a row the profile
+  states for itself is in the accent, with the arrow that hands it back
+  to the defaults. A row whose prerequisite is off is grayed and its key
+  does nothing, from the same predicates Settings grays its checkboxes
+  on.
+- **Explained in Settings.** The panel says where the rows are explained
+  rather than explaining them: Settings has each row's help beside its
+  checkbox. A first version showed the help of the row under the
+  pointer, which only someone already reaching for a row would read.
+- **Bound from the start.** A way out nobody has set up is no way out.
+  Like every hotkey, one another application holds is left unregistered
+  and named in the message at the start, and the app runs without it
+  (`TrayController::UnregisteredHotkeys`). Each hotkey added makes such
+  a clash more likely, which is the cost of binding one by default; the
+  message, once per start, is the price of that clash, and Settings >
+  Hotkeys or `null` in the file ends it.
 
 ### The tutorial
 
@@ -3324,8 +3395,8 @@ old (`docs/OVERLAY_STATES.md`, section 7, has the faults and how each
 was reproduced).
 
 **Transitions happen between frames.** Two requests arrive inside a
-frame - a notice's message has faded, and the input options HUD asks
-for a restart - and a committed setting usually does too. Each is
+frame - a notice's message has faded, and the Behavior panel asks for a
+restart - and a committed setting usually does too. Each is
 posted (`IPlatformHost::Post`) and carried out after the frame, before
 the next: Win32 queues it and posts the host window a message, which the
 loop dispatches before it draws. Hiding or restarting the window from
@@ -3787,11 +3858,12 @@ Consequences that shape `Win32InputGrab`:
   take, is the repeat of a key held since before it began, and is
   swallowed without being recorded. Recorded, it made the key's up the
   grab's to swallow, and a W held to walk kept walking after the overlay
-  was gone. Only for a key the grab takes, though: with just the input
-  options HUD's digits taken, every other key and a digit held from
-  before are the game's, repeats and all. Found in the next review on
-  2026-09-27: the rule was asked ahead of the HUD's, and a Backspace or
-  an arrow held in the game acted once. A hotkey fires on a press, never on its repeat, as
+  was gone. Only for a key the grab takes, though: while the input
+  options HUD took the digits alone, every other key and a digit held
+  from before were the game's, repeats and all. Found in the next review
+  on 2026-09-27: the rule was asked ahead of the HUD's, and a Backspace
+  or an arrow held in the game acted once. The grab takes every key or
+  none now. A hotkey fires on a press, never on its repeat, as
   `RegisterHotKey`'s `MOD_NOREPEAT` does; held a moment too long, the
   edit hotkey opened the overlay and closed it again. Mouse buttons follow
   the same rule, so a drag in the application underneath ends there when
@@ -4010,10 +4082,7 @@ needs raw input, and the software pointer is independent of all of them.
 An option whose precondition fails keeps its stored value and has no
 effect, and every reader asks availability, not storage - the stored
 value of an option that cannot take effect is not evidence of anything.
-The HUD shows such a row as `--` rather than `ON`. The HUD itself is off
-by default because its number keys can only reach a focus-less overlay
-through the keyboard hook, so an always-on HUD ate digits even with
-keystroke forwarding on.
+Settings and the Behavior panel gray such a row.
 
 ### Freezing the screen instead of out-arguing the game
 
