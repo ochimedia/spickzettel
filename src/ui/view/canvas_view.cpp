@@ -678,15 +678,16 @@ void CanvasView::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
     if (editor_.TakeNoteEditJustBegun()) {
         ImGui::SetKeyboardFocusHere();
     }
-    // Snapshotted *before* the widget call below, not read back out of
-    // the editor's buffer afterwards - InputTextMultiline reverts its own
-    // buffer internally when Escape is pressed, in the same call that
-    // reports the resulting deactivation, so by the time that call returns
-    // on an Escape frame the buffer already holds the stale
-    // pre-edit-session text again. This snapshot is always exactly what
-    // the user had typed as of the start of this frame, which is what
-    // EndEditingNote below actually needs to commit - see its own doc
-    // comment. FrameBg is cleared here too, scoped to just this one
+    // Snapshotted *before* the widget call below, for Escape alone -
+    // InputTextMultiline reverts its own buffer internally when Escape is
+    // pressed, in the same call that reports the resulting deactivation,
+    // so by the time that call returns on an Escape frame the buffer
+    // already holds the stale pre-edit-session text again. The snapshot is
+    // what the user had typed as of the start of this frame. Any other
+    // ending - a click outside, Enter, Tab - commits the buffer as the
+    // call left it: a character typed in the same frame as the click is
+    // in it and not in the snapshot (found in the review of 2026-10-08).
+    // FrameBg is cleared here too, scoped to just this one
     // widget, so no default input-field fill shows through the transparent
     // window behind it either, and so is the frame's border: the field is
     // a child window, which drew it as a faint rounded outline inside the
@@ -718,7 +719,8 @@ void CanvasView::RenderNoteEditor(const Item& item, ImVec2 pMin, ImVec2 pMax) {
         // typing" (the app's own Undo covers that), so both paths commit;
         // only the source of the text differs (see preCallBuffer's own
         // comment above).
-        host_.Act(action::FinishNoteEdit{preCallBuffer});
+        const bool escaped = ImGui::IsKeyPressed(ImGuiKey_Escape, /*repeat=*/false);
+        host_.Act(action::FinishNoteEdit{escaped ? preCallBuffer : buffer});
     }
     ImGui::PopStyleColor();
     ImGui::PopFont();

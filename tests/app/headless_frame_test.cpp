@@ -4619,6 +4619,39 @@ TEST_F(HeadlessAppTest, WhileANoteIsTypedEveryKeyIsTheNotesAndEscapeKeepsTheText
     EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "");
 }
 
+// A character typed in the same frame as the click that ends the typing is
+// kept: the click's frame commits what the field holds after it, not what
+// it held before - that is for Escape alone, which reverts the field.
+TEST_F(HeadlessAppTest, ACharacterTypedInTheFrameOfTheClickAwayIsKept) {
+    StartWith(WithTextOnT());
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
+    PressKey(ImGuiKey_T);
+    RawClick(400.0f, 400.0f);
+    const ItemId note = Canvases().CurrentOrNull()->items[0].id;
+    ASSERT_EQ(App().EditingNote(), std::optional<ItemId>(note));
+    ImGui::GetIO().AddInputCharacter('a');
+    StepFrame();
+    MoveTo(900.0f, 650.0f);
+    StepFrame();
+    ASSERT_EQ(App().EditingNote(), std::optional<ItemId>(note)) << "still typing, the pointer outside";
+
+    // ImGui takes both in one frame: no move between them makes a new one.
+    ImGui::GetIO().AddInputCharacter('b');
+    MouseButtonEvent(ImGuiMouseButton_Left, true);
+    StepFrame();
+    MouseButtonEvent(ImGuiMouseButton_Left, false);
+    StepFrames(2);
+
+    EXPECT_FALSE(App().EditingNote().has_value());
+    EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "ab");
+    PressCtrlKey(ImGuiKey_Z);
+    EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "") << "one step for the whole edit";
+    PressCtrlKey(ImGuiKey_Y);
+    EXPECT_EQ(Canvases().FindItemAnywhere(note)->noteText, "ab");
+}
+
 // A note opened for typing shows its caret at once: the field draws no
 // border of its own, whose clip cut off a caret at the start of a line,
 // and the caret there is inside what the field draws. The text starts
