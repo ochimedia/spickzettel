@@ -758,7 +758,11 @@ void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTo
     // In rows as wide as the display allows, the first at the bottom and
     // each further one above it, each centered: one row as long as the
     // snippets were left the outer chips off the screen, out of reach
-    // (found in the review of 2026-09-27, again on 2026-10-08).
+    // (found in the review of 2026-09-27, again on 2026-10-08). The rows
+    // are not bounded in turn: enough of them to pass the top of the
+    // display - 64 minimized on one canvas at 300% on 1920x1080 - is
+    // taken to be past how the dock is used, and is to be revisited if
+    // it shows up in practice.
     const size_t count = minimizedIds.size();
     const size_t perRow = std::max<size_t>(
         1, static_cast<size_t>((std::max(0.0f, displayW - 2.0f * margin) + gap) / (chipSize + gap)));
