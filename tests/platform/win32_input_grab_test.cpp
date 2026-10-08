@@ -727,6 +727,46 @@ TEST(Win32InputGrabTest, AnAltOrWinChordTypesNothing) {
     DestroyWindow(overlay);
 }
 
+// A key pressed with a Win key held is no key of the overlay's: handed over,
+// it arrived bare, and Win+1 - the taskbar's first program - switched the
+// Behavior panel's first row, Win+E picked the eraser.
+TEST(Win32InputGrabTest, AWinChordIsNoKeyOfTheOverlays) {
+    HWND overlay = CreateWindowExW(0, L"STATIC", L"overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleW(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);  // not active: no hook, the keys are handed in
+    const auto keysPosted = [overlay] {
+        std::vector<WPARAM> keys;
+        MSG msg;
+        while (PeekMessageW(&msg, overlay, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_KEYDOWN || msg.message == WM_KEYUP) {
+                keys.push_back(msg.wParam);
+            }
+        }
+        return keys;
+    };
+
+    for (const UINT win : {VK_LWIN, VK_RWIN}) {
+        grab.KeyEventForTesting(win, true);
+        EXPECT_EQ(grab.KeyEventForTesting('1', true), 1) << "kept from the shell too";
+        EXPECT_EQ(grab.KeyEventForTesting('1', false), 0) << "its down was nobody's";
+        grab.KeyEventForTesting(win, false);
+        const std::vector<WPARAM> keys = keysPosted();
+        EXPECT_EQ(std::count(keys.begin(), keys.end(), static_cast<WPARAM>('1')), 0) << "Win+1 with " << win;
+    }
+
+    grab.KeyEventForTesting('1', true);
+    grab.KeyEventForTesting('1', false);
+    EXPECT_EQ(keysPosted(), (std::vector<WPARAM>{'1', '1'})) << "a bare 1 is the overlay's";
+
+    grab.SetOptions(EditModeInputOptions{});
+    grab.SetOverlayWindow(nullptr);
+    DestroyWindow(overlay);
+}
+
 namespace {
 // An overlay stand-in, the keyboard grabbed with every key the overlay's,
 // and what the grab hands Windows as it ends caught in `handedBack` - no

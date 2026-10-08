@@ -1392,18 +1392,13 @@ void Win32InputGrab::PostCharactersToOverlay(UINT vk, const KBDLLHOOKSTRUCT& eve
     }
     // Ctrl without Alt is a shortcut, not text - Ctrl+A would otherwise
     // produce U+0001 - and so is Alt without Ctrl, which Windows makes a
-    // WM_SYSCHAR that no text field takes, and a Win key chord. AltGr
-    // arrives as Ctrl+Alt together and *is* text on layouts that use it
-    // (the German @ and \ live there), so that one is kept. Alt+E and
-    // Win+E typed an "e". The Win key is no modifier the record keeps:
-    // swallowed like any key, or held since before the grab.
+    // WM_SYSCHAR that no text field takes. AltGr arrives as Ctrl+Alt
+    // together and *is* text on layouts that use it (the German @ and
+    // \ live there), so that one is kept. Alt+E typed an "e". A Win key
+    // chord never gets here: see WinKeyHeld.
     const bool ctrl = modifiers_.Ctrl();
     const bool alt = modifiers_.Alt();
-    const auto held = [this](UINT key) {
-        return swallowedDown_[key].load(std::memory_order_relaxed) ||
-               (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) != 0;
-    };
-    if (ctrl != alt || held(VK_LWIN) || held(VK_RWIN)) {
+    if (ctrl != alt) {
         return;
     }
 
@@ -1733,6 +1728,16 @@ LRESULT Win32InputGrab::SwallowKey(UINT vk, bool isDown) {
     return 1;
 }
 
+// The Win key is no modifier the record keeps: it is swallowed like any
+// key, or was held since before the grab and so reached Windows.
+bool Win32InputGrab::WinKeyHeld() const {
+    const auto held = [this](UINT key) {
+        return swallowedDown_[key].load(std::memory_order_relaxed) ||
+               (GetAsyncKeyState(static_cast<int>(key)) & 0x8000) != 0;
+    };
+    return held(VK_LWIN) || held(VK_RWIN);
+}
+
 LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event) {
     const bool isDown = (message == WM_KEYDOWN || message == WM_SYSKEYDOWN);
     const UINT vk = event.vkCode;
@@ -1794,6 +1799,19 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
 
     if (TrackModifier(SidedModifier(vk, event.scanCode, (event.flags & LLKHF_EXTENDED) != 0), isDown)) {
         return SwallowKey(vk, isDown);
+    }
+
+    // A key pressed with a Win key held is the shell's chord - Win+1 the
+    // first program on the taskbar, Win+E File Explorer - which the grab
+    // keeps from the shell (see "Taking the keyboard takes the Windows key
+    // too" in ARCHITECTURE.md) but is no key of the overlay's either:
+    // handed over, it arrived bare, since the Win key never reaches the
+    // key state the overlay reads its modifiers from. Win+1 switched the
+    // Behavior panel's first row, and Win+E picked the eraser (found in
+    // the review of 2026-10-08). Taken from everyone, and not recorded, so
+    // its up goes by as the up of a key the grab never took.
+    if (isDown && vk != VK_LWIN && vk != VK_RWIN && WinKeyHeld()) {
+        return 1;
     }
 
     // A hotkey fires on its press, as RegisterHotKey's MOD_NOREPEAT has it,

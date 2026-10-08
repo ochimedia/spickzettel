@@ -407,6 +407,8 @@ private:
     // normally arrives as WM_CHAR from TranslateMessage, and therefore only
     // to a focused window. See its definition.
     void PostCharactersToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event);
+    // Whether a Win key is down, by the grab's record or by Windows'.
+    bool WinKeyHeld() const;
 
     // Each reads state the app thread writes, and each is called
     // from the hook thread, so they take the lock. Never called while it is

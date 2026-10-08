@@ -3986,7 +3986,10 @@ Consequences that shape `Win32InputGrab`:
   do nothing until edit mode ends. Ctrl+Alt+Del never reaches a hook.
   Letting the Windows key through would hand the shell's shortcuts to it
   mid-edit, where the window one opens takes focus from the game (see
-  "What is a Windows limitation, not a bug"). The key never reaches
+  "What is a Windows limitation, not a bug"). A key pressed with it held
+  goes to nobody (`WinKeyHeld`): handed to the overlay, it arrived bare,
+  and Win+1 switched the Behavior panel's first row and Win+E picked the
+  eraser (found in the review of 2026-10-08). The key never reaches
   Windows' key state either, and the grab keeps no record of it, so
   `HeldModifiers` reads it as up while the keyboard is grabbed: a press on
   empty canvas with it held makes a snippet, where with focus taken it
