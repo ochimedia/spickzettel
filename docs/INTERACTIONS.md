@@ -572,6 +572,14 @@ Global hotkeys are commands too, bound at the root: every level passes a
 captured in Settings, which today is `CompletesAHotkeyCapture` in the
 tray.
 
+A hotkey's chord is the hotkey's alone: no `KeyDown` of it reaches the
+levels, however it is delivered. Windows keeps a registered hotkey's
+press from the focused window, and the keyboard grab, which matches the
+hotkeys itself while the game keeps focus, keeps it from the overlay the
+same way, repeats included. A shortcut on the same combination never
+runs. (Until 2026-10-08 the grab handed the key over as well, and one
+press ran both: the Behavior panel and the cheat sheet opened together.)
+
 ## 8. The session side
 
 An interaction that changes the library opens a gesture on the session

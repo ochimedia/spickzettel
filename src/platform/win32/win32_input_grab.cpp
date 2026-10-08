@@ -1814,10 +1814,16 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
         return 1;
     }
 
-    // A hotkey fires on its press, as RegisterHotKey's MOD_NOREPEAT has it,
-    // not on the repeats of a held one: held a moment too long, the edit
-    // hotkey opened the overlay and its first repeat closed it again.
-    if (isDown && !isRepeat) {
+    // A hotkey's chord is the hotkey's, and no key of the overlay's: as
+    // Windows has it for a registered one, whose press the focused window
+    // never sees. Handed over as well, it ran a shortcut on the same
+    // combination too - the Behavior panel and the cheat sheet opened by
+    // one press (docs/INTERACTIONS.md, section 7). It fires on its press,
+    // as RegisterHotKey's MOD_NOREPEAT has it, not on the repeats of a
+    // held one - held a moment too long, the edit hotkey opened the
+    // overlay and its first repeat closed it again - and its repeats are
+    // the hotkey's too.
+    if (isDown) {
         // Copied under the lock rather than iterated in place: the app
         // thread can add or remove hotkeys (a rebind in Settings) while
         // this runs on the hook thread.
@@ -1826,22 +1832,23 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
             std::lock_guard<std::mutex> lock(stateMutex_);
             hotkeys = hotkeys_;
         }
+        const bool ctrl = modifiers_.Ctrl();
+        const bool alt = modifiers_.Alt();
+        const bool shift = modifiers_.Shift();
         for (const Hotkey& hotkey : hotkeys) {
-            const bool ctrl = modifiers_.Ctrl();
-            const bool alt = modifiers_.Alt();
-            const bool shift = modifiers_.Shift();
             if (hotkey.vk == vk && hotkey.ctrl == ctrl && hotkey.alt == alt && hotkey.shift == shift) {
-                // Exactly the message RegisterHotKey would have produced,
-                // delivered to exactly the window that registered it - so
-                // Win32PlatformHost's existing WM_HOTKEY handler dispatches
-                // it without knowing this didn't come from the OS.
-                const UINT modifiers = (ctrl ? MOD_CONTROL : 0u) | (alt ? MOD_ALT : 0u) | (shift ? MOD_SHIFT : 0u);
-                PostMessageA(hotkey.target, WM_HOTKEY, static_cast<WPARAM>(hotkey.id),
-                             MAKELPARAM(modifiers, vk));
-                // Deliberately still falls through to the overlay below: a
-                // hotkey is a global chord, not a reason for the focused
-                // surface to go deaf.
-                break;
+                if (!isRepeat) {
+                    // Exactly the message RegisterHotKey would have
+                    // produced, delivered to exactly the window that
+                    // registered it - so Win32PlatformHost's existing
+                    // WM_HOTKEY handler dispatches it without knowing this
+                    // didn't come from the OS.
+                    const UINT modifiers =
+                        (ctrl ? MOD_CONTROL : 0u) | (alt ? MOD_ALT : 0u) | (shift ? MOD_SHIFT : 0u);
+                    PostMessageA(hotkey.target, WM_HOTKEY, static_cast<WPARAM>(hotkey.id),
+                                 MAKELPARAM(modifiers, vk));
+                }
+                return SwallowKey(vk, isDown);
             }
         }
     }

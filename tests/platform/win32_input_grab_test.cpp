@@ -767,6 +767,54 @@ TEST(Win32InputGrabTest, AWinChordIsNoKeyOfTheOverlays) {
     DestroyWindow(overlay);
 }
 
+// A hotkey's chord is the hotkey's alone, held and repeating too, as
+// Windows has it for a registered one: handed to the overlay as well, it
+// ran a shortcut on the same combination - the Behavior panel and the cheat
+// sheet opened by one press.
+TEST(Win32InputGrabTest, AHotkeysChordIsNoKeyOfTheOverlays) {
+    HWND overlay = CreateWindowExW(0, L"STATIC", L"overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleW(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);  // not active: no hook, the keys are handed in
+    constexpr int kHotkeyId = 78;
+    grab.AddHotkey(kHotkeyId, KeyCombo{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'B'}, overlay);
+    int hotkeys = 0;
+    const auto bsPosted = [overlay, &hotkeys] {
+        size_t keys = 0;
+        MSG msg;
+        while (PeekMessageW(&msg, overlay, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_HOTKEY) {
+                ++hotkeys;
+            } else if (msg.message == WM_KEYDOWN && msg.wParam == 'B') {
+                ++keys;
+            }
+        }
+        return keys;
+    };
+
+    grab.KeyEventForTesting(VK_LCONTROL, true);
+    grab.KeyEventForTesting(VK_LMENU, true);
+    EXPECT_EQ(grab.KeyEventForTesting('B', true), 1);
+    EXPECT_EQ(grab.KeyEventForTesting('B', true), 1) << "its repeat";
+    grab.KeyEventForTesting('B', false);
+    grab.KeyEventForTesting(VK_LMENU, false);
+    grab.KeyEventForTesting(VK_LCONTROL, false);
+    EXPECT_EQ(bsPosted(), 0u);
+    EXPECT_EQ(hotkeys, 1) << "on its press, not its repeat";
+
+    grab.KeyEventForTesting('B', true);
+    grab.KeyEventForTesting('B', false);
+    EXPECT_EQ(bsPosted(), 1u) << "a bare B is the overlay's";
+
+    grab.RemoveHotkey(kHotkeyId);
+    grab.SetOptions(EditModeInputOptions{});
+    grab.SetOverlayWindow(nullptr);
+    DestroyWindow(overlay);
+}
+
 namespace {
 // An overlay stand-in, the keyboard grabbed with every key the overlay's,
 // and what the grab hands Windows as it ends caught in `handedBack` - no
