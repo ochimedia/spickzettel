@@ -157,9 +157,10 @@ public:
     bool HasImage(uint64_t itemId);
 
     // Makes what was written since the last checkpoint durable: moves it
-    // from the WAL into the file and flushes it to the disk. The one flush
-    // the store makes, so it can stall on a busy disk - for when nothing on
-    // screen waits for it (see TrayController::CheckpointLibrary). A
+    // from the WAL into the file and flushes it to the disk. The flush
+    // that can stall on a busy disk - so made when nothing on screen waits
+    // for it (see TrayController::CheckpointLibrary and
+    // CheckpointWhenStill). A
     // write checkpoints by itself once the WAL holds kCheckpointAtBytes, so
     // an overlay left up does not grow it without end. Nothing to do when
     // nothing was written since, or the file is not open. False when the

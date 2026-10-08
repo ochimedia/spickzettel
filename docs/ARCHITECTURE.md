@@ -1025,8 +1025,12 @@ that waits for a busy disk shows least (`TrayController::CheckpointLibrary`):
   waited a minute, at the start of a frame with no input for five
   seconds and no mouse button held. Anywhere else in edit mode it would
   be the hitch the WAL takes out; there, a frame it makes late is one
-  nobody is waiting on. Added in 0.3.1, from a review: an hour in edit
-  mode had been an hour of changes a power cut could take. And by a
+  nobody is waiting on. Added after 0.3.1, from a review: an hour in edit
+  mode had been an hour of changes a power cut could take. On a disk
+  written flat out a checkpoint can take longer than the input grab
+  waits for a frame (PERF.md: up to 3.7 s; the grab, two seconds), and a
+  hand that moves again meanwhile reaches the game - see "The hooks stand
+  down when the app thread stops". And by a
   write once the WAL holds 64 MB, so that the WAL does not grow without
   end however busy the hand.
 
@@ -3970,7 +3974,17 @@ Consequences that shape `Win32InputGrab`:
   on. The hook thread notes that as each one goes past: the grab's
   record of Ctrl, Alt and Shift follows it, the up of a key whose down
   was swallowed before the stall is no longer swallowed, and the overlay
-  is told that key went up. The first version worked this out after the
+  is told that key went up. A checkpoint in edit mode on a disk written
+  flat out is such a stall too (see "In edit mode, only while the hand is
+  still"): made after five seconds of rest, it can outlast two, and what
+  the hand does in the rest of it - a click, a key, a note's typing - goes
+  to the game behind the overlay. Left so on purpose (review of
+  2026-10-08): the watchdog cannot tell a slow disk from a hung thread,
+  and should not; the only way out is a checkpoint off the app thread,
+  which would put a lock into a store that is single-threaded by design,
+  and the first edit during it would wait all the same. It takes a
+  saturated disk, a rest and a move inside the checkpoint's last part.
+  The first version worked this out after the
   stall from what the system said was held. The system never saw a
   swallowed key go down, though, so a key held through the stall looked
   let go, and one pressed again during it still looked ours: its up was

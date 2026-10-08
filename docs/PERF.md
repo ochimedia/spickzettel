@@ -389,9 +389,12 @@ commits - median and max of the 6, in milliseconds:
 - **`NORMAL` moves the flush to the checkpoint rather than doing without
   it**: 8 ms on an idle disk, 65-140 ms on a moderate one, and 1.5-3.7 s
   on a disk written flat out. Hence when the app makes one: out of edit
-  mode, where nothing on screen waits for it (ARCHITECTURE.md, "Commits
-  wait for nobody: the WAL"), and never inside a commit on its own at
-  every thousand pages - a single capture could be that.
+  mode, and in it while the hand has rested five seconds - where nothing
+  on screen waits for it (ARCHITECTURE.md, "Commits wait for nobody: the
+  WAL") - and never inside a commit on its own at every thousand pages -
+  a single capture could be that. The 3.7 s is past the input grab's two
+  seconds without a frame, after which its hooks let everything through
+  (ARCHITECTURE.md, "The hooks stand down when the app thread stops").
 
 The six checkpoints per setting are few, and the tails of 120 commits vary
 from run to run; the medians and the order of the settings are what to
