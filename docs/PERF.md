@@ -63,8 +63,13 @@ the GPU is not in this number. Measure that with instruments 2 and 3.
 library in a data folder of its own (`--data-dir`, ARCHITECTURE.md,
 "Command-line options"), so it can neither touch nor be perturbed by the
 real one. It refuses to start while a copy of Spickzettel runs - quit it
-first - and stops only the copy it started; it warns if the real config or
-library changed meanwhile.
+first - and refuses an executable that does not take `--data-dir`, which
+would run on the real library: to compare against an older build, run it
+under another Windows account. It brings the overlay up with
+`--edit-mode`, presses no key, looks only at windows of the copy it
+started - failing at once when that copy exits or shows a message box -
+and stops only that copy; it warns if the real config or library changed
+meanwhile.
 
     .\tools\perf_library\measure.ps1 -Exe <path-to-exe> -LibrarySource %TEMP%\libs\heavy.db `
         -Seconds 5 -Repeat 3 -ShowFps -Screenshot heavy.png

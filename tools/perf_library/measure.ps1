@@ -6,7 +6,9 @@
 # directory (--data-dir), so a measurement can neither touch nor be
 # perturbed by the real library and config. A copy of Spickzettel already
 # running is refused rather than stopped: it is someone's, with a note
-# perhaps half typed; quit it first. Only the copy started here is stopped.
+# perhaps half typed; quit it first. Only the copy started here is looked
+# at, by its process id, and stopped; no key is pressed (--edit-mode brings
+# the overlay up). A build that does not take --data-dir is refused.
 #
 #   .\measure.ps1 -Exe <path> [-Scenario name]
 #                 [-Seconds 8] [-Screenshot <path>]
@@ -40,37 +42,56 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # Guarded, not just error-suppressed: a matrix runs this script many times in
-# one session, and re-adding a type that already exists is a hard error.
-if (-not ([System.Management.Automation.PSTypeName]'SzMeasure').Type) {
+# one session, and re-adding a type that already exists is a hard error. Named
+# anew whenever its members change, for the same reason.
+#
+# Every question is asked of the copy this script started, by its process id:
+# another copy's overlay - one under another name, started meanwhile - is not
+# the one being measured, and nothing here sends a key, which would reach
+# whichever copy holds the hotkey.
+if (-not ([System.Management.Automation.PSTypeName]'SzMeasureWindows').Type) {
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public static class SzMeasure {
-    [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, IntPtr extra);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindowW(string cls, string title);
-    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
-    public static void Chord(byte k) {
-        keybd_event(0x11, 0, 0, IntPtr.Zero); keybd_event(0x12, 0, 0, IntPtr.Zero); keybd_event(k, 0, 0, IntPtr.Zero);
-        System.Threading.Thread.Sleep(60);
-        keybd_event(k, 0, 2, IntPtr.Zero); keybd_event(0x12, 0, 2, IntPtr.Zero); keybd_event(0x11, 0, 2, IntPtr.Zero);
+using System.Text;
+public static class SzMeasureWindows {
+    delegate bool EnumProc(IntPtr h, IntPtr p);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc f, IntPtr p);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassNameW(IntPtr h, StringBuilder s, int n);
+    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+    // Whether process `pid` has a visible top-level window of class `cls`.
+    public static bool HasVisible(int pid, string cls) {
+        bool found = false;
+        EnumWindows((h, p) => {
+            uint owner;
+            GetWindowThreadProcessId(h, out owner);
+            if (owner != (uint)pid || !IsWindowVisible(h)) { return true; }
+            var name = new StringBuilder(64);
+            GetClassNameW(h, name, name.Capacity);
+            if (name.ToString() == cls) { found = true; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return found;
     }
-    public static bool Visible() {
-        IntPtr h = FindWindowW("SpickzettelOverlayWindowClass", null);
-        return h != IntPtr.Zero && IsWindowVisible(h);
-    }
+    // Its overlay, up.
+    public static bool OverlayUp(int pid) { return HasVisible(pid, "SpickzettelOverlayWindowClass"); }
+    // A message box of its own: the app said why it would not start - a copy
+    // already running, an unreadable library, an option it does not know.
+    public static bool SaysSomething(int pid) { return HasVisible(pid, "#32770"); }
 }
 "@
 }
 
-# A config with the input options all off: this drives the app with synthetic
-# input, and the grab/software-pointer paths would fight it. Everything else
-# is the shipped default, so a measurement reflects the app as delivered.
+# A config with the input options all off: what is measured is the overlay
+# drawing, not the input grab's hooks. Everything else - the hotkeys
+# included, which nothing here presses - is the shipped default, so a
+# measurement reflects the app as delivered.
 function New-MeasurementConfig {
     param([string]$Path, [bool]$Fps)
     $json = @"
 {
   "version": 1,
-  "hotkeys": { "editMode": "Ctrl+Alt+O", "viewMode": "Ctrl+Alt+V", "quickCapture": "Ctrl+Alt+C", "silentCapture": "Ctrl+Alt+S" },
   "drawing": { "strokeColor": "#FF0000", "strokeWidth": 3.0 },
   "appearance": { "showItemBorders": true },
   "overview": { "showStrokes": true, "showBitmaps": false },
@@ -82,9 +103,23 @@ function New-MeasurementConfig {
     Set-Content -Path $Path -Value $json -Encoding UTF8
 }
 
+# A build from before --data-dir ignores it and opens the real config and
+# library. The option's name is in every build that takes it - the table of
+# options is text in the executable - so one without it is refused before it
+# starts. To compare against an older build, run it under another Windows
+# account instead.
+$exeText = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes((Resolve-Path $Exe).Path))
+foreach ($option in '--data-dir', '--edit-mode') {
+    if (-not $exeText.Contains($option)) {
+        throw "$Exe does not take $option, so it would run on the real config and library: a build from before it"
+    }
+}
+$exeText = $null
+
 # The single-instance lock is per user, not per folder: with a copy up, the
-# one started here would refuse to start (see main_win32.cpp), and the
-# hotkeys pressed below would reach the running one.
+# one started here refuses to start (see main_win32.cpp). Said here first;
+# a copy under another name, or one started meanwhile, is caught below by
+# the refusal it causes.
 $running = Get-Process -Name Spickzettel* -ErrorAction SilentlyContinue
 if ($running) {
     throw "Spickzettel is running ($(($running | ForEach-Object { $_.ProcessName }) -join ', ')): quit it first"
@@ -111,24 +146,25 @@ try {
     $psi.FileName = (Resolve-Path $Exe).Path
     $psi.UseShellExecute = $false
     # Arguments, not ArgumentList, which Windows PowerShell's .NET lacks.
-    # The sandbox's path holds no quotes to escape.
-    $psi.Arguments = "--data-dir `"$sandbox`""
+    # The sandbox's path holds no quotes to escape. --edit-mode brings the
+    # overlay up by itself, whatever the start would do otherwise (a first
+    # run shows it, a start on a library does not): pressing the edit
+    # hotkey instead was a coin flip between showing and hiding it, and a
+    # global key goes to whichever copy holds it.
+    $psi.Arguments = "--data-dir `"$sandbox`" --edit-mode"
     $proc = [System.Diagnostics.Process]::Start($psi)
 
-    # Getting the overlay up is deliberately careful rather than "sleep, then
-    # press the hotkey". The app shows itself on some starts and not others
-    # (a first run puts the welcome note up), so a blind press is a coin flip
-    # between showing it and hiding it again - which is exactly what produced
-    # samples of 0.0%, the app sitting in the tray with the loop parked in
-    # GetMessage and nothing being drawn at all.
+    # Its overlay, and nothing else: up, or the start failed - the process
+    # gone, or a message box of its own saying why.
     $deadline = (Get-Date).AddSeconds(15)
-    while (-not [SzMeasure]::Visible() -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
-    if (-not [SzMeasure]::Visible()) {
-        [SzMeasure]::Chord(0x4F)
-        $deadline = (Get-Date).AddSeconds(10)
-        while (-not [SzMeasure]::Visible() -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 250 }
+    while (-not [SzMeasureWindows]::OverlayUp($proc.Id) -and (Get-Date) -lt $deadline) {
+        if ($proc.HasExited) { throw "Spickzettel exited at its start, code $($proc.ExitCode)" }
+        if ([SzMeasureWindows]::SaysSomething($proc.Id)) {
+            throw "Spickzettel would not start - a copy already running? See the message it shows"
+        }
+        Start-Sleep -Milliseconds 250
     }
-    if (-not [SzMeasure]::Visible()) { throw "the overlay never became visible" }
+    if (-not [SzMeasureWindows]::OverlayUp($proc.Id)) { throw "the overlay never became visible" }
     Start-Sleep -Seconds $SettleSeconds
 
     # Sampled several times and reported as the median: one sample is easily
@@ -140,7 +176,7 @@ try {
         # across the overlay being hidden measures a process that stopped
         # drawing halfway through, and reads as a number rather than as an
         # error.
-        if (-not [SzMeasure]::Visible()) { throw "the overlay was hidden before sample $($i + 1)" }
+        if (-not [SzMeasureWindows]::OverlayUp($proc.Id)) { throw "the overlay was hidden before sample $($i + 1)" }
         $proc.Refresh()
         $cpu0 = $proc.TotalProcessorTime
         $wall0 = Get-Date
@@ -148,7 +184,7 @@ try {
         $proc.Refresh()
         $cpu1 = $proc.TotalProcessorTime
         $wall1 = Get-Date
-        if (-not [SzMeasure]::Visible()) { throw "the overlay was hidden during sample $($i + 1)" }
+        if (-not [SzMeasureWindows]::OverlayUp($proc.Id)) { throw "the overlay was hidden during sample $($i + 1)" }
         $samples += 100.0 * ($cpu1 - $cpu0).TotalMilliseconds / ($wall1 - $wall0).TotalMilliseconds
     }
     $sorted = $samples | Sort-Object
