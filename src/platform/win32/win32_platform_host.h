@@ -34,6 +34,7 @@ public:
     void SetTrayCommandCallback(TrayCommandCallback callback) override;
     int RegisterGlobalHotkey(const KeyCombo& combo, HotkeyCallback callback) override;
     void UnregisterGlobalHotkey(int hotkeyId) override;
+    void SetHotkeysPaused(bool paused) override;
     IOverlayWindow& GetOverlayWindow() override;
     std::vector<DisplayInfo> ListDisplays() const override;
     std::filesystem::path GetConfigFilePath() const override;
@@ -80,6 +81,10 @@ private:
     UINT openedAgainMessage_ = 0;
     TrayCommandCallback trayCallback_;
     std::unordered_map<int, HotkeyCallback> hotkeyCallbacks_;
+    // What each was registered with - RegisterHotKey's modifiers and key -
+    // to register it again after a pause.
+    std::unordered_map<int, std::pair<UINT, UINT>> hotkeyKeys_;
+    bool hotkeysPaused_ = false;
     std::function<void()> backgroundTimerCallback_;
     std::function<void()> sessionEndCallback_;
     std::function<void()> openedAgainCallback_;

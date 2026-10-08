@@ -152,6 +152,7 @@ bool TrayController::Initialize() {
     overlayApp_.SetHotkeyChangeCallback([this](HotkeySlot slot, platform::KeyCombo combo) {
         return ChangeHotkey(slot, combo);
     });
+    overlayApp_.SetHotkeysPausedCallback([this](bool paused) { host_.SetHotkeysPaused(paused); });
     overlayApp_.SetHotkeyRegisteredQuery([this](HotkeySlot slot) { return HotkeyId(slot) != 0; });
     // The two requests that arrive in a frame, carried out after it: a
     // transition changes what the frame is part of (docs/OVERLAY_STATES.md,

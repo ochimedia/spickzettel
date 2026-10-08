@@ -568,9 +568,12 @@ Canvas level, ahead of the bindings, with no row here, and a digit
 pressed mid-gesture switched a setting under it.)
 
 Global hotkeys are commands too, bound at the root: every level passes a
-`Hotkey` event except the one interaction that wants it - a hotkey being
-captured in Settings, which today is `CompletesAHotkeyCapture` in the
-tray.
+`Hotkey` event. While a row in Settings waits for a key (`KeyCapture`)
+the hotkeys are paused - unregistered with Windows, and unmatched by the
+keyboard grab - so the combination one holds arrives as a `KeyDown` like
+any other: the row takes it, and nothing runs. Before the pause, a
+hotkey's row took the `Hotkey` event as the press, and a shortcut's row
+let it run: the edit hotkey hid the overlay with the row still waiting.
 
 A hotkey's chord is the hotkey's alone: no `KeyDown` of it reaches the
 levels, however it is delivered. Windows keeps a registered hotkey's

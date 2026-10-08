@@ -37,6 +37,10 @@ public:
     // if the OS takes it - see OverlayApp::SetHotkeyChangeCallback. False
     // when it did not.
     virtual bool ChangeHotkey(core::HotkeySlot slot, platform::KeyCombo combo) = 0;
+    // No hotkey fires while `paused`, and the press of one is a key like
+    // any other - for a row waiting for a key (see OverlayApp::
+    // SetHotkeysPausedCallback).
+    virtual void PauseHotkeys(bool paused) = 0;
     // A delete of `target`: the confirmation, unless Settings > Behavior
     // says not to ask, and then the delete itself, as an action.
     virtual void AskToDelete(DeleteTarget target) = 0;

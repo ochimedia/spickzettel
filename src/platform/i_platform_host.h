@@ -38,6 +38,12 @@ public:
     // combination could not be registered (another application owns it).
     virtual int RegisterGlobalHotkey(const KeyCombo& combo, HotkeyCallback callback) = 0;
     virtual void UnregisterGlobalHotkey(int hotkeyId) = 0;
+    // While true, no hotkey fires and the press of one reaches the overlay
+    // as any other key does - for a row in Settings waiting for a key,
+    // which would otherwise never see a combination a hotkey holds, and
+    // whose press would run that hotkey. Each keeps its id, and is
+    // registered again as the pause ends.
+    virtual void SetHotkeysPaused(bool paused) = 0;
 
     virtual IOverlayWindow& GetOverlayWindow() = 0;
 

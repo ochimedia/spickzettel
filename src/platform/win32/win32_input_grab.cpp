@@ -1822,8 +1822,8 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // as RegisterHotKey's MOD_NOREPEAT has it, not on the repeats of a
     // held one - held a moment too long, the edit hotkey opened the
     // overlay and its first repeat closed it again - and its repeats are
-    // the hotkey's too.
-    if (isDown) {
+    // the hotkey's too. None of it while they are paused.
+    if (isDown && !hotkeysPaused_.load(std::memory_order_relaxed)) {
         // Copied under the lock rather than iterated in place: the app
         // thread can add or remove hotkeys (a rebind in Settings) while
         // this runs on the hook thread.

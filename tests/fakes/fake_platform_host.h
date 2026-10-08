@@ -319,6 +319,11 @@ public:
         registeredCombos.erase(hotkeyId);
     }
 
+    // Paused, TriggerHotkey fires nothing, as Windows sends nothing: the
+    // press arrives as keys, which a test presses as keys.
+    void SetHotkeysPaused(bool paused) override { hotkeysPaused = paused; }
+    bool hotkeysPaused = false;
+
     platform::IOverlayWindow& GetOverlayWindow() override { return overlayWindow; }
 
     std::vector<platform::DisplayInfo> ListDisplays() const override { return displays; }
@@ -415,6 +420,9 @@ public:
 
     // Test-only helpers to simulate what a real backend would deliver.
     void TriggerHotkey(int hotkeyId) {
+        if (hotkeysPaused) {
+            return;
+        }
         auto it = hotkeyCallbacks.find(hotkeyId);
         if (it != hotkeyCallbacks.end() && it->second) {
             it->second();

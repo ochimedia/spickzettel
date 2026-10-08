@@ -1647,44 +1647,54 @@ void SettingsPage::RenderHotkeyEditor(const char* id, const char* label, HotkeyS
 
 // A row waiting is a KeyCapture on the machine's Text level - one at a
 // time, so arming one disarms the other, as the level holds one.
+// The hotkeys come back before a combination is offered, so the OS is
+// asked about it with every other hotkey of the app's in place.
 void SettingsPage::ArmHotkeyCapture(HotkeySlot slot) {
     editor_.Input().Push(std::make_unique<KeyCapture>(
                              slot,
                              [this, slot](platform::KeyCombo combo) {
+                                 host_.PauseHotkeys(false);
                                  if (!TryChangeHotkey(slot, combo)) {
                                      host_.Say(strings::kHotkeysComboRejected);
                                  }
                              },
-                             KeyboardRelease()),
+                             WaitEnded()),
                          Event{});
-    BorrowKeyboard();
+    WaitForAKey();
 }
 
 void SettingsPage::ArmShortcutCapture(ShortcutAction action) {
     editor_.Input().Push(std::make_unique<KeyCapture>(
                              action,
                              [this, action](platform::KeyCombo combo) {
+                                 host_.PauseHotkeys(false);
                                  settings_.SetShortcut(action, combo, editProfile_);
                              },
-                             KeyboardRelease()),
+                             WaitEnded()),
                          Event{});
-    BorrowKeyboard();
+    WaitForAKey();
 }
 
 // The key a row waits for has to reach the overlay, which a game that
 // keeps focus holds when the grab has no keyboard hook to hand keys over
 // with: the row then waited on keys that went to the game. So it borrows
-// the keyboard as a text field does, focus if need be - after the Push,
-// which ended whatever held the level before, and gave back what that
-// borrowed.
-void SettingsPage::BorrowKeyboard() {
+// the keyboard as a text field does, focus if need be. And the hotkeys
+// pause: a combination one holds went to it, which Windows hands nothing
+// else, and its press ran the hotkey - the edit hotkey hid the overlay
+// with the row still waiting. Both after the Push, which ended whatever
+// held the level before, and gave back what that took.
+void SettingsPage::WaitForAKey() {
     if (host_.Window() != nullptr) {
         host_.Window()->RequestTextInput();
     }
+    host_.PauseHotkeys(true);
 }
 
-std::function<void()> SettingsPage::KeyboardRelease() {
+// However the wait ends - a key taken, Escape, another row armed, the
+// overlay hidden - both come back.
+std::function<void()> SettingsPage::WaitEnded() {
     return [this] {
+        host_.PauseHotkeys(false);
         if (host_.Window() != nullptr) {
             host_.Window()->ReleaseTextInput();
         }

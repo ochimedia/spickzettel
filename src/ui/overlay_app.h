@@ -434,6 +434,12 @@ public:
     void SetHotkeyChangeCallback(std::function<bool(HotkeySlot, platform::KeyCombo)> callback) {
         hotkeyChangeCallback_ = std::move(callback);
     }
+    // Pauses the global hotkeys while a row in Settings waits for a key,
+    // and ends the pause as the wait ends, however it ends: the key a
+    // hotkey holds is then a key the row can take, and pressing it runs
+    // nothing (see IPlatformHost::SetHotkeysPaused). Left null, a test's,
+    // there is nothing to pause.
+    void SetHotkeysPausedCallback(std::function<void(bool)> callback) { hotkeysPausedCallback_ = std::move(callback); }
 
 
 private:
@@ -519,6 +525,11 @@ private:
     platform::IOverlayWindow* Window() const override { return window_; }
     std::vector<platform::DisplayInfo> ListDisplays() override;
     bool ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) override;
+    void PauseHotkeys(bool paused) override {
+        if (hotkeysPausedCallback_) {
+            hotkeysPausedCallback_(paused);
+        }
+    }
     void OpenCanvasMenu(CanvasId canvas, ImVec2 at) override { popups_.OpenCanvasMenu(canvas, at); }
     void Mark(Anchor anchor, ImVec2 min, ImVec2 max) override { anchors_.Mark(anchor, AnchorRect{min, max}); }
     // Where the anchored widgets were drawn this frame - cleared in
@@ -633,6 +644,7 @@ private:
     uint8_t buttonsDown_ = 0;
     // See SetHotkeyChangeCallback's own doc comment.
     std::function<bool(HotkeySlot, platform::KeyCombo)> hotkeyChangeCallback_;
+    std::function<void(bool)> hotkeysPausedCallback_;
 
     // The pacing last handed to the window - see OnFrame, which decides it
     // each frame and passes it on only when it changes.

@@ -181,15 +181,16 @@ private:
 // modifiers are held - is bound, and for a chosen key the middle or a side
 // mouse button as well. Escape, and for a chosen key Backspace and Delete,
 // bind nothing: a row showing "(none)" is what a hand reaches for them to
-// get - for a hotkey, Escape only stops waiting. A global hotkey that
-// fires meanwhile is the press, for a hotkey's row: Windows hands a
-// registered combination to its hotkey and to nothing else, so it never
-// arrives as a key. The pointer is passed on, to the panel the row is in.
+// get - for a hotkey, Escape only stops waiting. The global hotkeys are
+// paused meanwhile, so the combination one holds arrives as a key like
+// any other (see IPlatformHost::SetHotkeysPaused); one that fires anyway
+// is the press, for a hotkey's row. The pointer is passed on, to the
+// panel the row is in.
 //
 // A row waiting borrows the keyboard as a text field does (see
-// IOverlayWindow::RequestTextInput), whoever armed it; `release` gives it
-// back, however the wait ends - a key bound, Escape, or the level ended
-// from outside.
+// IOverlayWindow::RequestTextInput) and pauses the hotkeys, whoever armed
+// it; `release` gives both back, however the wait ends - a key bound,
+// Escape, or the level ended from outside.
 class KeyCapture final : public Interaction {
 public:
     using Target = std::variant<core::HotkeySlot, core::ShortcutAction>;

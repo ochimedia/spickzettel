@@ -3939,6 +3939,14 @@ Consequences that shape `Win32InputGrab`:
   screenshot tool in hand. `OverlayApp::OnOverlayShown` clears ImGui's
   event queue and key state, so a showing starts from no input either
   way.
+- **Hotkeys pause while a row waits for a key.** A row in Settings
+  waiting for a key would never see a combination a hotkey holds, and its
+  press ran the hotkey - the edit hotkey hid the overlay with the row
+  still waiting. `IPlatformHost::SetHotkeysPaused` unregisters each with
+  Windows and has the grab match none, and registers them again under
+  the same ids as the wait ends, before the key taken is offered as a
+  hotkey of its own. One another application took in the seconds between
+  stays out until the next start, working only under the grab.
 - **A key-up is swallowed only if its key-down was.** The hotkey that
   turns edit mode on is pressed before any hook exists; its key-ups then
   arrived under the hook and were swallowed, so Windows never learned

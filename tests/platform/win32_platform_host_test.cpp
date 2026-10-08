@@ -222,6 +222,43 @@ TEST(Win32PlatformHostTest, AHotkeyCallbackCanUnregisterItsOwnHotkey) {
     EXPECT_EQ(ranToTheEnd, word);
 }
 
+// Paused, a hotkey's combination is out of Windows' hands - free for
+// anyone to register, and its press a key like any other - and back in
+// them as the pause ends, under the same id.
+TEST(Win32PlatformHostTest, APausedHotkeyLeavesItsCombinationFreeUntilThePauseEnds) {
+    const std::string name = "SpickzettelHostTest-" + std::to_string(GetCurrentProcessId());
+    Win32PlatformHost host;
+    ASSERT_TRUE(host.Initialize(name));
+    const KeyCombo combo{true, true, true, KeyCombo::kFunctionKeyBase + 23};
+    const UINT modifiers = MOD_CONTROL | MOD_ALT | MOD_SHIFT | MOD_NOREPEAT;
+    const int id = host.RegisterGlobalHotkey(combo, [] {});
+    if (id == 0) {
+        GTEST_SKIP() << "Ctrl+Alt+Shift+F23 taken by something else";
+    }
+    constexpr int kProbe = 0xBEEF;
+    const auto freeForAnother = [&] {
+        const bool registered = RegisterHotKey(nullptr, kProbe, modifiers, VK_F23) != FALSE;
+        if (registered) {
+            UnregisterHotKey(nullptr, kProbe);
+        }
+        return registered;
+    };
+    ASSERT_FALSE(freeForAnother());
+
+    host.SetHotkeysPaused(true);
+    EXPECT_TRUE(freeForAnother());
+    const int whilePaused = host.RegisterGlobalHotkey(KeyCombo{true, true, true, KeyCombo::kFunctionKeyBase + 22}, [] {});
+    EXPECT_NE(whilePaused, 0) << "one registered meanwhile is told it is free";
+    EXPECT_TRUE(RegisterHotKey(nullptr, kProbe, modifiers, VK_F22)) << "and left out too";
+    UnregisterHotKey(nullptr, kProbe);
+
+    host.SetHotkeysPaused(false);
+    EXPECT_FALSE(freeForAnother());
+    EXPECT_FALSE(RegisterHotKey(nullptr, kProbe, modifiers, VK_F22));
+    host.UnregisterGlobalHotkey(whilePaused);
+    host.UnregisterGlobalHotkey(id);
+}
+
 // The background timer's callback may set the timer again while it runs
 // - the config retry does, from the save it retries - and runs on to the
 // end with what it captured intact.

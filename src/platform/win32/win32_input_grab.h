@@ -80,6 +80,10 @@ public:
     // also disable the hotkey that turns it off.
     void AddHotkey(int id, const KeyCombo& combo, HWND target);
     void RemoveHotkey(int id);
+    // While true, the grab matches none of them: a hotkey's chord is a key
+    // like any other, for a row in Settings waiting for one (see
+    // IPlatformHost::SetHotkeysPaused).
+    void SetHotkeysPaused(bool paused) { hotkeysPaused_.store(paused, std::memory_order_relaxed); }
 
     // True while ImGui must navigate by the position below instead of by
     // the real cursor. Under a mouse grab the real cursor is left entirely
@@ -691,6 +695,7 @@ private:
     ModifierRecord modifiers_;
 
     std::vector<Hotkey> hotkeys_;
+    std::atomic<bool> hotkeysPaused_{false};
 
     // Message-only window receiving the raw mouse stream - the overlay is told
     // about movement, buttons and the wheel from here, so it exists whenever

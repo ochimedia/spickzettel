@@ -300,6 +300,12 @@ int Win32PlatformHost::RegisterGlobalHotkey(const KeyCombo& combo, HotkeyCallbac
     }
 
     hotkeyCallbacks_[id] = std::move(callback);
+    hotkeyKeys_[id] = {modifiers, vkCode};
+    // Registered to learn whether the combination is free, and left out
+    // until the pause ends.
+    if (hotkeysPaused_) {
+        UnregisterHotKey(hwnd_, id);
+    }
     // Also handed to the input grab: while that is swallowing the keyboard,
     // Windows stops delivering WM_HOTKEY at all (measured - a low-level
     // hook that discards the event suppresses the hotkey with it), so the
@@ -318,7 +324,29 @@ void Win32PlatformHost::UnregisterGlobalHotkey(int hotkeyId) {
     }
     UnregisterHotKey(hwnd_, hotkeyId);
     hotkeyCallbacks_.erase(hotkeyId);
+    hotkeyKeys_.erase(hotkeyId);
     Win32InputGrab::Instance().RemoveHotkey(hotkeyId);
+}
+
+// Taken out of Windows' hands for the pause rather than ignored as they
+// arrive: Windows keeps a registered hotkey's press from the focused
+// window, so the row waiting would never see it. Registered again under
+// the same ids. One another application took in the seconds between
+// stays out until the app starts again - Windows refuses it - and keeps
+// working only under the keyboard grab, which matches it itself.
+void Win32PlatformHost::SetHotkeysPaused(bool paused) {
+    if (paused == hotkeysPaused_) {
+        return;
+    }
+    hotkeysPaused_ = paused;
+    Win32InputGrab::Instance().SetHotkeysPaused(paused);
+    for (const auto& [id, keys] : hotkeyKeys_) {
+        if (paused) {
+            UnregisterHotKey(hwnd_, id);
+        } else {
+            RegisterHotKey(hwnd_, id, keys.first, keys.second);
+        }
+    }
 }
 
 IOverlayWindow& Win32PlatformHost::GetOverlayWindow() { return overlayWindow_; }

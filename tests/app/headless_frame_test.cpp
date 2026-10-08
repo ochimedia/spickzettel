@@ -1844,20 +1844,27 @@ TEST_F(HeadlessAppTest, AChangeOfCanvasBringsTheBarOutForAMoment) {
     EXPECT_GE(App().CanvasBarReveal(), 1.0f);
 }
 
-// A combo one of the app's own hotkeys already has never reaches the
-// capture loop as a key press - Windows hands a registered combination
-// to the hotkey and to nothing else - so the hotkey firing is the press:
-// it completes the capture instead of doing its usual job, and the row
-// that had the combo is left unbound.
-TEST_F(HeadlessAppTest, AHotkeyPressedWhileCapturingBecomesTheCapturedCombo) {
+// The hotkeys pause while a row waits: Windows hands a registered
+// combination to its hotkey and to nothing else, so a combination one of
+// the app's own hotkeys has would never reach the row as a key, and its
+// press would do the hotkey's job. Paused, it is a key like any other -
+// captured, not acted on - and the row that had it is left unbound.
+TEST_F(HeadlessAppTest, AHotkeysCombinationIsAKeyLikeAnyOtherWhileARowWaits) {
     ShowEditMode();
     StepFrame();
     controller_->Overlay().ArmHotkeyCapture(HotkeySlot::EditMode);
     ASSERT_TRUE(App().IsCapturingHotkey());
+    EXPECT_TRUE(host_.hotkeysPaused);
 
-    TriggerHotkey(config_.hotkeyViewMode);
+    TriggerHotkey(config_.hotkeyViewMode);  // Windows sends nothing
+    KeyEvent(ImGuiMod_Ctrl, true);
+    KeyEvent(ImGuiMod_Alt, true);
+    PressKey(ImGuiKey_V);
+    KeyEvent(ImGuiMod_Alt, false);
+    KeyEvent(ImGuiMod_Ctrl, false);
     StepFrame();
 
+    EXPECT_FALSE(host_.hotkeysPaused) << "back once the row has its key";
     EXPECT_FALSE(App().IsCapturingHotkey());
     EXPECT_FALSE(App().IsViewOnly()) << "the press was captured, not acted on";
     EXPECT_TRUE(host_.overlayWindow.visible);
@@ -1941,8 +1948,8 @@ TEST_F(HeadlessAppTest, AWaitingRowTakesTheNextKeyAndEscapeStopsIt) {
 
 // A waiting row borrows the keyboard, as a text field does: with no hook
 // to hand the keys over, the key it waits for went to the program
-// underneath. Each way the wait ends gives it back - a key bound, Escape,
-// another row armed, edit mode left.
+// underneath. And it pauses the hotkeys. Each way the wait ends gives both
+// back - a key bound, Escape, another row armed, edit mode left.
 TEST_F(HeadlessAppTest, AWaitingRowBorrowsTheKeyboardUntilItStops) {
     ShowEditMode();
     StepFrame();
@@ -1950,7 +1957,10 @@ TEST_F(HeadlessAppTest, AWaitingRowBorrowsTheKeyboardUntilItStops) {
     StepFrame();
     const int& requested = host_.overlayWindow.requestTextInputCallCount;
     const int& released = host_.overlayWindow.releaseTextInputCallCount;
-    const auto borrowed = [&] { return requested - released; };
+    const auto borrowed = [&] {
+        EXPECT_EQ(host_.hotkeysPaused, requested != released);
+        return requested - released;
+    };
     ASSERT_EQ(borrowed(), 0);
 
     controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
@@ -1965,9 +1975,9 @@ TEST_F(HeadlessAppTest, AWaitingRowBorrowsTheKeyboardUntilItStops) {
     controller_->Overlay().ArmHotkeyCapture(HotkeySlot::ViewMode);
     controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
     EXPECT_EQ(borrowed(), 1) << "the first given back as the second borrowed";
-    // A hotkey is no key to a shortcut's row: view mode comes up, and the
-    // Overview goes with edit mode.
-    ShowViewMode();
+    // The tray's menu, which is no key: the overlay goes, and the Overview
+    // with edit mode.
+    host_.TriggerTrayCommand(platform::TrayCommand::ToggleOverlay);
     StepFrame();
     EXPECT_FALSE(App().IsCapturingShortcut());
     EXPECT_EQ(borrowed(), 0) << "edit mode left";
