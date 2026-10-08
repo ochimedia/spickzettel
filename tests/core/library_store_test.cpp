@@ -1194,14 +1194,13 @@ TEST_F(LibraryStoreTest, ALibraryWhereItWasIsMovedHere) {
     EXPECT_EQ(loaded->canvases[0].items.size(), 2u);
 }
 
-// To another drive it is copied, and the copy is the library once it is
-// whole: nothing is left where it was, and no copy in between.
-TEST_F(LibraryStoreTest, ALibraryCopiedToAnotherDriveIsMovedWhole) {
+// It is copied, to another drive or not, and the copy is the library once
+// it is whole: nothing is left where it was, and no copy in between.
+TEST_F(LibraryStoreTest, ALibraryIsMovedAsAWholeCopy) {
     const std::filesystem::path former = dir_ / "roaming" / "library.db";
     const std::filesystem::path here = dir_ / "local" / "library.db";
     ASSERT_TRUE(LibraryStore(former).Save(MakeSampleSnapshot()));
     LibraryStore store(here);
-    store.CopyOnMoveForTesting();
     store.MoveHereFrom(former);
     EXPECT_EQ(store.File(), here);
     EXPECT_FALSE(std::filesystem::exists(former));

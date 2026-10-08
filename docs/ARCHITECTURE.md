@@ -925,11 +925,20 @@ A library where 0.2.0 kept it is moved at the first start that finds
 none in `%LOCALAPPDATA%` (`LibraryStore::MoveHereFrom`, called by
 `TrayController::Initialize` after the instance check, so that no copy of
 the app has it open): opened and closed first, which plays a journal a
-crash left back into it, so that it is one file to move; renamed, or on
-another drive copied and made the library only once the copy is whole
-and flushed to the disk. Since 0.3.1 the flush is explicit: the original
-is removed right after, and a copy still in the OS's cache would have
-gone with it at a power cut. One that cannot be moved is opened where it is, and the move is tried
+crash left back into it, so that it is one file to move; copied, beside
+the new place as `library.db.moving`, and made the library only once the
+copy is whole and flushed to the disk.
+The flush is explicit: the original is removed right after, and a copy
+still in the OS's cache would have gone with it at a power cut. Found
+after 0.3.1 that the copy never ran on Windows: `std::filesystem::rename`
+is `MoveFileExW` with `MOVEFILE_COPY_ALLOWED` there, which crosses drives
+by copying straight to `library.db`, unflushed, and removes the original
+when it returns. A power cut during that copy left a partial library
+under the real name, which the next start set aside as unreadable while
+the whole one stayed behind, never tried again. So it is copied always,
+on the same drive too: a rename that refuses another drive is an OS call
+(`MoveFileExW` without the flag), and `sz_core` makes none. One that
+cannot be moved is opened where it is, and the move is tried
 again at the next start. One in `%LOCALAPPDATA%` already wins, and the
 old one is left alone. The crash dumps went along
 (`%LOCALAPPDATA%\Spickzettel\crashes`); old ones stay where they were.

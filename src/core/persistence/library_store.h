@@ -186,10 +186,6 @@ public:
     static void LockSharedForTesting(bool shared) { lockShared_ = shared; }
     static bool LocksSharedForTesting() { return lockShared_; }
 
-    // MoveHereFrom copies, as it does to another drive, rather than
-    // renaming.
-    void CopyOnMoveForTesting() { copyOnMove_ = true; }
-
 private:
     // The rows of one Write, inside its transaction. False at the first
     // statement that fails.
@@ -227,7 +223,6 @@ private:
     int64_t walFrames_ = 0;
     int64_t pageSize_ = 4096;
     int64_t checkpointAtBytes_ = kCheckpointAtBytes;
-    bool copyOnMove_ = false;
     inline static bool lockShared_ = false;
 };
 

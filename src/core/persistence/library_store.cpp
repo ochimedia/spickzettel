@@ -625,16 +625,16 @@ void LibraryStore::MoveHereFrom(const std::filesystem::path& former) {
     }
     std::filesystem::create_directories(file_.parent_path(), ec);
     if (!ec) {
-        if (!copyOnMove_) {
-            std::filesystem::rename(former, file_, ec);
-            if (!ec) {
-                return;
-            }
-        }
-        // Another drive - a roaming profile redirected to a server share:
-        // copied, and made the library only once the copy is whole and on
+        // Copied, and made the library only once the copy is whole and on
         // the disk. The original is removed next, and a copy still in the
-        // OS's cache would have gone with it at a power cut.
+        // OS's cache would have gone with it at a power cut. Copied always,
+        // never renamed: across drives - a roaming profile redirected to a
+        // server share - std::filesystem::rename on Windows is MoveFileExW
+        // with MOVEFILE_COPY_ALLOWED, which copies straight to the new
+        // name, unflushed, and removes the original as soon as it returns.
+        // A rename that refuses another drive is an OS call this layer
+        // does not make; a copy once, at the first start after 0.2.0, is
+        // cheap beside it.
         std::filesystem::path moving = file_;
         moving += ".moving";
         ec.clear();
