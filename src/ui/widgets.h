@@ -109,6 +109,11 @@ bool TabButton(const char* id, const char* text, bool active);
 // character, as often as not, and an edit then saves the cut. Returns what
 // ImGui::InputText does: whether the text changed this frame.
 bool InputString(const char* label, std::string& text);
+// The same, taking no more than `maxBytes` - whole characters, as ImGui
+// inserts them - for text the settings file holds, which has a size it
+// may not pass (core::kMaxConfigFileBytes). Text already longer, from a
+// file written by hand, is kept whole and only cannot grow.
+bool InputString(const char* label, std::string& text, size_t maxBytes);
 // ImGuiInputTextFlags_CallbackResize's contract, against a std::string:
 // the widget reports the length it needs, the string is resized to hold
 // it, and the widget is pointed at the (possibly moved) storage. For a

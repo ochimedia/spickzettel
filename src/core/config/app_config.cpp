@@ -769,6 +769,14 @@ bool WriteConfigFile(const std::filesystem::path& path, const AppConfig& config)
     }
     text = std::move(crlf);
 #endif
+    // Not past what LoadOrCreateConfig reads: a file this writes is one the
+    // next start can load, or it is not written - the one on disk stays,
+    // and the failure is said and tried again (TrayController::
+    // PersistConfig). Written, it would be set aside at the next start and
+    // every setting would go back to its default.
+    if (text.size() > kMaxConfigFileBytes) {
+        return false;
+    }
     const TimelineScope marked(TimelineMark::ConfigWrite);
     return WriteFileAtomically(path, text);
 }

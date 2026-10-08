@@ -1023,6 +1023,33 @@ TEST_F(WriteConfigFileTest, AFileTooBigToBeASettingsFileIsSetAside) {
     EXPECT_TRUE(std::filesystem::exists(dir_ / "config-unreadable-stamp.json"));
 }
 
+// What is written is what the next start reads: settings that would make a
+// file past the reader's limit are not written at all, and the file on disk
+// stays as it was - rather than set aside at the next start, with every
+// setting back at its default. Just under the limit, it is written and read.
+TEST_F(WriteConfigFileTest, NoFileIsWrittenThatTheNextStartWouldRefuse) {
+    const std::filesystem::path path = dir_ / "config.json";
+    ASSERT_TRUE(WriteConfigFile(path, DefaultConfig()));
+    const std::string before = ReadFile(path);
+
+    AppConfig big = DefaultConfig();
+    Profile profile;
+    profile.name = "Big";
+    // One rule of 1000 bytes in a quoted, escaped line each.
+    for (size_t i = 0; i * 1000 < kMaxConfigFileBytes; ++i) {
+        profile.match.titleContains.push_back(std::string(1000, 'x'));
+    }
+    big.profiles.push_back(profile);
+    EXPECT_FALSE(WriteConfigFile(path, big));
+    EXPECT_EQ(ReadFile(path), before) << "left as it was";
+
+    big.profiles[0].match.titleContains.resize(kMaxConfigFileBytes / 1000 - 50);
+    ASSERT_TRUE(WriteConfigFile(path, big));
+    const LoadedConfig loaded = LoadOrCreateConfig(path, "stamp");
+    EXPECT_EQ(loaded.source, ConfigSource::Read);
+    EXPECT_EQ(loaded.config.profiles, big.profiles);
+}
+
 TEST_F(WriteConfigFileTest, WritesTextThatParsesBackToTheSameConfig) {
     AppConfig config = DefaultConfig();
     config.showDebugOverlay = true;

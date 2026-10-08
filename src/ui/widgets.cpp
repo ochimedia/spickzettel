@@ -4,6 +4,7 @@
 #include <cfloat>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -389,6 +390,20 @@ bool TabButton(const char* id, const char* text, bool active) {
 bool InputString(const char* label, std::string& text) {
     return ImGui::InputText(label, text.data(), text.capacity() + 1, ImGuiInputTextFlags_CallbackResize,
                             &ResizeStringForInputText, &text);
+}
+
+bool InputString(const char* label, std::string& text, size_t maxBytes) {
+    // A buffer of the most it may hold, rather than one grown on demand:
+    // ImGui stops inserting at a full buffer, and grows one on demand
+    // without asking. Never smaller than what is there.
+    std::string buffer = text;
+    buffer.resize(std::max(maxBytes, text.size()) + 1, '\0');
+    if (!ImGui::InputText(label, buffer.data(), buffer.size())) {
+        return false;
+    }
+    buffer.resize(std::strlen(buffer.c_str()));
+    text = std::move(buffer);
+    return true;
 }
 
 int ResizeStringForInputText(ImGuiInputTextCallbackData* data) {

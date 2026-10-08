@@ -1232,6 +1232,11 @@ namespace {
 // and a trailing label lands between the field and the button.
 constexpr float kProfileFieldX = 120.0f;
 constexpr float kProfileFieldWidth = 260.0f;
+// The most a profile's name or one of its rules may hold, in bytes: room
+// for any window title, and far enough under the settings file's limit
+// (core::kMaxConfigFileBytes) that no number of profiles a person makes
+// reaches it. WriteConfigFile refuses a file past it all the same.
+constexpr size_t kMaxProfileTextBytes = 512;
 
 // Whether any of a profile's rules can match: an entry left empty is no
 // rule (see ProfileMatch::Matches).
@@ -1262,7 +1267,7 @@ bool EditStringList(const char* label, const char* addLabel, const char* id, std
         ImGui::SetNextItemWidth(Px(kProfileFieldWidth));
         // The entry itself, whole - a window title can be longer than any
         // array sized for one. See InputString.
-        if (InputString("##entry", list[entry])) {
+        if (InputString("##entry", list[entry], kMaxProfileTextBytes)) {
             changed = true;
         }
         ImGui::SameLine();
@@ -1499,7 +1504,7 @@ bool SettingsPage::RenderProfileRow(size_t index, Profile& profile, bool& remove
     // the profile keeps its old one, and a field left like that shows it
     // again once it lets go. A taken name is said under the field while it
     // is typed, since the refusal is otherwise invisible.
-    if (InputString("##name", name)) {
+    if (InputString("##name", name, kMaxProfileTextBytes)) {
         if (settings_.RenameProfile(index, name)) {
             profile.name = name;
             takenProfileName_.reset();

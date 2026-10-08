@@ -314,8 +314,15 @@ to the debug overlay. A file that has it reads as one that does not.
 **`profiles`**: not a setting but the list of profiles. Each profile has
 a name, match rules, and sparse `behavior` and `shortcuts` objects (the
 two groups above, holding only what the profile overrides). Invariant:
-names unique and not empty. Edited from Settings > Profiles. Effect:
-Session.
+names unique and not empty; a name and each rule at most 512 bytes as
+typed in Settings (one written by hand keeps its length). Edited from
+Settings > Profiles. Effect: Session.
+
+The file as a whole is at most `kMaxConfigFileBytes` (1 MiB), the limit
+the reader sets aside a larger file at. The writer holds to it too: a
+file that would be larger is not written, the one on disk stays, and
+the failure is said and tried again - so no file the app writes is one
+its next start refuses (found in the review of 2026-10-08).
 
 The row order is the file's order, and the file does not change: the
 catalog-driven writer produces today's text byte for byte (section 12,
