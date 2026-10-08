@@ -661,8 +661,8 @@ profileable row it shows the override mark and the revert arrow. The
 `anyChanged` flag goes. Grayed rows keep asking the preconditions in
 `EditModeInputOptions`, as the Behavior panel and the grab do.
 
-**Showing follows a profile just made.** Make a profile for this and New
-profile point the picker at the profile they made, as the overlay coming
+**Showing follows a profile just made.** Make a new profile's two
+buttons, For this application and Empty profile, point the picker at the profile they made, as the overlay coming
 up points it at the profile that runs. Left where it was, the first
 change after making a profile went to the defaults, for every program
 (`docs/TUTORIAL.md`, question 42).

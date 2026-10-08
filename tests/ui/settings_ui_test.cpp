@@ -684,6 +684,29 @@ TEST_F(UiTest, MakingAProfileForWhatIsUnderneathTakesOneClick) {
     EXPECT_TRUE(AppSettings().ActiveProfile().has_value());
 }
 
+// With nothing identifiable underneath, the button is still on its row,
+// grayed, and makes nothing; an empty profile can still be made beside it.
+TEST_F(UiTest, NothingUnderneathGraysTheButtonForIt) {
+    host_.overlayWindow.underlyingApp = platform::ForegroundApp{};
+    ShowEditMode();
+    StepFrame();
+
+    OpenOverviewUi();
+    bool grayed = false;
+    RunUi("try both", [&](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionprofiles");
+        grayed = (ctx->ItemInfo("**/###makeprofile").ItemFlags & ImGuiItemFlags_Disabled) != 0;
+        ctx->ItemClick("**/###makeprofile");
+        ctx->ItemClick("**/###newprofile");
+    });
+
+    EXPECT_TRUE(grayed);
+    ASSERT_EQ(AppSettings().Profiles().size(), 1u) << "the empty one alone";
+    EXPECT_TRUE(AppSettings().Profiles()[0].match.executables.empty());
+}
+
 // The app's own license has to be viewable from the app - the GPL asks an
 // interactive program to say how - and is one button away on About.
 TEST_F(UiTest, TheLicenseIsReachableFromAbout) {

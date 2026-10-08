@@ -868,36 +868,9 @@ void SettingsPage::RenderSettingsBehavior() {
 
     SettingsScopeBox profileBox;
     BeginSettingsScope(profileBox, SettingsScope::Profile);
-    // What the overlay is up over. Read-only for now, and the reason it is
-    // here at all: every setting in this section is an answer to a question
-    // about *that* application, and until now there was nothing on screen
-    // that said which one it is. It is also the identity a per-application
-    // profile will be matched on, so seeing it - including seeing it come
-    // up empty for a process whose image path can't be read - is worth
-    // having before anything depends on it.
-    if (host_.Window() != nullptr) {
-        const platform::ForegroundApp app = host_.Window()->UnderlyingApplication();
-        SettingsHeading("inputunderneathheading", strings::kInputUnderneathHeading,
-                         strings::kInputUnderneathHelp);
-        ImGui::AlignTextToFramePadding();
-        if (!app.Known()) {
-            ImGui::TextColored(theme::kGraphite300, "%s", strings::kInputNothingIdentifiable);
-        } else {
-            ImGui::TextUnformatted(app.executable.empty() ? strings::kInputUnreadableExecutable
-                                                           : app.executable.c_str());
-            if (!app.title.empty()) {
-                ImGui::SameLine();
-                ImGui::TextColored(theme::kGraphite300, strings::kInputWindowTitleLine, app.title.c_str());
-            }
-            if (app.executable.empty()) {
-                ImGui::SameLine();
-                HelpMarker("inputunreadableexecutable", strings::kInputUnreadableExecutable,
-                            strings::kInputUnreadableExecutableHelp);
-            }
-        }
-        SettingsGroupBreak();
-    }
-
+    // The picker first, as on Hotkeys: what the overlay is up over is
+    // named on the Profiles section, where a profile is made for it, and
+    // the profile that runs over it is tagged Active in the picker.
     RenderEditTargetPicker(ProfileGroup::Behavior);
 
     SettingsHeading("inputeditmodeheading", strings::kInputEditModeHeading,
@@ -1208,6 +1181,16 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
     const std::optional<size_t> showing =
         editProfile_ && *editProfile_ < profileCount ? editProfile_ : std::nullopt;
     const bool showingActive = showing == active;
+    if (showing && !showingActive) {
+        // Said where Active would be: the settings below are a profile's
+        // that does not run now, which the name in the box alone does not
+        // tell. The defaults are not tagged so: they are what every
+        // profile leaves alone, running or not.
+        ImGui::SameLine();
+        if (Tag(strings::kProfilesTagNotActive, theme::kGraphite300, theme::kHoverWash)) {
+            HelpTooltip("%s", strings::kProfilesTagNotActiveTooltip);
+        }
+    }
     if (showing) {
         const ProfileOverrides& overrides = settings_.Profiles()[*showing].overrides;
         ProfileTags(showingActive, /*matchesNothing=*/false,
@@ -1380,19 +1363,35 @@ void SettingsPage::RemoveProfiles(const std::vector<ProfileId>& ids) {
 
 bool SettingsPage::RenderProfileMakers(std::vector<Profile>& edited) {
     bool changed = false;
+    const platform::ForegroundApp& app = settings_.UnderlyingApplication();
+    // What the overlay is up over, on a line of its own: an executable's
+    // name alone, or the window's title when its image path can't be read,
+    // with why behind a "?".
     ImGui::AlignTextToFramePadding();
-    if (!settings_.UnderlyingApplication().Known()) {
+    if (!app.Known()) {
         ImGui::TextColored(theme::kGraphite300, "%s", strings::kProfilesNothingToMake);
     } else {
-        const platform::ForegroundApp& app = settings_.UnderlyingApplication();
-        // Said what it is: an executable's name alone, ahead of the
-        // button, read as one more word of the page.
-        const std::string label = app.executable.empty() ? app.title : app.executable;
         ImGui::TextColored(theme::kGraphite300, "%s", strings::kProfilesUnderneath);
         ImGui::SameLine();
-        ImGui::TextUnformatted(label.c_str());
-        ImGui::SameLine();
-        if (ImGui::Button(Labeled(strings::kProfilesMakeForThis, "makeprofile"))) {
+        ImGui::TextUnformatted(app.executable.empty() ? app.title.c_str() : app.executable.c_str());
+        if (app.executable.empty()) {
+            ImGui::SameLine();
+            HelpMarker("unreadableexecutable", strings::kProfilesUnreadableExecutable,
+                        strings::kProfilesUnreadableExecutableHelp);
+        }
+    }
+
+    // Both ways to make one on the next line, under one label. The first
+    // is grayed, not left out, with nothing to make it for: the line
+    // above says why, and the row keeps its shape.
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextColored(theme::kGraphite200, "%s", strings::kProfilesMakeNew);
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!app.Known());
+    const bool makeForThis = ImGui::Button(Labeled(strings::kProfilesMakeForThis, "makeprofile"));
+    ImGui::EndDisabled();
+    if (app.Known()) {
+        if (makeForThis) {
             Profile profile;
             // Named after what it matches, the executable where there is
             // one: the stable half, and the name shown beside this button.
@@ -1414,6 +1413,7 @@ bool SettingsPage::RenderProfileMakers(std::vector<Profile>& edited) {
             editProfile_ = edited.size() - 1;
             changed = true;
         }
+        // Marked only while it can be pressed: the tutorial points at it.
         host_.Mark(Anchor{AnchorId::SettingsMakeProfile}, ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
         if (ImGui::IsItemHovered()) {
             HelpTooltip("%s", strings::kProfilesMakeForThisTooltip);
