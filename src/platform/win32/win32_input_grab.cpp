@@ -1752,9 +1752,11 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     if (!WantsAllKeystrokes()) {
         const bool isPanelDigit = vk >= '1' && vk < '1' + static_cast<UINT>(PanelDigits());
         // GetKeyState, on the hook thread - see PostCharactersToOverlay for
-        // why it follows the keys there.
-        const bool bare = (GetKeyState(VK_CONTROL) & 0x8000) == 0 &&
-                          (GetKeyState(VK_MENU) & 0x8000) == 0 && (GetKeyState(VK_SHIFT) & 0x8000) == 0;
+        // why it follows the keys there. The Windows keys too: Win+1 starts
+        // the first program on the taskbar.
+        const auto held = [](int key) { return (GetKeyState(key) & 0x8000) != 0; };
+        const bool bare =
+            !held(VK_CONTROL) && !held(VK_MENU) && !held(VK_SHIFT) && !held(VK_LWIN) && !held(VK_RWIN);
         // A digit held since before the edit mode is the game's too: its
         // down went there.
         if (!isPanelDigit || !bare || heldFromBefore) {

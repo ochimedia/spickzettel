@@ -3040,7 +3040,9 @@ edit mode.
   never by Escape, which stays the canvas's.
 - **Its digits, and no other key.** While it is up the keyboard grab
   takes the bare digits 1 to 7 from the game and hands them to the
-  overlay (`IOverlayWindow::SetPanelDigits`), and every other key goes
+  overlay (`IOverlayWindow::SetPanelDigits`) - bare of the Windows keys
+  too, since Win+1 is the taskbar's (found in the review of 2026-10-08) -
+  and every other key goes
   where it would without the panel: to the game with keystrokes
   forwarded, so that forwarding can be judged with the panel up. The
   Canvas level hands the digits to the panel ahead of any command bound

@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cwchar>
 #include <functional>
+#include <iterator>
 #include <cstdlib>
 #include <thread>
 #include <vector>
@@ -606,6 +607,18 @@ TEST(Win32InputGrabTest, ThePanelLeavesTheRepeatsOfTheGamesKeysAlone) {
     EXPECT_EQ(grab.KeyEventForTesting('2', false), 1);
     EXPECT_EQ(grab.KeyEventForTesting('4', true), 0) << "past the panel's rows";
     EXPECT_EQ(grab.KeyEventForTesting('4', false), 0);
+
+    // Win+2 is the shell's: the second program on the taskbar. The hook
+    // reads this thread's key state here, which SetKeyboardState sets.
+    BYTE keys[256] = {};
+    ASSERT_TRUE(GetKeyboardState(keys));
+    BYTE withWin[256];
+    std::copy(std::begin(keys), std::end(keys), std::begin(withWin));
+    withWin[VK_LWIN] = 0x80;
+    ASSERT_TRUE(SetKeyboardState(withWin));
+    EXPECT_EQ(grab.KeyEventForTesting('2', true), 0) << "with a Windows key held";
+    EXPECT_EQ(grab.KeyEventForTesting('2', false), 0);
+    SetKeyboardState(keys);
 
     grab.SetPanelDigits(0);
     EXPECT_EQ(grab.KeyEventForTesting('2', true), 0) << "the game's again with the panel closed";
