@@ -328,7 +328,10 @@ void Win32InputGrab::Refresh() {
         FlushPendingCorrection();
     }
     counteringWasOn_ = countering;
-    if (virtualCursorWasDriving_ && !virtualCursorDriving) {
+    // Not from a grab that could not be set up: then the real cursor was
+    // the pointer all along (see VirtualCursorActive), and the virtual one
+    // is still where the grab began - handing it back would be the jump.
+    if (virtualCursorWasDriving_ && !virtualCursorDriving && !pointerGrabFailed_.load()) {
         const POINT at = VirtualCursor();
         SetCursorPos(at.x, at.y);
     } else if (!virtualCursorWasDriving_ && virtualCursorDriving) {

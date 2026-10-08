@@ -3776,7 +3776,11 @@ Consequences that shape `Win32InputGrab`:
   versions were wrong: seeding the baseline from the hook thread was a data
   race, and leaving the whole seed to the app thread's next frame let a click
   through at the old position first and could lose the request (both found
-  in follow-up reviews).
+  in follow-up reviews). A grab that ends while it is failing hands no
+  cursor back (`Refresh`): the real cursor was the pointer all along, and
+  the drawn one was still where the grab began, so the hand-back put the
+  cursor there - the very jump it exists to prevent (found in the review
+  of 2026-10-08).
 
   A keyboard hook that cannot be installed swallows nothing, so the keys
   reach whatever has focus. Its failure is published too:

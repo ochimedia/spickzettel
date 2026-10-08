@@ -264,6 +264,47 @@ TEST(Win32InputGrabTest, APointerGrabGotOnARetryIsSeededBeforeItIsPublished) {
     SetCursorPos(before.x, before.y);
 }
 
+// A grab that could not be set up hands no cursor back when it ends: the
+// real cursor was the pointer meanwhile, and stays where the hand left it
+// rather than jumping back to where the grab began.
+TEST(Win32InputGrabTest, AFailedPointerGrabLeavesTheRealCursorWhereItIs) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    POINT before{};
+    GetCursorPos(&before);
+
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = false;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetPointerBounds(RECT{0, 0, 400, 300});
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    grab.FailPointerGrabForTesting(true);
+
+    SetCursorPos(50, 50);
+    grab.SetActive(true);
+    ASSERT_TRUE(Eventually([&grab] { return !grab.VirtualCursorActive(); }, std::chrono::milliseconds(800)));
+    SetCursorPos(250, 150);  // the hand goes on, with the real cursor
+    grab.SetActive(false);
+    // With a little room, since a hand on this machine's mouse moves it
+    // meanwhile.
+    POINT real{};
+    GetCursorPos(&real);
+    EXPECT_GT(std::labs(real.x - 50) + std::labs(real.y - 50), 20)
+        << "handed back to where the grab began: (" << real.x << ", " << real.y << ")";
+
+    grab.FailPointerGrabForTesting(false);
+    grab.Shutdown();
+    grab.SetPointerBounds(RECT{});
+    DestroyWindow(overlay);
+    SetCursorPos(before.x, before.y);
+}
+
 // A text field that chose the keyboard hook to type through, when no hook
 // was needed until then, is told when the hook cannot be installed: the
 // window then takes focus for it instead.
