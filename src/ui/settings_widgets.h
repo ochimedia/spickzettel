@@ -34,6 +34,10 @@ void HelpMarker(const char* id, const char* title, const char* text);
 // The revert arrow that marks a row as set here rather than inherited, and
 // is the button that undoes it.
 bool RevertButton(const char* strId);
+// A word or a count in a rounded box, for a state read at a glance - a
+// profile's "Active", how much it overrides. Returns whether the pointer
+// is on it, for a tooltip.
+bool Tag(const char* text, const ImVec4& ink, const ImVec4& fill);
 
 // A Global switch: a checkbox, and its "?" when there is `help`.
 void SettingCheckbox(Settings& settings, const GlobalSetting<BoolRule>& row, const char* id, const char* label,

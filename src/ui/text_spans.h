@@ -22,4 +22,9 @@ struct TextSpan {
 // (tutorial::ExpandSpans).
 std::vector<TextSpan> MarkedSpans(std::string_view text);
 
+// `format` with its %s replaced by `value`, all of it - for a name that
+// can be any length, such as a profile's. snprintf into an array cuts a
+// long one by bytes, through the middle of a character.
+std::string WithValue(std::string_view format, std::string_view value);
+
 }  // namespace sz::ui

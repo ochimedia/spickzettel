@@ -108,7 +108,11 @@ void WrappedSpans(const ImVec4& color, const ImVec4& markColor, const std::vecto
     }
 
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    const ImVec2 origin = ImGui::GetCursorScreenPos();
+    // Lowered as Text lowers its words on a line a frame set the height
+    // of (AlignTextToFramePadding), so these sit level with a box beside
+    // them; at the start of a line the offset is nothing.
+    const ImVec2 top = ImGui::GetCursorScreenPos();
+    const ImVec2 origin(top.x, top.y + ImGui::GetCurrentWindow()->DC.CurrLineTextBaseOffset);
     // Where TextUnformatted would wrap: at the pushed wrap position, and
     // nowhere without one.
     const float wrapWidth = ImGui::CalcWrapWidthForPos(origin, ImGui::GetCurrentWindow()->DC.TextWrapPos);
@@ -141,7 +145,7 @@ void WrappedSpans(const ImVec4& color, const ImVec4& markColor, const std::vecto
         x = at;
         widest = std::max(widest, x - origin.x);
     }
-    ImGui::Dummy(ImVec2(widest, y + lineHeight - origin.y));
+    ImGui::Dummy(ImVec2(widest, y + lineHeight - top.y));
 }
 
 namespace {

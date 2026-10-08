@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <iterator>
+#include <string>
 
 #include <imgui.h>
 
@@ -146,13 +147,10 @@ void BehaviorPanel::Draw() {
 
     // Where a switch goes: the profile that runs, or the defaults when
     // none does.
-    char target[256];
+    std::string target = strings::kBehaviorPanelDefaults;
     if (const std::optional<size_t> profile = settings_.ActiveProfile();
         profile.has_value() && *profile < settings_.Profiles().size()) {
-        std::snprintf(target, sizeof(target), strings::kBehaviorPanelProfile,
-                      settings_.Profiles()[*profile].name.c_str());
-    } else {
-        std::snprintf(target, sizeof(target), "%s", strings::kBehaviorPanelDefaults);
+        target = WithValue(strings::kBehaviorPanelProfile, settings_.Profiles()[*profile].name);
     }
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrapWidth);
     WrappedSpans(theme::kGraphite200, theme::Accent(), MarkedSpans(target));

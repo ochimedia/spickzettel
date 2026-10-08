@@ -1589,7 +1589,7 @@ TEST_F(TutorialAppTest, TheSettingsPagesWidgetsAreMarkedWhereTheyAreDrawn) {
     EXPECT_TRUE(App().AnchorAt(Anchor{AnchorId::SettingsDeleteProfile, 0}).has_value());
 
     PickSection(SettingsPage::SettingsSection::Behavior);
-    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), "Game") << "Showing follows the profile made";
+    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), "game.exe") << "Showing follows the profile made";
     const std::optional<AnchorRect> showing = App().AnchorAt(Anchor{AnchorId::SettingsShowing});
     ASSERT_TRUE(showing.has_value());
     EXPECT_GT(showing->max.x - showing->min.x, 200.0f) << "the whole box, not its text";
@@ -1604,8 +1604,8 @@ TEST_F(TutorialAppTest, TheSettingsPagesWidgetsAreMarkedWhereTheyAreDrawn) {
 
     PickShowing(std::nullopt);
     EXPECT_EQ(App().TutorialWorld().SettingsShowing(), std::nullopt);
-    PickShowing("Game");
-    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), "Game");
+    PickShowing("game.exe");
+    EXPECT_EQ(App().TutorialWorld().SettingsShowing(), "game.exe");
 }
 
 TEST_F(TutorialAppTest, NewProfilePointsShowingAtTheProfileItMakes) {
@@ -1691,7 +1691,7 @@ TEST_F(TutorialAppTest, DoneDeletesTheTutorialsProfileAndKeepKeepsIt) {
     config.profiles = {mine};
     StartWith(config);
     WalkTo("end", "profiles");
-    ASSERT_EQ(MadeProfiles(), std::vector<std::string>{"Game"});
+    ASSERT_EQ(MadeProfiles(), std::vector<std::string>{"game.exe"});
     const size_t folders = Canvases().Folders().size();
     Press(TutorialButton::Done);
     EXPECT_FALSE(Runner().On());
@@ -1707,7 +1707,7 @@ TEST_F(TutorialAppTest, DoneDeletesTheTutorialsProfileAndKeepKeepsIt) {
     WalkTo("end", "profiles");
     DoneKeeping();
     ASSERT_EQ(AppSettings().Profiles().size(), 2u);
-    EXPECT_EQ(AppSettings().Profiles()[1].name, "Game");
+    EXPECT_EQ(AppSettings().Profiles()[1].name, "game.exe");
 }
 
 // A profile of the user's renamed as makeProfile is up is not the
@@ -1727,7 +1727,7 @@ TEST_F(TutorialAppTest, DoneLeavesAProfileOfTheUsersRenamedOnTheWay) {
         DoStep(StepUp());
     }
     ASSERT_EQ(StepUp(), "end");
-    EXPECT_EQ(TutorialsProfile(), "Game");
+    EXPECT_EQ(TutorialsProfile(), "game.exe");
     Press(TutorialButton::Done);
     ASSERT_EQ(AppSettings().Profiles().size(), 1u);
     EXPECT_EQ(AppSettings().Profiles()[0].name, "Mine 2");
@@ -1796,7 +1796,7 @@ TEST_F(TutorialAppTest, TheSpotlightRingsInsideSettings) {
 TEST_F(TutorialAppTest, TheTutorialsProfileDeletedIsMadeAgainByGoingBack) {
     WalkTo("change", "profiles");
     PickSection(SettingsPage::SettingsSection::Profiles);
-    ClickAnchor(Anchor{AnchorId::SettingsDeleteProfile, ProfileIndex("Game")});
+    ClickAnchor(Anchor{AnchorId::SettingsDeleteProfile, ProfileIndex("game.exe")});
     PickSection(SettingsPage::SettingsSection::Behavior);
     StepFrames(2);
     EXPECT_EQ(NeedUp(), tutorial::Need::TutorialsProfile);
@@ -1823,7 +1823,7 @@ TEST_F(TutorialAppTest, AProgramWithAProfileAlreadyGetsASecondOneForPractice) {
     EXPECT_EQ(HintUp(), std::string(strings::kTutorialMakeProfileMissTaken));
     DoStep("makeProfile");
     ASSERT_EQ(StepUp(), "behavior") << HintUp();
-    EXPECT_EQ(TutorialsProfile(), "Game");
+    EXPECT_EQ(TutorialsProfile(), "game.exe");
     EXPECT_EQ(AppSettings().ActiveProfile(), 0u) << "the user's, first in the list";
 }
 

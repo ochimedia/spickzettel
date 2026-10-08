@@ -28,6 +28,28 @@ bool RevertButton(const char* strId) {
     return pressed;
 }
 
+// Laid out as text is, so it goes on any line a word would - beside a tree
+// node's label as well as beside a frame - and its box reaches a little
+// above and below the words without making the line taller. The padding
+// on each side is its own, not taken from the item spacing, so two tags in
+// a row are as far apart as a tag and a word.
+bool Tag(const char* text, const ImVec4& ink, const ImVec4& fill) {
+    const float padX = Px(6.0f);
+    const float padY = Px(1.0f);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padX);
+    const ImGuiWindow* window = ImGui::GetCurrentWindow();
+    const ImVec2 at(window->DC.CursorPos.x, window->DC.CursorPos.y + window->DC.CurrLineTextBaseOffset);
+    const ImVec2 size = ImGui::CalcTextSize(text);
+    const ImVec2 boxMin(at.x - padX, at.y - padY);
+    const ImVec2 boxMax(at.x + size.x + padX, at.y + size.y + padY);
+    ImGui::GetWindowDrawList()->AddRectFilled(boxMin, boxMax, ImGui::GetColorU32(fill), (boxMax.y - boxMin.y) * 0.5f);
+    ImGui::TextColored(ink, "%s", text);
+    const bool hovered = ImGui::IsItemHovered();
+    ImGui::SameLine(0.0f, 0.0f);
+    ImGui::Dummy(ImVec2(padX, 0.0f));
+    return hovered;
+}
+
 // The "?" that carries a setting's explanation, so the panel can read as a
 // list of settings rather than as an essay with checkboxes in it. Clicking
 // opens the text in a popover beside the row; until then it takes one

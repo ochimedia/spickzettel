@@ -15,6 +15,7 @@
 #include "ui/theme.h"
 #include "ui/widgets.h"
 #include "ui/settings_widgets.h"
+#include "ui/text_spans.h"
 
 #include <imgui.h>
 // For the combo preview the edit-target picker draws a profile's name in -
@@ -1081,6 +1082,43 @@ void SettingsPage::RenderShortcutEditor(ShortcutAction action, const Icon& icon,
     ImGui::PopID();
 }
 
+namespace {
+
+// The tags after a profile's name, in its row and beside the picker: what
+// is there to say only, so a profile that changes nothing has none.
+void ProfileTags(bool isActive, bool matchesNothing, size_t behaviorCount, size_t shortcutCount) {
+    const ImVec4 countFill = theme::kHoverWash;
+    if (isActive) {
+        ImGui::SameLine();
+        if (Tag(strings::kProfilesTagActive, theme::kRunningInk, theme::kRunningSoft)) {
+            HelpTooltip("%s", strings::kProfilesTagActiveTooltip);
+        }
+    }
+    if (matchesNothing) {
+        ImGui::SameLine();
+        if (Tag(strings::kProfilesTagNoCriteria, theme::kCautionInk, theme::kCautionSoft)) {
+            HelpTooltip("%s", strings::kProfilesNothingToMatchOn);
+        }
+    }
+    char text[64];
+    if (behaviorCount > 0) {
+        std::snprintf(text, sizeof(text),
+                      behaviorCount == 1 ? strings::kProfilesTagBehaviorOverride : strings::kProfilesTagBehaviorOverrides,
+                      behaviorCount);
+        ImGui::SameLine();
+        Tag(text, theme::kGraphite200, countFill);
+    }
+    if (shortcutCount > 0) {
+        std::snprintf(text, sizeof(text),
+                      shortcutCount == 1 ? strings::kProfilesTagShortcutOverride : strings::kProfilesTagShortcutOverrides,
+                      shortcutCount);
+        ImGui::SameLine();
+        Tag(text, theme::kGraphite200, countFill);
+    }
+}
+
+}  // namespace
+
 void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
     const auto nameOf = [this](std::optional<size_t> target) -> std::string {
         if (!target || *target >= settings_.Profiles().size()) {
@@ -1088,7 +1126,7 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
         }
         std::string label = settings_.Profiles()[*target].name;
         if (settings_.ActiveProfile() && *settings_.ActiveProfile() == *target) {
-            label += strings::kProfilesCurrent;
+            label += strings::kProfilesActiveSuffix;
         }
         return label;
     };
@@ -1139,44 +1177,47 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
     }
 
     // One line: whether what is on screen is also what is running, and how
-    // much of it this target
-    // states for itself. The rest - what a profile leaves to the defaults,
-    // and what the marks below mean - is behind the "?" next to the picker.
-    const char* noun = group == ProfileGroup::Behavior ? "setting" : "shortcut";
+    // much of it this target states for itself. The rest - what a profile
+    // leaves to the defaults, and what the marks below mean - is behind
+    // the "?" next to the picker.
     ImGui::SameLine();
+    // The row told again that it is a frame tall: EndComboPreview puts
+    // the cursor back after the combo but leaves the line size its
+    // preview's text gave, a line of text, and the marker centered on
+    // that sat above the box's middle.
+    ImGui::AlignTextToFramePadding();
     HelpMarker("profilesshowing", strings::kProfilesShowing,
                 group == ProfileGroup::Behavior
                     ? strings::kProfilesShowingSettingsHelp
                     : strings::kProfilesShowingShortcutsHelp);
 
-    if (editProfile_ && *editProfile_ < settings_.Profiles().size()) {
-        const Profile& profile = settings_.Profiles()[*editProfile_];
-        const bool isActive = settings_.ActiveProfile() && *settings_.ActiveProfile() == *editProfile_;
+    // The tags the profile's row has, the overrides counted for *this*
+    // section only: the total would read as a claim about what is on
+    // screen, and a profile that only rebinds keys would announce
+    // overrides on the Behavior section with nothing marked anywhere
+    // below. The defaults are tagged Active when no profile is. Whatever
+    // is shown that is not what runs, what does is named after the tags.
+    const size_t profileCount = settings_.Profiles().size();
+    const std::optional<size_t> active =
+        settings_.ActiveProfile() && *settings_.ActiveProfile() < profileCount ? settings_.ActiveProfile()
+                                                                                  : std::nullopt;
+    const std::optional<size_t> showing =
+        editProfile_ && *editProfile_ < profileCount ? editProfile_ : std::nullopt;
+    const bool showingActive = showing == active;
+    if (showing) {
+        const ProfileOverrides& overrides = settings_.Profiles()[*showing].overrides;
+        ProfileTags(showingActive, /*matchesNothing=*/false,
+                    group == ProfileGroup::Behavior ? overrides.OverriddenCount(group) : 0,
+                    group == ProfileGroup::Shortcuts ? overrides.OverriddenCount(group) : 0);
+    } else if (showingActive) {
+        ProfileTags(/*isActive=*/true, false, 0, 0);
+    }
+    if (!showingActive) {
+        const std::string running = active ? WithValue(strings::kProfilesIsWhatsRunning, settings_.Profiles()[*active].name)
+                                           : std::string(strings::kProfilesNoneActive);
         ImGui::SameLine();
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(isActive ? theme::Accent() : theme::kGraphite300,
-                            isActive ? strings::kProfilesRunningNow : strings::kProfilesNotRunning);
-        // Counted for *this* section only. The total would read as a claim
-        // about what is on screen, and a profile that only rebinds keys
-        // would announce settings on the Behavior section with nothing marked
-        // anywhere below.
-        const size_t count = profile.overrides.OverriddenCount(group);
-        ImGui::SameLine();
-        if (count == 0) {
-            ImGui::TextColored(theme::kGraphite300, "%s", strings::kProfilesSetsNothing);
-        } else {
-            ImGui::TextColored(theme::kGraphite300, strings::kProfilesSetsSummary, count, noun,
-                                count == 1 ? "" : strings::kProfilesPluralSuffix);
-        }
-    } else if (settings_.ActiveProfile() && *settings_.ActiveProfile() < settings_.Profiles().size()) {
-        ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(theme::kGraphite300, strings::kProfilesIsWhatsRunning,
-                            settings_.Profiles()[*settings_.ActiveProfile()].name.c_str());
-    } else {
-        ImGui::SameLine();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(theme::Accent(), "%s", strings::kProfilesRunningNow);
+        WrappedSpans(theme::kGraphite300, theme::Accent(), MarkedSpans(running));
     }
     SettingsGroupBreak();
 }
@@ -1189,41 +1230,13 @@ namespace {
 constexpr float kProfileFieldX = 120.0f;
 constexpr float kProfileFieldWidth = 260.0f;
 
-// What a closed row says about its profile, in the order the questions
-// get asked: what does it catch, how much does it change.
-std::string ProfileSummary(const Profile& profile) {
-    std::string summary;
-    if (profile.match.Empty()) {
-        summary = strings::kProfilesMatchesNothing;
-    } else {
-        const std::vector<std::string>& first = profile.match.executables.empty()
-                                                     ? profile.match.titleContains
-                                                     : profile.match.executables;
-        const size_t rules = profile.match.executables.size() + profile.match.titleContains.size();
-        summary = first.front().empty() ? std::string(strings::kProfilesMatchesNothing) : first.front();
-        if (rules > 1) {
-            summary += strings::kProfilesSummaryAnd + std::to_string(rules - 1);
-        }
-    }
-    const size_t inputCount = profile.overrides.OverriddenCount(ProfileGroup::Behavior);
-    const size_t shortcutCount = profile.overrides.OverriddenCount(ProfileGroup::Shortcuts);
-    // Two numbers rather than one: Input and Shortcuts are two different
-    // places to go and change them.
-    if (inputCount == 0 && shortcutCount == 0) {
-        summary += strings::kProfilesChangesNothing;
-        return summary;
-    }
-    summary += strings::kProfilesSummarySeparator;
-    if (inputCount > 0) {
-        summary += std::to_string(inputCount) + (inputCount == 1 ? strings::kProfilesSettingWord : strings::kProfilesSettingsWord);
-    }
-    if (inputCount > 0 && shortcutCount > 0) {
-        summary += strings::kProfilesSummaryJoin;
-    }
-    if (shortcutCount > 0) {
-        summary += std::to_string(shortcutCount) + (shortcutCount == 1 ? strings::kProfilesShortcutWord : strings::kProfilesShortcutsWord);
-    }
-    return summary;
+// Whether any of a profile's rules can match: an entry left empty is no
+// rule (see ProfileMatch::Matches).
+bool MatchesNothing(const Profile& profile) {
+    const auto anyRule = [](const std::vector<std::string>& entries) {
+        return std::any_of(entries.begin(), entries.end(), [](const std::string& e) { return !e.empty(); });
+    };
+    return !anyRule(profile.match.executables) && !anyRule(profile.match.titleContains);
 }
 
 // A labeled list of text fields, one per entry, each with a remove
@@ -1360,15 +1373,22 @@ bool SettingsPage::RenderProfileMakers(std::vector<Profile>& edited) {
         ImGui::TextColored(theme::kGraphite300, "%s", strings::kProfilesNothingToMake);
     } else {
         const platform::ForegroundApp& app = settings_.UnderlyingApplication();
+        // Said what it is: an executable's name alone, ahead of the
+        // button, read as one more word of the page.
         const std::string label = app.executable.empty() ? app.title : app.executable;
+        ImGui::TextColored(theme::kGraphite300, "%s", strings::kProfilesUnderneath);
+        ImGui::SameLine();
         ImGui::TextUnformatted(label.c_str());
         ImGui::SameLine();
         if (ImGui::Button(Labeled(strings::kProfilesMakeForThis, "makeprofile"))) {
             Profile profile;
-            // Named after the window's title where there is one - "Elden
-            // Ring" reads better in this list than "eldenring.exe" - but
-            // matched on the executable, which is the stable half.
-            profile.name = UniqueProfileName(edited, app.title.empty() ? app.executable : app.title);
+            // Named after what it matches, the executable where there is
+            // one: the stable half, and the name shown beside this button.
+            // A window's title was the name at first, and read better for
+            // a game, but it is often what the window is showing - a
+            // folder for File Explorer, Program Manager for the desktop of
+            // that same explorer.exe - and can be any length.
+            profile.name = UniqueProfileName(edited, app.executable.empty() ? app.title : app.executable);
             if (!app.executable.empty()) {
                 profile.match.executables.push_back(app.executable);
             } else {
@@ -1435,16 +1455,13 @@ bool SettingsPage::RenderProfileRow(size_t index, Profile& profile, bool& remove
         ImGui::PopStyleColor();
     }
 
-    // What the row says about itself: is this the one running, and then
-    // what it catches and how much it changes. Dim, because the name is
-    // what you are scanning for.
-    if (isActive) {
-        ImGui::SameLine();
-        ImGui::TextColored(theme::Accent(), "%s", strings::kProfilesRunningNow);
-    }
-    const std::string summary = ProfileSummary(profile);
-    ImGui::SameLine();
-    ImGui::TextColored(theme::kGraphite300, "%s", summary.c_str());
+    // What the row says about itself, as tags after the name: whether it
+    // runs, whether it can, and how much it changes - two counts, since
+    // Behavior and Shortcuts are two places to go and change them. What
+    // it matches is inside the row: an application's name, or a window
+    // title, said here made the line read as a list of words.
+    ProfileTags(isActive, MatchesNothing(profile), profile.overrides.OverriddenCount(ProfileGroup::Behavior),
+                profile.overrides.OverriddenCount(ProfileGroup::Shortcuts));
 
     // Right-aligned, so the buttons line up down the list however long
     // the names and summaries are.

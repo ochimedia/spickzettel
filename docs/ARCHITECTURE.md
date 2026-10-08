@@ -3525,8 +3525,8 @@ name outside every code page tested none.
 A string stays UTF-8 only while nothing cuts it. A text field over a
 fixed array is handed a copy made to fit the array, and `snprintf` fits
 it by bytes, through the middle of a character; an edit then saves the
-cut. The profile fields did that. A new profile is named after the
-window's title, and a title in characters of three bytes each overran
+cut. The profile fields did that. A new profile was named after the
+window's title then, and a title in characters of three bytes each overran
 the name field's 128 bytes at the forty-third. `json::dump` throws on a
 string that is not UTF-8, and nothing between a settings edit and
 `SerializeConfig` catches it, so renaming that profile ended the app. A

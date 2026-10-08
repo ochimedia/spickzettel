@@ -29,5 +29,16 @@ TEST(TextSpansTest, TextWithoutANameIsOnePlainRun) {
     EXPECT_TRUE(MarkedSpans("").empty());
 }
 
+// A profile's name goes in whole, however long, where an array of 256
+// cut it through a character.
+TEST(TextSpansTest, AValueGoesInWholeHoweverLong) {
+    std::string name;
+    for (int i = 0; i < 100; ++i) {
+        name += "æ¼¢";
+    }
+    EXPECT_EQ(WithValue("Profile {ui:%s} is active", name), "Profile {ui:" + name + "} is active");
+    EXPECT_EQ(WithValue("No value", name), "No value");
+}
+
 }  // namespace
 }  // namespace sz::ui

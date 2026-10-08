@@ -677,7 +677,7 @@ TEST_F(UiTest, MakingAProfileForWhatIsUnderneathTakesOneClick) {
     });
 
     ASSERT_EQ(AppSettings().Profiles().size(), 1u);
-    EXPECT_EQ(AppSettings().Profiles()[0].name, "Test Game");
+    EXPECT_EQ(AppSettings().Profiles()[0].name, "game.exe") << "named after what it matches";
     ASSERT_EQ(AppSettings().Profiles()[0].match.executables.size(), 1u);
     EXPECT_EQ(AppSettings().Profiles()[0].match.executables[0], "game.exe");
     // And it matches at once, so the next thing changed lands in it.

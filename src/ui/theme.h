@@ -76,6 +76,11 @@ inline constexpr ImVec4 kDeletedInk(0.965f, 0.525f, 0.537f, 1.00f);
 inline constexpr ImVec4 kCaution(0.961f, 0.773f, 0.259f, 1.00f);  // #f5c542
 inline constexpr ImVec4 kCautionSoft(0.961f, 0.773f, 0.259f, 0.16f);
 inline constexpr ImVec4 kCautionInk(0.980f, 0.851f, 0.502f, 1.00f);
+// Green, as a soft fill and the ink on it: what is in effect right now -
+// a profile's Active tag. Not the accent, which marks what is set here
+// and can be any color the user picks, green included.
+inline constexpr ImVec4 kRunningSoft(0.275f, 0.765f, 0.482f, 0.18f);  // #46c37b
+inline constexpr ImVec4 kRunningInk(0.592f, 0.890f, 0.682f, 1.00f);   // #97e3ae
 
 // Safe for FrameRounding/GrabRounding/ScrollbarRounding: ImDrawList's own
 // AddRectFilled/AddRect clamp rounding to half the shape's own size before
