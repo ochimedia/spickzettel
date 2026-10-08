@@ -11,9 +11,11 @@
 // canvas stay in view and in reach while it is up, since seeing them
 // behave is how a combination is judged. So it is no panel on the
 // machine's Panel level, which covers the canvas; it keeps whether it is
-// up itself, and the Canvas level hands it its digits (see
-// EditorViews::BehaviorPanelKey). Every other key goes where it would
+// up itself, and the Canvas level turns its digits into a command (see
+// EditorViews::BehaviorPanelRow). Every other key goes where it would
 // without it, the game's included (see IOverlayWindow::SetPanelDigits).
+
+#include <optional>
 
 #include "core/session/settings.h"
 #include "ui/editor.h"
@@ -31,9 +33,14 @@ public:
     void Toggle() { open_ = !open_; }
     // The window, while it is up, in edit mode.
     void Draw();
-    // A bare digit, while it is up in edit mode: its row switched. False
-    // for any other key, which goes on to the canvas.
-    bool Key(const Event& event, bool editMode);
+    // The row a bare digit names, while it is up in edit mode - a held
+    // one's repeats included. None for any other key, which goes on to the
+    // canvas.
+    std::optional<int> RowFor(const Event& event, bool editMode) const;
+    // The row switched, into the profile that runs - the panel is about the
+    // configuration in front of you - and the overlay restarted for a row
+    // read only on the way up. A grayed row is not.
+    void Switch(int row);
     // Once a frame, after the draw: the window told how many digits the
     // panel takes - none but in edit mode - and the overlay restarted once
     // a row that needs it has had its key or button let go of.
@@ -45,10 +52,6 @@ private:
     // are.
     bool Value(int row) const;
     bool Available(int row) const;
-    // The row switched, into the profile that runs - the panel is about the
-    // configuration in front of you - and the overlay restarted for a row
-    // read only on the way up.
-    void Switch(int row);
     void DrawRows();
 
     core::Settings& settings_;

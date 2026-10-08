@@ -51,7 +51,8 @@ public:
     void CloseInnermostPopup() override {}
     void ClosePanel(PanelKind /*kind*/) override {}
     void ToolSized(bool /*pen*/) override {}
-    bool BehaviorPanelKey(const Event& /*event*/) override { return false; }
+    std::optional<int> BehaviorPanelRow(const Event& /*event*/) const override { return std::nullopt; }
+    void SwitchBehaviorRow(int /*row*/) override {}
     void LetGoOfWidget() override {}
 };
 

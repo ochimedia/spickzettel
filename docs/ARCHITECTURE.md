@@ -3045,8 +3045,12 @@ edit mode.
   and every other key goes
   where it would without the panel: to the game with keystrokes
   forwarded, so that forwarding can be judged with the panel up. The
-  Canvas level hands the digits to the panel ahead of any command bound
-  to them, as it did the HUD's. Taking focus instead would change the
+  Canvas level turns a digit into a command, `SwitchBehaviorRow`, ahead
+  of any chosen key bound to it, and claims its repeats
+  (docs/INTERACTIONS.md, section 7). The HUD's digits were claimed there
+  and switched at once, so a digit mid-stroke changed a setting under the
+  stroke; as a command of the Hand's scope it ends the stroke first,
+  kept. Taking focus instead would change the
   very thing being tried. With Don't steal focus off the overlay has
   focus already, and the digits come the ordinary way. Arrow keys and
   Space, which a first version used to pick a row and switch it, are
@@ -3059,9 +3063,11 @@ edit mode.
 - **Rows read on the way up restart the overlay.** Don't steal focus,
   Take focus from elevated applications and Freeze screen decide how the
   window comes up, so a switch on one hides and shows the overlay again
-  (`OverlayRequest::Restart`) once the key or button that made it is up.
-  A restart with the key still down loses its up, and the next press of
-  that key was no press at all. The panel stays up through the restart.
+  (`OverlayRequest::Restart`) once the key or button that made it is up,
+  and every other mouse button too: a digit pressed during a right-drag
+  ends the drag but not the press. A restart with the key still down
+  loses its up, and the next press of that key was no press at all. The
+  panel stays up through the restart.
 - **Drawn as in Settings.** A row is Settings' own checkbox
   (`SettingCheckbox`), for the profile that runs: a row the profile
   states for itself is in the accent, with the arrow that hands it back

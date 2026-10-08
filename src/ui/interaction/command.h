@@ -59,6 +59,9 @@ enum class CommandId {
     QuickCapture,
     SilentCapture,
     BehaviorPanel,
+    // A row of the Behavior panel switched, by its digit while the panel is
+    // up (see EditorViews::BehaviorPanelRow) - Command::row says which.
+    SwitchBehaviorRow,
     // Reached from a menu or the selection bar only - and the two
     // fullscreen snippets from a gesture too, a double-click or a hold.
     ToggleFullscreen,
@@ -122,6 +125,8 @@ struct Command {
     std::optional<core::Rect> rect;
     core::ItemCreationKind kind = core::ItemCreationKind::Screenshot;
     MadeBy madeBy = MadeBy::Asking;
+    // SwitchBehaviorRow's row, from 0.
+    int row = 0;
 };
 
 // The arrow keys' commands, which come in bursts - see
@@ -224,6 +229,9 @@ inline constexpr std::array kCommands = [] {
         Hotkey(CommandId::QuickCapture, "quickCapture", HotkeySlot::QuickCapture, Scope::Canvas),
         Hotkey(CommandId::SilentCapture, "silentCapture", HotkeySlot::SilentCapture, Scope::Canvas),
         Hotkey(CommandId::BehaviorPanel, "behaviorPanel", HotkeySlot::BehaviorPanel),
+        // Scope Hand, as a key bound to a command: a digit mid-stroke or
+        // mid-drag ends it, kept, before a setting changes under it.
+        Clicked(CommandId::SwitchBehaviorRow, "switchBehaviorRow"),
         Clicked(CommandId::ToggleFullscreen, "toggleFullscreen"),
         Clicked(CommandId::ToggleFullscreenStretched, "toggleFullscreenStretched"),
         Clicked(CommandId::ResetSize, "resetSize"),

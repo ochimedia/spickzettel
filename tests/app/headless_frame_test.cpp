@@ -2779,6 +2779,75 @@ TEST_F(HeadlessAppTest, TheBehaviorPanelsDigitsSwitchARowAndTheCanvasStaysInReac
     EXPECT_TRUE(App().IsBehaviorPanelOpen());
 }
 
+// A row's number pressed halfway through a stroke is a command of the
+// Hand's scope: the stroke ends where the key found it and is kept, then
+// the row switches, and the rest of the drag draws nothing - a setting
+// does not change under a gesture still in flight.
+TEST_F(HeadlessAppTest, ABehaviorDigitMidStrokeEndsTheStrokeFirst) {
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
+    StepFrame();
+    ASSERT_TRUE(App().IsBehaviorPanelOpen());
+    CanvasManager& manager = test::Model(controller_->GetSession());
+    const ItemId drawing = manager.CurrentOrNull()->items[0].id;
+    const bool pointerBefore = AppSettings().Live().softwarePointer;
+
+    MoveTo(350.0f, 350.0f);
+    StepFrame();
+    RawMouse(350.0f, 350.0f, platform::MouseEventKind::Down);
+    StepFrame();
+    RawMouse(450.0f, 400.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    PressKey(ImGuiKey_6);  // Use a software pointer
+    EXPECT_EQ(AppSettings().Live().softwarePointer, !pointerBefore);
+    ASSERT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u) << "kept as the key found it";
+    const size_t points = manager.FindItemAnywhere(drawing)->strokes[0].points.size();
+    EXPECT_FALSE(AppSession().LiveLayer().ActiveStroke().has_value());
+    RawMouse(550.0f, 420.0f, platform::MouseEventKind::Move);
+    StepFrame();
+    RawMouse(550.0f, 420.0f, platform::MouseEventKind::Up);
+    StepFrames(2);
+    ASSERT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u);
+    EXPECT_EQ(manager.FindItemAnywhere(drawing)->strokes[0].points.size(), points) << "the rest drew nothing";
+}
+
+// A row's number held down switches the row once. Its repeats are the
+// panel's too, and reach no command the digit is bound to as well.
+TEST_F(HeadlessAppTest, AHeldBehaviorDigitSwitchesOnceAndRunsNothingElse) {
+    AppConfig config = DefaultConfig();
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Undo)] =
+        platform::KeyCombo{/*ctrl=*/false, /*alt=*/false, /*shift=*/false, /*key=*/'6'};
+    StartWith(std::move(config));
+    ShowEditMode();
+    StepFrame();
+    MakeADrawing(300.0f, 300.0f, 700.0f, 500.0f);
+    Drag(350.0f, 400.0f, 650.0f, 400.0f);
+    ASSERT_EQ(StrokeCountOnCurrentCanvas(), 1u);
+    TriggerHotkey(config_.hotkeyBehaviorPanel);
+    StepFrame();
+    ASSERT_TRUE(App().IsBehaviorPanelOpen());
+    const bool pointerBefore = AppSettings().Live().softwarePointer;
+
+    KeyEvent(ImGuiKey_6, true);
+    StepFrame();
+    for (int i = 0; i < 5; ++i) {  // the window's repeats, as Windows sends them
+        platform::InputEvent repeat;
+        repeat.kind = platform::InputEventKind::KeyDown;
+        repeat.key = '6';
+        repeat.repeat = true;
+        SendInput(repeat);
+        StepFrame();
+    }
+    KeyEvent(ImGuiKey_6, false);
+    StepFrame();
+
+    EXPECT_EQ(AppSettings().Live().softwarePointer, !pointerBefore) << "switched once";
+    EXPECT_EQ(StrokeCountOnCurrentCanvas(), 1u) << "nothing undone";
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u);
+}
+
 // A row that can do nothing with the rows above as they are is grayed,
 // and its key does nothing either: a change stored with nothing on screen
 // saying so is how an option comes to look broken.

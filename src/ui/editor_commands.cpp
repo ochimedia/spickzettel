@@ -94,6 +94,7 @@ bool Editor::Available(const Command& command) const {
         case CommandId::QuickCapture:
         case CommandId::SilentCapture:
         case CommandId::BehaviorPanel:
+        case CommandId::SwitchBehaviorRow:  // a grayed row's digit does nothing, there
         case CommandId::FullscreenScreenshot:
         case CommandId::FullscreenDrawing:
         case CommandId::Overview:
@@ -256,6 +257,11 @@ void Editor::Run(const Command& command, Filing filing) {
         case CommandId::BehaviorPanel:
             if (appCommandCallback_) {
                 appCommandCallback_(command.id);
+            }
+            return;
+        case CommandId::SwitchBehaviorRow:
+            if (views_ != nullptr) {
+                views_->SwitchBehaviorRow(command.row);
             }
             return;
         case CommandId::ToggleFullscreen:

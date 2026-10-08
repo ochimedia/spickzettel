@@ -48,10 +48,14 @@ constexpr int kRowCount = static_cast<int>(std::size(kRows));
 static_assert(kRowCount <= 9, "a number key each");
 
 // Whether a key or button a switch can be made with is down, which a
-// restart waits for.
+// restart waits for - any button, not only the one a row is clicked with:
+// a digit pressed with the right button held, mid-drag, ends the drag but
+// not the press, whose up a restart would lose too.
 bool AnySwitchHeld() {
-    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        return true;
+    for (int button = 0; button < ImGuiMouseButton_COUNT; ++button) {
+        if (ImGui::IsMouseDown(button)) {
+            return true;
+        }
     }
     for (int i = 0; i < kRowCount; ++i) {
         if (ImGui::IsKeyDown(static_cast<ImGuiKey>(ImGuiKey_1 + i))) {
@@ -88,7 +92,7 @@ bool BehaviorPanel::Available(int row) const {
 }
 
 void BehaviorPanel::Switch(int row) {
-    if (!Available(row)) {
+    if (row < 0 || row >= kRowCount || !Available(row)) {
         return;  // grayed, and a key on it does nothing to match
     }
     // Into the profile that matched, if one did - not the Settings panel's
@@ -97,17 +101,16 @@ void BehaviorPanel::Switch(int row) {
     pendingRestart_ = pendingRestart_ || kRows[row].restarts;
 }
 
-bool BehaviorPanel::Key(const Event& event, bool editMode) {
-    if (!open_ || !editMode || event.repeat || event.modifiers.ctrl || event.modifiers.alt || event.modifiers.shift) {
-        return false;
+std::optional<int> BehaviorPanel::RowFor(const Event& event, bool editMode) const {
+    if (!open_ || !editMode || event.modifiers.ctrl || event.modifiers.alt || event.modifiers.shift) {
+        return std::nullopt;
     }
     for (int i = 0; i < kRowCount; ++i) {
         if (event.key == '1' + i) {
-            Switch(i);
-            return true;
+            return i;
         }
     }
-    return false;
+    return std::nullopt;
 }
 
 void BehaviorPanel::Draw() {

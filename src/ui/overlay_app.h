@@ -463,7 +463,10 @@ private:
     }
     void ClosePanel(PanelKind kind) override;
     void ToolSized(bool pen) override { pointer_.ToolSized(pen); }
-    bool BehaviorPanelKey(const Event& event) override { return behaviorPanel_.Key(event, !IsViewOnly()); }
+    std::optional<int> BehaviorPanelRow(const Event& event) const override {
+        return behaviorPanel_.RowFor(event, !IsViewOnly());
+    }
+    void SwitchBehaviorRow(int row) override { behaviorPanel_.Switch(row); }
     void LetGoOfWidget() override { popups_.LetGoOfWidget(); }
     bool PopupOpen() const override;
     // Asked for, a popup is up - including the frames before one draws it,

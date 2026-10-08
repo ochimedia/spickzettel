@@ -282,7 +282,8 @@ Three rows answer the questions the design began with:
 Keys, beyond Escape: a note being typed and a name being edited take
 every key, as a text field does; a popup takes every key but the global
 hotkeys (**Change**, section 12); a panel takes every key but the global
-hotkeys and its own.
+hotkeys and its own. The Behavior panel is none of these: it is not on
+the stack, and its digits are a Canvas binding (section 7).
 
 Escape passing down the stack when the top has nothing to cancel gives
 today's staged Escape for free: a spent button passes; a popup closes;
@@ -552,6 +553,20 @@ model's answer: Delete with nothing selected does nothing. Today both are
 one tangle of conditions per key (`historyKeysFree`, `keysFree`,
 `!io.WantTextInput && !PanelOpen()`, the cheat sheet exception).
 
+**The Behavior panel's digits** are a binding of the Canvas level that
+exists while the panel is up in edit mode: a bare 1 to 7 is
+`SwitchBehaviorRow` with that row, ahead of any chosen key - one a
+person bound to a bare digit is not reached while the panel is up. A
+held digit's repeats are claimed and switch nothing more. The command's
+scope is Hand: a digit mid-stroke or mid-drag ends the gesture, kept,
+before a setting changes under it - Ctrl+Z's case (4.2). Reachable as
+any Canvas key is: a note, a name being edited, a key capture, a popup
+and a panel each take every key, so the digits do nothing while one of
+them is up. Why the panel is no level of its own: section 12, item 6.
+(Found in the review of 2026-10-08: the digits were claimed at the
+Canvas level, ahead of the bindings, with no row here, and a digit
+pressed mid-gesture switched a setting under it.)
+
 Global hotkeys are commands too, bound at the root: every level passes a
 `Hotkey` event except the one interaction that wants it - a hotkey being
 captured in Settings, which today is `CompletesAHotkeyCapture` in the
@@ -611,6 +626,7 @@ Each case as the machine sees it. "Kept" is Interrupt; "Esc" is Cancel.
 | Held arrow key | KeyDown at Canvas: a nudge burst | a nudge per repeat, and per press of an arrow | a second without a nudge: one step | filed | rolled back, while an arrow is held |
 | Wheel spin | the first notch: a burst of its kind - the selection's size, or its opacity | a step per notch | a second without one: one step | filed | rolled back |
 | Hotkey mid-anything | passed to the root | - | its command, after its scope ended what it covers | - | - |
+| Behavior digit mid-gesture | passed by the Gesture and Mode levels to the Canvas: `SwitchBehaviorRow` | - | the gesture interrupted (Hand scope), then the row switched; a restart it asks for waits for every key and button to be up | - | - |
 | Lost release | own button pressed again | - | interrupted; the press routed afresh | - | - |
 | Touch hold's injected right press | lands on Spent | - | swallowed | - | - |
 | Put away | the overlay settles | - | the Hand scope ends the gesture and the text; the rest stays for the next showing | - | - |
@@ -870,3 +886,14 @@ Settled on review (2026-09-26):
    reserve - stamping events and ordering them within a frame - was not
    needed: the single stream went in without touching the input grab
    (settled with phase 2).
+
+6. **The Behavior panel is no level** (decided when it was built,
+   2026-10-07; written here in the review of 2026-10-08). The Panel
+   level covers the canvas and takes every key, and the Behavior panel
+   is for judging the input options with the game, the snippets and the
+   canvas in reach: a stroke, a drag and Escape stay the canvas's while
+   it is up, and every key but its digits goes where it would without
+   it - to the game, with keystrokes forwarded. So whether it is up is
+   the view's (`BehaviorPanel`), and what it adds to the machine is one
+   binding of the Canvas level (section 7). A click on it is rule 1, as
+   on any window.

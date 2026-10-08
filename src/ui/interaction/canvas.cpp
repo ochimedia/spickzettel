@@ -50,9 +50,15 @@ Answer CanvasLevel::Offer(const Event& event, Editor& editor) {
         }
         case EventKind::KeyDown:
             // The Behavior panel's digits, while it is up, ahead of any
-            // command they might be bound to.
-            if (editor.Views().BehaviorPanelKey(event)) {
-                return Answer::Claim();
+            // command they might be bound to - a held one's repeats too,
+            // which switch nothing more (INTERACTIONS.md, section 7).
+            if (const std::optional<int> row = editor.Views().BehaviorPanelRow(event)) {
+                if (event.repeat) {
+                    return Answer::Claim();
+                }
+                Command command{CommandId::SwitchBehaviorRow};
+                command.row = *row;
+                return Answer::Start(command);
             }
             return Bound(event.key, event, editor);
         case EventKind::KeyUp:
