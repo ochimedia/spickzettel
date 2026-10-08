@@ -1054,13 +1054,15 @@ void SettingsPage::RenderShortcutEditor(ShortcutAction action, const Icon& icon,
 namespace {
 
 // The tags after a profile's name, in its row and beside the picker: what
-// is there to say only, so a profile that changes nothing has none.
-void ProfileTags(bool isActive, bool matchesNothing, size_t behaviorCount, size_t shortcutCount) {
+// is there to say only, so a profile that changes nothing has none. Active
+// is said of the defaults too, with why in `activeTooltip`.
+void ProfileTags(bool isActive, bool matchesNothing, size_t behaviorCount, size_t shortcutCount,
+                 const char* activeTooltip = strings::kProfilesTagActiveTooltip) {
     const ImVec4 countFill = theme::kHoverWash;
     if (isActive) {
         ImGui::SameLine();
         if (Tag(strings::kProfilesTagActive, theme::kRunningInk, theme::kRunningSoft)) {
-            HelpTooltip("%s", strings::kProfilesTagActiveTooltip);
+            HelpTooltip("%s", activeTooltip);
         }
     }
     if (matchesNothing) {
@@ -1189,7 +1191,7 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
                     group == ProfileGroup::Behavior ? overrides.OverriddenCount(group) : 0,
                     group == ProfileGroup::Shortcuts ? overrides.OverriddenCount(group) : 0);
     } else if (showingActive) {
-        ProfileTags(/*isActive=*/true, false, 0, 0);
+        ProfileTags(/*isActive=*/true, false, 0, 0, strings::kProfilesTagActiveDefaultsTooltip);
     }
     if (!showingActive) {
         // The name put in after the marks are found: a brace in it is no

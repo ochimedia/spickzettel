@@ -797,6 +797,7 @@
   "profiles.unnamed": "(unnamed)",
   "profiles.tagActive": "Active",
   "profiles.tagActiveTooltip": "The overlay is up over an application this profile matches, so its overrides are in effect",
+  "profiles.tagActiveDefaultsTooltip": "The defaults are active since no profile matches the application underneath",
   "profiles.tagNotActive": "Not active",
   "profiles.tagNotActiveTooltip": "The overlay isn't up over an application this profile matches, so what you change here takes effect once it is",
   "profiles.tagBehaviorOverride": "%zu behavior override",
