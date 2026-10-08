@@ -115,7 +115,7 @@ These hold after every transition and are checked in debug builds:
 
 | Request | From | Arrives | Notes |
 |---|---|---|---|
-| Edit | edit hotkey; tray "Toggle overlay"; the app started again, unless in Edit | as a message | through the input machine, which settles its scope first (`docs/INTERACTIONS.md`, section 7) |
+| Edit | edit hotkey; tray "Toggle overlay"; the app started again, unless in Edit; the Behavior panel's hotkey, unless in Edit | as a message | through the input machine, which settles its scope first (`docs/INTERACTIONS.md`, section 7) |
 | View | view hotkey | as a message | the same |
 | Quick capture | its hotkey | as a message | captures, then asks for Edit |
 | Silent capture | its hotkey | as a message | captures; says so |
@@ -138,6 +138,17 @@ While the start is held (`TrayController::HoldUntilStart`), still saying
 what it found, it does nothing; the start decides. Added on 2026-09-30,
 with no new request and no new cell (ARCHITECTURE.md, "Starting the app
 again brings up the copy running").
+
+The Behavior panel's hotkey is the same shape. Outside Edit it asks for
+Edit, Edit's row, and puts the panel up once the state is Edit. In Edit
+it puts the panel up or away and asks for nothing. The panel being up
+is no part of the state: it is the view's (`BehaviorPanel`; not a level
+of the input machine either, `docs/INTERACTIONS.md`, section 12), so it
+lasts through Hidden, Pinned, Notice and View, the All scope's settle
+into View included, and the next Edit shows it again with its digits
+taken (`IOverlayWindow::SetPanelDigits`, told none outside Edit). Added
+on 2026-10-07, with no new request and no new cell; written here in the
+review of 2026-10-08.
 
 ## 5. The table
 
