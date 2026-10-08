@@ -2,9 +2,11 @@
 #
 # See docs/PERF.md for what the scenarios are and how to read the numbers.
 #
-# Everything runs against an isolated APPDATA and LOCALAPPDATA under the
-# system temp directory, so a measurement can never touch - or be perturbed by - the real
-# library and config.
+# Everything runs in a data folder of its own under the system temp
+# directory (--data-dir), so a measurement can neither touch nor be
+# perturbed by the real library and config. A copy of Spickzettel already
+# running is refused rather than stopped: it is someone's, with a note
+# perhaps half typed; quit it first. Only the copy started here is stopped.
 #
 #   .\measure.ps1 -Exe <path> [-Scenario name]
 #                 [-Seconds 8] [-Screenshot <path>]
@@ -80,25 +82,37 @@ function New-MeasurementConfig {
     Set-Content -Path $Path -Value $json -Encoding UTF8
 }
 
-Get-Process -Name Spickzettel* -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Milliseconds 600
+# The single-instance lock is per user, not per folder: with a copy up, the
+# one started here would refuse to start (see main_win32.cpp), and the
+# hotkeys pressed below would reach the running one.
+$running = Get-Process -Name Spickzettel* -ErrorAction SilentlyContinue
+if ($running) {
+    throw "Spickzettel is running ($(($running | ForEach-Object { $_.ProcessName }) -join ', ')): quit it first"
+}
+
+# The real files, to check afterwards that nothing here wrote to them.
+$realFiles = @(
+    (Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'Spickzettel\config.json'),
+    (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Spickzettel\library.db'),
+    (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Spickzettel\library.db-wal')
+)
+$realBefore = $realFiles | ForEach-Object { if (Test-Path $_) { (Get-Item $_).LastWriteTimeUtc } else { $null } }
 
 $sandbox = Join-Path ([System.IO.Path]::GetTempPath()) ("sz_measure_" + [guid]::NewGuid().ToString('N').Substring(0, 8))
-New-Item -ItemType Directory -Force -Path (Join-Path $sandbox 'Spickzettel') | Out-Null
+New-Item -ItemType Directory -Force -Path $sandbox | Out-Null
 if ($LibrarySource -and (Test-Path $LibrarySource)) {
-    Copy-Item $LibrarySource (Join-Path $sandbox 'Spickzettel\library.db') -Force
+    Copy-Item $LibrarySource (Join-Path $sandbox 'library.db') -Force
 }
-New-MeasurementConfig -Path (Join-Path $sandbox 'Spickzettel\config.json') -Fps ([bool]$ShowFps)
+New-MeasurementConfig -Path (Join-Path $sandbox 'config.json') -Fps ([bool]$ShowFps)
 
+$proc = $null
 try {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = (Resolve-Path $Exe).Path
     $psi.UseShellExecute = $false
-    # Both: the config is under APPDATA and the library under LOCALAPPDATA,
-    # and one folder for both means no library to move from the one to the
-    # other (see LibraryStore::MoveHereFrom).
-    $psi.EnvironmentVariables["APPDATA"] = $sandbox
-    $psi.EnvironmentVariables["LOCALAPPDATA"] = $sandbox
+    # Arguments, not ArgumentList, which Windows PowerShell's .NET lacks.
+    # The sandbox's path holds no quotes to escape.
+    $psi.Arguments = "--data-dir `"$sandbox`""
     $proc = [System.Diagnostics.Process]::Start($psi)
 
     # Getting the overlay up is deliberately careful rather than "sleep, then
@@ -169,7 +183,14 @@ try {
         PrivateMB   = [math]::Round($proc.PrivateMemorySize64 / 1MB, 0)
     }
 } finally {
-    Get-Process -Name Spickzettel* -ErrorAction SilentlyContinue | Stop-Process -Force
-    Start-Sleep -Milliseconds 400
+    # This copy alone, and forced: its data is the sandbox's, about to go.
+    if ($proc -and -not $proc.HasExited) {
+        $proc.Kill()
+        $proc.WaitForExit(5000) | Out-Null
+    }
     Remove-Item -Recurse -Force $sandbox -ErrorAction SilentlyContinue
+    for ($i = 0; $i -lt $realFiles.Count; $i++) {
+        $after = if (Test-Path $realFiles[$i]) { (Get-Item $realFiles[$i]).LastWriteTimeUtc } else { $null }
+        if ($after -ne $realBefore[$i]) { Write-Warning "$($realFiles[$i]) changed during the measurement" }
+    }
 }

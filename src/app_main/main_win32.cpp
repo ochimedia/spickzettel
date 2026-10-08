@@ -1,11 +1,16 @@
 #include <windows.h>
 
+#include <shellapi.h>
+
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include <backends/imgui_impl_win32.h>
 
+#include "app/command_line.h"
 #include "app/tray_app.h"
 #include "core/build_info/build_info.h"
 #include "core/config/app_config.h"
@@ -46,6 +51,27 @@ sz::core::LoadedConfig LoadConfig(const std::filesystem::path& path) {
     return loaded;
 }
 
+// The arguments after the program's name, as UTF-8 - see
+// sz::app::ParseCommandLine.
+std::vector<std::string> CommandLineArguments() {
+    std::vector<std::string> args;
+    int count = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &count);
+    if (argv == nullptr) {
+        return args;
+    }
+    for (int i = 1; i < count; ++i) {
+        const int bytes = WideCharToMultiByte(CP_UTF8, 0, argv[i], -1, nullptr, 0, nullptr, nullptr);
+        std::string arg(bytes > 0 ? static_cast<size_t>(bytes - 1) : 0, '\0');
+        if (bytes > 1) {
+            WideCharToMultiByte(CP_UTF8, 0, argv[i], -1, arg.data(), bytes, nullptr, nullptr);
+        }
+        args.push_back(std::move(arg));
+    }
+    LocalFree(argv);
+    return args;
+}
+
 }  // namespace
 
 int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*cmdLine*/, int /*showCmd*/) {
@@ -55,10 +81,23 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     // real screen/mouse coordinates.
     ImGui_ImplWin32_EnableDpiAwareness();
 
-    auto host = sz::platform::CreatePlatformHost();
+    // Arguments nobody understood are said, and nothing starts: a start that
+    // quietly ignored --data-dir misspelled would be a start on the user's
+    // own library.
+    const sz::app::ParsedCommandLine commandLine = sz::app::ParseCommandLine(CommandLineArguments());
+    if (!commandLine.error.empty()) {
+        std::string body(2048, '\0');
+        const int length = std::snprintf(body.data(), body.size(), sz::strings::kStartupCommandLine,
+                                         commandLine.error.c_str(), sz::app::CommandLineUsage().c_str());
+        body.resize(length > 0 ? std::min(static_cast<size_t>(length), body.size() - 1) : 0);
+        MessageBoxA(nullptr, body.c_str(), "Spickzettel", MB_OK | MB_ICONWARNING);
+        return 1;
+    }
+
+    auto host = sz::platform::CreatePlatformHost(commandLine.options.dataDir.value_or(std::filesystem::path{}));
     // First, so that a crash anywhere after it - starting up included -
     // leaves a dump to be sent in. Beside the library, in
-    // %LOCALAPPDATA%\Spickzettel\crashes.
+    // %LOCALAPPDATA%\Spickzettel\crashes (or the data folder).
     sz::platform::win32::InstallCrashDumpWriter(host->GetLibraryPath().parent_path() / "crashes",
                                                 sz::core::build::VersionLine());
     if (!host->Initialize("Spickzettel")) {
@@ -72,7 +111,16 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     // Started again while a copy runs, what is wanted is that copy: it is
     // asked to come up, and this one goes. The message only when no copy
     // answers - one running as another account, say.
+    //
+    // Not with a data folder of its own: the copy running is the user's,
+    // on the user's library, and a script that meant its own would go on
+    // to drive that one. The single-instance mutex is per user, not per
+    // folder - the hotkeys are per user too.
     if (!host->AcquireSingleInstance()) {
+        if (commandLine.options.dataDir.has_value()) {
+            MessageBoxA(nullptr, sz::strings::kStartupRunningWithDataDir, "Spickzettel", MB_OK | MB_ICONWARNING);
+            return 1;
+        }
         if (host->PassOpeningToRunningCopy()) {
             return 0;
         }

@@ -3,8 +3,10 @@
 #include <windows.h>
 
 #include <deque>
+#include <filesystem>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "platform/i_platform_host.h"
 #include "platform/win32/win32_overlay_window.h"
@@ -20,6 +22,9 @@ namespace sz::platform::win32 {
 class Win32PlatformHost final : public IPlatformHost {
 public:
     Win32PlatformHost() = default;
+    // Keeping the settings, the library and the crash dumps in `dataDir`
+    // rather than the user's folders - see CreatePlatformHost.
+    explicit Win32PlatformHost(std::filesystem::path dataDir) : dataDir_(std::move(dataDir)) {}
     ~Win32PlatformHost() override;
 
     bool Initialize(const std::string& appName) override;
@@ -58,6 +63,8 @@ private:
     void Exit();
 
     std::string appName_;
+    // Empty for the user's own folders.
+    std::filesystem::path dataDir_;
     HWND hwnd_ = nullptr;
     // See AcquireSingleInstance: held, never released, until the process
     // ends - Windows abandons it for us.

@@ -1,6 +1,7 @@
 # The portable suite: everything that needs neither a window nor an OS.
 # Runs on Windows and, through the linux-tests preset, on Linux.
 add_executable(sz_core_tests
+    app/command_line_test.cpp
     app/headless_frame_test.cpp
     app/overlay_states_test.cpp
     app/perf_bench_test.cpp

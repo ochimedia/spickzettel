@@ -3,6 +3,7 @@
 # the overlay between its states (overlay_states). The one place that knows
 # about all three layers at once, and so the one place the executable links.
 add_library(sz_app STATIC
+    command_line.cpp
     overlay_states.cpp
     tray_app.cpp
 )

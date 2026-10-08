@@ -60,8 +60,11 @@ the GPU is not in this number. Measure that with instruments 2 and 3.
 ## Instrument 2: the real app
 
 `tools/perf_library/measure.ps1` runs a real build against a generated
-library in an isolated `APPDATA` and `LOCALAPPDATA`, so it can neither touch
-nor be perturbed by the real one.
+library in a data folder of its own (`--data-dir`, ARCHITECTURE.md,
+"Command-line options"), so it can neither touch nor be perturbed by the
+real one. It refuses to start while a copy of Spickzettel runs - quit it
+first - and stops only the copy it started; it warns if the real config or
+library changed meanwhile.
 
     .\tools\perf_library\measure.ps1 -Exe <path-to-exe> -LibrarySource %TEMP%\libs\heavy.db `
         -Seconds 5 -Repeat 3 -ShowFps -Screenshot heavy.png

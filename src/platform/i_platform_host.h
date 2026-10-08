@@ -95,7 +95,9 @@ public:
     virtual void Quit(int exitCode = 0) = 0;
 };
 
-// Implemented once per platform backend.
-std::unique_ptr<IPlatformHost> CreatePlatformHost();
+// Implemented once per platform backend. With a `dataDir`, the settings,
+// the library and the crash dumps are kept in that one folder rather than
+// the user's own (see app::CommandLine::dataDir).
+std::unique_ptr<IPlatformHost> CreatePlatformHost(std::filesystem::path dataDir = {});
 
 }  // namespace sz::platform

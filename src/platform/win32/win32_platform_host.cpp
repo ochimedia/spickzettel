@@ -335,8 +335,10 @@ namespace {
 // process handed down, and some sandboxes appear to provide unreliable
 // ones: another account's folders, which this process may not open, so
 // that neither the settings nor the library could be read. The cost is
-// that a deliberately changed %APPDATA% is not followed. The shell's
-// answer does follow Folder Redirection, as the variable does.
+// that a deliberately changed %APPDATA% is not followed - a test or a
+// measurement names its own folder with --data-dir instead (see
+// app::CommandLine). The shell's answer does follow Folder Redirection, as
+// the variable does.
 std::filesystem::path AppDataBase(REFKNOWNFOLDERID folder) {
     std::filesystem::path base;
     PWSTR path = nullptr;
@@ -354,8 +356,10 @@ std::filesystem::path AppDataBase(REFKNOWNFOLDERID folder) {
 }
 }  // namespace
 
+// With a data folder, everything is in it - the former library place too,
+// which is then the library's own, so that there is nothing to move.
 std::filesystem::path Win32PlatformHost::GetConfigFilePath() const {
-    return AppDataBase(FOLDERID_RoamingAppData) / "config.json";
+    return (dataDir_.empty() ? AppDataBase(FOLDERID_RoamingAppData) : dataDir_) / "config.json";
 }
 
 // Local, not roaming: a roaming profile copies %APPDATA% at every sign-in
@@ -364,11 +368,11 @@ std::filesystem::path Win32PlatformHost::GetConfigFilePath() const {
 // displays, is for. %LOCALAPPDATA% cannot be redirected. See
 // docs/ARCHITECTURE.md, "Persistence".
 std::filesystem::path Win32PlatformHost::GetLibraryPath() const {
-    return AppDataBase(FOLDERID_LocalAppData) / "library.db";
+    return (dataDir_.empty() ? AppDataBase(FOLDERID_LocalAppData) : dataDir_) / "library.db";
 }
 
 std::filesystem::path Win32PlatformHost::GetFormerLibraryPath() const {
-    return AppDataBase(FOLDERID_RoamingAppData) / "library.db";
+    return (dataDir_.empty() ? AppDataBase(FOLDERID_RoamingAppData) : dataDir_) / "library.db";
 }
 
 // Until Quit, which may come before the loop starts - a close while a
@@ -622,6 +626,8 @@ LRESULT Win32PlatformHost::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LPA
 
 namespace sz::platform {
 
-std::unique_ptr<IPlatformHost> CreatePlatformHost() { return std::make_unique<win32::Win32PlatformHost>(); }
+std::unique_ptr<IPlatformHost> CreatePlatformHost(std::filesystem::path dataDir) {
+    return std::make_unique<win32::Win32PlatformHost>(std::move(dataDir));
+}
 
 }  // namespace sz::platform

@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <thread>
@@ -40,6 +41,21 @@ TEST(Win32PlatformHostTest, TheHostWindowIsTopLevelAndAnswersASessionEnd) {
     EXPECT_EQ(sessionEnds, 2) << "and again when it is decided";
     SendMessageA(hwnd, WM_ENDSESSION, FALSE, 0);  // called off after all
     EXPECT_EQ(sessionEnds, 2);
+}
+
+// With a data folder, the settings and the library are in it and nowhere
+// else - the former library place too, so there is nothing to move; and
+// without one, neither is.
+TEST(Win32PlatformHostTest, ADataFolderHoldsTheSettingsAndTheLibrary) {
+    const std::filesystem::path folder = std::filesystem::temp_directory_path() / "sz-data-dir-test";
+    const Win32PlatformHost host(folder);
+    EXPECT_EQ(host.GetConfigFilePath(), folder / "config.json");
+    EXPECT_EQ(host.GetLibraryPath(), folder / "library.db");
+    EXPECT_EQ(host.GetFormerLibraryPath(), host.GetLibraryPath());
+
+    const Win32PlatformHost own;
+    EXPECT_NE(own.GetConfigFilePath().parent_path(), folder);
+    EXPECT_NE(own.GetLibraryPath().parent_path(), folder);
 }
 
 // A close asked from outside - WM_CLOSE, as taskkill without /f sends, or
