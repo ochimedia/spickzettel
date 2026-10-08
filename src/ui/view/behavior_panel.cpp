@@ -149,14 +149,15 @@ void BehaviorPanel::Draw() {
     ImGui::Separator();
 
     // Where a switch goes: the profile that runs, or the defaults when
-    // none does.
-    std::string target = strings::kBehaviorPanelDefaults;
-    if (const std::optional<size_t> profile = settings_.ActiveProfile();
-        profile.has_value() && *profile < settings_.Profiles().size()) {
-        target = WithValue(strings::kBehaviorPanelProfile, settings_.Profiles()[*profile].name);
-    }
+    // none does. The profile's name is put in after the marks are found -
+    // a name is the user's, and a brace in it is no mark.
+    const std::optional<size_t> profile = settings_.ActiveProfile();
+    const std::vector<TextSpan> target =
+        profile.has_value() && *profile < settings_.Profiles().size()
+            ? MarkedSpans(strings::kBehaviorPanelProfile, settings_.Profiles()[*profile].name)
+            : MarkedSpans(strings::kBehaviorPanelDefaults);
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrapWidth);
-    WrappedSpans(theme::kGraphite200, theme::Accent(), MarkedSpans(target));
+    WrappedSpans(theme::kGraphite200, theme::Accent(), target);
     ImGui::PopTextWrapPos();
     ImGui::Spacing();
 

@@ -36,8 +36,27 @@ TEST(TextSpansTest, AValueGoesInWholeHoweverLong) {
     for (int i = 0; i < 100; ++i) {
         name += "æ¼¢";
     }
-    EXPECT_EQ(WithValue("Profile {ui:%s} is active", name), "Profile {ui:" + name + "} is active");
-    EXPECT_EQ(WithValue("No value", name), "No value");
+    const std::vector<TextSpan> spans = MarkedSpans("Profile {ui:%s} is active", name);
+    ASSERT_EQ(spans.size(), 3u);
+    EXPECT_EQ(spans[1].text, name);
+    ASSERT_EQ(MarkedSpans("No value", name).size(), 1u);
+    EXPECT_EQ(MarkedSpans("No value", name)[0].text, "No value");
+}
+
+// The user's words put in after the names are found: a brace in them is
+// shown as typed, and marked or not as the place they go is.
+TEST(TextSpansTest, AnArgumentIsNeverReadForNames) {
+    const std::vector<TextSpan> spans = MarkedSpans("Editing behavior for profile {ui:%s}", "a}b{ui:c");
+    ASSERT_EQ(spans.size(), 2u);
+    EXPECT_EQ(spans[0].text, "Editing behavior for profile ");
+    EXPECT_FALSE(spans[0].marked);
+    EXPECT_EQ(spans[1].text, "a}b{ui:c");
+    EXPECT_TRUE(spans[1].marked);
+
+    const std::vector<TextSpan> plain = MarkedSpans("Hello %s.", "{ui:x}");
+    ASSERT_EQ(plain.size(), 1u);
+    EXPECT_EQ(plain[0].text, "Hello {ui:x}.");
+    EXPECT_FALSE(plain[0].marked);
 }
 
 }  // namespace

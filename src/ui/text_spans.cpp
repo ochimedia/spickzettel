@@ -29,15 +29,15 @@ std::vector<TextSpan> MarkedSpans(std::string_view text) {
     return out;
 }
 
-std::string WithValue(std::string_view format, std::string_view value) {
-    const size_t at = format.find("%s");
-    if (at == std::string_view::npos) {
-        return std::string(format);
+std::vector<TextSpan> MarkedSpans(std::string_view text, std::string_view arg) {
+    std::vector<TextSpan> out = MarkedSpans(text);
+    for (TextSpan& span : out) {
+        if (const size_t at = span.text.find("%s"); at != std::string::npos) {
+            span.text.replace(at, 2, arg);
+            break;
+        }
     }
-    std::string text(format.substr(0, at));
-    text += value;
-    text += format.substr(at + 2);
-    return text;
+    return out;
 }
 
 }  // namespace sz::ui

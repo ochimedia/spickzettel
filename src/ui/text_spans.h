@@ -21,10 +21,11 @@ struct TextSpan {
 // else in braces is left as it is. The tutorial's cards fill in more
 // (tutorial::ExpandSpans).
 std::vector<TextSpan> MarkedSpans(std::string_view text);
-
-// `format` with its %s replaced by `value`, all of it - for a name that
-// can be any length, such as a profile's. snprintf into an array cuts a
-// long one by bytes, through the middle of a character.
-std::string WithValue(std::string_view format, std::string_view value);
+// The same, with `arg` - the user's own words, a profile's name - put
+// where `text` says %s once the names are found, so that a brace in it is
+// shown as typed rather than read as a mark. All of it, however long:
+// snprintf into an array cut a long name by bytes, through the middle of
+// a character. `text` holds that one %s and no other conversion.
+std::vector<TextSpan> MarkedSpans(std::string_view text, std::string_view arg);
 
 }  // namespace sz::ui

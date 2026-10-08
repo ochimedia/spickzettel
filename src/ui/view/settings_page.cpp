@@ -1213,11 +1213,14 @@ void SettingsPage::RenderEditTargetPicker(ProfileGroup group) {
         ProfileTags(/*isActive=*/true, false, 0, 0);
     }
     if (!showingActive) {
-        const std::string running = active ? WithValue(strings::kProfilesIsWhatsRunning, settings_.Profiles()[*active].name)
-                                           : std::string(strings::kProfilesNoneActive);
+        // The name put in after the marks are found: a brace in it is no
+        // mark.
+        const std::vector<TextSpan> running =
+            active ? MarkedSpans(strings::kProfilesIsWhatsRunning, settings_.Profiles()[*active].name)
+                   : MarkedSpans(strings::kProfilesNoneActive);
         ImGui::SameLine();
         ImGui::AlignTextToFramePadding();
-        WrappedSpans(theme::kGraphite300, theme::Accent(), MarkedSpans(running));
+        WrappedSpans(theme::kGraphite300, theme::Accent(), running);
     }
     SettingsGroupBreak();
 }
