@@ -845,8 +845,10 @@ uint64_t PictureTextureOf(Session& session, ItemId item) {
     return session.Textures().Find(TextureKey{TextureKey::Kind::Picture, item}).value_or(0);
 }
 
-// A screenshot is drawn through the filter in settings, and the default
-// adds nothing to the draw list - it is ImGui's own sampler.
+// A screenshot is drawn through the filter in settings. Switched to one
+// that reads no mip chain, its texture is let go of, to be made again
+// without one. (That the default adds nothing to the draw list is
+// AfterALostDeviceEveryTextureIsMadeAgainBeforeItIsDrawn's to show.)
 TEST_F(HeadlessAppTest, AScreenshotIsDrawnThroughTheFilterInSettings) {
     AppConfig config = DefaultConfig();
     config.imageFilter = platform::ImageFilter::Lanczos;

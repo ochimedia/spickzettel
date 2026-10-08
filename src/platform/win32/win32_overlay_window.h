@@ -190,7 +190,8 @@ private:
     Vec2 lastPointerPosition_{};
     std::unique_ptr<Win32Dx11Renderer> renderer_;
     // The texture generations of renderers since destroyed, which took
-    // every texture they made with them. See TextureGeneration.
+    // every texture they made with them, and one for every switch of the
+    // mip chain (SetMipmapsWanted). See TextureGeneration.
     uint64_t pastTextureGenerations_ = 0;
     // See SetMipmapsWanted; handed to every renderer made.
     bool mipmapsWanted_ = false;

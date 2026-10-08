@@ -1124,7 +1124,7 @@ starts in its place. The app says so once, naming the file kept. A
 journal or WAL that cannot go along, held open by another program say,
 stops the new start: one left beside the new file would be played into
 it. What was moved is put back, and the file counts as unreadable, as
-one that cannot be moved at all does (since 0.3.1; the failure used to
+one that cannot be moved at all does (after 0.3.1; the failure used to
 be ignored). A load
 that finds damage partway does the same, and one that fails partway for
 any other reason - the file held past the wait below, a read error - is
@@ -2718,9 +2718,10 @@ level's to say, once drawing mode is on the stack.
 
 A key belongs to one command: the first row it is bound to, which puts
 the fixed keys ahead of chosen ones, and the table's order ahead of a
-profile that bound one key twice. A fixed key matches exactly the
-modifiers it names, except Escape, Delete and the arrows, which never
-cared (a nudge reads Shift itself, for ten pixels). The cheat sheet's
+profile that bound one key twice. The fixed keys match as `HeldWith`
+says: Escape and the arrows with any modifiers (a nudge reads Shift
+itself, for ten pixels), Delete and Backspace bare or with Shift
+(docs/INTERACTIONS.md, section 7). The cheat sheet's
 rows and the menus' key labels are read from the same table, so they
 show what is bound, not what a string says is; and a menu row runs the
 very command its key does, so the two cannot differ ("New screenshot"
@@ -3843,7 +3844,7 @@ Consequences that shape `Win32InputGrab`:
   resized nothing. Found in review on 2026-09-27. The pen went further
   than its last move only to snap the end of a line already drawn, so a
   stroke pressed, moved and released between two frames, with no move at
-  all, stayed a dot. Since 0.3.1 a release with no second point yet is a
+  all, stayed a dot. After 0.3.1 a release with no second point yet is a
   line when it is at least twice the point spacing from the press, which is
   as far as a single move must go to earn a point through the smoothing
   (`DrawTool::OnMouseEvent`); a twitch is still the dot. The first version
@@ -3895,8 +3896,9 @@ Consequences that shape `Win32InputGrab`:
   options HUD took the digits alone, every other key and a digit held
   from before were the game's, repeats and all. Found in the next review
   on 2026-09-27: the rule was asked ahead of the HUD's, and a Backspace
-  or an arrow held in the game acted once. The grab takes every key or
-  none now. A hotkey fires on a press, never on its repeat, as
+  or an arrow held in the game acted once. The Behavior panel brought the
+  digits-only case back (`SetPanelDigits`), and asks the same: a key held
+  from before is the game's. A hotkey fires on a press, never on its repeat, as
   `RegisterHotKey`'s `MOD_NOREPEAT` does; held a moment too long, the
   edit hotkey opened the overlay and closed it again. Mouse buttons follow
   the same rule, so a drag in the application underneath ends there when
@@ -4184,7 +4186,8 @@ a static function with nothing but the draw command finds its renderer.
 for Catmull-Rom, 6x6 for Lanczos-3) aliases just as bilinear does when
 shrinking: it has to widen by the reduction so every texel under a pixel
 counts, and a 4K screenshot shown at a tenth of its size would be 60x60
-taps a pixel. So every texture has a full mip chain, the shader reads
+taps a pixel. So a texture has a full mip chain while one of the two is
+chosen (made only for them; see below), the shader reads
 the level just above the target size and widens the kernel by what is
 left - at most 2x, so 12x12 taps at worst for Lanczos and far fewer for
 a picture shown near its own size. The mips are box-filtered, which is

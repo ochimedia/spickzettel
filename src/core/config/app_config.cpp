@@ -441,7 +441,7 @@ void WriteValue(json& root, const SettingPath& path, const Rule& rule, const typ
 }
 
 // One row, from the file into the config and back. The shortcuts are
-// fifteen settings keyed by action in their group.
+// one setting per action, keyed by action in their group.
 template <typename Row>
 void ReadRow(const json& doc, const Row& row, AppConfig& config) {
     if (auto value = ReadValue(row.rule, Find(doc, row.path))) {

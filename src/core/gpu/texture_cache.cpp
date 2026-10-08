@@ -93,8 +93,8 @@ void TextureCache::CheckDevice() {
     if (window_ == nullptr || window_->TextureGeneration() == generation_) {
         return;
     }
-    // Made on a device that is gone: they draw nothing and must not be
-    // updated, but each is still given back.
+    // Made on a device that is gone, where they draw nothing and must not
+    // be updated, or with the mip chain as it was; each is given back.
     ReleaseAll();
     generation_ = window_->TextureGeneration();
 }

@@ -233,7 +233,7 @@ struct ProfileSetting {
 };
 
 // The tool shortcuts: one setting per ShortcutAction, each overridable,
-// keyed in `group` by ShortcutActionKey. One row for the fifteen, since
+// keyed in `group` by ShortcutActionKey. One row for them all, since
 // the actions are already a list.
 struct ShortcutSettings {
     std::string_view group;

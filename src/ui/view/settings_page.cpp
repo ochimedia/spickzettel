@@ -1016,8 +1016,8 @@ void SettingsPage::RenderSettingsDebug() {
 namespace {
 
 // Every key button in the section is as wide as the widest of its two
-// prompts, and at least 200 px: the prompt says what Escape does, which
-// differs between the two kinds of row, so it is not cut short.
+// prompts, and at least 200 px: a hotkey's says how to cancel, a
+// shortcut's that Escape clears it, and neither is cut short.
 float KeyButtonWidth() {
     const float prompt = std::max(ImGui::CalcTextSize(strings::kHotkeysComboPrompt).x,
                                   ImGui::CalcTextSize(strings::kHotkeysShortcutPrompt).x);

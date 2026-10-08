@@ -160,8 +160,8 @@ at 100%. It holds:
     They had kept quotes, and ImGui's own wrapping may break a line
     after a quote, which left an opening one alone at the end of a line;
     `WrappedSpans` breaks at spaces only. A test keeps `{ui:}` out of
-    every string other than a card's text and a help text (a key ending
-    in `Help`).
+    every string other than a card's text, a help text (a key ending in
+    `Help`) and the Behavior panel's lines (`behaviorPanel.*`).
   - Every text is in `assets/ui_strings.json`, under `tutorial.*`.
 - the hint line, when one applies, and its button if it has one ("Put
   one here");

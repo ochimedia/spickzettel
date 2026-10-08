@@ -22,9 +22,9 @@
 
 namespace sz::ui {
 
-// Grouped by what reaches them. Fixed keys first, so a fixed key and a
-// chosen one that share a combination go to the fixed one (see
-// KeysFor): the chosen ones are what a person can move.
+// Grouped by what reaches them. Fixed keys first, so that were a fixed key
+// and a chosen one to share a combination, it would go to the fixed one
+// (see KeysFor) - none does today, as NoFixedKeyIsOneARowHolds checks.
 enum class CommandId {
     // Fixed keys.
     PutDown,  // Escape: the tool down, then drawing mode, a cut, the selection

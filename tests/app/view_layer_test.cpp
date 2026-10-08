@@ -262,6 +262,12 @@ TEST_F(ViewLayerTest, TheBehaviorPanelSitsOverTheSnippetsAndUnderTheChrome) {
     ASSERT_TRUE(App().IsBehaviorPanelOpen());
 
     ExpectStack({"canvas", "items", "canvas bar", "behavior panel", "chrome"});
+
+    RightClick(900.0f, 400.0f);
+    ASSERT_TRUE(App().IsEmptyCanvasMenuOpen());
+    ASSERT_TRUE(App().IsBehaviorPanelOpen());
+    ExpectStack({"canvas", "items", "canvas bar", "behavior panel", "empty canvas menu", "chrome"},
+                "empty canvas menu");
 }
 
 TEST_F(ViewLayerTest, TheDeleteConfirmationIsOverEverythingElse) {

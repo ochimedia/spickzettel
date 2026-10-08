@@ -408,8 +408,10 @@ TEST_F(Win32Dx11RendererTest, AFailedResizeIsTriedAgainByTheNextFrame) {
     EXPECT_FALSE(renderer_.ResizePendingForTesting());
 }
 
-// After a frame, which left its target bound: the resize goes through all
-// the same, rather than failing and being tried again every frame.
+// After a frame, which left its target bound: the resize goes through. A
+// smoke test only - ResizeBuffers has been seen to succeed with the target
+// still bound, so this passes without the unbind before it too, which is
+// D3D's documented contract rather than a fix for a failure seen.
 TEST_F(Win32Dx11RendererTest, AResizeAfterADrawnFrameGoesThrough) {
     ASSERT_TRUE(renderer_.ReadyToRender());
     renderer_.NewFrame();

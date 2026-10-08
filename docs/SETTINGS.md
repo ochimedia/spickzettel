@@ -493,13 +493,14 @@ condition for freezing, both on entry and on a display move. The release
 comes after the frame instead of during it: one frame later, and no
 longer on every frame the section is drawn.
 
-**Two answers today.** Two Behavior rows take effect differently
+**Two answers today.** Three Behavior rows take effect differently
 depending on where they are changed:
 
 | While in edit mode | Settings > Behavior | Behavior panel |
 |---|---|---|
 | "Don't steal focus" on | restyled at once; the overlay keeps the focus it took until the next entry | restart (hidden and shown), which hands focus back |
 | "Don't steal focus" off | restyled, and focus taken at once | restart |
+| "Take focus from elevated applications", over an elevated application | as "Don't steal focus": restyled at once | restart |
 | "Freeze screen" on | at the next entry into edit mode | restart, which freezes on the way up |
 | "Freeze screen" off | released after the frame (C9) | restart |
 

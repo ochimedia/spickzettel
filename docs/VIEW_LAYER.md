@@ -213,7 +213,7 @@ order, including where that is surprising (section 9, finding 3).
 | 5 | The canvas bar | window `##canvas_bar` | the pointer is at the bottom edge or on the bar, or its menu is up; not under a panel | Canvas bar |
 | 5a | The Behavior panel | window `##behavior_panel` | its hotkey brought it up | Behavior panel |
 | 6 | The snippet menu, the canvas tile menu, the empty canvas menu, Properties, the color chooser, the shape menu | popups | the Popup level holds it | Popups |
-| 8 | The edit-mode border, the frame graph, the input readout, the demo mark | layer `##sz_chrome_layer` | always, each as its setting says | Screen chrome |
+| 8 | The edit-mode border, the frame graph, the input readout | layer `##sz_chrome_layer` | always, each as its setting says | Screen chrome |
 | 9 | The Overview: its backdrop, its panel, and ImGui's popups inside it | panel | the Panel level holds the Overview | Overview; Settings page |
 | 10 | The cheat sheet: its backdrop and its panel | panel | the Panel level holds the cheat sheet | Cheat sheet |
 | 10a | The tutorial card | window `##tutorial_card` | a tutorial topic runs, or its list is up | Tutorial card |
@@ -237,7 +237,7 @@ panel.
 
 | # | Surface | Kind | Up while | Owner |
 |---|---|---|---|---|
-| 1 | The current canvas's snippets (in Pinned only the pinned ones; in Notice none), the debug readout, the frame graph, the demo mark | layer `##spickzettel_view_only` | always | Canvas view |
+| 1 | The current canvas's snippets (in Pinned only the pinned ones; in Notice none), the debug readout, the frame graph | layer `##spickzettel_view_only` | always | Canvas view |
 | 2 | The toast, the persistence warning | overlays | as above | Messages |
 
 What closing does is in section 4 for the popups. For the rest:
@@ -334,10 +334,10 @@ Every frame of edit mode runs these stages, in order:
 | Stage | What it does | What it may change | Today |
 |---|---|---|---|
 | 1. Prepare | tells the editor the display size; the anchor board cleared; the interface scale, the style and the accent; a note's text size, decided once; the frame pacing; the textures' frame begun and the current canvas's asked for; snippets fitted to a changed display; the selection pruned; a note edit ended elsewhere put away (C5); where the canvas bar is; what the start decided for the tutorial, asked for once as an action; the tutorial's runner brought up to date, its own state only | the library and the editor, for what the frame's own state calls for; the one setting decided here; ImGui's style | the top of `OnFrame`, down to `UpdateEdgePanels` |
-| 2. Canvas | surfaces 1 to 5 | a widget's own value (section 6); records actions | `RenderCanvasLayer`, `RenderItems`, `RenderCanvasBar` |
+| 2. Canvas | surfaces 1 to 5a | a widget's own value (section 6); records actions | `RenderCanvasLayer`, `RenderItems`, `RenderCanvasBar` |
 | 3. Open | the effect queue: popups opened and closed, ImGui's active widget let go | ImGui's popups and focus | `ApplyEffects` |
 | 4. Popups | surface 6 | as stage 2 | the five popups' `Render...` functions |
-| 5. Over the canvas | surfaces 7, 8 and 12 | nothing | the drag previews, `RenderBrushSizePreview`, `RenderToolModifierBadge`, `RenderScreenChrome` |
+| 5. Over the canvas | surfaces 8 and 12 | nothing | the drag previews, `RenderBrushSizePreview`, `RenderToolModifierBadge`, `RenderScreenChrome` |
 | 6. Panels | surfaces 9 to 11 | as stage 2 | `RenderOverview`, `RenderCheatSheet`, `RenderConfirmDeletePopover`, `RenderLibraryReminderPopover` |
 | 7. Messages | surfaces 13 and 13a | nothing | `RenderActionToast`, `RenderPersistenceWarning` |
 | 8. Stack | the pass of C1 | the windows' order | the 19 calls, spread over stages 2 to 6 |
@@ -469,7 +469,7 @@ what it is handed, and records actions:
 | Settings page | the Settings tab | the section; the edit target; a refused profile name; the display list | `overlay_app_overview.cpp` (Settings), `settings_widgets.*` |
 | Cheat sheet | 10 | none | `overlay_app_cheatsheet.cpp` |
 | Behavior panel | 5a | whether it is up; the digits asked for; a restart waiting for its key | new with the panel |
-| Screen chrome | 8 | the demo mark's place | `overlay_app.cpp` |
+| Screen chrome | 8 | none | `overlay_app.cpp` |
 | Messages | 13 | the message and when it expires; the message for the next showing; the settings file that failed; whether a notice's end was reported | `overlay_app.cpp`, `overlay_app_overview.cpp` |
 | Pointer | 12, 14; the pointer's shape | the applied shape and the cursor history; when the size preview expires; the pen's width owed | `overlay_app.cpp`, `overlay_app_popovers.cpp` |
 | Tutorial card | 10a, 13a | the runner and the topic it runs; whether the list is up; whether a topic has run; whether the card was dragged | new with the tutorial (`docs/TUTORIAL.md`) |

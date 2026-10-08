@@ -39,9 +39,10 @@ struct TexturePixels {
 // asked for in and is never kept past it. That is what makes the three ways
 // a handle goes bad this class's alone to handle:
 //
-// - The device is replaced (see IOverlayWindow::TextureGeneration): every
-//   texture is let go of before any is handed out again, and each is made
-//   again the next time it is asked for.
+// - The device is replaced, or textures are to carry a mip chain or not
+//   (see IOverlayWindow::TextureGeneration): every texture is let go of
+//   before any is handed out again, and each is made again the next time
+//   it is asked for.
 // - Nobody draws it any more: a texture not asked for through a whole frame
 //   is released at the start of the next (see BeginFrame). What leaves the
 //   screen - a canvas switched away from, a snippet deleted, a panel closed

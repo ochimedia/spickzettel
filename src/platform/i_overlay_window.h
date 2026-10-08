@@ -170,11 +170,13 @@ public:
     // Releases a texture from either call above. No-op for 0.
     virtual void ReleaseTexture(uint64_t textureHandle) = 0;
 
-    // Changes when every texture handed out before is lost: the GPU device
-    // was reset or replaced - a driver update, or a driver that stopped
-    // responding and was restarted. The handles from before draw nothing
-    // and must not be updated; each is still given back through
-    // ReleaseTexture, and what it showed uploaded again.
+    // Changes when every texture handed out before is to be made again.
+    // Either the GPU device was reset or replaced - a driver update, or a
+    // driver that stopped responding and was restarted - and the handles
+    // from before draw nothing and must not be updated; or whether
+    // textures carry a mip chain was switched (SetMipmapsWanted), and they
+    // still draw, only not as the filter now wants. Each is given back
+    // through ReleaseTexture either way, and what it showed uploaded again.
     virtual uint64_t TextureGeneration() const = 0;
 
     // Whether textures carry a mip chain: what the Bicubic and Lanczos
