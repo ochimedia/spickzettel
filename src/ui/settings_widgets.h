@@ -13,6 +13,7 @@
 // The Settings page draws these, and the Behavior panel its few switches,
 // so that a row there reads as it does in Settings.
 
+#include <algorithm>
 #include <cstddef>
 #include <optional>
 
@@ -84,6 +85,8 @@ struct ChoiceLabel {
 
 // A choice as a dropdown, its label in a column of `labelColumn` - or
 // none, for a `label` of nullptr: a row whose heading says what it is.
+// A `width` of 0 is as wide as the longest choice, which the closed box
+// would otherwise cut.
 template <typename E, size_t N>
 void SettingCombo(Settings& settings, const GlobalSetting<ChoiceRule<E>>& row, const char* id, const char* label,
                   const ChoiceLabel<E> (&choices)[N], float labelColumn, float width) {
@@ -99,7 +102,14 @@ void SettingCombo(Settings& settings, const GlobalSetting<ChoiceRule<E>>& row, c
         ImGui::TextUnformatted(label);
         ImGui::SameLine(Px(labelColumn));
     }
-    ImGui::SetNextItemWidth(Px(width));
+    float itemWidth = Px(width);
+    if (width <= 0.0f) {
+        for (const ChoiceLabel<E>& choice : choices) {
+            itemWidth = std::max(itemWidth, ImGui::CalcTextSize(choice.label).x);
+        }
+        itemWidth += ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetFrameHeight();
+    }
+    ImGui::SetNextItemWidth(itemWidth);
     if (ImGui::BeginCombo(Labeled("", id), preview)) {
         for (const ChoiceLabel<E>& choice : choices) {
             if (ImGui::Selectable(Labeled(choice.label, choice.id), choice.value == current) &&

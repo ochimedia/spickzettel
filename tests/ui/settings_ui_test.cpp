@@ -126,7 +126,8 @@ TEST_F(UiTest, PickingAMonitorPutsTheOverlayOnIt) {
 }
 
 // The picture filter is a dropdown, each choice saying what it does and
-// costs: picked there, it is the setting.
+// costs: picked there, it is the setting. The closed box shows the longest
+// whole, cost included, which a fixed width cut.
 TEST_F(UiTest, TheImageFilterIsPickedFromItsDropdown) {
     ShowEditMode();
     StepFrame();
@@ -137,6 +138,13 @@ TEST_F(UiTest, TheImageFilterIsPickedFromItsDropdown) {
         ctx->ItemClick("**/###overviewtabsettings");
         ctx->ItemClick("**/###sectionappearance");
         ctx->SetRef(ctx->WindowInfo("//##overview_panel/##overview_body/##settings_body").ID);
+        const ImRect box = ctx->ItemInfo("###imagefilter").RectFull;
+        for (const char* label : {strings::kAppearanceImageFilterBilinear, strings::kAppearanceImageFilterNearest,
+                                  strings::kAppearanceImageFilterBicubic, strings::kAppearanceImageFilterLanczos}) {
+            EXPECT_GE(box.GetWidth(), ImGui::CalcTextSize(label).x + ImGui::GetStyle().FramePadding.x * 2.0f +
+                                          ImGui::GetFrameHeight())
+                << label;
+        }
         ctx->ItemClick("###imagefilter");
         ctx->ItemClick("**/###imagefilterlanczos");
     });

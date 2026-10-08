@@ -508,7 +508,7 @@ void SettingsPage::RenderSettingsAppearance() {
     };
     // A dropdown rather than a row of radio buttons: each choice says what
     // it does and costs, which made the row wider than the panel.
-    SettingCombo(settings_, setting::kImageFilter, "imagefilter", nullptr, filters, 0.0f, 360.0f);
+    SettingCombo(settings_, setting::kImageFilter, "imagefilter", nullptr, filters, 0.0f, 0.0f);
 
     SettingsGroupBreak();
 

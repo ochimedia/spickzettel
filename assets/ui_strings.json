@@ -635,7 +635,7 @@
   "appearance.imageFilterBilinear": "Bilinear (soft, default)",
   "appearance.imageFilterNearest": "Nearest (pixelated)",
   "appearance.imageFilterBicubic": "Bicubic (sharper, more memory usage)",
-  "appearance.imageFilterLanczos": "Lanczos (sharpest, may cause faint halos, more memory usage)",
+  "appearance.imageFilterLanczos": "Lanczos (sharpest, more memory usage)",
   "appearance.snippetColorsHeading": "Snippet border colors",
   "appearance.snippetColorsHelp": "Different colors for different states of a snippet, to tell them apart at a glance.\n\nHovering is shown separately, as a thicker border.",
   "appearance.frontmostBorder": "Frontmost",
