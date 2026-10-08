@@ -151,7 +151,6 @@ std::vector<tutorial::ProfileFacts> AppWorld::Profiles() const {
         namespace setting = core::setting;
         each.statedAsDefaults = asDefaults(setting::kDontStealFocus) + asDefaults(setting::kTakeFocusOverElevated) +
                                 asDefaults(setting::kSoftwarePointer) + asDefaults(setting::kRawMouseInput) +
-                                asDefaults(setting::kDontForwardKeystrokes) +
                                 asDefaults(setting::kCounterRawMouseInput) + asDefaults(setting::kCounterThreshold) +
                                 asDefaults(setting::kFreezeScreen);
         facts.push_back(std::move(each));

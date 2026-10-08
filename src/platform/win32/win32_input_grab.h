@@ -54,10 +54,11 @@ public:
     // the overlay is hidden.
     void SetActive(bool active);
 
-    // Temporarily hands the keyboard back for real text entry - see
-    // IOverlayWindow::RequestTextInput/ReleaseTextInput, which bracket exactly the
-    // situations that need it. Without this a rename field would silently
-    // swallow every keystroke instead of receiving it.
+    // Temporarily hands the keyboard back for real text entry, when a text
+    // field takes focus because the grab cannot type into it - see
+    // IOverlayWindow::RequestTextInput/ReleaseTextInput. Without this a hook
+    // that came in meanwhile would swallow every keystroke the field exists
+    // to receive.
     void SetKeyboardSuspended(bool suspended);
 
     // Whether the game underneath still holds OS focus - i.e. whether
@@ -72,19 +73,6 @@ public:
     // Deliberately does not gate SoftwarePointerWanted: drawing the pointer
     // is a matter of appearance and stays available either way.
     void SetGameKeepsFocus(bool gameKeepsFocus);
-
-    // How many bare digits the Behavior panel takes, starting at '1'; 0 when
-    // it is not up - see IOverlayWindow::SetPanelDigits. A non-zero count
-    // keeps the hook installed for the panel's sake even when nothing asked
-    // for the keyboard, and then it swallows those digits and nothing else
-    // (see OnKeyboard). Not cleared with the grab, as a text field's claim
-    // is (see SetActive): the panel stays up across a restart of the
-    // overlay, and says so again only when it closes.
-    //
-    // The count comes across rather than being a constant on this side: it
-    // has to match the panel's row count, and a constant here would only
-    // match it by comment.
-    void SetPanelDigits(int digitCount);
 
     // The app's global hotkeys, so the grab can dispatch them itself while
     // the keyboard is swallowed. Measured: a swallowing low-level keyboard
@@ -114,38 +102,6 @@ public:
     // because the hook is delivering the keyboard - characters included - to
     // the overlay. See its definition, and IOverlayWindow::RequestTextInput.
     bool DeliversTypingToOverlay() const;
-
-    // Whether it *would* deliver typing if asked to take the keyboard - i.e.
-    // whether SetTextFieldOpen(true) is worth trying. Everything except the
-    // decision itself, and nothing known to be broken: no keyboard hook that
-    // failed, no hook thread that could not start or has stopped answering.
-    bool CanDeliverTyping() const;
-
-    // A text field is open and wants the keyboard for as long as it is.
-    //
-    // This is the difference between the two ways to give a field what it
-    // needs. With keystroke forwarding on - the user wanting WASD to keep
-    // reaching the game while the overlay is up - serving a field by taking
-    // real OS focus stops the stray WASD but costs the game exactly the
-    // focus-loss event the whole mode exists to avoid. Taking the keyboard
-    // for the duration instead does the same job for nothing: the
-    // game sees no keystrokes while the field is open, gets them back when it
-    // closes, and never learns it lost anything.
-    //
-    // Turning this on flips WantKeyboard, so Refresh installs the hook and
-    // seeds the modifier record through BeginGrabbedKeyboard, and turning it
-    // off runs EndGrabbedKeyboard - the boundary handling is already there and
-    // this is simply another thing that moves the boundary.
-    //
-    // Opening says whether typing is now delivered: the hook thread has
-    // answered, and the keyboard hook is in. False - the hook could not be
-    // installed, or the thread did not answer in time - and the field takes
-    // focus instead, after closing this claim again.
-    bool SetTextFieldOpen(bool open);
-
-    // Whether the whole keyboard is currently ours rather than only the
-    // Behavior panel's digits - see WantsAllKeystrokesLocked.
-    bool WantsAllKeystrokes() const;
 
     // Where that pointer is, in screen coordinates. Accumulated from the
     // movements the hook swallows, so it is unaffected by anything the game
@@ -475,39 +431,14 @@ private:
         std::lock_guard<std::mutex> lock(stateMutex_);
         return active_ && options_.useRawMouseInput && options_.RawMouseInputCanBeUsed(gameKeepsFocus_);
     }
-    int PanelDigits() const {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        return panelDigits_;
-    }
-    // The hook is installed for either of two reasons: something wants the
-    // whole keyboard (see WantsAllKeystrokesLocked), or the Behavior panel
-    // is up and its digits have to reach an overlay that deliberately has
-    // no focus. In the second case it swallows nothing but those digits -
-    // see OnKeyboard.
-    //
-    // Both reasons need gameKeepsFocus_. Without it this window holds focus
-    // and receives key messages the ordinary way, the panel's digits
-    // included, with no hook involved.
+    // The whole keyboard, while edit mode is up over a game that keeps
+    // focus. Without gameKeepsFocus_ this window holds focus and receives
+    // key messages the ordinary way, with no hook involved.
     bool WantKeyboard() const {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        return active_ && !keyboardSuspended_ && EditModeInputOptions::KeystrokesCanBeHeld(gameKeepsFocus_) &&
-               (WantsAllKeystrokesLocked() || panelDigits_ > 0);
+        return WantKeyboardLocked();
     }
-    // Whether the whole keyboard is ours, as opposed to only the Behavior
-    // panel's digits. The option asks for it permanently; an open text field
-    // asks for it while it is open, which is the difference between a field
-    // costing the game its focus and costing it nothing at all.
-    bool WantsAllKeystrokesLocked() const { return options_.dontForwardKeystrokes || textFieldOpen_; }
-    // Everything typing needs except the decision to take the keyboard - what
-    // SetTextFieldOpen turns into a yes. Not with the keyboard hook known to
-    // have failed, nor with no hook thread to install one: until a retry
-    // gets it, nothing delivers the keys - see ReconcileHooks.
-    bool CanDeliverTypingLocked() const {
-        return active_ && !keyboardSuspended_ && overlay_ != nullptr &&
-               EditModeInputOptions::KeystrokesCanBeHeld(gameKeepsFocus_) &&
-               keyboardHookState_.load() != HookState::Failed && !hookThreadStartFailed_.load() &&
-               reconciledGeneration_.load() >= awaitedGeneration_.load();
-    }
+    bool WantKeyboardLocked() const { return active_ && !keyboardSuspended_ && gameKeepsFocus_; }
     bool WantCancellation() const {
         std::lock_guard<std::mutex> lock(stateMutex_);
         return active_ && options_.counterRawMouseInput &&
@@ -592,10 +523,6 @@ private:
     // See SetGameKeepsFocus. Defaults false so nothing is grabbed until the
     // window has said which way it was shown.
     bool gameKeepsFocus_ = false;
-    // See SetTextFieldOpen.
-    bool textFieldOpen_ = false;
-    // See SetPanelDigits.
-    int panelDigits_ = 0;
     // What Refresh saw last time, so each handover runs once, on its own
     // transition - see Refresh.
     bool keyboardWasGrabbed_ = false;

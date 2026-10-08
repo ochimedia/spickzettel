@@ -466,7 +466,6 @@ void Win32OverlayWindow::TakeFocus() {
     SetForegroundWindow(hwnd_);
 }
 
-void Win32OverlayWindow::SetPanelDigits(int digitCount) { Win32InputGrab::Instance().SetPanelDigits(digitCount); }
 
 void Win32OverlayWindow::SetEditModeInput(const EditModeInputOptions& options) {
     editModeInput_ = options;
@@ -802,25 +801,13 @@ void Win32OverlayWindow::RequestTextInput() {
     if (!hwnd_) {
         return;
     }
-    // A text field needs the keyboard, not focus, and there are two ways to
-    // give it one. Borrowing the keyboard costs the game nothing; borrowing
-    // focus costs it the focus-loss event this whole mode exists to avoid. So
-    // ask for the keyboard whenever the grab is in a position to hand it over
-    // - which includes the case where keystroke forwarding is *off*, i.e. the
-    // user wants WASD to keep reaching the game while the overlay is up. That
-    // want stops at the edge of a text field: someone typing a name is not
-    // steering a character, and the field takes the keyboard for exactly as
-    // long as it is open.
-    //
-    // Whether the keyboard was had is known when SetTextFieldOpen returns:
-    // it waits for the hook thread's answer. Not had - the hook refused, or
-    // the thread not answering - the claim goes with it, and focus it is.
-    Win32InputGrab& grab = Win32InputGrab::Instance();
-    if (grab.CanDeliverTyping()) {
-        if (grab.SetTextFieldOpen(true)) {
-            return;
-        }
-        grab.SetTextFieldOpen(false);
+    // A text field needs the keyboard, not focus. While the grab holds the
+    // keyboard it is the overlay's already, at no cost to the game; taking
+    // focus would cost it the focus-loss event this whole mode exists to
+    // avoid. Only without that - the overlay holding focus anyway, or a
+    // keyboard hook that could not be had - is focus taken.
+    if (Win32InputGrab::Instance().DeliversTypingToOverlay()) {
+        return;
     }
     TakeTextInputFocus();
 }
@@ -829,11 +816,11 @@ void Win32OverlayWindow::RequestTextInput() {
 // borrow from, the overlay holding focus anyway, or a keyboard hook that
 // could not be installed.
 void Win32OverlayWindow::TakeTextInputFocus() {
-    // Otherwise the field needs the real thing - no grab to borrow from, or
+    // Otherwise the field needs the real thing - no grab to type through, or
     // the overlay already holds focus anyway. Hand the keyboard back for as
     // long as the field is open (see Win32InputGrab::SetKeyboardSuspended):
-    // without this, a field opened under a grab that is *not* forwarding
-    // keystrokes would swallow the very keys it exists to receive.
+    // without this, a keyboard hook that came in on a retry would swallow
+    // the very keys the field exists to receive.
     Win32InputGrab::Instance().SetKeyboardSuspended(true);
 
     // And WS_EX_NOACTIVATE has to come off for the duration, or the keys
@@ -861,12 +848,10 @@ void Win32OverlayWindow::TakeTextInputFocus() {
 
 void Win32OverlayWindow::ReleaseTextInput() {
     // Both undos are unconditional and idempotent, because a field can be
-    // closed by routes that have no idea which way it was opened: the
-    // keyboard the field borrowed goes back to whatever the options ask for,
-    // and a grab that was never suspended does nothing here. One that *was*
-    // must be resumed however the field is closing, or a single rename would
+    // closed by routes that have no idea which way it was opened: a grab
+    // that was never suspended does nothing here. One that *was* must be
+    // resumed however the field is closing, or a single rename would
     // disable it for the session.
-    Win32InputGrab::Instance().SetTextFieldOpen(false);
     Win32InputGrab::Instance().SetKeyboardSuspended(false);
 
     // Everything below undoes a RequestTextInput that actually took focus. When

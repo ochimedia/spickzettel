@@ -38,7 +38,6 @@ struct Row {
 constexpr Row kRows[] = {
     {strings::kHudDontStealFocus, &setting::kDontStealFocus, 0, true},
     {strings::kInputTakeFocusOverElevatedLabel, &setting::kTakeFocusOverElevated, 1, true},
-    {strings::kHudDontForwardKeystrokes, &setting::kDontForwardKeystrokes, 1, false},
     {strings::kHudUseRawMouseInput, &setting::kRawMouseInput, 1, false},
     {strings::kInputCounterRawMouseLabel, &setting::kCounterRawMouseInput, 2, false},
     {strings::kHudUseSoftwarePointer, &setting::kSoftwarePointer, 0, false},
@@ -78,9 +77,6 @@ bool BehaviorPanel::Available(int row) const {
     const ProfileSetting<BoolRule>* setting = kRows[row].setting;
     if (setting == &setting::kTakeFocusOverElevated) {
         return live.dontStealFocus;
-    }
-    if (setting == &setting::kDontForwardKeystrokes) {
-        return platform::EditModeInputOptions::KeystrokesCanBeHeld(live.dontStealFocus);
     }
     if (setting == &setting::kRawMouseInput) {
         return live.InputOptions().RawMouseInputCanBeUsed(live.dontStealFocus);
@@ -200,12 +196,7 @@ void BehaviorPanel::DrawRows() {
 }
 
 void BehaviorPanel::Update(bool editMode) {
-    const int digits = editMode && open_ ? kRowCount : 0;
-    if (host_.Window() != nullptr && digits != appliedDigits_) {
-        host_.Window()->SetPanelDigits(digits);
-        appliedDigits_ = digits;
-    }
-    if (digits == 0) {
+    if (!editMode || !open_) {
         // Closed before the key came up: nobody left to have asked, and a
         // restart later would hide and show the overlay for no reason
         // anyone could see.

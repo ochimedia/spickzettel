@@ -554,7 +554,7 @@ one tangle of conditions per key (`historyKeysFree`, `keysFree`,
 `!io.WantTextInput && !PanelOpen()`, the cheat sheet exception).
 
 **The Behavior panel's digits** are a binding of the Canvas level that
-exists while the panel is up in edit mode: a bare 1 to 7 is
+exists while the panel is up in edit mode: a bare 1 to 6 is
 `SwitchBehaviorRow` with that row, ahead of any chosen key - one a
 person bound to a bare digit is not reached while the panel is up. A
 held digit's repeats are claimed and switch nothing more. The command's
@@ -900,7 +900,7 @@ Settled on review (2026-09-26):
    is for judging the input options with the game, the snippets and the
    canvas in reach: a stroke, a drag and Escape stay the canvas's while
    it is up, and every key but its digits goes where it would without
-   it - to the game, with keystrokes forwarded. So whether it is up is
+   it. So whether it is up is
    the view's (`BehaviorPanel`), and what it adds to the machine is one
    binding of the Canvas level (section 7). A click on it is rule 1, as
    on any window.

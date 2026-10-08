@@ -888,8 +888,6 @@ void SettingsPage::RenderSettingsBehavior() {
     // panel grays the same rows on the same answers, and two copies of these
     // rules would eventually disagree.
     const ProfileableSettings edited = EditedSettings();
-    const bool keystrokesAvailable =
-        platform::EditModeInputOptions::KeystrokesCanBeHeld(edited.dontStealFocus);
     const bool rawAvailable = edited.InputOptions().RawMouseInputCanBeUsed(edited.dontStealFocus);
     const bool counterAvailable =
         edited.InputOptions().CounterRawMouseInputCanBeUsed(edited.dontStealFocus);
@@ -924,12 +922,6 @@ void SettingsPage::RenderSettingsBehavior() {
                     strings::kInputTakeFocusOverElevatedLabel, strings::kInputTakeFocusOverElevatedHelp,
                     !edited.dontStealFocus);
     markRevert(settings_.IsOverridden(setting::kTakeFocusOverElevated, editProfile_));
-    TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
-
-    rowPos = ImGui::GetCursorScreenPos();
-    SettingCheckbox(settings_, editProfile_, setting::kDontForwardKeystrokes, "dontforwardkeys",
-                    strings::kHudDontForwardKeystrokes, strings::kInputDontForwardKeystrokesHelp, !keystrokesAvailable);
-    markRevert(settings_.IsOverridden(setting::kDontForwardKeystrokes, editProfile_));
     TreeBranch(focusTrunk, rowPos, Px(kTreeIndent));
 
     rowPos = ImGui::GetCursorScreenPos();
@@ -1677,11 +1669,12 @@ void SettingsPage::ArmShortcutCapture(ShortcutAction action) {
     BorrowKeyboard();
 }
 
-// The key a row waits for has to reach the overlay, which a profile that
-// neither takes focus nor holds keystrokes leaves with the program
-// underneath: the row then waited on keys that went to that program. So
-// it borrows the keyboard as a text field does - after the Push, which
-// ended whatever held the level before, and gave back what that borrowed.
+// The key a row waits for has to reach the overlay, which a game that
+// keeps focus holds when the grab has no keyboard hook to hand keys over
+// with: the row then waited on keys that went to the game. So it borrows
+// the keyboard as a text field does, focus if need be - after the Push,
+// which ended whatever held the level before, and gave back what that
+// borrowed.
 void SettingsPage::BorrowKeyboard() {
     if (host_.Window() != nullptr) {
         host_.Window()->RequestTextInput();

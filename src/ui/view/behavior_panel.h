@@ -12,8 +12,9 @@
 // behave is how a combination is judged. So it is no panel on the
 // machine's Panel level, which covers the canvas; it keeps whether it is
 // up itself, and the Canvas level turns its digits into a command (see
-// EditorViews::BehaviorPanelRow). Every other key goes where it would
-// without it, the game's included (see IOverlayWindow::SetPanelDigits).
+// EditorViews::BehaviorPanelRow). Its digits reach the overlay as every
+// key does in edit mode, the grab holding the keyboard while the game
+// keeps focus.
 
 #include <optional>
 
@@ -41,9 +42,9 @@ public:
     // configuration in front of you - and the overlay restarted for a row
     // read only on the way up. A grayed row is not.
     void Switch(int row);
-    // Once a frame, after the draw: the window told how many digits the
-    // panel takes - none but in edit mode - and the overlay restarted once
-    // a row that needs it has had its key or button let go of.
+    // Once a frame, after the draw: the overlay restarted once a row that
+    // needs it has had its key or button let go of - in edit mode, with
+    // the panel up.
     void Update(bool editMode);
 
 private:
@@ -57,9 +58,6 @@ private:
     core::Settings& settings_;
     ViewHost& host_;
     bool open_ = false;
-    // What the window was last told (see Update): telling it again can
-    // install or remove a keyboard hook.
-    int appliedDigits_ = 0;
     // A switch that needs edit mode entered again, waiting for the key or
     // button that made it to come up: a restart takes the window down with
     // the key still held, its up is lost, and the next press of it is no

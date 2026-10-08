@@ -194,7 +194,6 @@ TEST(ProfileTest, InputOptionsRoundTripThroughTheFlatFields) {
     platform::EditModeInputOptions options;
     options.useSoftwarePointer = false;
     options.useRawMouseInput = true;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = true;
     settings.SetInputOptions(options);
     EXPECT_EQ(settings.InputOptions(), options);
@@ -292,7 +291,6 @@ TEST(ProfileTest, AnOverrideOfEveryKindSurvivesTheFile) {
     profile.overrides.takeFocusOverElevated = false;
     profile.overrides.softwarePointer = false;
     profile.overrides.rawMouseInput = false;
-    profile.overrides.dontForwardKeystrokes = false;
     profile.overrides.counterRawMouseInput = false;
     profile.overrides.freezeScreen = false;
     profile.overrides.counterThreshold = 75;

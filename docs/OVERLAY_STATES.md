@@ -145,8 +145,7 @@ it puts the panel up or away and asks for nothing. The panel being up
 is no part of the state: it is the view's (`BehaviorPanel`; not a level
 of the input machine either, `docs/INTERACTIONS.md`, section 12), so it
 lasts through Hidden, Pinned, Notice and View, the All scope's settle
-into View included, and the next Edit shows it again with its digits
-taken (`IOverlayWindow::SetPanelDigits`, told none outside Edit). Added
+into View included, and the next Edit shows it again. Added
 on 2026-10-07, with no new request and no new cell; written here in the
 review of 2026-10-08.
 

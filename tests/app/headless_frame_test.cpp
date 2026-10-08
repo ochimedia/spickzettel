@@ -1939,10 +1939,10 @@ TEST_F(HeadlessAppTest, AWaitingRowTakesTheNextKeyAndEscapeStopsIt) {
     EXPECT_FALSE(App().IsOverviewOpen()) << "with nothing waiting, Escape closes the Overview";
 }
 
-// A waiting row borrows the keyboard, as a text field does: under a
-// profile that neither takes focus nor holds keystrokes, the key it waits
-// for went to the program underneath. Each way the wait ends gives it
-// back - a key bound, Escape, another row armed, edit mode left.
+// A waiting row borrows the keyboard, as a text field does: with no hook
+// to hand the keys over, the key it waits for went to the program
+// underneath. Each way the wait ends gives it back - a key bound, Escape,
+// another row armed, edit mode left.
 TEST_F(HeadlessAppTest, AWaitingRowBorrowsTheKeyboardUntilItStops) {
     ShowEditMode();
     StepFrame();
@@ -2765,7 +2765,7 @@ TEST_F(HeadlessAppTest, SavingASettingOverAnElevatedApplicationKeepsItsFocusTake
 // ===== The Behavior panel =====
 
 // Its hotkey brings the overlay up in edit mode with the panel open, from
-// hidden, and the panel takes its digits while it is up. Pressed again, it
+// hidden. Pressed again, it
 // puts the panel away and leaves edit mode where it is. Escape is the
 // canvas's still: the panel covers nothing for it to close first.
 TEST_F(HeadlessAppTest, TheBehaviorPanelHotkeyBringsTheOverlayUpWithThePanel) {
@@ -2776,7 +2776,6 @@ TEST_F(HeadlessAppTest, TheBehaviorPanelHotkeyBringsTheOverlayUpWithThePanel) {
     StepFrame();
     EXPECT_EQ(controller_->State(), app::OverlayState::Edit);
     EXPECT_TRUE(App().IsBehaviorPanelOpen());
-    EXPECT_EQ(host_.overlayWindow.panelDigits, 7);
     PressKey(ImGuiKey_Escape);
     EXPECT_TRUE(App().IsBehaviorPanelOpen());
 
@@ -2784,7 +2783,6 @@ TEST_F(HeadlessAppTest, TheBehaviorPanelHotkeyBringsTheOverlayUpWithThePanel) {
     StepFrame();
     EXPECT_EQ(controller_->State(), app::OverlayState::Edit);
     EXPECT_FALSE(App().IsBehaviorPanelOpen());
-    EXPECT_EQ(host_.overlayWindow.panelDigits, 0) << "the digits back with the panel";
 }
 
 // A row's number switches it, into the profile that runs. The panel
@@ -2800,14 +2798,14 @@ TEST_F(HeadlessAppTest, TheBehaviorPanelsDigitsSwitchARowAndTheCanvasStaysInReac
     TriggerHotkey(config_.hotkeyBehaviorPanel);
     StepFrame();
     ASSERT_TRUE(AppSettings().ActiveProfile().has_value());
-    const bool forwardBefore = AppSettings().Live().dontForwardKeystrokes;
+    const bool rawBefore = AppSettings().Live().rawMouseInput;
     const bool pointerBefore = AppSettings().Live().softwarePointer;
 
-    PressKey(ImGuiKey_3);  // Don't forward keystrokes
-    EXPECT_EQ(AppSettings().Live().dontForwardKeystrokes, !forwardBefore);
-    ASSERT_TRUE(AppSettings().Profiles()[0].overrides.dontForwardKeystrokes.has_value());
-    EXPECT_EQ(AppSettings().Base().dontForwardKeystrokes, forwardBefore) << "not into the defaults";
-    PressKey(ImGuiKey_6);  // Use a software pointer
+    PressKey(ImGuiKey_3);  // Use raw mouse input
+    EXPECT_EQ(AppSettings().Live().rawMouseInput, !rawBefore);
+    ASSERT_TRUE(AppSettings().Profiles()[0].overrides.rawMouseInput.has_value());
+    EXPECT_EQ(AppSettings().Base().rawMouseInput, rawBefore) << "not into the defaults";
+    PressKey(ImGuiKey_5);  // Use a software pointer
     EXPECT_EQ(AppSettings().Live().softwarePointer, !pointerBefore);
 
     MakeADrawing(700.0f, 400.0f, 1000.0f, 600.0f);
@@ -2836,7 +2834,7 @@ TEST_F(HeadlessAppTest, ABehaviorDigitMidStrokeEndsTheStrokeFirst) {
     StepFrame();
     RawMouse(450.0f, 400.0f, platform::MouseEventKind::Move);
     StepFrame();
-    PressKey(ImGuiKey_6);  // Use a software pointer
+    PressKey(ImGuiKey_5);  // Use a software pointer
     EXPECT_EQ(AppSettings().Live().softwarePointer, !pointerBefore);
     ASSERT_EQ(manager.FindItemAnywhere(drawing)->strokes.size(), 1u) << "kept as the key found it";
     const size_t points = manager.FindItemAnywhere(drawing)->strokes[0].points.size();
@@ -2854,7 +2852,7 @@ TEST_F(HeadlessAppTest, ABehaviorDigitMidStrokeEndsTheStrokeFirst) {
 TEST_F(HeadlessAppTest, AHeldBehaviorDigitSwitchesOnceAndRunsNothingElse) {
     AppConfig config = DefaultConfig();
     config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Undo)] =
-        platform::KeyCombo{/*ctrl=*/false, /*alt=*/false, /*shift=*/false, /*key=*/'6'};
+        platform::KeyCombo{/*ctrl=*/false, /*alt=*/false, /*shift=*/false, /*key=*/'5'};
     StartWith(std::move(config));
     ShowEditMode();
     StepFrame();
@@ -2866,17 +2864,17 @@ TEST_F(HeadlessAppTest, AHeldBehaviorDigitSwitchesOnceAndRunsNothingElse) {
     ASSERT_TRUE(App().IsBehaviorPanelOpen());
     const bool pointerBefore = AppSettings().Live().softwarePointer;
 
-    KeyEvent(ImGuiKey_6, true);
+    KeyEvent(ImGuiKey_5, true);
     StepFrame();
     for (int i = 0; i < 5; ++i) {  // the window's repeats, as Windows sends them
         platform::InputEvent repeat;
         repeat.kind = platform::InputEventKind::KeyDown;
-        repeat.key = '6';
+        repeat.key = '5';
         repeat.repeat = true;
         SendInput(repeat);
         StepFrame();
     }
-    KeyEvent(ImGuiKey_6, false);
+    KeyEvent(ImGuiKey_5, false);
     StepFrame();
 
     EXPECT_EQ(AppSettings().Live().softwarePointer, !pointerBefore) << "switched once";
@@ -2893,17 +2891,17 @@ TEST_F(HeadlessAppTest, AGrayedBehaviorRowIgnoresItsKey) {
     StartWith(std::move(config));
     TriggerHotkey(config_.hotkeyBehaviorPanel);
     StepFrame();
-    const bool before = AppSettings().Live().dontForwardKeystrokes;
+    const bool before = AppSettings().Live().rawMouseInput;
 
-    PressKey(ImGuiKey_3);  // Don't forward keystrokes, which needs Don't steal focus
+    PressKey(ImGuiKey_3);  // Use raw mouse input, which needs Don't steal focus
 
-    EXPECT_EQ(AppSettings().Live().dontForwardKeystrokes, before);
+    EXPECT_EQ(AppSettings().Live().rawMouseInput, before);
 }
 
 // A row read only on the way up restarts the overlay once its key is up.
 // The restart is the same showing: the profile is not looked for again -
 // in the middle of hiding, what is underneath can read as nothing - and
-// the panel is still up after it, with the keyboard.
+// the panel is still up after it.
 TEST_F(HeadlessAppTest, ABehaviorSwitchSurvivesTheRestartItAsksFor) {
     AppConfig config = DefaultConfig();
     Profile profile;
@@ -2932,7 +2930,6 @@ TEST_F(HeadlessAppTest, ABehaviorSwitchSurvivesTheRestartItAsksFor) {
     EXPECT_EQ(*AppSettings().Profiles()[0].overrides.dontStealFocus, !before);
     EXPECT_EQ(AppSettings().Base().dontStealFocus, before);
     EXPECT_TRUE(App().IsBehaviorPanelOpen());
-    EXPECT_EQ(host_.overlayWindow.panelDigits, 7);
 }
 
 TEST_F(HeadlessAppTest, ShortcutsAreIgnoredInViewOnlyMode) {

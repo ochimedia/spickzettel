@@ -109,7 +109,6 @@ TEST(Win32InputGrabTest, RawMouseInputIsRegisteredAgainAfterHideAndShow) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -145,7 +144,6 @@ TEST(Win32InputGrabTest, APointerGrabThatFailsIsNotHalfSetUpAndIsTriedAgain) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -180,7 +178,6 @@ TEST(Win32InputGrabTest, AKeyboardHookThatFailsDeliversNoTypingAndIsSeededOnRetr
     EditModeInputOptions options;
     options.useRawMouseInput = false;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = true;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -188,9 +185,7 @@ TEST(Win32InputGrabTest, AKeyboardHookThatFailsDeliversNoTypingAndIsSeededOnRetr
     grab.FailKeyboardHookForTesting(true);
 
     grab.SetActive(true);
-    EXPECT_TRUE(Eventually([&grab] { return !grab.CanDeliverTyping(); }, std::chrono::milliseconds(800)))
-        << "the failure is published";
-    EXPECT_FALSE(grab.DeliversTypingToOverlay());
+    EXPECT_FALSE(grab.DeliversTypingToOverlay()) << "the failure is published as the call returns";
 
     // The thread tried as it was asked to, and failed; the next try is the
     // retry a second later. Waited a little, so that it is the retry that
@@ -233,7 +228,6 @@ TEST(Win32InputGrabTest, APointerGrabGotOnARetryIsSeededBeforeItIsPublished) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetPointerBounds(RECT{0, 0, 400, 300});
@@ -278,7 +272,6 @@ TEST(Win32InputGrabTest, AFailedPointerGrabLeavesTheRealCursorWhereItIs) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetPointerBounds(RECT{0, 0, 400, 300});
@@ -305,43 +298,6 @@ TEST(Win32InputGrabTest, AFailedPointerGrabLeavesTheRealCursorWhereItIs) {
     SetCursorPos(before.x, before.y);
 }
 
-// A text field that chose the keyboard hook to type through, when no hook
-// was needed until then, is told at once when the hook cannot be installed:
-// opening it says so, having waited for the hook thread's answer, and the
-// window takes focus for it instead.
-TEST(Win32InputGrabTest, AFieldWhoseKeyboardHookFailsIsToldAsItOpens) {
-    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
-                                   GetModuleHandleA(nullptr), nullptr);
-    ASSERT_NE(overlay, nullptr);
-
-    Win32InputGrab& grab = Win32InputGrab::Instance();
-    EditModeInputOptions options;
-    options.useRawMouseInput = false;
-    options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;  // no keyboard hook until a field opens
-    options.counterRawMouseInput = false;
-    grab.SetOverlayWindow(overlay);
-    grab.SetOptions(options);
-    grab.SetGameKeepsFocus(true);
-    grab.FailKeyboardHookForTesting(true);
-    grab.SetActive(true);
-    ASSERT_TRUE(grab.CanDeliverTyping()) << "nothing has failed yet";
-
-    EXPECT_FALSE(grab.SetTextFieldOpen(true)) << "not delivered";
-    EXPECT_FALSE(grab.DeliversTypingToOverlay());
-    EXPECT_FALSE(grab.CanDeliverTyping()) << "and the next field is not offered it either";
-    grab.SetTextFieldOpen(false);
-
-    grab.FailKeyboardHookForTesting(false);
-    EXPECT_TRUE(grab.SetTextFieldOpen(true)) << "a field once the hook can be had";
-    EXPECT_TRUE(grab.DeliversTypingToOverlay());
-
-    grab.SetTextFieldOpen(false);
-    grab.SetActive(false);
-    grab.Shutdown();
-    DestroyWindow(overlay);
-}
-
 // The grab is in when the call that asked for it returns, and out when the
 // one that put it away does: the hook thread is waited for. Nothing is
 // polled for here.
@@ -354,7 +310,6 @@ TEST(Win32InputGrabTest, TheGrabIsInWhenItsCallReturns) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = true;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -387,7 +342,6 @@ TEST(Win32InputGrabTest, OneHookThreadServesEveryShowAndHiddenItHoldsNothing) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -421,7 +375,6 @@ TEST(Win32InputGrabTest, AHookThreadThatCannotStartLeavesTheRealCursorAndFocus) 
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = true;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -430,7 +383,6 @@ TEST(Win32InputGrabTest, AHookThreadThatCannotStartLeavesTheRealCursorAndFocus) 
 
     grab.SetActive(true);
     EXPECT_FALSE(grab.VirtualCursorActive());
-    EXPECT_FALSE(grab.CanDeliverTyping());
     EXPECT_FALSE(grab.DeliversTypingToOverlay());
     EXPECT_FALSE(QueryRawMouse().present);
     EXPECT_EQ(HookThreadCount(), 0u);
@@ -457,7 +409,6 @@ TEST(Win32InputGrabTest, AMouseHookThatFailsTakesTheSinkDownWithIt) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -488,7 +439,6 @@ TEST(Win32InputGrabTest, AHookThreadThatDoesNotAnswerIsNotTrustedUntilItDoes) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -497,14 +447,15 @@ TEST(Win32InputGrabTest, AHookThreadThatDoesNotAnswerIsNotTrustedUntilItDoes) {
     grab.SetActive(false);
 
     grab.StallHookThreadForTesting(1500);
+    // The keyboard held back at first, so that letting it go asks again.
+    grab.SetKeyboardSuspended(true);
     const auto start = std::chrono::steady_clock::now();
     grab.SetActive(true);
-    options.dontForwardKeystrokes = true;
-    grab.SetOptions(options);  // asked again while it is still held up: no second wait
+    grab.SetKeyboardSuspended(false);  // asked again while it is still held up: no second wait
     const auto waited = std::chrono::steady_clock::now() - start;
     EXPECT_LT(waited, std::chrono::milliseconds(1000)) << "one wait, and a short one";
     EXPECT_FALSE(grab.VirtualCursorActive()) << "not answered, so nothing is in";
-    EXPECT_FALSE(grab.CanDeliverTyping());
+    EXPECT_FALSE(grab.DeliversTypingToOverlay());
 
     EXPECT_TRUE(Eventually([&grab] { return grab.VirtualCursorActive(); }, std::chrono::milliseconds(3000)))
         << "in once it caught up";
@@ -614,7 +565,6 @@ TEST(Win32InputGrabTest, KeysLeftOnAnotherDesktopAreTakenAsReleased) {
     ASSERT_NE(overlay, nullptr);
     Win32InputGrab& grab = Win32InputGrab::Instance();
     EditModeInputOptions options;
-    options.dontForwardKeystrokes = true;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);  // not active: no hook, the keys are handed in
     constexpr int kHotkeyId = 77;
@@ -696,7 +646,6 @@ TEST(Win32InputGrabTest, ASwitchOfDesktopIsHeardWhileTheGrabRuns) {
     EditModeInputOptions options;
     options.useRawMouseInput = true;
     options.useSoftwarePointer = false;
-    options.dontForwardKeystrokes = false;
     options.counterRawMouseInput = false;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);
@@ -715,56 +664,6 @@ TEST(Win32InputGrabTest, ASwitchOfDesktopIsHeardWhileTheGrabRuns) {
     DestroyWindow(overlay);
 }
 
-// With only the Behavior panel's digits taken, the keyboard stays the
-// game's: a key held there repeats there, and so does a digit held since
-// before, whose down went there. Only a fresh digit is the panel's. The
-// rule for keys held from before was asked first and swallowed every
-// repeat: a Backspace or an arrow held in the game acted once.
-TEST(Win32InputGrabTest, ThePanelLeavesTheRepeatsOfTheGamesKeysAlone) {
-    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
-                                   GetModuleHandleA(nullptr), nullptr);
-    ASSERT_NE(overlay, nullptr);
-    Win32InputGrab& grab = Win32InputGrab::Instance();
-    EditModeInputOptions options;
-    options.dontForwardKeystrokes = false;
-    grab.SetOverlayWindow(overlay);
-    grab.SetOptions(options);  // not active: no hook, the keys are handed in
-    grab.SetPanelDigits(3);
-
-    EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, true), 0);
-    EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, true, /*heldByWindows=*/true), 0) << "its repeats";
-    EXPECT_EQ(grab.KeyEventForTesting(VK_BACK, false), 0);
-    EXPECT_EQ(grab.KeyEventForTesting('W', true), 0) << "the game's, while the panel is up";
-    EXPECT_EQ(grab.KeyEventForTesting('W', false), 0);
-    EXPECT_EQ(grab.KeyEventForTesting('2', true, /*heldByWindows=*/true), 0) << "a digit held since before";
-    EXPECT_EQ(grab.KeyEventForTesting('2', false), 0);
-    EXPECT_EQ(grab.KeyEventForTesting('2', true), 1) << "a fresh one";
-    EXPECT_EQ(grab.KeyEventForTesting('2', true, /*heldByWindows=*/true), 1) << "and its repeats";
-    EXPECT_EQ(grab.KeyEventForTesting('2', false), 1);
-    EXPECT_EQ(grab.KeyEventForTesting('4', true), 0) << "past the panel's rows";
-    EXPECT_EQ(grab.KeyEventForTesting('4', false), 0);
-
-    // Win+2 is the shell's: the second program on the taskbar. The hook
-    // reads this thread's key state here, which SetKeyboardState sets.
-    BYTE keys[256] = {};
-    ASSERT_TRUE(GetKeyboardState(keys));
-    BYTE withWin[256];
-    std::copy(std::begin(keys), std::end(keys), std::begin(withWin));
-    withWin[VK_LWIN] = 0x80;
-    ASSERT_TRUE(SetKeyboardState(withWin));
-    EXPECT_EQ(grab.KeyEventForTesting('2', true), 0) << "with a Windows key held";
-    EXPECT_EQ(grab.KeyEventForTesting('2', false), 0);
-    SetKeyboardState(keys);
-
-    grab.SetPanelDigits(0);
-    EXPECT_EQ(grab.KeyEventForTesting('2', true), 0) << "the game's again with the panel closed";
-    EXPECT_EQ(grab.KeyEventForTesting('2', false), 0);
-
-    grab.SetOptions(EditModeInputOptions{});
-    grab.SetOverlayWindow(nullptr);
-    DestroyWindow(overlay);
-}
-
 // With every key the overlay's, the repeat of one held since before the
 // grab is taken too, and its up left to Windows, which saw it go down.
 TEST(Win32InputGrabTest, TheRepeatOfAKeyHeldFromBeforeIsTakenAndItsUpLeft) {
@@ -773,7 +672,6 @@ TEST(Win32InputGrabTest, TheRepeatOfAKeyHeldFromBeforeIsTakenAndItsUpLeft) {
     ASSERT_NE(overlay, nullptr);
     Win32InputGrab& grab = Win32InputGrab::Instance();
     EditModeInputOptions options;
-    options.dontForwardKeystrokes = true;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);  // not active: no hook, the keys are handed in
 
@@ -795,7 +693,6 @@ TEST(Win32InputGrabTest, AnAltOrWinChordTypesNothing) {
     ASSERT_NE(overlay, nullptr);
     Win32InputGrab& grab = Win32InputGrab::Instance();
     EditModeInputOptions options;
-    options.dontForwardKeystrokes = true;
     grab.SetOverlayWindow(overlay);
     grab.SetOptions(options);  // not active: no hook, the keys are handed in
     const auto charsPosted = [overlay] {
@@ -841,7 +738,6 @@ public:
                                    GetModuleHandleW(nullptr), nullptr)) {
         Win32InputGrab& grab = Win32InputGrab::Instance();
         EditModeInputOptions options;
-        options.dontForwardKeystrokes = true;
         grab.SetOverlayWindow(overlay_);
         grab.SetOptions(options);
         grab.CaptureHandBackForTesting(&handedBack, std::move(gap));

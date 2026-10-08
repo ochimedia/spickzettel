@@ -168,7 +168,6 @@
 
   "_hud": "The edit-mode options' names, in Settings > Behavior and on the Behavior panel.",
   "hud.dontStealFocus": "Don't steal focus",
-  "hud.dontForwardKeystrokes": "Don't forward keystrokes",
   "hud.useRawMouseInput": "Use raw mouse input",
   "hud.useSoftwarePointer": "Use a software pointer",
   "hud.freezeScreenWhileEditing": "Freeze screen while editing",
@@ -738,8 +737,7 @@
   "_input": "Settings > Behavior - what the overlay does to the application underneath.",
   "input.editModeHeading": "Overlay behavior in edit mode",
   "input.editModeHelp": "How the overlay behaves while the respective profile is active. Which combination works depends on the application or game, so they stay separately switchable. Some settings depend on others as indicated by the tree structure.\n\nTo try them out in front of the game, the {ui:Behavior panel} hotkey brings them up there, a key each (see {ui:Hotkeys}).",
-  "input.dontStealFocusHelp": "Keeps a game from going into its pause screen or muting itself while the overlay is up.\n\nAlternatively, turn this off and look in the game's own settings for how it behaves when it loses focus.\n\nIf the game supports it, taking focus from the game properly may help to keep keystrokes and mouse input from reaching it.",
-  "input.dontForwardKeystrokesHelp": "Tries to keep keystrokes from reaching the underlying application while it keeps focus.\n\nThe hotkeys keep working, including the one that hides the overlay again. Certain Windows shortcuts - the Windows key, Alt+Tab - are also affected by this setting.\n\nA game reading the keyboard directly may still receive keys. In such cases, stealing the focus from the game may help, as long as the game doesn't break when focus is taken away from it.",
+  "input.dontStealFocusHelp": "Keeps a game from going into its pause screen or muting itself while the overlay is up.\n\nThe overlay still takes the keyboard while it is up in edit mode, so your keys don't reach the game. The hotkeys keep working, including the one that hides the overlay again, but the Windows key and Alt+Tab do nothing until edit mode ends.\n\nAlternatively, turn this off and look in the game's own settings for how it behaves when it loses focus. A game that reads the keyboard or the mouse directly may still receive some input while it keeps focus; taking focus from it properly may help there.",
   "input.rawMouseHelp": "With this enabled, the mouse pointer is driven by reading input from the hardware directly instead of from the Windows cursor. That is what makes the overlay usable over a game that hides the pointer, pins it, or snaps it back to the middle of the screen. Clicks and drags over the overlay also no longer reach the game.\n\nOftentimes this does not stop the game looking around. First-person games read mouse movement directly as well, so expect the camera to keep turning while you draw. The {ui:Counter raw mouse input} together with {ui:Freeze screen while editing} settings below may help in that case.",
   "input.takeFocusOverElevatedLabel": "Take focus from elevated applications",
   "input.takeFocusOverElevatedHelp": "Windows doesn't pass any input to the overlay while an application with higher privileges is in front - for example Task Manager on an account with administrator rights.\n\nTo keep the overlay functional, you can choose to take focus from such applications despite the {ui:Don't steal focus} setting.\n\nNote that detection may not be perfect and is done on a best-effort basis.",

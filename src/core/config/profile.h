@@ -58,7 +58,6 @@ struct ProfileOverrides {
     std::optional<bool> takeFocusOverElevated;
     std::optional<bool> softwarePointer;
     std::optional<bool> rawMouseInput;
-    std::optional<bool> dontForwardKeystrokes;
     std::optional<bool> counterRawMouseInput;
     std::optional<bool> freezeScreen;
     std::optional<int> counterThreshold;
@@ -129,7 +128,6 @@ struct ProfileableSettings {
     // which combination is right still depends on the game.
     bool softwarePointer = true;
     bool rawMouseInput = true;
-    bool dontForwardKeystrokes = true;
     bool counterRawMouseInput = false;
     // Freeze the screen while editing: on entering edit mode, grab what is
     // on screen and draw that instead of letting the live application show

@@ -3025,9 +3025,10 @@ from it rather than refused. While a row waits for a key, a press of one
 of the app's own combos never reaches it as a key - Windows hands it to
 its hotkey - so the hotkey event is what the waiting row takes (see
 "Input, in order"). A waiting row borrows the keyboard as a text field
-does, and gives it back however the wait ends: under a profile that
-neither takes focus nor holds keystrokes, the key went to the program
-underneath and the row waited on (found 2026-10-08).
+does, and gives it back however the wait ends: with no keyboard to
+borrow from the grab, it takes focus. It was found on 2026-10-08 under
+Don't forward keystrokes, since gone, where the key went to the program
+underneath and the row waited on.
 
 ### The cheat sheet
 
@@ -3088,13 +3089,11 @@ edit mode.
   it keeps whether it is up itself, a click on it is a click on an ImGui
   window like the canvas bar's, and it closes by its key or its button,
   never by Escape, which stays the canvas's.
-- **Its digits, and no other key.** While it is up the keyboard grab
-  takes the bare digits 1 to 7 from the game and hands them to the
-  overlay (`IOverlayWindow::SetPanelDigits`) - bare of the Windows keys
-  too, since Win+1 is the taskbar's (found in the review of 2026-10-08) -
-  and every other key goes
-  where it would without the panel: to the game with keystrokes
-  forwarded, so that forwarding can be judged with the panel up. The
+- **Its digits reach it as any key does.** In edit mode over a game
+  that keeps focus the keyboard grab hands every key to the overlay, and
+  with focus taken the overlay has the keys anyway. With Don't forward
+  keystrokes, since gone, the grab took the bare digits 1 to 7 alone
+  for the panel and left the rest to the game. The
   Canvas level turns a digit into a command, `SwitchBehaviorRow`, ahead
   of any chosen key bound to it, and claims its repeats
   (docs/INTERACTIONS.md, section 7). The HUD's digits were claimed there
@@ -3862,15 +3861,9 @@ Consequences that shape `Win32InputGrab`:
 
   A keyboard hook that cannot be installed swallows nothing, so the keys
   reach whatever has focus. Its failure is published too:
-  `CanDeliverTyping` and `DeliversTypingToOverlay` say no, so a text field
-  opened meanwhile takes focus instead of waiting on a hook that is not
-  there. A field that chose the hook anyway, when no hook was needed until
-  it opened, learns as it opens: `SetTextFieldOpen` returns whether typing
-  is delivered, the hook thread's answer waited for, and the field takes
-  focus at once (`TakeTextInputFocus`). It used to be told afterwards, by
-  a message the hook thread posted at the first failure, which a field
-  opening just as that failure was published never got (found in the
-  review of 2026-10-08). The modifier record is cleared on failure, leaving
+  `DeliversTypingToOverlay` says no, so a text field opened meanwhile
+  takes focus (`TakeTextInputFocus`) instead of waiting on a hook that is
+  not there. The modifier record is cleared on failure, leaving
   the system's state alone to say what is held, and it is seeded from the
   system just before every install, on the hook thread. With no hook in
   place nothing has been swallowed, so the system is right; a modifier let
@@ -3960,8 +3953,8 @@ Consequences that shape `Win32InputGrab`:
   from before were the game's, repeats and all. Found in the next review
   on 2026-09-27: the rule was asked ahead of the HUD's, and a Backspace
   or an arrow held in the game acted once. The Behavior panel brought the
-  digits-only case back (`SetPanelDigits`), and asks the same: a key held
-  from before is the game's. A hotkey fires on a press, never on its repeat, as
+  digits-only case back for Don't forward keystrokes, and it went with
+  that option. A hotkey fires on a press, never on its repeat, as
   `RegisterHotKey`'s `MOD_NOREPEAT` does; held a moment too long, the
   edit hotkey opened the overlay and closed it again. Mouse buttons follow
   the same rule, so a drag in the application underneath ends there when
@@ -3988,8 +3981,7 @@ Consequences that shape `Win32InputGrab`:
   would stop it, at more cost than it has.
 - **Taking the keyboard takes the Windows key too** - known, and left so
   until use gives a reason to change it. While the grab takes every key -
-  keystroke holding on, the default while the game keeps focus, or a
-  text field open under the grab - the Windows key goes to the overlay
+  in edit mode while the game keeps focus - the Windows key goes to the overlay
   with the rest, and so does Alt: Start, Win+E, Win+Shift+S and Alt+Tab
   do nothing until edit mode ends. Ctrl+Alt+Del never reaches a hook.
   Letting the Windows key through would hand the shell's shortcuts to it
@@ -4027,7 +4019,7 @@ Consequences that shape `Win32InputGrab`:
   where the pointer was last (`WM_CAPTURECHANGED`), and tells each up
   once, however many say so.
 - **The hooks stand down when the app thread stops.** They swallow the
-  machine's mouse and, with forwarding off, its keyboard, whatever the app
+  machine's mouse and its keyboard, whatever the app
   thread is doing, and the way out - the hotkey - is posted to that same
   thread. Hung there, the machine had no input short of Ctrl+Alt+Del. The
   window stamps a heartbeat every frame it renders (at least four a
@@ -4182,8 +4174,8 @@ application that must never lose it: a game behind an anti-cheat driver
 refuses that query in precisely the same way an elevated tool would. Only
 a positive reading forces anything.
 
-The option dependencies are enforced, not documented: keystroke holding,
-raw input and countering need the game to keep focus (with focus taken
+The option dependencies are enforced, not documented: raw input and
+countering need the game to keep focus (with focus taken
 the ordinary way the game has already stopped receiving input, and the
 hooks would install a system-wide chokepoint for nothing), countering
 needs raw input, and the software pointer is independent of all of them.
@@ -4191,6 +4183,22 @@ An option whose precondition fails keeps its stored value and has no
 effect, and every reader asks availability, not storage - the stored
 value of an option that cannot take effect is not evidence of anything.
 Settings and the Behavior panel gray such a row.
+
+**The keyboard is no option.** While the game keeps focus, edit mode
+takes the whole keyboard, as it takes the mouse. Don't forward
+keystrokes, on by default, could leave the keys with the game, and was
+removed on 2026-10-08. Off, every key the overlay answers to went to
+the game: its tools, undo, the clipboard, Escape - which over a game is
+the pause menu - and the typing of any field that did not borrow the
+keyboard for itself. A Settings row waiting for a key and the Profiles
+fields did not, and waited on keys that went elsewhere. All it gave was
+a game that kept walking while the mouse was the overlay's, and view
+mode is for a game in play. It spared no hook either: a field borrowed
+the keyboard through the same hook. What it costs: a program that
+listens for a key outside the game, Discord's push-to-talk say, does not
+hear it in edit mode. If that is missed, the answer is to let through
+the keys the overlay does not use while no field is open, not the
+option.
 
 ### Freezing the screen instead of out-arguing the game
 
@@ -4304,8 +4312,8 @@ normal focus routing, and once they open a window focus follows it.
 While the input grab takes the keyboard - the default in edit mode
 while the game keeps focus - they do not get there at all: the Windows
 key and Alt go to the overlay with every other key (see "Taking the
-keyboard takes the Windows key too"). Without it - keystroke holding
-off, or edit mode taking focus - they work as they do anywhere, and only
+keyboard takes the Windows key too"). Without it - edit mode taking
+focus - they work as they do anywhere, and only
 a hook swallowing them could stop them. Exclusive-fullscreen games
 sidestep all of this by not sharing the desktop, which an always-on-top
 overlay deliberately does.

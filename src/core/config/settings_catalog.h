@@ -179,9 +179,6 @@ inline constexpr ProfileSetting<BoolRule> kSoftwarePointer{
 inline constexpr ProfileSetting<BoolRule> kRawMouseInput{
     {"behavior", "", "rawMouseInput"}, {}, E::Window, &ProfileableSettings::rawMouseInput,
     &ProfileOverrides::rawMouseInput};
-inline constexpr ProfileSetting<BoolRule> kDontForwardKeystrokes{
-    {"behavior", "", "dontForwardKeystrokes"}, {}, E::Window, &ProfileableSettings::dontForwardKeystrokes,
-    &ProfileOverrides::dontForwardKeystrokes};
 inline constexpr ProfileSetting<BoolRule> kCounterRawMouseInput{
     {"behavior", "", "counterRawMouseInput"}, {}, E::Window, &ProfileableSettings::counterRawMouseInput,
     &ProfileOverrides::counterRawMouseInput};
@@ -223,7 +220,7 @@ inline constexpr auto kAll = std::tuple{
     &kConfirmDelete, &kConfirmDeleteForGood, &kPurgeDeleted, &kPurgeDeletedAfterDays,
     &kLibrarySizeReminder, &kLibrarySizeReminderMb,
     &kDisplayId, &kDisplayName,
-    &kDontStealFocus, &kTakeFocusOverElevated, &kSoftwarePointer, &kRawMouseInput, &kDontForwardKeystrokes,
+    &kDontStealFocus, &kTakeFocusOverElevated, &kSoftwarePointer, &kRawMouseInput,
     &kCounterRawMouseInput, &kCounterThreshold, &kFreezeScreen,
     &kShortcuts,
     &kTutorialProgress,

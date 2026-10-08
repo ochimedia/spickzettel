@@ -274,10 +274,15 @@ from the Behavior panel, where the booleans are a key each.
 | `takeFocusOverElevated` | `profileable.takeFocusOverElevated` | true | bool | Window |
 | `softwarePointer` | `profileable.softwarePointer` | true | bool | Window, and Frame |
 | `rawMouseInput` | `profileable.rawMouseInput` | true | bool | Window |
-| `dontForwardKeystrokes` | `profileable.dontForwardKeystrokes` | true | bool | Window |
 | `counterRawMouseInput` | `profileable.counterRawMouseInput` | false | bool | Window |
 | `counterThreshold` | `profileable.counterThreshold` | 100 | 10..5000 held | Window |
 | `freezeScreen` | `profileable.freezeScreen` | false | bool | Freeze; two answers (section 7) |
+
+`dontForwardKeystrokes`, which could leave the keyboard with the game
+in edit mode, was removed after 0.3.1: edit mode takes the keyboard
+whenever the game keeps focus (`docs/ARCHITECTURE.md`, "The keyboard is
+no option"). A file that has it reads as one that does not, in the
+defaults and in a profile.
 
 **`shortcuts`**: Profile, one setting per `ShortcutAction` (17). Rule: a
 key, or Mouse3-5, with modifiers, or `null` for unbound. Invariant: one

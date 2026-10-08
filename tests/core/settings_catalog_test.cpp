@@ -152,10 +152,10 @@ auto Fields(const AppConfig& c) {
 }
 
 auto Fields(const ProfileableSettings& s) {
-    const auto& [dontStealFocus, takeFocusOverElevated, softwarePointer, rawMouseInput, dontForwardKeystrokes,
-                 counterRawMouseInput, freezeScreen, counterThreshold, shortcuts] = s;
-    return std::tie(dontStealFocus, takeFocusOverElevated, softwarePointer, rawMouseInput, dontForwardKeystrokes,
-                    counterRawMouseInput, freezeScreen, counterThreshold, shortcuts);
+    const auto& [dontStealFocus, takeFocusOverElevated, softwarePointer, rawMouseInput, counterRawMouseInput,
+                 freezeScreen, counterThreshold, shortcuts] = s;
+    return std::tie(dontStealFocus, takeFocusOverElevated, softwarePointer, rawMouseInput, counterRawMouseInput,
+                    freezeScreen, counterThreshold, shortcuts);
 }
 
 auto Fields(const SnippetDefaults& d) {

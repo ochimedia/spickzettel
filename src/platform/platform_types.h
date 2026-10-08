@@ -182,11 +182,10 @@ struct EditModeInputOptions {
     // input is then the only place movement, buttons and the wheel can be
     // read from with exact sub-pixel deltas. Neither half alone works.
     bool useRawMouseInput = true;
-    // Swallow physical keyboard input, so typing near the overlay does not
-    // also walk the player forwards. The app's own global hotkeys keep
-    // working because the grab recognizes and dispatches them itself; a
-    // swallowing hook suppresses RegisterHotKey too.
-    bool dontForwardKeystrokes = true;
+    // The keyboard is not an option: while the game keeps focus, edit mode
+    // always swallows it and hands it to the overlay (see Win32InputGrab).
+    // Leaving it with the game was one once, and it left every key the
+    // overlay answers to - its tools, Escape, a text field - with the game.
     // Bank every physical mouse movement and inject the exact opposite, so a
     // camera integrating raw motion nets out to where it started. Needs the
     // mouse taken first - see CounterRawMouseInputCanBeUsed. Settled in
@@ -222,7 +221,6 @@ struct EditModeInputOptions {
     // than the stored value. With focus taken the ordinary way there is
     // nothing to take: a game registers raw input without RIDEV_INPUTSINK
     // and so only receives it while foreground.
-    static bool KeystrokesCanBeHeld(bool gameKeepsFocus) { return gameKeepsFocus; }
     bool RawMouseInputCanBeUsed(bool gameKeepsFocus) const { return gameKeepsFocus; }
     // A correction is injected as relative motion and goes through the
     // pointer ballistics on its way to the game, so with Windows still

@@ -124,15 +124,11 @@ void Win32InputGrab::SetActive(bool active) {
         leftDown_ = rightDown_ = middleDown_ = x1Down_ = x2Down_ = false;
 
         // A text field cannot be open when the overlay is not shown, and
-        // neither claim on the keyboard may outlive the grab. Both are set by
-        // a field opening and cleared by it closing - and a field can stop
-        // existing without closing, because hiding the overlay takes it with
-        // it. Measured: hide with a rename open, show again, and the keyboard
-        // was still being swallowed with no field anywhere, so the WASD that
-        // keystroke forwarding exists to preserve silently stopped reaching
-        // the game.
+        // its hand-back of the keyboard may not outlive the grab: set by a
+        // field opening and cleared by it closing - and a field can stop
+        // existing without closing, because hiding the overlay takes it
+        // with it. Left, the next edit mode would not take the keyboard.
         std::lock_guard<std::mutex> lock(stateMutex_);
-        textFieldOpen_ = false;
         keyboardSuspended_ = false;
     }
     Refresh();
@@ -329,14 +325,12 @@ void Win32InputGrab::Refresh() {
 
     // The keyboard's handover, on the same shape and for the same reason: it
     // belongs to the transition, not to any one of the things that can cause
-    // it. WantKeyboard depends on six pieces of state, so the hook comes and
-    // goes through SetActive, SetKeyboardSuspended, SetGameKeepsFocus,
-    // SetOptions, SetTextFieldOpen and SetPanelDigits alike. In
-    // SetActive alone,
-    // opening a rename field (which suspends the keyboard) or switching
-    // keystroke forwarding off from the Settings tab would skip all of it -
-    // leaving ImGui with a latched key, or the OS with no
-    // idea a modifier was held.
+    // it. WantKeyboard depends on three pieces of state, so the hook comes
+    // and goes through SetActive, SetKeyboardSuspended and
+    // SetGameKeepsFocus alike. In SetActive alone, opening a rename field
+    // that takes focus (which suspends the keyboard) would skip all of it -
+    // leaving ImGui with a latched key, or the OS with no idea a modifier
+    // was held.
     const bool keyboardGrabbed = WantKeyboard();
     if (!keyboardWasGrabbed_ && keyboardGrabbed) {
         BeginGrabbedKeyboard();
@@ -365,7 +359,7 @@ void Win32InputGrab::Reconcile(bool pointer, bool keyboard) {
     }
     // Nothing wanted, and no thread up to have anything installed: nothing
     // to start one for. A start that failed is no reason not to try the
-    // next time something is wanted - a text field, say (CanDeliverTyping).
+    // next time something is wanted - the next edit mode, say.
     if (!pointer && !keyboard && !hookThreadUp_.load()) {
         if (!hookThread_) {
             hookThreadStartFailed_.store(false);
@@ -662,8 +656,7 @@ void Win32InputGrab::ReconcileHooks() {
     // keys go where they would without the grab, and the record, which no
     // hook keeps, is cleared, so that what the overlay is told is held is
     // the system's alone (see HeldModifiers). Typing is not delivered
-    // either, which CanDeliverTyping and DeliversTypingToOverlay say - and
-    // SetTextFieldOpen, to the field that asked - so a text field takes
+    // either, which DeliversTypingToOverlay says, so a text field takes
     // focus instead. Tried again below.
     if (wantKeyboard && !keyboardHook_) {
         modifiers_.Seed([](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; });
@@ -979,55 +972,15 @@ bool Win32InputGrab::VirtualCursorActive() const {
 
 // Whether a text field can be typed into without this window taking focus:
 // the hook is swallowing the whole keyboard and handing it to the overlay,
-// characters included (see PostCharactersToOverlay).
-//
-// Deliberately not the same question as WantKeyboard, which is also true for
-// the Behavior panel alone - that case swallows the digits and lets
-// everything else through to whoever has focus, which is no use to a text
-// field.
+// characters included (see PostCharactersToOverlay). Not with the keyboard
+// hook known to have failed, nor with no hook thread answering for it, nor
+// before it has answered for what is wanted now: until a retry gets it,
+// nothing delivers the keys - see ReconcileHooks.
 bool Win32InputGrab::DeliversTypingToOverlay() const {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    return CanDeliverTypingLocked() && WantsAllKeystrokesLocked() && HookThreadAnswering() &&
+    return WantKeyboardLocked() && overlay_ != nullptr && !hookThreadStartFailed_.load() &&
+           reconciledGeneration_.load() >= awaitedGeneration_.load() && HookThreadAnswering() &&
            keyboardHookState_.load() == HookState::Installed;
-}
-
-bool Win32InputGrab::CanDeliverTyping() const {
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    return CanDeliverTypingLocked();
-}
-
-bool Win32InputGrab::WantsAllKeystrokes() const {
-    std::lock_guard<std::mutex> lock(stateMutex_);
-    return WantsAllKeystrokesLocked();
-}
-
-bool Win32InputGrab::SetTextFieldOpen(bool open) {
-    bool changed = false;
-    {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        changed = textFieldOpen_ != open;
-        textFieldOpen_ = open;
-    }
-    // Refresh does the rest: this changes WantKeyboard, and the handover on
-    // that transition is already written - hook installed and modifiers
-    // seeded on the way in, key-ups and modifiers handed back on the way out.
-    // It waits for the hook thread's answer, so what is said below is what
-    // is installed.
-    if (changed) {
-        Refresh();
-    }
-    return !open || DeliversTypingToOverlay();
-}
-
-void Win32InputGrab::SetPanelDigits(int digitCount) {
-    {
-        std::lock_guard<std::mutex> lock(stateMutex_);
-        if (panelDigits_ == digitCount) {
-            return;
-        }
-        panelDigits_ = digitCount;
-    }
-    Refresh();  // as SetTextFieldOpen: the boundary handling is Refresh's
 }
 
 bool Win32InputGrab::SoftwarePointerWanted() const {
@@ -1162,15 +1115,15 @@ LRESULT CALLBACK Win32InputGrab::MouseProc(int code, WPARAM wParam, LPARAM lPara
 
 void Win32InputGrab::Heartbeat() { lastHeartbeatMs_.store(GetTickCount64(), std::memory_order_relaxed); }
 
-// The hooks swallow every mouse event and, with keystroke forwarding off,
-// every key on the machine, whatever the app thread is doing - and the only
-// way out, the hotkey, is posted to that same thread. Hung or blocked there
-// (a deadlock, a loop, a write to a disk that stopped answering), it left
-// the whole machine with no mouse and no keyboard short of Ctrl+Alt+Del,
-// and for a standard user Task Manager's input was swallowed too. So once
-// the app thread has missed a couple of seconds of frames, both hooks let
-// everything through until it is back: the overlay stops working, which it
-// has already, and the machine does not.
+// The hooks swallow every mouse event and every key on the machine,
+// whatever the app thread is doing - and the only way out, the hotkey, is
+// posted to that same thread. Hung or blocked there (a deadlock, a loop, a
+// write to a disk that stopped answering), it left the whole machine with
+// no mouse and no keyboard short of Ctrl+Alt+Del, and for a standard user
+// Task Manager's input was swallowed too. So once the app thread has
+// missed a couple of seconds of frames, both hooks let everything through
+// until it is back: the overlay stops working, which it has already, and
+// the machine does not.
 bool Win32InputGrab::AppThreadStalled() const {
     // The beat first, then the clock, so that now is never before it -
     // IsStalled copes either way, and this is the order that needs no
@@ -1828,37 +1781,12 @@ LRESULT Win32InputGrab::OnKeyboard(WPARAM message, const KBDLLHOOKSTRUCT& event)
     // after the overlay was gone, and a held Shift stayed held. Swallowed and
     // not recorded, and not handed to the overlay, which never saw the key go
     // down either. A modifier held that way is in the grab's record already,
-    // from BeginGrabbedKeyboard. Only for a key the grab takes: asked
-    // ahead of the panel's digits below, it swallowed the repeats of every
-    // key the game kept, and a Backspace or an arrow held there acted once.
+    // from BeginGrabbedKeyboard.
     const bool isRepeat = isDown && vk < kVirtualKeyCount && swallowedDown_[vk].load(std::memory_order_relaxed);
     const bool heldFromBefore =
         isDown && vk < kVirtualKeyCount && !isRepeat &&
         (vk == heldByWindowsForTesting_.load(std::memory_order_relaxed) ||
          (GetAsyncKeyState(static_cast<int>(vk)) & 0x8000) != 0);
-
-    // The Behavior panel's digits, and nothing else, when nothing wants the
-    // whole keyboard: the situation its rows exist for is the one where the
-    // overlay has no keyboard focus to receive them, dontStealFocus leaving
-    // focus with the game on purpose. So the bare digits the panel offers
-    // are taken here and handed to the overlay, and every other key goes
-    // where it would without the panel.
-    if (!WantsAllKeystrokes()) {
-        const bool isPanelDigit = vk >= '1' && vk < '1' + static_cast<UINT>(PanelDigits());
-        // GetKeyState, on the hook thread - see PostCharactersToOverlay for
-        // why it follows the keys there. The Windows keys too: Win+1 starts
-        // the first program on the taskbar.
-        const auto held = [](int key) { return (GetKeyState(key) & 0x8000) != 0; };
-        const bool bare =
-            !held(VK_CONTROL) && !held(VK_MENU) && !held(VK_SHIFT) && !held(VK_LWIN) && !held(VK_RWIN);
-        // A digit held since before the edit mode is the game's too: its
-        // down went there.
-        if (!isPanelDigit || !bare || heldFromBefore) {
-            return 0;  // everyone else's key, left alone
-        }
-        PostKeyToOverlay(vk, event, isDown);
-        return SwallowKey(vk, isDown);
-    }
 
     if (heldFromBefore) {
         return 1;

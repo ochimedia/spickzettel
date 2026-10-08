@@ -86,7 +86,6 @@ TEST(AppConfigTest, EveryEditModeInputOptionButCounteringDefaultsToOn) {
     const platform::EditModeInputOptions options = DefaultConfig().profileable.InputOptions();
     EXPECT_TRUE(options.useSoftwarePointer);
     EXPECT_TRUE(options.useRawMouseInput);
-    EXPECT_TRUE(options.dontForwardKeystrokes);
     EXPECT_FALSE(options.counterRawMouseInput);
 }
 
@@ -106,13 +105,6 @@ TEST(AppConfigTest, TheSoftwarePointerOptionAloneDecidesWhetherAPointerIsDrawn) 
     // PublishVirtualCursor), so "swallowing with no pointer" is still not a
     // state that exists.
     EXPECT_TRUE(options.RawMouseInputCanBeUsed(/*gameKeepsFocus=*/true));
-}
-
-// Nothing is left to take once edit mode holds focus the ordinary way: the
-// game has stopped receiving input, raw input included.
-TEST(AppConfigTest, HoldingKeystrokesNeedsTheGameToKeepFocus) {
-    EXPECT_TRUE(platform::EditModeInputOptions::KeystrokesCanBeHeld(/*gameKeepsFocus=*/true));
-    EXPECT_FALSE(platform::EditModeInputOptions::KeystrokesCanBeHeld(/*gameKeepsFocus=*/false));
 }
 
 // Taking the mouse says nothing about which pointer is shown: the grab
@@ -149,7 +141,6 @@ TEST(AppConfigTest, CounteringNeedsTheMouseTaken) {
 // no combination of the leaves can re-enable one.
 TEST(AppConfigTest, LosingFocusDisablesTheWholePointerChain) {
     platform::EditModeInputOptions options;  // everything on
-    EXPECT_FALSE(platform::EditModeInputOptions::KeystrokesCanBeHeld(false));
     EXPECT_FALSE(options.RawMouseInputCanBeUsed(false));
     EXPECT_FALSE(options.CounterRawMouseInputCanBeUsed(false));
 
@@ -161,8 +152,6 @@ TEST(AppConfigTest, LosingFocusDisablesTheWholePointerChain) {
 TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
     EXPECT_FALSE(ParseConfig(One("behavior", "softwarePointer", "false")).profileable.softwarePointer);
     EXPECT_FALSE(ParseConfig(One("behavior", "rawMouseInput", "false")).profileable.rawMouseInput);
-    EXPECT_FALSE(
-        ParseConfig(One("behavior", "dontForwardKeystrokes", "false")).profileable.dontForwardKeystrokes);
     EXPECT_TRUE(
         ParseConfig(One("behavior", "counterRawMouseInput", "true")).profileable.counterRawMouseInput);
 
@@ -172,7 +161,6 @@ TEST(AppConfigTest, ParsesEachEditModeInputOptionIndependently) {
         ParseConfig(One("behavior", "rawMouseInput", "false")).profileable.InputOptions();
     EXPECT_FALSE(onlyMouse.useRawMouseInput);
     EXPECT_TRUE(onlyMouse.useSoftwarePointer);
-    EXPECT_TRUE(onlyMouse.dontForwardKeystrokes);
     EXPECT_FALSE(onlyMouse.counterRawMouseInput);
 }
 
@@ -197,6 +185,19 @@ TEST(AppConfigTest, CounterThresholdIsReadClampedAndRoundTrips) {
 TEST(AppConfigTest, TheInputOptionsHudsSwitchIsReadAsNothing) {
     EXPECT_EQ(ParseConfig(One("diagnostics", "showInputOptionsHud", "true")), DefaultConfig());
     EXPECT_EQ(SerializeConfig(DefaultConfig()).find("showInputOptionsHud"), std::string::npos);
+}
+
+// Don't forward keystrokes, from before edit mode always took the keyboard
+// over a game that keeps focus: read as nothing, in the defaults and in a
+// profile, and not written back. A profile that stated only it states
+// nothing now.
+TEST(AppConfigTest, TheKeystrokeSwitchIsReadAsNothing) {
+    EXPECT_EQ(ParseConfig(One("behavior", "dontForwardKeystrokes", "false")), DefaultConfig());
+    const AppConfig parsed = ParseConfig(R"({"profiles": [{"name": "Game", "match": {"exe": ["game.exe"]},
+                                                         "behavior": {"dontForwardKeystrokes": false}}]})");
+    ASSERT_EQ(parsed.profiles.size(), 1u);
+    EXPECT_TRUE(parsed.profiles[0].overrides.Empty());
+    EXPECT_EQ(SerializeConfig(parsed).find("dontForwardKeystrokes"), std::string::npos);
 }
 
 TEST(AppConfigTest, FrameGraphDefaultsToOffAndRoundTrips) {
@@ -277,7 +278,6 @@ TEST(AppConfigTest, SerializeThenParseRoundTrips) {
     config.profileable.freezeScreen = true;
     config.profileable.softwarePointer = false;
     config.profileable.rawMouseInput = true;
-    config.profileable.dontForwardKeystrokes = false;
     config.profileable.counterRawMouseInput = true;  // off by default
 
     const std::string text = SerializeConfig(config);

@@ -53,7 +53,6 @@ platform::EditModeInputOptions ProfileableSettings::InputOptions() const {
     platform::EditModeInputOptions options;
     options.useSoftwarePointer = softwarePointer;
     options.useRawMouseInput = rawMouseInput;
-    options.dontForwardKeystrokes = dontForwardKeystrokes;
     options.counterRawMouseInput = counterRawMouseInput;
     options.counterThreshold = counterThreshold;
     return options;
@@ -62,7 +61,6 @@ platform::EditModeInputOptions ProfileableSettings::InputOptions() const {
 void ProfileableSettings::SetInputOptions(const platform::EditModeInputOptions& options) {
     softwarePointer = options.useSoftwarePointer;
     rawMouseInput = options.useRawMouseInput;
-    dontForwardKeystrokes = options.dontForwardKeystrokes;
     counterRawMouseInput = options.counterRawMouseInput;
     counterThreshold = options.counterThreshold;
 }

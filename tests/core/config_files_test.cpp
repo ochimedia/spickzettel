@@ -77,7 +77,6 @@ AppConfig Everything() {
     game.overrides.takeFocusOverElevated = false;
     game.overrides.softwarePointer = false;
     game.overrides.rawMouseInput = false;
-    game.overrides.dontForwardKeystrokes = false;
     game.overrides.counterRawMouseInput = true;
     game.overrides.freezeScreen = true;
     game.overrides.counterThreshold = 250;
@@ -96,7 +95,6 @@ AppConfig Everything() {
     c.profileable.takeFocusOverElevated = false;
     c.profileable.softwarePointer = false;
     c.profileable.rawMouseInput = false;
-    c.profileable.dontForwardKeystrokes = false;
     c.profileable.counterRawMouseInput = true;
     c.profileable.counterThreshold = 40;
     c.showItemBorders = false;

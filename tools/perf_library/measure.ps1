@@ -96,7 +96,7 @@ function New-MeasurementConfig {
   "appearance": { "showItemBorders": true },
   "overview": { "showStrokes": true, "showBitmaps": false },
   "behavior": { "dontStealFocus": false, "softwarePointer": false, "rawMouseInput": false,
-                "dontForwardKeystrokes": false, "counterRawMouseInput": false, "freezeScreen": false },
+                "counterRawMouseInput": false, "freezeScreen": false },
   "diagnostics": { "showDebugOverlay": $($Fps.ToString().ToLower()) }
 }
 "@

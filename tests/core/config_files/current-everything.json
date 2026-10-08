@@ -118,7 +118,6 @@
     "takeFocusOverElevated": false,
     "softwarePointer": false,
     "rawMouseInput": false,
-    "dontForwardKeystrokes": false,
     "counterRawMouseInput": true,
     "counterThreshold": 40,
     "freezeScreen": true
@@ -169,7 +168,6 @@
         "takeFocusOverElevated": false,
         "softwarePointer": false,
         "rawMouseInput": false,
-        "dontForwardKeystrokes": false,
         "counterRawMouseInput": true,
         "counterThreshold": 250,
         "freezeScreen": true

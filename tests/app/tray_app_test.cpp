@@ -72,7 +72,6 @@ TEST(TrayControllerTest, InitializeConfiguresEditModeInputFromConfig) {
     AppConfig config = DefaultConfig();
     config.profileable.rawMouseInput = true;
     config.profileable.counterRawMouseInput = true;
-    config.profileable.dontForwardKeystrokes = false;
     TrayController controller(host, config);
 
     ASSERT_TRUE(controller.Initialize());
@@ -83,7 +82,6 @@ TEST(TrayControllerTest, InitializeConfiguresEditModeInputFromConfig) {
     EXPECT_EQ(host.overlayWindow.setEditModeInputCallCount, 1);
     EXPECT_TRUE(host.overlayWindow.editModeInput.useRawMouseInput);
     EXPECT_TRUE(host.overlayWindow.editModeInput.counterRawMouseInput);
-    EXPECT_FALSE(host.overlayWindow.editModeInput.dontForwardKeystrokes);
 }
 
 TEST(TrayControllerTest, InitializeFailsWhenAnotherCopyIsRunning) {
@@ -2005,14 +2003,13 @@ TEST(TrayControllerSettingsEffectTest, AWindowSettingReachesTheWindowAfterTheFra
     const int inputCalls = host.overlayWindow.setEditModeInputCallCount;
     const int noActivateCalls = host.overlayWindow.setEditModeNoActivateCallCount;
 
-    controller.GetSettings().Set(setting::kDontForwardKeystrokes, !config.profileable.dontForwardKeystrokes,
-                                 std::nullopt);
+    controller.GetSettings().Set(setting::kRawMouseInput, !config.profileable.rawMouseInput, std::nullopt);
     controller.GetSettings().Set(setting::kDontStealFocus, !config.profileable.dontStealFocus, std::nullopt);
     EXPECT_EQ(host.overlayWindow.setEditModeInputCallCount, inputCalls) << "not in the frame";
     EXPECT_EQ(host.overlayWindow.setEditModeNoActivateCallCount, noActivateCalls) << "not in the frame";
     host.RunPostedTasks();
 
-    EXPECT_EQ(host.overlayWindow.editModeInput.dontForwardKeystrokes, !config.profileable.dontForwardKeystrokes);
+    EXPECT_EQ(host.overlayWindow.editModeInput.useRawMouseInput, !config.profileable.rawMouseInput);
     EXPECT_EQ(host.overlayWindow.editModeNoActivate, !config.profileable.dontStealFocus);
 }
 

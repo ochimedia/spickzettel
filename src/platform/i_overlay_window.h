@@ -93,10 +93,10 @@ public:
     virtual void SetEditModeNoActivate(bool enabled) = 0;
 
     // A text field is open and needs keystrokes even though the window may
-    // be holding no focus: the backend either grabs the keyboard for the
-    // duration or borrows real focus, whichever it can. Release gives back
-    // whichever was taken. Both are no-ops when the window holds focus the
-    // ordinary way.
+    // be holding no focus: nothing to do while the backend holds the
+    // keyboard for edit mode, and real focus borrowed when it cannot.
+    // Release gives back what was taken. Both are no-ops when the window
+    // holds focus the ordinary way.
     virtual void RequestTextInput() = 0;
     virtual void ReleaseTextInput() = 0;
 
@@ -105,13 +105,6 @@ public:
     // Safe to call at any time; applies only while presented interactive,
     // never while hidden or click-through.
     virtual void SetEditModeInput(const EditModeInputOptions& options) = 0;
-
-    // The Behavior panel is up and switches its rows with the bare digits
-    // '1' and on, `digitCount` of them; 0 when it closes. They have to reach
-    // the overlay without taking focus, since how the overlay sits over the
-    // game is what the panel is for - so the backend takes those digits
-    // from the game while it is up, and leaves it every other key.
-    virtual void SetPanelDigits(int digitCount) = 0;
 
     // Which application the overlay is up over - see ForegroundApp. Asked
     // at the moment the overlay is shown, when the answer means something.
