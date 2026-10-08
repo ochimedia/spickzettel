@@ -241,22 +241,12 @@ void Win32InputGrab::EndGrabbedKeyboard() {
 // Takes the pointer over from the real cursor: start where it is, and reset
 // everything that describes movement since there is none yet.
 //
-// Called on the transition into driving rather than when the grab activates,
-// because those are not the same moment. Switching raw input on part way
-// through an edit-mode session leaves the grab already active, so seeding in
-// SetActive alone would never run again - and the drawn pointer would jump
-// back to wherever the real cursor had been when edit mode opened. The mirror of the
-// hand-back in Refresh, and it has to be the same one place, or the two ends
-// of the same handover drift apart.
-void Win32InputGrab::BeginVirtualCursor() {
-    SeedVirtualCursor();
-    lastFramePoint_ = VirtualCursor();
-}
-
-// The seed itself: the pointer's integration state, from the real cursor.
-// From the app thread as the pointer starts driving, and from the hook
-// thread as a retry gets the grab (see ReconcileHooks) - never the frame's
-// last point, which only the app thread keeps.
+// On the hook thread, as the grab goes in (see ReconcileHooks) - whatever
+// put it in: edit mode opening, raw input switched on part way through a
+// session, a retry getting a grab that had failed. Seeded only when the
+// grab opened, the drawn pointer jumped back to wherever the real cursor
+// had been then. Never the frame's last point, which only the app thread
+// keeps: it is told by pointerSeeds_ (see SampleFrameStep).
 void Win32InputGrab::SeedVirtualCursor() {
     POINT seed{};
     GetCursorPos(&seed);
@@ -268,11 +258,8 @@ void Win32InputGrab::SeedVirtualCursor() {
     if (!PtInRect(&bounds, seed)) {
         seed = POINT{bounds.left + (bounds.right - bounds.left) / 2, bounds.top + (bounds.bottom - bounds.top) / 2};
     }
-    // Under the pointer lock throughout, the registry reads included: the
-    // raw-input sink may still be up on the hook thread and integrating
-    // reports into the very fields being seeded (see pointerMutex_). A
-    // report waits here for a moment once per grab; one integrated halfway
-    // through a seed would put the pointer somewhere neither meant.
+    // Under the pointer lock, which Diagnostics reads under (see
+    // pointerMutex_).
     std::lock_guard<std::mutex> lock(pointerMutex_);
     virtualCursorX_.store(seed.x);
     virtualCursorY_.store(seed.y);
@@ -334,13 +321,11 @@ void Win32InputGrab::Refresh() {
     // real cursor was the pointer all along (see VirtualCursorActive), and
     // the virtual one is still where the grab began - handing it back would
     // be the jump. Before the reconcile below, which takes the grab out.
+    // The other end, the seed, is the hook thread's as it puts the grab in.
     if (!virtualCursorDriving && PointerGrabbed()) {
         const POINT at = VirtualCursor();
         SetCursorPos(at.x, at.y);
-    } else if (!virtualCursorWasDriving_ && virtualCursorDriving) {
-        BeginVirtualCursor();
     }
-    virtualCursorWasDriving_ = virtualCursorDriving;
 
     // The keyboard's handover, on the same shape and for the same reason: it
     // belongs to the transition, not to any one of the things that can cause
@@ -635,6 +620,7 @@ void Win32InputGrab::ReconcileHooks() {
     // the real cursor, as without the grab; one that failed is tried again
     // shortly. (The order within this call does not matter: neither the
     // hook nor the sink hears anything until this thread pumps again.)
+    const bool pointerWasGrabbed = mouseHook_ != nullptr;
     bool pointerGrabbed = false;
     if (wantMouse) {
         pointerGrabbed = EnsureRawInputSink();
@@ -654,15 +640,15 @@ void Win32InputGrab::ReconcileHooks() {
         }
         DestroyRawInputSink();
     }
-    if (pointerGrabbed && pointerGrabState_.load() == HookState::Failed) {
-        // Got on a later try: the real cursor has gone on moving since the
-        // seed Refresh took, and the drawn one starts from where it is now.
-        // Seeded here, before the grab is published below and before this
-        // thread pumps again - so before the sink integrates a report or
-        // stamps a click with the position. The app thread is told only to
-        // take its frame baseline from the new position (SampleFrameStep).
+    if (pointerGrabbed && !pointerWasGrabbed) {
+        // In now, on the first try or a later one: the drawn pointer starts
+        // where the real one is. Seeded here, before the grab is published
+        // below and before this thread pumps again - so before the sink
+        // integrates a report or stamps a click with the position. The app
+        // thread is told only to take its frame baseline from the new
+        // position (SampleFrameStep).
         SeedVirtualCursor();
-        frameBaselinePending_.store(true);
+        pointerSeeds_.fetch_add(1, std::memory_order_release);
     }
     pointerGrabState_.store(!wantMouse ? HookState::Off : pointerGrabbed ? HookState::Installed : HookState::Failed);
 
@@ -1077,9 +1063,11 @@ InputGrabDiagnostics Win32InputGrab::Diagnostics() const {
 // simply being drawn once a frame while the hand moves continuously - which
 // is a different problem with a different fix.
 void Win32InputGrab::SampleFrameStep() {
-    // A pointer grab got on a retry and seeded by the hook thread - see
-    // ReconcileHooks. Set after the seed, so the position read here is it.
-    if (frameBaselinePending_.exchange(false)) {
+    // A pointer grab put in and seeded by the hook thread since the last
+    // frame - see ReconcileHooks. Counted after the seed, so the position
+    // read here is it.
+    if (const uint32_t seeds = pointerSeeds_.load(std::memory_order_acquire); seeds != pointerSeedsSeen_) {
+        pointerSeedsSeen_ = seeds;
         lastFramePoint_ = VirtualCursor();
     }
     const POINT now = VirtualCursor();

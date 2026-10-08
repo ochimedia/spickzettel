@@ -361,11 +361,13 @@ private:
     // every-other-keypress bug that needs both halves.
     void ReleaseSwallowedKeys();
 
-    // The two handovers, each run from Refresh on the transition rather than
-    // from any one of the several setters that can cause it - see their
-    // definitions, and the matching hand-backs in Refresh itself.
-    void BeginVirtualCursor();
+    // The pointer's start: seeded from the real cursor on the hook thread,
+    // as the grab goes in - see ReconcileHooks; its end, the hand-back, is
+    // in Refresh.
     void SeedVirtualCursor();
+    // The keyboard's two handovers, each run from Refresh on the transition
+    // rather than from any one of the several setters that can cause it -
+    // see their definitions.
     void BeginGrabbedKeyboard();
     void EndGrabbedKeyboard();
 
@@ -596,7 +598,6 @@ private:
     int panelDigits_ = 0;
     // What Refresh saw last time, so each handover runs once, on its own
     // transition - see Refresh.
-    bool virtualCursorWasDriving_ = false;
     bool keyboardWasGrabbed_ = false;
     bool counteringWasOn_ = false;
     // The keyboard state ToUnicodeEx is given, kept here because the real one
@@ -666,15 +667,11 @@ private:
     std::atomic<LONG> virtualCursorX_{0};
     std::atomic<LONG> virtualCursorY_{0};
     // Everything from here to lastGain_ is the pointer's integration state:
-    // the raw-input sink moves it on the hook thread, report by report, and
-    // SeedVirtualCursor seeds it whenever the virtual pointer starts
-    // driving - on the app thread, or on the hook thread as a retry gets
-    // the grab - and the first can happen while the sink is still up,
-    // since raw mouse input can go off and on again before the hook thread
-    // has reconciled and taken the sink down. Diagnostics reads it from the
-    // app thread too. So all of it is under this lock, which nothing else
-    // takes: uncontended but for those moments, and never held across
-    // SetCursorPos.
+    // the raw-input sink moves it report by report and SeedVirtualCursor
+    // seeds it as the grab goes in, both on the hook thread, so the two
+    // never overlap. Diagnostics reads it from the app thread, under this
+    // lock, which nothing else takes: uncontended but for those reads, and
+    // never held across SetCursorPos.
     mutable std::mutex pointerMutex_;
     // The sub-pixel part of the above, and the scale applied to raw device
     // counts - see MoveVirtualCursorRaw.
@@ -701,8 +698,8 @@ private:
     // stand for several reports - always, from a 1000 Hz mouse - and the
     // curve has to be read per report. The hook is called once for every
     // report regardless, so between two messages it counts them. Written by
-    // the hook, read and reset by the sink, both on the hook thread; atomic
-    // because SeedVirtualCursor resets it from the app thread too.
+    // the hook, read and reset by the sink and by SeedVirtualCursor, all on
+    // the hook thread.
     std::atomic<int> hookMovesSinceReport_{0};
     // Which mouse buttons' downs the hook has swallowed, one bit each (left,
     // right, middle, X1, X2) - so that the up of a button pressed before the
@@ -773,9 +770,11 @@ private:
     // The hook thread's timer for trying again what could not be set up -
     // see ReconcileHooks. 0 when none is running.
     UINT_PTR hookRetryTimer_ = 0;
-    // A pointer grab got on a retry and seeded, for the app thread to take
-    // its frame baseline from - see SampleFrameStep.
-    std::atomic<bool> frameBaselinePending_{false};
+    // How many times the hook thread has seeded the pointer - see
+    // SampleFrameStep, which takes its frame baseline afresh at each, and
+    // the count it last saw.
+    std::atomic<uint32_t> pointerSeeds_{0};
+    uint32_t pointerSeedsSeen_ = 0;
     std::atomic<bool> failPointerGrabForTesting_{false};
     std::atomic<bool> failMouseHookForTesting_{false};
     std::atomic<bool> failKeyboardHookForTesting_{false};

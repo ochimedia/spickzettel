@@ -3765,12 +3765,13 @@ Consequences that shape `Win32InputGrab`:
   *absolutely*, which does not go through the ballistics curve (a
   relative `SendInput` did, and was the reason the pair looked
   inseparable).
-- **The handover runs both ways from one place.** The real cursor is
-  parked where the grab began and the drawn one is far away by the end;
-  starting to drive seeds from the real cursor and stopping puts the real
-  cursor where the drawn one was, both in `Refresh`, or switching raw
-  input on mid-session leaves the pointer jumping back to where edit mode
-  opened.
+- **The handover runs both ways, each from one place.** The real cursor
+  is parked where the grab began and the drawn one is far away by the
+  end; the grab going in seeds the drawn one from the real cursor, on
+  the hook thread in the reconcile that puts it in, whatever put it in,
+  and the grab going out puts the real cursor where the drawn one was,
+  in `Refresh`. Seeded only as edit mode opened, switching raw input on
+  mid-session left the pointer jumping back to where edit mode opened.
 - **The hooks live on their own thread, and this is not a nicety.** A
   low-level hook runs on the thread that installed it and the input stack
   blocks every mouse event system-wide until that thread services it.
@@ -3829,18 +3830,19 @@ Consequences that shape `Win32InputGrab`:
   and the hook thread tries again every second for as long as the grab is
   wanted (a keyboard hook that could not be installed as well). With
   the sink up and the hook refused, the sink goes too
-  (`FailMouseHookForTesting`). A grab got
-  on a later try seeds the drawn pointer again from the real one
-  (`SeedVirtualCursor`). The seed happens on the hook thread, in the same
-  reconcile that installs the hook and the sink, and before the grab is
+  (`FailMouseHookForTesting`). A grab got on a later try is seeded from
+  the real cursor as any is (`SeedVirtualCursor`): on the hook thread, in
+  the reconcile that installs the hook and the sink, before the grab is
   published. So no report is integrated, and no click is stamped with a
-  position, until the seed is in place. The app thread is told only to take
-  its frame baseline, the frame's last point, from the new position at its
-  next frame (`SampleFrameStep`), since that point is its own. Two earlier
-  versions were wrong: seeding the baseline from the hook thread was a data
-  race, and leaving the whole seed to the app thread's next frame let a click
-  through at the old position first and could lose the request (both found
-  in follow-up reviews). A grab that ends while it is failing hands no
+  position, until the seed is in place. The app thread only takes its
+  frame baseline, the frame's last point, from the new position at its
+  next frame (`SampleFrameStep`, by a count of seeds), since that point
+  is its own. Earlier versions were wrong: seeding the baseline from the
+  hook thread was a data race, leaving the whole seed to the app thread's
+  next frame let a click through at the old position first and could
+  lose the request (both found in follow-up reviews), and seeding on the
+  app thread as the grab was asked for, and again on the hook thread on
+  a retry, made two seed sites racing the sink. A grab that ends while it is failing hands no
   cursor back (`Refresh`): the real cursor was the pointer all along, and
   the drawn one was still where the grab began, so the hand-back put the
   cursor there - the very jump it exists to prevent (found in the review
@@ -3872,15 +3874,13 @@ Consequences that shape `Win32InputGrab`:
   `FailHookThreadStartForTesting` the thread's start, and
   `StallHookThreadForTesting` holds its next answer up.
 - **The pointer's integration state has a lock of its own.** The
-  raw-input sink integrates reports into it on the hook thread, and the
-  app thread seeds it whenever the virtual pointer starts driving. The
-  two were assumed never to overlap, but they can: the hook thread
-  outlives a raw-mouse toggle while the keyboard grab keeps it up, and
-  the sink is only taken down once that thread reconciles, so switching
-  raw input off and on again can seed the position under a sink still
-  moving it. A dedicated mutex, taken per report and at seeding, never
-  across `SetCursorPos`, is uncontended the rest of the time; the
-  diagnostics read their gain under it too.
+  raw-input sink integrates reports into it, and the seed resets it, both
+  on the hook thread; the diagnostics read their gain from the app
+  thread, under a dedicated mutex taken per report and at seeding, never
+  across `SetCursorPos`, and uncontended but for those reads. It was
+  added when the app thread seeded too and could do so under a sink still
+  moving the position - switching raw input off and on again before the
+  hook thread had reconciled.
 - **Movement is never posted.** Windows coalesces `WM_MOUSEMOVE` to about
   one per frame; re-posting every swallowed report made a 1000 Hz mouse a
   message flood. The render thread emits one Move per frame while a
