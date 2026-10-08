@@ -8,18 +8,46 @@
 #include "ui/icons_generated.h"
 #include "generated/ui_strings.h"
 
-// For ImGui::GetCurrentWindow, which is how HelpMarker asks how tall the
-// row it is joining already is - see its own comment.
+// For ImGui::GetCurrentWindow, which is how a marker asks how tall the
+// row it is joining already is - see CenterOnRow.
 #include <imgui_internal.h>
 
 namespace sz::ui {
 
+namespace {
+
+// Moves the cursor down so that an item `size` tall, next, sits in the
+// middle of the row it joins, rather than on its top edge - this is always
+// called after a SameLine, so the cursor is at the top of a line something
+// else set the height of. Which one it is matters: a checkbox makes the
+// row a frame tall, a plain heading only a line of text tall, and
+// centering on the frame either way dropped every marker beside a heading
+// visibly below its own words. DC.CurrLineSize.y is the tallest thing on
+// the row so far, which is exactly the question; it is zero on a row with
+// nothing on it yet, and then there is nothing to line up with.
+//
+// Never negative: an item taller than the row sits on its top edge and
+// overhangs below rather than being centered. Overhanging downward is
+// free; upward is not - the first row of a settings tab starts at the top
+// of a scrolling child, and a marker reaching a pixel above that is a
+// pixel outside the clip rect, which shaved the top off the "?" circles
+// in Input, Hotkeys and Profiles.
+void CenterOnRow(float size) {
+    const float rowHeight = ImGui::GetCurrentWindow()->DC.CurrLineSize.y;
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(0.0f, (rowHeight - size) * 0.5f));
+}
+
+}  // namespace
+
 // The revert arrow that marks a settings row as set here rather than
 // inherited. Small and quiet enough to sit inside a checkbox row without
 // making it taller, and accent-colored because being marked is the point:
-// it is both the indicator and the button that undoes it.
+// it is both the indicator and the button that undoes it. Centered on its
+// row, as the "?" before it is: on the row's top edge, it sat half a frame
+// above the words and the "?".
 bool RevertButton(const char* strId) {
     constexpr float kSize = 16.0f;
+    CenterOnRow(Px(kSize));
     ImGui::InvisibleButton(strId, ImVec2(Px(kSize), Px(kSize)));
     const bool pressed = ImGui::IsItemClicked();
     const ImVec2 pMin = ImGui::GetItemRectMin();
@@ -72,26 +100,10 @@ void HelpMarker(const char* id, const char* title, const char* text) {
     std::snprintf(buttonId, sizeof(buttonId), "##help_%s", id);
     std::snprintf(popupId, sizeof(popupId), "##helppop_%s", id);
 
+    // Two pixels taller than a line of text, so that beside a heading it
+    // sits on the row's top edge and overhangs below - see CenterOnRow.
     const float size = std::floor(ImGui::GetFontSize() + Px(2.0f));
-    // Centered on whatever else is already on this row, rather than on its
-    // top edge - this is always called after a SameLine, so the cursor is
-    // at the top of a line something else set the height of. Which one it
-    // is matters: a checkbox makes the row a frame tall, a plain heading
-    // only a line of text tall, and centering on the frame either way
-    // dropped every marker beside a heading visibly below its own words.
-    // DC.CurrLineSize.y is the tallest thing on the row so far, which is
-    // exactly the question; it is zero on a row with nothing on it yet,
-    // and then there is nothing to line up with.
-    //
-    // Never negative, and the marker is deliberately two pixels taller
-    // than a line of text, so beside a heading it sits on the row's top
-    // edge and overhangs below rather than being centered. Overhanging
-    // downward is free; upward is not - the first row of a settings tab
-    // starts at the top of a scrolling child, and a marker reaching a
-    // pixel above that is a pixel outside the clip rect, which shaved the
-    // top off the circles in Input, Hotkeys and Profiles.
-    const float rowHeight = ImGui::GetCurrentWindow()->DC.CurrLineSize.y;
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + std::max(0.0f, (rowHeight - size) * 0.5f));
+    CenterOnRow(size);
     ImGui::InvisibleButton(buttonId, ImVec2(size, size));
     const bool clicked = ImGui::IsItemClicked();
     // Lit while its own popover is up, so a reader can see which row the
