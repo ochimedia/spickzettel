@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <iterator>
 #include <cmath>
+#include <optional>
 
 namespace sz::platform::win32 {
 
@@ -692,19 +693,16 @@ bool Win32InputGrab::FlushPendingCorrection() {
     if (dx == 0 && dy == 0) {
         return false;
     }
-    // How long the game had this movement to itself. Recorded before the
+    // How long the game had this movement to itself. Measured before the
     // injection rather than after, so the number is the wait rather than
-    // the wait plus SendInput's own cost.
+    // the wait plus SendInput's own cost - and recorded only once the
+    // injection went in, since a refused one ended no wait.
+    std::optional<float> lagMs;
     if (since != 0) {
         LARGE_INTEGER frequency{};
         QueryPerformanceFrequency(&frequency);
         if (frequency.QuadPart > 0) {
-            const float lagMs =
-                static_cast<float>(NowTicks() - since) * 1000.0f / static_cast<float>(frequency.QuadPart);
-            correctionLagMsLast_.store(lagMs, std::memory_order_relaxed);
-            if (lagMs > correctionLagMsMax_.load(std::memory_order_relaxed)) {
-                correctionLagMsMax_.store(lagMs, std::memory_order_relaxed);
-            }
+            lagMs = static_cast<float>(NowTicks() - since) * 1000.0f / static_cast<float>(frequency.QuadPart);
         }
     }
 
@@ -725,6 +723,12 @@ bool Win32InputGrab::FlushPendingCorrection() {
         return false;
     }
     correctionsInjected_.fetch_add(1, std::memory_order_relaxed);
+    if (lagMs.has_value()) {
+        correctionLagMsLast_.store(*lagMs, std::memory_order_relaxed);
+        if (*lagMs > correctionLagMsMax_.load(std::memory_order_relaxed)) {
+            correctionLagMsMax_.store(*lagMs, std::memory_order_relaxed);
+        }
+    }
     return true;
 }
 
