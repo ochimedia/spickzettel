@@ -506,6 +506,8 @@
   "startup.commandLine": "Spickzettel could not start: %s\n\nIt takes these options:%s",
   "_commandLine": "The command-line options, for the scripts that test and measure the app: the help of each, and what is said about arguments that are wrong. %s is the argument or the option's name.",
   "commandLine.dataDir": "Keeps the settings, the library and the crash dumps in this folder instead of your own.",
+  "commandLine.editMode": "Brings the overlay up in edit mode once started.",
+  "commandLine.flagWithValue": "%s takes no value.",
   "commandLine.unknown": "%s is not an option it knows.",
   "commandLine.twice": "%s is given more than once.",
   "commandLine.noValue": "%s needs a value after it.",

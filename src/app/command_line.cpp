@@ -17,7 +17,8 @@ std::filesystem::path PathFromUtf8(std::string_view text) {
 
 struct Option {
     std::string_view name;
-    // What follows it, as the help shows it.
+    // What follows it, as the help shows it; empty for a flag, which takes
+    // nothing.
     std::string_view value;
     const char* help;
     // False when the value is no use - empty, say.
@@ -40,6 +41,12 @@ const Option kOptions[] = {
          return true;
      },
      [](const CommandLine& options) { return options.dataDir.has_value(); }},
+    {"--edit-mode", "", strings::kCommandLineEditMode,
+     [](CommandLine& options, std::string_view) {
+         options.editMode = true;
+         return true;
+     },
+     [](const CommandLine& options) { return options.editMode; }},
 };
 
 const Option* Find(std::string_view name) {
@@ -77,6 +84,14 @@ ParsedCommandLine ParseCommandLine(const std::vector<std::string>& args) {
             parsed.error = Formatted(strings::kCommandLineTwice, option->name);
             return parsed;
         }
+        if (option->value.empty()) {
+            if (value.has_value()) {
+                parsed.error = Formatted(strings::kCommandLineFlagWithValue, option->name);
+                return parsed;
+            }
+            option->apply(parsed.options, {});
+            continue;
+        }
         if (!value.has_value()) {
             if (i + 1 >= args.size()) {
                 parsed.error = Formatted(strings::kCommandLineNoValue, option->name);
@@ -97,8 +112,10 @@ std::string CommandLineUsage() {
     for (const Option& option : kOptions) {
         usage += "\n    ";
         usage += option.name;
-        usage += ' ';
-        usage += option.value;
+        if (!option.value.empty()) {
+            usage += ' ';
+            usage += option.value;
+        }
         usage += "\n        ";
         usage += option.help;
     }

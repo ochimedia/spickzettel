@@ -18,6 +18,10 @@ struct CommandLine {
     // in this one folder rather than the user's own - so that a test or a
     // measurement can neither read nor change them.
     std::optional<std::filesystem::path> dataDir;
+    // --edit-mode: the overlay up in edit mode once started, as if started
+    // again while running - so that a script reaches it without pressing a
+    // global hotkey, which goes to whichever copy holds it.
+    bool editMode = false;
 };
 
 struct ParsedCommandLine {
@@ -28,10 +32,11 @@ struct ParsedCommandLine {
 };
 
 // `args` without the program's own name, as UTF-8. An option's value
-// follows it as the next argument or after an equals sign (--data-dir=x).
-// An option unknown, given twice, or without its value is an error, and so
-// is anything that is not an option: a start with arguments nobody
-// understood is not a start of what was meant.
+// follows it as the next argument or after an equals sign (--data-dir=x);
+// a flag (--edit-mode) has none. An option unknown, given twice, without
+// its value, or a flag given one is an error, and so is anything that is
+// not an option: a start with arguments nobody understood is not a start
+// of what was meant.
 ParsedCommandLine ParseCommandLine(const std::vector<std::string>& args);
 
 // The options and their help, a line each, for that message.

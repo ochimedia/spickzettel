@@ -49,10 +49,22 @@ TEST(CommandLineTest, AnythingNotUnderstoodIsAnError) {
     EXPECT_FALSE(ParseCommandLine({"--data-dir", "a", "--data-dir", "b"}).error.empty()) << "given twice";
 }
 
+// A flag takes nothing: given, it is set; given a value, it is an error.
+TEST(CommandLineTest, AFlagIsSetAndTakesNoValue) {
+    EXPECT_FALSE(ParseCommandLine({}).options.editMode);
+    const ParsedCommandLine both = ParseCommandLine({"--edit-mode", "--data-dir", "x"});
+    ASSERT_TRUE(both.error.empty()) << both.error;
+    EXPECT_TRUE(both.options.editMode);
+    EXPECT_TRUE(both.options.dataDir.has_value()) << "the next argument is not the flag's";
+    EXPECT_NE(ParseCommandLine({"--edit-mode=yes"}).error.find("--edit-mode"), std::string::npos);
+    EXPECT_FALSE(ParseCommandLine({"--edit-mode", "--edit-mode"}).error.empty()) << "given twice";
+}
+
 // The help names every option and what follows it.
 TEST(CommandLineTest, TheUsageNamesTheOptions) {
     const std::string usage = CommandLineUsage();
     EXPECT_NE(usage.find("--data-dir <folder>"), std::string::npos) << usage;
+    EXPECT_NE(usage.find("--edit-mode" + std::string(1, '\n')), std::string::npos) << usage;
 }
 
 }  // namespace

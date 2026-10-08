@@ -354,9 +354,10 @@ The executable takes options for the scripts that test and measure it;
 a person starting the app has no reason to pass any. They are one table,
 `kOptions` in `app/command_line.cpp`: a name, what follows it, a line of
 help, and what it sets in `app::CommandLine`. A new option is a row and
-a field. A value follows its option as the next argument or after `=`.
-Anything not understood - an unknown option, one given twice, one
-without its value, an argument that is no option - stops the start with
+a field. A value follows its option as the next argument or after `=`;
+a flag has none. Anything not understood - an unknown option, one given
+twice, one without its value, a flag given one, an argument that is no
+option - stops the start with
 a message naming it and listing the options: a start that quietly
 ignored a misspelled `--data-dir` would be a start on the user's own
 library.
@@ -372,6 +373,14 @@ library.
   hotkeys are: with a copy running, a start with a data folder is
   refused with a message rather than handed to that copy, which is the
   user's and on the user's library.
+- **`--edit-mode`** brings the overlay up in edit mode once started, as
+  starting the app again does (`TrayController::OnOpenedAgain`). The
+  measurement script used to press the edit hotkey when the overlay did
+  not come up by itself, and a global hotkey reaches whichever copy holds
+  it - the user's, under another name or started meanwhile, rather than
+  the one in the sandbox (found in the review of 2026-10-08). With this,
+  the script sends no input at all, and asks about windows only by the
+  process id of the copy it started.
 
 ## Drawing model
 

@@ -192,5 +192,12 @@ int WINAPI WinMain(HINSTANCE /*instance*/, HINSTANCE /*prevInstance*/, LPSTR /*c
     }
 
     trayController.Start();
+    // Asked for on the command line: up in edit mode, as a second start
+    // brings it - for the scripts that measure the app, which would
+    // otherwise press the edit hotkey, a global one that reaches whichever
+    // copy holds it.
+    if (commandLine.options.editMode) {
+        trayController.OnOpenedAgain();
+    }
     return host->RunEventLoop();
 }

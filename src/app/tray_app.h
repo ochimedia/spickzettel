@@ -114,8 +114,9 @@ public:
 
     // Which of the five the overlay is in - see docs/OVERLAY_STATES.md.
     OverlayState State() const { return state_; }
-    // The app started again while this copy runs: the overlay comes up in
-    // edit mode, and stays if it is there already.
+    // The app started again while this copy runs, or started with
+    // --edit-mode (see app::CommandLine): the overlay comes up in edit
+    // mode, and stays if it is there already.
     void OnOpenedAgain();
     // The start of every frame - see OverlayApp::SetFrameStartCallback.
     // In view mode and the pinned view, once a frame of the state is on

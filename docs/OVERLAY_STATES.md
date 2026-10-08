@@ -115,7 +115,7 @@ These hold after every transition and are checked in debug builds:
 
 | Request | From | Arrives | Notes |
 |---|---|---|---|
-| Edit | edit hotkey; tray "Toggle overlay"; the app started again, unless in Edit; the Behavior panel's hotkey, unless in Edit | as a message | through the input machine, which settles its scope first (`docs/INTERACTIONS.md`, section 7) |
+| Edit | edit hotkey; tray "Toggle overlay"; the app started again, or with `--edit-mode`, unless in Edit; the Behavior panel's hotkey, unless in Edit | as a message | through the input machine, which settles its scope first (`docs/INTERACTIONS.md`, section 7) |
 | View | view hotkey | as a message | the same |
 | Quick capture | its hotkey | as a message | captures, then asks for Edit |
 | Silent capture | its hotkey | as a message | captures; says so |
