@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
@@ -220,6 +221,18 @@ protected:
     void MoveTo(float x, float y) {
         ImGui::GetIO().AddMousePosEvent(x, y);
         pointer_ = platform::Vec2{x, y};
+    }
+
+    // `key` pressed with `mods` held, and a frame.
+    void PressChord(ImGuiKey key, std::initializer_list<ImGuiKey> mods) {
+        for (const ImGuiKey mod : mods) {
+            KeyEvent(mod, true);
+        }
+        PressKey(key);
+        for (const ImGuiKey mod : mods) {
+            KeyEvent(mod, false);
+        }
+        StepFrame();
     }
 
     // A key going down or up, as the window hands it on: to ImGui, and into

@@ -379,7 +379,8 @@ TEST_F(UiTest, AShortcutRowTakesAMouseButton) {
               (platform::KeyCombo{false, false, false, platform::KeyCombo::kX1Button}));
 }
 
-// Undo's key is a key like any other: a row given it takes it from Undo.
+// Undo's key is a key like any other: a row given it takes it from Undo,
+// once the question is answered.
 TEST_F(UiTest, AShortcutRowTakesUndosKey) {
     ShowEditMode();
     StepFrame();
@@ -391,14 +392,87 @@ TEST_F(UiTest, AShortcutRowTakesUndosKey) {
     });
 
     controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
-    KeyEvent(ImGuiMod_Ctrl, true);
-    PressKey(ImGuiKey_Z);
-    KeyEvent(ImGuiMod_Ctrl, false);
-    StepFrame();
+    PressChord(ImGuiKey_Z, {ImGuiMod_Ctrl});
     EXPECT_FALSE(App().IsCapturingShortcut());
+    StepFrame();
+    ASSERT_TRUE(App().IsKeyReassignOpen());
+    RunUi("reassign", [](ImGuiTestContext* ctx) { ctx->ItemClick("//$FOCUSED/###reassign_confirm"); });
+    StepFrame();
+    EXPECT_FALSE(App().IsKeyReassignOpen());
     const ShortcutBindings& shortcuts = AppSettings().Stored().profileable.shortcuts;
     EXPECT_EQ(shortcuts[ShortcutActionIndex(ShortcutAction::Copy)], (platform::KeyCombo{true, false, false, 'Z'}));
     EXPECT_FALSE(shortcuts[ShortcutActionIndex(ShortcutAction::Undo)].IsValid());
+}
+
+// A shortcut given a hotkey's key takes it from the hotkey, in every
+// application: the hotkey is unbound and lets go of its registration.
+// Cancel leaves both as they were.
+TEST_F(UiTest, AShortcutGivenAHotkeysKeyUnbindsTheHotkey) {
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("open the hotkeys", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionhotkeys");
+    });
+    const platform::KeyCombo viewKey = AppSettings().Stored().hotkeyViewMode;
+    const size_t copy = ShortcutActionIndex(ShortcutAction::Copy);
+    const platform::KeyCombo copyKey = AppSettings().Stored().profileable.shortcuts[copy];
+
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    PressChord(ImGuiKey_V, {ImGuiMod_Ctrl, ImGuiMod_Alt});
+    StepFrame();
+    ASSERT_TRUE(App().IsKeyReassignOpen());
+    RunUi("cancel", [](ImGuiTestContext* ctx) { ctx->ItemClick("//$FOCUSED/###reassign_cancel"); });
+    StepFrame();
+    EXPECT_EQ(AppSettings().Stored().profileable.shortcuts[copy], copyKey);
+    EXPECT_EQ(AppSettings().Stored().hotkeyViewMode, viewKey);
+
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    PressChord(ImGuiKey_V, {ImGuiMod_Ctrl, ImGuiMod_Alt});
+    StepFrame();
+    RunUi("reassign", [](ImGuiTestContext* ctx) { ctx->ItemClick("//$FOCUSED/###reassign_confirm"); });
+    StepFrame();
+    EXPECT_EQ(AppSettings().Stored().profileable.shortcuts[copy], viewKey);
+    EXPECT_FALSE(AppSettings().Stored().hotkeyViewMode.IsValid());
+    for (const auto& [id, combo] : host_.registeredCombos) {
+        EXPECT_FALSE(combo == viewKey) << "its registration let go of";
+    }
+}
+
+// A hotkey given a key shortcuts hold takes it from each - the defaults'
+// and a profile's own, since a hotkey holds its key in every application -
+// unbound in the profile rather than handed back to the defaults.
+TEST_F(UiTest, AHotkeyGivenAShortcutsKeyUnbindsItEverywhere) {
+    const platform::KeyCombo key{true, true, false, 'K'};
+    const size_t copy = ShortcutActionIndex(ShortcutAction::Copy);
+    const size_t paste = ShortcutActionIndex(ShortcutAction::Paste);
+    Settings& settings = controller_->GetSettings();
+    std::vector<Profile> profiles(1);
+    profiles[0].name = "Game";
+    profiles[0].overrides.shortcuts[paste] = key;
+    settings.SetProfiles(profiles);
+    settings.SetShortcut(ShortcutAction::Copy, key, std::nullopt);
+    ShowEditMode();
+    StepFrame();
+    OpenOverviewUi();
+    RunUi("open the hotkeys", [](ImGuiTestContext* ctx) {
+        ctx->SetRef("//##overview_panel");
+        ctx->ItemClick("**/###overviewtabsettings");
+        ctx->ItemClick("**/###sectionhotkeys");
+    });
+
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::QuickCapture);
+    PressChord(ImGuiKey_K, {ImGuiMod_Ctrl, ImGuiMod_Alt});
+    StepFrame();
+    ASSERT_TRUE(App().IsKeyReassignOpen());
+    RunUi("reassign", [](ImGuiTestContext* ctx) { ctx->ItemClick("//$FOCUSED/###reassign_confirm"); });
+    StepFrame();
+    const AppConfig& stored = AppSettings().Stored();
+    EXPECT_EQ(stored.hotkeyQuickCapture, key);
+    EXPECT_FALSE(stored.profileable.shortcuts[copy].IsValid());
+    EXPECT_EQ(stored.profiles[0].overrides.shortcuts[paste], std::optional<platform::KeyCombo>(platform::KeyCombo{}));
 }
 
 // A row waiting for its key says so, and what Escape does, in full: its

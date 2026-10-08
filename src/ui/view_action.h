@@ -15,12 +15,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
 #include "core/canvas/canvas.h"
 #include "core/canvas/item.h"
+#include "core/session/settings.h"
 #include "ui/interaction/command.h"
 #include "ui/interaction/levels.h"
 #include "ui/tutorial/topics.h"
@@ -46,6 +48,21 @@ struct DeleteTarget {
     // confirmation - the tutorial's, at its Done (docs/TUTORIAL.md,
     // section 17.3). Never with forGood.
     std::vector<uint64_t> alsoFolders;
+};
+
+// A key a Settings row took that something else holds: what it is for,
+// and what giving it away unbinds (see core::Settings::HoldersOf) - asked
+// first, since with seventeen shortcuts and five hotkeys a row going
+// "(none)" somewhere is easily missed. `key`, `wants` and `unbinds` are
+// taken as it is asked, for the confirmation to say as they are.
+struct KeyReassign {
+    core::KeyUse use;
+    platform::KeyCombo combo;
+    std::optional<size_t> target;  // a shortcut's: none for the defaults
+    std::vector<core::KeyHolder> holders;
+    std::string key;
+    std::string wants;
+    std::vector<std::string> unbinds;
 };
 
 // One of the tutorial card's own buttons. Done ends the tutorial and puts
@@ -151,6 +168,15 @@ struct PracticeSnippet {};
 struct ShowTrash {};
 struct ShowTrashSettings {};
 
+// A key a row took that something else holds, asked about; and the
+// confirmation's Reassign.
+struct AskToReassign {
+    KeyReassign request;
+};
+struct AssignKey {
+    KeyReassign request;
+};
+
 }  // namespace action
 
 using ViewAction =
@@ -160,6 +186,7 @@ using ViewAction =
                  action::Delete, action::RestoreMinimized, action::ClosePanel, action::FinishNoteEdit,
                  action::TutorialPress, action::StartTutorial, action::OpenTutorialList,
                  action::BackToTutorial,
-                 action::PracticeSnippet, action::ShowTrash, action::ShowTrashSettings>;
+                 action::PracticeSnippet, action::ShowTrash, action::ShowTrashSettings, action::AskToReassign,
+                 action::AssignKey>;
 
 }  // namespace sz::ui

@@ -407,12 +407,34 @@ These are today's except where marked:
 | Invariant | Load repair | Edit repair |
 |---|---|---|
 | Creation triggers differ, unless off | both back to the defaults | the other takes the edited one's old trigger |
-| Summon hotkeys differ, unless unbound | a later one is unbound (moved from `Initialize`) | the one that had the combination is unbound; the OS registration is tried first (section 6) |
-| One shortcut, one action, per target | none for what the file names; an action it does not name is unbound rather than take a combination the file gives another, or a hotkey; a hotkey it does not name is unbound rather than take a shortcut's, from the defaults or a profile; written back | the others in the target are unbound |
+| Summon hotkeys differ, unless unbound | a later one is unbound (moved from `Initialize`) | the one that had the combination is unbound, once asked (below); the OS registration is tried first (section 6) |
+| One shortcut, one action, per target | none for what the file names; an action it does not name is unbound rather than take a combination the file gives another, or a hotkey; a hotkey it does not name is unbound rather than take a shortcut's, from the defaults or a profile; written back | the others in the target are unbound, once asked (below) |
+| A hotkey's combination is no shortcut's | as the row above | a hotkey given a shortcut's key unbinds it in the defaults and in every profile that binds it itself; a shortcut given a hotkey's unbinds the hotkey; once asked (below) |
 | A profile's binding wins over an inherited same key | applied when resolving, not stored | the same |
 | Profile names are not empty | "Profile" | a cleared field keeps the old name |
 | Retention runs only with a period read from the file | retention off, when `afterDays` is missing or not a number (the default period could delete far sooner than the one meant) | none: the panel's field always holds a period |
 | Profile names are unique | numbered ("Game 2") | new profiles numbered; **Change (C3)**: a rename to a name another profile has is refused. The profile keeps its old name for as long as the typed one is taken, as with a cleared field, and a line under the field says the name is taken |
+
+**A key that unbinds something is asked about first** (added after
+0.3.1). With seventeen shortcuts and five hotkeys, a row going "(none)"
+somewhere else was easily missed. A key a row in Settings > Hotkeys
+takes is checked against everything that holds it
+(`Settings::HoldersOf`), by these rules:
+
+| The row is | Counted against | Not counted |
+|---|---|---|
+| a hotkey | the other hotkeys; the defaults' shortcuts; each profile's own shortcuts | - |
+| a shortcut in the defaults | the hotkeys; the defaults' other shortcuts | a profile's own, which wins where that profile is active |
+| a shortcut in a profile | the hotkeys; what the profile resolves to - its own, and what it inherits, which is unbound in that profile alone | another profile's own: only one profile is active at a time |
+
+When nothing holds it, it is given at once. Otherwise a question names
+each holder, and Reassign gives the key and unbinds them, a profile's own
+shortcut as an unbinding in that profile rather than a return to the
+defaults. Cancel, Escape or a click outside changes nothing. The hotkeys
+are paused while a row waits (`IPlatformHost::SetHotkeysPaused`), so a
+combination one holds is a key like any other. Escape, Backspace,
+Delete and the arrows are no key a row can take, so the keys the canvas
+answers to on its own never come up.
 
 **Change (C4)**: load repairs are written back at start. Today only the
 hotkey repair writes the file (`Initialize` calls `PersistConfig`); the

@@ -675,6 +675,14 @@ bool TrayController::ChangeHotkey(HotkeySlot slot, platform::KeyCombo combo) {
     if (combo == settings_.Get(row) && (HotkeyId(slot) != 0 || !combo.IsValid())) {
         return true;
     }
+    // Unbound - its key given to a shortcut (see SettingsPage::AssignKey):
+    // nothing to ask the OS, only a registration to let go of.
+    if (!combo.IsValid()) {
+        host_.UnregisterGlobalHotkey(HotkeyId(slot));
+        HotkeyId(slot) = 0;
+        settings_.Set(row, combo);
+        return true;
+    }
     // A combo one of the app's own other hotkeys has moves over: that one
     // is unbound, the way a tool shortcut's key is taken from the row that
     // had it (see Settings::SetShortcut). Refusing it instead leaves

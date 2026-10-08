@@ -34,6 +34,7 @@ inline constexpr const char* kShapeMenuId = "##shape_menu";
 inline constexpr const char* kItemPropertiesPopupId = "##item_properties_popover";
 inline constexpr const char* kColorChooserPopupId = "##color_chooser";
 inline constexpr const char* kConfirmDeletePopupId = "##confirm_delete_popover";
+inline constexpr const char* kConfirmReassignPopupId = "##confirm_reassign_popover";
 inline constexpr const char* kLibraryReminderPopupId = "##library_reminder_popover";
 // A popup's ImGui id, as its draw begins it.
 const char* PopupId(PopupKind kind);
@@ -69,6 +70,8 @@ public:
     void OpenShapeMenu(core::Tool tool, ImVec2 at);
     // The delete confirmation, for `target`.
     void OpenConfirmDelete(DeleteTarget target);
+    // The key confirmation, for `request`.
+    void OpenConfirmReassign(KeyReassign request);
     // The reminder that the library holds `bytes`, past the size Settings
     // reminds at (see AppConfig::librarySizeReminder).
     void OpenLibraryReminder(int64_t bytes);
@@ -120,6 +123,7 @@ public:
     // Stage 6: the delete confirmation and the library size reminder, over
     // the panels.
     void DrawConfirmDelete();
+    void DrawConfirmReassign();
     void DrawLibraryReminder();
 
 private:
@@ -136,6 +140,7 @@ private:
         core::ItemId item = 0;
         core::CanvasId canvas = 0;
         std::optional<DeleteTarget> deleteTarget;
+        std::optional<KeyReassign> reassign;
         core::Tool tool = core::Tool::Draw;  // the shape menu's
         int64_t bytes = 0;                   // the library reminder's
         ImVec2 at{0.0f, 0.0f};
@@ -216,6 +221,9 @@ private:
     // folder. A snippet asks nothing: its delete is undoable instead (see
     // Session::DeleteItem), and a canvas takes every snippet on it along.
     void RenderConfirmDeletePopover();
+    // Cancel or Reassign, for a key a Settings row took that something
+    // else holds, naming each thing it unbinds.
+    void RenderConfirmReassignPopover();
     void RenderLibraryReminderPopover();
 
     // Something only a frame can do to ImGui's popups, asked for from

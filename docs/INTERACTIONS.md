@@ -132,7 +132,7 @@ states where the innermost active one sees an event first.
 | Canvas | the canvas and its selection - always there | 1 |
 | Mode | drawing mode on snippets; a creation tool in hand | 1 |
 | Panel | the Overview; the cheat sheet | 1 |
-| Popup | a context menu (a snippet's, a canvas tile's, empty canvas's, the pen's or the eraser's shapes); the Properties popover; the color chooser; a delete confirmation; the library size reminder | 1 |
+| Popup | a context menu (a snippet's, a canvas tile's, empty canvas's, the pen's or the eraser's shapes); the Properties popover; the color chooser; a delete confirmation; the question a key reassignment asks; the library size reminder | 1 |
 | Text | a note being typed; a name being edited; a key being captured in Settings | 1 |
 | Gesture | what a held button or key is doing: a press not yet understood, a stroke, a drag, a widget drag, a spent button, a nudge or wheel burst | 1 |
 

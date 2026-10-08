@@ -100,6 +100,64 @@ void Settings::SetShortcut(ShortcutAction action, platform::KeyCombo combo, std:
     CommitNow();
 }
 
+std::vector<KeyHolder> Settings::HoldersOf(const platform::KeyCombo& combo, const KeyUse& wanted,
+                                           std::optional<size_t> target) const {
+    std::vector<KeyHolder> holders;
+    if (combo.key == 0) {
+        return holders;
+    }
+    for (const HotkeySlot slot : kAllHotkeySlots) {
+        if (wanted != KeyUse{slot} && Get(HotkeySetting(slot)) == combo) {
+            holders.push_back(KeyHolder{slot});
+        }
+    }
+    if (std::holds_alternative<HotkeySlot>(wanted)) {
+        for (const ShortcutAction action : kAllShortcutActions) {
+            if (Base().shortcuts[ShortcutActionIndex(action)] == combo) {
+                holders.push_back(KeyHolder{action});
+            }
+        }
+        for (size_t profile = 0; profile < stored_.profiles.size(); ++profile) {
+            for (const ShortcutAction action : kAllShortcutActions) {
+                const std::optional<platform::KeyCombo>& own =
+                    stored_.profiles[profile].overrides.shortcuts[ShortcutActionIndex(action)];
+                if (own.has_value() && *own == combo) {
+                    holders.push_back(KeyHolder{action, profile});
+                }
+            }
+        }
+        return holders;
+    }
+    const ProfileableSettings resolved = ResolvedFor(target);
+    for (const ShortcutAction action : kAllShortcutActions) {
+        if (wanted != KeyUse{action} && resolved.shortcuts[ShortcutActionIndex(action)] == combo) {
+            const bool inProfile = IsProfile(target);
+            holders.push_back(KeyHolder{action, inProfile ? target : std::nullopt,
+                                        inProfile && !IsShortcutOverridden(action, target)});
+        }
+    }
+    return holders;
+}
+
+void Settings::UnbindShortcuts(const std::vector<KeyHolder>& holders) {
+    bool unbound = false;
+    for (const KeyHolder& holder : holders) {
+        const ShortcutAction* action = std::get_if<ShortcutAction>(&holder.use);
+        if (action == nullptr) {
+            continue;
+        }
+        if (IsProfile(holder.profile)) {
+            stored_.profiles[*holder.profile].overrides.shortcuts[ShortcutActionIndex(*action)] = platform::KeyCombo{};
+        } else {
+            stored_.profileable.shortcuts[ShortcutActionIndex(*action)] = platform::KeyCombo{};
+        }
+        unbound = true;
+    }
+    if (unbound) {
+        CommitNow();
+    }
+}
+
 void Settings::ClearShortcutOverride(ShortcutAction action, std::optional<size_t> profile) {
     if (!IsProfile(profile)) {
         return;

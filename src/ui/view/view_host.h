@@ -44,6 +44,9 @@ public:
     // A delete of `target`: the confirmation, unless Settings > Behavior
     // says not to ask, and then the delete itself, as an action.
     virtual void AskToDelete(DeleteTarget target) = 0;
+    // The confirmation of a key that unbinds something else - see
+    // KeyReassign. Its Reassign is action::AssignKey.
+    virtual void AskToReassign(KeyReassign request) = 0;
     // The overlay hidden and shown again, after this frame - for an option
     // that takes effect only on entry to edit mode (see OverlayApp::
     // SetRestartOverlayCallback).

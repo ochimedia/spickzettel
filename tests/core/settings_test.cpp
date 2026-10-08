@@ -249,5 +249,53 @@ TEST(SettingsTest, AShortcutTakesItsKeyFromTheActionThatHadIt) {
     EXPECT_FALSE(settings.Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::NewScreenshot)].IsValid());
 }
 
+// What else holds a key about to be given (docs/SETTINGS.md, section 5),
+// row by row of its table: a hotkey holds a key in every application, and
+// counts against every shortcut - the defaults' and each profile's own -
+// while a shortcut counts against the hotkeys and its own target alone,
+// an inherited binding included.
+TEST(SettingsTest, WhatHoldsAKeyIsWhatGivingItAwayUnbinds) {
+    const platform::KeyCombo key{/*ctrl=*/true, /*alt=*/true, /*shift=*/false, /*key=*/'K'};
+    AppConfig config = ConfigWithOneProfile();
+    config.profiles.push_back(Profile{"Other"});
+    config.hotkeySilentCapture = key;
+    config.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)] = key;
+    config.profiles[1].overrides.shortcuts[ShortcutActionIndex(ShortcutAction::Paste)] = key;
+    Settings settings(config);
+    const auto holders = [&settings, &key](KeyUse wanted, std::optional<size_t> target) {
+        return settings.HoldersOf(key, wanted, target);
+    };
+
+    EXPECT_EQ(holders(HotkeySlot::EditMode, std::nullopt),
+              (std::vector<KeyHolder>{{HotkeySlot::SilentCapture},
+                                      {ShortcutAction::Copy},
+                                      {ShortcutAction::Paste, 1u}}))
+        << "a hotkey: every other hotkey, the defaults' shortcuts and each profile's own";
+    EXPECT_EQ(holders(ShortcutAction::Cut, std::nullopt),
+              (std::vector<KeyHolder>{{HotkeySlot::SilentCapture}, {ShortcutAction::Copy}}))
+        << "in the defaults: not a profile's own, which wins where it is active";
+    EXPECT_EQ(holders(ShortcutAction::Cut, 0u),
+              (std::vector<KeyHolder>{{HotkeySlot::SilentCapture}, {ShortcutAction::Copy, 0u, /*inherited=*/true}}))
+        << "in a profile: what it inherits too, and not another profile's own";
+    EXPECT_EQ(holders(ShortcutAction::Cut, 1u),
+              (std::vector<KeyHolder>{{HotkeySlot::SilentCapture}, {ShortcutAction::Paste, 1u}}))
+        << "its own binding, over the defaults' it hides";
+    EXPECT_EQ(holders(ShortcutAction::Copy, std::nullopt), (std::vector<KeyHolder>{{HotkeySlot::SilentCapture}}))
+        << "not the row itself";
+    EXPECT_TRUE(settings.HoldersOf(platform::KeyCombo{}, HotkeySlot::EditMode, std::nullopt).empty());
+
+    settings.UnbindShortcuts(holders(ShortcutAction::Cut, 0u));
+    EXPECT_FALSE(settings.ResolvedFor(0u).shortcuts[ShortcutActionIndex(ShortcutAction::Copy)].IsValid());
+    EXPECT_EQ(settings.Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)], key)
+        << "an inherited one in its profile alone";
+    EXPECT_EQ(settings.Get(setting::kHotkeySilentCapture), key) << "a hotkey is the tray's to unbind";
+
+    settings.UnbindShortcuts(holders(HotkeySlot::EditMode, std::nullopt));
+    EXPECT_FALSE(settings.Stored().profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)].IsValid());
+    EXPECT_EQ(settings.Stored().profiles[1].overrides.shortcuts[ShortcutActionIndex(ShortcutAction::Paste)],
+              std::optional<platform::KeyCombo>(platform::KeyCombo{}))
+        << "unbound in the profile, not handed back to the defaults";
+}
+
 }  // namespace
 }  // namespace sz::core

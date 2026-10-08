@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/config/display_choice.h"
@@ -1654,9 +1655,7 @@ void SettingsPage::ArmHotkeyCapture(HotkeySlot slot) {
                              slot,
                              [this, slot](platform::KeyCombo combo) {
                                  host_.PauseHotkeys(false);
-                                 if (!TryChangeHotkey(slot, combo)) {
-                                     host_.Say(strings::kHotkeysComboRejected);
-                                 }
+                                 OfferKey(slot, combo);
                              },
                              WaitEnded()),
                          Event{});
@@ -1668,7 +1667,7 @@ void SettingsPage::ArmShortcutCapture(ShortcutAction action) {
                              action,
                              [this, action](platform::KeyCombo combo) {
                                  host_.PauseHotkeys(false);
-                                 settings_.SetShortcut(action, combo, editProfile_);
+                                 OfferKey(action, combo);
                              },
                              WaitEnded()),
                          Event{});
@@ -1729,9 +1728,124 @@ void SettingsPage::CompleteHotkeyCapture(platform::KeyCombo combo) {
         return;
     }
     DisarmCapture();
-    if (!TryChangeHotkey(*slot, combo)) {
-        host_.Say(strings::kHotkeysComboRejected);
+    OfferKey(*slot, combo);
+}
+
+namespace {
+
+// `format` with `value` where it says %s, all of it however long - a
+// profile's name included, which a fixed buffer would cut through the
+// middle of a character.
+std::string Filled(std::string_view format, std::string_view value) {
+    std::string text(format);
+    if (const size_t at = text.find("%s"); at != std::string::npos) {
+        text.replace(at, 2, value);
     }
+    return text;
+}
+
+// A Settings row's name, as the row says it.
+const char* KeyUseLabel(const KeyUse& use) {
+    if (const HotkeySlot* slot = std::get_if<HotkeySlot>(&use)) {
+        switch (*slot) {
+            case HotkeySlot::EditMode:
+                return strings::kHotkeysEditMode;
+            case HotkeySlot::ViewMode:
+                return strings::kHotkeysViewMode;
+            case HotkeySlot::QuickCapture:
+                return strings::kHotkeysQuickCapture;
+            case HotkeySlot::SilentCapture:
+                return strings::kHotkeysSilentCapture;
+            case HotkeySlot::BehaviorPanel:
+                return strings::kHotkeysBehaviorPanel;
+        }
+        return "";
+    }
+    const ShortcutAction action = std::get<ShortcutAction>(use);
+    for (const GalleryTool& tool : kGalleryTools) {
+        if (ShortcutForTool(tool.tool) == action) {
+            return tool.name;
+        }
+    }
+    for (const CreateActionInfo& info : kCreateActions) {
+        if (ShortcutForCreateAction(info.action) == action) {
+            return info.name;
+        }
+    }
+    for (const ClipboardActionInfo& info : kClipboardActions) {
+        if (ShortcutForClipboardAction(info.action) == action) {
+            return info.name;
+        }
+    }
+    switch (action) {
+        case ShortcutAction::Undo:
+            return strings::kHotkeysShortcutUndo;
+        case ShortcutAction::Redo:
+            return strings::kHotkeysShortcutRedo;
+        case ShortcutAction::CheatSheet:
+            return strings::kMenuCheatSheet;
+        default:
+            return "";
+    }
+}
+
+}  // namespace
+
+// What a key a row took unbinds, named for the confirmation: a hotkey,
+// a shortcut in the defaults or in a profile, or the defaults' as a
+// profile inherits it.
+std::string SettingsPage::HolderLabel(const KeyHolder& holder) const {
+    const char* name = KeyUseLabel(holder.use);
+    if (std::holds_alternative<HotkeySlot>(holder.use)) {
+        return Filled(strings::kKeyReassignHotkey, name);
+    }
+    if (holder.inherited) {
+        return Filled(strings::kKeyReassignInherited, name);
+    }
+    if (holder.profile.has_value() && *holder.profile < settings_.Profiles().size()) {
+        return Filled(Filled(strings::kKeyReassignInProfile, name), settings_.Profiles()[*holder.profile].name);
+    }
+    return Filled(strings::kKeyReassignInDefaults, name);
+}
+
+// A key a row took: given at once when nothing else holds it, and asked
+// about first when something does - with seventeen shortcuts and five
+// hotkeys, a row elsewhere going "(none)" is easily missed. Who holds it is
+// core::Settings::HoldersOf's to say (docs/SETTINGS.md, section 5).
+void SettingsPage::OfferKey(const KeyUse& use, platform::KeyCombo combo) {
+    const std::optional<size_t> target =
+        std::holds_alternative<ShortcutAction>(use) ? editProfile_ : std::optional<size_t>();
+    KeyReassign request{use, combo, target, settings_.HoldersOf(combo, use, target)};
+    if (request.holders.empty()) {
+        AssignKey(request);
+        return;
+    }
+    request.key = FormatKeyComboLabel(combo);
+    request.wants = KeyUseLabel(use);
+    for (const KeyHolder& holder : request.holders) {
+        request.unbinds.push_back(HolderLabel(holder));
+    }
+    host_.AskToReassign(std::move(request));
+}
+
+// The key given, and what held it unbound: a hotkey's once the OS has
+// taken it - one it refuses changes nothing - and a shortcut's, whose
+// own target SetShortcut clears of it, after the hotkeys that had it.
+void SettingsPage::AssignKey(const KeyReassign& request) {
+    if (const HotkeySlot* slot = std::get_if<HotkeySlot>(&request.use)) {
+        if (!TryChangeHotkey(*slot, request.combo)) {
+            host_.Say(strings::kHotkeysComboRejected);
+            return;
+        }
+        settings_.UnbindShortcuts(request.holders);
+        return;
+    }
+    for (const KeyHolder& holder : request.holders) {
+        if (const HotkeySlot* hotkey = std::get_if<HotkeySlot>(&holder.use)) {
+            host_.ChangeHotkey(*hotkey, platform::KeyCombo{});
+        }
+    }
+    settings_.SetShortcut(std::get<ShortcutAction>(request.use), request.combo, request.target);
 }
 
 // "Ask first, store after" rather than the plain Settings::Set every other

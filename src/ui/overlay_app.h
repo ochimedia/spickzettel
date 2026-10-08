@@ -176,6 +176,9 @@ public:
     // answered, and not again this run.
     void RemindOfLibrarySize(int64_t bytes) { libraryReminder_ = bytes; }
     bool IsLibraryReminderOpen() const { return popups_.Up(PopupKind::LibraryReminder); }
+    // Whether a key a Settings row took is being asked about - see
+    // KeyReassign.
+    bool IsKeyReassignOpen() const { return popups_.Up(PopupKind::ConfirmReassign); }
     // What that message currently says, empty for none - the readable half
     // of the pair above, and how a test asks whether something was said at
     // all rather than looking at pixels.
@@ -592,6 +595,10 @@ private:
     // action. A snippet on screen doesn't ask: its delete is undoable
     // instead (see Session::DeleteItem).
     void AskToDelete(DeleteTarget target) override;
+    // Opened at Apply, not here: asked from a row's bind, inside the
+    // machine's offer of the key to the KeyCapture, a popup pushed then
+    // would end the capture still answering.
+    void AskToReassign(KeyReassign request) override { Act(action::AskToReassign{std::move(request)}); }
 
     // The pen's width and color, kept as AppConfig::strokeWidth and
     // strokeColorRGBA: the width the wheel left once its size preview has

@@ -392,6 +392,7 @@ void OverlayApp::StackSurfaces() {
     Front("##cheat_sheet_panel");
     Front("##tutorial_card");
     Front(AppPopupWindow(PopupKind::ConfirmDelete));
+    Front(AppPopupWindow(PopupKind::ConfirmReassign));
     Front(AppPopupWindow(PopupKind::LibraryReminder));
 }
 
@@ -569,6 +570,7 @@ void OverlayApp::DrawPanels(float displayW, float displayH) {
     // delete confirmation, which must stay reachable.
     tutorialCard_.Draw(displayW, displayH);
     popups_.DrawConfirmDelete();
+    popups_.DrawConfirmReassign();
     popups_.DrawLibraryReminder();
 }
 
@@ -713,6 +715,8 @@ void OverlayApp::Do(const ViewAction& action) {
                        overview_.OpenSettings();
                        settingsPage_.ShowSection(SettingsPage::SettingsSection::Behavior);
                    },
+                   [&](const action::AskToReassign& a) { popups_.OpenConfirmReassign(a.request); },
+                   [&](const action::AssignKey& a) { settingsPage_.AssignKey(a.request); },
                },
                action);
 }

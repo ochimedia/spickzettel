@@ -104,6 +104,10 @@ public:
     // Ends the capture with `combo` as the answer. Nothing while none is
     // armed.
     void CompleteHotkeyCapture(platform::KeyCombo combo);
+    // A key a row took, given - or, when something else holds it, asked
+    // about first (see KeyReassign) - and the confirmation's Reassign.
+    void OfferKey(const core::KeyUse& use, platform::KeyCombo combo);
+    void AssignKey(const KeyReassign& request);
     // What clicking a hotkey row's button, or a shortcut row's, does. Arming
     // either disarms the other: both rows are on one page, each waits for
     // the next key, and one press bound it to both.
@@ -186,6 +190,8 @@ private:
     // app's own other hotkeys is not a rejection: that one is unbound
     // instead (see TrayController::ChangeHotkey).
     bool TryChangeHotkey(core::HotkeySlot slot, platform::KeyCombo combo);
+    // What `holder` is, as the confirmation names it.
+    std::string HolderLabel(const core::KeyHolder& holder) const;
     // The row waiting, if one is.
     std::optional<core::HotkeySlot> CapturingHotkey() const;
     std::optional<core::ShortcutAction> CapturingShortcut() const;

@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "core/config/app_config.h"
@@ -23,6 +24,19 @@ inline constexpr HotkeySlot kAllHotkeySlots[] = {HotkeySlot::EditMode, HotkeySlo
 // its combination is stored, which the tray, the command table and the
 // Settings panel all go through.
 const GlobalSetting<HotkeyRule>& HotkeySetting(HotkeySlot slot);
+
+// What a combination is given to: a summon hotkey, or a chosen key.
+using KeyUse = std::variant<HotkeySlot, ShortcutAction>;
+// Something that holds a combination another is about to be given - see
+// Settings::HoldersOf. A shortcut's `profile` is the target it is bound in,
+// none for the defaults; `inherited` is the defaults' binding as a profile
+// inherits it, which is unbound in that profile alone.
+struct KeyHolder {
+    KeyUse use;
+    std::optional<size_t> profile;
+    bool inherited = false;
+    bool operator==(const KeyHolder&) const = default;
+};
 
 // The settings, as one object with one owner: what config.json holds, and
 // what that resolves to over whatever application the overlay is up over.
@@ -173,6 +187,20 @@ public:
     // profile is active, and a key the defaults use elsewhere is not this
     // profile's to solve. An unbound combo collides with nothing.
     void SetShortcut(ShortcutAction action, platform::KeyCombo combo, std::optional<size_t> target);
+    // What else holds `combo`, for it to be given to `wanted` in `target`
+    // (a shortcut's; a hotkey's is every application) - what giving it
+    // unbinds (docs/SETTINGS.md, section 5). A hotkey holds a key in every
+    // application, so against a hotkey every shortcut counts, the
+    // defaults' and each profile's own; a shortcut counts against the
+    // hotkeys and against what its own target resolves to, an inherited
+    // binding included, and not against another profile's, which is never
+    // active with it. Nothing for an unbound combo.
+    std::vector<KeyHolder> HoldersOf(const platform::KeyCombo& combo, const KeyUse& wanted,
+                                     std::optional<size_t> target) const;
+    // The shortcuts among `holders` unbound - an inherited one in its
+    // profile alone - and committed once. The hotkeys among them are the
+    // tray's to unregister (see TrayController::ChangeHotkey).
+    void UnbindShortcuts(const std::vector<KeyHolder>& holders);
     void ClearShortcutOverride(ShortcutAction action, std::optional<size_t> profile);
     // Replaces the whole list - adding, deleting, editing what a profile
     // matches - and commits. Which profile matches may change. The names

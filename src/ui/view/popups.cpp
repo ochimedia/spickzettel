@@ -35,6 +35,13 @@ void Popups::OpenConfirmDelete(DeleteTarget target) {
     Open(std::move(popup));
 }
 
+void Popups::OpenConfirmReassign(KeyReassign request) {
+    PopupRecord popup;
+    popup.kind = PopupKind::ConfirmReassign;
+    popup.reassign = std::move(request);
+    Open(std::move(popup));
+}
+
 // Stage 4, in the order they sit in the stack's row of them.
 void Popups::DrawOverCanvas(float displayW, float displayH) {
     RenderItemPropertiesPopover();
@@ -53,6 +60,8 @@ void Popups::OpenLibraryReminder(int64_t bytes) {
 }
 
 void Popups::DrawConfirmDelete() { RenderConfirmDeletePopover(); }
+
+void Popups::DrawConfirmReassign() { RenderConfirmReassignPopover(); }
 
 void Popups::DrawLibraryReminder() { RenderLibraryReminderPopover(); }
 
@@ -442,6 +451,8 @@ const char* PopupId(PopupKind kind) {
             return kShapeMenuId;
         case PopupKind::ConfirmDelete:
             return kConfirmDeletePopupId;
+        case PopupKind::ConfirmReassign:
+            return kConfirmReassignPopupId;
         case PopupKind::LibraryReminder:
             return kLibraryReminderPopupId;
     }
@@ -479,6 +490,7 @@ void Popups::Closed(PopupKind kind) {
         case PopupKind::EmptyCanvasMenu:
         case PopupKind::ShapeMenu:
         case PopupKind::ConfirmDelete:
+        case PopupKind::ConfirmReassign:
         case PopupKind::LibraryReminder:
             break;  // what it was about goes with the record
     }
@@ -550,6 +562,7 @@ void Popups::ApplyEffects() {
                     case PopupKind::ItemProperties:
                     case PopupKind::ColorChooser:
                     case PopupKind::ConfirmDelete:
+                    case PopupKind::ConfirmReassign:
                     case PopupKind::LibraryReminder:
                         ImGui::OpenPopup(PopupId(effect.popup));
                         break;
@@ -867,6 +880,47 @@ void Popups::RenderConfirmDeletePopover() {
 
     if (deletePressed) {
         host_.Act(action::Delete{target});
+    }
+}
+
+// At the middle of the screen, as the delete confirmation is: the key, each
+// thing it unbinds, what takes it, and Cancel or Reassign. Cancel leaves
+// everything as it was, the row's old key included.
+void Popups::RenderConfirmReassignPopover() {
+    const ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(displaySize.x * 0.5f, displaySize.y * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    const bool open = ImGui::BeginPopup(kConfirmReassignPopupId);
+    Drawn(PopupKind::ConfirmReassign, open);
+    if (!open) {
+        return;
+    }
+    if (!Up(PopupKind::ConfirmReassign)) {
+        ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+        return;
+    }
+    const KeyReassign request = *popup_->reassign;
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + Px(320.0f));
+    ImGui::Text(strings::kKeyReassignPrompt, request.key.c_str());
+    for (const std::string& unbound : request.unbinds) {
+        ImGui::Bullet();
+        ImGui::TextUnformatted(unbound.c_str());
+    }
+    ImGui::Spacing();
+    ImGui::Text(strings::kKeyReassignQuestion, request.wants.c_str());
+    ImGui::PopTextWrapPos();
+    ImGui::Spacing();
+
+    const bool cancelPressed = ImGui::Button(Labeled(strings::kKeyReassignCancel, "reassign_cancel"));
+    ImGui::SameLine();
+    const bool reassignPressed = ImGui::Button(Labeled(strings::kKeyReassignConfirm, "reassign_confirm"));
+    if (cancelPressed || reassignPressed) {
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+
+    if (reassignPressed) {
+        host_.Act(action::AssignKey{request});
     }
 }
 

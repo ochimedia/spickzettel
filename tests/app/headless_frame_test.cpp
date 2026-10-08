@@ -1848,9 +1848,12 @@ TEST_F(HeadlessAppTest, AChangeOfCanvasBringsTheBarOutForAMoment) {
 // combination to its hotkey and to nothing else, so a combination one of
 // the app's own hotkeys has would never reach the row as a key, and its
 // press would do the hotkey's job. Paused, it is a key like any other -
-// captured, not acted on - and the row that had it is left unbound.
+// captured, not acted on - and, since the view hotkey has it, asked about
+// before anything changes. Escape on the question changes nothing.
 TEST_F(HeadlessAppTest, AHotkeysCombinationIsAKeyLikeAnyOtherWhileARowWaits) {
     ShowEditMode();
+    StepFrame();
+    ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::Settings}));
     StepFrame();
     controller_->Overlay().ArmHotkeyCapture(HotkeySlot::EditMode);
     ASSERT_TRUE(App().IsCapturingHotkey());
@@ -1868,9 +1871,18 @@ TEST_F(HeadlessAppTest, AHotkeysCombinationIsAKeyLikeAnyOtherWhileARowWaits) {
     EXPECT_FALSE(App().IsCapturingHotkey());
     EXPECT_FALSE(App().IsViewOnly()) << "the press was captured, not acted on";
     EXPECT_TRUE(host_.overlayWindow.visible);
+    StepFrame();
+    EXPECT_TRUE(App().IsKeyReassignOpen());
     const AppConfig& stored = controller_->GetSettings().Stored();
-    EXPECT_EQ(stored.hotkeyEditMode, config_.hotkeyViewMode);
-    EXPECT_FALSE(stored.hotkeyViewMode.IsValid()) << "taken from the view hotkey";
+    EXPECT_EQ(stored.hotkeyEditMode, config_.hotkeyEditMode) << "nothing changed before the answer";
+    EXPECT_EQ(stored.hotkeyViewMode, config_.hotkeyViewMode);
+
+    PressKey(ImGuiKey_Escape);
+    StepFrame();
+    EXPECT_FALSE(App().IsKeyReassignOpen());
+    EXPECT_EQ(stored.hotkeyEditMode, config_.hotkeyEditMode);
+    EXPECT_EQ(stored.hotkeyViewMode, config_.hotkeyViewMode);
+    EXPECT_TRUE(App().IsOverviewOpen()) << "Escape closes the question alone";
 }
 
 // A hotkey another application held at the start has its combo and no

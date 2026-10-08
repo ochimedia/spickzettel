@@ -183,21 +183,24 @@ TEST(TrayControllerTest, ChangeHotkeySwapsTheRegistrationAndTriggersTheNewCombo)
     EXPECT_NE(FindHotkeyId(host, config.hotkeyQuickCapture), 0);
 }
 
-// An unset combo is no change a hotkey can take: Windows registers
-// nothing for one, so the hotkey keeps the combo it had. The Settings row
-// offers none - Backspace and Delete unbind a shortcut, not a hotkey. The
-// fake host registered one all the same, so a test could unbind what the
-// app cannot.
-TEST(TrayControllerTest, AnUnsetComboLeavesTheHotkeyAsItWas) {
+// An unset combo unbinds the hotkey: its key given to a shortcut, after the
+// confirmation asked (see SettingsPage::AssignKey). Windows registers
+// nothing for one, so its registration is let go of, and the key does
+// nothing more. The hotkey's own row still offers no way to unbind it -
+// Backspace and Delete unbind a shortcut, not a hotkey.
+TEST(TrayControllerTest, AnUnsetComboUnbindsTheHotkey) {
     test::FakePlatformHost host;
     const AppConfig config = DefaultConfig();
     TrayController controller(host, config);
     ASSERT_TRUE(controller.Initialize());
+    const int id = FindHotkeyId(host, config.hotkeyEditMode);
+    ASSERT_NE(id, 0);
 
-    EXPECT_FALSE(controller.ChangeHotkey(HotkeySlot::EditMode, platform::KeyCombo{}));
-    EXPECT_EQ(controller.GetSettings().Stored().hotkeyEditMode, config.hotkeyEditMode);
-    host.TriggerHotkey(FindHotkeyId(host, config.hotkeyEditMode));
-    EXPECT_TRUE(host.overlayWindow.IsVisible());
+    EXPECT_TRUE(controller.ChangeHotkey(HotkeySlot::EditMode, platform::KeyCombo{}));
+    EXPECT_FALSE(controller.GetSettings().Stored().hotkeyEditMode.IsValid());
+    EXPECT_EQ(FindHotkeyId(host, config.hotkeyEditMode), 0);
+    host.TriggerHotkey(id);
+    EXPECT_FALSE(host.overlayWindow.IsVisible());
 }
 
 TEST(TrayControllerTest, ChangeHotkeyPersistsTheNewComboToDisk) {

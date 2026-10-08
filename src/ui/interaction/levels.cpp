@@ -119,6 +119,8 @@ const char* PopupName(PopupKind kind) {
             return "ShapeMenu";
         case PopupKind::ConfirmDelete:
             return "ConfirmDelete";
+        case PopupKind::ConfirmReassign:
+            return "ConfirmReassign";
         case PopupKind::LibraryReminder:
             return "LibraryReminder";
     }
