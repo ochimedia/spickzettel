@@ -1939,6 +1939,40 @@ TEST_F(HeadlessAppTest, AWaitingRowTakesTheNextKeyAndEscapeStopsIt) {
     EXPECT_FALSE(App().IsOverviewOpen()) << "with nothing waiting, Escape closes the Overview";
 }
 
+// A waiting row borrows the keyboard, as a text field does: under a
+// profile that neither takes focus nor holds keystrokes, the key it waits
+// for went to the program underneath. Each way the wait ends gives it
+// back - a key bound, Escape, another row armed, edit mode left.
+TEST_F(HeadlessAppTest, AWaitingRowBorrowsTheKeyboardUntilItStops) {
+    ShowEditMode();
+    StepFrame();
+    ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::Settings}));
+    StepFrame();
+    const int& requested = host_.overlayWindow.requestTextInputCallCount;
+    const int& released = host_.overlayWindow.releaseTextInputCallCount;
+    const auto borrowed = [&] { return requested - released; };
+    ASSERT_EQ(borrowed(), 0);
+
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    EXPECT_EQ(borrowed(), 1);
+    PressKey(ImGuiKey_K);
+    EXPECT_EQ(borrowed(), 0) << "a key bound";
+
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    PressKey(ImGuiKey_Escape);
+    EXPECT_EQ(borrowed(), 0) << "Escape";
+
+    controller_->Overlay().ArmHotkeyCapture(HotkeySlot::ViewMode);
+    controller_->Overlay().ArmShortcutCapture(ShortcutAction::Copy);
+    EXPECT_EQ(borrowed(), 1) << "the first given back as the second borrowed";
+    // A hotkey is no key to a shortcut's row: view mode comes up, and the
+    // Overview goes with edit mode.
+    ShowViewMode();
+    StepFrame();
+    EXPECT_FALSE(App().IsCapturingShortcut());
+    EXPECT_EQ(borrowed(), 0) << "edit mode left";
+}
+
 // Picking where a snippet goes, the Overview comes up as it always does:
 // on the Canvases tab. It kept the tab a previous visit left, and a pick
 // after a visit to Settings came up on Settings.

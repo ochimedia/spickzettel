@@ -1654,13 +1654,16 @@ void SettingsPage::RenderHotkeyEditor(const char* id, const char* label, HotkeyS
 // A row waiting is a KeyCapture on the machine's Text level - one at a
 // time, so arming one disarms the other, as the level holds one.
 void SettingsPage::ArmHotkeyCapture(HotkeySlot slot) {
-    editor_.Input().Push(std::make_unique<KeyCapture>(slot,
-                                                      [this, slot](platform::KeyCombo combo) {
-                                                          if (!TryChangeHotkey(slot, combo)) {
-                                                              host_.Say(strings::kHotkeysComboRejected);
-                                                          }
-                                                      }),
+    editor_.Input().Push(std::make_unique<KeyCapture>(
+                             slot,
+                             [this, slot](platform::KeyCombo combo) {
+                                 if (!TryChangeHotkey(slot, combo)) {
+                                     host_.Say(strings::kHotkeysComboRejected);
+                                 }
+                             },
+                             KeyboardRelease()),
                          Event{});
+    BorrowKeyboard();
 }
 
 void SettingsPage::ArmShortcutCapture(ShortcutAction action) {
@@ -1668,8 +1671,29 @@ void SettingsPage::ArmShortcutCapture(ShortcutAction action) {
                              action,
                              [this, action](platform::KeyCombo combo) {
                                  settings_.SetShortcut(action, combo, editProfile_);
-                             }),
+                             },
+                             KeyboardRelease()),
                          Event{});
+    BorrowKeyboard();
+}
+
+// The key a row waits for has to reach the overlay, which a profile that
+// neither takes focus nor holds keystrokes leaves with the program
+// underneath: the row then waited on keys that went to that program. So
+// it borrows the keyboard as a text field does - after the Push, which
+// ended whatever held the level before, and gave back what that borrowed.
+void SettingsPage::BorrowKeyboard() {
+    if (host_.Window() != nullptr) {
+        host_.Window()->RequestTextInput();
+    }
+}
+
+std::function<void()> SettingsPage::KeyboardRelease() {
+    return [this] {
+        if (host_.Window() != nullptr) {
+            host_.Window()->ReleaseTextInput();
+        }
+    };
 }
 
 std::optional<HotkeySlot> SettingsPage::CapturingHotkey() const {

@@ -230,6 +230,16 @@ Answer NameEdit::Offer(const Event& event, Editor& /*editor*/) {
 // ================= KeyCapture =================
 
 Answer KeyCapture::Offer(const Event& event, Editor& /*editor*/) {
+    Answer answer = Answered(event);
+    // Finished, it is popped without being told: the keyboard goes back
+    // here.
+    if (answer.kind == Answer::Kind::Finish) {
+        Release();
+    }
+    return answer;
+}
+
+Answer KeyCapture::Answered(const Event& event) {
     const auto combo = [&event](int key) {
         return platform::KeyCombo{event.modifiers.ctrl, event.modifiers.alt, event.modifiers.shift, key};
     };

@@ -185,22 +185,34 @@ private:
 // fires meanwhile is the press, for a hotkey's row: Windows hands a
 // registered combination to its hotkey and to nothing else, so it never
 // arrives as a key. The pointer is passed on, to the panel the row is in.
+//
+// A row waiting borrows the keyboard as a text field does (see
+// IOverlayWindow::RequestTextInput), whoever armed it; `release` gives it
+// back, however the wait ends - a key bound, Escape, or the level ended
+// from outside.
 class KeyCapture final : public Interaction {
 public:
     using Target = std::variant<core::HotkeySlot, core::ShortcutAction>;
-    KeyCapture(Target target, std::function<void(platform::KeyCombo)> bind)
-        : target_(target), bind_(std::move(bind)) {}
+    KeyCapture(Target target, std::function<void(platform::KeyCombo)> bind, std::function<void()> release = {})
+        : target_(target), bind_(std::move(bind)), release_(std::move(release)) {}
     Level level() const override { return Level::Text; }
     const char* Name() const override { return "KeyCapture"; }
     const Target& Waiting() const { return target_; }
     Answer Offer(const Event& event, Editor& editor) override;
-    void Interrupt(Editor& /*editor*/) override {}
-    void Cancel(Editor& /*editor*/) override {}
+    void Interrupt(Editor& /*editor*/) override { Release(); }
+    void Cancel(Editor& /*editor*/) override { Release(); }
 
 private:
     bool ForHotkey() const { return std::holds_alternative<core::HotkeySlot>(target_); }
+    Answer Answered(const Event& event);
+    void Release() {
+        if (release_) {
+            release_();
+        }
+    }
     Target target_;
     std::function<void(platform::KeyCombo)> bind_;
+    std::function<void()> release_;
 };
 
 }  // namespace sz::ui

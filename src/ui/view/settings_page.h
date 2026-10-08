@@ -6,6 +6,7 @@
 // own is which section is showing, whose values it shows, a profile name
 // refused, and the displays last listed.
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <utility>
@@ -190,6 +191,10 @@ private:
     std::optional<core::ShortcutAction> CapturingShortcut() const;
     // Stops a row waiting, binding nothing.
     void DisarmCapture();
+    // The keyboard a waiting row borrows, and what gives it back - see
+    // the definition of BorrowKeyboard.
+    void BorrowKeyboard();
+    std::function<void()> KeyboardRelease();
     // The Shortcuts section: every tool and create action, each with the
     // key it answers to. A section of its own rather than rows appended to
     // another one - eleven key editors would be most of whatever panel

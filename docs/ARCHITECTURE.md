@@ -3024,7 +3024,10 @@ if it accepts. A combo one of the app's own other hotkeys has is taken
 from it rather than refused. While a row waits for a key, a press of one
 of the app's own combos never reaches it as a key - Windows hands it to
 its hotkey - so the hotkey event is what the waiting row takes (see
-"Input, in order").
+"Input, in order"). A waiting row borrows the keyboard as a text field
+does, and gives it back however the wait ends: under a profile that
+neither takes focus nor holds keystrokes, the key went to the program
+underneath and the row waited on (found 2026-10-08).
 
 ### The cheat sheet
 
