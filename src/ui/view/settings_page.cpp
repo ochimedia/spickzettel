@@ -276,6 +276,10 @@ bool SettingsSectionButton(const char* id, const char* text, bool active) {
 // "Hotkeys" is the one section that is both, which is why the three global
 // ones sit above its profile picker rather than below it - see
 // RenderSettingsHotkeys.
+//
+// "Profiles" comes before the two it changes, as what they depend on;
+// "Defaults", what new snippets start with, is seldom changed and goes
+// last but for "Debug".
 void SettingsPage::Draw() {
     struct SectionRow {
         SettingsSection section;
@@ -285,10 +289,10 @@ void SettingsPage::Draw() {
     static constexpr SectionRow kSections[] = {
         {SettingsSection::Appearance, "sectionappearance", strings::kSettingsTabAppearance},
         {SettingsSection::Interaction, "sectioninteraction", strings::kSettingsTabInteraction},
-        {SettingsSection::Behavior, "sectionbehavior", strings::kSettingsTabBehavior},
-        {SettingsSection::Defaults, "sectiondefaults", strings::kSettingsTabDefaults},
-        {SettingsSection::Hotkeys, "sectionhotkeys", strings::kSettingsTabHotkeys},
         {SettingsSection::Profiles, "sectionprofiles", strings::kSettingsTabProfiles},
+        {SettingsSection::Behavior, "sectionbehavior", strings::kSettingsTabBehavior},
+        {SettingsSection::Hotkeys, "sectionhotkeys", strings::kSettingsTabHotkeys},
+        {SettingsSection::Defaults, "sectiondefaults", strings::kSettingsTabDefaults},
         {SettingsSection::Debug, "sectiondebug", strings::kSettingsTabDebug},
     };
 
@@ -327,17 +331,17 @@ void SettingsPage::Draw() {
         case SettingsSection::Interaction:
             RenderSettingsInteraction();
             break;
+        case SettingsSection::Profiles:
+            RenderSettingsProfiles();
+            break;
         case SettingsSection::Behavior:
             RenderSettingsBehavior();
-            break;
-        case SettingsSection::Defaults:
-            RenderSettingsDefaults();
             break;
         case SettingsSection::Hotkeys:
             RenderSettingsHotkeys();
             break;
-        case SettingsSection::Profiles:
-            RenderSettingsProfiles();
+        case SettingsSection::Defaults:
+            RenderSettingsDefaults();
             break;
         case SettingsSection::Debug:
             RenderSettingsDebug();

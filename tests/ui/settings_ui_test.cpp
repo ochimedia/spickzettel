@@ -42,8 +42,8 @@ TEST_F(UiTest, TheSettingsSectionsAreAllReachable) {
         // in ui/view/settings_page.cpp, and assets/ui_strings.json for where
         // the words live now. A test that reached for "Appearance" broke the
         // moment anyone reworded it, which is the coupling this removed.
-        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior", "sectiondefaults",
-                                     "sectionhotkeys", "sectionprofiles", "sectiondebug"}) {
+        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionprofiles", "sectionbehavior",
+                                     "sectionhotkeys", "sectiondefaults", "sectiondebug"}) {
             const std::string path = std::string("**/###") + section;
             ctx->ItemClick(path.c_str());
             ctx->Yield();
@@ -258,8 +258,8 @@ TEST_F(UiTest, TheSettingsSectionsAreAllReachableAtALargeScale) {
     RunUi("settings sections at 200%", [](ImGuiTestContext* ctx) {
         ctx->SetRef("//##overview_panel");
         ctx->ItemClick("**/###overviewtabsettings");
-        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionbehavior", "sectiondefaults",
-                                     "sectionhotkeys", "sectionprofiles", "sectiondebug"}) {
+        for (const char* section : {"sectionappearance", "sectioninteraction", "sectionprofiles", "sectionbehavior",
+                                     "sectionhotkeys", "sectiondefaults", "sectiondebug"}) {
             const std::string path = std::string("**/###") + section;
             ctx->ItemClick(path.c_str());
             ctx->Yield();

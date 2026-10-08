@@ -68,7 +68,7 @@ public:
     // Appearance/Drawing/Diagnostics are about you and are global;
     // Input/Shortcuts are about whatever is underneath, and are what a
     // per-application profile may override - see Draw.
-    enum class SettingsSection { Appearance, Interaction, Behavior, Defaults, Hotkeys, Profiles, Debug };
+    enum class SettingsSection { Appearance, Interaction, Profiles, Behavior, Hotkeys, Defaults, Debug };
     SettingsSection Section() const { return settingsSection_; }
     // `section` shown, as its row pressed shows it.
     void ShowSection(SettingsSection section);
