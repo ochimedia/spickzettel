@@ -401,6 +401,9 @@ public:
     ItemId CreateFullscreenItem(ItemCreationKind kind);
     ItemId CreateFullscreenItem(ItemCreationKind kind, float width, float height);
     ItemId CreateRegionItem(ItemCreationKind kind, Rect rect);
+    // Session::CreateItem, saying so when a screenshot's capture came back
+    // with nothing.
+    ItemId CreateSnippet(Item prototype);
     // What the hand does with a snippet just made: a screenshot is
     // selected, a drawing entered with the pen.
     void HandOverNewItem(ItemCreationKind kind, ItemId id);

@@ -685,6 +685,14 @@ A picture is content only. The texture it is drawn with is kept by
 `TextureCache` under the snippet's id (see "Textures"), so copying an
 `Item` never copies a handle; a copy is given stored pixels of its own.
 
+A capture that comes back with nothing - the screen could not be read,
+or it is past what a picture may be - still makes its snippet, with the
+placeholder it shows for a picture that cannot be read: something to
+delete or to draw on, and undoable like any other. It says so
+(`Session::FailedCaptures`, `Editor::CreateSnippet`), and the tutorial
+does not count it. Until the review of 2026-10-08 it said "Captured
+screenshot".
+
 ### Strokes live in the item's native space
 
 Strokes are stored in a fixed coordinate space set at creation

@@ -113,6 +113,7 @@
 
   "_toasts": "The brief messages that appear after something happened.",
   "toast.capturedScreenshot": "Captured screenshot",
+  "toast.captureFailed": "The screen could not be captured - the snippet shows a placeholder",
   "toast.copied": "Copied",
   "toast.copiedWithoutPicture": "Copied without its picture - the original's could not be read",
   "toast.deleted": "Deleted",

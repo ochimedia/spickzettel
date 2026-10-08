@@ -257,6 +257,13 @@ public:
     std::vector<uint8_t> captureReturnsPixelsRGBA;
     int captureReturnsWidth = 0;
     int captureReturnsHeight = 0;
+    // Captures that come back with a picture - a small gray one, whatever
+    // was asked for - for the tests that need a capture to have worked.
+    void CapturesTakePictures() {
+        captureReturnsWidth = 4;
+        captureReturnsHeight = 4;
+        captureReturnsPixelsRGBA.assign(4 * 4 * 4, 128);
+    }
     int captureCallCount = 0;
     platform::Rect lastCaptureRect{};
     // Off by default, like a capture: no device to upload to.

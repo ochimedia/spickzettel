@@ -3087,6 +3087,7 @@ TEST_F(HeadlessAppTest, ACaptureLandsInTheFolderOfTheCanvasBeingWorkedOn) {
 // screen is the message saying so - on a window that takes no clicks and
 // takes itself away again.
 TEST_F(HeadlessAppTest, ASilentCaptureShowsAMessageWithoutOpeningTheOverlay) {
+    host_.overlayWindow.CapturesTakePictures();
     ASSERT_FALSE(host_.overlayWindow.visible);
     const size_t before = ItemCountOnCurrentCanvas();
 
@@ -3105,6 +3106,30 @@ TEST_F(HeadlessAppTest, ASilentCaptureShowsAMessageWithoutOpeningTheOverlay) {
 
     EXPECT_FALSE(host_.overlayWindow.visible) << "the notice takes itself away when the message fades";
     EXPECT_FALSE(App().IsNoticeOnly());
+}
+
+// A capture that comes back with nothing still makes its snippet, with the
+// placeholder, but says the screen could not be captured rather than that
+// it was - by the quick hotkey, the silent one and a drag alike - and the
+// tutorial does not count it.
+TEST_F(HeadlessAppTest, ACaptureThatCameBackEmptySaysSo) {
+    ASSERT_TRUE(host_.overlayWindow.captureReturnsPixelsRGBA.empty()) << "the fake's own default";
+    const size_t before = App().TutorialWorld().Captures(core::HotkeySlot::SilentCapture);
+
+    TriggerHotkey(config_.hotkeySilentCapture);
+    StepFrame();
+    EXPECT_EQ(App().ActionToastText(), "The screen could not be captured - the snippet shows a placeholder");
+    EXPECT_EQ(ItemCountOnCurrentCanvas(), 1u) << "kept, to delete or to draw on";
+    EXPECT_EQ(App().TutorialWorld().Captures(core::HotkeySlot::SilentCapture), before) << "no capture to count";
+
+    TriggerHotkey(config_.hotkeyQuickCapture);
+    StepFrame();
+    EXPECT_EQ(App().ActionToastText(), "The screen could not be captured - the snippet shows a placeholder");
+
+    controller_->Overlay().DismissActionToast();
+    ASSERT_TRUE(controller_->Overlay().Dispatch(Command{CommandId::NewScreenshotTool}));
+    Drag(100.0f, 100.0f, 400.0f, 300.0f);
+    EXPECT_EQ(App().ActionToastText(), "The screen could not be captured - the snippet shows a placeholder");
 }
 
 // With messages-while-hidden off, the same hotkey leaves no trace at all -
@@ -3132,6 +3157,7 @@ TEST_F(HeadlessAppTest, ASilentCaptureCanBeCompletelySilent) {
 // message costs a frame that was being drawn anyway. View-only especially,
 // where there is otherwise nothing at all to show that the hotkey worked.
 TEST_F(HeadlessAppTest, ASilentCaptureSaysSoInViewOnlyModeEvenWithMessagesOff) {
+    host_.overlayWindow.CapturesTakePictures();
     AppConfig config = DefaultConfig();
     config.showToastsWhileHidden = false;
     StartWith(config);

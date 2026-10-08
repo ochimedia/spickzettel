@@ -532,11 +532,23 @@ ItemId Editor::CreateFullscreenItem(ItemCreationKind kind, float width, float he
     prototype.isFullscreen = true;
     // Through the session, so that making it is on the history - see
     // Session::CreateItem.
-    const ItemId id = session_.CreateItem(std::move(prototype));
+    const ItemId id = CreateSnippet(std::move(prototype));
     if (id == 0) {
         return 0;
     }
     HandOverNewItem(kind, id);
+    return id;
+}
+
+ItemId Editor::CreateSnippet(Item prototype) {
+    const uint64_t failures = session_.FailedCaptures();
+    const ItemId id = session_.CreateItem(std::move(prototype));
+    // Made all the same, with the placeholder it shows when a picture
+    // cannot be read: something to delete, or to draw on. Said, rather
+    // than looking like a capture of something black.
+    if (id != 0 && session_.FailedCaptures() != failures) {
+        Say(strings::kToastCaptureFailed);
+    }
     return id;
 }
 
@@ -566,7 +578,7 @@ ItemId Editor::CreateRegionItem(ItemCreationKind kind, Rect rect) {
     if (EnsureCanvasForNewItem() == nullptr) {
         return 0;
     }
-    const ItemId id = session_.CreateItem(PrototypeForKind(kind, rect));
+    const ItemId id = CreateSnippet(PrototypeForKind(kind, rect));
     if (id == 0) {
         return 0;
     }
@@ -774,8 +786,14 @@ bool Editor::QuickCapture(float displayW, float displayH) {
         Say(strings::kToastNotWritten);
         return false;
     }
+    const uint64_t captureFailures = session_.FailedCaptures();
     const ItemId made = CreateFullscreenItem(ItemCreationKind::Screenshot, displayW, displayH);
-    // Not made when it could not be written - see Session::Land.
+    // Not made when it could not be written - see Session::Land. Made
+    // without a capture, it said so itself (CreateSnippet), and is no
+    // capture to count.
+    if (made != 0 && session_.FailedCaptures() != captureFailures) {
+        return false;
+    }
     Say(made != 0 ? strings::kToastCapturedScreenshot : strings::kToastNotWritten);
     return made != 0;
 }

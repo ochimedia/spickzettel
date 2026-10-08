@@ -439,6 +439,7 @@ void Session::CaptureShotItem(Item& item) {
     // until the next start and then never again, since the library would
     // not read it back - the placeholder from the start is the honest one.
     if (result.pixelsRGBA.empty() || !persistence::WithinImageBudget(result.width, result.height)) {
+        ++failedCaptures_;
         return;
     }
     // Its texture from the pixels at hand, rather than read back from the

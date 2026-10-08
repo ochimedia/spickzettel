@@ -19,6 +19,12 @@ namespace {
 
 class TutorialAppTest : public HeadlessAppTest {
 protected:
+    // Captures that work, as the steps that take them expect.
+    void SetUp() override {
+        host_.overlayWindow.CapturesTakePictures();
+        HeadlessAppTest::SetUp();
+    }
+
     OverlayApp& Overlay() { return controller_->Overlay(); }
 
     // A screenshot framed on empty canvas, left selected.

@@ -77,6 +77,11 @@ public:
     // a call, whether anything it wrote failed - where LastWriteFailed says
     // only whether the last write did.
     uint64_t FailedWrites() const { return failedWrites_; }
+    // How many screen captures have come back with nothing - see
+    // CaptureShotItem. Compared across a call, as FailedWrites is: the
+    // snippet is made all the same, with its placeholder, and only this
+    // says it shows no capture.
+    uint64_t FailedCaptures() const { return failedCaptures_; }
     // Writes the whole library as it is: for one begun in memory - a first
     // run's, a folder and a canvas - before its first command, which writes
     // only what it changes and would find what holds it missing. True
@@ -402,7 +407,8 @@ private:
     // Captures what is under `item` into its picture - cropped out of the
     // frozen screen while one is held, live otherwise - and puts its
     // texture in the cache. The pixels are written with the command that
-    // made the snippet (see captured_).
+    // made the snippet (see captured_). One that comes back with nothing
+    // is counted (FailedCaptures), and the snippet keeps its placeholder.
     void CaptureShotItem(Item& item);
     // Gives the copy `copyId` a picture of its own when `sourceId` has one,
     // copied as stored, with the command that made the copy. False when
@@ -480,6 +486,8 @@ private:
     // See LastWriteFailed and FailedWrites.
     bool lastWriteFailed_ = false;
     uint64_t failedWrites_ = 0;
+    // See FailedCaptures.
+    uint64_t failedCaptures_ = 0;
     // What the command in progress has for Land to write besides rows: the
     // pixels of the screenshots it captured, and the pictures its copies
     // take from their sources. Emptied by every Land, landed or not.
