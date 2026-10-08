@@ -4,6 +4,7 @@
 // real gestures.
 #include <algorithm>
 #include <cmath>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -670,6 +671,48 @@ TEST_F(TutorialAppTest, ADockChipIsMarkedForItsSnippet) {
     Click(Center(*firstChip).x, Center(*firstChip).y);
     EXPECT_FALSE(Canvases().FindItemAnywhere(first)->minimized);
     EXPECT_FALSE(App().AnchorAt(Anchor{AnchorId::DockChip, first}).has_value());
+}
+
+// More snippets minimized than one row of chips holds: the rest go in rows
+// above it, every chip on the screen and a click away. In one row, the
+// outer ones were off the screen's edges.
+TEST_F(TutorialAppTest, ManyDockChipsWrapIntoRowsOnTheScreen) {
+    ShowEditMode();
+    StepFrame();
+    Session& session = controller_->GetSession();
+    std::vector<ItemId> ids;
+    for (int i = 0; i < 40; ++i) {
+        Item prototype;
+        prototype.rect = Rect{20.0f + static_cast<float>(i) * 10.0f, 40.0f, 200.0f, 150.0f};
+        ids.push_back(session.CreateItem(prototype));
+        ASSERT_NE(ids.back(), 0u);
+    }
+    session.SetMinimized(ids, true);
+    StepFrame();
+
+    std::set<float> rowsAt;
+    for (const ItemId id : ids) {
+        const std::optional<AnchorRect> chip = App().AnchorAt(Anchor{AnchorId::DockChip, id});
+        ASSERT_TRUE(chip.has_value()) << id;
+        EXPECT_GE(chip->min.x, 0.0f) << id;
+        EXPECT_LE(chip->max.x, kDisplayWidth) << id;
+        EXPECT_GE(chip->min.y, 0.0f) << id;
+        EXPECT_LE(chip->max.y, kDisplayHeight) << id;
+        rowsAt.insert(chip->min.y);
+    }
+    EXPECT_GT(rowsAt.size(), 1u) << "wrapped";
+
+    // The last one, in the top row, brings its snippet back. Pointed at
+    // first and left to settle: the pointer near the bottom brings the
+    // canvas bar up, which lifts the dock above it.
+    const std::optional<AnchorRect> last = App().AnchorAt(Anchor{AnchorId::DockChip, ids.back()});
+    ASSERT_TRUE(last.has_value());
+    MoveTo(Center(*last).x, Center(*last).y);
+    StepFrames(30);
+    const std::optional<AnchorRect> settled = App().AnchorAt(Anchor{AnchorId::DockChip, ids.back()});
+    ASSERT_TRUE(settled.has_value());
+    Click(Center(*settled).x, Center(*settled).y);
+    EXPECT_FALSE(Canvases().FindItemAnywhere(ids.back())->minimized);
 }
 
 // ===== The world (section 7.1) =====

@@ -754,16 +754,35 @@ void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTo
 
     const float chipSize = Px(56.0f);
     const float gap = Px(8.0f);
-    const float bottomMargin = Px(16.0f);
-    const float totalW =
-        static_cast<float>(minimizedIds.size()) * chipSize + static_cast<float>(minimizedIds.size() - 1) * gap;
+    const float margin = Px(16.0f);
+    // In rows as wide as the display allows, the first at the bottom and
+    // each further one above it, each centered: one row as long as the
+    // snippets were left the outer chips off the screen, out of reach
+    // (found in the review of 2026-09-27, again on 2026-10-08).
+    const size_t count = minimizedIds.size();
+    const size_t perRow = std::max<size_t>(
+        1, static_cast<size_t>((std::max(0.0f, displayW - 2.0f * margin) + gap) / (chipSize + gap)));
+    const size_t rows = (count + perRow - 1) / perRow;
+    const auto rowWidth = [&](size_t chips) {
+        return static_cast<float>(chips) * chipSize + static_cast<float>(chips - 1) * gap;
+    };
+    const float widest = rowWidth(std::min(count, perRow));
     // Above whatever is out on the bottom edge - the canvas bar, a strip
     // docked there - rather than under it.
-    const float chipsBottom = std::min(displayH - bottomMargin, bottomPanelsTop - gap);
-    const ImVec2 dockMin((displayW - totalW) * 0.5f, chipsBottom - chipSize);
+    const float chipsBottom = std::min(displayH - margin, bottomPanelsTop - gap);
+    const float height = static_cast<float>(rows) * chipSize + static_cast<float>(rows - 1) * gap;
+    const ImVec2 dockMin((displayW - widest) * 0.5f, chipsBottom - height);
+    // Where chip `i` goes: its row from the bottom, its place in that row,
+    // the last row centered on what it holds.
+    const auto chipAt = [&](size_t i) {
+        const size_t row = i / perRow;
+        const float rowW = rowWidth(std::min(perRow, count - row * perRow));
+        return ImVec2((displayW - rowW) * 0.5f + static_cast<float>(i % perRow) * (chipSize + gap),
+                      chipsBottom - chipSize - static_cast<float>(row) * (chipSize + gap));
+    };
 
     ImGui::SetNextWindowPos(dockMin);
-    ImGui::SetNextWindowSize(ImVec2(totalW, chipSize));
+    ImGui::SetNextWindowSize(ImVec2(widest, height));
     ImGui::Begin("##dock", nullptr,
                  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
@@ -781,7 +800,7 @@ void CanvasView::RenderDock(float displayW, float displayH, float bottomPanelsTo
         if (item == nullptr) {
             continue;
         }
-        const ImVec2 chipMin(dockMin.x + static_cast<float>(i) * (chipSize + gap), dockMin.y);
+        const ImVec2 chipMin = chipAt(i);
         const ImVec2 chipMax(chipMin.x + chipSize, chipMin.y + chipSize);
         dl->AddRectFilled(chipMin, chipMax, ImGui::ColorConvertFloat4ToU32(theme::kPanelBg), Px(theme::kRadiusSm));
 
