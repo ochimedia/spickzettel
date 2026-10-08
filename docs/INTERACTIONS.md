@@ -772,6 +772,13 @@ phase 2 keeps each as it is:
   window is gone) are timing the grab relies on. The stream is fed and
   drained on the app thread, where the messages already arrive.
 
+The hook thread itself became one thread for the app's life after 0.3.1,
+told what is wanted and answering for it (`docs/ARCHITECTURE.md`, "One
+hook thread, told what is wanted"). The three places above are as they
+were: nothing per event is new, the last correction still goes out while
+the hooks are in, and a show or a hide waits for the thread half a second
+at most - where it used to wait for a thread's start or end.
+
 Checked by the grab's own tests, unchanged, and then by hand in a game
 with countering on, as its settings were tuned: if phase 2 turns out to
 need anything inside the grab after all, that is a structural change in

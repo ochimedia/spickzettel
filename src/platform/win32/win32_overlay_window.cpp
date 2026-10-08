@@ -811,17 +811,23 @@ void Win32OverlayWindow::RequestTextInput() {
     // want stops at the edge of a text field: someone typing a name is not
     // steering a character, and the field takes the keyboard for exactly as
     // long as it is open.
-    textInputRequested_ = true;
-    if (Win32InputGrab::Instance().CanDeliverTyping()) {
-        Win32InputGrab::Instance().SetTextFieldOpen(true);
-        return;
+    //
+    // Whether the keyboard was had is known when SetTextFieldOpen returns:
+    // it waits for the hook thread's answer. Not had - the hook refused, or
+    // the thread not answering - the claim goes with it, and focus it is.
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    if (grab.CanDeliverTyping()) {
+        if (grab.SetTextFieldOpen(true)) {
+            return;
+        }
+        grab.SetTextFieldOpen(false);
     }
     TakeTextInputFocus();
 }
 
 // The other way: focus, for a field the grab cannot type into - none to
 // borrow from, the overlay holding focus anyway, or a keyboard hook that
-// could not be installed (see Win32InputGrab::kKeyboardUnavailableMessage).
+// could not be installed.
 void Win32OverlayWindow::TakeTextInputFocus() {
     // Otherwise the field needs the real thing - no grab to borrow from, or
     // the overlay already holds focus anyway. Hand the keyboard back for as
@@ -854,7 +860,6 @@ void Win32OverlayWindow::TakeTextInputFocus() {
 }
 
 void Win32OverlayWindow::ReleaseTextInput() {
-    textInputRequested_ = false;
     // Both undos are unconditional and idempotent, because a field can be
     // closed by routes that have no idea which way it was opened: the
     // keyboard the field borrowed goes back to whatever the options ask for,
@@ -1420,13 +1425,6 @@ LRESULT Win32OverlayWindow::HandleMessage(HWND hwnd, UINT msg, WPARAM wParam, LP
         case WM_CAPTURECHANGED:
             if (reinterpret_cast<HWND>(lParam) != hwnd && buttonsHeld_ != 0) {
                 PostMessageW(hwnd, kCaptureLostMessage, 0, 0);
-            }
-            return 0;
-        case Win32InputGrab::kKeyboardUnavailableMessage:
-            // Only for the field still open, and not twice.
-            if (textInputRequested_ && !focusBorrowed_) {
-                Win32InputGrab::Instance().SetTextFieldOpen(false);
-                TakeTextInputFocus();
             }
             return 0;
         case kCaptureLostMessage:

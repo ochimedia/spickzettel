@@ -21,7 +21,7 @@ constexpr const char* kRawInputSinkClassName = "SpickzettelRawInputSink";
 constexpr ULONG_PTR kOwnInjectionMarker = 0x5A4B5053;  // 'SPKZ'
 
 // Asks the hook thread to install or remove hooks to match the current
-// options. Only that thread may own them - see StartHookThread.
+// options. Only that thread may own them - see EnsureHookThread.
 constexpr UINT kReconcileHooksMessage = WM_USER + 1;
 
 // How long after a hook or the raw-input sink could not be set up the hook
@@ -188,7 +188,8 @@ void Win32InputGrab::Shutdown() {
         std::lock_guard<std::mutex> lock(stateMutex_);
         active_ = false;
     }
-    Refresh();
+    Refresh();  // everything handed back and taken down, answered
+    StopHookThread();
 }
 
 // Takes the keyboard over: start from what is physically held rather than
@@ -329,10 +330,11 @@ void Win32InputGrab::Refresh() {
         FlushPendingCorrection();
     }
     counteringWasOn_ = countering;
-    // Not from a grab that could not be set up: then the real cursor was
-    // the pointer all along (see VirtualCursorActive), and the virtual one
-    // is still where the grab began - handing it back would be the jump.
-    if (virtualCursorWasDriving_ && !virtualCursorDriving && !pointerGrabFailed_.load()) {
+    // Only from a grab that is in: from one that could not be set up, the
+    // real cursor was the pointer all along (see VirtualCursorActive), and
+    // the virtual one is still where the grab began - handing it back would
+    // be the jump. Before the reconcile below, which takes the grab out.
+    if (!virtualCursorDriving && PointerGrabbed()) {
         const POINT at = VirtualCursor();
         SetCursorPos(at.x, at.y);
     } else if (!virtualCursorWasDriving_ && virtualCursorDriving) {
@@ -358,55 +360,121 @@ void Win32InputGrab::Refresh() {
     }
     keyboardWasGrabbed_ = keyboardGrabbed;
 
-    const bool wantHooks = (WantPointerGrab() && overlay_ != nullptr) || keyboardGrabbed;
-    if (wantHooks) {
-        // The thread owns the hooks and the raw-input sink alike, so it has
-        // to be the one to create or destroy them; this only asks - and
-        // only of a thread whose queue exists. A post to one still on its
-        // way up, or on its way out, is lost; a thread on its way up
-        // reconciles once by itself when it gets there, and for the rest
-        // the next transition asks again.
-        if (StartHookThread()) {
-            PostThreadMessageA(hookThreadId_, kReconcileHooksMessage, 0, 0);
+    // The same two answers the handovers above were made for, and no
+    // others: the hook thread installs from this snapshot alone.
+    Reconcile(virtualCursorDriving, keyboardGrabbed);
+}
+
+void Win32InputGrab::Reconcile(bool pointer, bool keyboard) {
+    // The snapshot first, whatever happens to the thread below: one on its
+    // way up reconciles it by itself when it gets there.
+    uint64_t generation = 0;
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        changed = wanted_.pointer != pointer || wanted_.keyboard != keyboard;
+        if (changed) {
+            wanted_ = Wanted{pointer, keyboard, wanted_.generation + 1};
         }
-    } else {
-        StopHookThread();
+        generation = wanted_.generation;
+    }
+    // Nothing wanted, and no thread up to have anything installed: nothing
+    // to start one for. A start that failed is no reason not to try the
+    // next time something is wanted - a text field, say (CanDeliverTyping).
+    if (!pointer && !keyboard && !hookThreadUp_.load()) {
+        if (!hookThread_) {
+            hookThreadStartFailed_.store(false);
+        }
+        return;
+    }
+    // The thread owns the hooks and the raw-input sink alike, so it has to
+    // be the one to make or take them down; this only asks - of a thread
+    // whose queue exists. None to ask - it could not start, or is still on
+    // its way up - and nothing is installed by it, which is what the
+    // published state says: the real cursor and typing by focus hold.
+    bool started = false;
+    if (!EnsureHookThread(started)) {
+        return;
+    }
+    // A thread started just now has answered nothing, whatever the last one
+    // did: a generation of its own to answer, so that the wait below is for
+    // it.
+    if (started) {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        wanted_.generation += 1;
+        generation = wanted_.generation;
+        changed = true;
+    }
+    if (!changed && reconciledGeneration_.load() >= generation) {
+        return;  // so already
+    }
+    PostThreadMessageA(hookThreadId_, kReconcileHooksMessage, 0, 0);
+    AwaitReconciled(generation);
+}
+
+void Win32InputGrab::AwaitReconciled(uint64_t generation) {
+    // Behind on an earlier generation still: a thread held up, or gone. Not
+    // waited for again - the grab's answers would each cost the whole wait
+    // - until it has caught up; until then it counts as having installed
+    // nothing (HookThreadAnswering).
+    const bool behind = reconciledGeneration_.load() < awaitedGeneration_.load();
+    awaitedGeneration_.store(generation);
+    if (behind) {
+        return;
+    }
+    const ULONGLONG deadline = GetTickCount64() + kReconcileWaitMs;
+    while (reconciledGeneration_.load(std::memory_order_acquire) < generation) {
+        const ULONGLONG now = GetTickCount64();
+        if (now >= deadline || !hookThreadUp_.load()) {
+            return;
+        }
+        WaitForSingleObject(reconciled_, static_cast<DWORD>(deadline - now));
     }
 }
 
-bool Win32InputGrab::StartHookThread() {
+bool Win32InputGrab::HookThreadAnswering() const {
+    return hookThreadUp_.load() && reconciledGeneration_.load() >= awaitedGeneration_.load();
+}
+
+bool Win32InputGrab::EnsureHookThread(bool& started) {
+    started = false;
     if (hookThread_) {
-        // There is a thread. Finished since it was last looked at - a Stop
-        // that gave up waiting, or a start that died late - and it is
-        // closed here and a fresh one started. Still there and on its way
-        // out (see StopHookThread), waited for once more: a post would
-        // land behind its quit, and a second thread over the same hooks
-        // is not an option. Still there and on its way up, ready only if
-        // its queue has appeared meanwhile.
-        const DWORD wait = WaitForSingleObject(hookThread_, hookThreadQuitting_ ? 2000 : 0);
-        if (wait != WAIT_OBJECT_0) {
-            if (hookThreadQuitting_) {
+        // There is a thread. Finished since it was last looked at - a
+        // Shutdown that gave up waiting, or one that died - and it is closed
+        // here and a fresh one started. Still there after a Shutdown gave
+        // up on it: a second thread over the same hooks is not an option.
+        // Still on its way up: ready only if its queue has appeared
+        // meanwhile.
+        if (WaitForSingleObject(hookThread_, 0) == WAIT_OBJECT_0) {
+            CloseHookThreadHandles();
+        } else if (hookThreadQuitting_) {
+            return false;
+        } else if (hookThreadReady_ != nullptr) {
+            if (WaitForSingleObject(hookThreadReady_, 0) != WAIT_OBJECT_0) {
                 return false;
             }
-            if (hookThreadReady_) {
-                if (WaitForSingleObject(hookThreadReady_, 0) != WAIT_OBJECT_0) {
-                    return false;
-                }
-                CloseHandle(hookThreadReady_);
-                hookThreadReady_ = nullptr;
-            }
+            CloseHandle(hookThreadReady_);
+            hookThreadReady_ = nullptr;
+            return true;
+        } else {
             return true;
         }
-        CloseHookThreadHandles();
     }
     // A thread has no message queue until it first asks for one, and
     // PostThreadMessage to a thread without a queue fails - so the first
     // reconcile request, posted the moment this returns, could land on
     // nothing. The thread signals once its queue exists, and this waits for
     // that (or for the thread to die trying) before handing the id out.
-    // Without the event there is no handshake, so no thread either.
+    // Without the events there is no handshake and no answer, so no thread
+    // either.
+    hookThreadStartFailed_.store(true);  // until it is up
+    if (failHookThreadStartForTesting_.load()) {
+        return false;
+    }
     hookThreadReady_ = CreateEventA(nullptr, TRUE, FALSE, nullptr);
-    if (!hookThreadReady_) {
+    reconciled_ = CreateEventA(nullptr, FALSE, FALSE, nullptr);
+    if (!hookThreadReady_ || !reconciled_) {
+        CloseHookThreadHandles();
         return false;
     }
     hookThread_ = CreateThread(nullptr, 0, &Win32InputGrab::HookThreadMain, this, 0, &hookThreadId_);
@@ -414,23 +482,33 @@ bool Win32InputGrab::StartHookThread() {
         CloseHookThreadHandles();
         return false;
     }
+    hookThreadStartFailed_.store(false);
     const HANDLE readyOrDead[] = {hookThreadReady_, hookThread_};
-    const DWORD result = WaitForMultipleObjects(2, readyOrDead, FALSE, 5000);
+    const DWORD result = WaitForMultipleObjects(2, readyOrDead, FALSE, kReconcileWaitMs);
     if (result == WAIT_OBJECT_0) {
         CloseHandle(hookThreadReady_);  // running: the handshake is over
         hookThreadReady_ = nullptr;
+        started = true;
         return true;
     }
     if (result == WAIT_OBJECT_0 + 1) {
         CloseHookThreadHandles();  // died before its queue existed
+        hookThreadStartFailed_.store(true);
         return false;
     }
     // Timed out: still starting, on a machine that is very busy. The event
     // stays open for the thread to set when it gets there, and the next
-    // Start looks at it; nothing is posted until then.
+    // call looks at it; nothing is posted until then. The thread
+    // reconciles the snapshot by itself as it starts.
     return false;
 }
 
+// Ends the thread: what it has installed is taken down on its way out (see
+// HookThreadMain) - by Shutdown, already, through Refresh. A thread that
+// does not end in time - a hook callback stuck behind something - is kept,
+// handle and id, so that it stays this object's: the next EnsureHookThread
+// finds it rather than starting a second thread over the same hooks and
+// raw-input sink, and starts a fresh one once it has ended.
 void Win32InputGrab::StopHookThread() {
     if (!hookThread_) {
         return;
@@ -444,11 +522,6 @@ void Win32InputGrab::StopHookThread() {
         PostThreadMessageA(hookThreadId_, WM_QUIT, 0, 0);
     }
     if (WaitForSingleObject(hookThread_, 2000) != WAIT_OBJECT_0) {
-        // Still running - a hook callback stuck behind something, say. The
-        // handle and id are kept, so that it stays this object's thread:
-        // the next Start finds it rather than starting a second thread over
-        // the same hooks and raw-input sink, and knows from the flag that
-        // it is not one to post to; the next Stop asks again.
         hookThreadQuitting_ = true;
         return;
     }
@@ -464,6 +537,10 @@ void Win32InputGrab::CloseHookThreadHandles() {
         CloseHandle(hookThreadReady_);
         hookThreadReady_ = nullptr;
     }
+    if (reconciled_) {
+        CloseHandle(reconciled_);
+        reconciled_ = nullptr;
+    }
     hookThreadId_ = 0;
     hookThreadQuitting_ = false;
 }
@@ -471,14 +548,11 @@ void Win32InputGrab::CloseHookThreadHandles() {
 DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
     auto& grab = *static_cast<Win32InputGrab*>(self);
     SetThreadDescription(GetCurrentThread(), kHookThreadName);
-    // The message queue exists from this call on - and StartHookThread is
+    // The message queue exists from this call on - and EnsureHookThread is
     // waiting to hear so before it lets anyone post here.
     MSG msg;
     PeekMessageA(&msg, nullptr, WM_USER, WM_USER, PM_NOREMOVE);
-    // Out of context, so called here, between messages, like the hooks.
-    const HWINEVENTHOOK desktopSwitch =
-        SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, nullptr,
-                        &Win32InputGrab::DesktopSwitchProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    grab.hookThreadUp_.store(true);
     if (grab.hookThreadReady_) {
         SetEvent(grab.hookThreadReady_);
     }
@@ -508,8 +582,9 @@ DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
     // thread. Under a grab that is a dead mouse: the hook goes on swallowing
     // every event, and nothing is left to read them.
     grab.DestroyRawInputSink();
-    if (desktopSwitch) {
-        UnhookWinEvent(desktopSwitch);
+    if (grab.desktopSwitchHook_) {
+        UnhookWinEvent(grab.desktopSwitchHook_);
+        grab.desktopSwitchHook_ = nullptr;
     }
     if (grab.mouseHook_) {
         UnhookWindowsHookEx(grab.mouseHook_);
@@ -523,14 +598,28 @@ DWORD WINAPI Win32InputGrab::HookThreadMain(void* self) {
         KillTimer(nullptr, grab.hookRetryTimer_);
         grab.hookRetryTimer_ = 0;
     }
-    grab.pointerGrabFailed_.store(false, std::memory_order_relaxed);
-    grab.keyboardGrabFailed_.store(false, std::memory_order_relaxed);
+    // Nothing installed, and no thread to say otherwise.
+    grab.pointerGrabState_.store(HookState::Off);
+    grab.keyboardHookState_.store(HookState::Off);
+    grab.hookThreadUp_.store(false);
     return 0;
 }
 
 void Win32InputGrab::ReconcileHooks() {
-    const bool wantMouse = WantPointerGrab() && overlay_ != nullptr;
-    const bool wantKeyboard = WantKeyboard();
+    if (const DWORD stall = stallReconcileForTestingMs_.exchange(0); stall != 0) {
+        Sleep(stall);
+    }
+    // What Refresh decided, whole - not worked out again from the state it
+    // was decided from, which may have moved on since: then what is
+    // installed and what the handovers were made for would be two
+    // decisions (see Wanted).
+    Wanted wanted;
+    {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        wanted = wanted_;
+    }
+    const bool wantMouse = wanted.pointer;
+    const bool wantKeyboard = wanted.keyboard;
 
     // The raw-input sink lives here too, for the same reason the hooks do:
     // it drives the pointer, and a pointer whose position waits for the
@@ -542,17 +631,19 @@ void Win32InputGrab::ReconcileHooks() {
     // The two are one grab, set up whole or not at all. The hook alone
     // swallows the mouse with nothing left to read it, and the sink alone
     // posts every click to the overlay on top of the one Windows delivers.
-    // Until a try fails, VirtualCursorActive says what is asked for, as it
-    // always did; after one, the overlay goes by the real cursor, as
-    // without the grab, and the grab is tried again shortly. (The order
-    // within this call does not matter: neither the hook nor the sink hears
-    // anything until this thread pumps again.)
+    // Until it is in, VirtualCursorActive says no and the overlay goes by
+    // the real cursor, as without the grab; one that failed is tried again
+    // shortly. (The order within this call does not matter: neither the
+    // hook nor the sink hears anything until this thread pumps again.)
     bool pointerGrabbed = false;
     if (wantMouse) {
         pointerGrabbed = EnsureRawInputSink();
         if (pointerGrabbed && !mouseHook_) {
             swallowedButtons_.store(0, std::memory_order_relaxed);  // nothing is ours yet - see OnMouse
-            mouseHook_ = SetWindowsHookExA(WH_MOUSE_LL, &Win32InputGrab::MouseProc, GetModuleHandleA(nullptr), 0);
+            if (!failMouseHookForTesting_.load()) {
+                mouseHook_ =
+                    SetWindowsHookExA(WH_MOUSE_LL, &Win32InputGrab::MouseProc, GetModuleHandleA(nullptr), 0);
+            }
             pointerGrabbed = mouseHook_ != nullptr;
         }
     }
@@ -563,7 +654,7 @@ void Win32InputGrab::ReconcileHooks() {
         }
         DestroyRawInputSink();
     }
-    if (pointerGrabbed && pointerGrabFailed_.load()) {
+    if (pointerGrabbed && pointerGrabState_.load() == HookState::Failed) {
         // Got on a later try: the real cursor has gone on moving since the
         // seed Refresh took, and the drawn one starts from where it is now.
         // Seeded here, before the grab is published below and before this
@@ -573,7 +664,7 @@ void Win32InputGrab::ReconcileHooks() {
         SeedVirtualCursor();
         frameBaselinePending_.store(true);
     }
-    pointerGrabFailed_.store(wantMouse && !pointerGrabbed);
+    pointerGrabState_.store(!wantMouse ? HookState::Off : pointerGrabbed ? HookState::Installed : HookState::Failed);
 
     // The modifier record is seeded from the system just before the hook
     // goes in, here on its own thread: with no hook nothing has been
@@ -585,8 +676,9 @@ void Win32InputGrab::ReconcileHooks() {
     // keys go where they would without the grab, and the record, which no
     // hook keeps, is cleared, so that what the overlay is told is held is
     // the system's alone (see HeldModifiers). Typing is not delivered
-    // either, which CanDeliverTyping and DeliversTypingToOverlay say, so a
-    // text field takes focus instead. Tried again below.
+    // either, which CanDeliverTyping and DeliversTypingToOverlay say - and
+    // SetTextFieldOpen, to the field that asked - so a text field takes
+    // focus instead. Tried again below.
     if (wantKeyboard && !keyboardHook_) {
         modifiers_.Seed([](int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; });
         if (!failKeyboardHookForTesting_.load()) {
@@ -606,27 +698,25 @@ void Win32InputGrab::ReconcileHooks() {
         UnhookWindowsHookEx(keyboardHook_);
         keyboardHook_ = nullptr;
     }
-    const bool keyboardFailed = wantKeyboard && !keyboardHook_;
-    if (keyboardFailed) {
+    if (wantKeyboard && !keyboardHook_) {
         modifiers_.Clear();
-        // A text field that chose the hook to type through is told it
-        // cannot be had: it takes focus instead (see
-        // Win32OverlayWindow::RequestTextInput). At every failed try, not
-        // only the first: a field can ask for the hook after it was last
-        // asked whether typing can be delivered and before this try's
-        // failure was published, and the first try would have found it
-        // not open yet. Its own SetTextFieldOpen brings a try that finds
-        // it; a second message is ignored.
-        HWND fieldWindow = nullptr;
-        {
-            std::lock_guard<std::mutex> lock(stateMutex_);
-            fieldWindow = textFieldOpen_ ? overlay_ : nullptr;
-        }
-        if (fieldWindow != nullptr) {
-            PostMessageA(fieldWindow, kKeyboardUnavailableMessage, 0, 0);
-        }
     }
-    keyboardGrabFailed_.store(keyboardFailed, std::memory_order_relaxed);
+    keyboardHookState_.store(!wantKeyboard ? HookState::Off
+                             : keyboardHook_ ? HookState::Installed
+                                             : HookState::Failed);
+
+    // A switch of desktop is the grab's business while it holds something
+    // of the machine's input - and only then: hidden, this thread holds
+    // nothing. Out of context, so called here, between messages, like the
+    // hooks.
+    const bool holding = mouseHook_ != nullptr || keyboardHook_ != nullptr;
+    if (holding && !desktopSwitchHook_) {
+        desktopSwitchHook_ = SetWinEventHook(EVENT_SYSTEM_DESKTOPSWITCH, EVENT_SYSTEM_DESKTOPSWITCH, nullptr,
+                                             &Win32InputGrab::DesktopSwitchProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+    } else if (!holding && desktopSwitchHook_) {
+        UnhookWinEvent(desktopSwitchHook_);
+        desktopSwitchHook_ = nullptr;
+    }
 
     const bool missing = (wantMouse && !pointerGrabbed) || (wantKeyboard && !keyboardHook_);
     if (missing && hookRetryTimer_ == 0) {
@@ -635,6 +725,11 @@ void Win32InputGrab::ReconcileHooks() {
         KillTimer(nullptr, hookRetryTimer_);
         hookRetryTimer_ = 0;
     }
+
+    // Answered last, once all of the above is published: the app thread
+    // reads what is installed as soon as this says it is so.
+    reconciledGeneration_.store(wanted.generation, std::memory_order_release);
+    SetEvent(reconciled_);
 }
 
 bool Win32InputGrab::EnsureRawInputSink() {
@@ -890,8 +985,10 @@ void Win32InputGrab::IntegrateRawMovement(LONG rawDx, LONG rawDy, int reports) {
     stepCounts_[std::clamp<LONG>(std::max(stepX, stepY), 0, 3)].fetch_add(1, std::memory_order_relaxed);
 }
 
+// What is in, not what is asked for: a grab not set up yet, one refused,
+// and one no hook thread has answered for are the real cursor.
 bool Win32InputGrab::VirtualCursorActive() const {
-    return WantPointerGrab() && overlay_ != nullptr && !pointerGrabFailed_.load();
+    return WantPointerGrab() && overlay_ != nullptr && PointerGrabbed();
 }
 
 // Whether a text field can be typed into without this window taking focus:
@@ -904,7 +1001,8 @@ bool Win32InputGrab::VirtualCursorActive() const {
 // field.
 bool Win32InputGrab::DeliversTypingToOverlay() const {
     std::lock_guard<std::mutex> lock(stateMutex_);
-    return CanDeliverTypingLocked() && WantsAllKeystrokesLocked();
+    return CanDeliverTypingLocked() && WantsAllKeystrokesLocked() && HookThreadAnswering() &&
+           keyboardHookState_.load() == HookState::Installed;
 }
 
 bool Win32InputGrab::CanDeliverTyping() const {
@@ -917,18 +1015,22 @@ bool Win32InputGrab::WantsAllKeystrokes() const {
     return WantsAllKeystrokesLocked();
 }
 
-void Win32InputGrab::SetTextFieldOpen(bool open) {
+bool Win32InputGrab::SetTextFieldOpen(bool open) {
+    bool changed = false;
     {
         std::lock_guard<std::mutex> lock(stateMutex_);
-        if (textFieldOpen_ == open) {
-            return;
-        }
+        changed = textFieldOpen_ != open;
         textFieldOpen_ = open;
     }
     // Refresh does the rest: this changes WantKeyboard, and the handover on
     // that transition is already written - hook installed and modifiers
     // seeded on the way in, key-ups and modifiers handed back on the way out.
-    Refresh();
+    // It waits for the hook thread's answer, so what is said below is what
+    // is installed.
+    if (changed) {
+        Refresh();
+    }
+    return !open || DeliversTypingToOverlay();
 }
 
 void Win32InputGrab::SetPanelDigits(int digitCount) {

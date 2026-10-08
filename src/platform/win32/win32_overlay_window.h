@@ -163,9 +163,6 @@ private:
     // Whether RequestTextInput took WS_EX_NOACTIVATE off to borrow real keyboard
     // focus, so ReleaseTextInput knows to put it back - see both.
     bool focusBorrowed_ = false;
-    // Whether a text field is open, from RequestTextInput to
-    // ReleaseTextInput - see Win32InputGrab::kKeyboardUnavailableMessage.
-    bool textInputRequested_ = false;
     // Seconds since the last z-order check - see RenderFrame.
     float topmostCheckSeconds_ = 0.0f;
     // Seconds since the last show, for the same check - see RenderFrame.

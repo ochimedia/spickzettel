@@ -3779,28 +3779,44 @@ Consequences that shape `Win32InputGrab`:
   300 injected reports took 10 ms ungrabbed and 5,318 ms grabbed, and a
   drag laid down 2 stroke points ungrabbed and 282 grabbed. On a thread
   that does nothing but pump, 18 ms and 4 points, the ungrabbed baseline.
-  The app thread owns the thread from `CreateThread` to the `CloseHandle`
-  after it has been seen to exit. Starting it is a handshake: a thread
-  has no message queue until it first asks for one, `PostThreadMessage`
-  to a thread without one fails, and the first reconcile request is
-  posted the moment the start returns - so the thread signals an event
-  once its queue exists and the start waits for that. The thread is in
-  one of three states the app thread can tell apart - starting (the
-  event still open), running, stopping (a quit posted and not yet seen
-  to land) - and a reconcile request is posted only to a running one:
-  a post to a thread still on its way up is lost, and a thread on its
-  way out would run it behind its quit, or not at all. A start whose
-  wait times out keeps the event for the thread to set when it gets
-  there; a stop whose two-second wait times out keeps the handle rather
-  than forgetting a live thread, so that the next start finds it (waits
-  for it once more, or finds it finished and closes it) instead of
-  starting a second thread over the same hooks and sink; a stop whose
-  quit could not be posted because the queue is not up yet waits for
-  the queue and posts again. The first version ignored the wait's
-  result and closed the event whatever it said, and a start after a
-  timed-out stop posted to a thread that was about to quit. These paths
-  are established from the source: the class offers no fault injection,
-  and the rapid start/stop test exercises ordinary timing.
+- **One hook thread, told what is wanted.** The thread is started the
+  first time anything is wanted and ended only by `Shutdown`; hidden, it
+  holds nothing - no hook, no raw-input registration, no timer, not the
+  desktop-switch hook - and sleeps in `GetMessage`, a stack's few pages
+  and no CPU. Starting it is a handshake: a thread has no message queue
+  until it first asks for one, and `PostThreadMessage` to a thread
+  without one fails, so the thread signals an event once its queue exists
+  and the start waits for that, half a second at most; one slower than
+  that keeps the event and reconciles by itself when it gets there.
+
+  `Refresh` decides once what is wanted - the pointer grab, the keyboard -
+  makes its handovers for that decision, and hands it to the thread as
+  one snapshot with a generation number (`Wanted`); the thread installs
+  from the snapshot alone, publishes what is in - `Off`, `Installed` or
+  `Failed`, for the pointer and the keyboard - and answers the
+  generation. `Refresh` waits for the answer, half a second at most, so
+  a grab is in, or known not to be, when the call that asked for it
+  returns. Everything the app thread decides by reads what is published,
+  never what was asked for: no thread, one that could not start, and
+  one that has not answered are nothing installed, so every fallback -
+  the real cursor, typing by focus - holds without a word from the
+  thread. A thread that misses its answer is not waited for again until
+  it has caught up: one wait per hang, not one per call.
+
+  Until after 0.3.1 the thread came and went with every grab, which made
+  every show and hide a race between two threads: over a queue not up
+  yet, a quit posted to one, a thread that outlived its stop and the
+  sink window that died with it. Its states were told apart by which
+  handles were null, it published only failures - whose default, none,
+  read as working whenever no reconcile had run, a thread that never
+  started included (found in the review of 2026-10-08) - and the app
+  thread and the hook thread each worked out what was wanted from the
+  live state, so that what was installed and what the handovers were
+  made for could be two decisions. Every review since September found
+  one more race among those; the classes are gone with the per-grab
+  thread and the second decision. `Shutdown` still waits two seconds for
+  the thread and keeps the handle of one that does not end, so that no
+  second thread is started over its hooks.
 - **The mouse hook and the raw-input sink are one grab, set up whole or
   not at all** (`ReconcileHooks`). The hook alone swallows the mouse with
   nothing left to read it: the overlay's pointer stands still and its
@@ -3811,7 +3827,9 @@ Consequences that shape `Win32InputGrab`:
   try takes down whatever it set up, `VirtualCursorActive` turns false so
   that the overlay goes by the real cursor as it does without the grab,
   and the hook thread tries again every second for as long as the grab is
-  wanted (a keyboard hook that could not be installed as well). A grab got
+  wanted (a keyboard hook that could not be installed as well). With
+  the sink up and the hook refused, the sink goes too
+  (`FailMouseHookForTesting`). A grab got
   on a later try seeds the drawn pointer again from the real one
   (`SeedVirtualCursor`). The seed happens on the hook thread, in the same
   reconcile that installs the hook and the sink, and before the grab is
@@ -3833,13 +3851,12 @@ Consequences that shape `Win32InputGrab`:
   `CanDeliverTyping` and `DeliversTypingToOverlay` say no, so a text field
   opened meanwhile takes focus instead of waiting on a hook that is not
   there. A field that chose the hook anyway, when no hook was needed until
-  it opened, is told by a message to the overlay
-  (`kKeyboardUnavailableMessage`) and then takes focus the same way
-  (`TakeTextInputFocus`). Told at every failed try it is open for, not
-  only at the first: a field that asked whether typing can be delivered
-  just before the first failure was published, and opened just after, was
-  told nothing and waited on the hook (found in the review of
-  2026-10-08). The modifier record is cleared on failure, leaving
+  it opened, learns as it opens: `SetTextFieldOpen` returns whether typing
+  is delivered, the hook thread's answer waited for, and the field takes
+  focus at once (`TakeTextInputFocus`). It used to be told afterwards, by
+  a message the hook thread posted at the first failure, which a field
+  opening just as that failure was published never got (found in the
+  review of 2026-10-08). The modifier record is cleared on failure, leaving
   the system's state alone to say what is held, and it is seeded from the
   system just before every install, on the hook thread. With no hook in
   place nothing has been swallowed, so the system is right; a modifier let
@@ -3848,11 +3865,12 @@ Consequences that shape `Win32InputGrab`:
   at what is wanted and its seed is cleared again after it: the end had
   cleared the record before the seed refilled it with the modifiers of
   the very hotkey that ended it, and once the grab is over no hook
-  records. Before
-  a try has failed, `VirtualCursorActive` says what is asked for, as it
-  always did, so the ordinary start has no frames on the real cursor
-  while the thread sets up. `FailPointerGrabForTesting` makes the
-  registration fail.
+  records. `VirtualCursorActive` says what is installed: the ordinary
+  start has no frame on the real cursor all the same, since the call
+  that shows the overlay waits for the thread's answer.
+  `FailPointerGrabForTesting` makes the registration fail,
+  `FailHookThreadStartForTesting` the thread's start, and
+  `StallHookThreadForTesting` holds its next answer up.
 - **The pointer's integration state has a lock of its own.** The
   raw-input sink integrates reports into it on the hook thread, and the
   app thread seeds it whenever the virtual pointer starts driving. The
@@ -3978,8 +3996,8 @@ Consequences that shape `Win32InputGrab`:
   matched Ctrl+Alt+S and hid the overlay, and the downs handed back as it
   hid stayed down system-wide - from then on a bare S showed it again,
   in the game as well, until Ctrl and Alt were pressed once more. The
-  hook thread now listens for `EVENT_SYSTEM_DESKTOPSWITCH` and forgets
-  every key it swallowed the down of: the overlay is told each came up,
+  hook thread now listens for `EVENT_SYSTEM_DESKTOPSWITCH` while it
+  holds a hook, and forgets every key it swallowed the down of: the overlay is told each came up,
   and nothing is left to hand back (`InputLeftOnAnotherDesktop`). A key
   still held on the way back comes up later through the hook, as an up
   whose down it has no record of, which it passes on and Windows

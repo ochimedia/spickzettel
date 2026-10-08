@@ -67,7 +67,7 @@ public:
     // registers without RIDEV_INPUTSINK and so only receives it while
     // foreground) and there is nothing left to take. Installing hooks then
     // would buy nothing and cost a system-wide chokepoint on every mouse
-    // event - see StartHookThread.
+    // event - see EnsureHookThread.
     //
     // Deliberately does not gate SoftwarePointerWanted: drawing the pointer
     // is a matter of appearance and stays available either way.
@@ -116,8 +116,9 @@ public:
     bool DeliversTypingToOverlay() const;
 
     // Whether it *would* deliver typing if asked to take the keyboard - i.e.
-    // whether SetTextFieldOpen(true) is enough on its own. Everything except
-    // the decision itself.
+    // whether SetTextFieldOpen(true) is worth trying. Everything except the
+    // decision itself, and nothing known to be broken: no keyboard hook that
+    // failed, no hook thread that could not start or has stopped answering.
     bool CanDeliverTyping() const;
 
     // A text field is open and wants the keyboard for as long as it is.
@@ -135,7 +136,12 @@ public:
     // seeds the modifier record through BeginGrabbedKeyboard, and turning it
     // off runs EndGrabbedKeyboard - the boundary handling is already there and
     // this is simply another thing that moves the boundary.
-    void SetTextFieldOpen(bool open);
+    //
+    // Opening says whether typing is now delivered: the hook thread has
+    // answered, and the keyboard hook is in. False - the hook could not be
+    // installed, or the thread did not answer in time - and the field takes
+    // focus instead, after closing this claim again.
+    bool SetTextFieldOpen(bool open);
 
     // Whether the whole keyboard is currently ours rather than only the
     // Behavior panel's digits - see WantsAllKeystrokesLocked.
@@ -238,7 +244,9 @@ public:
     InputGrabDiagnostics Diagnostics() const;
     void SampleFrameStep();
 
-    // Called once at shutdown; also safe to call when nothing is installed.
+    // Takes everything down and ends the hook thread - see StopHookThread.
+    // Called once at shutdown, and by the tests between them; safe to call
+    // with nothing installed, and the grab can be used again after it.
     void Shutdown();
 
     // Called by the window every frame it renders: the app thread is alive.
@@ -296,13 +304,18 @@ public:
     // Registrations for raw mouse input fail while `fail`, as
     // RegisterRawInputDevices would - see ReconcileHooks.
     void FailPointerGrabForTesting(bool fail) { failPointerGrabForTesting_.store(fail); }
+    // The mouse hook is not installed while `fail`, as if SetWindowsHookEx
+    // had failed - with the raw-input sink up already.
+    void FailMouseHookForTesting(bool fail) { failMouseHookForTesting_.store(fail); }
     // The keyboard hook is not installed while `fail`, as if
     // SetWindowsHookEx had failed.
     void FailKeyboardHookForTesting(bool fail) { failKeyboardHookForTesting_.store(fail); }
-
-    // Posted to the overlay when the keyboard hook a text field chose to
-    // type through could not be installed: the field takes focus instead.
-    static constexpr UINT kKeyboardUnavailableMessage = WM_APP + 2;
+    // The hook thread is not started while `fail`, as if CreateThread had
+    // failed - see EnsureHookThread.
+    void FailHookThreadStartForTesting(bool fail) { failHookThreadStartForTesting_.store(fail); }
+    // The hook thread's next reconcile waits `ms` first, as a thread held up
+    // by something would - see AwaitReconciled.
+    void StallHookThreadForTesting(DWORD ms) { stallReconcileForTestingMs_.store(ms); }
 
 private:
     Win32InputGrab() = default;
@@ -383,21 +396,52 @@ private:
     // pointer, a stroke made of visible steps, and "everything feels slower
     // with this on" all were. This thread does nothing but pump, so hooks
     // are serviced immediately.
+    //
+    // One thread for the app's life: started the first time something is
+    // wanted, ended only by Shutdown. Hidden, it holds nothing - no hook, no
+    // raw-input registration, no timer - and sleeps in GetMessage. The
+    // thread used to come and go with every grab, and every show and hide
+    // was a race between two threads over its start and its end - see
+    // docs/ARCHITECTURE.md, "One hook thread, told what is wanted".
+    //
+    // What is wanted, as Refresh last decided it: one snapshot, read whole
+    // by the hook thread, so that what it installs and what the app thread
+    // handed over for are one decision. `generation` counts the decisions.
+    struct Wanted {
+        bool pointer = false;
+        bool keyboard = false;
+        uint64_t generation = 0;
+    };
+    // Hands the hook thread `wanted`, and waits a moment for it to say it is
+    // so - see AwaitReconciled. Starts the thread if it is needed and there
+    // is none.
+    void Reconcile(bool pointer, bool keyboard);
+    // Waits for the hook thread to have reconciled `generation`, for at most
+    // kReconcileWaitMs. A thread that does not answer in time is taken to
+    // have installed nothing (HookThreadAnswering), and is not waited for
+    // again until it has caught up: one wait per hang, not one per call.
+    void AwaitReconciled(uint64_t generation);
+    // Whether the hook thread has answered everything asked of it - so that
+    // what it published is what is installed. False with no thread, one
+    // that could not start, and one that missed its answer.
+    bool HookThreadAnswering() const;
     // Starts the hook thread if there is none, and says whether there is
-    // now one whose message queue exists - the only kind a post reaches.
-    // False when the thread could not be started, died on the way up, is
-    // still on the way up, or is on its way out after a Stop that gave up
-    // waiting: the caller posts nothing, and the next transition asks
-    // again. See the .cpp for the states.
-    bool StartHookThread();
+    // one to post to: running, with its message queue. False when it could
+    // not be started, died on the way up, is still on the way up, or is
+    // one a Shutdown gave up waiting for: nothing is posted, and nothing is
+    // installed by it. `started` says a thread was started by this call.
+    bool EnsureHookThread(bool& started);
+    // Asks the hook thread to end, and waits a while for it - see
+    // Shutdown.
     void StopHookThread();
-    // Lets go of the thread's handle, the ready event and the id, once the
+    // Lets go of the thread's handle, the events and the id, once the
     // thread has been seen to exit - the one place these are closed.
     void CloseHookThreadHandles();
     static DWORD WINAPI HookThreadMain(void* self);
-    // Runs on the hook thread: installs/removes hooks to match the state
-    // below. Posted to rather than called directly, since only that thread
-    // may own them.
+    // Runs on the hook thread: installs/removes hooks to match the wanted_
+    // snapshot, publishes what is installed, and answers its generation.
+    // Posted to rather than called directly, since only that thread may own
+    // them.
     void ReconcileHooks();
 
     void PostKeyToOverlay(UINT vk, const KBDLLHOOKSTRUCT& event, bool isDown);
@@ -453,13 +497,14 @@ private:
     // costing the game its focus and costing it nothing at all.
     bool WantsAllKeystrokesLocked() const { return options_.dontForwardKeystrokes || textFieldOpen_; }
     // Everything typing needs except the decision to take the keyboard - what
-    // SetTextFieldOpen turns into a yes.
-    // Not after a try to install the keyboard hook failed: until a retry
+    // SetTextFieldOpen turns into a yes. Not with the keyboard hook known to
+    // have failed, nor with no hook thread to install one: until a retry
     // gets it, nothing delivers the keys - see ReconcileHooks.
     bool CanDeliverTypingLocked() const {
         return active_ && !keyboardSuspended_ && overlay_ != nullptr &&
-               !keyboardGrabFailed_.load(std::memory_order_relaxed) &&
-               EditModeInputOptions::KeystrokesCanBeHeld(gameKeepsFocus_);
+               EditModeInputOptions::KeystrokesCanBeHeld(gameKeepsFocus_) &&
+               keyboardHookState_.load() != HookState::Failed && !hookThreadStartFailed_.load() &&
+               reconciledGeneration_.load() >= awaitedGeneration_.load();
     }
     bool WantCancellation() const {
         std::lock_guard<std::mutex> lock(stateMutex_);
@@ -562,20 +607,57 @@ private:
     // Owned by the hook thread; never touched from anywhere else.
     HHOOK mouseHook_ = nullptr;
     HHOOK keyboardHook_ = nullptr;
+    // EVENT_SYSTEM_DESKTOPSWITCH's, in while either hook is - see
+    // InputLeftOnAnotherDesktop.
+    HWINEVENTHOOK desktopSwitchHook_ = nullptr;
     // The thread itself is owned by the app thread, from CreateThread to
-    // the CloseHandle after it has been seen to exit - see StartHookThread,
-    // StopHookThread and CloseHookThreadHandles. Three states, told apart
-    // by these: no thread (hookThread_ null); starting (hookThreadReady_
-    // still open - the event the thread sets once its message queue
-    // exists, which Start waits on before it lets anyone post to the id,
-    // and keeps if that wait times out, for the thread to set when it
-    // gets there); running (the event closed); stopping
-    // (hookThreadQuitting_: a Stop posted WM_QUIT and gave up waiting, so
-    // whatever is posted now lands behind the quit and is lost).
+    // the CloseHandle after it has been seen to exit - see EnsureHookThread,
+    // StopHookThread and CloseHookThreadHandles. No thread (hookThread_
+    // null); starting (hookThreadReady_ still open - the event the thread
+    // sets once its message queue exists, which EnsureHookThread waits on
+    // before it lets anyone post to the id, and keeps if that wait times
+    // out, for the thread to set when it gets there); running (the event
+    // closed); or one a Shutdown gave up waiting for (hookThreadQuitting_:
+    // kept, so that no second thread is started over its hooks).
     HANDLE hookThread_ = nullptr;
     DWORD hookThreadId_ = 0;
     HANDLE hookThreadReady_ = nullptr;
     bool hookThreadQuitting_ = false;
+    // Set by the hook thread each time it has answered a generation - see
+    // AwaitReconciled. Auto-reset; lives as long as the thread.
+    HANDLE reconciled_ = nullptr;
+    // How long the app thread waits for an answer - well under
+    // kStalledAfterMs, and far over the few milliseconds a reconcile takes.
+    static constexpr DWORD kReconcileWaitMs = 500;
+    // Under stateMutex_: written by Refresh, read whole by the hook thread.
+    Wanted wanted_;
+    // The latest generation the hook thread has reconciled, and the latest
+    // the app thread asked it for. Behind, the thread has not answered:
+    // see HookThreadAnswering.
+    std::atomic<uint64_t> reconciledGeneration_{0};
+    std::atomic<uint64_t> awaitedGeneration_{0};
+    // True from the thread's queue existing to its exit, written by the
+    // thread itself - so a thread whose start the app thread stopped
+    // waiting for counts once it gets there.
+    std::atomic<bool> hookThreadUp_{false};
+    // The last try to start the thread failed: CreateEvent or CreateThread
+    // did, or the thread died on its way up. Tried again at the next
+    // Refresh that wants anything.
+    std::atomic<bool> hookThreadStartFailed_{false};
+    // What is installed, as the hook thread publishes it after each
+    // reconcile: not wanted (Off), in (Installed), or wanted and refused
+    // (Failed, tried again on the timer). The app thread decides from these
+    // - never from what it asked for - so that no hook thread, or one that
+    // has not answered, is nothing installed, and every fallback (the real
+    // cursor, typing by focus) holds without a word from it.
+    enum class HookState : uint8_t { Off, Installed, Failed };
+    std::atomic<HookState> pointerGrabState_{HookState::Off};
+    std::atomic<HookState> keyboardHookState_{HookState::Off};
+    // The pointer grab as the app thread can rely on it: published in, by
+    // a thread that has answered.
+    bool PointerGrabbed() const {
+        return HookThreadAnswering() && pointerGrabState_.load() == HookState::Installed;
+    }
 
     // The overlay's own pointer, in screen coordinates - see
     // VirtualCursorActive. Seeded from the real cursor when a grab starts
@@ -691,17 +773,14 @@ private:
     // The hook thread's timer for trying again what could not be set up -
     // see ReconcileHooks. 0 when none is running.
     UINT_PTR hookRetryTimer_ = 0;
-    // Whether the pointer grab is asked for and the last try to set it up
-    // failed; read by VirtualCursorActive on the app thread.
-    std::atomic<bool> pointerGrabFailed_{false};
     // A pointer grab got on a retry and seeded, for the app thread to take
     // its frame baseline from - see SampleFrameStep.
     std::atomic<bool> frameBaselinePending_{false};
-    // Whether the keyboard hook is asked for and the last try to install it
-    // failed - see CanDeliverTypingLocked.
-    std::atomic<bool> keyboardGrabFailed_{false};
     std::atomic<bool> failPointerGrabForTesting_{false};
+    std::atomic<bool> failMouseHookForTesting_{false};
     std::atomic<bool> failKeyboardHookForTesting_{false};
+    std::atomic<bool> failHookThreadStartForTesting_{false};
+    std::atomic<DWORD> stallReconcileForTestingMs_{0};
 };
 
 }  // namespace sz::platform::win32

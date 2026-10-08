@@ -27,8 +27,8 @@
 namespace sz::platform::win32 {
 namespace {
 
-// How many of this process's threads are the grab's hook thread: one while
-// the grab is active, none once it is not. Counted by name rather than
+// How many of this process's threads are the grab's hook thread: one from
+// the first grab to Shutdown, none after it. Counted by name rather than
 // all threads at once: Windows starts threads of its own in a process -
 // a thread pool's workers - and on a CI runner one stayed past the wait,
 // failing a count of every thread with no hook thread left.
@@ -192,10 +192,9 @@ TEST(Win32InputGrabTest, AKeyboardHookThatFailsDeliversNoTypingAndIsSeededOnRetr
         << "the failure is published";
     EXPECT_FALSE(grab.DeliversTypingToOverlay());
 
-    // The thread tries once as it starts and once more for the request
-    // that started it; both fail, and the next try is the retry a second
-    // later. Waited past the second, so that it is the retry that finds
-    // the hook allowed.
+    // The thread tried as it was asked to, and failed; the next try is the
+    // retry a second later. Waited a little, so that it is the retry that
+    // finds the hook allowed.
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
     // Ctrl as the record would have it from a seed while it was down, and
     // let go of with no hook to see it.
@@ -307,9 +306,10 @@ TEST(Win32InputGrabTest, AFailedPointerGrabLeavesTheRealCursorWhereItIs) {
 }
 
 // A text field that chose the keyboard hook to type through, when no hook
-// was needed until then, is told when the hook cannot be installed: the
-// window then takes focus for it instead.
-TEST(Win32InputGrabTest, AFieldWhoseKeyboardHookFailsIsTold) {
+// was needed until then, is told at once when the hook cannot be installed:
+// opening it says so, having waited for the hook thread's answer, and the
+// window takes focus for it instead.
+TEST(Win32InputGrabTest, AFieldWhoseKeyboardHookFailsIsToldAsItOpens) {
     HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                    GetModuleHandleA(nullptr), nullptr);
     ASSERT_NE(overlay, nullptr);
@@ -327,25 +327,58 @@ TEST(Win32InputGrabTest, AFieldWhoseKeyboardHookFailsIsTold) {
     grab.SetActive(true);
     ASSERT_TRUE(grab.CanDeliverTyping()) << "nothing has failed yet";
 
-    grab.SetTextFieldOpen(true);
-    MSG msg{};
-    EXPECT_TRUE(Eventually(
-        [&] { return PeekMessageA(&msg, overlay, Win32InputGrab::kKeyboardUnavailableMessage,
-                                  Win32InputGrab::kKeyboardUnavailableMessage, PM_REMOVE) != 0; },
-        std::chrono::milliseconds(1500)));
+    EXPECT_FALSE(grab.SetTextFieldOpen(true)) << "not delivered";
+    EXPECT_FALSE(grab.DeliversTypingToOverlay());
+    EXPECT_FALSE(grab.CanDeliverTyping()) << "and the next field is not offered it either";
+    grab.SetTextFieldOpen(false);
+
+    grab.FailKeyboardHookForTesting(false);
+    EXPECT_TRUE(grab.SetTextFieldOpen(true)) << "a field once the hook can be had";
+    EXPECT_TRUE(grab.DeliversTypingToOverlay());
 
     grab.SetTextFieldOpen(false);
     grab.SetActive(false);
-    grab.FailKeyboardHookForTesting(false);
     grab.Shutdown();
     DestroyWindow(overlay);
 }
 
-// A start followed at once by a stop, many times over: the stop's quit
-// message must reach a queue that exists, and every thread started must be
-// gone by the time the grab says it is inactive - or a hook survives on a
-// thread nothing owns.
-TEST(Win32InputGrabTest, RapidStartAndStopLeavesNoHookBehind) {
+// The grab is in when the call that asked for it returns, and out when the
+// one that put it away does: the hook thread is waited for. Nothing is
+// polled for here.
+TEST(Win32InputGrabTest, TheGrabIsInWhenItsCallReturns) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = true;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+
+    grab.SetActive(true);
+    EXPECT_TRUE(grab.VirtualCursorActive());
+    EXPECT_TRUE(QueryRawMouse().targetIsAWindow);
+    EXPECT_TRUE(grab.DeliversTypingToOverlay());
+
+    grab.SetActive(false);
+    EXPECT_FALSE(grab.VirtualCursorActive());
+    EXPECT_FALSE(QueryRawMouse().present);
+    EXPECT_FALSE(grab.DeliversTypingToOverlay());
+
+    grab.Shutdown();
+    DestroyWindow(overlay);
+}
+
+// One hook thread serves every show: a hide takes down what it installed
+// and leaves the thread asleep, holding nothing, and Shutdown ends it.
+// Shown and hidden many times over, nothing is left registered, there is
+// one thread, and a show after all that still works.
+TEST(Win32InputGrabTest, OneHookThreadServesEveryShowAndHiddenItHoldsNothing) {
     HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
                                    GetModuleHandleA(nullptr), nullptr);
     ASSERT_NE(overlay, nullptr);
@@ -364,15 +397,118 @@ TEST(Win32InputGrabTest, RapidStartAndStopLeavesNoHookBehind) {
         grab.SetActive(true);
         grab.SetActive(false);
     }
-    EXPECT_TRUE(Eventually([] { return !QueryRawMouse().present; }, std::chrono::milliseconds(1500)))
-        << "a sink registered by a thread that outlived its stop";
-    EXPECT_TRUE(Eventually([] { return HookThreadCount() == 0; }, std::chrono::milliseconds(1500)))
-        << "a stop left its hook thread running: " << HookThreadCount() << " still there";
+    EXPECT_FALSE(QueryRawMouse().present) << "a sink left registered while hidden";
+    EXPECT_EQ(HookThreadCount(), 1u) << "one thread for every show";
 
-    // ...and a start after all that still works.
     grab.SetActive(true);
-    EXPECT_TRUE(Eventually([] { return QueryRawMouse().targetIsAWindow; }, std::chrono::milliseconds(1500)));
-    EXPECT_EQ(HookThreadCount(), 1u) << "the count above finds the hook thread by its name";
+    EXPECT_TRUE(QueryRawMouse().targetIsAWindow);
+    grab.SetActive(false);
+    grab.Shutdown();
+    EXPECT_TRUE(Eventually([] { return HookThreadCount() == 0; }, std::chrono::milliseconds(1500)))
+        << "Shutdown left the hook thread running";
+    DestroyWindow(overlay);
+}
+
+// A hook thread that cannot be started installs nothing, and nothing takes
+// it for one that did: the overlay goes by the real cursor, and a text field
+// takes focus. Asked again by the next change, it starts.
+TEST(Win32InputGrabTest, AHookThreadThatCannotStartLeavesTheRealCursorAndFocus) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    grab.Shutdown();  // no thread left from an earlier test
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = true;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    grab.FailHookThreadStartForTesting(true);
+
+    grab.SetActive(true);
+    EXPECT_FALSE(grab.VirtualCursorActive());
+    EXPECT_FALSE(grab.CanDeliverTyping());
+    EXPECT_FALSE(grab.DeliversTypingToOverlay());
+    EXPECT_FALSE(QueryRawMouse().present);
+    EXPECT_EQ(HookThreadCount(), 0u);
+
+    grab.FailHookThreadStartForTesting(false);
+    options.counterRawMouseInput = true;  // any change asks again
+    grab.SetOptions(options);
+    EXPECT_TRUE(grab.VirtualCursorActive());
+    EXPECT_TRUE(grab.DeliversTypingToOverlay());
+
+    grab.SetActive(false);
+    grab.Shutdown();
+    DestroyWindow(overlay);
+}
+
+// The mouse hook refused with the raw-input sink up already: the sink goes
+// too, rather than posting every click to the overlay on top of the one
+// Windows delivers.
+TEST(Win32InputGrabTest, AMouseHookThatFailsTakesTheSinkDownWithIt) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = false;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    grab.FailMouseHookForTesting(true);
+
+    grab.SetActive(true);
+    EXPECT_FALSE(grab.VirtualCursorActive());
+    EXPECT_FALSE(QueryRawMouse().present) << "no sink without its hook";
+
+    grab.FailMouseHookForTesting(false);
+    EXPECT_TRUE(Eventually([&grab] { return grab.VirtualCursorActive(); }, std::chrono::milliseconds(3000)))
+        << "tried again";
+    grab.SetActive(false);
+    grab.Shutdown();
+    DestroyWindow(overlay);
+}
+
+// A hook thread held up past the wait is not waited for again until it has
+// caught up, and until then counts as having installed nothing: the calls
+// return in a moment, the overlay goes by the real cursor, and once the
+// thread answers the grab is in.
+TEST(Win32InputGrabTest, AHookThreadThatDoesNotAnswerIsNotTrustedUntilItDoes) {
+    HWND overlay = CreateWindowExA(0, "STATIC", "overlay stand-in", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr,
+                                   GetModuleHandleA(nullptr), nullptr);
+    ASSERT_NE(overlay, nullptr);
+    Win32InputGrab& grab = Win32InputGrab::Instance();
+    EditModeInputOptions options;
+    options.useRawMouseInput = true;
+    options.useSoftwarePointer = false;
+    options.dontForwardKeystrokes = false;
+    options.counterRawMouseInput = false;
+    grab.SetOverlayWindow(overlay);
+    grab.SetOptions(options);
+    grab.SetGameKeepsFocus(true);
+    grab.SetActive(true);  // the thread up, and answering
+    grab.SetActive(false);
+
+    grab.StallHookThreadForTesting(1500);
+    const auto start = std::chrono::steady_clock::now();
+    grab.SetActive(true);
+    options.dontForwardKeystrokes = true;
+    grab.SetOptions(options);  // asked again while it is still held up: no second wait
+    const auto waited = std::chrono::steady_clock::now() - start;
+    EXPECT_LT(waited, std::chrono::milliseconds(1000)) << "one wait, and a short one";
+    EXPECT_FALSE(grab.VirtualCursorActive()) << "not answered, so nothing is in";
+    EXPECT_FALSE(grab.CanDeliverTyping());
+
+    EXPECT_TRUE(Eventually([&grab] { return grab.VirtualCursorActive(); }, std::chrono::milliseconds(3000)))
+        << "in once it caught up";
+    EXPECT_TRUE(grab.DeliversTypingToOverlay());
     grab.SetActive(false);
     grab.Shutdown();
     DestroyWindow(overlay);
