@@ -3786,15 +3786,23 @@ Consequences that shape `Win32InputGrab`:
   reach whatever has focus. Its failure is published too:
   `CanDeliverTyping` and `DeliversTypingToOverlay` say no, so a text field
   opened meanwhile takes focus instead of waiting on a hook that is not
-  there. A field that chose the hook before the first failure, when no hook
-  was needed until it opened, is told by a message to the overlay
+  there. A field that chose the hook anyway, when no hook was needed until
+  it opened, is told by a message to the overlay
   (`kKeyboardUnavailableMessage`) and then takes focus the same way
-  (`TakeTextInputFocus`). The modifier record is cleared on failure, leaving
+  (`TakeTextInputFocus`). Told at every failed try it is open for, not
+  only at the first: a field that asked whether typing can be delivered
+  just before the first failure was published, and opened just after, was
+  told nothing and waited on the hook (found in the review of
+  2026-10-08). The modifier record is cleared on failure, leaving
   the system's state alone to say what is held, and it is seeded from the
   system just before every install, on the hook thread. With no hook in
   place nothing has been swallowed, so the system is right; a modifier let
   go of between `Refresh`'s seed and the install, a retry later, was
-  otherwise left held. Before
+  otherwise left held. A grab that ended between the hook thread's look
+  at what is wanted and its seed is cleared again after it: the end had
+  cleared the record before the seed refilled it with the modifiers of
+  the very hotkey that ended it, and once the grab is over no hook
+  records. Before
   a try has failed, `VirtualCursorActive` says what is asked for, as it
   always did, so the ordinary start has no frames on the real cursor
   while the thread sets up. `FailPointerGrabForTesting` makes the

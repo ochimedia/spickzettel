@@ -592,6 +592,15 @@ void Win32InputGrab::ReconcileHooks() {
             keyboardHook_ =
                 SetWindowsHookExA(WH_KEYBOARD_LL, &Win32InputGrab::KeyboardProc, GetModuleHandleA(nullptr), 0);
         }
+        // The grab ended meanwhile, on the app thread, and cleared the
+        // record before the seed above put back what is held - Ctrl and
+        // Alt of the hotkey that ended it, say - for nothing to clear
+        // again: no hook records once the grab is over. EndGrabbedKeyboard
+        // marks the grab over before it clears, so either its clear comes
+        // after the seed or this one does.
+        if (!keyboardGrabbed_.load(std::memory_order_acquire)) {
+            modifiers_.Clear();
+        }
     } else if (!wantKeyboard && keyboardHook_) {
         UnhookWindowsHookEx(keyboardHook_);
         keyboardHook_ = nullptr;
@@ -599,18 +608,21 @@ void Win32InputGrab::ReconcileHooks() {
     const bool keyboardFailed = wantKeyboard && !keyboardHook_;
     if (keyboardFailed) {
         modifiers_.Clear();
-        // A text field that chose the hook to type through, before this
-        // try said it could not be had, is told: it takes focus instead
-        // (see Win32OverlayWindow::RequestTextInput).
-        if (!keyboardGrabFailed_.load()) {
-            HWND fieldWindow = nullptr;
-            {
-                std::lock_guard<std::mutex> lock(stateMutex_);
-                fieldWindow = textFieldOpen_ ? overlay_ : nullptr;
-            }
-            if (fieldWindow != nullptr) {
-                PostMessageA(fieldWindow, kKeyboardUnavailableMessage, 0, 0);
-            }
+        // A text field that chose the hook to type through is told it
+        // cannot be had: it takes focus instead (see
+        // Win32OverlayWindow::RequestTextInput). At every failed try, not
+        // only the first: a field can ask for the hook after it was last
+        // asked whether typing can be delivered and before this try's
+        // failure was published, and the first try would have found it
+        // not open yet. Its own SetTextFieldOpen brings a try that finds
+        // it; a second message is ignored.
+        HWND fieldWindow = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            fieldWindow = textFieldOpen_ ? overlay_ : nullptr;
+        }
+        if (fieldWindow != nullptr) {
+            PostMessageA(fieldWindow, kKeyboardUnavailableMessage, 0, 0);
         }
     }
     keyboardGrabFailed_.store(keyboardFailed, std::memory_order_relaxed);
