@@ -11,6 +11,7 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -448,29 +449,12 @@ void ReadRow(const json& doc, const Row& row, AppConfig& config) {
         ValueIn(row, config) = std::move(*value);
     }
 }
-// An action the file says nothing of - one added since it was written, as
-// Paste in place was in 0.2.3 - has its default, unless the file gives
-// that combination to another action: it was chosen for that one, and the
-// new action starts unbound rather than take it. Taken, the key would go
-// to whichever of the two comes first (see Editor::CommandForKey).
+// An action the file says nothing of keeps its default here; whether it
+// may is YieldNewKeysToNamedOnes'.
 void ReadRow(const json& doc, const ShortcutSettings& row, AppConfig& config) {
-    ShortcutBindings& shortcuts = config.profileable.shortcuts;
-    std::array<bool, kShortcutActionCount> said{};
     for (const ShortcutAction action : kAllShortcutActions) {
         if (auto value = ReadValue(row.rule, Find(doc, {row.group, "", ShortcutActionKey(action)}))) {
-            shortcuts[ShortcutActionIndex(action)] = *value;
-            said[ShortcutActionIndex(action)] = true;
-        }
-    }
-    for (size_t unsaid = 0; unsaid < kShortcutActionCount; ++unsaid) {
-        if (said[unsaid] || !shortcuts[unsaid].IsValid()) {
-            continue;
-        }
-        for (size_t other = 0; other < kShortcutActionCount; ++other) {
-            if (said[other] && shortcuts[other] == shortcuts[unsaid]) {
-                shortcuts[unsaid] = platform::KeyCombo{};
-                break;
-            }
+            config.profileable.shortcuts[ShortcutActionIndex(action)] = *value;
         }
     }
 }
@@ -578,6 +562,71 @@ bool RepairSummonHotkeys(AppConfig& config) {
     return repaired;
 }
 
+// A shortcut or hotkey the file says nothing of - one added since it was
+// written: Paste in place and Select all in 0.2.3, Undo, Redo and the
+// Behavior panel's hotkey after 0.3.1 - has its default, unless the file
+// gives that combination to something else: it was chosen for that, and
+// the new one starts unbound rather than take it. Taken, the key went to
+// whichever action came first (see Editor::CommandForKey), or to the
+// hotkey, past every shortcut. A shortcut a profile names is counted
+// against the hotkeys, which hold in every application; against the
+// defaults' own shortcuts it already wins where the profile runs
+// (ResolveProfile). Hotkeys against each other are RepairSummonHotkeys'.
+bool YieldNewKeysToNamedOnes(const json& doc, AppConfig& config) {
+    const GlobalSetting<HotkeyRule>* hotkeyRows[] = {&setting::kHotkeyEditMode, &setting::kHotkeyViewMode,
+                                                      &setting::kHotkeyQuickCapture, &setting::kHotkeySilentCapture,
+                                                      &setting::kHotkeyBehaviorPanel};
+    const auto named = [&doc](const SettingPath& path, const auto& rule) {
+        return ReadValue(rule, Find(doc, path)).has_value();
+    };
+    std::vector<platform::KeyCombo> namedHotkeys;
+    for (const GlobalSetting<HotkeyRule>* row : hotkeyRows) {
+        if (named(row->path, row->rule)) {
+            namedHotkeys.push_back(ValueIn(*row, config));
+        }
+    }
+    ShortcutBindings& shortcuts = config.profileable.shortcuts;
+    const ShortcutSettings& shortcutRow = setting::kShortcuts;
+    std::array<bool, kShortcutActionCount> shortcutNamed{};
+    std::vector<platform::KeyCombo> namedShortcuts;
+    for (const ShortcutAction action : kAllShortcutActions) {
+        const size_t index = ShortcutActionIndex(action);
+        shortcutNamed[index] = named({shortcutRow.group, "", ShortcutActionKey(action)}, shortcutRow.rule);
+        if (shortcutNamed[index]) {
+            namedShortcuts.push_back(shortcuts[index]);
+        }
+    }
+    const size_t namedInTheDefaults = namedShortcuts.size();
+    for (const Profile& profile : config.profiles) {
+        for (const std::optional<platform::KeyCombo>& combo : profile.overrides.shortcuts) {
+            if (combo.has_value()) {
+                namedShortcuts.push_back(*combo);
+            }
+        }
+    }
+    const auto among = [](const platform::KeyCombo& combo, auto first, auto last) {
+        return combo.IsValid() && std::find(first, last, combo) != last;
+    };
+
+    bool yielded = false;
+    for (size_t index = 0; index < kShortcutActionCount; ++index) {
+        if (!shortcutNamed[index] &&
+            (among(shortcuts[index], namedShortcuts.begin(), namedShortcuts.begin() + namedInTheDefaults) ||
+             among(shortcuts[index], namedHotkeys.begin(), namedHotkeys.end()))) {
+            shortcuts[index] = platform::KeyCombo{};
+            yielded = true;
+        }
+    }
+    for (const GlobalSetting<HotkeyRule>* row : hotkeyRows) {
+        platform::KeyCombo& hotkey = ValueIn(*row, config);
+        if (!named(row->path, row->rule) && among(hotkey, namedShortcuts.begin(), namedShortcuts.end())) {
+            hotkey = platform::KeyCombo{};
+            yielded = true;
+        }
+    }
+    return yielded;
+}
+
 // Every repair, not only up to the first that finds something.
 bool RepairOnLoad(AppConfig& config) {
     bool repaired = RepairCreationTriggers(config);
@@ -639,6 +688,7 @@ std::optional<ParsedConfig> TryParseConfig(std::string_view text) {
             config.profiles.push_back(std::move(profile));
         }
     }
+    parsed.changed = YieldNewKeysToNamedOnes(doc, config) || parsed.changed;
 
     // Retention on, with no period the file states that can be read: off,
     // and the file made to say so. The default period in its place could

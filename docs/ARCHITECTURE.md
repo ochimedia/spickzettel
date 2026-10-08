@@ -1546,10 +1546,15 @@ also why a bare letter is allowed here and questionable there.
 
 `ShortcutAction` is the flat list the config layer persists, by name.
 An action added since a file was written - Paste in place and Select
-all, in 0.2.3 - has its default, unless the file gives that combination
-to another action, which keeps it; the new one starts unbound. Taken,
-the key went to whichever of the two comes first in the command table,
-which could be the new one.
+all, in 0.2.3, Undo and Redo after 0.3.1 - has its default, unless the
+file gives that combination to another action or to a hotkey, which
+keeps it; the new one starts unbound. Taken, the key went to whichever
+of the two comes first in the command table, which could be the new
+one, or to the hotkey. A hotkey added since - the Behavior panel's -
+gives way the same to a shortcut, the defaults' or a profile's. A key
+the user chose is never taken by a default that came later
+(`YieldNewKeysToNamedOnes`); a profile's own already wins over an
+inherited one where it runs (`ResolveProfile`).
 Config sits below the app and cannot see what a key does; the command
 table ties each action to its command (see "Commands" under the overlay
 UI), and a test checks that every action names exactly one.

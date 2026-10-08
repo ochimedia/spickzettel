@@ -178,8 +178,9 @@ Edited from Settings > Hotkeys, upper box. Effect: Registration.
 
 `behaviorPanel` was added after 0.3.1. A file from before it names it
 nowhere and gets the default, unless the file gives Ctrl+Alt+B to
-another hotkey: the load repair unbinds the later of two hotkeys that
-share a combination, and the new one is last.
+another hotkey - the load repair unbinds the later of two hotkeys that
+share a combination, and the new one is last - or to a shortcut, in
+the defaults or in any profile (see `shortcuts` below).
 
 **`drawing`**: Global.
 
@@ -289,8 +290,12 @@ key, or Mouse3-5, with modifiers, or `null` for unbound. Invariant: one
 combination, one action within a target. Default: `DefaultShortcuts()`;
 an action the file does not name, one added since (`pasteInPlace` and
 `selectAll` in 0.2.3, `undo` and `redo` after 0.3.1), has it only if the
-file gives that combination to no other action, and is unbound
-otherwise.
+file gives that combination to no other action and no hotkey, and is
+unbound otherwise. A combination a profile gives another action is the
+profile's where it runs, over the new action's default (see the table
+in section 5). The same holds for a hotkey added since against every
+shortcut the file names: a key the user chose is never taken by a
+default that came later.
 Edited from Settings > Hotkeys, lower box. Effect: Use.
 
 **`tutorial`**: Global. Edited from the tutorial as it goes
@@ -403,7 +408,7 @@ These are today's except where marked:
 |---|---|---|
 | Creation triggers differ, unless off | both back to the defaults | the other takes the edited one's old trigger |
 | Summon hotkeys differ, unless unbound | a later one is unbound (moved from `Initialize`) | the one that had the combination is unbound; the OS registration is tried first (section 6) |
-| One shortcut, one action, per target | none for what the file names; an action it does not name is unbound rather than take a combination the file gives another | the others in the target are unbound |
+| One shortcut, one action, per target | none for what the file names; an action it does not name is unbound rather than take a combination the file gives another, or a hotkey; a hotkey it does not name is unbound rather than take a shortcut's, from the defaults or a profile; written back | the others in the target are unbound |
 | A profile's binding wins over an inherited same key | applied when resolving, not stored | the same |
 | Profile names are not empty | "Profile" | a cleared field keeps the old name |
 | Retention runs only with a period read from the file | retention off, when `afterDays` is missing or not a number (the default period could delete far sooner than the one meant) | none: the panel's field always holds a period |

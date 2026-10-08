@@ -380,8 +380,9 @@ TEST(AppConfigTest, UndoAndRedoKeysAreShortcutsLikeAnyOther) {
     EXPECT_EQ(given.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)],
               (platform::KeyCombo{true, false, false, 'Z'}));
     EXPECT_FALSE(given.profileable.shortcuts[undo].IsValid());
-    EXPECT_EQ(ParseConfig(One("hotkeys", "editMode", R"("Ctrl+Y")")).hotkeyEditMode,
-              (platform::KeyCombo{true, false, false, 'Y'}));
+    const AppConfig hotkeyGiven = ParseConfig(One("hotkeys", "editMode", R"("Ctrl+Y")"));
+    EXPECT_EQ(hotkeyGiven.hotkeyEditMode, (platform::KeyCombo{true, false, false, 'Y'}));
+    EXPECT_FALSE(hotkeyGiven.profileable.shortcuts[redo].IsValid()) << "a hotkey's key is no new action's";
     EXPECT_EQ(ParseConfig(One("shortcuts", "redo", R"("Ctrl+Shift+Z")")).profileable.shortcuts[redo],
               (platform::KeyCombo{true, false, true, 'Z'}));
 }
@@ -408,6 +409,49 @@ TEST(AppConfigTest, ANewActionDoesNotTakeACombinationTheFileGaveAway) {
     const AppConfig both =
         ParseConfig(R"({"shortcuts": {"duplicate": "Ctrl+Shift+V", "pasteInPlace": "Ctrl+Shift+V"}})");
     EXPECT_EQ(pasteInPlace(both), (platform::KeyCombo{true, false, true, 'V'}));
+}
+
+// The same for a profile's own: Copy on Ctrl+Z in a 0.3.1 profile keeps it
+// where the profile runs, and Undo, which the file never named, is unbound
+// there and keeps Ctrl+Z everywhere else.
+TEST(AppConfigTest, ANewActionDoesNotTakeACombinationAProfileGaveAway) {
+    const AppConfig config =
+        ParseConfig(R"({"profiles": [{"name": "Game", "match": {"exe": ["game.exe"]},
+                                      "shortcuts": {"copy": "Ctrl+Z"}}]})");
+    const size_t undo = ShortcutActionIndex(ShortcutAction::Undo);
+    const platform::KeyCombo ctrlZ{true, false, false, 'Z'};
+    EXPECT_EQ(config.profileable.shortcuts[undo], ctrlZ) << "in the defaults";
+    const ProfileableSettings inGame = ResolveProfile(config.profileable, config.profiles, 0);
+    EXPECT_EQ(inGame.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)], ctrlZ);
+    EXPECT_FALSE(inGame.shortcuts[undo].IsValid());
+}
+
+// A hotkey added since - the Behavior panel's, after 0.3.1 - gives way as
+// an action does, to a shortcut the file gave its combination to, in the
+// defaults or in any profile: the hotkey would take the key from it in
+// every application.
+TEST(AppConfigTest, ANewHotkeyDoesNotTakeACombinationAShortcutWasGiven) {
+    const platform::KeyCombo ctrlAltB{true, true, false, 'B'};
+    const AppConfig inTheDefaults = ParseConfig(One("shortcuts", "copy", R"("Ctrl+Alt+B")"));
+    EXPECT_EQ(inTheDefaults.profileable.shortcuts[ShortcutActionIndex(ShortcutAction::Copy)], ctrlAltB);
+    EXPECT_FALSE(inTheDefaults.hotkeyBehaviorPanel.IsValid());
+
+    const AppConfig inAProfile =
+        ParseConfig(R"({"profiles": [{"name": "Game", "shortcuts": {"copy": "Ctrl+Alt+B"}}]})");
+    EXPECT_FALSE(inAProfile.hotkeyBehaviorPanel.IsValid());
+
+    // Named, it is what was named: the file's own clash.
+    const AppConfig both =
+        ParseConfig(R"({"hotkeys": {"behaviorPanel": "Ctrl+Alt+B"}, "shortcuts": {"copy": "Ctrl+Alt+B"}})");
+    EXPECT_EQ(both.hotkeyBehaviorPanel, ctrlAltB);
+}
+
+// What gave way is written back at the start, so the file says so from then
+// on and a later change elsewhere does not hand the key back.
+TEST(AppConfigTest, AKeyThatGaveWayIsToBeWrittenBack) {
+    const std::optional<ParsedConfig> parsed = TryParseConfig(One("shortcuts", "copy", R"("Ctrl+Z")"));
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_TRUE(parsed->changed);
 }
 
 TEST(AppConfigTest, ParsesFunctionKeyHotkeyWithModifiers) {
