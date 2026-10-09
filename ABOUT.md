@@ -63,6 +63,30 @@ If the app crashes, it writes a crash report to
 Keys named below are the defaults; the cheat sheet shows them as they are
 currently bound.
 
+### Unreleased
+
+#### Features
+
+- Behavior panel (Ctrl+Alt+B): a panel for quickly adjusting behavior options for the current profile
+- Undo and Redo are now rebindable shortcuts in Settings > Hotkeys. Text fields are independent of that and always use the usual keys (Ctrl+Z/Y/C/X/V/A)
+- A warning dialog when binding a key that is already in use, including conflicts between global hotkeys and per-profile shortcuts
+- Help tooltips can be switched off (Settings > Appearance), and tooltips appear after a slight delay
+- Improved profile settings UI
+- Command-line options --data-dir <folder> and --edit-mode, mostly used for automated testing
+
+#### Changes
+
+- Removed the "Don't forward keystrokes" behavior option; edit mode always takes the keyboard
+- Refined settings UI and help texts, reordered settings sections
+- Decreased memory usage when using the Bilinear or Nearest scaling filters
+- Minimized snippets in the dock wrap into rows if necessary
+
+#### Fixes
+
+- Notes: a character typed in the same moment a note was closed was lost
+- Notes: the caret is now visible when it is at the left edge of the text field
+- Fixed some edge cases in stroke drawing, input grab, screen capture, settings and library persistence, and rendering
+
 ### 0.3.1
 
 #### Changes
